@@ -1,3 +1,5 @@
+> **PR:** [#379](https://github.com/IchirokuXVI/nx-portfolio/pull/379)
+
 # 0004 A brand is one the registry holds
 
 > Depends on `apps/luna-shopper-backend/plans/0115`, which builds the brands registry and its

@@ -9,7 +9,7 @@
  * until `apply`.
  */
 
-import { chainName } from './rules.mjs';
+import { chainName, chainNamesById, findBrand } from './rules.mjs';
 
 /** An `extra` bag can hold a leaflet's whole page text; the model needs a taste. */
 const MAX_EXTRA_CHARS = 2000;
@@ -50,8 +50,42 @@ export function toCandidate(
   };
 }
 
+/**
+ * The registered brand this entry's own printed brand names, or null.
+ *
+ * The registry is read by the library and never by the model: what the packet
+ * carries is the one brand this row resolved to, with the chain that owns it
+ * when it is a private label. An unregistered spelling answers null, which is
+ * the same answer a row with no brand at all gets, and the prompt says what to
+ * do with either.
+ *
+ * Candidates are not annotated. A `LINK` takes the candidate's brand as it is,
+ * because that brand is already a catalog product's brand and nothing here
+ * would be deciding anything new about it.
+ */
+export function brandMatchFor({ entry, brands, supermarkets }) {
+  const registered = findBrand(brands, entry?.brand);
+  if (!registered) {
+    return null;
+  }
+  const owner = registered.privateLabelSupermarketId;
+  return {
+    label: registered.label,
+    privateLabelOf: owner
+      ? (chainNamesById(supermarkets).get(owner) ?? null)
+      : null,
+  };
+}
+
 /** What the model is asked about: the entry as observed, plus the pre-pass. */
-export function buildEntryPacket({ entry, supermarket, candidates, eanMatch }) {
+export function buildEntryPacket({
+  entry,
+  supermarket,
+  candidates,
+  eanMatch,
+  brands = new Map(),
+  supermarkets = [],
+}) {
   return {
     entry: {
       id: entry.id,
@@ -66,6 +100,7 @@ export function buildEntryPacket({ entry, supermarket, candidates, eanMatch }) {
       status: entry.status ?? null,
       chainName: supermarket ? chainName(supermarket) : null,
       chainRegistered: Boolean(supermarket),
+      brandMatch: brandMatchFor({ entry, brands, supermarkets }),
       proposedItemId: entry.itemId ?? null,
       extra: trimExtra(entry.extra ?? null),
     },

@@ -42,6 +42,17 @@ export function makeGateway(session) {
     },
 
     /**
+     * GET /v1/admin/catalog/brands, every page (plan 0115).
+     *
+     * Read once, by `start`, and written into the run directory. Every later
+     * step reads the file, so a brand registered while a walk runs is seen by
+     * the next walk and not by this one.
+     */
+    listBrands() {
+      return pageThrough('/v1/admin/catalog/brands', { order: 'label' });
+    },
+
+    /**
      * GET /v1/admin/harvest/entries, one page of one chain's queue.
      *
      * Absent `status` is the queue itself: CANDIDATE and UNRESOLVED, the two

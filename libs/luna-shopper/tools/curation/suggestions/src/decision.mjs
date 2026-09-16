@@ -8,11 +8,13 @@
  */
 
 import {
+  brandKey,
   carriesBrand,
   carriesGlitch,
   carriesSize,
   chainName,
-  normalizeName,
+  chainNamesById,
+  findBrand,
 } from './rules.mjs';
 
 /** Below this a decision is a REVIEW, whatever the model wrote. */
@@ -162,12 +164,6 @@ function sameNumber(a, b) {
   return Number(a) === Number(b);
 }
 
-function supermarketKeys(supermarket) {
-  return [supermarket?.name?.es, supermarket?.name?.en]
-    .filter(isString)
-    .map(normalizeName);
-}
-
 /**
  * Every check the library makes for itself, whatever the model's confidence was.
  *
@@ -180,7 +176,8 @@ export function validateDecision({
   supermarket,
   linkTarget = null,
   eanOwner = null,
-  privateLabels = new Map(),
+  brands = new Map(),
+  supermarkets = [],
   categories = [],
   units = [],
   local = false,
@@ -293,18 +290,65 @@ export function validateDecision({
     }
   }
 
+  // The two brand registry checks, on a CREATE only (plan 0004). A LINK writes
+  // no brand: it binds the entry to a catalog product whose brand a person
+  // already settled, so there is nothing here for either of them to judge.
+  //
+  // Neither is retryable. Both report a judgment the model made and stands by,
+  // and asking the same row again would get the same brand back; what the row
+  // needs is the person who can register it.
+  if (decision.decision === 'CREATE' && item) {
+    const sourceBrand = findBrand(brands, entry?.brand);
+
+    // A brand the registry does not hold. A null brand is a real answer and is
+    // never demoted for it: plenty of products carry no brand at all.
+    if (item.brand && !findBrand(brands, item.brand)) {
+      issues.push({
+        ...issue(
+          'BRAND_UNREGISTERED',
+          `"${item.brand}" is not a registered brand. Register it in the back office or correct the brand.`
+        ),
+        // Read by `end`, which counts the run's unregistered brands by key and
+        // names the spelling the model wrote most often. The key is carried
+        // here rather than parsed back out of the sentence above.
+        brand: item.brand,
+        brandKey: brandKey(item.brand),
+      });
+    }
+
+    // A spelling difference is not one of these. Catalog stores a registered
+    // brand's label on every item written with its key (plan 0115 section 4),
+    // so `HACENDADO` and `Hacendado` are one brand and neither is worth a
+    // person's time.
+    if (sourceBrand && brandKey(item.brand) !== sourceBrand.key) {
+      issues.push(
+        issue(
+          'BRAND_DIFFERS_FROM_SOURCE',
+          `the chain prints "${entry.brand}", a registered brand, and the decision writes ${item.brand ? `"${item.brand}"` : 'no brand'}.`
+        )
+      );
+    }
+  }
+
+  // Rule 6, by chain id (plan 0004). The registry is where a private label is
+  // declared and it declares the owner as an id, so the comparison is an id
+  // against the entry's own `supermarketId`. It used to compare the chain's
+  // name against a name written beside the brand in a JSON file, which made
+  // two spellings of one chain two chains.
   const brand =
     decision.decision === 'LINK'
       ? (linkTarget?.brand ?? null)
       : (item?.brand ?? null);
-  const label = brand ? privateLabels.get(normalizeName(brand)) : undefined;
-  if (label && supermarket) {
-    const keys = supermarketKeys(supermarket);
-    if (!keys.includes(label.chainKey)) {
+  const label = findBrand(brands, brand);
+  if (label?.privateLabelSupermarketId && entry) {
+    if (label.privateLabelSupermarketId !== entry.supermarketId) {
+      const owner =
+        chainNamesById(supermarkets).get(label.privateLabelSupermarketId) ??
+        label.privateLabelSupermarketId;
       issues.push(
         issue(
           'PRIVATE_LABEL_CROSSES_CHAIN',
-          `"${label.brand}" is ${label.chain}'s own label and this entry belongs to ${chainName(supermarket)} (rule 6).`
+          `"${label.label}" is ${owner}'s own label and this entry belongs to ${supermarket ? chainName(supermarket) : entry.supermarketId} (rule 6).`
         )
       );
     }

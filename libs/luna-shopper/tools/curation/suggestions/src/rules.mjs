@@ -15,7 +15,6 @@ const OPENAPI_URL = new URL(
   import.meta.url
 );
 const PROMPT_URL = new URL('./prompt.md', import.meta.url);
-const PRIVATE_LABELS_URL = new URL('./private-labels.json', import.meta.url);
 
 // ---------------------------------------------------------------------------
 // Normalizing, verbatim from the harvester's matching.ts
@@ -36,6 +35,31 @@ export function normalizeName(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+
+/**
+ * A brand's key, character for character the contracts function (plan 0115).
+ *
+ * A copy of `brandKey` in
+ * `libs/luna-shopper/contracts/src/lib/brands/brand-key.ts`. This library is
+ * plain `.mjs` with no build step, so it cannot import the TypeScript, and the
+ * two are held together by `brand-key.cases.json`: every pair in that file is
+ * asserted against this function in `rules.test.mjs`.
+ *
+ * It is not `normalizeName`. That one keeps a space between words, so `El Pozo`
+ * and `ElPozo` are two keys under it and one key here, which is the whole
+ * reason the registry needed a key of its own.
+ */
+export function brandKey(text) {
+  if (text === null || text === undefined) {
+    return null;
+  }
+  const key = String(text)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  return key === '' ? null : key;
 }
 
 /**
@@ -155,23 +179,71 @@ export function loadVocabularies(docUrl = OPENAPI_URL) {
 }
 
 /**
- * The private label map, normalized on both sides so a validator can compare it
- * with a catalog supermarket's own name.
+ * The brand registry, keyed the way catalog keys it.
+ *
+ * The rows are whatever `GET /v1/admin/catalog/brands` answered, read once per
+ * run and kept in the run directory. A row whose label has no key is dropped:
+ * catalog cannot hold one either, so it can never be the answer to a lookup.
  */
-export function loadPrivateLabels(url = PRIVATE_LABELS_URL) {
-  return indexPrivateLabels(readJson(url));
-}
-
-export function indexPrivateLabels(raw) {
-  const byBrand = new Map();
-  for (const [brand, chain] of Object.entries(raw ?? {})) {
-    const key = normalizeName(brand);
+export function indexBrands(raw) {
+  const byKey = new Map();
+  for (const row of raw ?? []) {
+    const key = row?.key ?? brandKey(row?.label);
     if (!key) {
       continue;
     }
-    byBrand.set(key, { brand, chain, chainKey: normalizeName(chain) });
+    byKey.set(key, {
+      id: row.id ?? null,
+      key,
+      label: row.label ?? null,
+      privateLabelSupermarketId: row.privateLabelSupermarketId ?? null,
+    });
   }
-  return byBrand;
+  return byKey;
+}
+
+/** The registered brand a spelling names, or null. */
+export function findBrand(brands, text) {
+  const key = brandKey(text);
+  if (!key) {
+    return null;
+  }
+  return brands?.get(key) ?? null;
+}
+
+/** The chains by id, so a private label can name the chain that owns it. */
+export function chainNamesById(supermarkets) {
+  const names = new Map();
+  for (const supermarket of supermarkets ?? []) {
+    if (supermarket?.id) {
+      names.set(supermarket.id, chainName(supermarket));
+    }
+  }
+  return names;
+}
+
+/**
+ * How many private label lines the system prompt carries before `start` says
+ * so.
+ *
+ * A chain has a handful of house labels, so the list is short by nature. It is
+ * also billed on every row of the run, which is what makes a long one worth a
+ * warning rather than a truncation: the list still has to be complete, because
+ * rule 6 is enforced against exactly these brands.
+ */
+export const PRIVATE_LABEL_WARN_LINES = 40;
+
+/** The registry's private label brands, each with the chain that owns it. */
+export function privateLabelLines(brands, supermarkets) {
+  const names = chainNamesById(supermarkets);
+  return [...(brands?.values() ?? [])]
+    .filter((brand) => brand.privateLabelSupermarketId)
+    .map((brand) => ({
+      label: brand.label,
+      chain:
+        names.get(brand.privateLabelSupermarketId) ??
+        brand.privateLabelSupermarketId,
+    }));
 }
 
 /** The rules prompt template, the markdown file beside this source. */
@@ -181,7 +253,12 @@ export function loadPromptTemplate(url = PROMPT_URL) {
 
 /**
  * The system prompt: the file, then the two vocabularies and the private label
- * map appended, so the model is told the same lists the validators enforce.
+ * brands appended, so the model is told the same lists the validators enforce.
+ *
+ * The registry itself is never in here. It is hundreds of brands, every one of
+ * them billed on every row of the run, and the model does not need it: the
+ * library looks a brand up for itself and the packet carries the one brand the
+ * row resolves to.
  *
  * `start` answers this text, and the orchestrator hands it to the model. The
  * library owns it because the library is what checks the answer against it.
@@ -190,10 +267,11 @@ export function buildSystemPrompt({
   template = loadPromptTemplate(),
   categories,
   units,
-  privateLabels,
+  brands = new Map(),
+  supermarkets = [],
 }) {
-  const labels = [...privateLabels.values()]
-    .map((entry) => `- \`${entry.brand}\` belongs to ${entry.chain}.`)
+  const labels = privateLabelLines(brands, supermarkets)
+    .map((entry) => `- \`${entry.label}\` belongs to ${entry.chain}.`)
     .join('\n');
   return [
     template.trimEnd(),

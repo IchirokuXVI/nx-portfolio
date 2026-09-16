@@ -16,7 +16,6 @@ import {
   start,
 } from './commands.mjs';
 import { makeGateway } from './gateway.mjs';
-import { indexPrivateLabels } from './rules.mjs';
 import { readJsonl } from './run-dir.mjs';
 import { makeCatalog, makeFakeSession, makeQueue } from './test-fakes.mjs';
 
@@ -32,7 +31,24 @@ const VOCABULARIES = {
   categories: ['DAIRY', 'PANTRY', 'OTHER'],
   units: ['UNIT', 'LITER', 'GRAM'],
 };
-const LABELS = indexPrivateLabels({ Hacendado: 'Mercadona' });
+
+/** The registry the fake main gateway answers, one house label and one not. */
+const BRANDS = [
+  {
+    id: 'b-hacendado',
+    key: 'hacendado',
+    label: 'Hacendado',
+    privateLabelSupermarketId: 'sm-1',
+    itemCount: 4,
+  },
+  {
+    id: 'b-pascual',
+    key: 'pascual',
+    label: 'Pascual',
+    privateLabelSupermarketId: null,
+    itemCount: 2,
+  },
+];
 
 function entry(id, name, overrides = {}) {
   return {
@@ -62,7 +78,12 @@ function runDir() {
  * A whole world: a main gateway with a catalog and a queue, and an empty
  * rehearsal slot, the way `curation-cli` provisions one.
  */
-function world({ entries = [], catalogItems = [], verifyFails = null } = {}) {
+function world({
+  entries = [],
+  catalogItems = [],
+  verifyFails = null,
+  brands = BRANDS,
+} = {}) {
   const byChain = {};
   for (const row of entries) {
     (byChain[row.supermarketId] ??= []).push(row);
@@ -73,6 +94,7 @@ function world({ entries = [], catalogItems = [], verifyFails = null } = {}) {
     catalog: mainCatalog,
     queue: makeQueue(byChain),
     supermarkets: SUPERMARKETS,
+    brands,
     label: 'main',
     verifyFails: verifyFails === 'main',
   });
@@ -108,7 +130,6 @@ function startIn(dir, w, overrides = {}) {
     model: 'claude-sonnet-5',
     makeSession: w.makeSession,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
     ...overrides,
   });
 }
@@ -163,6 +184,46 @@ test('start verifies both logins, counts the queue and answers the prompt', asyn
   assert.equal(header.mainUrl, MAIN_URL);
   assert.equal(header.rehearsalUrl, REHEARSAL_URL);
   assert.equal(header.model, 'claude-sonnet-5');
+});
+
+test('start snapshots the whole registry into brands.json', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });
+
+  const answer = await startIn(dir, w);
+
+  const snapshot = JSON.parse(readFileSync(join(dir, 'brands.json'), 'utf8'));
+  assert.deepEqual(snapshot.brands, BRANDS);
+  assert.ok(Date.parse(snapshot.readAt) > 0);
+  assert.equal(answer.brands, 2);
+  // The one thing an operator has to know about a snapshot: it is a moment.
+  assert.ok(
+    answer.notes.some((note) =>
+      /Read 2 brands\. A brand registered after this moment is not seen by this run\./.test(
+        note
+      )
+    )
+  );
+  // The private labels reach the prompt and the rest of the registry does not.
+  assert.match(answer.prompt, /`Hacendado` belongs to Mercadona/);
+  assert.doesNotMatch(answer.prompt, /Pascual/);
+  assert.equal(
+    w.mainSession.calls.filter(
+      (call) => call.path === '/v1/admin/catalog/brands'
+    ).length,
+    1
+  );
+});
+
+test('an empty registry is allowed and said out loud', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche')], brands: [] });
+
+  const answer = await startIn(dir, w);
+
+  assert.equal(answer.brands, 0);
+  assert.ok(answer.notes.some((note) => /every CREATE naming one/.test(note)));
+  assert.match(answer.prompt, /- \(none\)/);
 });
 
 test('start stops on a failed login before it counts anything', async () => {
@@ -255,7 +316,6 @@ test('next answers done when every row has been decided', async () => {
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.deepEqual(await next({ runDir: dir, gateways: w.gateways }), {
@@ -279,7 +339,6 @@ test('next walks past a chain whose rows are all decided, onto the next chain', 
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   const answer = await next({ runDir: dir, gateways: w.gateways });
@@ -308,7 +367,6 @@ test('a twin created by the previous decide is a candidate on the next row', asy
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   // The second row's candidate exists only because the first row's decide
@@ -334,7 +392,6 @@ test('a run candidate can be linked onto by its ref', async () => {
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   const answer = await decide({
@@ -343,7 +400,6 @@ test('a run candidate can be linked onto by its ref', async () => {
     input: { decision: 'LINK', itemRef: 'ref-e1', confidence: 0.97 },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.accepted, true);
@@ -363,7 +419,6 @@ test('a ref no decide created is a REVIEW, not a link into nothing', async () =>
     input: { decision: 'LINK', itemRef: 'ref-invented', confidence: 0.99 },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.decision.decision, 'REVIEW');
@@ -385,7 +440,6 @@ test('a CREATE writes into the rehearsal catalog and never into the main one', a
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.accepted, true);
@@ -418,7 +472,6 @@ test('a confidence under the threshold is demoted and writes nothing anywhere', 
     input: { ...CREATE_MILK, confidence: 0.5 },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.accepted, false);
@@ -446,7 +499,6 @@ test('a decision that fails a validator is a REVIEW and writes nothing', async (
     },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.decision.decision, 'REVIEW');
@@ -465,7 +517,6 @@ test('a reply that breaks the schema is retryable and writes nothing', async () 
     input: { decision: 'MAYBE', confidence: 1 },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.retryable, true);
@@ -485,7 +536,6 @@ test('--final turns a broken reply into a recorded REVIEW', async () => {
     final: true,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.retryable, false);
@@ -508,7 +558,6 @@ test('a glitched name is retryable and writes nothing', async () => {
     },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   // Not a judgment the model stands by: one token of the generation went
@@ -539,7 +588,6 @@ test('--final records a second glitch as a REVIEW carrying the code', async () =
     final: true,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.retryable, false);
@@ -573,7 +621,6 @@ test('a sizeless CREATE from a local model is recorded as a REVIEW', async () =>
     },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   // A judgment and not a glitch, so the row goes to a person on the first
@@ -616,7 +663,6 @@ test('the same sizeless CREATE from a Claude model is a CREATE', async () => {
     },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.accepted, true);
@@ -635,7 +681,6 @@ test('an entry already decided is refused rather than asked twice', async () => 
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   };
   await decide(args);
 
@@ -656,11 +701,56 @@ test('a failed rehearsal write is a REVIEW that names the failure', async () => 
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.decision.decision, 'REVIEW');
   assert.ok(answer.issues.some((i) => i.code === 'REHEARSAL_WRITE_FAILED'));
+});
+
+test('decide reads the snapshot and never asks the gateway for a brand', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [entry('e1', 'Zumo de naranja', { brand: null })],
+  });
+  await startIn(dir, w);
+  const before = w.mainSession.calls.length;
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: {
+      ...CREATE_MILK,
+      item: { ...CREATE_MILK.item, brand: '+Proteínas' },
+    },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'REVIEW');
+  assert.ok(answer.issues.some((i) => i.code === 'BRAND_UNREGISTERED'));
+  assert.deepEqual(
+    w.mainSession.calls
+      .slice(before)
+      .filter((call) => call.path === '/v1/admin/catalog/brands'),
+    []
+  );
+});
+
+test('a CREATE with no brand is never demoted for it', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: CREATE_MILK,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'CREATE');
+  assert.deepEqual(answer.issues, []);
 });
 
 // ---------------------------------------------------------------------------
@@ -679,7 +769,6 @@ test('a run resumes from a half written run directory', async () => {
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   // A kill between the append and the state rewrite: the state forgets the row
@@ -699,9 +788,93 @@ test('a run resumes from a half written run directory', async () => {
   );
 });
 
+test('a resumed run applies the registry it started with', async () => {
+  const dir = runDir();
+  // The list the fake gateway answers, mutated after `start` has read it: a
+  // brand registered while the walk runs. The next walk sees it and this one
+  // does not, because every step after `start` reads the file.
+  const registry = [...BRANDS];
+  const w = world({
+    entries: [entry('e1', 'Leche entera 1 L')],
+    brands: registry,
+  });
+  await startIn(dir, w);
+  registry.push({
+    id: 'b-proteinas',
+    key: 'proteinas',
+    label: '+Proteínas',
+    privateLabelSupermarketId: null,
+  });
+  w.mainSession.calls.length = 0;
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: {
+      ...CREATE_MILK,
+      item: { ...CREATE_MILK.item, brand: '+Proteínas' },
+    },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'REVIEW');
+  assert.ok(answer.issues.some((i) => i.code === 'BRAND_UNREGISTERED'));
+  assert.deepEqual(
+    w.mainSession.calls.filter(
+      (call) => call.path === '/v1/admin/catalog/brands'
+    ),
+    []
+  );
+
+  // And the snapshot on disk is still the one `start` wrote.
+  const snapshot = JSON.parse(readFileSync(join(dir, 'brands.json'), 'utf8'));
+  assert.deepEqual(
+    snapshot.brands.map((row) => row.key),
+    ['hacendado', 'pascual']
+  );
+});
+
 // ---------------------------------------------------------------------------
 // end
 // ---------------------------------------------------------------------------
+
+test('the report counts the run unregistered brands by rows', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [
+      entry('e1', 'Yogur natural'),
+      entry('e2', 'Yogur de fresa'),
+      entry('e3', 'Queso curado'),
+    ],
+  });
+  await startIn(dir, w);
+
+  const create = (brand) => ({
+    ...CREATE_MILK,
+    item: { ...CREATE_MILK.item, brand },
+  });
+  // One key, two spellings, and the more frequent one is the one an operator
+  // is shown when they go to register it.
+  for (const [entryId, brand] of [
+    ['e1', '+Proteínas'],
+    ['e2', '+ Proteinas'],
+    ['e3', '+Proteínas'],
+  ]) {
+    await decide({
+      runDir: dir,
+      entryId,
+      input: create(brand),
+      gateways: w.gateways,
+      vocabularies: VOCABULARIES,
+    });
+  }
+
+  const report = JSON.parse(readFileSync(end({ runDir: dir }).report, 'utf8'));
+  assert.deepEqual(report.unregisteredBrands, [
+    { key: 'proteinas', spelling: '+Proteínas', rows: 3 },
+  ]);
+});
 
 test('end writes the report with the counts, the reviews and the usage', async () => {
   const dir = runDir();
@@ -715,7 +888,6 @@ test('end writes the report with the counts, the reviews and the usage', async (
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
   await decide({
     runDir: dir,
@@ -727,7 +899,6 @@ test('end writes the report with the counts, the reviews and the usage', async (
     },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   const answer = end({
@@ -742,6 +913,9 @@ test('end writes the report with the counts, the reviews and the usage', async (
   assert.deepEqual(report.usage, { inputTokens: 10, outputTokens: 2 });
   assert.equal(report.reviews.length, 1);
   assert.equal(report.reviews[0].entryId, 'e2');
+  // A run that registered nothing new says so with an empty list rather than
+  // by leaving the field out.
+  assert.deepEqual(report.unregisteredBrands, []);
   assert.ok(report.reviews[0].issues.length > 0);
 });
 
@@ -1083,7 +1257,6 @@ test('a row deferred by composition is the first row of the next batch', async (
       input: { decision: 'REVIEW', confidence: 0.4, issues: [] },
       gateways: w.gateways,
       vocabularies: VOCABULARIES,
-      privateLabels: LABELS,
     });
   }
 
@@ -1109,7 +1282,6 @@ test('next --count larger than the queue answers what there is, then nothing', a
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.deepEqual(
@@ -1190,7 +1362,6 @@ test('a row that gained a candidate from its own batch is stale and writes nothi
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   const answer = await decide({
@@ -1199,7 +1370,6 @@ test('a row that gained a candidate from its own batch is stale and writes nothi
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.stale, true);
@@ -1220,7 +1390,6 @@ test('a row that gained a candidate from its own batch is stale and writes nothi
     input: { decision: 'LINK', itemRef: 'ref-e1', confidence: 0.97 },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
   assert.equal(again.stale, undefined);
   assert.equal(again.accepted, true);
@@ -1254,7 +1423,6 @@ test('the same candidates in another order are not stale', async () => {
     input: { decision: 'LINK', itemId: 'i1', confidence: 0.95 },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.stale, undefined);
@@ -1274,7 +1442,6 @@ test('a decide nothing handed out is judged, not called stale', async () => {
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.equal(answer.stale, undefined);
@@ -1296,7 +1463,6 @@ test('the report names the re-ask rate the run actually saw', async () => {
     runDir: dir,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   };
   await decide({ ...decideArgs, entryId: 'e1', input: CREATE_MILK });
   // Stale, then asked again and recorded.
@@ -1333,7 +1499,6 @@ test('the set a row was handed is forgotten once the row is decided', async () =
     input: CREATE_MILK,
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
-    privateLabels: LABELS,
   });
 
   assert.deepEqual(
