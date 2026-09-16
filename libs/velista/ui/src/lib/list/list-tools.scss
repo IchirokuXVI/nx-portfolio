@@ -15,6 +15,20 @@
   background: var(--app-surface-ground);
 }
 
+// The search's label and count, heard and not seen (velista 0079, section 3). Here and
+// not global: velista has no global utility class, and the basket page's own rule
+// does not reach inside this component.
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 // The leading edge and the controls at the trailing one. At least one control tall,
 // which is the height the open search keeps too, so opening and closing it leaves the
 // lines where they are (velista 0079, section 3).
