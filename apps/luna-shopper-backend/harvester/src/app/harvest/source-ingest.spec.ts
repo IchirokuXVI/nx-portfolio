@@ -515,6 +515,56 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
     expect(catalog.addPrices).not.toHaveBeenCalled();
   });
 
+  /**
+   * The key follows the brand on every path a row is written by (plan 0115,
+   * section 6).
+   *
+   * `brand` itself is untouched, here and everywhere in that plan: what the
+   * chain printed is the run's to state, and a decision never rewrites it (D8).
+   */
+  it('keys the brand a source printed, on a created row and on a touched one', async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          id: 'held-1',
+          externalId: entryKey('Cerveza', null),
+          name: 'Cerveza',
+          brand: 'Mahou',
+          brandKey: 'mahou',
+        },
+      ],
+    });
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [
+        observation({ name: 'Cerveza', brand: 'MAHOU' }),
+        observation({ name: 'Chorizo', brand: 'Campofrío' }),
+        // A brand of punctuation has no key, so the row carries none. LIDL's
+        // `-` and `---` arrive exactly like this.
+        observation({ name: 'Oferta', brand: '---' }),
+      ],
+    });
+
+    const byName = new Map(saved.map((row) => [row.name, row]));
+    // The spelling is rewritten because a run rewrites the source group, and
+    // the key follows it. The row is the same row.
+    expect(byName.get('Cerveza')).toMatchObject({
+      brand: 'MAHOU',
+      brandKey: 'mahou',
+    });
+    expect(byName.get('Chorizo')).toMatchObject({
+      brand: 'Campofrío',
+      brandKey: 'campofrio',
+    });
+    expect(byName.get('Oferta')).toMatchObject({
+      brand: '---',
+      brandKey: null,
+    });
+  });
+
   it('collects a price for the ACTIVE rows only', async () => {
     const { ingest, context, catalog } = build({
       rows: [

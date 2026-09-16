@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  BRAND_SPELLINGS_MAX,
+  brandKey,
   HarvestRunMode,
   HarvestRunStatus,
   ItemCategory,
@@ -10,10 +12,15 @@ import {
   SourceEntryStatus,
   UnitOfMeasure,
   type AcceptSourceEntryRequest,
+  type BrandSpellingsRequest,
+  type BrandSpellingsResult,
+  type BrandSuggestionPage,
+  type BrandSuggestionView,
   type CreateItemFromSourceEntryRequest,
   type ExportHarvestRunRequest,
   type HarvestRunExportResult,
   type ItemView,
+  type ListBrandSuggestionsRequest,
   type ListSourceEntriesRequest,
   type SourceCatalogEntryPage,
   type SourceCatalogEntryView,
@@ -50,6 +57,41 @@ import { SupermarketSourceService } from './supermarket-source.service';
 interface EntryCursor {
   value: string;
   id: string;
+}
+
+/** The keyset a suggestions page resumes from (plan 0115, section 7.2). */
+interface SuggestionCursor {
+  productCount: number;
+  key: string;
+}
+
+/** One grouped suggestion row, as the raw query hands it back. */
+interface SuggestionRow {
+  key: string;
+  spelling: string;
+  productCount: number;
+  firstSeenAt: Date | string;
+  /** `jsonb_agg` answers null for a group with no chains, which cannot happen. */
+  chains: { supermarketId: string; productCount: number }[] | null;
+}
+
+/** One chain's spelling of one brand, as the raw query hands it back. */
+interface SpellingRow {
+  supermarketId: string;
+  spelling: string;
+  productCount: number;
+  queuedCount: number;
+}
+
+/** A grouped suggestion row on the wire. */
+function toBrandSuggestionView(row: SuggestionRow): BrandSuggestionView {
+  return {
+    key: row.key,
+    spelling: row.spelling,
+    productCount: row.productCount,
+    firstSeenAt: new Date(row.firstSeenAt).toISOString(),
+    chains: row.chains ?? [],
+  };
 }
 
 /** The two statuses that are waiting for a person: the queue (plan 0086, D7). */
@@ -303,6 +345,162 @@ export class SourceEntryService {
     entry.decidedAt = new Date();
     // name, brand and sizeFormat are deliberately untouched (D8).
     return toSourceCatalogEntryView(await this.entries.save(entry));
+  }
+
+  // --- Brands (plan 0115, sections 7 and 8) ---------------------------------
+
+  /**
+   * The brand keys queued rows carry that no registered brand holds (plan 0115,
+   * section 7).
+   *
+   * **A suggestion is a key, not a spelling.** Queued is `CANDIDATE` or
+   * `UNRESOLVED`: the products still waiting for a person. An `ACTIVE` row is
+   * already a product and a `REJECTED` row is one the owner said is not tracked,
+   * so neither counts. A product two chains carry is two source rows and counts
+   * twice, which is the number the queue shows.
+   *
+   * The registry lives in catalog, so `registeredKeys` arrives with the request:
+   * the harvester holds no copy of it, because a copy is a second answer to what
+   * is registered and it can disagree with the first.
+   *
+   * Two things about the SQL are the plan rather than taste:
+   *
+   * - **The chains are a grouped subquery**, not a second query per row. Twenty
+   *   suggestions on a page would otherwise be twenty round trips for a column.
+   * - **The cursor is a keyset over `(productCount, key)`**. Counts move as the
+   *   queue is worked, so a row can appear on two pages; the back office dedupes
+   *   by key, as the admin's own queue already does by id. What a keyset buys
+   *   over an offset is that a page is never *silently* short.
+   */
+  async brandSuggestions(
+    req: ListBrandSuggestionsRequest
+  ): Promise<BrandSuggestionPage> {
+    await this.admin.requireAdmin(req);
+    const limit = clampPageSize(req.limit);
+    const cursor = decodeCursor(req.cursor) as SuggestionCursor | undefined;
+
+    const values: unknown[] = [];
+    const bind = (value: unknown): string => `$${values.push(value)}`;
+    const registered = bind(req.registeredKeys ?? []);
+
+    const filters: string[] = [];
+    const query = req.query?.trim();
+    if (query) {
+      const key = brandKey(query);
+      // Keyed before matching, so `el pozo` finds `elpozo`. A query with no
+      // letters or digits keys to nothing and narrows nothing, which is the
+      // plan's "answers every suggestion" rather than an empty page.
+      if (key !== null) {
+        filters.push(`e."brandKey" LIKE ${bind(`%${key}%`)}`);
+      }
+    }
+
+    const seek =
+      cursor === undefined
+        ? ''
+        : (() => {
+            const count = bind(cursor.productCount);
+            return `WHERE (g."productCount" < ${count}
+                       OR (g."productCount" = ${count} AND g."key" > ${bind(cursor.key)}))`;
+          })();
+
+    const rows: SuggestionRow[] = await this.entries.query(
+      `
+      SELECT g.*
+        FROM (
+          SELECT e."brandKey"                            AS "key",
+                 mode() WITHIN GROUP (ORDER BY e."brand") AS "spelling",
+                 count(*)::int                           AS "productCount",
+                 min(e."firstSeenAt")                    AS "firstSeenAt",
+                 (
+                   SELECT jsonb_agg(chain ORDER BY chain."productCount" DESC,
+                                                   chain."supermarketId" ASC)
+                     FROM (
+                       SELECT c."supermarketId"::text AS "supermarketId",
+                              count(*)::int           AS "productCount"
+                         FROM "source_catalog_entries" c
+                        WHERE c."status" IN ('CANDIDATE', 'UNRESOLVED')
+                          AND c."brandKey" = e."brandKey"
+                        GROUP BY c."supermarketId"
+                     ) chain
+                 )                                      AS "chains"
+            FROM "source_catalog_entries" e
+           WHERE e."status" IN ('CANDIDATE', 'UNRESOLVED')
+             AND e."brandKey" IS NOT NULL
+             AND NOT (e."brandKey" = ANY(${registered}::text[]))
+             ${filters.length ? `AND ${filters.join(' AND ')}` : ''}
+           GROUP BY e."brandKey"
+        ) g
+        ${seek}
+       ORDER BY g."productCount" DESC, g."key" ASC
+       LIMIT ${bind(limit + 1)}
+      `,
+      values
+    );
+
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+    return {
+      items: page.map(toBrandSuggestionView),
+      nextCursor:
+        hasMore && last
+          ? encodeCursor({
+              productCount: last.productCount,
+              key: last.key,
+            })
+          : null,
+    };
+  }
+
+  /**
+   * How each chain spells the named brands (plan 0115, section 8).
+   *
+   * Every source row carrying one of the keys **except `REJECTED`**: a product
+   * the owner said is not tracked still says nothing about how the chain writes
+   * the brand, and counting it would inflate the number beside a spelling
+   * nobody will ever see again.
+   *
+   * Not paged, because one brand has a handful of spellings. It is capped
+   * instead, at {@link BRAND_SPELLINGS_MAX}, so a chain with a data problem
+   * cannot answer a screen with ten thousand rows.
+   */
+  async brandSpellings(
+    req: BrandSpellingsRequest
+  ): Promise<BrandSpellingsResult> {
+    await this.admin.requireAdmin(req);
+    const keys = req.keys ?? [];
+    if (keys.length === 0) {
+      return { spellings: [] };
+    }
+
+    const rows: SpellingRow[] = await this.entries.query(
+      `
+      SELECT e."supermarketId"::text AS "supermarketId",
+             e."brand"               AS "spelling",
+             count(*)::int           AS "productCount",
+             count(*) FILTER (
+               WHERE e."status" IN ('CANDIDATE', 'UNRESOLVED')
+             )::int                  AS "queuedCount"
+        FROM "source_catalog_entries" e
+       WHERE e."brandKey" = ANY($1::text[])
+         AND e."status" <> 'REJECTED'
+         AND e."brand" IS NOT NULL
+       GROUP BY e."supermarketId", e."brand"
+       ORDER BY e."supermarketId" ASC, count(*) DESC, e."brand" ASC
+       LIMIT $2
+      `,
+      [keys, BRAND_SPELLINGS_MAX]
+    );
+
+    return {
+      spellings: rows.map((row) => ({
+        supermarketId: row.supermarketId,
+        spelling: row.spelling,
+        productCount: row.productCount,
+        queuedCount: row.queuedCount,
+      })),
+    };
   }
 
   /**

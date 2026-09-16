@@ -127,6 +127,28 @@ export const SOURCE_ENTRY_PATTERNS = {
    * reject hides a row from the queue that nobody will look at again.
    */
   applyDecisions: 'sourceEntry.applyDecisions',
+  /**
+   * The brand keys queued rows carry that no registered brand holds (plan 0115,
+   * section 7).
+   *
+   * **A suggestion is a key, not a spelling.** Queued is `CANDIDATE` or
+   * `UNRESOLVED`: the products still waiting for a person. An `ACTIVE` row is
+   * already a product and a `REJECTED` row is one the owner said is not
+   * tracked, so neither counts. A product carried by two chains is two source
+   * rows and counts twice, which is the number the queue shows.
+   *
+   * The registry lives in catalog, so the caller sends the registered keys in
+   * with the request: the harvester holds no copy of them.
+   */
+  brandSuggestions: 'sourceEntry.brandSuggestions',
+  /**
+   * How each chain spells one registered brand (plan 0115, section 8).
+   *
+   * Every source row carrying the key **except `REJECTED`**, grouped by chain
+   * and by the verbatim spelling. Not paged: one brand has a handful of
+   * spellings, and the answer is capped rather than cut into pages.
+   */
+  brandSpellings: 'sourceEntry.brandSpellings',
 } as const;
 
 /**
@@ -1191,6 +1213,83 @@ export interface SetSupermarketSourceEnabledRequest extends AdminCredential {
 
 export interface ListSupermarketSourcesRequest
   extends PageQuery, AdminCredential {}
+
+// --- Brand suggestions and spellings (plan 0115, sections 7 and 8) ----------
+
+/**
+ * Ask for the keys queued rows carry that nothing in the registry holds.
+ *
+ * `registeredKeys` is the whole registry, sent in the message. The harvester
+ * keeps no copy of it, because a copy is a second answer to "what is
+ * registered" that can disagree with the first. The ceiling on that is
+ * documented on `BRAND_PATTERNS.keys`.
+ */
+export interface ListBrandSuggestionsRequest
+  extends PageQuery, AdminCredential {
+  registeredKeys: string[];
+  /** Keyed with `brandKey` before matching. A query with no key matches every row. */
+  query?: string;
+}
+
+/** One chain's share of a suggestion. */
+export interface BrandSuggestionChain {
+  supermarketId: string;
+  productCount: number;
+}
+
+/**
+ * One unregistered brand key, as the queue sees it (plan 0115, section 7.2).
+ *
+ * The cursor is a keyset over `(productCount, key)`, and counts move as the
+ * queue is worked, so a row can appear on two pages. The back office dedupes by
+ * key.
+ */
+export interface BrandSuggestionView {
+  key: string;
+  /** The most common verbatim spelling: the label the back office proposes. */
+  spelling: string;
+  productCount: number;
+  firstSeenAt: string;
+  /** Every chain whose queued rows carry the key, most products first. */
+  chains: BrandSuggestionChain[];
+}
+
+export type BrandSuggestionPage = Paginated<BrandSuggestionView>;
+
+/** Ask how each chain spells the named keys. One key in practice. */
+export interface BrandSpellingsRequest extends AdminCredential {
+  keys: string[];
+}
+
+/**
+ * How one chain spells one brand, and how many products it is on (plan 0115,
+ * section 8).
+ *
+ * A spelling differing from the label only by case or accents is still its own
+ * row: seeing `MAHOU` beside `Mahou` is the point of the read.
+ */
+export interface BrandSpellingView {
+  supermarketId: string;
+  /** The brand as the chain printed it, verbatim. */
+  spelling: string;
+  productCount: number;
+  /** Of those, the ones still `CANDIDATE` or `UNRESOLVED`. */
+  queuedCount: number;
+}
+
+/**
+ * The full list, ordered by chain then by count descending, never paged.
+ *
+ * Capped at {@link BRAND_SPELLINGS_MAX}: one brand has a handful of spellings,
+ * and a chain that has printed more than that has a data problem rather than a
+ * paging problem.
+ */
+export interface BrandSpellingsResult {
+  spellings: BrandSpellingView[];
+}
+
+/** The most spelling rows one brand's read answers with. */
+export const BRAND_SPELLINGS_MAX = 200;
 
 // --- Pages -----------------------------------------------------------------
 

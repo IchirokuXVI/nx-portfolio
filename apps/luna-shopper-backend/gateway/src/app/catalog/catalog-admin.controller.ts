@@ -13,18 +13,27 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
+  BRAND_PATTERNS,
+  HARVEST_SCHEMA_IDS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
   PRICE_POLICY_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PriceSourceKind,
   PRODUCT_GROUP_PATTERNS,
+  SOURCE_ENTRY_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type AdminSupermarketItemPage,
   type ApplyProductGroupAssignmentsResult,
+  type BrandKeysResult,
+  type BrandPage,
+  type BrandSpellingsResult,
+  type BrandSuggestionPage,
+  type BrandView,
+  type CreateBrandResult,
   type CreateItemsResult,
   type ItemPage,
   type ItemPricePage,
@@ -50,9 +59,15 @@ import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import type { CurrentAdmin } from '../admin/admin-jwt.strategy';
 import { ActingAdmin } from '../admin/current-admin.decorator';
 import { referenceFilter } from '../admin/reference-none';
-import { ApiContractResponse, ApiProblemResponses } from '../docs';
+import {
+  ApiComposedResponse,
+  ApiContractResponse,
+  ApiProblemResponses,
+} from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
+  AdminListBrandsQueryDto,
+  AdminListBrandSuggestionsQueryDto,
   AdminListLocationItemsQueryDto,
   AdminListLocationsQueryDto,
   AdminListSupermarketItemsQueryDto,
@@ -62,6 +77,7 @@ import {
 import {
   AddItemPriceDto,
   ApplyProductGroupAssignmentsDto,
+  CreateBrandDto,
   CreateItemDto,
   CreateItemsDto,
   CreatePriceScopeDto,
@@ -73,6 +89,7 @@ import {
   ListProductGroupsQueryDto,
   SetSupermarketItemAvailabilityDto,
   SetSupermarketLocationItemAvailabilityDto,
+  UpdateBrandDto,
   UpdateItemDto,
   UpdatePricePolicyDto,
   UpdatePriceScopeDto,
@@ -528,6 +545,170 @@ export class AdminCatalogProductGroupsController {
       ...adminCredential(admin),
       productGroupId: id,
     });
+  }
+}
+
+/**
+ * The registry of brands a person fills (plan 0115).
+ *
+ * A brand used to be free text on every table, so `+Proteinas` sat as a brand on
+ * 24 Mercadona products when it is a range of Hacendado, and nobody could list
+ * the brands the catalog holds because there was no such list. These four routes
+ * are the list, plus the one read that says how each chain spells a brand.
+ *
+ * **There is no delete** (plan 0115, section 9), and there is no `key` anywhere
+ * in a request body: the key is made from the label, and editing the label is
+ * the only thing that changes it.
+ */
+@ApiTags('admin-catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/catalog/brands', version: '1' })
+export class AdminCatalogBrandsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * Register a brand, and claim the products already carrying its key.
+   *
+   * The answer is the brand plus `linkedItems`, the number of products the
+   * create picked up, which the back office says out loud. Zero is ordinary: a
+   * brand registered ahead of any product carries nothing yet.
+   */
+  @Post()
+  @ApiContractResponse(BRAND_PATTERNS.create, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, conflict: true })
+  create(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: CreateBrandDto
+  ): Promise<CreateBrandResult> {
+    return this.nats.send<CreateBrandResult>(BRAND_PATTERNS.create, {
+      ...adminCredential(admin),
+      ...dto,
+    });
+  }
+
+  @Get()
+  @ApiContractResponse(BRAND_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: AdminListBrandsQueryDto
+  ): Promise<BrandPage> {
+    return this.nats.send<BrandPage>(BRAND_PATTERNS.list, {
+      userId: admin.adminId,
+      query: query.query,
+      privateLabelSupermarketId: query.privateLabelSupermarketId,
+      cursor: query.cursor,
+      limit: query.limit,
+      order: query.order,
+    });
+  }
+
+  /**
+   * How each chain spells this brand (plan 0115, section 8).
+   *
+   * Composed from two services: catalog holds the brand, and the spellings are
+   * whatever the chains printed, which only the harvester has. The brand is read
+   * first so a missing id answers 404 from the service that owns the row rather
+   * than an empty list from the one that does not.
+   */
+  @Get(':id/spellings')
+  @ApiComposedResponse(HARVEST_SCHEMA_IDS.brandSpellingsResult, {
+    description:
+      'How each chain spells this brand, from the harvester’s source rows. Composed: the brand is read from catalog first.',
+  })
+  async spellings(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<BrandSpellingsResult> {
+    const brand = await this.nats.send<BrandView>(BRAND_PATTERNS.get, {
+      userId: admin.adminId,
+      brandId: id,
+    });
+    return this.nats.send<BrandSpellingsResult>(
+      SOURCE_ENTRY_PATTERNS.brandSpellings,
+      { ...adminCredential(admin), keys: [brand.key] }
+    );
+  }
+
+  @Get(':id')
+  @ApiContractResponse(BRAND_PATTERNS.get)
+  get(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<BrandView> {
+    return this.nats.send<BrandView>(BRAND_PATTERNS.get, {
+      userId: admin.adminId,
+      brandId: id,
+    });
+  }
+
+  /**
+   * Rename a brand, or move it under a chain.
+   *
+   * A rename rewrites `brand` on every item linked to this brand, and links the
+   * unlinked items that carry the new key. Items linked under the old key stay
+   * linked: they were this brand, and a corrected spelling does not change that.
+   */
+  @Patch(':id')
+  @ApiContractResponse(BRAND_PATTERNS.update)
+  @ApiProblemResponses({ body: true, conflict: true })
+  update(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: UpdateBrandDto
+  ): Promise<BrandView> {
+    return this.nats.send<BrandView>(BRAND_PATTERNS.update, {
+      ...adminCredential(admin),
+      brandId: id,
+      ...dto,
+    });
+  }
+}
+
+/**
+ * The brands the queue is asking for (plan 0115, section 7).
+ *
+ * Its own controller because its path is a sibling of `brands` rather than a
+ * child: a suggestion has no id and is not a resource, it is a key nothing has
+ * registered yet.
+ *
+ * **Composed, and in this order.** Catalog answers which keys are registered,
+ * and the harvester answers which keys its queued rows carry; subtracting one
+ * from the other is the whole read. The keys travel in the NATS message, and the
+ * ceiling on that is documented on `BRAND_PATTERNS.keys`.
+ */
+@ApiTags('admin-catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/catalog/brand-suggestions', version: '1' })
+export class AdminCatalogBrandSuggestionsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiComposedResponse(HARVEST_SCHEMA_IDS.brandSuggestionPage, {
+    description:
+      'The brand keys queued source rows carry that no registered brand holds, most products first. Composed from catalog’s registry and the harvester’s queue.',
+  })
+  async list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: AdminListBrandSuggestionsQueryDto
+  ): Promise<BrandSuggestionPage> {
+    const { keys } = await this.nats.send<BrandKeysResult>(
+      BRAND_PATTERNS.keys,
+      { userId: admin.adminId }
+    );
+    return this.nats.send<BrandSuggestionPage>(
+      SOURCE_ENTRY_PATTERNS.brandSuggestions,
+      {
+        ...adminCredential(admin),
+        registeredKeys: keys,
+        query: query.query,
+        cursor: query.cursor,
+        limit: query.limit,
+      }
+    );
   }
 }
 

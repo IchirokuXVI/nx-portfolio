@@ -27,6 +27,8 @@ export interface SourceEntryFields {
   sourceKind: PriceSourceKind;
   name: string;
   brand: string | null;
+  /** The brand's key, derived and written beside it (plan 0115, section 6). */
+  brandKey: string | null;
   ean: string | null;
   unitSize: number | null;
   sizeFormat: string | null;
@@ -74,6 +76,9 @@ export function applySourceGroup(
   row.sourceKind = fields.sourceKind;
   row.name = fields.name;
   row.brand = fields.brand;
+  // The key follows the brand and is never compared on its own, which is why
+  // {@link sourceGroupChanged} above says nothing about it.
+  row.brandKey = fields.brandKey;
   row.ean = fields.ean;
   row.unitSize = fields.unitSize;
   row.sizeFormat = fields.sizeFormat;

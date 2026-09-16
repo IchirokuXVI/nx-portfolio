@@ -9,6 +9,7 @@ import {
   CATALOG_NATS_EVENTS,
   CatalogEventsPublisher,
 } from '../events/catalog-events.publisher';
+import { BrandService } from './brand.service';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CatalogController } from './catalog.controller';
 import { CatalogDashboardService } from './dashboard.service';
@@ -75,6 +76,9 @@ import { SupermarketService } from './supermarket.service';
     SupermarketLocationService,
     ProductGroupService,
     ProductGroupAssignmentService,
+    // The registry a person fills, and the keys an item is written against
+    // (plan 0115).
+    BrandService,
     ItemService,
     // Turns a place into the scopes that price it today (plan 0049).
     ScopeResolverService,

@@ -5,6 +5,7 @@ import {
   IntersectionType,
 } from '@nestjs/swagger';
 import {
+  BRAND_LABEL_MAX_LENGTH,
   BULK_DECISION_MAX_OPERATIONS,
   CONTENT_LOCALES,
   ITEM_LOOKUP_LIMITS,
@@ -1233,4 +1234,57 @@ export class ListProductGroupsQueryDto extends CatalogListQueryDto {
   @IsString()
   @MaxLength(120)
   query?: string;
+}
+
+/**
+ * Register a brand (plan 0115, section 5.3).
+ *
+ * **There is no `key` field, here or anywhere.** The key is made from the label
+ * and is never sent by a client, so offering it would invite two answers to what
+ * this brand's key is. A label of nothing but punctuation makes no key at all
+ * and is refused by catalog with `brand_label_empty`; the length and the type
+ * are all this layer can honestly check.
+ */
+export class CreateBrandDto {
+  @ApiProperty({
+    maxLength: BRAND_LABEL_MAX_LENGTH,
+    description:
+      'How the brand is written everywhere a person reads it. Its key is made from this.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(BRAND_LABEL_MAX_LENGTH)
+  label!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The chain that owns this private label. Null, and usually absent, for an ordinary brand.',
+  })
+  @IsOptional()
+  @ValidateIf((dto: CreateBrandDto) => dto.privateLabelSupermarketId !== null)
+  @IsUUID()
+  privateLabelSupermarketId?: string | null;
+}
+
+/**
+ * Edit a brand.
+ *
+ * Sending `label` is the only way a key changes, and it also rewrites `brand` on
+ * every item linked to this brand. Items linked under the old key stay linked.
+ */
+export class UpdateBrandDto {
+  @ApiPropertyOptional({ maxLength: BRAND_LABEL_MAX_LENGTH })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(BRAND_LABEL_MAX_LENGTH)
+  label?: string;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @IsOptional()
+  @ValidateIf((dto: UpdateBrandDto) => dto.privateLabelSupermarketId !== null)
+  @IsUUID()
+  privateLabelSupermarketId?: string | null;
 }

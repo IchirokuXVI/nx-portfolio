@@ -174,6 +174,14 @@ export type AvailabilityEntryDto = {
 };
 
 /**
+ * `CreateBrandDto` in the gateway's OpenAPI document.
+ */
+export type CreateBrandDto = {
+  label: string;
+  privateLabelSupermarketId?: string | null;
+};
+
+/**
  * `CreateGeneratedListDto` in the gateway's OpenAPI document.
  */
 export type CreateGeneratedListDto = {
@@ -479,6 +487,8 @@ export type ProblemDetails = {
     | 'line_merge_required'
     | 'line_merge_needs_approval'
     | 'line_merge_too_many_products'
+    | 'brand_label_empty'
+    | 'brand_key_taken'
     | 'internal';
   detail?: string;
   message: string;
@@ -847,6 +857,14 @@ export type UpdateAdminZoneDto = {
   config?: {
     [key: string]: unknown;
   };
+};
+
+/**
+ * `UpdateBrandDto` in the gateway's OpenAPI document.
+ */
+export type UpdateBrandDto = {
+  label?: string;
+  privateLabelSupermarketId?: string | null;
 };
 
 /**
@@ -1661,6 +1679,29 @@ export type CatalogAdminSupermarketItemView = {
 };
 
 /**
+ * `catalog.BrandPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogBrandPage = {
+  items: CatalogBrandView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.BrandView` in the gateway's OpenAPI document.
+ */
+export type CatalogBrandView = {
+  id: string;
+  key: string;
+  label: string;
+  privateLabelSupermarketId: string | null;
+  itemCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
  * `catalog.BulkOperationError` in the gateway's OpenAPI document.
  */
 export type CatalogBulkOperationError = {
@@ -1694,6 +1735,20 @@ export type CatalogCatalogSuggestion = {
   kind: 'group' | 'item';
   group: CatalogProductGroupOfferView | null;
   item: CatalogItemView | null;
+};
+
+/**
+ * `catalog.CreateBrandResult` in the gateway's OpenAPI document.
+ */
+export type CatalogCreateBrandResult = {
+  id: string;
+  key: string;
+  label: string;
+  privateLabelSupermarketId: string | null;
+  itemCount: number;
+  createdAt: string;
+  updatedAt: string;
+  linkedItems: number;
 };
 
 /**
@@ -2855,6 +2910,52 @@ export const HarvestAdapterCapabilityTable = {
  */
 export type HarvestAdapterCapabilityTable =
   typeof HarvestAdapterCapabilityTable;
+
+/**
+ * `harvest.BrandSpellingView` in the gateway's OpenAPI document.
+ */
+export type HarvestBrandSpellingView = {
+  supermarketId: string;
+  spelling: string;
+  productCount: number;
+  queuedCount: number;
+};
+
+/**
+ * `harvest.BrandSpellingsResult` in the gateway's OpenAPI document.
+ */
+export type HarvestBrandSpellingsResult = {
+  spellings: HarvestBrandSpellingView[];
+};
+
+/**
+ * `harvest.BrandSuggestionChain` in the gateway's OpenAPI document.
+ */
+export type HarvestBrandSuggestionChain = {
+  supermarketId: string;
+  productCount: number;
+};
+
+/**
+ * `harvest.BrandSuggestionPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestBrandSuggestionPage = {
+  items: HarvestBrandSuggestionView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.BrandSuggestionView` in the gateway's OpenAPI document.
+ */
+export type HarvestBrandSuggestionView = {
+  key: string;
+  spelling: string;
+  productCount: number;
+  firstSeenAt: string;
+  chains: HarvestBrandSuggestionChain[];
+};
 
 /**
  * `harvest.DiscoveredPlaceCounts` in the gateway's OpenAPI document.

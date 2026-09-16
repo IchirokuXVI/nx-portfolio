@@ -110,6 +110,17 @@ export const ERROR_CATALOG: Record<
     en: 'Together these two lines would hold more than {max} products, so they cannot be merged.',
     es: 'Juntas, estas dos líneas tendrían más de {max} productos, así que no se pueden unir.',
   },
+  // The brand registry's two refusals (plan 0115, section 5.3). Both name what
+  // to do rather than what failed: type a real word, or open the brand that
+  // already holds the key.
+  [ERROR_CODES.BRAND_LABEL_EMPTY]: {
+    en: 'The label needs at least one letter or digit.',
+    es: 'La etiqueta necesita al menos una letra o un dígito.',
+  },
+  [ERROR_CODES.BRAND_KEY_TAKEN]: {
+    en: 'A brand with this key already exists.',
+    es: 'Ya existe una marca con esta clave.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',
