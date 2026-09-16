@@ -15,6 +15,7 @@ import {
 import { DataSource } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
 import {
+  Brand,
   CATALOG_ENTITIES,
   Item,
   PriceScope,
@@ -115,6 +116,7 @@ describeIntegration('localized name paging (real Postgres)', () => {
       dataSource.getRepository(Item),
       dataSource.getRepository(ProductGroup),
       dataSource.getRepository(SupermarketItem),
+      dataSource.getRepository(Brand),
       groups,
       admin,
       audit,

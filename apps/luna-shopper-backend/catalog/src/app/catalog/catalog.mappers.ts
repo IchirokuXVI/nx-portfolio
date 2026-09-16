@@ -1,5 +1,6 @@
 import {
   CONTENT_LOCALES,
+  type BrandView,
   type ContentLocale,
   type ItemOfferView,
   type ItemPriceView,
@@ -18,6 +19,7 @@ import {
   type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
 import type {
+  Brand,
   Item,
   ItemPrice,
   PricePolicy,
@@ -220,6 +222,25 @@ export function toItemView(row: Item, bestOffer?: ItemOfferView): ItemView {
     productGroupId: row.productGroupId,
   };
   return bestOffer ? { ...view, bestOffer } : view;
+}
+
+/**
+ * A brand on the wire (plan 0115, section 5.1).
+ *
+ * `itemCount` is not on the row: it is counted for the page in one grouped
+ * query, so it is handed in rather than read off the entity. Passing it
+ * explicitly is what stops a caller quietly answering zero because it forgot.
+ */
+export function toBrandView(row: Brand, itemCount: number): BrandView {
+  return {
+    id: row.id,
+    key: row.key,
+    label: row.label,
+    privateLabelSupermarketId: row.privateLabelSupermarketId,
+    itemCount,
+    createdAt: toInstant(row.createdAt) as string,
+    updatedAt: toInstant(row.updatedAt) as string,
+  };
 }
 
 /** A timestamp on the wire, or null. Raw rows hand back strings, entities hand back dates. */

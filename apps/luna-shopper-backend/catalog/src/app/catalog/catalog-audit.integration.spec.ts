@@ -14,6 +14,7 @@ import { CATALOG_MIGRATIONS } from '../db/migrations';
 import {
   AuditAction,
   AuditActorKind,
+  Brand,
   CATALOG_ENTITIES,
   CatalogAudit,
   Item,
@@ -121,6 +122,7 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
       dataSource.getRepository(Item),
       dataSource.getRepository(ProductGroup),
       dataSource.getRepository(SupermarketItem),
+      dataSource.getRepository(Brand),
       groups,
       admin,
       audit,
@@ -206,10 +208,19 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
     const history = await historyOf('items', item.id);
     expect(history).toHaveLength(1);
     expect(history[0].action).toBe(AuditAction.UPDATE);
-    // Exactly the field that moved. `name`, `category` and `defaultUnit` were
+    // Exactly the fields that moved. `name`, `category` and `defaultUnit` were
     // all sent to the database by the same save and none of them changed.
-    expect(history[0].before).toEqual({ brand: 'Pascual' });
-    expect(history[0].after).toEqual({ brand: 'Hacendado' });
+    // `brandKey` moves with `brand` because it is derived from it (plan 0115),
+    // and it is in the diff for that reason rather than as noise: it is a
+    // stored column that genuinely changed.
+    expect(history[0].before).toEqual({
+      brand: 'Pascual',
+      brandKey: 'pascual',
+    });
+    expect(history[0].after).toEqual({
+      brand: 'Hacendado',
+      brandKey: 'hacendado',
+    });
   });
 
   it('writes no row for an update that changes nothing', async () => {

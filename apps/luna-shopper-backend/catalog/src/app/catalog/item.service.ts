@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  brandKey,
   BULK_DECISION_MAX_OPERATIONS,
   ITEM_LOOKUP_LIMITS,
   LINE_ITEM_SET_MAX,
@@ -39,7 +40,7 @@ import {
   Repository,
   type SelectQueryBuilder,
 } from 'typeorm';
-import { Item, ProductGroup, SupermarketItem } from '../entities';
+import { Brand, Item, ProductGroup, SupermarketItem } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
@@ -127,6 +128,10 @@ export class ItemService {
     private readonly groups: Repository<ProductGroup>,
     @InjectRepository(SupermarketItem)
     private readonly prices: Repository<SupermarketItem>,
+    // The registry every written brand is looked up in (plan 0115, section 4).
+    // Read directly rather than through `BrandService`, because what the write
+    // step needs is one lookup by key and nothing the service adds around it.
+    @InjectRepository(Brand) private readonly brands: Repository<Brand>,
     private readonly productGroups: ProductGroupService,
     private readonly admin: PlatformAdminService,
     private readonly audit: CatalogAuditService,
@@ -148,7 +153,6 @@ export class ItemService {
     const actor = await this.admin.requireAdmin(req);
     const draft = this.items.create({
       name: req.name,
-      brand: req.brand ?? null,
       imageUrl: req.imageUrl ?? null,
       sku: req.sku ?? null,
       ean: req.ean ?? null,
@@ -157,6 +161,10 @@ export class ItemService {
       defaultUnit: req.defaultUnit,
       productGroupId: await this.resolveGroup(req.productGroupId ?? null),
     });
+    // The three brand columns, in the one step every write shares (plan 0115,
+    // section 4). An unregistered brand is still accepted: refusing it is the
+    // curator's decision, not the catalog's.
+    this.applyBrand(draft, req.brand, await this.registeredBrands([req.brand]));
     // Guarded for the same reason {@link createMany} is: the barcode is unique
     // when present, so a product the catalog already holds under it refuses the
     // insert. Unguarded, that reaches the operator as a 500 saying nothing,
@@ -211,21 +219,27 @@ export class ItemService {
     // Every group is resolved before the transaction opens, which is where the
     // audit service says validating reads belong. A group deleted between the
     // check and the write fails on the foreign key, and fails the whole batch.
+    // Every distinct key of the batch in **one** query, not one per product
+    // (plan 0115, section 4). A file of a thousand products is a thousand
+    // lookups otherwise, for a registry of a few hundred rows.
+    const registered = await this.registeredBrands(
+      req.items.map((input) => input.brand)
+    );
+
     const drafts: Item[] = [];
     for (const input of req.items) {
-      drafts.push(
-        this.items.create({
-          name: input.name,
-          brand: input.brand ?? null,
-          imageUrl: input.imageUrl ?? null,
-          sku: input.sku ?? null,
-          ean: input.ean ?? null,
-          unitSize: input.unitSize ?? null,
-          category: input.category,
-          defaultUnit: input.defaultUnit,
-          productGroupId: await this.resolveGroup(input.productGroupId ?? null),
-        })
-      );
+      const draft = this.items.create({
+        name: input.name,
+        imageUrl: input.imageUrl ?? null,
+        sku: input.sku ?? null,
+        ean: input.ean ?? null,
+        unitSize: input.unitSize ?? null,
+        category: input.category,
+        defaultUnit: input.defaultUnit,
+        productGroupId: await this.resolveGroup(input.productGroupId ?? null),
+      });
+      this.applyBrand(draft, input.brand, registered);
+      drafts.push(draft);
     }
 
     let saved: Item[];
@@ -278,7 +292,7 @@ export class ItemService {
       row.name = req.name;
     }
     if (req.brand !== undefined) {
-      row.brand = req.brand;
+      this.applyBrand(row, req.brand, await this.registeredBrands([req.brand]));
     }
     if (req.imageUrl !== undefined) {
       row.imageUrl = req.imageUrl;
@@ -1064,6 +1078,71 @@ export class ItemService {
       throw new NotFoundException('Item not found');
     }
     return row;
+  }
+
+  /**
+   * The registered brands the given texts key to, by key (plan 0115,
+   * section 4).
+   *
+   * **One query for a whole batch**, which is why it takes a list rather than a
+   * string: `createMany` resolves every distinct key of the file at once, and a
+   * per product lookup would be a thousand round trips for a registry of a few
+   * hundred rows. A single write calls it with one text, which is the same code
+   * path with a list of one.
+   */
+  private async registeredBrands(
+    texts: readonly (string | null | undefined)[]
+  ): Promise<ReadonlyMap<string, Brand>> {
+    const keys = [
+      ...new Set(
+        texts
+          .map((text) => brandKey(text))
+          .filter((key): key is string => key !== null)
+      ),
+    ];
+    if (keys.length === 0) {
+      return new Map();
+    }
+    const rows = await this.brands.find({ where: { key: In(keys) } });
+    return new Map(rows.map((row) => [row.key, row]));
+  }
+
+  /**
+   * The three brand columns for one written product (plan 0115, section 4).
+   *
+   * The one step `create`, `createMany` and `update` share, and the four cases
+   * of the section, in order:
+   *
+   * 1. A text with no letters or digits has no key, so the product has no
+   *    brand: all three columns are null. `-` and `---` from a LIDL leaflet
+   *    reach here and need no special case of their own.
+   * 2. A registered key stores that brand's **label**, whatever spelling the
+   *    request sent, so `MAHOU` from a Carrefour accept is stored as `Mahou`.
+   *    The label is copied onto `brand` rather than joined at read time because
+   *    the search trigger, the trigram index and the ranking all read that
+   *    column.
+   * 3. An unregistered brand is **still accepted**, trimmed, with its key beside
+   *    it and no `brandId`. Refusing it is the curator's decision (curation plan
+   *    `0004`) and not the catalog's: a person creating a product by hand in the
+   *    back office has to be able to.
+   */
+  private applyBrand(
+    row: Pick<Item, 'brand' | 'brandKey' | 'brandId'>,
+    brand: string | null | undefined,
+    registered: ReadonlyMap<string, Brand>
+  ): void {
+    const text = brand?.trim() ?? null;
+    const key = brandKey(text);
+    if (key === null) {
+      row.brand = null;
+      row.brandKey = null;
+      row.brandId = null;
+      return;
+    }
+    const held = registered.get(key);
+    row.brand = held ? held.label : (text as string);
+    row.brandKey = key;
+    row.brandId = held ? held.id : null;
   }
 
   /**
