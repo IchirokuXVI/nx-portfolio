@@ -38,7 +38,7 @@ interface MemberCursor {
 }
 
 /** The sort key of the row a cursor names, read back at full precision. */
-/** A membership id, which is all a contacts cursor may name. */
+/** A uuid, which is what both halves of a contacts cursor must be. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function boundary(columns: string): string {
@@ -67,10 +67,10 @@ export class MemberListingService {
    * membership, the caller left out.
    *
    * Paged because nothing bounds it: no group caps its members and nobody is
-   * capped in how many groups they join. Neither grouped nor ordered for display,
-   * which was decided with the plan's author, so a page is a fixed number of rows
-   * however large one group is, and the client groups by `zoneId` with the group
-   * names it already holds.
+   * capped in how many groups they join, so a page is a fixed number of rows
+   * however large one group is. **Ordered by group** so that each group's members
+   * are contiguous across pages, and the client names the groups with the names
+   * it already holds. See `CONTACTS_SQL`.
    *
    * It needs no authorization beyond the caller's id: the query reaches only the
    * groups the caller is approved in, which is the standing every member listing
@@ -79,13 +79,23 @@ export class MemberListingService {
    */
   async contacts(req: ContactsRequest): Promise<ContactPage> {
     const limit = clampPageSize(req.limit);
-    const cursor = decodeCursor<{ id?: unknown }>(req.cursor);
+    const cursor = decodeCursor<{ zoneId?: unknown; id?: unknown }>(
+      req.cursor
+    );
+    // Both halves or neither: a cursor with one of them is not one this service
+    // wrote, and it starts from the first page like any other it cannot read.
     const after =
-      typeof cursor?.id === 'string' && UUID.test(cursor.id) ? cursor.id : null;
+      typeof cursor?.zoneId === 'string' &&
+      UUID.test(cursor.zoneId) &&
+      typeof cursor.id === 'string' &&
+      UUID.test(cursor.id)
+        ? { zoneId: cursor.zoneId, id: cursor.id }
+        : null;
 
     const rows = await this.memberships.query<ContactRow[]>(CONTACTS_SQL, [
       req.userId,
-      after,
+      after?.zoneId ?? null,
+      after?.id ?? null,
       limit + 1,
     ]);
     const page = rows.slice(0, limit);
@@ -97,7 +107,10 @@ export class MemberListingService {
       })),
       nextCursor:
         rows.length > limit
-          ? encodeCursor({ id: page[page.length - 1].membershipId })
+          ? encodeCursor({
+              zoneId: page[page.length - 1].zoneId,
+              id: page[page.length - 1].membershipId,
+            })
           : null,
     };
   }

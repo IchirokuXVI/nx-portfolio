@@ -6,9 +6,9 @@ import { ContactApi } from './contact-api';
 /**
  * The people the caller shares a group with (backend `0114`, section 2).
  *
- * One page of memberships at a time, flat and unordered for display. A person in two
- * groups is two rows. Grouping and sorting belong to the screen, which has the group
- * names and the reader's language.
+ * One page of memberships at a time, ordered by group so that one group's members are
+ * contiguous across pages. A person in two groups is two rows. Naming and sorting the
+ * groups belong to the screen, which has the group names and the reader's language.
  */
 export interface ContactServiceI {
   /** `GET /v1/contacts`. */

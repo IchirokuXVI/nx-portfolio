@@ -2,10 +2,10 @@
  * The people the reader shares a group with, and how the people picker draws them
  * (velista `0085`, backend `0114` section 2).
  *
- * The server answers **one row per membership**, flat and in no display order: a
- * person in two groups is two rows, each with the name they carry in that group. The
- * grouping and the sort are this client's, because the group names are too, and a
- * page of memberships stays bounded however large one group grows.
+ * The server answers **one row per membership**: a person in two groups is two rows,
+ * each with the name they carry in that group. The rows arrive ordered by group, so
+ * one group's members are contiguous across pages. Naming the groups is this
+ * client's, because the group names are too, and so is the order they are read in.
  */
 
 /** One approved membership in a group the reader is also approved in. */

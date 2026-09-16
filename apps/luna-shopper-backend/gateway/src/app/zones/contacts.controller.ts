@@ -30,11 +30,11 @@ export class ContactsController {
    * One page of contacts: one row per membership, so a person in two of the
    * caller's groups is two rows, each under the name that group knows them by.
    *
-   * Neither grouped nor ordered for display. A client that draws people by group
-   * groups these rows by `zoneId` with the group names it already reads from
-   * `GET /v1/zones`, and sorts them itself; the order a page arrives in exists
-   * only to keep the cursor exact. Temporary accounts are included, and the
-   * caller never is.
+   * Ordered by group, so every member of one group arrives before any member of
+   * the next, and a page drawn as it lands never gains a member for a group
+   * already drawn. The rows carry no group name: a client names each `zoneId`
+   * with the names it already reads from `GET /v1/zones`. Temporary accounts are
+   * included, and the caller never is.
    */
   @Get()
   @ApiContractResponse(ZONE_PATTERNS.contacts)
