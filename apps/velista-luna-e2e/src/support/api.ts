@@ -248,18 +248,6 @@ export async function readBasketLines(
   return body.lines;
 }
 
-/**
- * `POST /v1/generated-lists/:id/participants`: the owner adds a person they
- * share a group with, as a registered participant (backend plan 0114).
- */
-export async function addParticipant(
-  s: Session,
-  basketId: string,
-  userId: string
-): Promise<void> {
-  await s.post(`/v1/generated-lists/${basketId}/participants`, { userId });
-}
-
 /** `GET /v1/generated-lists/:id/share-link`: the link, if one exists. */
 export async function readShareLink(
   s: Session,

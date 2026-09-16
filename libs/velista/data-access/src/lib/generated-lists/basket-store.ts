@@ -157,6 +157,29 @@ export class BasketStore {
   /** The pending coalesced refresh, or null. See {@link _scheduleRefresh}. */
   private _refreshAt: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * How many times this store has changed the basket by any path other than a
+   * read applying its answer, which is what tells {@link refresh} its answer is old.
+   *
+   * The failure it exists to prevent, in the order it happened. Somebody joins, the
+   * burst of events that arrival makes is coalesced into one re-read a second and a
+   * half later, and while that read is out the person holding the phone adds a line
+   * in the aisle. The add answers first and its row is drawn. The read answers
+   * second, from before the add, and it replaced the whole basket, so the row the
+   * shopper had just watched appear vanished with nothing on screen to say why.
+   *
+   * A read that starts after the last local change cannot be old, so comparing this
+   * number across the request is enough, and a read that finds it moved goes back
+   * and asks again rather than applying what it has.
+   */
+  private _generation = 0;
+
+  /** The read {@link refresh} has out, or null. See {@link _read}. */
+  private _reading: Promise<void> | null = null;
+
+  /** Whether somebody asked to refresh while {@link _reading} was already out. */
+  private _queued = false;
+
   constructor() {
     // By hand, not `takeUntilDestroyed`: `@angular/core/rxjs-interop` is a secondary
     // entry point module federation does not dedupe, and a service several remotes
@@ -484,6 +507,13 @@ export class BasketStore {
     this._cancelRefresh();
     this._id = null;
     this._basket.set(null);
+    // A read that is still out was asked for the basket being let go, so it is
+    // disowned here: the next `open` starts one of its own rather than waiting on
+    // an answer nothing will apply, and the bump makes that answer stale even in
+    // the one case the id check cannot see, which is the same basket opened again.
+    this._reading = null;
+    this._queued = false;
+    this._changed();
     this._link.set(null);
     this._present.set([]);
     this._busyLines.set(new Set());
@@ -505,6 +535,15 @@ export class BasketStore {
    * Called after this store's own writes, and by the page when the app comes back
    * from the background (`0035`), which is the moment a shopper's screen is most
    * likely to be behind somebody else's.
+   *
+   * **Two calls at once collapse into one read, with at most one queued behind it.**
+   * A caller that arrives while a read is out is not served by that read, because it
+   * left before they asked: several writes await this method precisely so the answer
+   * reflects what they just did (velista `0057`, section 6). So they join the read
+   * already running and it goes round once more for them.
+   *
+   * The promise resolves when an answer that was not out of date has been applied, or
+   * when the read failed. See {@link _generation} for what out of date means here.
    */
   async refresh(): Promise<void> {
     const id = this._id;
@@ -512,14 +551,81 @@ export class BasketStore {
       return;
     }
 
-    try {
-      const basket = await this._service.getBasket(id);
+    const reading = this._reading;
+    if (reading !== null) {
+      this._queued = true;
+      await reading;
+      return;
+    }
+
+    // Recorded here and cleared in the chained `finally`, which settles this
+    // promise only after it has run. So nobody can resume from an await to find a
+    // read still recorded that has in fact finished, and queue behind it forever.
+    // The identity check is what lets {@link leave} disown a read: a newer one is
+    // already recorded by the time an abandoned one gets here.
+    const started = this._read(id).finally(() => {
+      if (this._reading === started) {
+        this._reading = null;
+      }
+    });
+    this._reading = started;
+    await started;
+  }
+
+  /**
+   * Ask for the basket until an answer is worth applying, then apply it.
+   *
+   * The loop ends when the writes stop, because a read that starts after the last
+   * local change cannot be out of date. There is deliberately **no cap** that gives
+   * up and applies an old answer anyway: applying one is the defect this exists to
+   * remove, and a screen a moment behind is better than a row that disappears.
+   *
+   * A failure ends it, keeping {@link _fail}'s treatment, and so does the screen
+   * letting this basket go while the read was out.
+   */
+  private async _read(id: string): Promise<void> {
+    for (;;) {
+      const generation = this._generation;
+      this._queued = false;
+
+      let basket: BasketView;
+      try {
+        basket = await this._service.getBasket(id);
+      } catch (error) {
+        this._fail(id, error);
+        return;
+      }
+
+      if (this._id !== id) {
+        // `leave` happened while this was out, so there is no screen to draw on
+        // and the next visit reads for itself.
+        return;
+      }
+
+      if (this._generation !== generation) {
+        continue;
+      }
+
       this._basket.set(basket);
       this._state.set('ready');
       this._error.set(null);
-    } catch (error) {
-      this._fail(id, error);
+
+      if (!this._queued) {
+        return;
+      }
     }
+  }
+
+  /**
+   * Note that the basket changed by a path other than a read applying its answer.
+   *
+   * Called from the shared paths rather than from each call site, which is what
+   * makes it hard to forget: every fold of a write's answer and every socket event
+   * goes through {@link append}, {@link apply} or {@link drop}. See
+   * {@link _generation}.
+   */
+  private _changed(): void {
+    this._generation += 1;
   }
 
   /**
@@ -767,6 +873,7 @@ export class BasketStore {
         ? [...held.lines, line]
         : [...held.lines.slice(0, at), line, ...held.lines.slice(at)];
     this._basket.set({ ...held, lines });
+    this._changed();
     return true;
   }
 
@@ -783,11 +890,15 @@ export class BasketStore {
    * already have refetched without it.
    */
   drop(lineId: string): void {
-    this._basket.update((basket) =>
-      basket === null
-        ? basket
-        : { ...basket, lines: basket.lines.filter((row) => row.id !== lineId) }
-    );
+    const held = this._basket();
+    if (held === null) {
+      return;
+    }
+    this._basket.set({
+      ...held,
+      lines: held.lines.filter((row) => row.id !== lineId),
+    });
+    this._changed();
   }
 
   /**
@@ -804,19 +915,19 @@ export class BasketStore {
    * disappearing when somebody else settles something.
    */
   apply(line: BasketLine): void {
-    this._basket.update((basket) => {
-      if (basket === null) {
-        return basket;
-      }
-      return {
-        ...basket,
-        lines: basket.lines.map((held) =>
-          held.id === line.id
-            ? { ...held, ...line, origins: line.origins ?? held.origins }
-            : held
-        ),
-      };
+    const basket = this._basket();
+    if (basket === null) {
+      return;
+    }
+    this._basket.set({
+      ...basket,
+      lines: basket.lines.map((held) =>
+        held.id === line.id
+          ? { ...held, ...line, origins: line.origins ?? held.origins }
+          : held
+      ),
     });
+    this._changed();
   }
 
   /**
