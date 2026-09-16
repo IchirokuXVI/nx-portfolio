@@ -1012,6 +1012,9 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         outcome: settleOutcome,
         ...settleOptions,
       });
+      if (updateHeld !== null) {
+        await updateHeld;
+      }
       if (outcome === 'failed') {
         return { state: 'failed' as const, error: new Error('settle failed') };
       }
@@ -1151,13 +1154,13 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     answerNextUpdate: (answer: (typeof updateAnswers)[number]) => {
       updateAnswers.push(answer);
     },
-    /** Keep every edit in flight until `releaseUpdates`. */
-    holdUpdates: () => {
+    /** Keep every edit and settle in flight until `releaseWrites`. */
+    holdWrites: () => {
       updateHeld = new Promise<void>((resolve) => {
         releaseUpdate = resolve;
       });
     },
-    releaseUpdates: () => {
+    releaseWrites: () => {
       updateHeld = null;
       releaseUpdate?.();
       releaseUpdate = null;

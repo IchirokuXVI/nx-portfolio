@@ -243,7 +243,11 @@ describe('gatewayInterceptor', () => {
         {
           code: 'line_merge_required',
           correlationId: 'server-id',
-          details: { otherLineId: 'l2', otherContent: 'Milk', otherQuantity: 2 },
+          details: {
+            otherLineId: 'l2',
+            otherContent: 'Milk',
+            otherQuantity: 2,
+          },
         },
         { status: 409, statusText: 'Conflict' }
       );

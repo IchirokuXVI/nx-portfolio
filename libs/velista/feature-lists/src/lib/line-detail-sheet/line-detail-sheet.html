@@ -1,34 +1,154 @@
-<lib-sheet-shell (dismiss)="dismiss()" labelledBy="line-detail-title">
+<!--
+  Not dismissible while a save or a settle is out (velista plan 0083, section 7): nobody
+  leaves the sheet with a write still in flight.
+-->
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!submitting()"
+  labelledBy="line-detail-title"
+>
   @if (detail(); as line) {
-    @if (step() === 'summary') {
+    @if (merge(); as question) {
       <!--
-        The header: what it is, what it stands for, and how many are wanted. The
-        quantity sits here exactly as it does on the row, so opening a line does not
-        change what the number means.
+        The merge question, in place of the sheet's content (section 5). The fact first
+        and the question second, each on its own line, because the fact is what the
+        reader did not know. The third line answers the worry the question raises.
+
+        The dialog stays labelled by the saved name, which is why the title is here too.
       -->
-      <div class="head">
-        <div class="head-text">
-          <h2 #title class="title" id="line-detail-title" tabindex="-1">
-            {{ line.content }}
-          </h2>
+      <h2 class="visually-hidden" id="line-detail-title">{{ line.content }}</h2>
+
+      <div class="merge">
+        <p #question class="merge-taken" tabindex="-1">
+          {{
+            'list.merge.taken'
+              | rokuT
+                : {
+                    other: question.other,
+                    otherQuantity: question.otherQuantity,
+                  }
+          }}
+        </p>
+        <p class="merge-question">
+          {{ 'list.merge.question' | rokuT: { total: question.total } }}
+        </p>
+        <p class="merge-keeps">{{ 'list.merge.keeps' | rokuT }}</p>
+
+        <!-- The solid button here, because in this pane merging is the only thing to do. -->
+        <button
+          (click)="confirmMerge()"
+          [attr.aria-busy]="saving()"
+          [disabled]="saving()"
+          class="primary"
+          type="button"
+        >
+          @if (saving()) {
+            <lib-spinner-icon class="spinning" />
+          }
+          <span>{{ 'list.merge.confirm' | rokuT }}</span>
+        </button>
+
+        <button
+          (click)="keepEditing()"
+          [disabled]="saving()"
+          class="cancel"
+          type="button"
+        >
+          {{ 'list.merge.keepEditing' | rokuT }}
+        </button>
+      </div>
+    } @else if (step() === 'summary') {
+      @if (scope(); as editScope) {
+        <!--
+          A reader who may edit gets the name and the amount where the header was
+          (section 3). The title stays, hidden, because the dialog is labelled by the
+          saved name and not by whatever is being typed. The header's quantity pill goes:
+          the amount below is the same number.
+        -->
+        <h2 class="visually-hidden" id="line-detail-title">
+          {{ line.content }}
+        </h2>
+
+        <div (focusout)="onFieldsFocusOut($event)" class="fields">
+          <label class="label" for="line-detail-name">
+            {{ 'list.detail.name' | rokuT }}
+          </label>
+          <input
+            (focus)="startEditing()"
+            (input)="onNameInput($event)"
+            [attr.maxlength]="maxLength"
+            [readOnly]="saving()"
+            [value]="name()"
+            autocomplete="off"
+            class="field"
+            id="line-detail-name"
+            type="text"
+          />
+
+          <div class="amount">
+            <span class="label">{{ 'list.detail.askedFor' | rokuT }}</span>
+            @if (editScope === 'full') {
+              <lib-quantity-reel
+                (committedTo)="onAmountCommitted($event.to)"
+                (preview)="onAmountPreview($event)"
+                [label]="'list.detail.askedFor' | rokuT"
+                [readonly]="saving()"
+                [value]="amount()"
+              />
+            } @else {
+              <!--
+                The number as text, where the reel's pill would be, so the sheet does not
+                change shape between two readers.
+              -->
+              <p class="shown">{{ amount() }}</p>
+            }
+          </div>
+        </div>
+
+        <!-- `status` and not `alert`: this is what is about to happen, not a failure. -->
+        @if (warnsAboutUnapproval()) {
+          <p class="notice" role="status">
+            {{ 'list.edit.unapproves' | rokuT }}
+          </p>
+        }
+
+        <!--
+          Save, in the quiet accent. The solid amber stays on "I bought this", which is
+          what a reader opened the sheet to press. After a save the button itself says
+          so, and is the polite live region, so the announcement happens once.
+        -->
+        <button
+          (click)="save()"
+          [attr.aria-busy]="saving()"
+          [class.saved]="saved()"
+          [disabled]="!canSave()"
+          #saveButton
+          aria-live="polite"
+          class="save"
+          type="button"
+        >
+          @if (saving()) {
+            <lib-spinner-icon class="spinning" />
+          } @else if (saved()) {
+            <lib-check-icon aria-hidden="true" class="saved-glyph" />
+          }
+          <span>{{
+            (saved() ? 'list.detail.saved' : 'list.edit.save') | rokuT
+          }}</span>
+        </button>
+
+        @if (saveErrorKey(); as key) {
+          <p class="error" role="alert">{{ key | rokuT: saveErrorArgs() }}</p>
+        }
+
+        <!-- The rule is what says that Save writes the fields above it and nothing below. -->
+        <div class="about">
           <p class="products">
             {{ line.productsKey | rokuT: line.productsArgs }}
           </p>
-
-          <!--
-            The names could not be read, which is **not** the line being empty (section
-            1.2). The phrase above still gives the count, because the count is a fact
-            about the line and is known; this is a fact about the request.
-          -->
           @if (line.namesUnavailable) {
             <p class="names-failed">{{ 'list.detail.namesFailed' | rokuT }}</p>
           }
-
-          <!--
-            The same indicators the row carries, from the same function (section 5).
-            The sheet opens from that row, and a row showing "bought" over a header
-            showing nothing is two answers to one question a tap apart.
-          -->
           @if (line.indicators.length > 0) {
             <p class="indicators">
               @for (indicator of line.indicators; track indicator) {
@@ -53,9 +173,67 @@
             </p>
           }
         </div>
+      } @else {
+        <!--
+          The header: what it is, what it stands for, and how many are wanted. The
+          quantity sits here exactly as it does on the row, so opening a line does not
+          change what the number means.
+        -->
+        <div class="head">
+          <div class="head-text">
+            <h2 class="title" id="line-detail-title" tabindex="-1">
+              {{ line.content }}
+            </h2>
+            <p class="products">
+              {{ line.productsKey | rokuT: line.productsArgs }}
+            </p>
 
-        <span aria-hidden="true" class="quantity">{{ line.quantity }}</span>
-      </div>
+            <!--
+              The names could not be read, which is **not** the line being empty (section
+              1.2). The phrase above still gives the count, because the count is a fact
+              about the line and is known; this is a fact about the request.
+            -->
+            @if (line.namesUnavailable) {
+              <p class="names-failed">
+                {{ 'list.detail.namesFailed' | rokuT }}
+              </p>
+            }
+
+            <!--
+              The same indicators the row carries, from the same function (section 5).
+              The sheet opens from that row, and a row showing "bought" over a header
+              showing nothing is two answers to one question a tap apart.
+            -->
+            @if (line.indicators.length > 0) {
+              <p class="indicators">
+                @for (indicator of line.indicators; track indicator) {
+                  <span [class]="'indicator indicator-' + indicator">
+                    @switch (indicator) {
+                      @case ('bought') {
+                        {{ 'line.indicator.bought' | rokuT }}
+                      }
+                      @case ('notAvailable') {
+                        {{ 'line.indicator.notAvailable' | rokuT }}
+                      }
+                      @case ('claimed') {
+                        @if (line.claimedBy; as who) {
+                          {{
+                            'line.indicator.claimedBy' | rokuT: { name: who }
+                          }}
+                        } @else {
+                          {{ 'line.indicator.claimed' | rokuT }}
+                        }
+                      }
+                    }
+                  </span>
+                }
+              </p>
+            }
+          </div>
+
+          <span aria-hidden="true" class="quantity">{{ line.quantity }}</span>
+        </div>
+      }
 
       <!--
         The two facts you have while standing in the kitchen. Each row is absent rather
@@ -108,7 +286,7 @@
         same reason (section 5.2). Absent rather than disabled for a caller who may not
         decide: a disabled pair at the bottom of a sheet is an invitation that does not
         work, and the reader still gets the history above it, which is what they came
-        for.
+        for. Disabled while a save is out, so two writes to one line never race.
       -->
       @if (line.canSettle) {
         <div class="actions">
@@ -132,8 +310,52 @@
         </div>
       }
 
+      <!--
+        Comments for everybody, as the row's menu offered them, with the same count the
+        row shows. Delete line only when this reader may delete, and Comments takes the
+        whole row when it is absent (section 3). Both are buttons that push a sheet over
+        this one.
+      -->
+      <div class="more">
+        <button
+          (click)="openComments()"
+          [attr.aria-label]="
+            commentCount()
+              ? ('list.detail.commentsLabel' | rokuT: { count: commentCount() })
+              : null
+          "
+          [disabled]="saving()"
+          class="more-button"
+          type="button"
+        >
+          <lib-comment-icon aria-hidden="true" class="more-glyph" />
+          <span>{{ 'list.line.comments' | rokuT }}</span>
+          @if (commentCount()) {
+            <span aria-hidden="true" class="more-count">{{
+              commentCount()
+            }}</span>
+          }
+        </button>
+
+        @if (canDelete()) {
+          <button
+            (click)="openDelete()"
+            [disabled]="saving()"
+            class="more-button more-danger"
+            type="button"
+          >
+            {{ 'list.detail.delete' | rokuT }}
+          </button>
+        }
+      </div>
+
       <div class="through">
-        <button (click)="openPage()" class="link" type="button">
+        <button
+          (click)="openPage()"
+          [disabled]="saving()"
+          class="link"
+          type="button"
+        >
           {{ 'list.detail.everything' | rokuT }}
         </button>
       </div>

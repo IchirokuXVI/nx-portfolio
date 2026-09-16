@@ -457,15 +457,11 @@
       "approve": "Añadirlo",
       "reject": "Esto no",
       "restore": "Devolverlo a la lista",
-      "edit": "Cambiar esto",
       "editing": "Editando",
       "comments": "Comentarios",
-      "delete": "Quitar de la lista",
-      "menuFor": "Más opciones para {{name}}",
       "overwritten": "{{name}} cambió esto mientras lo editabas",
       "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
       "failed": "No se ha guardado. Toca para reintentar",
-      "move": "Mover",
       "movedTo": "Movido a la posición {{position}} de {{total}}",
       "quantityFor": "Cuántos de {{name}}",
       "quantityChanged": "{{name}}, ahora {{quantity}}"
@@ -495,8 +491,6 @@
       "none": "Ninguna línea coincide."
     },
     "edit": {
-      "title": "Cambiar esta línea",
-      "content": "Qué es",
       "save": "Guardar",
       "unapproves": "Al guardar, la línea volverá a estar pendiente de aprobación."
     },
@@ -585,7 +579,9 @@
       "readOnly": "Puedes ver esta lista, no cambiarla",
       "roleChanged": "Tu papel en este grupo ha cambiado",
       "tooFast": "Ve un poco más despacio e inténtalo de nuevo",
-      "failed": "No ha funcionado. Inténtalo de nuevo en un momento"
+      "failed": "No ha funcionado. Inténtalo de nuevo en un momento",
+      "mergeNeedsApproval": "Ese nombre es de una línea aprobada, y esta línea aún no lo está.",
+      "mergeTooManyProducts": "Juntas tienen más de {{max}} productos."
     },
     "detail": {
       "title": "Sobre esta línea",
@@ -613,7 +609,12 @@
       "whichOne": "¿Cuál has cogido?",
       "record": "Guárdalo",
       "cancel": "Cancelar",
-      "failed": "No se ha guardado. Inténtalo otra vez"
+      "failed": "No se ha guardado. Inténtalo otra vez",
+      "name": "Nombre",
+      "askedFor": "Pedido",
+      "saved": "Guardado",
+      "commentsLabel": "Comentarios, {{count}}",
+      "delete": "Borrar línea"
     },
     "page": {
       "where": "en {{list}}, de {{zone}}",
@@ -658,6 +659,13 @@
     },
     "buying": {
       "notMine": "Cualquiera puede añadir a esta lista. Comprar es de quien hace la compra"
+    },
+    "merge": {
+      "taken": "«{{other}}» ya está en esta lista y pide {{otherQuantity}}.",
+      "question": "¿Juntarlas en una línea que pida {{total}}?",
+      "keeps": "Los comentarios y lo comprado se van con ella.",
+      "confirm": "Juntar",
+      "keepEditing": "Seguir editando"
     }
   },
   "account": {
