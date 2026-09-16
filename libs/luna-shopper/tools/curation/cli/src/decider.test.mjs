@@ -25,11 +25,11 @@ test('an implementation names one CLI, and an unknown one is refused', () => {
   assert.deepEqual(IMPLEMENTATION_NAMES, ['suggestions', 'groups']);
   assert.equal(
     deciderPath('suggestions', '/repo'),
-    '/repo/libs/luna-shopper/curation-suggestions/src/cli.mjs'
+    '/repo/libs/luna-shopper/tools/curation/suggestions/src/cli.mjs'
   );
   assert.equal(
     deciderPath('groups', '/repo'),
-    '/repo/libs/luna-shopper/curation-groups/src/cli.mjs'
+    '/repo/libs/luna-shopper/tools/curation/groups/src/cli.mjs'
   );
   assert.throws(() => deciderPath('entries', '/repo'), /suggestions, groups/);
 });

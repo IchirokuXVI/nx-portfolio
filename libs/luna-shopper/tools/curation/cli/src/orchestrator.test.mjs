@@ -4,7 +4,7 @@ import {
   emptyUsage,
   handleAbandoned,
   stripFence,
-} from '../../model-engines/src/index.mjs';
+} from '../../../../../shared/model-engines/src/index.mjs';
 import {
   decideRow,
   fetchBatch,
