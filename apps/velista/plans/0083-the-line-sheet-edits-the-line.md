@@ -8,6 +8,11 @@
 > and makes the detail sheet the one place a line is changed: the name and the amount are
 > edited in it, with a Save button, and comments and delete are reached from it.
 >
+> The design is drawn in `mocks/line-sheet/`, published at
+> https://claude.ai/artifact/4zbiAsWxFJFQokU29JouLs. Three of its five artboards are this
+> plan: the sheet at rest, while typing and saved; the merge question, a refusal and
+> saving; the other readers and the row without its menu.
+>
 > Prerequisite reading: `0043` (the detail sheet), `0076`'s client half in
 > `edit-line-sheet/` (what each permission can edit, and the unapproval warning), backend
 > `0112` in full, and the sheet rules in CLAUDE.md.
@@ -103,39 +108,66 @@ For a reader with an edit scope:
    `LINE_CONTENT_MAX_LENGTH`. The sheet's `h2` keeps the saved name for the dialog's label
    and is visually hidden while the input is shown.
 2. **Asked for**, the quantity reel in `full` scope, the number as text in `content` scope.
+   The number as text sits where the reel's pill would, so the sheet does not change shape
+   between two readers.
 3. The `list.edit.unapproves` notice, shown once the name or the amount differs from the
    saved line and `warnsAboutUnapproval` is true.
 4. **Save**, enabled only when something changed and the name is not blank. It shows the
    spinner and `aria-busy` while saving. Errors show under it with `role="alert"`.
-5. What the sheet shows today: the products phrase, the facts, the settle actions and their
-   how many step.
-6. **Comments**, for every reader, as the menu offered it.
-7. **Delete line**, when `actionsFor` includes `delete`.
-8. "See more details", the link to the line page.
+5. A rule, and then what the sheet shows today: the products phrase, the facts, the settle
+   actions and their how many step.
+6. **Comments** and **Delete line**, one row of two buttons under a second rule, below the
+   settle actions. Comments is drawn for every reader, as the menu offered it, and carries
+   the line's comment count, so the row's count and the sheet agree. Delete line is drawn
+   only when `actionsFor` includes `delete`, in the danger colour, and Comments takes the
+   whole row when it is absent.
+7. "See more details", the link to the line page.
 
-A reader with no edit scope sees the static title and sections 5 to 8.
+A reader with no edit scope sees the static title and sections 5 to 7.
 
 The reel for "Asked for" and the stepper of the how many step are both on the sheet, with
 their labels, by decision of the product owner.
+
+Three things the mock settles about the shape of it:
+
+- **The header's quantity pill goes** for a reader with an edit scope, because the reel
+  above it is the same number. A reader with no scope keeps today's header, pill included.
+- **Save takes the quiet accent** (`--app-action-quiet-bg`, `--app-action-quiet-border`,
+  `--app-action-quiet-fg`), not the solid `.primary` this library's `_sheet-form.scss`
+  gives a sheet's one button. The solid amber stays on "I bought this", which is what a
+  reader opened the sheet to press, and two solid buttons on one sheet compete for the
+  thumb. Disabled is the same dimming `.primary` uses.
+- **The rule above section 5 is what scopes Save.** Save writes the name and the amount and
+  nothing below it, and the rule is what says so.
 
 ## 4. Saving
 
 - Save sends only what changed: `content` when the trimmed name differs, `quantity` when the
   amount differs and the scope is `full`.
 - A successful save keeps the sheet open on the saved values and announces
-  `list.detail.saved` politely.
+  `list.detail.saved` politely. The button itself says it: it holds `list.detail.saved` and
+  a check, disabled, until the next change turns it back into Save. It is where the reader
+  is already looking, it costs no height, and the live region is the button, so the
+  announcement happens once.
 - A realtime update to this line while nothing is edited redraws the fields. While something
   is edited, it does not overwrite what the reader typed.
 
 ## 5. The merge confirmation
 
 When Save answers `line_merge_required`, the sheet shows a confirmation pane in place of
-its content, built from the error's details:
+its content, built from the error's details. Three lines, in this order:
 
-> "Milk" is already on this list, asking for 2. Merge them into one line asking for 5?
+> **"Milk" is already on this list, asking for 2.**
+> Merge them into one line asking for 5?
+> Comments and what was bought move with it.
 
-with **Merge** (primary) and **Keep editing**. Merge repeats the save with
-`confirmMerge: true`. Keep editing returns to the fields with the typed values intact.
+The fact comes first and the question second, each on its own line, because the fact is
+what the reader did not know. The third line answers the worry the question raises, and it
+is true by backend `0112` section 4: comments and settlements move to the survivor.
+
+Then **Merge** and **Keep editing**. Merge is the solid `.primary` here, because in this
+pane it is the only thing to do, and it repeats the save with `confirmMerge: true`. Keep
+editing returns to the fields with the typed values intact.
 
 After a confirmed merge:
 
@@ -165,6 +197,12 @@ The two other refusals show as errors under Save, and the fields keep their valu
   and clears after a save, when the reader leaves both fields with nothing changed, and on
   destroy.
 - The shell gets `[dismissible]="!submitting()"`, covering a save and a settle.
+- **While a save is in flight, nothing else on the sheet writes.** The fields are read only,
+  and the settle actions, Comments, Delete line and "See more details" are disabled. Two
+  writes to one line never race, and nobody leaves the sheet with a save still in flight.
+- The sheet keeps `initialFocus` on the panel (`0081`, PR #371), so opening it over a line
+  raises no keyboard. The keyboard comes up when the name input is tapped, and the name,
+  the amount, the notice and Save all stand above it at 390 by 844.
 
 ## 8. What goes
 
@@ -175,19 +213,22 @@ deleted.
 
 ## 9. Copy
 
-| Key                               | English                                                                                                     | Spanish                                                                                           |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `list.detail.name`                | Name                                                                                                        | Nombre                                                                                            |
-| `list.detail.askedFor`            | Asked for                                                                                                   | Pedido                                                                                            |
-| `list.detail.save`                | Save                                                                                                        | Guardar                                                                                           |
-| `list.detail.saved`               | Saved                                                                                                       | Guardado                                                                                          |
-| `list.detail.comments`            | Comments                                                                                                    | Comentarios                                                                                       |
-| `list.detail.delete`              | Delete line                                                                                                 | Borrar línea                                                                                      |
-| `list.merge.question`             | "{other}" is already on this list, asking for {otherQuantity}. Merge them into one line asking for {total}? | «{other}» ya está en esta lista y pide {otherQuantity}. ¿Juntarlas en una línea que pida {total}? |
-| `list.merge.confirm`              | Merge                                                                                                       | Juntar                                                                                            |
-| `list.merge.keepEditing`          | Keep editing                                                                                                | Seguir editando                                                                                   |
-| `list.error.mergeNeedsApproval`   | That name belongs to an approved line, and this line is not approved yet.                                   | Ese nombre es de una línea aprobada, y esta línea aún no lo está.                                 |
-| `list.error.mergeTooManyProducts` | Together they have more than {max} products.                                                                | Juntas tienen más de {max} productos.                                                             |
+| Key                               | English                                                                   | Spanish                                                           |
+| --------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `list.detail.name`                | Name                                                                      | Nombre                                                            |
+| `list.detail.askedFor`            | Asked for                                                                 | Pedido                                                            |
+| `list.detail.save`                | Save                                                                      | Guardar                                                           |
+| `list.detail.saved`               | Saved                                                                     | Guardado                                                          |
+| `list.detail.comments`            | Comments                                                                  | Comentarios                                                       |
+| `list.detail.commentsLabel`       | Comments, {count}                                                         | Comentarios, {count}                                              |
+| `list.detail.delete`              | Delete line                                                               | Borrar línea                                                      |
+| `list.merge.taken`                | "{other}" is already on this list, asking for {otherQuantity}.            | «{other}» ya está en esta lista y pide {otherQuantity}.           |
+| `list.merge.question`             | Merge them into one line asking for {total}?                              | ¿Juntarlas en una línea que pida {total}?                         |
+| `list.merge.keeps`                | Comments and what was bought move with it.                                | Los comentarios y lo comprado se van con ella.                    |
+| `list.merge.confirm`              | Merge                                                                     | Juntar                                                            |
+| `list.merge.keepEditing`          | Keep editing                                                              | Seguir editando                                                   |
+| `list.error.mergeNeedsApproval`   | That name belongs to an approved line, and this line is not approved yet. | Ese nombre es de una línea aprobada, y esta línea aún no lo está. |
+| `list.error.mergeTooManyProducts` | Together they have more than {max} products.                              | Juntas tienen más de {max} productos.                             |
 
 Reuse an existing key wherever one already says the same thing, and name it in the PR.
 
@@ -215,6 +256,10 @@ Reuse an existing key wherever one already says the same thing, and name it in t
 11. The sheet is not dismissible while saving or settling.
 12. A socket update redraws clean fields and leaves edited fields alone.
 13. `routes.spec.ts` no longer finds the edit route.
+14. A save puts `list.detail.saved` on the button, and the next change puts Save back.
+15. While a save is in flight the fields are read only, and the settle actions, Comments,
+    Delete line and the link are disabled.
+16. Comments carries the count, and its accessible name carries it too.
 
 ## 12. Acceptance criteria
 

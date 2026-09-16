@@ -1,0 +1,888 @@
+<title>Velista: the line sheet edits the line</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Detail * { box-sizing: border-box; }
+#ab-Detail a { color: #ffb454; text-decoration: none; }
+#ab-Detail a:hover { color: #ffc271; }
+#ab-DetailMerge * { box-sizing: border-box; }
+#ab-DetailMerge a { color: #ffb454; text-decoration: none; }
+#ab-DetailMerge a:hover { color: #ffc271; }
+#ab-DetailReaders * { box-sizing: border-box; }
+#ab-DetailReaders a { color: #ffb454; text-decoration: none; }
+#ab-DetailReaders a:hover { color: #ffc271; }
+#ab-Settle * { box-sizing: border-box; }
+#ab-Settle a { color: #ffb454; text-decoration: none; }
+#ab-Settle a:hover { color: #ffc271; }
+#ab-SettleMerge * { box-sizing: border-box; }
+#ab-SettleMerge a { color: #ffb454; text-decoration: none; }
+#ab-SettleMerge a:hover { color: #ffc271; }
+</style>
+
+<header>
+  <h1>Velista: the line sheet edits the line</h1>
+  <p class="lede">The design for plans <code>0083</code> (a zone list line is changed from its detail sheet) and <code>0084</code> (a basket line is renamed from its settle sheet), with backend <code>0112</code> and <code>0113</code> behind them. The name and the amount move into the sheet the reader already opens, with Save, a merge question when the name is taken, and comments and delete reached from the same sheet. Phone only, 390 by 844, Night only: every colour role here is already proven on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 1830px; height: 5650px;">
+      <figure class="board" style="left: 0px; top: 0px; width: 1330px;">
+        <figcaption>0083: the detail sheet at rest, while typing, and saved</figcaption>
+        <div class="frame" id="ab-Detail" style="width: 1330px; height: 1010px;">
+          <div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ AT REST ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">AT REST &middot; the name and the amount are the header, Save waits</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <span style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb; margin-bottom: 8px;">NAME</span>
+                  <div style="height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.35); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: #f7f8fc;">Milk</div>
+
+                  <div style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb;">ASKED FOR</span>
+                    <div style="display: flex; align-items: center;">
+                      <span style="width: 44px; height: 40px; border: 1px solid rgba(255,255,255,0.12); border-right: 0; border-radius: 12px 0 0 12px; background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #f7f8fc;">&minus;</span>
+                      <span style="min-width: 52px; height: 40px; border: 1px solid rgba(255,255,255,0.12); background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">2</span>
+                      <span style="width: 44px; height: 40px; border: 1px solid rgba(255,255,255,0.12); border-left: 0; border-radius: 0 12px 12px 0; background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #f7f8fc;">+</span>
+                    </div>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 48px; margin-top: 16px; border: 1px solid rgba(255,180,84,0.26); border-radius: 14px; background: rgba(255,180,84,0.10); color: #ffb454; font-family: inherit; font-size: 15px; font-weight: 650; opacity: 0.45;">Save</button>
+
+                  <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <div style="font-size: 13.5px; color: #98a0bb;">3 products &middot; last bought Hacendado entera, 1 L</div>
+                  </div>
+
+                  <div style="margin-top: 8px;">
+                    <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 14px; color: #98a0bb;">Last bought</span>
+                      <span style="font-size: 14px; color: #f7f8fc;">Tuesday &middot; 2</span>
+                    </div>
+                    <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 14px; color: #98a0bb;">You buy this about</span>
+                      <span style="font-size: 14px; color: #f7f8fc;">every 11 days</span>
+                    </div>
+                  </div>
+
+                  <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 9px;">
+                    <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">I bought this</button>
+                    <button type="button" style="width: 100%; height: 48px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 550;">They did not have it</button>
+                  </div>
+
+                  <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 8px;">
+                    <button type="button" style="flex: 1; height: 44px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z" stroke="#c2c8db" stroke-width="1.9" stroke-linejoin="round"/></svg>
+                      Comments <span style="color: #98a0bb; font-variant-numeric: tabular-nums;">2</span>
+                    </button>
+                    <button type="button" style="flex: 1; height: 44px; border: 1px solid rgba(251,113,133,0.26); border-radius: 14px; background: transparent; color: #fb7185; font-family: inherit; font-size: 14px; font-weight: 600;">Delete line</button>
+                  </div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px;">
+                    <a href="#" style="font-size: 14px; font-weight: 550;">See more details</a>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ EDITING, KEYBOARD UP ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">EDITING &middot; name typed, amount moved, Save still above the keyboard</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 291px; height: 475px; overflow: hidden; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 0; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <span style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb; margin-bottom: 8px;">NAME</span>
+                  <div style="height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: #f7f8fc;">Whole milk<span style="display: inline-block; width: 1.5px; height: 20px; margin-left: 1px; background: #ffb454;"></span></div>
+
+                  <div style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb;">ASKED FOR</span>
+                    <div style="display: flex; align-items: center;">
+                      <span style="width: 44px; height: 40px; border: 1px solid rgba(255,255,255,0.12); border-right: 0; border-radius: 12px 0 0 12px; background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #f7f8fc;">&minus;</span>
+                      <span style="min-width: 52px; height: 40px; border: 1px solid rgba(255,255,255,0.12); background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">3</span>
+                      <span style="width: 44px; height: 40px; border: 1px solid rgba(255,255,255,0.12); border-left: 0; border-radius: 0 12px 12px 0; background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #f7f8fc;">+</span>
+                    </div>
+                  </div>
+
+                  <p style="margin: 12px 0 0; padding: 9px 12px; border-radius: 12px; background: #0a0c14; font-size: 12.5px; line-height: 1.5; color: #c2c8db;">Saving this will put the line back to awaiting approval.</p>
+
+                  <button type="button" style="width: 100%; height: 48px; margin-top: 14px; border: 1px solid rgba(255,180,84,0.26); border-radius: 14px; background: rgba(255,180,84,0.10); color: #ffb454; font-family: inherit; font-size: 15px; font-weight: 650;">Save</button>
+
+                  <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <div style="font-size: 13.5px; color: #98a0bb;">3 products &middot; last bought Hacendado entera, 1 L</div>
+                  </div>
+                  <div style="margin-top: 8px; padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                    <span style="font-size: 14px; color: #98a0bb;">Last bought</span>
+                    <span style="font-size: 14px; color: #f7f8fc;">Tuesday &middot; 2</span>
+                  </div>
+                </div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ SAVED ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SAVED &middot; the button says so until the next change, the sheet stays open</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <span style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb; margin-bottom: 8px;">NAME</span>
+                  <div style="height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.35); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: #f7f8fc;">Whole milk</div>
+
+                  <div style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb;">ASKED FOR</span>
+                    <div style="display: flex; align-items: center;">
+                      <span style="width: 44px; height: 40px; border: 1px solid rgba(255,255,255,0.12); border-right: 0; border-radius: 12px 0 0 12px; background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #f7f8fc;">&minus;</span>
+                      <span style="min-width: 52px; height: 40px; border: 1px solid rgba(255,255,255,0.12); background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">3</span>
+                      <span style="width: 44px; height: 40px; border: 1px solid rgba(255,255,255,0.12); border-left: 0; border-radius: 0 12px 12px 0; background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #f7f8fc;">+</span>
+                    </div>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 48px; margin-top: 16px; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#34d399" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Saved
+                  </button>
+
+                  <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <div style="font-size: 13.5px; color: #98a0bb;">3 products &middot; last bought Hacendado entera, 1 L</div>
+                    <div style="margin-top: 4px; font-size: 12px; color: #c2c8db;">Awaiting approval</div>
+                  </div>
+
+                  <div style="margin-top: 8px;">
+                    <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 14px; color: #98a0bb;">Last bought</span>
+                      <span style="font-size: 14px; color: #f7f8fc;">Tuesday &middot; 2</span>
+                    </div>
+                    <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 14px; color: #98a0bb;">You buy this about</span>
+                      <span style="font-size: 14px; color: #f7f8fc;">every 11 days</span>
+                    </div>
+                  </div>
+
+                  <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 9px;">
+                    <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">I bought this</button>
+                    <button type="button" style="width: 100%; height: 48px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 550;">They did not have it</button>
+                  </div>
+
+                  <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 8px;">
+                    <button type="button" style="flex: 1; height: 44px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z" stroke="#c2c8db" stroke-width="1.9" stroke-linejoin="round"/></svg>
+                      Comments <span style="color: #98a0bb; font-variant-numeric: tabular-nums;">2</span>
+                    </button>
+                    <button type="button" style="flex: 1; height: 44px; border: 1px solid rgba(251,113,133,0.26); border-radius: 14px; background: transparent; color: #fb7185; font-family: inherit; font-size: 14px; font-weight: 600;">Delete line</button>
+                  </div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px;">
+                    <a href="#" style="font-size: 14px; font-weight: 550;">See more details</a>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 1160px; width: 1330px;">
+        <figcaption>0083: the merge question, a refusal, and saving</figcaption>
+        <div class="frame" id="ab-DetailMerge" style="width: 1330px; height: 1010px;">
+          <div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ THE MERGE QUESTION ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">LECHE RENAMED TO MILK &middot; the fact, then the question, in place of the sheet</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 20px; font-weight: 650; line-height: 1.35; letter-spacing: -0.01em;">&ldquo;Milk&rdquo; is already on this list, asking for 2.</div>
+                  <div style="margin-top: 6px; font-size: 16px; line-height: 1.45; color: #c2c8db;">Merge them into one line asking for 5?</div>
+                  <div style="margin-top: 10px; font-size: 13px; line-height: 1.5; color: #98a0bb;">Comments and what was bought move with it.</div>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 22px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Merge</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #c2c8db;">Keep editing</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ REFUSED ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REFUSED &middot; the reason under Save, the typed values kept</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; top: 118px; overflow: hidden; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 0; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <span style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb; margin-bottom: 8px;">NAME</span>
+                  <div style="height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.35); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: #f7f8fc;">Milk</div>
+
+                  <div style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb;">ASKED FOR</span>
+                    <div style="display: flex; align-items: center;">
+                      <span style="width: 44px; height: 40px; border: 1px solid rgba(255,255,255,0.12); border-right: 0; border-radius: 12px 0 0 12px; background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #f7f8fc;">&minus;</span>
+                      <span style="min-width: 52px; height: 40px; border: 1px solid rgba(255,255,255,0.12); background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">3</span>
+                      <span style="width: 44px; height: 40px; border: 1px solid rgba(255,255,255,0.12); border-left: 0; border-radius: 0 12px 12px 0; background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #f7f8fc;">+</span>
+                    </div>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 48px; margin-top: 16px; border: 1px solid rgba(255,180,84,0.26); border-radius: 14px; background: rgba(255,180,84,0.10); color: #ffb454; font-family: inherit; font-size: 15px; font-weight: 650;">Save</button>
+                  <p style="margin: 10px 0 0; font-size: 14px; line-height: 1.5; color: #fb7185;">That name belongs to an approved line, and this line is not approved yet.</p>
+
+                  <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <div style="font-size: 13.5px; color: #98a0bb;">Not linked to a product</div>
+                    <div style="margin-top: 4px; font-size: 12px; color: #c2c8db;">Awaiting approval</div>
+                  </div>
+                  <div style="margin-top: 8px; padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                    <span style="font-size: 14px; color: #98a0bb;">Last bought</span>
+                    <span style="font-size: 14px; color: #f7f8fc;">3 weeks ago &middot; 1</span>
+                  </div>
+
+                  <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 9px;">
+                    <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">I bought this</button>
+                    <button type="button" style="width: 100%; height: 48px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 550;">They did not have it</button>
+                  </div>
+
+                  <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 8px;">
+                    <button type="button" style="flex: 1; height: 44px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z" stroke="#c2c8db" stroke-width="1.9" stroke-linejoin="round"/></svg>
+                      Comments
+                    </button>
+                    <button type="button" style="flex: 1; height: 44px; border: 1px solid rgba(251,113,133,0.26); border-radius: 14px; background: transparent; color: #fb7185; font-family: inherit; font-size: 14px; font-weight: 600;">Delete line</button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ SAVING ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SAVING &middot; the sheet cannot close and nothing else on it writes</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <span style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb; margin-bottom: 8px;">NAME</span>
+                  <div style="height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: #c2c8db;">Whole milk</div>
+
+                  <div style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb;">ASKED FOR</span>
+                    <div style="display: flex; align-items: center; opacity: 0.55;">
+                      <span style="width: 44px; height: 40px; border: 1px solid rgba(255,255,255,0.12); border-right: 0; border-radius: 12px 0 0 12px; background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #f7f8fc;">&minus;</span>
+                      <span style="min-width: 52px; height: 40px; border: 1px solid rgba(255,255,255,0.12); background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">3</span>
+                      <span style="width: 44px; height: 40px; border: 1px solid rgba(255,255,255,0.12); border-left: 0; border-radius: 0 12px 12px 0; background: #161a28; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #f7f8fc;">+</span>
+                    </div>
+                  </div>
+
+                  <button type="button" aria-busy="true" style="width: 100%; height: 48px; margin-top: 16px; border: 1px solid rgba(255,180,84,0.26); border-radius: 14px; background: rgba(255,180,84,0.10); color: #ffb454; font-family: inherit; font-size: 15px; font-weight: 650; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="rgba(255,180,84,0.26)" stroke-width="3"/><path d="M12 3a9 9 0 0 1 9 9" stroke="#ffb454" stroke-width="3" stroke-linecap="round"/></svg>
+                    Save
+                  </button>
+
+                  <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <div style="font-size: 13.5px; color: #98a0bb;">3 products &middot; last bought Hacendado entera, 1 L</div>
+                  </div>
+
+                  <div style="margin-top: 8px;">
+                    <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 14px; color: #98a0bb;">Last bought</span>
+                      <span style="font-size: 14px; color: #f7f8fc;">Tuesday &middot; 2</span>
+                    </div>
+                    <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 14px; color: #98a0bb;">You buy this about</span>
+                      <span style="font-size: 14px; color: #f7f8fc;">every 11 days</span>
+                    </div>
+                  </div>
+
+                  <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 9px; opacity: 0.45;">
+                    <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">I bought this</button>
+                    <button type="button" style="width: 100%; height: 48px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 550;">They did not have it</button>
+                  </div>
+
+                  <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 8px; opacity: 0.45;">
+                    <button type="button" style="flex: 1; height: 44px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z" stroke="#c2c8db" stroke-width="1.9" stroke-linejoin="round"/></svg>
+                      Comments <span style="color: #98a0bb; font-variant-numeric: tabular-nums;">2</span>
+                    </button>
+                    <button type="button" style="flex: 1; height: 44px; border: 1px solid rgba(251,113,133,0.26); border-radius: 14px; background: transparent; color: #fb7185; font-family: inherit; font-size: 14px; font-weight: 600;">Delete line</button>
+                  </div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px; opacity: 0.45;">
+                    <span style="font-size: 14px; font-weight: 550; color: #ffb454;">See more details</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 2320px; width: 1330px;">
+        <figcaption>0083: other readers, and the row without its menu</figcaption>
+        <div class="frame" id="ab-DetailReaders" style="width: 1330px; height: 1010px;">
+          <div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ CONTENT SCOPE ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">NAME ONLY &middot; the amount is text where the reel would be, no delete</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <span style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb; margin-bottom: 8px;">NAME</span>
+                  <div style="height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.35); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: #f7f8fc;">Oat milk</div>
+
+                  <div style="margin-top: 14px; min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb;">ASKED FOR</span>
+                    <span style="min-width: 52px; padding-right: 44px; text-align: center; font-size: 18px; font-weight: 600; color: #f7f8fc; font-variant-numeric: tabular-nums;">2</span>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 48px; margin-top: 16px; border: 1px solid rgba(255,180,84,0.26); border-radius: 14px; background: rgba(255,180,84,0.10); color: #ffb454; font-family: inherit; font-size: 15px; font-weight: 650; opacity: 0.45;">Save</button>
+
+                  <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <div style="font-size: 13.5px; color: #98a0bb;">Alpro Avena, 1 L</div>
+                  </div>
+                  <div style="margin-top: 8px; padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                    <span style="font-size: 14px; color: #98a0bb;">Last bought</span>
+                    <span style="font-size: 14px; color: #f7f8fc;">Friday &middot; 2</span>
+                  </div>
+
+                  <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 9px;">
+                    <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">I bought this</button>
+                    <button type="button" style="width: 100%; height: 48px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 550;">They did not have it</button>
+                  </div>
+
+                  <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 8px;">
+                    <button type="button" style="flex: 1; height: 44px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z" stroke="#c2c8db" stroke-width="1.9" stroke-linejoin="round"/></svg>
+                      Comments
+                    </button>
+                  </div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px;">
+                    <a href="#" style="font-size: 14px; font-weight: 550;">See more details</a>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ NO SCOPE ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">CANNOT EDIT &middot; today's header, and Comments added</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="flex: 1 1 auto; min-width: 0;">
+                      <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">Milk</div>
+                      <div style="margin-top: 4px; font-size: 13px; color: #98a0bb;">3 products &middot; last bought Hacendado entera, 1 L</div>
+                    </div>
+                    <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #f7f8fc;">2</span>
+                  </div>
+
+                  <div style="margin-top: 18px;">
+                    <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 14px; color: #98a0bb;">Last bought</span>
+                      <span style="font-size: 14px; color: #f7f8fc;">Tuesday &middot; 2</span>
+                    </div>
+                    <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.07); display: flex; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 14px; color: #98a0bb;">You buy this about</span>
+                      <span style="font-size: 14px; color: #f7f8fc;">every 11 days</span>
+                    </div>
+                  </div>
+
+                  <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 9px;">
+                    <button type="button" style="width: 100%; height: 52px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">I bought this</button>
+                    <button type="button" style="width: 100%; height: 48px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #c2c8db; font-family: inherit; font-size: 15px; font-weight: 550;">They did not have it</button>
+                  </div>
+
+                  <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 8px;">
+                    <button type="button" style="flex: 1; height: 44px; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z" stroke="#c2c8db" stroke-width="1.9" stroke-linejoin="round"/></svg>
+                      Comments <span style="color: #98a0bb; font-variant-numeric: tabular-nums;">2</span>
+                    </button>
+                  </div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px;">
+                    <a href="#" style="font-size: 14px; font-weight: 550;">See more details</a>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ THE ROW ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE ROW &middot; the menu goes, the tap opens the sheet</span>
+              <div style="width: 390px; display: flex; flex-direction: column; gap: 14px;">
+
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">TODAY &middot; edit, comments and delete behind three dots</span>
+                  <div style="background: #161a28; border-radius: 12px; height: 60px; padding: 0 4px 0 16px; display: flex; align-items: center; gap: 10px;">
+                    <span style="flex: 1 1 auto; font-size: 18px; color: #f7f8fc;">Chorizo</span>
+                    <span style="flex: 0 0 auto; display: flex; align-items: center; gap: 4px; color: #98a0bb;">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z" stroke="#98a0bb" stroke-width="1.9" stroke-linejoin="round"/></svg>
+                      <span style="font-size: 13px; font-variant-numeric: tabular-nums;">2</span>
+                    </span>
+                    <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">1</span>
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
+                      <span style="width: 3px; height: 3px; border-radius: 50%; background: #98a0bb;"></span>
+                      <span style="width: 3px; height: 3px; border-radius: 50%; background: #98a0bb;"></span>
+                      <span style="width: 3px; height: 3px; border-radius: 50%; background: #98a0bb;"></span>
+                    </span>
+                  </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">AFTER &middot; the reel moves to the edge, nothing else changes</span>
+                  <div style="background: #161a28; border-radius: 12px; height: 60px; padding: 0 12px 0 16px; display: flex; align-items: center; gap: 10px;">
+                    <span style="flex: 1 1 auto; font-size: 18px; color: #f7f8fc;">Chorizo</span>
+                    <span style="flex: 0 0 auto; display: flex; align-items: center; gap: 4px; color: #98a0bb;">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z" stroke="#98a0bb" stroke-width="1.9" stroke-linejoin="round"/></svg>
+                      <span style="font-size: 13px; font-variant-numeric: tabular-nums;">2</span>
+                    </span>
+                    <span style="flex: 0 0 auto; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">1</span>
+                  </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">WHERE COMMENTS AND DELETE LEAD</span>
+                  <div style="background: #161a28; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #c2c8db;">
+                      <span style="flex: none; padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18);">Comments</span>
+                      <span style="color: #6f7899;">opens</span>
+                      <span style="color: #f7f8fc;">About Chorizo</span>
+                    </div>
+                    <div style="font-size: 12.5px; line-height: 1.5; color: #98a0bb;">Pushed over the detail sheet. Close, drag, the dim and Escape all land back on it.</div>
+                    <div style="height: 1px; background: rgba(255,255,255,0.07);"></div>
+                    <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #c2c8db;">
+                      <span style="flex: none; padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(251,113,133,0.26); color: #fb7185;">Delete line</span>
+                      <span style="color: #6f7899;">opens</span>
+                      <span style="color: #f7f8fc;">Delete &ldquo;Chorizo&rdquo;?</span>
+                    </div>
+                    <div style="font-size: 12.5px; line-height: 1.5; color: #98a0bb;">Keep it lands back on the detail sheet. Delete the line leaves both sheets and lands on the list.</div>
+                  </div>
+                </div>
+
+                <div style="padding: 13px 14px; border: 1px dashed rgba(255,255,255,0.12); border-radius: 14px;">
+                  <span style="font-size: 12.5px; line-height: 1.5; color: #6f7899;">Approve, reject and restore stay under the row, where a manager already finds them. They decide about the line rather than change it, and a manager reviewing ten new lines must not open ten sheets.</span>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 3480px; width: 1330px;">
+        <figcaption>0084: the settle sheet with the name field</figcaption>
+        <div class="frame" id="ab-Settle" style="width: 1330px; height: 1010px;">
+          <div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ THE OWNER, AT REST ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE OWNER &middot; the title is the name field, the rest of the pane does not move</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <span style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb; margin-bottom: 8px;">NAME</span>
+                  <div style="height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.35); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: #f7f8fc;">leche</div>
+                  <button type="button" style="width: 100%; height: 48px; margin-top: 12px; border: 1px solid rgba(255,180,84,0.26); border-radius: 14px; background: rgba(255,180,84,0.10); color: #ffb454; font-family: inherit; font-size: 15px; font-weight: 650; opacity: 0.45;">Save</button>
+
+                  <div style="margin: 16px 0 12px; font-size: 14px; color: #ffb454;">3 outstanding</div>
+
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="font-size: 14px; color: #c2c8db;">Hacendado entera, 1 L</span>
+                    <span style="flex: none; height: 44px; padding: 0 12px; display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; font-size: 14px; color: #c2c8db;">Change</span>
+                  </div>
+
+                  <div style="margin-top: 12px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.08); border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <div style="font-size: 14px; font-weight: 500; color: #c2c8db; margin-bottom: 4px;">Lists that asked for this</div>
+                    <div style="display: grid; grid-template-columns: minmax(0,1fr) 72px 72px; column-gap: 8px; font-size: 11px; letter-spacing: 0.04em; color: #98a0bb;">
+                      <span></span><span style="text-align: center;">ASKED FOR</span><span style="text-align: center;">GOT</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: minmax(0,1fr) 72px 72px; column-gap: 8px; align-items: center; min-height: 52px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                      <span><span style="display: block; font-size: 14px; color: #f7f8fc;">Weekly shop</span><span style="display: block; font-size: 12px; color: #98a0bb;">Flat 3B</span></span>
+                      <span style="justify-self: center; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">2</span>
+                      <span style="justify-self: center; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">0</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: minmax(0,1fr) 72px 72px; column-gap: 8px; align-items: center; min-height: 52px;">
+                      <span><span style="display: block; font-size: 14px; color: #f7f8fc;">Groceries</span><span style="display: block; font-size: 12px; color: #98a0bb;">Parents' house</span></span>
+                      <span style="justify-self: center; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">1</span>
+                      <span style="justify-self: center; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;">0</span>
+                    </div>
+                  </div>
+
+                  <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px;">
+                    <button type="button" style="width: 100%; height: 50px; border: 0; border-radius: 12px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600;">Got all 3</button>
+                    <button type="button" style="width: 100%; height: 44px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: #161a28; color: #c2c8db; font-family: inherit; font-size: 14px;">Got some</button>
+                    <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px; font-size: 14px; color: #98a0bb;">They had none</div>
+                  </div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 8px; font-size: 14px; color: #ffb454;">Show line history</div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ THE OWNER, TYPING ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">TYPING &middot; Save is right under the field, above the keyboard</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 291px; height: 475px; overflow: hidden; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 0; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <span style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb; margin-bottom: 8px;">NAME</span>
+                  <div style="height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: #f7f8fc;">Leche entera<span style="display: inline-block; width: 1.5px; height: 20px; margin-left: 1px; background: #ffb454;"></span></div>
+                  <button type="button" style="width: 100%; height: 48px; margin-top: 12px; border: 1px solid rgba(255,180,84,0.26); border-radius: 14px; background: rgba(255,180,84,0.10); color: #ffb454; font-family: inherit; font-size: 15px; font-weight: 650;">Save</button>
+
+                  <div style="margin: 16px 0 12px; font-size: 14px; color: #ffb454;">3 outstanding</div>
+
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="font-size: 14px; color: #c2c8db;">Hacendado entera, 1 L</span>
+                    <span style="flex: none; height: 44px; padding: 0 12px; display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; font-size: 14px; color: #c2c8db;">Change</span>
+                  </div>
+
+                  <div style="margin-top: 12px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <div style="font-size: 14px; font-weight: 500; color: #c2c8db; margin-bottom: 4px;">Lists that asked for this</div>
+                    <div style="display: grid; grid-template-columns: minmax(0,1fr) 72px 72px; column-gap: 8px; font-size: 11px; letter-spacing: 0.04em; color: #98a0bb;">
+                      <span></span><span style="text-align: center;">ASKED FOR</span><span style="text-align: center;">GOT</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: minmax(0,1fr) 72px 72px; column-gap: 8px; align-items: center; min-height: 52px;">
+                      <span><span style="display: block; font-size: 14px; color: #f7f8fc;">Weekly shop</span><span style="display: block; font-size: 12px; color: #98a0bb;">Flat 3B</span></span>
+                      <span style="justify-self: center; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600;">2</span>
+                      <span style="justify-self: center; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600;">0</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 291px; background: #1b1f2e; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #4d5470;">Keyboard</span>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ A GUEST ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A GUEST &middot; or anyone the server refuses: the title stays a title</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; line-height: 1.25; color: #f7f8fc;">leche</div>
+                  <div style="margin: 4px 0 12px; font-size: 14px; color: #ffb454;">3 outstanding</div>
+
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="font-size: 14px; color: #c2c8db;">Hacendado entera, 1 L</span>
+                    <span style="flex: none; height: 44px; padding: 0 12px; display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; font-size: 14px; color: #c2c8db;">Change</span>
+                  </div>
+
+                  <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 4px;">
+                    <button type="button" style="width: 100%; height: 50px; border: 0; border-radius: 12px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600;">Got all 3</button>
+                    <button type="button" style="width: 100%; height: 44px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: #161a28; color: #c2c8db; font-family: inherit; font-size: 14px;">Got some</button>
+                    <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px; font-size: 14px; color: #98a0bb;">They had none</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 4640px; width: 1330px;">
+        <figcaption>0084: the merge question, a refusal, and a line added in the shop</figcaption>
+        <div class="frame" id="ab-SettleMerge" style="width: 1330px; height: 1010px;">
+          <div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ THE MERGE QUESTION ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE NAME IS TAKEN IN THREE PLACES &middot; one row each, one question</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <div style="font-size: 20px; font-weight: 650; line-height: 1.35; letter-spacing: -0.01em;">These already have a line called &ldquo;Leche entera&rdquo;</div>
+                  <div style="margin-top: 6px; font-size: 14px; line-height: 1.5; color: #98a0bb;">Merging makes each of them one line, with the amounts added together.</div>
+
+                  <div style="margin-top: 16px; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden;">
+                    <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                      <span style="flex: 1; min-width: 0;">
+                        <span style="display: block; font-size: 14.5px; font-weight: 600;">Weekly shop</span>
+                        <span style="display: block; margin-top: 1px; font-size: 12px; color: #98a0bb;">Flat 3B</span>
+                      </span>
+                      <span style="flex: none; font-size: 13.5px; color: #c2c8db; font-variant-numeric: tabular-nums;">asks for 2</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 14px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                      <span style="flex: 1; min-width: 0;">
+                        <span style="display: block; font-size: 14.5px; font-weight: 600;">Groceries</span>
+                        <span style="display: block; margin-top: 1px; font-size: 12px; color: #98a0bb;">Parents' house</span>
+                      </span>
+                      <span style="flex: none; font-size: 13.5px; color: #c2c8db; font-variant-numeric: tabular-nums;">asks for 1</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 14px;">
+                      <span style="flex: 1; min-width: 0;">
+                        <span style="display: block; font-size: 14.5px; font-weight: 600;">This basket</span>
+                      </span>
+                      <span style="flex: none; font-size: 13.5px; color: #c2c8db; font-variant-numeric: tabular-nums;">2 to get</span>
+                    </div>
+                  </div>
+
+                  <button type="button" style="width: 100%; height: 52px; margin-top: 20px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Merge</button>
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px;">
+                    <span style="font-size: 14.5px; font-weight: 500; color: #c2c8db;">Keep editing</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ REFUSED ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REFUSED &middot; the sentence names the household in the way</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; top: 118px; overflow: hidden; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 0; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <span style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb; margin-bottom: 8px;">NAME</span>
+                  <div style="height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.35); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: #f7f8fc;">Leche entera</div>
+                  <button type="button" style="width: 100%; height: 48px; margin-top: 12px; border: 1px solid rgba(255,180,84,0.26); border-radius: 14px; background: rgba(255,180,84,0.10); color: #ffb454; font-family: inherit; font-size: 15px; font-weight: 650;">Save</button>
+                  <p style="margin: 10px 0 0; font-size: 14px; line-height: 1.5; color: #fb7185;">In Weekly shop, that name belongs to an approved line, and this one is not approved yet.</p>
+
+                  <div style="margin: 16px 0 12px; font-size: 14px; color: #ffb454;">3 outstanding</div>
+
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="font-size: 14px; color: #c2c8db;">Hacendado entera, 1 L</span>
+                    <span style="flex: none; height: 44px; padding: 0 12px; display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; font-size: 14px; color: #c2c8db;">Change</span>
+                  </div>
+
+                  <div style="margin-top: 12px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.08); border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <div style="font-size: 14px; font-weight: 500; color: #c2c8db; margin-bottom: 4px;">Lists that asked for this</div>
+                    <div style="display: grid; grid-template-columns: minmax(0,1fr) 72px 72px; column-gap: 8px; font-size: 11px; letter-spacing: 0.04em; color: #98a0bb;">
+                      <span></span><span style="text-align: center;">ASKED FOR</span><span style="text-align: center;">GOT</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: minmax(0,1fr) 72px 72px; column-gap: 8px; align-items: center; min-height: 52px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                      <span><span style="display: block; font-size: 14px; color: #f7f8fc;">Weekly shop</span><span style="display: block; font-size: 12px; color: #98a0bb;">Flat 3B</span></span>
+                      <span style="justify-self: center; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600;">2</span>
+                      <span style="justify-self: center; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600;">0</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: minmax(0,1fr) 72px 72px; column-gap: 8px; align-items: center; min-height: 52px;">
+                      <span><span style="display: block; font-size: 14px; color: #f7f8fc;">Groceries</span><span style="display: block; font-size: 12px; color: #98a0bb;">Parents' house</span></span>
+                      <span style="justify-self: center; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600;">1</span>
+                      <span style="justify-self: center; min-width: 52px; height: 40px; border-radius: 12px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600;">0</span>
+                    </div>
+                  </div>
+
+                  <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px;">
+                    <button type="button" style="width: 100%; height: 50px; border: 0; border-radius: 12px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600;">Got all 3</button>
+                    <button type="button" style="width: 100%; height: 44px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: #161a28; color: #c2c8db; font-family: inherit; font-size: 14px;">Got some</button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ A LINE ADDED IN THE AISLE ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ADDED IN THE SHOP &middot; the owner renames it, no list is behind it</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
+
+                <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42);">
+                  <div style="width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+                  <span style="display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: #98a0bb; margin-bottom: 8px;">NAME</span>
+                  <div style="height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.35); display: flex; align-items: center; padding: 0 16px; font-size: 16px; color: #f7f8fc;">pan de molde</div>
+                  <button type="button" style="width: 100%; height: 48px; margin-top: 12px; border: 1px solid rgba(255,180,84,0.26); border-radius: 14px; background: rgba(255,180,84,0.10); color: #ffb454; font-family: inherit; font-size: 15px; font-weight: 650; opacity: 0.45;">Save</button>
+
+                  <div style="margin: 16px 0 12px; font-size: 14px; color: #ffb454;">1 outstanding</div>
+
+                  <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px;">
+                    <button type="button" style="width: 100%; height: 50px; border: 0; border-radius: 12px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 600;">Got it</button>
+                    <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 4px; font-size: 14px; color: #98a0bb;">They had none</div>
+                  </div>
+
+                  <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 8px; font-size: 14px; color: #ffb454;">Show line history</div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 1390px; top: 0px; width: 440px;"><p>ONE PLACE TO CHANGE A LINE. On a zone list the three dots menu and the edit sheet go. The detail sheet the reader already opens holds the name, the amount, Save, comments and delete. In the basket, the settle sheet's title becomes the name field for the readers the server lets rename.</p><p>ONE SOLID BUTTON PER SHEET. The solid amber stays on what the reader came to do: I bought this, Got all 3. Save takes the quiet amber the app already uses for a chosen option, tinted and bordered with amber text. It reads as a button and as enabled, and it never competes with the settle button for the thumb.</p><p>SAVE SITS UNDER THE FIELDS IT SAVES, and a rule separates it from everything it does not save. Nothing is written while typing, on blur, or on close. Closing the sheet with changes throws them away, as every velista sheet does.</p></aside>
+      <aside class="note" style="left: 1390px; top: 560px; width: 440px;"><p>WHILE TYPING. The sheet opens on itself (plan 0081), so no keyboard covers it before it is read. When the name field takes focus the keyboard comes up, and the name, the amount, the notice and Save are all above it on a 390 by 844 phone. Nobody types blind or closes the keyboard to reach Save.</p><p>SAVED stays on the button, with a check, until the next change turns it back into Save. It is where the eye already is, and it is a status region, so a screen reader hears it once. The sheet stays open on the saved values.</p><p>THE HEADER PILL GOES for a reader with an edit scope, because the reel below it is the same number. A reader with no scope keeps today's header.</p></aside>
+      <aside class="note" style="left: 1390px; top: 1160px; width: 440px;"><p>THE MERGE QUESTION REPLACES THE SHEET'S CONTENT, and focus moves to it. The fact comes first and the question second, each on its own line, because the fact is what the reader did not know. One more sentence says that comments and what was bought move too, which is the worry behind the question. Merge is the solid button here, because in this pane it is the only thing to do. Keep editing returns to the fields with the typed values, and focus goes back to Save.</p><p>A MERGE THAT LANDS ON THE OTHER LINE moves the sheet to that line's detail sheet, so the reader never looks at a line that no longer exists.</p><p>REFUSALS show under Save in the danger colour, and the fields keep what was typed.</p></aside>
+      <aside class="note" style="left: 1390px; top: 1780px; width: 440px;"><p>SAVING LOCKS THE SHEET. It cannot be closed, the fields are read only, and the settle buttons, Comments, Delete line and See more details are dimmed until the answer arrives. Two writes to one line never race, and nobody leaves the sheet with a save still in flight.</p></aside>
+      <aside class="note" style="left: 1390px; top: 2320px; width: 440px;"><p>NAME ONLY (the content scope) edits the name. The amount is the number as text, where the reel would be, so the sheet does not change shape between two readers.</p><p>CANNOT EDIT is today's sheet with Comments added.</p><p>COMMENTS AND DELETE are one row under a rule, below the settle buttons and away from the thumb that reaches for I bought this. Delete line is drawn only for a reader who may delete, and Comments then takes the whole row. The comment count sits in the button, so the row's count and the sheet agree. Both push a sheet of their own, and every way out of it lands back here. A confirmed delete lands on the list.</p><p>THE ROW keeps its reel and its comment count, the menu is gone, and a tap anywhere else opens the sheet as today.</p></aside>
+      <aside class="note" style="left: 1390px; top: 3480px; width: 440px;"><p>THE BASKET. The name field replaces the title for the owner, and for a registered participant who sees the lists, on a line that came from lists. The owner also renames a line added in the shop. Everybody else, guests first, sees the title exactly as today, in the display face. The field is removed, not disabled, once the trip is finished.</p><p>The rest of the settle pane does not move. Outstanding, the product, the lists, the three settle buttons and the history link keep their order, so a shopper who knows where Got all is still finds it there.</p><p>There is one field and no amount here, so Save sits straight under the field, and there is no rule: the outstanding count below it already starts a new block.</p></aside>
+      <aside class="note" style="left: 1390px; top: 4640px; width: 440px;"><p>ONE ROW PER PLACE THE NAME IS TAKEN, not one sentence per place. A rename in the basket can collide on three lists and in the basket at once, and in an aisle a column of rows is read at a glance where three sentences are not. Each row names the list and its group and says what the other line already asks for. The basket's own row says how many are still to get.</p><p>A REFUSAL NAMES THE LIST, because the reader has to know which household's line is in the way.</p><p>A LINE ADDED IN THE SHOP has no lists block, and a merge on it can only touch the basket.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 1830;
+    var h = 5650;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>
