@@ -46,6 +46,17 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
       // adding a city's worth of codes gets most often, and "that code does not
       // exist" is a typo they can fix while "the request was refused" is not.
       return 'resource.error.postalCodeUnknown';
+    case 'brand_label_empty':
+      // A label made of punctuation, which makes no key and therefore no brand
+      // (backend plan 0115, section 5.3). LIDL's `-` and `---` are the real
+      // cases. Named apart from the generic validation sentence because the fix
+      // is to type a letter, and "the request was refused" does not say that.
+      return 'resource.error.brandLabelEmpty';
+    case 'brand_key_taken':
+      // Another brand already holds this key. A conflict, and the useful half is
+      // which brand: the refusal publishes its id, so the screen that was
+      // refused can offer to open it instead of only apologising.
+      return 'resource.error.brandKeyTaken';
     case 'run_in_progress':
       // A row the harvester is working on right now. A conflict, but the useful
       // half is which conflict: waiting for the run to finish is the whole of
