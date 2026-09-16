@@ -20,8 +20,10 @@ import {
 import {
   ASSISTANT_SERVICE,
   CATALOG_SERVICE,
+  ItemNames,
   LineStore,
   ListStore,
+  ListViewStore,
   MemberNames,
   presenceNames,
   presencePeople,
@@ -37,6 +39,7 @@ import {
 import {
   APP_BASE_PATH,
   LINE_VOICE_MAX_SECONDS,
+  NO_CATEGORY,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
   type CatalogSuggestion,
@@ -69,6 +72,7 @@ import {
   LineList,
   ListHeader,
   ListNotice,
+  ListTools,
   RowSkeleton,
   SpinnerIcon,
   type LineRowAction,
@@ -134,12 +138,17 @@ import { voiceFailureCopy } from '../voice-error-copy';
     LineList,
     ListHeader,
     ListNotice,
+    ListTools,
     RowSkeleton,
     SpinnerIcon,
   ],
   templateUrl: './list-page.html',
   styleUrl: './list-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    // Which element scrolls, for the sticky tools row: see `standalone`.
+    '[class.standalone]': 'standalone',
+  },
   // The composer's microphone, with this page's cap on it (plan 0038, section 4).
   //
   // Here rather than in `root`, so leaving the page releases the microphone: a
@@ -176,6 +185,24 @@ export class ListPage {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+
+  /**
+   * What this screen shows of the list: the search, the order and one category
+   * (velista `0082`). Route provided, so the filter sheet reaches the same instance.
+   */
+  private readonly _view = inject(ListViewStore);
+
+  /** The products on the lines, for their categories and names (section 3). */
+  private readonly _itemNames = inject(ItemNames);
+
+  /**
+   * Whether this is the standalone build, where the document scrolls and not `.page`.
+   *
+   * The sticky tools row needs to know, for the reason `BasketPage.standalone` gives
+   * (velista `0079`, section 2): `overflow-y: auto` makes `.page` a scroll container
+   * whether or not it overflows, and standalone it never does.
+   */
+  protected readonly standalone = this._basePath === '';
 
   /** Both from the URL, and both signals: the router reuses this component. */
   readonly zoneId = zoneIdOf(this._route);
@@ -403,7 +430,76 @@ export class ListPage {
     return current.kind === 'loaded' ? current : null;
   });
 
+  // --- The search, the order and one category (velista 0082) ----------------
+
+  /**
+   * The rows actually drawn, and the category heading above them or null.
+   *
+   * `current.lines` is already in list order, which is what "List order" keeps. The
+   * rules are `composeListView`; nothing here narrows anything by hand.
+   */
+  readonly view = computed(() => {
+    const page = this.loaded();
+    return page === null ? null : this._view.compose(page.lines);
+  });
+
+  /** What is in the search field, for the tools row and the no match sentence. */
+  readonly searchQuery = this._view.query;
+
+  /** The query folded once, for the rows' `<mark>`. */
+  readonly highlight = this._view.folded;
+
+  readonly searching = this._view.searching;
+
+  /** How many settings are on, for the filter button's badge (section 2). */
+  readonly activeCount = this._view.activeCount;
+
+  /** Whether the reorder action is held with a sentence (section 7). */
+  readonly reorderHeld = this._view.holdsReorder;
+
+  /** The heading's words, as a key: a category's label, or "No category". */
+  readonly headingKey = computed(() => {
+    const category = this.view()?.category ?? null;
+    if (category === null) {
+      return null;
+    }
+    return category === NO_CATEGORY
+      ? 'list.view.noCategory'
+      : `basket.category.${category}`;
+  });
+
+  search(query: string): void {
+    this._view.search(query);
+  }
+
+  openFilter(): void {
+    void this._openSheet(['filter']);
+  }
+
+  /** The empty view's Reset: the order and the category back to their defaults. */
+  resetView(): void {
+    this._view.reset();
+  }
+
   constructor() {
+    // The view store follows the list in the URL. Opening another list restores the
+    // remembered order and starts with no search and all lines.
+    effect(() => {
+      const listId = this.listId();
+      untracked(() => this._view.open(listId));
+    });
+
+    // The products on every line, for the category view and the search (section 3).
+    // Runs again when lines arrive over the socket; `ItemNames` asks only for ids it
+    // has not seen, and splits a large set at the lookup limit.
+    effect(() => {
+      const lines = this._lines.forList(this.listId())().lines;
+      const itemIds = lines.flatMap((line) => line.itemIds);
+      if (itemIds.length > 0) {
+        untracked(() => void this._itemNames.ensure(itemIds));
+      }
+    });
+
     // The lines, from the list id alone. Keyed on the id and nothing else, so it runs
     // again when the person navigates from one list to another and never because its
     // own answer landed.
@@ -573,6 +669,9 @@ export class ListPage {
     });
 
     inject(DestroyRef).onDestroy(() => {
+      // The view store is provided on the route and is never destroyed, so it is
+      // given back here, as the basket page gives back `BasketViewStore`.
+      this._view.leave();
       this.announcement.set('');
       if (this._markTimer !== null) {
         clearTimeout(this._markTimer);
@@ -1050,6 +1149,12 @@ export class ListPage {
   }
 
   startReorder(): void {
+    // The header holds the action and says why, so this is belt on top of braces:
+    // a drag over a searched, sorted or narrowed screen would rewrite positions
+    // nobody can see (velista 0082, section 7).
+    if (this.reorderHeld()) {
+      return;
+    }
     this.reordering.set(true);
     this.announcement.set(this._translator.t('list.reorder.started'));
   }

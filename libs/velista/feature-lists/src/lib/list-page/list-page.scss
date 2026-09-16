@@ -30,6 +30,30 @@
   @include list-page.page;
 }
 
+// Standalone the document scrolls, so `.page` must not be a scroll container of its
+// own, or the sticky tools row sticks to a box that never moves (velista 0079,
+// section 2, which the basket page found first). Standalone `.page` is already as
+// tall as its content, so `overflow-y: auto` never produced a scroll there anyway.
+:host(.standalone) .page {
+  overflow-y: visible;
+}
+
+// The tools row (velista 0082, section 2), stretched over the column's own inline
+// padding so the ground it paints covers the lines scrolling under it edge to edge.
+lib-list-tools {
+  margin-inline: calc(var(--app-space-5) * -1);
+  padding-inline: var(--app-space-3);
+}
+
+// The one category on screen, a step below the list's name (section 10).
+.category-heading {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-secondary);
+}
+
 // Always at the bottom of the screen, which is what makes the field reachable with a
 // thumb no matter how long the list is.
 //

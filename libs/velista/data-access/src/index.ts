@@ -48,6 +48,7 @@ export * from './lib/lists/list-api';
 export * from './lib/lists/list-memory';
 export * from './lib/lists/list-service';
 export * from './lib/lists/list-store';
+export * from './lib/lists/list-view-store';
 export * from './lib/mapping/basket-mappers';
 export * from './lib/mapping/mappers';
 export * from './lib/mapping/primitives';

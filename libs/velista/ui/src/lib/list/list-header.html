@@ -26,8 +26,14 @@
         so reordering a half read list collides two lines onto one position (rule L4).
       -->
       @if (canReorder()) {
+        <!--
+          Held rather than absent while the screen is not in list order (velista 0082,
+          section 7): the name stays, the press answers with the sentence below.
+        -->
         <button
-          (click)="startReorder.emit()"
+          (click)="pressReorder()"
+          [attr.aria-disabled]="reorderHeld() ? 'true' : null"
+          [class.held]="reorderHeld()"
           class="header-action"
           type="button"
         >
@@ -41,6 +47,13 @@
     </div>
   }
 </header>
+
+<!--
+  Why reorder is waiting, after a press on the held action (velista 0082, section 7).
+  Always in the document and polite, so a sentence written into it is announced; empty
+  until the first held press, and empty again once the list is back in list order.
+-->
+<p aria-live="polite" class="held-message" role="status">{{ heldMessage() }}</p>
 
 <!--
   "7 of 12 pending", with the bar underneath. The number is what the list still wants,

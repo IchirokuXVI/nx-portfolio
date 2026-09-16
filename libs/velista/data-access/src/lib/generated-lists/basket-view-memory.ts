@@ -1,5 +1,16 @@
 import type { BasketGrouping, BasketOrder } from '@portfolio/velista/models';
 import { isRecord } from '../mapping/primitives';
+import {
+  hasExpired,
+  oneOfOrNull,
+  readRemembered,
+  UNREADABLE,
+  untilFor,
+  type Remembered,
+  type ViewLifetime,
+} from '../view-memory';
+
+export { hasExpired, type Remembered, type ViewLifetime } from '../view-memory';
 
 /**
  * What the filter sheet remembers between visits, and for how long (velista
@@ -31,12 +42,6 @@ import { isRecord } from '../mapping/primitives';
  * `access-token-expiry.ts` already uses for a decision made against the clock: the
  * store passes `Date.now()` and a spec passes whatever moment it wants to stand at.
  */
-export interface Remembered<T> {
-  readonly value: T;
-  /** ISO instant after which the value is ignored, or null for never. */
-  readonly until: string | null;
-}
-
 /** One record for the device, holding whichever of the three were ever set. */
 export interface BasketViewMemory {
   readonly version: 1;
@@ -65,7 +70,7 @@ export type RememberedProperty = Exclude<keyof BasketViewMemory, 'version'>;
  * list, and that does not go stale.
  */
 export const BASKET_VIEW_LIFETIME_MS: Readonly<
-  Record<RememberedProperty, number | null>
+  Record<RememberedProperty, ViewLifetime>
 > = {
   order: null,
   grouping: null,
@@ -93,19 +98,6 @@ export const NO_BASKET_VIEW_MEMORY: BasketViewMemory = { version: VERSION };
 
 const ORDERS: readonly BasketOrder[] = ['shop', 'alpha'];
 const GROUPINGS: readonly BasketGrouping[] = ['none', 'category', 'list'];
-
-/**
- * That a stored property was present and could not be read, as distinct from
- * absent.
- *
- * The two have to stay tellable apart: an absent property is an ordinary record
- * that never had one, and an unreadable property condemns the **whole** record,
- * because a build that wrote a shape this one cannot read may have written the rest
- * of it differently too.
- */
-const UNREADABLE = Symbol('unreadable');
-
-type Read<T> = Remembered<T> | undefined | typeof UNREADABLE;
 
 /**
  * Map a stored record, which is rule D4 applied to storage.
@@ -161,25 +153,6 @@ export function parseBasketViewMemory(
 }
 
 /**
- * Whether a remembered value's date has passed.
- *
- * A null `until` never passes, which is what a lifetime of null means. The
- * comparison is made **once**, by whoever asks: this is a date to compare against,
- * not a timer, so a value read at 11:50 and due at 12:00 stays applied while the
- * basket is open and is ignored by the next basket to open.
- */
-export function hasExpired(
-  remembered: Remembered<unknown>,
-  now: number
-): boolean {
-  if (remembered.until === null) {
-    return false;
-  }
-
-  return Date.parse(remembered.until) <= now;
-}
-
-/**
  * The record without the properties whose date has passed.
  *
  * Returns the record it was given, by identity, when nothing expired, so a caller
@@ -214,8 +187,12 @@ export function remember<K extends RememberedProperty>(
   now: number
 ): BasketViewMemory {
   const lifetime = BASKET_VIEW_LIFETIME_MS[property];
-  const until =
-    lifetime === null ? null : new Date(now + lifetime).toISOString();
+  if (lifetime === 'visit') {
+    // Never stored (velista `0082`, section 8). None of the basket's properties has
+    // this lifetime; the branch is what keeps the shared type honest here.
+    return forget(memory, property);
+  }
+  const until = untilFor(lifetime, now);
 
   // The computed key is what widens the spread's type, and the shape being built is
   // the one the signature already promised.
@@ -241,57 +218,4 @@ export function forget(
 
   const { [property]: dropped, ...kept } = memory;
   return kept;
-}
-
-/**
- * One stored property: present and well formed, absent, or unreadable.
- *
- * A `value` its reader rejects and an `until` that is neither null nor a real
- * instant are both unreadable, and both condemn the record they came from.
- */
-function readRemembered<T>(
-  raw: unknown,
-  readValue: (value: unknown) => T | null
-): Read<T> {
-  if (raw === undefined) {
-    return undefined;
-  }
-
-  if (!isRecord(raw)) {
-    return UNREADABLE;
-  }
-
-  const value = readValue(raw['value']);
-  if (value === null) {
-    return UNREADABLE;
-  }
-
-  const until = raw['until'];
-  if (until === null) {
-    return { value, until: null };
-  }
-
-  if (typeof until !== 'string' || Number.isNaN(Date.parse(until))) {
-    return UNREADABLE;
-  }
-
-  return { value, until };
-}
-
-/**
- * A member of a union, or null.
- *
- * `oneOf` in `mapping/primitives.ts` falls back to a default instead, which is right
- * for a response body a screen has to draw something for and wrong here: a stored
- * value outside its union is a record this build cannot read, and quietly reading it
- * as `'none'` would apply a grouping nobody chose.
- */
-function oneOfOrNull<T extends string>(
-  value: unknown,
-  allowed: readonly T[]
-): T | null {
-  return typeof value === 'string' &&
-    (allowed as readonly string[]).includes(value)
-    ? (value as T)
-    : null;
 }

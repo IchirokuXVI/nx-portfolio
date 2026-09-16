@@ -360,7 +360,7 @@ describe('AppShellRoutes', () => {
         ).toContain('sheet/lists/new');
       });
 
-      it('offers the five sheets over it, as routes rather than flags', () => {
+      it('offers the six sheets over it, as routes rather than flags', () => {
         // Rule E1: each covers the page without losing it, and Android's back button
         // has to dismiss it. Ticking a line off is deliberately not among them.
         expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual(
@@ -373,8 +373,18 @@ describe('AppShellRoutes', () => {
             'sheet/lines/:lineId/comments',
             'sheet/lines/:lineId/confirm/delete',
             'sheet/settings',
+            // The order and the category view (velista `0082`, section 4).
+            'sheet/filter',
           ]
         );
+      });
+
+      it('provides the view store on the list route, where the filter sheet reaches it', () => {
+        const provided = (routeAt(listPath)?.providers ?? []).map(
+          (provider) => (provider as { name?: string }).name
+        );
+
+        expect(provided).toEqual(['ListViewStore']);
       });
 
       it('guards none of the sheets, because write access is not knowable', () => {
@@ -384,7 +394,7 @@ describe('AppShellRoutes', () => {
         // allowed, on every request.
         const sheets = routeAt(listPath)?.children ?? [];
 
-        expect(sheets).toHaveLength(5);
+        expect(sheets).toHaveLength(6);
         for (const sheet of sheets) {
           expect(sheet.canActivate).toBeUndefined();
         }
@@ -891,8 +901,9 @@ describe('the sheets and their exit animation', () => {
     // It was twenty nine until velista `0068` deleted the send sheet, and twenty eight
     // until `0073` deleted the units sheet: its rows are drawn on the settle sheet
     // under the product now. `0075` added the basket's filter sheet, which took it
-    // back to twenty eight, and `0078` added the shop picker beside it.
-    expect(sheets).toHaveLength(29);
+    // back to twenty eight, and `0078` added the shop picker beside it. `0082` added
+    // the zone list's filter sheet.
+    expect(sheets).toHaveLength(30);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

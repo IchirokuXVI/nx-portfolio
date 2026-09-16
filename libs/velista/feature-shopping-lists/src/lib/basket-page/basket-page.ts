@@ -1,4 +1,3 @@
-import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -9,7 +8,6 @@ import {
   signal,
   untracked,
   viewChild,
-  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -43,13 +41,11 @@ import {
 import {
   ChevronLeftIcon,
   ChipRow,
-  CloseIcon,
-  FilterIcon,
   FlagIcon,
   LineComposer,
+  ListTools,
   OfflineIcon,
   PersonIcon,
-  SearchIcon,
   ShareIcon,
   type ChipRowItem,
 } from '@portfolio/velista/ui';
@@ -116,16 +112,13 @@ import { BASKET_PATHS } from '../basket-paths';
     BasketLineRow,
     ChevronLeftIcon,
     ChipRow,
-    CloseIcon,
-    FilterIcon,
     FlagIcon,
     LineComposer,
-    NgTemplateOutlet,
+    ListTools,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,
     RouterOutlet,
-    SearchIcon,
     ShareIcon,
   ],
   templateUrl: './basket-page.html',
@@ -806,83 +799,15 @@ export class BasketPage {
   protected readonly highlight = this._view.folded;
 
   /**
-   * Whether the field has replaced the row, which is not the same as searching.
+   * What was typed, or the empty string from Clear and Cancel.
    *
-   * A field that is open and empty draws the whole basket, and the count under it
-   * says so. The two questions are separate because opening is a gesture and
-   * searching is a string: the field stays open through a query somebody deletes a
-   * character at a time, and Cancel is what closes it.
+   * Whether the field is open is `ListTools`' to know since velista `0082`, which
+   * moved the row, its focus handling and its Cancel into a component the zone list
+   * page draws too. Cancel still clears the query, so the row that comes back is over
+   * the whole basket.
    */
-  private readonly _searchOpen = signal(false);
-
-  protected readonly searchOpen = this._searchOpen.asReadonly();
-
-  /**
-   * Which control the keyboard should be on once the row has been redrawn.
-   *
-   * A signal and not a call, because neither control exists at the moment the
-   * gesture happens: opening the search destroys the button that was pressed, and
-   * cancelling destroys the field. The effect below waits for whichever one arrives.
-   */
-  private readonly _focusWanted = signal<'field' | 'button' | null>(null);
-
-  private readonly _searchField =
-    viewChild<ElementRef<HTMLInputElement>>('searchField');
-
-  private readonly _searchButton =
-    viewChild<ElementRef<HTMLButtonElement>>('searchButton');
-
-  /**
-   * Put the focus where the gesture said, as soon as there is something to put it
-   * on (section 6).
-   *
-   * Focus never lands on the page body, which is what a naive open and close does:
-   * the field takes it when it appears, and Cancel or Escape gives it back to the
-   * search button, so a keyboard reader is never dropped at the top of the document
-   * in the middle of a basket.
-   */
-  private readonly _focusEffect = effect(() => {
-    const wanted = this._focusWanted();
-    const field = this._searchField();
-    const button = this._searchButton();
-
-    const target =
-      wanted === 'field' ? field : wanted === 'button' ? button : null;
-    if (target === undefined || target === null) {
-      return;
-    }
-
-    untracked(() => this._focusWanted.set(null));
-    target.nativeElement.focus();
-  });
-
-  /** Replace the row with the field, and put the caret in it. */
-  protected openSearch(): void {
-    this._searchOpen.set(true);
-    this._focusWanted.set('field');
-  }
-
-  protected onSearch(event: Event): void {
-    this._view.search((event.target as HTMLInputElement).value);
-  }
-
-  /** Empty the field without closing it, which is the control inside it. */
-  protected clearSearch(): void {
-    this._view.search('');
-    this._focusWanted.set('field');
-  }
-
-  /**
-   * Cancel, the scrim of this particular control: Escape does exactly the same.
-   *
-   * It **clears the query as well as closing the field**, so the row that comes
-   * back is over the whole basket. A search left running behind a closed field is a
-   * screen missing rows for a reason nothing on it says.
-   */
-  protected closeSearch(): void {
-    this._view.search('');
-    this._searchOpen.set(false);
-    this._focusWanted.set('button');
+  protected search(query: string): void {
+    this._view.search(query);
   }
 
   // --- The filter sheet and its chips (plan 0075) ----------------------------

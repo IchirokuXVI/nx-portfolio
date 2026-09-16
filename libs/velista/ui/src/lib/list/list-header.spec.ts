@@ -122,3 +122,83 @@ describe('ListHeader', () => {
     });
   });
 });
+
+/** Velista `0082`, section 7: reorder waits for the list order, and says so. */
+describe('ListHeader: the held reorder action', () => {
+  async function held(isHeld: boolean) {
+    const fixture = await render();
+    fixture.componentRef.setInput('hasMenu', true);
+    fixture.componentRef.setInput('canReorder', true);
+    fixture.componentRef.setInput('reorderHeld', isHeld);
+    fixture.detectChanges();
+
+    const reorder = Array.from(
+      host(fixture).querySelectorAll<HTMLButtonElement>('.header-action')
+    ).find((button) => button.textContent?.includes('list.reorder.enter'));
+    if (reorder === undefined) {
+      throw new Error('there is no reorder action');
+    }
+
+    const started = jest.fn();
+    fixture.componentInstance.startReorder.subscribe(started);
+
+    return { fixture, reorder, started };
+  }
+
+  function message(fixture: ComponentFixture<ListHeader>): string {
+    return host(fixture).querySelector('.held-message')?.textContent ?? '';
+  }
+
+  it('enters the mode while nothing holds it', async () => {
+    const { fixture, reorder, started } = await held(false);
+
+    reorder.click();
+    fixture.detectChanges();
+
+    expect(reorder.getAttribute('aria-disabled')).toBeNull();
+    expect(started).toHaveBeenCalledTimes(1);
+    expect(message(fixture)).toBe('');
+  });
+
+  it('keeps its name, is aria-disabled and not disabled, and says why on a press', async () => {
+    const { fixture, reorder, started } = await held(true);
+
+    expect(reorder.getAttribute('aria-disabled')).toBe('true');
+    expect(reorder.disabled).toBe(false);
+    expect(reorder.textContent).toContain('list.reorder.enter');
+    expect(message(fixture)).toBe('');
+
+    reorder.click();
+    fixture.detectChanges();
+
+    expect(started).not.toHaveBeenCalled();
+    expect(message(fixture)).toContain('list.reorder.unavailable');
+    const region = host(fixture).querySelector('.held-message');
+    expect(region?.getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('changes the region on every press, so each press is announced once', async () => {
+    const { fixture, reorder } = await held(true);
+
+    reorder.click();
+    fixture.detectChanges();
+    const first = message(fixture);
+
+    reorder.click();
+    fixture.detectChanges();
+
+    expect(message(fixture)).not.toBe(first);
+    expect(message(fixture).trim()).toBe(first.trim());
+  });
+
+  it('drops the sentence once the hold is lifted', async () => {
+    const { fixture, reorder } = await held(true);
+    reorder.click();
+    fixture.detectChanges();
+
+    fixture.componentRef.setInput('reorderHeld', false);
+    fixture.detectChanges();
+
+    expect(message(fixture)).toBe('');
+  });
+});

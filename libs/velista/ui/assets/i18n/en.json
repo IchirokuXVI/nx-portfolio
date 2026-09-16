@@ -478,7 +478,21 @@
       "started": "Putting them in order. Ticking off is off",
       "ended": "Finished putting them in order",
       "moveUp": "Move {{name}} up",
-      "moveDown": "Move {{name}} down"
+      "moveDown": "Move {{name}} down",
+      "unavailable": "To reorder, use the list order, all lines and no search."
+    },
+    "view": {
+      "order": {
+        "legend": "Order",
+        "list": "List order",
+        "alpha": "A to Z"
+      },
+      "view": "View",
+      "all": "All lines",
+      "oneCategory": "One category",
+      "noCategory": "No category",
+      "reset": "Reset",
+      "none": "No lines match."
     },
     "edit": {
       "title": "Change this line",

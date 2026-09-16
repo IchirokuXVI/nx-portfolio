@@ -245,150 +245,46 @@
           search, filter, and see what is on without scrolling back to the top.
           The empty state and the no match block stay below it, in the scroll.
         -->
-        <div class="tools-bar">
-          @if (searchOpen()) {
-            <!--
-            The field takes the whole row, count and control together, which is
-            what makes it usable one handed on a phone. Cancel is beside it rather
-            than inside it: it is not a clear, it puts the row back.
+        <lib-list-tools
+          (openFilter)="openFilter()"
+          (queryChange)="search($event)"
+          [activeCount]="activeCount()"
+          [query]="searchQuery()"
+          [shown]="visibleLines().length"
+          [total]="lines().length"
+          fieldId="basket-search"
+        >
+          <!--
+            "got" means bought. A line closed because the shop had none is counted
+            separately rather than folded in, because folding it in would claim a
+            purchase that never happened.
 
-            **One row, the height of the closed one** (velista 0079, section 3,
-            which reverses 0074 section 6 on two points). Opening the search must
-            not move the first line by a pixel, so the label and the count are
-            still here for a screen reader and no longer drawn.
+            It counts the **whole** basket and never what a search left standing:
+            this is about how much shopping is left, and hiding rows does not buy
+            anything.
           -->
-            <div class="search">
-              <label class="visually-hidden" for="basket-search">
-                {{ 'basket.search.label' | rokuT }}
-              </label>
-
-              <span class="search-field">
-                <lib-search-icon class="search-glyph" />
-                <input
-                  (input)="onSearch($event)"
-                  (keydown.escape)="closeSearch()"
-                  [placeholder]="'basket.search.placeholder' | rokuT"
-                  [value]="searchQuery()"
-                  #searchField
-                  autocapitalize="none"
-                  autocomplete="off"
-                  class="search-input"
-                  enterkeyhint="search"
-                  id="basket-search"
-                  type="search"
-                />
-
-                <!--
-                  Only where there is something to clear. A control that does
-                  nothing is the invitation `0038` section 2.1 refuses to draw, and
-                  an empty field already says it is empty.
-                -->
-                @if (searchQuery() !== '') {
-                  <button
-                    (click)="clearSearch()"
-                    [attr.aria-label]="'basket.search.clear' | rokuT"
-                    class="search-clear"
-                    type="button"
-                  >
-                    <lib-close-icon class="search-clear-glyph" />
-                  </button>
-                }
-              </span>
-
-              <button
-                (click)="closeSearch()"
-                class="search-cancel"
-                type="button"
-              >
-                {{ 'basket.search.cancel' | rokuT }}
-              </button>
-
-              <!--
-                The filter stays while the field is open. The field replaces the
-                count and the search control, which the field is; it must not
-                take the filter with it, or a shopper searching a grouped basket
-                has to cancel the search to change what it is grouped by.
-              -->
-              <ng-container [ngTemplateOutlet]="filterTool" />
-            </div>
-
-            <!--
-            How many are left, and it is the reason the search is trustworthy: a
-            search that silently empties the screen is indistinguishable from one
-            that broke (`0059` section 7). One polite region, and the only thing
-            announced on a keystroke.
-
-            Heard and not seen since velista 0079. The rows narrowing under the
-            field are what a sighted reader checks, and a visible sentence made the
-            open search twice the height of the row it replaced.
-          -->
-            <p
-              aria-live="polite"
-              class="visually-hidden search-count"
-              role="status"
-            >
-              {{
-                'basket.search.count'
-                  | rokuT
-                    : { shown: visibleLines().length, total: lines().length }
-              }}
-            </p>
-          } @else {
-            <div class="tools">
-              <!--
-              "got" means bought. A line closed because the shop had none is
-              counted separately rather than folded in, because folding it in would
-              claim a purchase that never happened.
-
-              It counts the **whole** basket and never what a search left standing:
-              this is about how much shopping is left, and hiding rows does not buy
-              anything.
-            -->
-              <p class="progress">
+          <p class="progress">
+            {{
+              'basket.progress'
+                | rokuT: { done: progress().done, total: progress().total }
+            }}
+            @if (progress().unavailable > 0) {
+              <span class="progress-unavailable">
                 {{
-                  'basket.progress'
-                    | rokuT: { done: progress().done, total: progress().total }
+                  'basket.progressUnavailable'
+                    | rokuT: { count: progress().unavailable }
                 }}
-                @if (progress().unavailable > 0) {
-                  <span class="progress-unavailable">
-                    {{
-                      'basket.progressUnavailable'
-                        | rokuT: { count: progress().unavailable }
-                    }}
-                  </span>
-                }
-              </p>
-
-              <button
-                (click)="openSearch()"
-                [attr.aria-label]="'basket.search.open' | rokuT"
-                #searchButton
-                class="tool"
-                type="button"
-              >
-                <lib-search-icon class="tool-glyph" />
-              </button>
-
-              <!--
-              Filtering and ordering (plan 0075, section 5). One template, drawn
-              here and again beside the open search field, so the two cannot
-              disagree about the control's name or its badge.
-            -->
-              <ng-container [ngTemplateOutlet]="filterTool" />
-            </div>
-          }
+              </span>
+            }
+          </p>
 
           <!--
-          What the sheet turned on, named on the page (section 5). Absent entirely
-          when nothing is on, so the lines move up: a row that is always there but
-          usually empty is a band of wasted height on a 390 wide phone.
-
-          The chips name the order and the grouping as well as the filters, even
-          though neither hides a line. This row is how the state of the screen is
-          understood without opening the sheet, and a basket that is suddenly
-          alphabetical with nothing saying so looks broken to the next person handed
-          the phone.
-        -->
+            What the sheet turned on, named on the page (plan 0075, section 5). Absent
+            entirely when nothing is on, so the lines move up. The chips name the order
+            and the grouping as well as the filters, because a basket that is suddenly
+            alphabetical with nothing saying so looks broken to the next person handed
+            the phone.
+          -->
           @if (chipItems().length > 0) {
             <lib-chip-row
               (more)="openFilter()"
@@ -396,9 +292,10 @@
               [chips]="chipItems()"
               [count]="chipCount()"
               class="chips"
+              listToolsBelow
             />
           }
-        </div>
+        </lib-list-tools>
 
         <!--
           Every line is settled, so the screen asks (plan 0057, section 4). The last
@@ -602,31 +499,3 @@
   keeps its scroll underneath and Android's back button dismisses them.
 -->
 <router-outlet />
-
-<!--
-  The filter control, in one place, for the tools row and for the search row. The
-  badge is how many properties are not at their default, and the **name carries
-  it too**: "Filter and order, 2 on". A count that only exists as a dot over a
-  glyph is a count a screen reader never hears, and the chips under the row are
-  the other half of saying the same thing.
--->
-<ng-template #filterTool>
-  <button
-    (click)="openFilter()"
-    [attr.aria-label]="
-      activeCount() === 0
-        ? ('basket.view.open' | rokuT)
-        : ('basket.view.openCount' | rokuT: { count: activeCount() })
-    "
-    [class.is-on]="activeCount() > 0"
-    class="tool"
-    type="button"
-  >
-    <lib-filter-icon class="tool-glyph" />
-    @if (activeCount() > 0) {
-      <span aria-hidden="true" class="tool-badge">
-        {{ activeCount() }}
-      </span>
-    }
-  </button>
-</ng-template>
