@@ -75,8 +75,8 @@ import {
  * A sheet is addressed `<the covered page's URL>/sheet/<what it is about>`, and this
  * is where the marker is put on, for the reason the guard is put on here: the rule is
  * worth nothing if one route can be written without it. So the table below declares
- * what a sheet is **about**, `lines/:lineId/edit`, and the path that reaches it is
- * `sheet/lines/:lineId/edit`. `SHEET_SEGMENT` carries the argument for the rule, and
+ * what a sheet is **about**, `lines/:lineId/comments`, and the path that reaches it is
+ * `sheet/lines/:lineId/comments`. `SHEET_SEGMENT` carries the argument for the rule, and
  * `sheetSegments` is the other half of it, used by everything that opens one.
  *
  * The prefix is what stops a sheet and a page competing for one URL. Before it, the
@@ -229,16 +229,15 @@ function listSheetRoutes(): Route[] {
       // No guard, like the others here: whether this caller may record a purchase is
       // decided inside it from the same abilities the page uses, and opening it to read
       // a history is something anybody holding `READ` may do.
+      //
+      // It is also where a line is edited, and where its comments and its delete are
+      // opened from, since velista plan 0083 deleted the row's menu and the edit sheet
+      // at `lines/:lineId/edit`.
       path: 'lines/:lineId/detail',
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then(
           (m) => m.LineDetailSheet
         ),
-    }),
-    sheet({
-      path: 'lines/:lineId/edit',
-      loadComponent: () =>
-        import('@portfolio/velista/feature-lists').then((m) => m.EditLineSheet),
     }),
     sheet({
       // Approved member, readers included: `comment.add` requires only
@@ -249,6 +248,10 @@ function listSheetRoutes(): Route[] {
     }),
     sheet({
       path: 'lines/:lineId/confirm/delete',
+      // Opened by the detail sheet, which it pops back to after the delete; that sheet
+      // then closes itself (velista plan 0083, section 6). The line page's copy of this
+      // route has no such sheet under it, and leaves for the list instead.
+      data: { popsAfterDelete: true },
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then(
           (m) => m.DeleteLineSheet

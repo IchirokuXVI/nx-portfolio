@@ -60,6 +60,22 @@ describe('the product bound on a merge (plan 0112, section 2)', () => {
     );
   });
 
+  it('publishes the bound and the offered count as details', () => {
+    // The client writes its own sentence and never reads `messageArgs`, which
+    // stay on the server (velista plan 0083).
+    let thrown: unknown;
+    try {
+      assertMergeFits(60, 60, LINE_ITEM_SET_MAX + 1);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject({
+      exposesDetails: true,
+      details: { max: LINE_ITEM_SET_MAX, offered: LINE_ITEM_SET_MAX + 1 },
+    });
+  });
+
   it('lets a line its group carried past the cap absorb one that adds nothing', () => {
     // The edit rule of plan 0070, section 7: an over cap line may stay that size.
     const over = LINE_ITEM_SET_MAX + 4;

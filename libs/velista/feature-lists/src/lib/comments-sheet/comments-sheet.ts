@@ -39,6 +39,7 @@ import {
   type RecordingLimits,
 } from '@portfolio/velista/platform';
 import { CommentComposer, CommentRow, SheetShell } from '@portfolio/velista/ui';
+import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
 import { listErrorKey } from '../list-error-copy';
 import { selectAbilities } from '../select-list-state';
 
@@ -118,7 +119,13 @@ const PENDING_ROW: CommentRowVm = {
  */
 @Component({
   selector: 'lib-comments-sheet',
-  imports: [RokuTranslatorPipe, CommentComposer, CommentRow, SheetShell],
+  imports: [
+    RokuTranslatorPipe,
+    CommentComposer,
+    CommentRow,
+    SheetShell,
+    LineGoneNotice,
+  ],
   templateUrl: './comments-sheet.html',
   styleUrl: './comments-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -159,6 +166,13 @@ export class CommentsSheet {
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);
   readonly lineId = lineIdOf(this._route);
+
+  /** The line going away under the sheet (velista plan 0083). */
+  readonly gone = watchLineGone({
+    listId: this.listId,
+    lineId: this.lineId,
+    close: () => this.dismiss(),
+  });
 
   readonly loading = signal(true);
   readonly sending = signal(false);

@@ -457,15 +457,11 @@
       "approve": "Add it",
       "reject": "Not this",
       "restore": "Put it back",
-      "edit": "Change this",
       "editing": "Editing",
       "comments": "Comments",
-      "delete": "Take off the list",
-      "menuFor": "More for {{name}}",
       "overwritten": "{{name}} changed this while you were editing",
       "overwrittenBySomeone": "Somebody else changed this while you were editing",
       "failed": "That did not save. Tap to try again",
-      "move": "Move",
       "movedTo": "Moved to position {{position}} of {{total}}",
       "quantityFor": "How many {{name}}",
       "quantityChanged": "{{name}}, now {{quantity}}"
@@ -495,8 +491,6 @@
       "none": "No lines match."
     },
     "edit": {
-      "title": "Change this line",
-      "content": "What is it",
       "save": "Save",
       "unapproves": "Saving this will put the line back to awaiting approval."
     },
@@ -577,15 +571,18 @@
       }
     },
     "gone": {
-      "deleted": "That list was deleted",
-      "unshared": "That list is no longer shared with you"
+      "byOthers": "This line was deleted by another user",
+      "unavailable": "This line was deleted and is no longer available",
+      "close": "Close"
     },
     "error": {
       "notAvailable": "This list is not available to you. It may have been deleted, or it may no longer be shared with you",
       "readOnly": "You can read this list, not change it",
       "roleChanged": "Your role in this group changed",
       "tooFast": "Slow down for a moment and try again",
-      "failed": "That did not work. Try again in a moment"
+      "failed": "That did not work. Try again in a moment",
+      "mergeNeedsApproval": "That name belongs to an approved line, and this line is not approved yet.",
+      "mergeTooManyProducts": "Together they have more than {{max}} products."
     },
     "detail": {
       "title": "About this line",
@@ -613,7 +610,12 @@
       "whichOne": "Which one did you get?",
       "record": "Record it",
       "cancel": "Cancel",
-      "failed": "That did not save. Try again"
+      "failed": "That did not save. Try again",
+      "name": "Name",
+      "askedFor": "Asked for",
+      "saved": "Saved",
+      "commentsLabel": "Comments, {{count}}",
+      "delete": "Delete line"
     },
     "page": {
       "where": "on {{list}}, in {{zone}}",
@@ -658,6 +660,13 @@
     },
     "buying": {
       "notMine": "Anybody can add to this list. Buying is for whoever does the shopping"
+    },
+    "merge": {
+      "taken": "“{{other}}” is already on this list, asking for {{otherQuantity}}.",
+      "question": "Merge them into one line asking for {{total}}?",
+      "keeps": "Comments and what was bought move with it.",
+      "confirm": "Merge",
+      "keepEditing": "Keep editing"
     }
   },
   "account": {

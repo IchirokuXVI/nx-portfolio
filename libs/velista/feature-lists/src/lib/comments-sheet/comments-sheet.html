@@ -5,19 +5,27 @@
   #shell
   labelledBy="comments-title"
 >
-  <h2 class="title" id="comments-title">
-    {{ 'list.comments.title' | rokuT: { name: lineName() } }}
-  </h2>
+  @if (gone.reason(); as reason) {
+    <!-- The line went while its comments were open (velista plan 0083). -->
+    <lib-line-gone-notice
+      (closed)="gone.acknowledge()"
+      [reason]="reason"
+      titleId="comments-title"
+    />
+  } @else {
+    <h2 class="title" id="comments-title">
+      {{ 'list.comments.title' | rokuT: { name: lineName() } }}
+    </h2>
 
-  @if (loading()) {
-    <p class="body">{{ 'list.comments.loading' | rokuT }}</p>
-  }
+    @if (loading()) {
+      <p class="body">{{ 'list.comments.loading' | rokuT }}</p>
+    }
 
-  @if (empty()) {
-    <p class="body">{{ 'list.comments.empty' | rokuT }}</p>
-  }
+    @if (empty()) {
+      <p class="body">{{ 'list.comments.empty' | rokuT }}</p>
+    }
 
-  <!--
+    <!--
     No scroll of its own any more (plan 0040, section 3). The conversation is as tall as
     it is and the sheet's body scrolls past it, which is the one scroll `0036` section 4
     asked every sheet to have: a nested scroll on a phone catches whichever of the two
@@ -26,21 +34,21 @@
     The cap at 40vh was how the composer was kept in view before there was a footer to
     put it in. It is in view now because it is not in the scroll.
   -->
-  @if (comments().length > 0) {
-    <ul class="comments">
-      @for (comment of comments(); track comment.id) {
-        <li class="comment">
-          <lib-comment-row [comment]="comment" [loadAudio]="loadAudio" />
-        </li>
-      }
-    </ul>
-  }
+    @if (comments().length > 0) {
+      <ul class="comments">
+        @for (comment of comments(); track comment.id) {
+          <li class="comment">
+            <lib-comment-row [comment]="comment" [loadAudio]="loadAudio" />
+          </li>
+        }
+      </ul>
+    }
 
-  @if (errorKey(); as key) {
-    <p class="error" role="alert">{{ key | rokuT }}</p>
-  }
+    @if (errorKey(); as key) {
+      <p class="error" role="alert">{{ key | rokuT }}</p>
+    }
 
-  <!--
+    <!--
     Drawn only for somebody who may say something. `comment.add` follows `WRITE` or
     `DECIDE` now (backend plan 0036, section 4), and `0027` pinned this composer under
     the conversation, which makes it the most prominent thing on the sheet and always in
@@ -50,8 +58,12 @@
     comment, which would read as a conversation that failed to load (plan 0030,
     section 3.1).
   -->
+  }
+
   <div class="footer" sheetFooter>
-    @if (canComment()) {
+    @if (gone.reason() !== null) {
+      <!-- Nothing to say about a line that is gone. -->
+    } @else if (canComment()) {
       <lib-comment-composer
         (recorded)="sendVoice($event)"
         (submitted)="send($event)"

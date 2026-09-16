@@ -6,6 +6,200 @@
 
 @include form.sheet-form;
 
+// The saved name, heard and not seen, while the name field stands where the header was
+// (velista plan 0083, section 3). Here and not global: velista has no global utility
+// class.
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+// The name, then the amount beside its label: the reel is small, and a label on its own
+// line above it would spend height the keyboard needs (section 7).
+.amount {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  margin-block-start: var(--app-space-4);
+
+  .label {
+    margin-block-end: 0;
+  }
+}
+
+// The amount in `content` scope: present, readable, and plainly not a control. It sits
+// where the reel's pill would, at the pill's size, so the sheet keeps its shape.
+.shown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--app-quantity-width);
+  height: var(--app-quantity-height);
+  margin: 0;
+  color: var(--app-text-primary);
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+// What the save is about to do, in the sheet's caution tone rather than its error
+// colour: nothing has gone wrong, and the reader is about to do this on purpose.
+.notice {
+  margin: var(--app-space-4) 0 0;
+  padding: var(--app-space-3);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+// Save takes the quiet accent, not the solid `.primary` (section 3). The solid amber
+// stays on "I bought this", and two solid buttons on one sheet compete for the thumb.
+.save {
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin-block-start: var(--app-space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-3);
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  cursor: pointer;
+
+  // The same dimming `.primary` uses.
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  // Saved is a statement, not a disabled action, so it is drawn at full strength in the
+  // neutral colours with the check in the success colour.
+  &.saved {
+    border-color: var(--app-border-subtle);
+    background: transparent;
+    color: var(--app-text-secondary);
+    opacity: 1;
+  }
+
+  @include form.focus-ring;
+}
+
+.saved-glyph {
+  font-size: var(--app-icon-sm);
+  color: var(--app-status-success-fg);
+}
+
+.spinning {
+  font-size: var(--app-icon-sm);
+}
+
+// The rule that scopes Save: it writes the fields above it and nothing below.
+.about {
+  margin: var(--app-space-6) 0 var(--app-space-2);
+  padding-top: var(--app-space-4);
+  border-top: 1px solid var(--app-border-subtle);
+
+  .products {
+    margin: 0;
+  }
+}
+
+// The merge question (section 5): the fact, the question, and what happens to the rest.
+.merge {
+  display: flex;
+  flex-direction: column;
+}
+
+.merge-taken {
+  margin: 0;
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.merge-question {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+}
+
+.merge-keeps {
+  margin: var(--app-space-2) 0 var(--app-space-2);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+// Comments and Delete line, one row of two under a second rule (section 3). Comments
+// takes the whole row when Delete is absent.
+.more {
+  display: flex;
+  gap: var(--app-space-2);
+  margin-top: var(--app-space-5);
+  padding-top: var(--app-space-4);
+  border-top: 1px solid var(--app-border-subtle);
+}
+
+.more-button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  min-height: var(--app-touch-target);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include form.focus-ring;
+}
+
+// Coral, and never coral alone: its label says "Delete line".
+.more-danger {
+  border-color: var(--app-status-danger-border);
+  color: var(--app-status-danger-fg);
+}
+
+.more-glyph {
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-secondary);
+}
+
+.more-count {
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 // The header: the name and what it stands for on the left, the quantity on the right,
 // laid out exactly as the row is so that opening a line does not rearrange it.
 .head {
@@ -136,6 +330,11 @@
   font-size: var(--app-text-sm);
   font-weight: 550;
   cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
 
   @include form.focus-ring;
 }

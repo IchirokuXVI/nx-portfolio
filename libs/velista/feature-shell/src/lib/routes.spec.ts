@@ -360,7 +360,7 @@ describe('AppShellRoutes', () => {
         ).toContain('sheet/lists/new');
       });
 
-      it('offers the six sheets over it, as routes rather than flags', () => {
+      it('offers the five sheets over it, as routes rather than flags', () => {
         // Rule E1: each covers the page without losing it, and Android's back button
         // has to dismiss it. Ticking a line off is deliberately not among them.
         expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual(
@@ -368,8 +368,8 @@ describe('AppShellRoutes', () => {
             // What a tap opens (velista plan 0043, section 5.1). `/sheet`, because
             // `/detail` is the line page and neither of them is the bare
             // `lines/:lineId` any more.
+            // The edit sheet is gone: the detail sheet edits the line (velista 0083).
             'sheet/lines/:lineId/detail',
-            'sheet/lines/:lineId/edit',
             'sheet/lines/:lineId/comments',
             'sheet/lines/:lineId/confirm/delete',
             'sheet/settings',
@@ -394,7 +394,7 @@ describe('AppShellRoutes', () => {
         // allowed, on every request.
         const sheets = routeAt(listPath)?.children ?? [];
 
-        expect(sheets).toHaveLength(6);
+        expect(sheets).toHaveLength(5);
         for (const sheet of sheets) {
           expect(sheet.canActivate).toBeUndefined();
         }
@@ -902,8 +902,9 @@ describe('the sheets and their exit animation', () => {
     // until `0073` deleted the units sheet: its rows are drawn on the settle sheet
     // under the product now. `0075` added the basket's filter sheet, which took it
     // back to twenty eight, and `0078` added the shop picker beside it. `0082` added
-    // the zone list's filter sheet.
-    expect(sheets).toHaveLength(30);
+    // the zone list's filter sheet, and `0083` deleted the edit sheet, whose fields are
+    // on the detail sheet now.
+    expect(sheets).toHaveLength(29);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

@@ -1,6 +1,5 @@
 export * from './lib/comments-sheet/comments-sheet';
 export * from './lib/delete-line-sheet/delete-line-sheet';
-export * from './lib/edit-line-sheet/edit-line-sheet';
 export * from './lib/line-detail-sheet/line-detail-sheet';
 export * from './lib/line-detail-sheet/select-line-detail';
 export * from './lib/line-page/line-page';

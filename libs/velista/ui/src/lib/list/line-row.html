@@ -187,53 +187,6 @@
       #reel
     />
   }
-
-  <!--
-    No actions means no trigger at all, not a disabled one. `MemberRow` makes the same
-    choice for the same reason: a disabled control implies a permission that is merely
-    unavailable right now.
-  -->
-  @if (!reordering() && line().actions.length > 0) {
-    <span class="menu-wrap">
-      <button
-        (click)="toggleMenu(); $event.stopPropagation()"
-        [attr.aria-expanded]="menuOpen()"
-        [attr.aria-label]="
-          'list.line.menuFor' | rokuT: { name: line().content }
-        "
-        #trigger
-        aria-haspopup="menu"
-        class="trigger"
-        type="button"
-      >
-        <lib-ellipsis-icon class="trigger-glyph" />
-      </button>
-
-      @if (menuOpen()) {
-        <ul
-          [attr.aria-label]="
-            'list.line.menuFor' | rokuT: { name: line().content }
-          "
-          class="menu"
-          role="menu"
-        >
-          @for (action of line().actions; track action) {
-            <li role="none">
-              <button
-                (click)="choose(action); $event.stopPropagation()"
-                [class.destructive]="isDestructive(action)"
-                class="item"
-                role="menuitem"
-                type="button"
-              >
-                {{ labelKey(action) | rokuT }}
-              </button>
-            </li>
-          }
-        </ul>
-      }
-    </span>
-  }
 </div>
 
 <!--

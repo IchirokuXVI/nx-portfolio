@@ -4,7 +4,13 @@ import type {
   ListPermission,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
-import { selectListState, type ListStateInput } from './select-list-state';
+import {
+  actionsFor,
+  editScopeFor,
+  selectAbilities,
+  selectListState,
+  type ListStateInput,
+} from './select-list-state';
 
 /**
  * Plan 0012 section 8, the half that is a property of the data rather than of the DOM,
@@ -433,10 +439,21 @@ describe('selectListState', () => {
       return loaded(select({ caller: { permissions }, lines })).lines[0];
     }
 
+    /** What the detail sheet offers this caller for one line (velista plan 0083). */
+    function offered(
+      permissions: readonly ListPermission[],
+      candidate: Line = line()
+    ) {
+      const abilities = selectAbilities(permissions);
+      return {
+        actions: actionsFor(candidate, abilities),
+        editScope: editScopeFor(candidate, abilities),
+      };
+    }
+
     it('leaves a read-only caller the conversation and nothing else', () => {
-      // Section 3.1 over acceptance item 1: the overflow is the only way into the
-      // comments sheet, and a reader keeps reading it. What they lose is the composer
-      // inside it, which is the sheet's business rather than the row's.
+      // Section 3.1: a reader keeps reading the comments. What they lose is the
+      // composer inside them, which is the comments sheet's business.
       expect(row(READ_ONLY)).toMatchObject({
         // **A reader's row opens**, which is the change (velista plan 0043, section
         // 5.1). The tap used to be the tick, so it followed `DECIDE` and a reader's
@@ -445,10 +462,12 @@ describe('selectListState', () => {
         interactive: true,
         // What they still may not do is move the number.
         adjustable: false,
-        actions: ['comments'],
-        editScope: null,
         decidable: false,
         restorable: false,
+      });
+      expect(offered(READ_ONLY)).toEqual({
+        actions: ['comments'],
+        editScope: null,
       });
     });
 
@@ -458,14 +477,16 @@ describe('selectListState', () => {
       expect(row(WRITER, [pending])).toMatchObject({
         interactive: true,
         adjustable: false,
+        decidable: false,
+      });
+      expect(offered(WRITER, pending)).toEqual({
         actions: ['edit', 'comments', 'delete'],
         editScope: 'full',
-        decidable: false,
       });
     });
 
     it('lets a writer edit and delete a turned down line too', () => {
-      expect(row(WRITER, [rejected])).toMatchObject({
+      expect(offered(WRITER, rejected)).toEqual({
         actions: ['edit', 'comments', 'delete'],
         editScope: 'full',
       });
@@ -475,7 +496,7 @@ describe('selectListState', () => {
       // Plan 0066, section 2. It used to be nothing at all, which landed on the person
       // who typed "Mile" on a list that approves lines by itself and could not fix it.
       // The number is still not theirs: that is what the group agreed to.
-      expect(row(WRITER)).toMatchObject({
+      expect(offered(WRITER)).toEqual({
         actions: ['edit', 'comments'],
         editScope: 'content',
       });
@@ -485,94 +506,73 @@ describe('selectListState', () => {
       expect(row(DECIDER, [pending])).toMatchObject({
         interactive: true,
         adjustable: true,
-        // No marking control of any kind, which is section 1.1: saying the shop did
-        // not have something is a thing you say afterwards, from the detail sheet.
+        decidable: true,
+      });
+      // No marking control of any kind, which is section 1.1: saying the shop did not
+      // have something is a thing you say afterwards, from the detail sheet.
+      expect(offered(DECIDER, pending)).toEqual({
         actions: ['comments'],
         editScope: null,
-        decidable: true,
       });
     });
 
-    it('gives a decider no sheet on an approved row either, and keeps the reel', () => {
+    it('gives a decider no fields on an approved row either, and keeps the reel', () => {
       // `DECIDE` is a separate permission from `WRITE` rather than a larger one, and
       // the server refuses this caller an approved line's content exactly as it
       // refuses them a pending one's (backend plan 0076, section 4.1). Offering the
-      // sheet here would open a screen whose save is a 403. What they keep is the
-      // reel, which asks `canDecide` on its own.
-      expect(row(DECIDER)).toMatchObject({
-        actions: ['comments'],
-        editScope: null,
-        adjustable: true,
-      });
+      // fields here would draw a save that is a 403. What they keep is the reel,
+      // which asks `canDecide` on its own.
+      expect(offered(DECIDER)).toEqual({ actions: ['comments'], editScope: null });
+      expect(row(DECIDER).adjustable).toBe(true);
     });
 
-    it('gives a caller holding both the whole sheet on an approved row', () => {
+    it('gives a caller holding both every field on an approved row', () => {
       // Plan 0066, section 2, and the reason the reversion is exempted for them: they
       // reach the same end state anyway by un-approving, editing and approving again,
       // which needs the `WRITE` that makes the edit possible in the first place.
-      expect(row(BOTH)).toMatchObject({
+      expect(offered(BOTH)).toEqual({
         actions: ['edit', 'comments'],
         editScope: 'full',
       });
     });
 
-    it('never produces the quantity scope that plan 0066 deleted', () => {
-      // The deletion proved rather than assumed. A mode the sheet still branches on and
-      // no row can reach is the kind of thing that survives three plans and then gets a
-      // feature built on it.
-      for (const permissions of [READ_ONLY, WRITER, DECIDER, BOTH, ADMIN]) {
-        for (const candidate of [line(), pending, rejected, missing]) {
-          expect(row(permissions, [candidate]).editScope).not.toBe('quantity');
-        }
-      }
-    });
-
     it('offers a read only caller no edit on any approval state', () => {
       for (const candidate of [line(), pending, rejected]) {
-        expect(row(READ_ONLY, [candidate]).editScope).toBeNull();
+        expect(offered(READ_ONLY, candidate).editScope).toBeNull();
       }
     });
 
     it('never lets a decider delete an approved line', () => {
-      expect(row(DECIDER).actions).not.toContain('delete');
-      expect(row(BOTH).actions).not.toContain('delete');
+      expect(offered(DECIDER).actions).not.toContain('delete');
+      expect(offered(BOTH).actions).not.toContain('delete');
     });
 
     it('gives a list admin every field of every line, and the delete', () => {
-      expect(row(ADMIN)).toMatchObject({
-        interactive: true,
-        adjustable: true,
+      expect(row(ADMIN)).toMatchObject({ interactive: true, adjustable: true });
+      expect(offered(ADMIN)).toEqual({
         actions: ['edit', 'comments', 'delete'],
         editScope: 'full',
       });
-      expect(row(ADMIN, [pending]).editScope).toBe('full');
+      expect(offered(ADMIN, pending).editScope).toBe('full');
     });
 
-    /**
-     * Section 1.1, asserted as an absence.
-     *
-     * The row has **no marking control of any kind**, for anybody, on any line. It is
-     * the distinction the whole plan draws: recording what a shop had is a deliberate
-     * act from the detail sheet, never something a thumb does in passing, and the way
-     * that stays true is for the overflow to have no entry that could become one.
-     */
-    it('offers no marking control to anybody, on any line', () => {
+    it('keeps the edit scope and the edit entry in step, on every combination', () => {
+      // The detail sheet draws its fields from one and nothing else reads the other,
+      // so the two answers must agree rather than be trusted to.
       for (const permissions of [READ_ONLY, WRITER, DECIDER, BOTH, ADMIN]) {
         for (const candidate of [line(), pending, rejected, missing]) {
-          const actions = row(permissions, [candidate]).actions;
-          expect(actions).not.toContain('markNotAvailable');
-          expect(actions).not.toContain('markPending');
+          const one = offered(permissions, candidate);
+          expect(one.actions.includes('edit')).toBe(one.editScope !== null);
         }
       }
     });
 
-    it('keeps editScope and the edit entry in step, on every combination', () => {
-      // The invariant `LineRowVm.editScope` states, asserted rather than trusted,
-      // because the two fields are read by two different components.
+    it('carries no menu on any row, for anybody (velista plan 0083)', () => {
       for (const permissions of [READ_ONLY, WRITER, DECIDER, BOTH, ADMIN]) {
         for (const candidate of [line(), pending, rejected, missing]) {
           const one = row(permissions, [candidate]);
-          expect(one.actions.includes('edit')).toBe(one.editScope !== null);
+          expect('actions' in one).toBe(false);
+          expect('editScope' in one).toBe(false);
         }
       }
     });
@@ -703,13 +703,10 @@ describe('selectListState', () => {
       expect(loaded(select()).canReorder).toBe(false);
     });
 
-    it('turns ticking off, and empties the overflow, while the mode is on', () => {
+    it('turns opening off while the mode is on', () => {
       const state = select({ lines: two, reordering: true });
 
-      expect(loaded(state).lines[0]).toMatchObject({
-        interactive: false,
-        actions: [],
-      });
+      expect(loaded(state).lines[0]).toMatchObject({ interactive: false });
     });
   });
 

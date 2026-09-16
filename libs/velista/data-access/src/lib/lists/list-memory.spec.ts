@@ -324,7 +324,9 @@ describe('LineMemory refuses what the server would refuse', () => {
     it('may edit an unapproved line and not an approved one', async () => {
       const { lines } = await build();
 
-      const edited = await lines.updateLine('ln-p-03', { quantity: 6 });
+      const { line: edited } = await lines.updateLine('ln-p-03', {
+        quantity: 6,
+      });
       expect(edited.quantity).toBe(6);
 
       expect(await codeOf(lines.updateLine('ln-p-02', { quantity: 2 }))).toBe(
@@ -337,7 +339,9 @@ describe('LineMemory refuses what the server would refuse', () => {
       // 0036, section 4.2). It happens on any edit, including a quantity-only one.
       const { lines } = await build();
 
-      const edited = await lines.updateLine('ln-p-04', { quantity: 2 });
+      const { line: edited } = await lines.updateLine('ln-p-04', {
+        quantity: 2,
+      });
 
       expect(edited.approvalStatus).toBe('PENDING');
       expect(edited.approvedByUserId).toBeNull();
@@ -383,7 +387,7 @@ describe('LineMemory refuses what the server would refuse', () => {
       const { lines } = await build();
 
       expect(
-        (await lines.updateLine('ln-m-01', { quantity: 4 })).quantity
+        (await lines.updateLine('ln-m-01', { quantity: 4 })).line.quantity
       ).toBe(4);
       expect(
         await codeOf(lines.updateLine('ln-m-01', { content: 'Passata' }))
@@ -411,9 +415,7 @@ describe('LineMemory refuses what the server would refuse', () => {
       const page = await lines.listLines(DECIDE_ONLY);
 
       expect(page.items).toHaveLength(4);
-      expect(
-        page.items.find((row) => row.id === 'ln-m-01')?.quantity
-      ).toBe(1);
+      expect(page.items.find((row) => row.id === 'ln-m-01')?.quantity).toBe(1);
     });
 
     it('does not split when the quantity went up either', async () => {
@@ -431,9 +433,9 @@ describe('LineMemory refuses what the server would refuse', () => {
       // is the ordinary end of the reel and no longer a validation failure.
       const { lines } = await build();
 
-      expect((await lines.updateLine('ln-m-01', { quantity: 0 })).quantity).toBe(
-        0
-      );
+      expect(
+        (await lines.updateLine('ln-m-01', { quantity: 0 })).line.quantity
+      ).toBe(0);
     });
 
     it('still refuses a quantity past the ceiling', async () => {
@@ -483,7 +485,8 @@ describe('LineMemory refuses what the server would refuse', () => {
       const { lines } = await build();
 
       expect(
-        (await lines.updateLine('ln-w-01', { content: 'Rye loaf' })).content
+        (await lines.updateLine('ln-w-01', { content: 'Rye loaf' })).line
+          .content
       ).toBe('Rye loaf');
       expect(await lines.deleteLine('ln-w-01')).toBe('ln-w-01');
     });

@@ -1,5 +1,9 @@
 import { inject, Injectable } from '@angular/core';
-import type { CanDeactivateFn } from '@angular/router';
+import type {
+  ActivatedRouteSnapshot,
+  CanDeactivateFn,
+  RouterStateSnapshot,
+} from '@angular/router';
 
 /**
  * What a sheet has to be able to do for its exit to be animated from the outside.
@@ -91,8 +95,44 @@ export class OpenSheet {
  * runs in an injection context only until its first suspension, so resolving the
  * registry inside the promise chain would throw NG0203 on the back button and nowhere
  * else. Hence a `.then` rather than an `async` function.
+ *
+ * ## A navigation that stays on the sheet does not fall
+ *
+ * When the next URL matches the same sheet route with other parameters, the router
+ * keeps the component and only its parameters change. Nothing is leaving, so there is
+ * nothing to animate, and a fall there would leave the kept sheet down for good, with
+ * its scrim still over the page. The detail sheet does this after a merge absorbs its
+ * line: it follows the surviving line to that line's URL (velista plan 0083).
  */
-export const sheetFallGuard: CanDeactivateFn<unknown> = () =>
-  inject(OpenSheet)
-    .fall()
-    .then(() => true);
+export const sheetFallGuard: CanDeactivateFn<unknown> = (
+  _component,
+  currentRoute,
+  _currentState,
+  nextState
+) => {
+  const open = inject(OpenSheet);
+  if (staysOnRoute(currentRoute, nextState)) {
+    return Promise.resolve(true);
+  }
+  return open.fall().then(() => true);
+};
+
+/** Whether the next state still holds the route being left, which the router reuses. */
+function staysOnRoute(
+  current: ActivatedRouteSnapshot | undefined,
+  next: RouterStateSnapshot | undefined
+): boolean {
+  const config = current?.routeConfig;
+  if (config === undefined || config === null) {
+    return false;
+  }
+
+  let snapshot: ActivatedRouteSnapshot | null = next?.root ?? null;
+  while (snapshot !== null) {
+    if (snapshot.routeConfig === config) {
+      return true;
+    }
+    snapshot = snapshot.firstChild;
+  }
+  return false;
+}

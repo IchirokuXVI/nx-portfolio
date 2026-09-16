@@ -719,6 +719,16 @@ export interface LineMergeRequiredDetails {
 }
 
 /**
+ * The `details` a `line_merge_too_many_products` refusal carries (velista plan
+ * 0083): the bound the merge passed, and how many products the two lines hold
+ * together.
+ */
+export interface LineMergeTooManyProductsDetails {
+  max: number;
+  offered: number;
+}
+
+/**
  * Add units to a line, or take them off, without reading it first (plan 0040,
  * section 3).
  *

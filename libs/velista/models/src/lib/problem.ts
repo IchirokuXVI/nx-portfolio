@@ -86,6 +86,22 @@ export const ERROR_CODES = [
    * save failed.
    */
   'below_settled',
+  /**
+   * A rename onto a name another line of the list holds, without the merge confirmed
+   * (backend plan 0112, section 2), as a 409.
+   *
+   * Nothing was written. The one code whose `details` the app reads: they name the
+   * other line, so the detail sheet can ask the question (velista plan 0083).
+   */
+  'line_merge_required',
+  /** A pending line renamed onto an approved one by somebody who cannot approve (409). */
+  'line_merge_needs_approval',
+  /**
+   * The two lines together would hold more products than one line may (409). The bound
+   * is in `details.max`, because it is not a constant: a line already past the cap
+   * raises it.
+   */
+  'line_merge_too_many_products',
   'internal',
 ] as const;
 
@@ -134,6 +150,12 @@ export interface ProblemDetails {
    * may invent.
    */
   readonly retryAfterSeconds?: number;
+  /**
+   * Machine readable facts about this occurrence, sent only for a code whose server
+   * side class publishes them (backend plan 0112, section 2). A bag of unknowns: each
+   * reader maps the keys it needs, as rule D4 asks of any other body.
+   */
+  readonly details?: Readonly<Record<string, unknown>>;
 }
 
 /**

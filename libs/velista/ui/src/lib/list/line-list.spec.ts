@@ -21,8 +21,6 @@ function vm(id: string): LineRowVm {
     overwrittenBy: null,
     interactive: true,
     adjustable: true,
-    actions: [],
-    editScope: null,
     decidable: false,
     restorable: false,
     editor: null,

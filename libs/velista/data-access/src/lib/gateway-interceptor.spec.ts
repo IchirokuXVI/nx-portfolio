@@ -235,6 +235,44 @@ describe('gatewayInterceptor', () => {
       expect(error.code).toBe('not_configured');
     });
 
+    it('carries a merge refusal and its details, and drops details that are not a record', async () => {
+      // Backend plan 0112, section 2: the refusal names the other line, and velista
+      // plan 0083 asks the question from it.
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/lines/l1`));
+      httpMock.expectOne(`${GATEWAY}/v1/lines/l1`).flush(
+        {
+          code: 'line_merge_required',
+          correlationId: 'server-id',
+          details: {
+            otherLineId: 'l2',
+            otherContent: 'Milk',
+            otherQuantity: 2,
+          },
+        },
+        { status: 409, statusText: 'Conflict' }
+      );
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).toBe('line_merge_required');
+      expect(error.details).toEqual({
+        otherLineId: 'l2',
+        otherContent: 'Milk',
+        otherQuantity: 2,
+      });
+
+      const malformed = expectFailure(http.get(`${GATEWAY}/v1/lines/l3`));
+      httpMock
+        .expectOne(`${GATEWAY}/v1/lines/l3`)
+        .flush(
+          { code: 'line_merge_too_many_products', details: [100] },
+          { status: 409, statusText: 'Conflict' }
+        );
+
+      const other = (await malformed) as GatewayError;
+      expect(other.code).toBe('line_merge_too_many_products');
+      expect(other.details).toBeUndefined();
+    });
+
     it('derives not_configured from a bare 501 as well', async () => {
       // A proxy's own 501, or a body this build could not read.
       const failure = expectFailure(http.get(`${GATEWAY}/v1/assistant`));

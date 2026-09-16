@@ -229,10 +229,14 @@ export class LineMergeNeedsApprovalException extends DomainException {
 
 /**
  * The merged product set would pass the bound a line is held to (plan 0112,
- * section 2). The bound travels in `messageArgs.max`.
+ * section 2). The bound travels in `messageArgs.max` for the server's own
+ * sentence, and in `details` as `{ max, offered }` for a client that writes its
+ * own (velista plan 0083). It publishes its details because the bound is not a
+ * constant the client could read: a line already past the cap raises it.
  */
 export class LineMergeTooManyProductsException extends DomainException {
   readonly code = ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS;
+  override readonly exposesDetails = true;
 }
 
 /**

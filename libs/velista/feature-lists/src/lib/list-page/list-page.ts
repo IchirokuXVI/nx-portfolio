@@ -863,18 +863,14 @@ export class ListPage {
     }
   }
 
-  /** Everything the row's overflow, decision buttons and grip emit. */
+  /**
+   * Everything the row's decision buttons and grip emit.
+   *
+   * Edit, comments and delete are not here since velista plan 0083: the row has no menu,
+   * and the detail sheet a tap opens is where each of them starts.
+   */
   async act(event: { action: LineRowAction; lineId: string }): Promise<void> {
     switch (event.action) {
-      case 'edit':
-        void this._openSheet(['lines', event.lineId, 'edit']);
-        return;
-      case 'comments':
-        void this._openSheet(['lines', event.lineId, 'comments']);
-        return;
-      case 'delete':
-        void this._openSheet(['lines', event.lineId, 'confirm', 'delete']);
-        return;
       case 'approve':
         this._afterWrite(
           await this._lines.setApproval(event.lineId, 'APPROVED'),
