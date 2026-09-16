@@ -3,14 +3,15 @@
  *
  * Everything else in the workspace holds an engine and calls one method on it:
  *
- *   engine.ask(prompt, { system, schema }) -> { text }
+ *   engine.ask(prompt, { system, schema, images }) -> { text }
  *
  * A caller holding several questions that do not depend on each other asks them
  * together instead (plan 0003), and reads the answers either at the end or as
  * each one arrives (plan 0004):
  *
- *   engine.askMany(prompts, { system, schema }) -> Array<{ text } | { error }>
- *   engine.askEach(prompts, { system, schema })
+ *   engine.askMany(prompts, { system, schema, images })
+ *     -> Array<{ text } | { error }>
+ *   engine.askEach(prompts, { system, schema, images })
  *     -> Array<Promise<{ text } | { error }>>
  *   engine.batchSize   // how many requests are held in flight, 1 means one
  *   engine.roundSize   // how many prompts a caller is advised to send at once
@@ -36,6 +37,17 @@
  * wrote the prompt. `engine.name`, `engine.model` and `engine.effort` are
  * readable, because the run reports what answered it.
  *
+ * **`images`** is a page the model can see (plan 0004, a page the model can
+ * see): an array of `{ mediaType, data }`, empty or absent by default, where
+ * `data` is base64 and never a file path. The media type is one of
+ * `SUPPORTED_IMAGE_MEDIA_TYPES`, and anything else is refused here before a
+ * request is made, with an error named `IMAGE_ERROR_NAME`. Like `system`, it
+ * belongs to the whole call: in `askMany` and `askEach` the same pictures reach
+ * every prompt, and a caller with a different picture per question calls `ask`
+ * per question. Whether the model can see at all is a property of the model
+ * rather than of a registry entry, so asking a text only model to read a page
+ * is a provider error the operator should read as written.
+ *
  * **Usage** is accumulated into the `usage` object an adapter is built with:
  * the five token counters of `emptyUsage`, and beside them an optional
  * `timings` block of sums, which a provider that measures itself fills in
@@ -54,9 +66,12 @@ export {
   MINIMAL_ARGS,
   TOOL_SHAPE_HINT,
   claudeChildEnv,
+  imagePromptLine,
+  imageToolArgs,
   makeClaudeEngine,
   makeScratchDir,
   readClaudeEnvelope,
+  writeImages,
 } from './claude-cli.mjs';
 export {
   DEFAULT_EFFORT,
@@ -64,15 +79,24 @@ export {
   EFFORT_LEVELS,
 } from './claude-models.mjs';
 export {
+  IMAGE_ERROR_NAME,
+  IMAGE_EXTENSIONS,
+  ImageInputError,
+  SUPPORTED_IMAGE_MEDIA_TYPES,
+  checkImages,
+} from './images.mjs';
+export {
   API_CONFIRMATION,
   confirmApiBilling,
   makeApiEngine,
   textOf,
+  userContent,
 } from './messages-api.mjs';
 export {
   CHARACTERS_PER_TOKEN,
   KEEP_ALIVE,
   NUM_CTX_CEILING,
+  NUM_PREDICT_CEILING,
   OLLAMA_DEFAULT_BATCH,
   OLLAMA_DEFAULT_HOST,
   OLLAMA_DEFAULT_MODEL,

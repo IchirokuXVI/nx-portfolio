@@ -16,6 +16,7 @@
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
 
+import { checkImages } from './images.mjs';
 import {
   RETRY_DELAYS,
   askEntry,
@@ -53,8 +54,8 @@ export const KEEP_ALIVE = '30m';
 export const NUM_CTX_CEILING = 16384;
 
 /**
- * The most tokens one answer may generate, unless `OLLAMA_NUM_PREDICT` says
- * otherwise.
+ * The most tokens one answer may generate, when the caller names no ceiling of
+ * its own and `OLLAMA_NUM_PREDICT` says nothing.
  *
  * Ollama's own default is unlimited, and unlimited is not a safe setting for a
  * pool. A request that loops holds one server slot for as long as the model
@@ -65,6 +66,10 @@ export const NUM_CTX_CEILING = 16384;
  *
  * A truncated answer is not silently accepted: it is not one JSON object, so
  * `decideRow` asks again and then records a REVIEW.
+ *
+ * **It is the default rather than the rule**, because how long an honest answer
+ * is belongs to the workload and not to the server. See `numPredict` on
+ * `makeOllamaEngine` for the workload that measured that.
  */
 export const NUM_PREDICT_CEILING = 1024;
 
@@ -378,8 +383,10 @@ export function modelContextLength(shown) {
  *
  * - `OLLAMA_HOST`: where the server listens, default `http://localhost:11434`.
  * - `OLLAMA_NUM_CTX`: the widest context window to ask for, default 16384.
- * - `OLLAMA_NUM_PREDICT`: the most tokens one answer may generate, default
- *   1024.
+ * - `OLLAMA_NUM_PREDICT`: the most tokens one answer may generate, default the
+ *   `numPredict` the caller built the engine with, and 1024 when it named none.
+ *   The operator's variable wins over both, because it is the operator's
+ *   override.
  * - `OLLAMA_BATCH`: how many requests the pool holds in flight, default 4.
  * - `OLLAMA_ROUND`: how many rows the caller is advised to work through as one
  *   round, default three times `OLLAMA_BATCH`, which is 12.
@@ -409,6 +416,17 @@ export function modelContextLength(shown) {
  * and writes `serializedNotice` to stderr when the answers came back one at a
  * time.
  *
+ * `numPredict` is the longest answer this caller's workload has: the ceiling
+ * the requests carry, unless `OLLAMA_NUM_PREDICT` says otherwise. It is an
+ * option because the honest length of an answer is a property of the question,
+ * not of the server. `NUM_PREDICT_CEILING` was set for a curation decision,
+ * which is a few hundred tokens of JSON, and a leaflet page is not that: read
+ * live at 1,024 tokens, a page of nine offers answered `not a JSON array`
+ * twice and was recorded as empty, while the same three pages at 4,096
+ * answered all 19 of their offers in 63 seconds. A truncated answer is exactly
+ * the unparseable answer case, and nothing in it says which one it was, so a
+ * caller whose answers are long says so here.
+ *
  * `now` is the clock the first round is timed on, injected so the notice can be
  * tested without a slow server. It is the client's clock and it answers a
  * question about the server's configuration. The server's own clock, which
@@ -419,6 +437,7 @@ export function makeOllamaEngine({
   fetchImpl = fetch,
   env = {},
   model = OLLAMA_DEFAULT_MODEL,
+  numPredict = NUM_PREDICT_CEILING,
   usage = null,
   sleep = defaultSleep,
   retryDelays = RETRY_DELAYS,
@@ -428,8 +447,13 @@ export function makeOllamaEngine({
 }) {
   const host = ollamaHost(env);
   const ceiling = positiveInteger(env?.OLLAMA_NUM_CTX) ?? NUM_CTX_CEILING;
+  // The operator's variable first, then what the caller asked for, then the
+  // ceiling. A value this cannot read falls through to the next answer rather
+  // than turning the limit off.
   const predictCeiling =
-    positiveInteger(env?.OLLAMA_NUM_PREDICT) ?? NUM_PREDICT_CEILING;
+    positiveInteger(env?.OLLAMA_NUM_PREDICT) ??
+    positiveInteger(numPredict) ??
+    NUM_PREDICT_CEILING;
   const width = ollamaBatchSize(env);
   const rows = ollamaRoundSize(env, width);
   let noticed = false;
@@ -486,7 +510,14 @@ export function makeOllamaEngine({
     };
   }
 
-  async function ask(prompt, { system = null, schema = null } = {}) {
+  async function ask(
+    prompt,
+    { system = null, schema = null, images = [] } = {}
+  ) {
+    // Before the model is described and long before anything is sent, because
+    // a media type this library does not carry is the caller's mistake and
+    // Ollama would sniff the bytes and answer about something else.
+    const pictures = checkImages(images);
     if (!profile) {
       profile = describeModel();
     }
@@ -502,7 +533,17 @@ export function makeOllamaEngine({
       // halves into one string would put the packet inside the prefix and
       // lose the cache on every row.
       ...(system ? [{ role: 'system', content: system }] : []),
-      { role: 'user', content: prompt },
+      // `/api/chat` takes the pictures on the message itself, as base64
+      // strings with no media type, which the server sniffs. The key is
+      // absent rather than empty when there are none, so a call with no image
+      // sends exactly the message it sent before this plan.
+      {
+        role: 'user',
+        content: prompt,
+        ...(pictures.length
+          ? { images: pictures.map((image) => image.data) }
+          : {}),
+      },
     ];
     const body = JSON.stringify({
       model,
