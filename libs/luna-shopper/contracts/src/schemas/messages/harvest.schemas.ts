@@ -12,6 +12,7 @@ import {
 import {
   ADAPTER_CAPABILITIES,
   ADAPTER_KEYS,
+  BRAND_SPELLINGS_MAX,
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
@@ -88,6 +89,17 @@ export const HARVEST_SCHEMA_IDS = {
   postalCodeDiscoveryRequestPage: schemaId(
     'harvest/PostalCodeDiscoveryRequestPage'
   ),
+
+  // The two reads the brand registry composes over (plan 0115, sections 7 and 8).
+  brandSuggestionChain: schemaId('harvest/BrandSuggestionChain'),
+  brandSuggestionView: schemaId('harvest/BrandSuggestionView'),
+  brandSuggestionPage: schemaId('harvest/BrandSuggestionPage'),
+  brandSpellingView: schemaId('harvest/BrandSpellingView'),
+  brandSpellingsResult: schemaId('harvest/BrandSpellingsResult'),
+  listBrandSuggestionsRequest: schemaId(
+    'msg/sourceEntry.brandSuggestions/request'
+  ),
+  brandSpellingsRequest: schemaId('msg/sourceEntry.brandSpellings/request'),
 
   spawnRunRequest: schemaId('msg/harvest.spawn/request'),
   runIdRequest: schemaId('msg/harvest.run.id/request'),
@@ -633,6 +645,85 @@ const sourceLocationPage = paginated(
   HARVEST_SCHEMA_IDS.sourceLocationPage,
   HARVEST_SCHEMA_IDS.sourceLocationView
 );
+
+// --- Brand suggestions and spellings (plan 0115, sections 7 and 8) ----------
+
+const brandSuggestionChain = object(
+  HARVEST_SCHEMA_IDS.brandSuggestionChain,
+  { supermarketId: nonEmptyString(), productCount: integer() },
+  ['supermarketId', 'productCount']
+);
+
+const brandSuggestionView = object(
+  HARVEST_SCHEMA_IDS.brandSuggestionView,
+  {
+    key: nonEmptyString({
+      description: 'The unregistered brand key queued rows carry.',
+    }),
+    spelling: nonEmptyString({
+      description:
+        'The most common verbatim spelling: the label the back office proposes.',
+    }),
+    productCount: integer({
+      description:
+        'Queued source rows carrying the key. A product two chains carry counts twice.',
+    }),
+    firstSeenAt: nonEmptyString(),
+    chains: array(ref(HARVEST_SCHEMA_IDS.brandSuggestionChain)),
+  },
+  ['key', 'spelling', 'productCount', 'firstSeenAt', 'chains']
+);
+
+const brandSuggestionPage = paginated(
+  HARVEST_SCHEMA_IDS.brandSuggestionPage,
+  HARVEST_SCHEMA_IDS.brandSuggestionView
+);
+
+const brandSpellingView = object(
+  HARVEST_SCHEMA_IDS.brandSpellingView,
+  {
+    supermarketId: nonEmptyString(),
+    spelling: nonEmptyString({
+      description: 'The brand as the chain printed it.',
+    }),
+    productCount: integer(),
+    queuedCount: integer({
+      description: 'Of those, the rows still CANDIDATE or UNRESOLVED.',
+    }),
+  },
+  ['supermarketId', 'spelling', 'productCount', 'queuedCount']
+);
+
+const brandSpellingsResult = object(
+  HARVEST_SCHEMA_IDS.brandSpellingsResult,
+  {
+    spellings: {
+      ...array(ref(HARVEST_SCHEMA_IDS.brandSpellingView)),
+      maxItems: BRAND_SPELLINGS_MAX,
+      description: `Ordered by chain then by count descending, and capped at ${BRAND_SPELLINGS_MAX} rows. Not paged: one brand has a handful of spellings.`,
+    },
+  },
+  ['spellings']
+);
+
+const listBrandSuggestionsRequest = object(
+  HARVEST_SCHEMA_IDS.listBrandSuggestionsRequest,
+  {
+    ...adminCredentialProperties,
+    registeredKeys: array(nonEmptyString()),
+    query: string(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId', 'registeredKeys']
+);
+
+const brandSpellingsRequest = object(
+  HARVEST_SCHEMA_IDS.brandSpellingsRequest,
+  { ...adminCredentialProperties, keys: array(nonEmptyString()) },
+  ['userId', 'keys']
+);
 const supermarketSourcePage = paginated(
   HARVEST_SCHEMA_IDS.supermarketSourcePage,
   HARVEST_SCHEMA_IDS.supermarketSourceView
@@ -1098,6 +1189,13 @@ export const harvestSchemas: JsonSchema[] = [
   discoveredPlacePage,
   sourceCatalogEntryPage,
   sourceLocationPage,
+  brandSuggestionChain,
+  brandSuggestionView,
+  brandSuggestionPage,
+  brandSpellingView,
+  brandSpellingsResult,
+  listBrandSuggestionsRequest,
+  brandSpellingsRequest,
   supermarketSourcePage,
   postalCodeDiscoveryRequestPage,
   spawnRunRequest,
@@ -1215,6 +1313,14 @@ export const harvestMessageContracts: Record<
   [SOURCE_ENTRY_PATTERNS.applyDecisions]: {
     request: HARVEST_SCHEMA_IDS.applyEntryDecisionsRequest,
     response: HARVEST_SCHEMA_IDS.applyEntryDecisionsResult,
+  },
+  [SOURCE_ENTRY_PATTERNS.brandSuggestions]: {
+    request: HARVEST_SCHEMA_IDS.listBrandSuggestionsRequest,
+    response: HARVEST_SCHEMA_IDS.brandSuggestionPage,
+  },
+  [SOURCE_ENTRY_PATTERNS.brandSpellings]: {
+    request: HARVEST_SCHEMA_IDS.brandSpellingsRequest,
+    response: HARVEST_SCHEMA_IDS.brandSpellingsResult,
   },
   [SUPERMARKET_SOURCE_PATTERNS.upsert]: {
     request: HARVEST_SCHEMA_IDS.upsertSourceRequest,

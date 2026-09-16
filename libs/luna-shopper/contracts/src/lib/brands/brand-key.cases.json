@@ -1,0 +1,21 @@
+[
+  ["El Pozo", "elpozo"],
+  ["ElPozo", "elpozo"],
+  ["ELPOZO", "elpozo"],
+  ["elpozo", "elpozo"],
+  ["Campofrío", "campofrio"],
+  ["Ñora", "nora"],
+  ["Coca-Cola", "cocacola"],
+  ["+Proteínas", "proteinas"],
+  ["DON SIMÓN", "donsimon"],
+  ["Hacenado", "hacenado"],
+  ["Hacendado", "hacendado"],
+  ["Central Lechera Asturiana", "centrallecheraasturiana"],
+  ["7 Up", "7up"],
+  ["  Mahou  ", "mahou"],
+  ["-", null],
+  ["---", null],
+  ["", null],
+  ["   ", null],
+  [null, null]
+]

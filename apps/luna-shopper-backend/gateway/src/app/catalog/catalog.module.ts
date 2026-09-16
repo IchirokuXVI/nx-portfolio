@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MessagingModule } from '../messaging/messaging.module';
 import {
+  AdminCatalogBrandSuggestionsController,
+  AdminCatalogBrandsController,
   AdminCatalogItemPricesController,
   AdminCatalogItemsController,
   AdminCatalogLocationItemsController,
@@ -59,6 +61,11 @@ import { ScopeResolutionService } from './scope-resolution.service';
     AdminCatalogLocationsController,
     AdminCatalogItemsController,
     AdminCatalogProductGroupsController,
+    // Plan 0115: the registry a person fills, and the keys the queue is asking
+    // for. The second is composed from catalog and the harvester, which is why
+    // it is two controllers rather than one path with a child.
+    AdminCatalogBrandsController,
+    AdminCatalogBrandSuggestionsController,
     AdminCatalogSupermarketItemsController,
     // Plan 0080: the rows a source gave, and the policy that picks one.
     AdminCatalogItemPricesController,

@@ -191,6 +191,41 @@ export const PRODUCT_GROUP_PATTERNS = {
 } as const;
 
 /**
+ * The registry of brands a person fills (plan 0115).
+ *
+ * A brand used to be free text on every table: `items.brand` was whatever the
+ * create request said and `source_catalog_entries.brand` whatever the chain
+ * printed, so nobody could list the brands the catalog holds because there was
+ * no such list. This is the list, keyed by `brandKey` so every spelling of one
+ * brand meets.
+ *
+ * **Nothing creates a row but a person.** No migration, no seed and no harvest
+ * run registers a brand: an unregistered brand is still accepted on an item,
+ * and deciding it is really a brand is curation.
+ *
+ * There is no `delete`, by section 9. A brand cannot be removed, and the day
+ * one can be, the foreign key sets `items.brandId` null.
+ */
+export const BRAND_PATTERNS = {
+  create: 'brand.create',
+  update: 'brand.update',
+  get: 'brand.get',
+  list: 'brand.list',
+  /**
+   * Every registered key and nothing else, for the suggestions read (plan 0115,
+   * section 7.3).
+   *
+   * **The keys travel in a NATS message, and that has a ceiling.** A key is at
+   * most 120 bytes and the default NATS payload limit is 1 MB, so this holds to
+   * several thousand brands with room left; `brand-keys-size.spec.ts` pins a
+   * request of 5,000 keys under 512 KB. When the registry outgrows that, the
+   * alternative is a copy of the keys kept in the harvester, fed by an event,
+   * rather than a bigger message.
+   */
+  keys: 'brand.keys',
+} as const;
+
+/**
  * The materialized row: the price a shopper sees for one product in one scope
  * (plan 0080, section 7).
  *
@@ -527,6 +562,40 @@ export interface ProductGroupView {
   /** The unit its members are compared in. */
   referenceUnit: UnitOfMeasure;
   synonyms: LocalizedSynonyms;
+}
+
+/**
+ * One registered brand (plan 0115, section 5.1).
+ *
+ * **The key follows the label** and is never sent by a client. Editing
+ * `Hacenado` to `Hacendado` changes the key to `hacendado`, and that is the only
+ * way a key ever changes.
+ */
+export interface BrandView {
+  id: string;
+  /** `brandKey(label)`. How every spelling of this brand meets. */
+  key: string;
+  /** How the brand is written everywhere a person reads it. */
+  label: string;
+  /** The chain that owns this private label, or null for an ordinary brand. */
+  privateLabelSupermarketId: string | null;
+  /** Products whose `brandId` is this brand. Counted for the page, not per row. */
+  itemCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * A brand just created, and how many products it picked up (plan 0115,
+ * section 5.3).
+ *
+ * `linkedItems` is the row count of the update that claimed every unlinked item
+ * already carrying this key. It is the number the back office says out loud
+ * ("Mahou registered. 38 products now carry it."), and it can be zero: a brand
+ * registered ahead of any product is the ordinary case.
+ */
+export interface CreateBrandResult extends BrandView {
+  linkedItems: number;
 }
 
 /**
@@ -1330,6 +1399,65 @@ export interface ListProductGroupsRequest extends PageQuery {
   query?: string;
 }
 
+// --- Brand requests (plan 0115, section 5) ----------------------------------
+
+/**
+ * The orders the registry may be read in (plan 0115, section 5.2).
+ *
+ * Both break ties on `id`, so the keyset cursor is stable under either: the
+ * curation tool reads the whole registry by following `nextCursor` and a page
+ * that repeated or skipped a row would silently change what it decided.
+ */
+export const BRAND_ORDERS = ['label', 'itemCount'] as const;
+export type BrandOrder = (typeof BRAND_ORDERS)[number];
+
+/** The longest a label, and therefore a key, may be. */
+export const BRAND_LABEL_MAX_LENGTH = 120;
+
+export interface CreateBrandRequest extends AdminCredential {
+  label: string;
+  privateLabelSupermarketId?: string | null;
+}
+
+/**
+ * Edit a brand.
+ *
+ * The key is **not** a field: it follows the label, and sending `label` is the
+ * only way to change it. Items linked under the old key stay linked, because
+ * they were this brand and a corrected spelling does not change that.
+ */
+export interface UpdateBrandRequest extends AdminCredential {
+  brandId: string;
+  label?: string;
+  privateLabelSupermarketId?: string | null;
+}
+
+export interface BrandIdRequest {
+  userId: string;
+  brandId: string;
+}
+
+export interface ListBrandsRequest extends PageQuery {
+  userId: string;
+  /**
+   * Matches when `brandKey(query)` is contained in the key, or when the label
+   * contains the text. A query with no key at all matches on the label only.
+   */
+  query?: string;
+  /** Only this chain's private labels. */
+  privateLabelSupermarketId?: string;
+  order?: BrandOrder;
+}
+
+/** Every registered key, for the suggestions read. Carries no page. */
+export interface BrandKeysRequest {
+  userId: string;
+}
+
+export interface BrandKeysResult {
+  keys: string[];
+}
+
 // --- Item price requests (plan 0080, section 9) -----------------------------
 
 /** The values one price row carries, shared by the single and the batch write. */
@@ -1796,6 +1924,7 @@ export type SupermarketLocationItemPage =
   Paginated<SupermarketLocationItemView>;
 export type ProductGroupPage = Paginated<ProductGroupView>;
 export type ProductGroupOfferPage = Paginated<ProductGroupOfferView>;
+export type BrandPage = Paginated<BrandView>;
 
 // --- The composer's one call (plan 0048, section 3) -------------------------
 

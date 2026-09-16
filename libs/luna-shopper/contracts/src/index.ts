@@ -5,6 +5,10 @@
 // Shared
 export * from './lib/pagination';
 
+// The one brand key function, shared by catalog, the harvester and the gateway
+// (plan 0115, section 2). Browser reachable: it names no `process`.
+export * from './lib/brands/brand-key';
+
 // Enums
 export * from './lib/enums/assistant.enums';
 export * from './lib/enums/auth.enums';

@@ -8,6 +8,9 @@ import {
 } from '../../lib/enums/catalog.enums';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
+  BRAND_LABEL_MAX_LENGTH,
+  BRAND_ORDERS,
+  BRAND_PATTERNS,
   CATALOG_SUGGESTION_KINDS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
@@ -58,6 +61,16 @@ export const CATALOG_SCHEMA_IDS = {
   productGroupOfferView: schemaId('catalog/ProductGroupOfferView'),
   productGroupPage: schemaId('catalog/ProductGroupPage'),
   productGroupOfferPage: schemaId('catalog/ProductGroupOfferPage'),
+  // The registry a person fills (plan 0115).
+  brandView: schemaId('catalog/BrandView'),
+  brandPage: schemaId('catalog/BrandPage'),
+  createBrandResult: schemaId('catalog/CreateBrandResult'),
+  createBrandRequest: schemaId('msg/brand.create/request'),
+  updateBrandRequest: schemaId('msg/brand.update/request'),
+  brandIdRequest: schemaId('msg/brand.get/request'),
+  listBrandsRequest: schemaId('msg/brand.list/request'),
+  brandKeysRequest: schemaId('msg/brand.keys/request'),
+  brandKeysResult: schemaId('msg/brand.keys/response'),
   catalogSuggestion: schemaId('catalog/CatalogSuggestion'),
   catalogSuggestResponse: schemaId('catalog/CatalogSuggestResponse'),
   createProductGroupRequest: schemaId('msg/productGroup.create/request'),
@@ -625,6 +638,74 @@ const productGroupOfferPage = paginated(
   CATALOG_SCHEMA_IDS.productGroupOfferView
 );
 
+/** One registered brand (plan 0115, section 5.1). */
+const brandView = object(
+  CATALOG_SCHEMA_IDS.brandView,
+  {
+    id: nonEmptyString(),
+    key: nonEmptyString({
+      description:
+        'Made from the label with everything but letters and digits taken out. Never sent by a client: editing the label is the only thing that changes it.',
+    }),
+    label: nonEmptyString({
+      description: 'How the brand is written everywhere a person reads it.',
+    }),
+    privateLabelSupermarketId: nullableString(),
+    itemCount: integer({
+      description: 'Products whose `brandId` is this brand.',
+    }),
+    createdAt: nonEmptyString(),
+    updatedAt: nonEmptyString(),
+  },
+  [
+    'id',
+    'key',
+    'label',
+    'privateLabelSupermarketId',
+    'itemCount',
+    'createdAt',
+    'updatedAt',
+  ]
+);
+
+const brandPage = paginated(
+  CATALOG_SCHEMA_IDS.brandPage,
+  CATALOG_SCHEMA_IDS.brandView
+);
+
+/**
+ * The create answer: the brand, plus how many products it picked up.
+ *
+ * Spelled out rather than composed with `allOf`, because the wire type
+ * generator reads `properties` and an `allOf` would produce a type with none.
+ */
+const createBrandResult = object(
+  CATALOG_SCHEMA_IDS.createBrandResult,
+  {
+    id: nonEmptyString(),
+    key: nonEmptyString(),
+    label: nonEmptyString(),
+    privateLabelSupermarketId: nullableString(),
+    itemCount: integer(),
+    createdAt: nonEmptyString(),
+    updatedAt: nonEmptyString(),
+    linkedItems: integer({
+      description:
+        'How many products already carrying this key were linked by the create. Zero when none did.',
+    }),
+  },
+  [
+    'id',
+    'key',
+    'label',
+    'privateLabelSupermarketId',
+    'itemCount',
+    'createdAt',
+    'updatedAt',
+    'linkedItems',
+  ]
+);
+
 // --- Requests --------------------------------------------------------------
 
 const createSupermarketRequest = object(
@@ -1007,6 +1088,57 @@ const listProductGroupsRequest = object(
     order: string(),
   },
   ['userId']
+);
+
+// --- Brands (plan 0115, section 5) ------------------------------------------
+
+const createBrandRequest = object(
+  CATALOG_SCHEMA_IDS.createBrandRequest,
+  {
+    ...adminCredentialProperties,
+    label: nonEmptyString({ maxLength: BRAND_LABEL_MAX_LENGTH }),
+    privateLabelSupermarketId: nullableString(),
+  },
+  ['userId', 'label']
+);
+const updateBrandRequest = object(
+  CATALOG_SCHEMA_IDS.updateBrandRequest,
+  {
+    ...adminCredentialProperties,
+    brandId: nonEmptyString(),
+    label: nonEmptyString({ maxLength: BRAND_LABEL_MAX_LENGTH }),
+    privateLabelSupermarketId: nullableString(),
+  },
+  ['userId', 'brandId']
+);
+// A read, so no admin token: the gate on the route is the guard, as every other
+// admin catalog read here is.
+const brandIdRequest = object(
+  CATALOG_SCHEMA_IDS.brandIdRequest,
+  { userId: nonEmptyString(), brandId: nonEmptyString() },
+  ['userId', 'brandId']
+);
+const listBrandsRequest = object(
+  CATALOG_SCHEMA_IDS.listBrandsRequest,
+  {
+    userId: nonEmptyString(),
+    query: string(),
+    privateLabelSupermarketId: string(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: { type: 'string', enum: [...BRAND_ORDERS] },
+  },
+  ['userId']
+);
+const brandKeysRequest = object(
+  CATALOG_SCHEMA_IDS.brandKeysRequest,
+  { userId: nonEmptyString() },
+  ['userId']
+);
+const brandKeysResult = object(
+  CATALOG_SCHEMA_IDS.brandKeysResult,
+  { keys: array(nonEmptyString()) },
+  ['keys']
 );
 
 // The values one price row carries (plan 0080, section 9). No `overrides` and
@@ -1665,6 +1797,15 @@ export const catalogSchemas: JsonSchema[] = [
   itemPage,
   productGroupPage,
   productGroupOfferPage,
+  brandView,
+  brandPage,
+  createBrandResult,
+  createBrandRequest,
+  updateBrandRequest,
+  brandIdRequest,
+  listBrandsRequest,
+  brandKeysRequest,
+  brandKeysResult,
   supermarketItemPage,
   adminSupermarketItemPage,
   supermarketLocationItemPage,
@@ -1837,6 +1978,26 @@ export const catalogMessageContracts: Record<
   [ITEM_PATTERNS.createMany]: {
     request: CATALOG_SCHEMA_IDS.createItemsRequest,
     response: CATALOG_SCHEMA_IDS.createItemsResult,
+  },
+  [BRAND_PATTERNS.create]: {
+    request: CATALOG_SCHEMA_IDS.createBrandRequest,
+    response: CATALOG_SCHEMA_IDS.createBrandResult,
+  },
+  [BRAND_PATTERNS.update]: {
+    request: CATALOG_SCHEMA_IDS.updateBrandRequest,
+    response: CATALOG_SCHEMA_IDS.brandView,
+  },
+  [BRAND_PATTERNS.get]: {
+    request: CATALOG_SCHEMA_IDS.brandIdRequest,
+    response: CATALOG_SCHEMA_IDS.brandView,
+  },
+  [BRAND_PATTERNS.list]: {
+    request: CATALOG_SCHEMA_IDS.listBrandsRequest,
+    response: CATALOG_SCHEMA_IDS.brandPage,
+  },
+  [BRAND_PATTERNS.keys]: {
+    request: CATALOG_SCHEMA_IDS.brandKeysRequest,
+    response: CATALOG_SCHEMA_IDS.brandKeysResult,
   },
   [PRODUCT_GROUP_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createProductGroupRequest,

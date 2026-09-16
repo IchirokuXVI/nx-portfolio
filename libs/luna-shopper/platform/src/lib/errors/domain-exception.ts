@@ -236,6 +236,37 @@ export class LineMergeTooManyProductsException extends DomainException {
 }
 
 /**
+ * A brand label made of punctuation, which makes no key (plan 0115,
+ * section 5.3).
+ *
+ * Refused rather than stored, because a brand with no key cannot meet any
+ * spelling of itself, which is the only thing the registry is for. LIDL's `-`
+ * and `---` are the real cases.
+ */
+export class BrandLabelEmptyException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_LABEL_EMPTY;
+}
+
+/**
+ * Another brand already holds this key (plan 0115, section 5.3).
+ *
+ * It publishes its details, for the same reason
+ * {@link LineMergeRequiredException} does: the back office's next act is to open
+ * the brand that holds the key, and it cannot without the id. The id travels
+ * under {@link BRAND_KEY_HOLDER_DETAIL}.
+ */
+export class BrandKeyTakenException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_KEY_TAKEN;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * The `details` key a {@link BrandKeyTakenException} names the holding brand
+ * under.
+ */
+export const BRAND_KEY_HOLDER_DETAIL = 'brandId';
+
+/**
  * The `details` key a {@link RateLimitedException} or an
  * {@link AccountLockedException} carries its wait under.
  */

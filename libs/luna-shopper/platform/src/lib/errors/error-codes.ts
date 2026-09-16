@@ -129,6 +129,26 @@ export const ERROR_CODES = {
    * 0112, section 2). The bound travels in `messageArgs.max`.
    */
   LINE_MERGE_TOO_MANY_PRODUCTS: 'line_merge_too_many_products',
+  /**
+   * The brand label has no letters and no digits, so it makes no key (plan
+   * 0115, section 5.3).
+   *
+   * Its own code rather than a plain {@link VALIDATION_FAILED}, because the
+   * sentence the back office shows is particular and short: "The label needs at
+   * least one letter or digit." `-` and `---` are the real cases, and they
+   * arrive from a suggestion row the operator pressed Register on.
+   */
+  BRAND_LABEL_EMPTY: 'brand_label_empty',
+  /**
+   * Another brand already holds the key this label makes (plan 0115,
+   * section 5.3).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the client's
+   * reaction is to link to the brand that holds it: the holder's id travels in
+   * the envelope's `details`, so the panel can offer to open it rather than only
+   * say no.
+   */
+  BRAND_KEY_TAKEN: 'brand_key_taken',
   INTERNAL: 'internal',
 } as const;
 
@@ -198,5 +218,11 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.LINE_MERGE_REQUIRED]: HttpStatus.CONFLICT,
   [ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL]: HttpStatus.CONFLICT,
   [ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS]: HttpStatus.CONFLICT,
+  // 400, because what is wrong is a value in the body: a label of punctuation
+  // makes no key, so there is nothing to register (plan 0115, section 5.3).
+  [ERROR_CODES.BRAND_LABEL_EMPTY]: HttpStatus.BAD_REQUEST,
+  // 409 for the ordinary reason: the request was well formed and the caller is
+  // allowed to make it, and what refuses it is a row that already exists.
+  [ERROR_CODES.BRAND_KEY_TAKEN]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };
