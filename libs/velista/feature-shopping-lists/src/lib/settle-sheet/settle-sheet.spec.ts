@@ -1899,6 +1899,19 @@ describe('SettleSheet: renaming the line', () => {
       expect(dismissedTo()).toEqual([]);
     });
 
+    it('keeps focus in the dialog when the disabled Save let go of it', async () => {
+      // Found in the browser: Save disables itself once the name is saved, focus
+      // fell to the page body, and Escape no longer reached the sheet.
+      const { fixture } = await render();
+
+      type(fixture, 'Leche entera');
+      (document.activeElement as HTMLElement | null)?.blur();
+      await press(fixture, saveButton(fixture));
+      await fixture.whenStable();
+
+      expect(document.activeElement?.id).toBe('settle-title');
+    });
+
     it('puts Save back on the next change', async () => {
       const { fixture } = await render();
 

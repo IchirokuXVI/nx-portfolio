@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DOCUMENT,
   effect,
   inject,
   Injector,
@@ -741,6 +742,8 @@ export class SettleSheet {
    */
   private _shown: string | null = null;
 
+  private readonly _document = inject(DOCUMENT);
+
   private readonly _saveButton =
     viewChild<ElementRef<HTMLButtonElement>>('saveButton');
   private readonly _mergeTitle =
@@ -862,7 +865,29 @@ export class SettleSheet {
       afterNextRender(() => this._titleHeading()?.nativeElement.focus(), {
         injector: this._injector,
       });
+    } else {
+      this._keepFocusInside();
     }
+  }
+
+  /**
+   * Put focus back in the dialog when the save took it away.
+   *
+   * Save is disabled while the write is out and again once the name matches the
+   * line, and a disabled button drops focus to the page body, where Escape no longer
+   * reaches the sheet. Found in the browser check: the sheet would not close. The
+   * title and not the field, because focusing a field opens the phone's keyboard.
+   */
+  private _keepFocusInside(): void {
+    afterNextRender(
+      () => {
+        const active = this._document.activeElement;
+        if (active === null || active === this._document.body) {
+          this._titleHeading()?.nativeElement.focus();
+        }
+      },
+      { injector: this._injector }
+    );
   }
 
   /** A refused rename: the merge question, or a sentence under Save. */
@@ -885,6 +910,7 @@ export class SettleSheet {
     this.renameReference.set(
       key === 'basket.error.failed' ? correlationIdOf(error) : null
     );
+    this._keepFocusInside();
   }
 
   /**
