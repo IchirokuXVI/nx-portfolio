@@ -104,7 +104,7 @@ async function render() {
             list: async () => ({
               items: [
                 { id: NATIONAL, kind: 'NATIONAL' },
-                { id: SCOPE, kind: 'POSTAL_CODE' },
+                { id: SCOPE, kind: 'LOCAL_AREA' },
               ],
               nextCursor: null,
             }),

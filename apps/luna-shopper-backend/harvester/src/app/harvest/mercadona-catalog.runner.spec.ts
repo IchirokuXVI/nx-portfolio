@@ -266,7 +266,7 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
     expect(report.products[0].ean).toBe('8480000135636');
   });
 
-  it('declares each warehouse as a REGION scope before any price names it', async () => {
+  it('declares each warehouse as a LOCAL_AREA scope before any price names it', async () => {
     const { fetchImpl } = stubFetch({});
     restore = withFetch(fetchImpl);
     const { runner, context, report } = build();
@@ -277,8 +277,8 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
     // D4). The scopes already exist, so the name is left null and nothing is
     // renamed by a walk.
     expect(report.scopes).toEqual([
-      { key: '4661', kind: PriceScopeKind.REGION, name: null },
-      { key: '4804', kind: PriceScopeKind.REGION, name: null },
+      { key: '4661', kind: PriceScopeKind.LOCAL_AREA, name: null },
+      { key: '4804', kind: PriceScopeKind.LOCAL_AREA, name: null },
     ]);
   });
 

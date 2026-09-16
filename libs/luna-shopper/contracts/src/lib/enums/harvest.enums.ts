@@ -213,6 +213,14 @@ export enum HarvestWarningCode {
    * none for one has still told us something true about the others.
    */
   NO_PRICE_SCOPE = 'NO_PRICE_SCOPE',
+  /**
+   * A run declared a scope key that catalog holds under another kind, for
+   * example `LOCAL_AREA 4661` against `REGION 4661` (plan 0116, section 6).
+   *
+   * The held scope is still used, so no price is lost. The operator decides
+   * which kind is right and corrects the row by hand.
+   */
+  SCOPE_KIND_MISMATCH = 'SCOPE_KIND_MISMATCH',
 }
 
 /**

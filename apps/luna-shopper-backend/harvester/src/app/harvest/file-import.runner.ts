@@ -5,6 +5,7 @@ import {
   PriceSourceKind,
   SourceEntryStatus,
   type HarvestDocumentProduct,
+  type HarvestDocumentScope,
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
 import { readHarvestDocument } from './harvest-document.reader';
@@ -157,11 +158,15 @@ export class FileImportRunner {
     // written (plan 0103, section 5.1). A document with none is every leaflet
     // and every version 1 file: its prices name no scope and fall to the one
     // the operator chose at the spawn.
-    const scopes = this.scopes.forRun(input.supermarketId, input.adapterKey);
+    const scopes = this.scopes.forRun(
+      input.supermarketId,
+      input.adapterKey,
+      (warning) => context.warn(warning)
+    );
     for (const scope of document.scopes ?? []) {
       await scopes.declare({
         key: scope.key,
-        kind: scope.kind as PriceScopeKind,
+        kind: documentScopeKind(scope.kind),
         name: scope.name ?? null,
       });
     }
@@ -394,6 +399,21 @@ function pageOf(
 ): number | null {
   const page = extra?.['page'];
   return typeof page === 'number' ? page : null;
+}
+
+/**
+ * A document's scope kind, read under its current name (plan 0116, section 2.1).
+ *
+ * `POSTAL_CODE` is what `LOCAL_AREA` was called before plan 0116. A version 2
+ * file that validated then still validates, and it declares the kind by its
+ * current name.
+ */
+export function documentScopeKind(
+  kind: HarvestDocumentScope['kind']
+): PriceScopeKind {
+  return kind === 'POSTAL_CODE'
+    ? PriceScopeKind.LOCAL_AREA
+    : (kind as PriceScopeKind);
 }
 
 function warningFor(

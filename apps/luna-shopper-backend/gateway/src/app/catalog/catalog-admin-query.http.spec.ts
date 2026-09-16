@@ -114,6 +114,52 @@ describe('the admin catalog lists, over HTTP', () => {
 
       expect(res.status).toBe(200);
       expect(sent[0].payload['supermarketId']).toBeUndefined();
+      // No kind means every kind (plan 0116, section 7).
+      expect(sent[0].payload['kinds']).toBeUndefined();
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('narrows the price scopes to the kinds named, repeated', async () => {
+    // Plan 0116, section 7: a chain holds a STORE scope per shop, so the runs
+    // form asks for its warehouses by kind rather than paging past every shop.
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/price-scopes?kind=LOCAL_AREA&kind=REGION`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['kinds']).toEqual(['LOCAL_AREA', 'REGION']);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('reads a single kind as a list of one', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/price-scopes?kind=LOCAL_AREA`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['kinds']).toEqual(['LOCAL_AREA']);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('refuses a kind that does not exist, including the old POSTAL_CODE', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/price-scopes?kind=POSTAL_CODE`
+      );
+
+      expect(res.status).toBe(400);
+      expect(sent).toEqual([]);
     } finally {
       await nest.close();
     }

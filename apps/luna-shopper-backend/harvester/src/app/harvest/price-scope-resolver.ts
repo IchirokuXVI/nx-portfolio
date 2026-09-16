@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestWarningCode,
+  type HarvestRunWarning,
+  type PriceScopeKind,
+} from '@portfolio/luna-shopper/contracts';
 import { CatalogClient } from './catalog-client.service';
 import { printedNameOrNull } from './source-entry-name';
 
@@ -18,6 +22,12 @@ export interface ScopeDeclaration {
   kind: PriceScopeKind;
   /** What the source calls it, for a scope the orchestrator has to create. */
   name: string | null;
+}
+
+/** A scope catalog already holds, as the resolver needs it. */
+interface HeldScope {
+  id: string;
+  kind: PriceScopeKind;
 }
 
 /**
@@ -50,16 +60,28 @@ export class PriceScopeResolver {
    * `adapterKey` is here for one reason: a scope the run has to create is named
    * with the source's own string, and that string belongs to the language the
    * source prints in (plan 0111, section 8).
+   *
+   * `warn` is where a declaration that disagrees with a held scope is reported
+   * (plan 0116, section 6), normally the run's own warnings list.
    */
-  forRun(supermarketId: string, adapterKey: string | null): RunScopeResolver {
-    return new RunScopeResolver(this.catalog, supermarketId, adapterKey);
+  forRun(
+    supermarketId: string,
+    adapterKey: string | null,
+    warn: (warning: HarvestRunWarning) => void = () => undefined
+  ): RunScopeResolver {
+    return new RunScopeResolver(this.catalog, supermarketId, adapterKey, warn);
   }
 }
 
 /** What a run resolves its own declarations through. */
 export class RunScopeResolver {
-  /** The chain's scopes by external key, paged once on first use. */
-  private held: Map<string, string> | null = null;
+  /**
+   * The chain's scopes by external key, paged once on first use.
+   *
+   * A list, because the unique index is `(supermarketId, kind, externalKey)`:
+   * one key can be held under two kinds.
+   */
+  private held: Map<string, HeldScope[]> | null = null;
   /** Every key this run has answered, including the ones it created. */
   private readonly resolved = new Map<string, string>();
   /** The keys this run created, for the run's report. */
@@ -68,7 +90,9 @@ export class RunScopeResolver {
   constructor(
     private readonly catalog: CatalogClient,
     private readonly supermarketId: string,
-    private readonly adapterKey: string | null
+    private readonly adapterKey: string | null,
+    private readonly warn: (warning: HarvestRunWarning) => void = () =>
+      undefined
   ) {}
 
   /**
@@ -77,6 +101,13 @@ export class RunScopeResolver {
    * Declaring the same key twice is free and answers the same scope: a run
    * declares a region once per product that is priced for it, which is once per
    * product rather than once per run.
+   *
+   * **A key held under another kind is still that scope** (plan 0116, section
+   * 6). A declaration of `LOCAL_AREA 4661` finding `REGION 4661` is a
+   * disagreement rather than a match, so it is a `SCOPE_KIND_MISMATCH` warning,
+   * but the held scope is used: a run that stopped over a label would lose a
+   * whole walk, and creating a second scope would split one warehouse's prices
+   * in two. The operator fixes the row by hand.
    */
   async declare(declaration: ScopeDeclaration): Promise<string> {
     const cached = this.resolved.get(declaration.key);
@@ -85,10 +116,26 @@ export class RunScopeResolver {
     }
 
     const held = await this.load();
-    const existing = held.get(declaration.key);
+    const candidates = held.get(declaration.key) ?? [];
+    const existing =
+      candidates.find((scope) => scope.kind === declaration.kind) ??
+      candidates[0];
     if (existing) {
-      this.resolved.set(declaration.key, existing);
-      return existing;
+      if (existing.kind !== declaration.kind) {
+        this.warn({
+          code: HarvestWarningCode.SCOPE_KIND_MISMATCH,
+          offerId: null,
+          page: null,
+          name: declaration.name,
+          message:
+            `The scope "${declaration.key}" was declared as ` +
+            `${declaration.kind}, but catalog holds it as ${existing.kind}. ` +
+            'The held scope was used. Correct its kind by hand if the ' +
+            'declaration is right.',
+        });
+      }
+      this.resolved.set(declaration.key, existing.id);
+      return existing.id;
     }
 
     // The source's own name for the group, written once under the language
@@ -106,7 +153,7 @@ export class RunScopeResolver {
       declaration.key,
       printedNameOrNull(declaration.name, this.adapterKey)
     );
-    held.set(declaration.key, scope.id);
+    held.set(declaration.key, [{ id: scope.id, kind: declaration.kind }]);
     this.resolved.set(declaration.key, scope.id);
     this.created.add(declaration.key);
     return scope.id;
@@ -137,16 +184,18 @@ export class RunScopeResolver {
     return [...this.resolved.keys()];
   }
 
-  private async load(): Promise<Map<string, string>> {
+  private async load(): Promise<Map<string, HeldScope[]>> {
     if (this.held) {
       return this.held;
     }
-    const held = new Map<string, string>();
+    const held = new Map<string, HeldScope[]>();
     for (const scope of await this.catalog.listAllPriceScopes(
       this.supermarketId
     )) {
       if (scope.externalKey) {
-        held.set(scope.externalKey, scope.id);
+        const list = held.get(scope.externalKey) ?? [];
+        list.push({ id: scope.id, kind: scope.kind });
+        held.set(scope.externalKey, list);
       }
     }
     this.held = held;

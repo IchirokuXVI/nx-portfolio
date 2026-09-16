@@ -294,12 +294,12 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     listsItsOwnStores: true,
     hasProductPages: false,
     printedLocale: 'es',
-    // The REGION band alone: a warehouse is what this chain prices by, and a
-    // crawl of one warehouse may claim neither the chain's NATIONAL summary nor
-    // a STORE row somebody typed.
+    // The LOCAL_AREA band alone (plan 0116, section 3): a warehouse is what this
+    // chain prices by, and a crawl of one warehouse may claim neither the chain's
+    // NATIONAL summary nor a STORE row somebody typed.
     walkablePriorities: {
-      min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
-      max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
+      min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
+      max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
     },
   },
   // The site prints no price at all, so a scope would be a required field that

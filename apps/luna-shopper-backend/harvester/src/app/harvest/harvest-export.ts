@@ -147,7 +147,7 @@ export function buildHarvestDocument(
               kind: scope.kind as
                 | 'NATIONAL'
                 | 'REGION'
-                | 'POSTAL_CODE'
+                | 'LOCAL_AREA'
                 | 'STORE',
               ...(scope.name ? { name: scope.name } : {}),
             };
