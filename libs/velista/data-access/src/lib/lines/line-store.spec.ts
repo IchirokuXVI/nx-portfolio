@@ -529,6 +529,55 @@ describe('LineStore', () => {
     });
   });
 
+  describe('what the store knows about a deleted line (velista plan 0083)', () => {
+    it('marks its own delete as its own, even when the event echoes it', async () => {
+      const { store, realtime } = await build([line('a')]);
+      await store.load(LIST);
+
+      await store.deleteLine('a');
+      realtime.emit('line.deleted', { id: 'a', listId: LIST });
+
+      expect(store.deletionOf('a')).toBe('mine');
+    });
+
+    it('forgets a delete that failed', async () => {
+      const { store, lines } = await build([line('a')]);
+      await store.load(LIST);
+      lines.failNext(new Error('offline'));
+
+      await store.deleteLine('a');
+
+      expect(store.deletionOf('a')).toBeNull();
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['a']);
+    });
+
+    it('marks an event for a line it did not remove as somebody else', async () => {
+      const { store, realtime } = await build([line('a')]);
+      await store.load(LIST);
+
+      realtime.emit('line.deleted', { id: 'a', listId: LIST });
+      expect(store.deletionOf('a')).toBe('others');
+
+      store.acknowledgeDeletion('a');
+      expect(store.deletionOf('a')).toBe('seen');
+    });
+
+    it('marks both sides of its own merge as its own', async () => {
+      const { store, lines } = await build([
+        line('a', { content: 'Milk', position: 1 }),
+        line('b', { content: 'Bread', position: 2 }),
+      ]);
+      await store.load(LIST);
+      lines.answerNext(line('a', { content: 'Milk', version: 2 }));
+      lines.absorbNext('b');
+
+      await store.updateLine('b', { content: 'Milk', confirmMerge: true });
+
+      expect(store.deletionOf('b')).toBe('mine');
+      expect(store.deletionOf('a')).toBeNull();
+    });
+  });
+
   describe('an edit that merges two lines (velista plan 0083, section 5)', () => {
     it('removes the absorbed line at once and keeps the survivor', async () => {
       const { store, lines, realtime } = await build([

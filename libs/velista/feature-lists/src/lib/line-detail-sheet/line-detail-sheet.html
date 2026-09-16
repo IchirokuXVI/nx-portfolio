@@ -7,7 +7,14 @@
   [dismissible]="!submitting()"
   labelledBy="line-detail-title"
 >
-  @if (detail(); as line) {
+  @if (gone.reason(); as reason) {
+    <!-- The line went while the sheet was open, or the URL named a deleted one. -->
+    <lib-line-gone-notice
+      (closed)="gone.acknowledge()"
+      [reason]="reason"
+      titleId="line-detail-title"
+    />
+  } @else if (detail(); as line) {
     @if (merge(); as question) {
       <!--
         The merge question, in place of the sheet's content (section 5). The fact first

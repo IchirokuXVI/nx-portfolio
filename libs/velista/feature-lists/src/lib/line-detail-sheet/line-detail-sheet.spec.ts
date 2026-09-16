@@ -108,6 +108,7 @@ interface Options {
   readonly permissions?: readonly ListPermission[];
   readonly autoApproveLines?: boolean;
   readonly commentCount?: number;
+  readonly state?: 'loading' | 'loaded';
 }
 
 async function render(options: Options = {}): Promise<{
@@ -122,7 +123,7 @@ async function render(options: Options = {}): Promise<{
 
   const lines = fakeLineStore({
     lines: options.lines ?? [line()],
-    state: 'loaded',
+    state: options.state ?? 'loaded',
     settlements: options.settlements ?? { [LINE_ID]: [] },
     claims: options.claims,
   });
@@ -747,6 +748,61 @@ describe('LineDetailSheet', () => {
           )
         ).toBe(false);
       });
+    });
+  });
+
+  describe('when the line is gone (velista plan 0083)', () => {
+    it('closes quietly, once, when this reader deleted it', async () => {
+      const { fixture, lines, sheets } = await render();
+
+      await lines.deleteLine(LINE_ID);
+      await settle(fixture);
+
+      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+      expect(textOf(fixture)).not.toContain('list.gone.');
+    });
+
+    it('says another user deleted it, and closes once when told', async () => {
+      const { fixture, lines, sheets } = await render();
+
+      lines.deleteByOthers(LINE_ID);
+      await settle(fixture);
+
+      expect(textOf(fixture)).toContain('list.gone.byOthers');
+      expect(sheets.dismiss).not.toHaveBeenCalled();
+      expect(
+        fixture.nativeElement.querySelector('#line-detail-title')?.textContent
+      ).toContain('list.gone.byOthers');
+
+      button(fixture, 'list.gone.close')?.click();
+      await settle(fixture);
+
+      expect(lines.deletionOf(LINE_ID)).toBe('seen');
+      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it('says a line that is not on a fully loaded list is no longer available', async () => {
+      const { fixture, sheets } = await render({ lines: [] });
+
+      expect(textOf(fixture)).toContain('list.gone.unavailable');
+      expect(sheets.dismiss).not.toHaveBeenCalled();
+    });
+
+    it('says nothing while the list is still loading', async () => {
+      const { fixture } = await render({ lines: [], state: 'loading' });
+
+      expect(textOf(fixture)).not.toContain('list.gone.');
+    });
+
+    it('closes quietly once the reader has been told, from another sheet', async () => {
+      const { fixture, lines, sheets } = await render();
+
+      lines.deleteByOthers(LINE_ID);
+      lines.acknowledgeDeletion(LINE_ID);
+      await settle(fixture);
+
+      expect(textOf(fixture)).not.toContain('list.gone.');
+      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
     });
   });
 });

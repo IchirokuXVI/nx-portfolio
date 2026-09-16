@@ -49,6 +49,7 @@ import {
   SheetShell,
   SpinnerIcon,
 } from '@portfolio/velista/ui';
+import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
 import { listErrorKey } from '../list-error-copy';
 import {
   actionsFor,
@@ -129,6 +130,7 @@ export interface MergeQuestion {
     SpinnerIcon,
     CheckIcon,
     CommentIcon,
+    LineGoneNotice,
   ],
   templateUrl: './line-detail-sheet.html',
   styleUrl: './line-detail-sheet.scss',
@@ -185,6 +187,24 @@ export class LineDetailSheet {
 
   /** The merge question, while it is being asked. */
   readonly merge = signal<MergeQuestion | null>(null);
+
+  /** Following the survivor of a merge, which is this sheet leaving on purpose. */
+  private readonly _leaving = signal(false);
+
+  /**
+   * The line going away under the sheet (velista plan 0083).
+   *
+   * Quietly for the reader's own delete, which is how back after a delete lands on the
+   * list rather than on this sheet. With a sentence when somebody else deleted it, or
+   * when the URL named a line that is not on the list. Held while a save or a merge is
+   * out, because a merge marks this line gone and follows the survivor itself.
+   */
+  readonly gone = watchLineGone({
+    listId: this.listId,
+    lineId: this.lineId,
+    close: () => this.dismiss(),
+    paused: computed(() => this.saving() || this._leaving()),
+  });
 
   private readonly _saveButton =
     viewChild<ElementRef<HTMLButtonElement>>('saveButton');
@@ -562,6 +582,10 @@ export class LineDetailSheet {
 
     const outcome = await this._lines.updateLine(this.lineId(), changes);
 
+    if (outcome.state !== 'failed' && outcome.line.id !== this.lineId()) {
+      // Before `saving` drops, so the watch never sees this line gone and unheld.
+      this._leaving.set(true);
+    }
     this.saving.set(false);
 
     if (outcome.state === 'failed') {

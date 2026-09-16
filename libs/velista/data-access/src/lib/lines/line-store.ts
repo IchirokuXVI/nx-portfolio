@@ -38,6 +38,16 @@ import {
  * 0083, section 5). The error on failure, because a merge refusal carries the facts its
  * question is built from, and a bare `'failed'` would have thrown them away.
  */
+/**
+ * How this client learned that a line is gone (velista plan 0083).
+ *
+ * `mine` is a delete or a merge this client made, `others` is a `line.deleted` event for
+ * a line this client did not remove itself, and `seen` is either of those after the
+ * reader has been told. A sheet about the line reads it to decide whether to close
+ * quietly or to say what happened first.
+ */
+export type LineDeletion = 'mine' | 'others' | 'seen';
+
 export type LineUpdateOutcome =
   | ({ readonly state: 'succeeded' | 'overwritten' } & LineUpdateResult)
   | { readonly state: 'failed'; readonly error: unknown };
@@ -108,6 +118,11 @@ export class LineStore {
   private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _mutations = inject(Mutations);
+
+  /** Lines known to be gone, and how this client learned it. */
+  private readonly _deletions = signal<ReadonlyMap<string, LineDeletion>>(
+    new Map()
+  );
   private readonly _destroyRef = inject(DestroyRef);
 
   private readonly _byList = signal<ReadonlyMap<string, readonly Line[]>>(
@@ -254,6 +269,22 @@ export class LineStore {
 
   errorOf(listId: string): unknown {
     return this._error().get(listId) ?? null;
+  }
+
+  /**
+   * How this client learned that a line is gone, or null when it has not.
+   *
+   * Kept by the store and not by a sheet, because the sheet that cares is destroyed
+   * while the confirmation over it is open and is created again when the reader comes
+   * back to it (velista plan 0083, section 6).
+   */
+  deletionOf(lineId: string): LineDeletion | null {
+    return this._deletions().get(lineId) ?? null;
+  }
+
+  /** The reader was told the line is gone. The next sheet about it closes quietly. */
+  acknowledgeDeletion(lineId: string): void {
+    this._markDeleted(lineId, 'seen');
   }
 
   /**
@@ -545,10 +576,14 @@ export class LineStore {
 
     const { line, absorbedLineId } = outcome.value;
 
+    // A merge this client confirmed removes a line too, and the event that follows must
+    // not read as somebody else deleting it.
     if (absorbedLineId !== null) {
+      this._markDeleted(absorbedLineId, 'mine');
       this._removeLine(absorbedLineId);
     }
     if (line.id !== lineId) {
+      this._markDeleted(lineId, 'mine');
       // The edited line was the one absorbed. `_removeLine` above already took it off
       // when the answer said so, and this covers an answer that did not.
       this._removeLine(lineId);
@@ -932,6 +967,9 @@ export class LineStore {
       return { state: 'failed' };
     }
 
+    // Before the removal, so the `line.deleted` event that echoes this delete finds the
+    // line already known as this client's own and does not report it as somebody else's.
+    this._markDeleted(lineId, 'mine');
     this._removeLine(lineId);
 
     const outcome = await this._mutations.run(null, () =>
@@ -939,6 +977,11 @@ export class LineStore {
     );
 
     if (outcome.state === 'failed') {
+      this._deletions.update((current) => {
+        const next = new Map(current);
+        next.delete(lineId);
+        return next;
+      });
       this._setLines(listId, before);
       return { state: 'failed', error: outcome.error };
     }
@@ -1238,6 +1281,11 @@ export class LineStore {
       }
 
       case 'line.deleted': {
+        // Only a line this client has not already accounted for. Its own delete and
+        // its own merge are marked before the request goes out.
+        if (this.deletionOf(event.lineId) === null) {
+          this._markDeleted(event.lineId, 'others');
+        }
         this._removeLine(event.lineId);
         break;
       }
@@ -1424,6 +1472,10 @@ export class LineStore {
         lines.map((line) => (line.id === lineId ? change(line) : line))
       );
     });
+  }
+
+  private _markDeleted(lineId: string, how: LineDeletion): void {
+    this._deletions.update((current) => new Map(current).set(lineId, how));
   }
 
   private _removeLine(lineId: string): void {

@@ -248,6 +248,10 @@ function listSheetRoutes(): Route[] {
     }),
     sheet({
       path: 'lines/:lineId/confirm/delete',
+      // Opened by the detail sheet, which it pops back to after the delete; that sheet
+      // then closes itself (velista plan 0083, section 6). The line page's copy of this
+      // route has no such sheet under it, and leaves for the list instead.
+      data: { popsAfterDelete: true },
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then(
           (m) => m.DeleteLineSheet

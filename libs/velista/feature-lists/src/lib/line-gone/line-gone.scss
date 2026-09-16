@@ -1,0 +1,11 @@
+@use '../sheet-form';
+
+:host {
+  display: block;
+}
+
+@include sheet-form.sheet-form;
+
+.title {
+  margin-block-end: var(--app-space-3);
+}

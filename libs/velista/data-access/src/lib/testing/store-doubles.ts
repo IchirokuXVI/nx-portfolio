@@ -787,6 +787,10 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     new Map(Object.entries(options.claims ?? {}))
   );
   const loads = signal(0);
+  /** Lines known to be gone, as `LineStore.deletionOf` answers (velista plan 0083). */
+  const deletions = signal<ReadonlyMap<string, 'mine' | 'others' | 'seen'>>(
+    new Map()
+  );
 
   const calls: LineWriteCall[] = [];
   let outcome = options.writeOutcome ?? 'succeeded';
@@ -910,6 +914,15 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       }
       if (staged !== undefined) {
         const target = staged.line?.id ?? lineId;
+        // A merge this client confirmed, marked as the real store marks it.
+        for (const gone of [
+          staged.absorbedLineId,
+          target === lineId ? undefined : lineId,
+        ]) {
+          if (gone !== undefined) {
+            deletions.update((current) => new Map(current).set(gone, 'mine'));
+          }
+        }
         lines.update((current) =>
           current
             .filter(
@@ -1110,9 +1123,22 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
 
     deleteLine: async (lineId: string) => {
       calls.push({ kind: 'delete', lineId });
-      return outcome === 'failed'
-        ? { state: 'failed' as const, error: new Error('delete failed') }
-        : { state: 'deleted' as const };
+      if (outcome === 'failed') {
+        return { state: 'failed' as const, error: new Error('delete failed') };
+      }
+      deletions.update((current) => new Map(current).set(lineId, 'mine'));
+      lines.update((current) => current.filter((l) => l.id !== lineId));
+      return { state: 'deleted' as const };
+    },
+
+    deletionOf: (lineId: string) => deletions().get(lineId) ?? null,
+    acknowledgeDeletion: (lineId: string) => {
+      deletions.update((current) => new Map(current).set(lineId, 'seen'));
+    },
+    /** Somebody else deleted the line: the event reached the store. */
+    deleteByOthers: (lineId: string) => {
+      deletions.update((current) => new Map(current).set(lineId, 'others'));
+      lines.update((current) => current.filter((l) => l.id !== lineId));
     },
 
     recordCommentCount: (lineId: string, count: number) => {

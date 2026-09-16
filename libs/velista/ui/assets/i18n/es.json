@@ -571,8 +571,9 @@
       }
     },
     "gone": {
-      "deleted": "Esa lista se ha eliminado",
-      "unshared": "Esa lista ya no está compartida contigo"
+      "byOthers": "Otra persona borró esta línea",
+      "unavailable": "Esta línea se borró y ya no está disponible",
+      "close": "Cerrar"
     },
     "error": {
       "notAvailable": "Esta lista no está disponible para ti. Puede que se haya eliminado o que ya no esté compartida contigo",

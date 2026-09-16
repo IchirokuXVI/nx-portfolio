@@ -571,8 +571,9 @@
       }
     },
     "gone": {
-      "deleted": "That list was deleted",
-      "unshared": "That list is no longer shared with you"
+      "byOthers": "This line was deleted by another user",
+      "unavailable": "This line was deleted and is no longer available",
+      "close": "Close"
     },
     "error": {
       "notAvailable": "This list is not available to you. It may have been deleted, or it may no longer be shared with you",
