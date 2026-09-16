@@ -5,7 +5,7 @@
  * here, so a change to the contract fails this check instead of drifting past it.
  *
  *   node --experimental-strip-types \
- *     apps/luna-shopper-backend/harvester/tools/leaflet/validate.mjs <file.json> ...
+ *     libs/luna-shopper/tools/leaflet/cli/src/validate.mjs <file.json> ...
  *
  * `--experimental-strip-types` is what lets Node import the contract's own `.ts`
  * file. Without it Node refuses the extension and the run reads as a missing
@@ -18,15 +18,10 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { REPO_ROOT } from './chains.mjs';
 
-const HERE = new URL('.', import.meta.url).pathname.replace(
-  /^\/([A-Za-z]:)/,
-  '$1'
-);
-/** tools/leaflet, tools, harvester, luna-shopper-backend, apps, then the root. */
-const REPO = join(HERE, '..', '..', '..', '..', '..');
 const DEFAULT_SCHEMA = join(
-  REPO,
+  REPO_ROOT,
   'libs/luna-shopper/contracts/src/schemas/harvest-document/harvest-document-1.schema.ts'
 );
 

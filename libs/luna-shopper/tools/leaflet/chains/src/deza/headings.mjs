@@ -52,3 +52,9 @@ export const FIXED_SECTIONS = {
  * `producer.name`, and not a claim about the file this prompt now lives in. */
 export const TOOL_NAME =
   'claude-sonnet-5 via Claude Code, prompt-deza-import.txt';
+
+/** The dpi `cli.mjs` renders this chain's pages at, unless `--dpi` says
+ * otherwise. Deza prints a page that is about 2.2 to 1, flat artwork with no
+ * text layer, so 128 holds the tile text at a page size the model reads as one
+ * tile anyway. A page is never split, whatever the aspect ratio. */
+export const DPI = 128;

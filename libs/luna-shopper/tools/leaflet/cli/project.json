@@ -1,0 +1,32 @@
+{
+  "name": "luna-shopper/leaflet-cli",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper/tools/leaflet/cli/src",
+  "projectType": "library",
+  "tags": [],
+  "//": "The chain files are read at run time by path, so Nx cannot see them as imports. An edit to dia/prompt.txt has to mark this project affected, or a prompt change would slip past `nx affected` and run none of these tests. `luna-shopper/contracts` is here for the same reason: validate.mjs loads the harvest document schema from that library by path.",
+  "implicitDependencies": [
+    "luna-shopper/leaflet-chains",
+    "luna-shopper/contracts"
+  ],
+  "targets": {
+    "read": {
+      "//": "The alias. Nx addresses a project by name, so the operator never types the path, and the path is free to be as deep as the arrangement needs. cwd stays the workspace root, which is the default, because the CLI resolves its own paths against the root and every --out an operator has typed is relative to it.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node libs/luna-shopper/tools/leaflet/cli/src/cli.mjs",
+        "forwardAllArgs": true
+      }
+    },
+    "test": {
+      "//": "Plain ESM with zero npm dependencies, so the tests are Node's own runner rather than jest. The glob is quoted because Node expands it itself; a shell that expanded it first would answer a different set of files on Windows than on Linux.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --test \"libs/luna-shopper/tools/leaflet/cli/src/**/*.test.mjs\""
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

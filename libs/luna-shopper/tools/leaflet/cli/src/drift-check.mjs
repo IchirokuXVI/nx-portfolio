@@ -3,7 +3,7 @@
  * Compares one build's report against its chain's `baseline.json`, and refuses
  * a reading that does not look like the chain's previous one.
  *
- *   node apps/luna-shopper-backend/harvester/tools/leaflet/drift-check.mjs \
+ *   node libs/luna-shopper/tools/leaflet/cli/src/drift-check.mjs \
  *     --report <out.report.json> --chain <slug>
  *
  * `build-document.mjs` writes `statistics` into every report it produces:
@@ -22,11 +22,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-
-const HERE = new URL('.', import.meta.url).pathname.replace(
-  /^\/([A-Za-z]:)/,
-  '$1'
-);
+import { CHAINS_DIR } from './chains.mjs';
 
 /** A share (a fraction of products) that moved more than this many points,
  * either direction, is drift. Fifteen points is chosen to clear the ordinary
@@ -103,7 +99,7 @@ function main(argv) {
   }
 
   const report = JSON.parse(readFileSync(resolve(reportPath), 'utf8'));
-  const baselinePath = join(HERE, 'chains', chain, 'baseline.json');
+  const baselinePath = join(CHAINS_DIR, chain, 'baseline.json');
   const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
   const current = report.statistics;
   if (!current) {

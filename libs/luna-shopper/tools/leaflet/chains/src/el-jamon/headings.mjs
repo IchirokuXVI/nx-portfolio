@@ -27,3 +27,8 @@ export const FIXED_SECTIONS = { 1: 'cover' };
 
 /** The model this chain's one reading has used so far. */
 export const TOOL_NAME = 'claude opus 5 reading the rendered pages at 200 dpi';
+
+/** The dpi `cli.mjs` renders this chain's pages at, unless `--dpi` says
+ * otherwise. 160 is what the September 2026 reading and the model comparison in
+ * the leaflet plan's section 7 both used. */
+export const DPI = 160;

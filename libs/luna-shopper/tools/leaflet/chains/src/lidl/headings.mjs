@@ -67,3 +67,10 @@ export const FIXED_SECTIONS = {
  * then wins over this default. */
 export const TOOL_NAME =
   'claude-opus-5 via Claude Code, chains/lidl/prompt.txt';
+
+/** The dpi `cli.mjs` renders this chain's pages at, unless `--dpi` says
+ * otherwise. The page is 467 by 794 pt, so 160 renders it at about 1040 by
+ * 1765. LIDL's own flyer endpoint serves every page as a 2400 pixel image
+ * already, and a leaflet taken that way is read with `--pdf <directory>` and
+ * never rendered here at all. */
+export const DPI = 160;
