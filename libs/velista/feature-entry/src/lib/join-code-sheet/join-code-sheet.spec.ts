@@ -96,6 +96,12 @@ function type(fixture: ComponentFixture<JoinCodeSheet>, value: string): void {
 
 describe('JoinCodeSheet', () => {
   describe('the code field', () => {
+    it('has focus when the sheet opens, because typing it is the whole job (plan 0081)', async () => {
+      const { fixture } = await render();
+
+      expect(document.activeElement).toBe(query(fixture, '.field'));
+    });
+
     it('enables the primary at exactly eight characters, and not before', async () => {
       const { fixture } = await render();
 

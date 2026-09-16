@@ -28,6 +28,28 @@ class SheetHost {
 }
 
 /**
+ * The same sheet, opted in to focusing its first control (plan 0081), which is what a
+ * sheet whose whole job is to type one value asks for.
+ */
+@Component({
+  selector: 'lib-first-control-sheet-host',
+  imports: [SheetShell],
+  template: `
+    <lib-sheet-shell
+      (dismiss)="dismissals.set(dismissals() + 1)"
+      [dismissible]="dismissible()"
+      initialFocus="first"
+      labelledBy="first-host-title"
+    >
+      <h2 id="first-host-title">Name your group</h2>
+      <input class="first" />
+      <button class="last" type="button">Cancel</button>
+    </lib-sheet-shell>
+  `,
+})
+class FirstControlSheetHost extends SheetHost {}
+
+/**
  * A second host, because the footer is the one thing about the shell that only exists
  * when a caller asks for it, and the assertion that matters is where the two halves
  * end up relative to the scroll (plan 0040, section 5).
@@ -48,13 +70,15 @@ class SheetHost {
 })
 class FooterSheetHost {}
 
-async function render(): Promise<ComponentFixture<SheetHost>> {
+async function render(
+  host: typeof SheetHost = SheetHost
+): Promise<ComponentFixture<SheetHost>> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
-    imports: [SheetHost],
+    imports: [host],
   }).compileComponents();
 
-  const fixture = TestBed.createComponent(SheetHost);
+  const fixture = TestBed.createComponent(host);
   fixture.detectChanges();
   // `afterNextRender` is what moves focus, and it runs after the render rather than
   // during it, so the fixture has to be allowed to settle before focus is asserted.
@@ -93,13 +117,69 @@ describe('SheetShell', () => {
   });
 
   describe('focus', () => {
-    it('moves to the first control inside, which is the field', async () => {
-      // Focusing the panel would announce the dialog and then leave the person a tab
-      // away from the only control that matters.
+    /** Tab, or Shift+Tab, pressed on whatever has focus now. */
+    function tab(shiftKey = false): void {
+      (document.activeElement as HTMLElement).dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true })
+      );
+    }
+
+    it('moves to the panel by default, so no field raises a keyboard (plan 0081)', async () => {
+      // The labelled dialog taking focus is also what makes a screen reader say the
+      // sheet's name on open.
       const fixture = await render();
+      const panel = query(fixture, '.panel') as HTMLElement;
+
+      expect(document.activeElement).toBe(panel);
+      expect(panel.getAttribute('tabindex')).toBe('-1');
+    });
+
+    it('moves to the first control when the sheet asks for it', async () => {
+      const fixture = await render(FirstControlSheetHost);
 
       expect(document.activeElement).toBe(query(fixture, '.first'));
     });
+
+    it('enters the controls on Tab from the panel', async () => {
+      const fixture = await render();
+
+      tab();
+
+      expect(document.activeElement).toBe(query(fixture, '.first'));
+    });
+
+    it('reaches the last control on Shift+Tab from the panel', async () => {
+      // The browser's own previous stop from the panel is the page behind the scrim.
+      const fixture = await render();
+
+      tab(true);
+
+      expect(document.activeElement).toBe(query(fixture, '.last'));
+    });
+
+    for (const [mode, host] of [
+      ['panel', SheetHost],
+      ['first', FirstControlSheetHost],
+    ] as const) {
+      it(`hands focus back to the opener on dismiss, with initialFocus ${mode}`, async () => {
+        const opener = document.createElement('button');
+        document.body.appendChild(opener);
+        opener.focus();
+        try {
+          const fixture = await render(host);
+          expect(document.activeElement).not.toBe(opener);
+
+          (document.activeElement as HTMLElement).dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+          );
+
+          expect(fixture.componentInstance.dismissals()).toBe(1);
+          expect(document.activeElement).toBe(opener);
+        } finally {
+          opener.remove();
+        }
+      });
+    }
 
     it('wraps from the last control back to the first', async () => {
       // Without this the next Tab lands on the page behind the scrim, which is
@@ -116,6 +196,7 @@ describe('SheetShell', () => {
 
     it('wraps backwards from the first control to the last', async () => {
       const fixture = await render();
+      (query(fixture, '.first') as HTMLElement).focus();
 
       (document.activeElement as HTMLElement).dispatchEvent(
         new KeyboardEvent('keydown', {
@@ -383,7 +464,7 @@ describe('SheetShell', () => {
     it('stays out of the focus trap', async () => {
       // Dragging is a convenience on top of Escape, Cancel and the back button. A
       // fourth control, first in document order, would take the field's focus.
-      const fixture = await render();
+      const fixture = await render(FirstControlSheetHost);
       const grabber = query(fixture, '.grabber') as HTMLElement;
 
       expect(grabber.getAttribute('aria-hidden')).toBe('true');

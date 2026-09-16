@@ -89,6 +89,12 @@ function type(
 
 describe('CreateGroupSheet', () => {
   describe('before anything is typed', () => {
+    it('focuses the name field on open, because typing it is the whole job (plan 0081)', async () => {
+      const { fixture } = await render();
+
+      expect(document.activeElement).toBe(query(fixture, '.field'));
+    });
+
     it('offers one field and a disabled primary', async () => {
       const { fixture } = await render();
 
