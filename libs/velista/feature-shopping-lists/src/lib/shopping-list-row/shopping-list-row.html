@@ -58,6 +58,16 @@
         }}
       }
     </span>
+
+    <!--
+      Whose basket this is, on the Shared lists tab only. Its own line under the
+      progress, because the owner is what tells two shared trips of one day apart.
+    -->
+    @if (sharedBy(); as by) {
+      <span class="shared-by">
+        {{ 'history.shared.byOn' | rokuT: { owner: by.owner, date: by.date } }}
+      </span>
+    }
   </span>
 
   <lib-chevron-right-icon class="chevron" />

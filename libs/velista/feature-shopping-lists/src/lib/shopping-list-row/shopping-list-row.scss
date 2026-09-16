@@ -87,3 +87,11 @@
   font-size: var(--app-icon-md);
   color: var(--app-text-muted);
 }
+
+// The owner and the day a basket was shared, quieter than the progress above it.
+.shared-by {
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  overflow-wrap: anywhere;
+}

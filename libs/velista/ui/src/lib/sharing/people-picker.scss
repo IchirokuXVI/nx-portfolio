@@ -1,0 +1,90 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.none {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+// The group's name sits above its people as the filter sheet's legends do: small,
+// muted and in capitals, so the names below are what the eye lands on.
+.group-name {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.people {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person + .person {
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  padding-block: var(--app-space-2);
+  cursor: pointer;
+
+  // The ring goes on the label, around the whole row, because the box inside it is
+  // the real control.
+  &:focus-within {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// Saving. Dimmed rather than hidden, and `aria-busy` on the row says it in words.
+.is-busy {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+// The native checkbox, kept: it is what makes the row a checkbox to a screen reader
+// and to the keyboard. `accent-color` tints it without replacing it.
+.control {
+  flex: none;
+  margin: 0;
+  accent-color: var(--app-action-bg);
+}
+
+.choice-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+}
+
+.name {
+  color: var(--app-text-primary);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+}

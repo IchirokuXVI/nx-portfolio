@@ -11,6 +11,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContactStore,
   GeneratedListStore,
   LIST_SERVICE,
   SHOPPING_PROFILE_SERVICE,
@@ -24,6 +25,7 @@ import {
   APP_BASE_PATH,
   formatGeneratedDate,
   GENERATED_LIST_NAME_MAX_LENGTH,
+  groupContacts,
   type GeneratedListSource,
   type ProfileGenerationScope,
 } from '@portfolio/velista/models';
@@ -32,8 +34,10 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  PeoplePicker,
   SheetShell,
   SpinnerIcon,
+  type PeoplePickerToggle,
 } from '@portfolio/velista/ui';
 
 /**
@@ -120,6 +124,7 @@ const MAX_LIST_PAGES = 100;
     CheckIcon,
     ChevronDownIcon,
     ChevronRightIcon,
+    PeoplePicker,
     SheetShell,
     SpinnerIcon,
   ],
@@ -146,6 +151,7 @@ export class GetListSheet {
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _route = inject(ActivatedRoute);
+  private readonly _contacts = inject(ContactStore);
 
   /**
    * The page this sheet is drawn over, named by the route rather than worked out from
@@ -309,6 +315,29 @@ export class GetListSheet {
     return sources;
   });
 
+  /**
+   * The reader's contacts, one section per group (velista `0085`, section 3).
+   *
+   * Grouped here, where the locale and the group names both are, from the flat
+   * memberships the contacts read answers.
+   */
+  readonly contactGroups = computed(() => {
+    const names = new Map(this.zones().map((zone) => [zone.id, zone.name]));
+    return groupContacts(this._contacts.contacts(), names, this._locale());
+  });
+
+  /**
+   * Whether to draw "Share with" at all: only once there is somebody to choose. A
+   * section that could only ever say nobody is here would be furniture on the sheet
+   * most people open to make a basket for themselves.
+   */
+  readonly showPeople = computed(() =>
+    this.contactGroups().some((group) => group.people.length > 0)
+  );
+
+  /** Who the basket is shared with as it is made. Nobody, until somebody is ticked. */
+  readonly members = signal<ReadonlySet<string>>(new Set());
+
   readonly canSubmit = computed(
     () => !this.submitting() && this.sources().length > 0
   );
@@ -320,6 +349,7 @@ export class GetListSheet {
 
   constructor() {
     void this._zones.load();
+    void this._contacts.load();
     // The profiles, for the one row that names which one the run uses. Idempotent, and
     // usually already in hand: the store is app scoped, so a person who has opened the
     // profiles page in this session pays nothing here.
@@ -503,6 +533,19 @@ export class GetListSheet {
     });
   }
 
+  /** Choose a person, or unchoose them. Kept in the sheet until Generate. */
+  toggleMember(toggle: PeoplePickerToggle): void {
+    this.members.update((held) => {
+      const next = new Set(held);
+      if (toggle.selected) {
+        next.add(toggle.userId);
+      } else {
+        next.delete(toggle.userId);
+      }
+      return next;
+    });
+  }
+
   async submit(): Promise<void> {
     if (!this.canSubmit()) {
       return;
@@ -514,6 +557,14 @@ export class GetListSheet {
     try {
       const typed = this.name().trim();
       const profileId = this.selectedProfileId();
+      // Only people still in the picker: somebody who left every shared group while
+      // the sheet was open is not sent, since the server would refuse the whole run.
+      const offered = new Set(
+        this.contactGroups().flatMap((group) =>
+          group.people.map((person) => person.userId)
+        )
+      );
+      const memberUserIds = [...this.members()].filter((id) => offered.has(id));
       const run = await this._generated.create({
         // Empty is not a name and is not sent as one: null is what makes the server
         // leave it unnamed, which is what displays as the date.
@@ -521,6 +572,7 @@ export class GetListSheet {
         ...(profileId === null ? {} : { profileId }),
         sources: this.sources(),
         idempotencyKey: this._idempotencyKey,
+        ...(memberUserIds.length === 0 ? {} : { memberUserIds }),
       });
 
       // Straight into the basket, which is where somebody who just pressed Generate is

@@ -1,0 +1,45 @@
+:host {
+  display: block;
+}
+
+// Two equal halves under a hairline, so the tabs read as the top edge of the panel
+// they switch rather than as two more buttons.
+.tablist {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.tab {
+  min-block-size: var(--app-touch-target);
+  margin: 0;
+  border: 0;
+  // The indicator is a border rather than a background, so the selected tab is marked
+  // by a shape as well as by its colour.
+  border-block-end: var(--app-line-accent-width) solid transparent;
+  padding-inline: var(--app-space-3);
+  background: none;
+  color: var(--app-text-muted);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--app-motion-fast) var(--app-motion-ease);
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-width) * -1);
+  }
+}
+
+.is-selected {
+  border-block-end-color: var(--app-action-bg);
+  color: var(--app-text-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab {
+    transition: none;
+  }
+}

@@ -378,6 +378,19 @@ export type RealtimeEvent =
       readonly type: 'generatedList.deleted';
       readonly generatedListId: string;
     }
+  | {
+      /**
+       * A basket somebody else owns was shared with the reader, or stopped being
+       * (backend `0114`, section 10).
+       *
+       * Addressed to the reader's own sessions, so it arrives on the account socket,
+       * and it carries the basket id and nothing else. `unshared` covers every way
+       * access ends: removed, the link revoked with its people, leaving, and the
+       * basket being deleted.
+       */
+      readonly type: 'generatedList.shared' | 'generatedList.unshared';
+      readonly generatedListId: string;
+    }
   | { readonly type: 'presence.zoneUpdated'; readonly presence: ZonePresence }
   | { readonly type: 'presence.listUpdated'; readonly presence: ListPresence };
 
@@ -423,6 +436,8 @@ export const REALTIME_EVENT_NAMES = [
   'generatedList.participantJoined',
   'generatedList.participantLeft',
   'generatedList.deleted',
+  'generatedList.shared',
+  'generatedList.unshared',
   'presence.zoneUpdated',
   'presence.listUpdated',
   'presence.generatedListUpdated',

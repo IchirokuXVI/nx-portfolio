@@ -1201,7 +1201,13 @@
       "viaOwner": "hizo esta lista",
       "remove": "Quitar de esta lista",
       "close": "Cerrar",
-      "joinedUnknown": "No consta"
+      "joinedUnknown": "No consta",
+      "leave": "Salir de esta lista",
+      "leaveQuestion": "¿Salir de «{{name}}»? Puedes volver con el enlace si lo tienes.",
+      "leaveConfirm": "Salir",
+      "stay": "Quedarme",
+      "leaveFailed": "No se pudo completar. Inténtalo de nuevo.",
+      "viaInvite": "lo añadió quien hizo esta lista"
     },
     "share": {
       "open": "Compartir esta lista",
@@ -1355,7 +1361,10 @@
     "submit": "Generar",
     "submitting": "Generando",
     "cancel": "Cancelar",
-    "error": "No se pudo completar. Inténtalo de nuevo"
+    "error": "No se pudo completar. Inténtalo de nuevo",
+    "people": {
+      "label": "Compartir con"
+    }
   },
   "history": {
     "title": "Tus listas de la compra",
@@ -1383,6 +1392,22 @@
     "announce": {
       "loaded_one": "{{count}} lista de la compra cargada",
       "loaded_other": "{{count}} listas de la compra cargadas"
+    },
+    "tabs": {
+      "mine": "Mis listas",
+      "shared": "Listas compartidas"
+    },
+    "shared": {
+      "byOn": "Compartida por {{owner}} el {{date}}",
+      "empty": "Todavía nadie ha compartido una lista contigo."
+    }
+  },
+  "share": {
+    "people": {
+      "title": "Personas",
+      "none": "Aún no hay nadie más en tus grupos.",
+      "linkJoined": "Entró con el enlace. Si lo quitas, el enlace deja de servirle.",
+      "failed": "No se ha guardado. Inténtalo de nuevo."
     }
   }
 }

@@ -1736,6 +1736,54 @@ export class BasketMemory implements BasketServiceI {
     );
   }
 
+  /**
+   * Add a contact, as the owner. Somebody already on the basket is answered as they
+   * are, which is what the server does for a live invited member.
+   */
+  async addParticipant(
+    _generatedListId: string,
+    userId: string
+  ): Promise<BasketParticipant> {
+    const held = this._participants.find((person) => person.userId === userId);
+    if (held !== undefined) {
+      const invited = { ...held, shareLinkId: null };
+      this._participants = this._participants.map((person) =>
+        person.id === held.id ? invited : person
+      );
+      return invited;
+    }
+
+    const added: BasketParticipant = {
+      id: `p-${userId}`,
+      kind: 'REGISTERED',
+      displayName: null,
+      username: userId,
+      guestNumber: null,
+      userId,
+      joinedAt: new Date(),
+      lastSeenAt: null,
+      shareLinkId: null,
+    };
+    this._participants = [...this._participants, added];
+    return added;
+  }
+
+  /** Leave, as the reader. A guest and the owner are refused, as the server refuses them. */
+  async leaveBasket(): Promise<void> {
+    if (this.me.kind !== 'REGISTERED') {
+      throw new GatewayError({
+        code: this.me.kind === 'GUEST' ? 'forbidden' : 'validation_failed',
+        status: this.me.kind === 'GUEST' ? 403 : 422,
+        correlationId: 'memory',
+        detail: 'only a registered participant may leave',
+      });
+    }
+    const me = this.me.id;
+    this._participants = this._participants.filter(
+      (person) => person.id !== me
+    );
+  }
+
   /** The line, or the 404 every route here answers for one that is not there. */
   private _require(lineId: string): BasketLine {
     const line = this._lines.find((row) => row.id === lineId);

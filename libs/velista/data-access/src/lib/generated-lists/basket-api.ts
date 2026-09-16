@@ -543,6 +543,30 @@ export class BasketApi implements BasketServiceI {
     );
   }
 
+  async addParticipant(
+    generatedListId: string,
+    userId: string
+  ): Promise<BasketParticipant> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._basket(generatedListId)}/participants`,
+        { userId },
+        { context: operation('basket.participant.add') }
+      )
+    );
+
+    return required(toBasketParticipant(body), 'basket.participant.add');
+  }
+
+  async leaveBasket(generatedListId: string): Promise<void> {
+    await firstValueFrom(
+      this._http.delete<unknown>(
+        `${this._basket(generatedListId)}/participants/mine`,
+        this._participantOptions(generatedListId, 'basket.participant.leave')
+      )
+    );
+  }
+
   // --- Internals -------------------------------------------------------------
 
   /**

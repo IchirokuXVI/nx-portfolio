@@ -135,6 +135,15 @@
   margin-block-start: var(--app-space-4);
 }
 
+// The same gap above as the sources, so the two choices read as two sections.
+.people-label {
+  margin-block-start: var(--app-space-4);
+}
+
+.people {
+  margin-block-end: var(--app-space-4);
+}
+
 .none {
   margin: 0;
   padding: var(--app-space-4);

@@ -37,6 +37,7 @@ import {
   type Comment,
   type CommentRecording,
   type CommentTranscription,
+  type Contact,
   type GeneratedListRun,
   type GeneratedListSkippedLine,
   type GeneratedListSummary,
@@ -60,6 +61,7 @@ import {
   type ProfilePostalCode,
   type ResolvedPostalCode,
   type SessionTokens,
+  type SharedGeneratedListSummary,
   type ShoppingList,
   type ShoppingListSummary,
   type ShoppingProfile,
@@ -1233,6 +1235,57 @@ export function toGeneratedListSummary(
     notAvailableLineCount: numOr(raw['notAvailableLineCount'], 0),
     presentCount: numOr(raw['presentCount'], 0),
   };
+}
+
+/**
+ * From `SharedGeneratedListView` (backend `0114`, section 8): a summary plus who
+ * shared it and when.
+ *
+ * The owner and the date are required. A row with no owner could not say whose basket
+ * it is, which is the one thing the Shared lists tab adds to a row.
+ */
+export function toSharedGeneratedListSummary(
+  raw: unknown
+): SharedGeneratedListSummary | null {
+  const summary = toGeneratedListSummary(raw);
+  if (summary === null || !isRecord(raw)) {
+    return null;
+  }
+
+  const owner = raw['owner'];
+  const sharedAt = date(raw['sharedAt']);
+  if (!isRecord(owner) || sharedAt === null) {
+    return null;
+  }
+
+  const userId = str(owner['userId']);
+  if (userId === null) {
+    return null;
+  }
+
+  return {
+    ...summary,
+    owner: { userId, name: strOr(owner['name'], '') },
+    sharedAt,
+  };
+}
+
+/**
+ * From `ContactView` (backend `0114`, section 2): one membership in a group the reader
+ * shares. All three fields are required, because a person with no group has no section
+ * to be drawn in and a person with no id cannot be chosen.
+ */
+export function toContact(raw: unknown): Contact | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const userId = str(raw['userId']);
+  const zoneId = str(raw['zoneId']);
+  const username = str(raw['username']);
+  return userId === null || zoneId === null || username === null
+    ? null
+    : { userId, zoneId, username };
 }
 
 /** From `GeneratedListSkippedLineView`. */

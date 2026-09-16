@@ -5,6 +5,7 @@ import type {
   GeneratedListRun,
   GeneratedListSummary,
   Page,
+  SharedGeneratedListSummary,
   WritableGeneratedListStatus,
 } from '@portfolio/velista/models';
 import { GeneratedListApi } from './generated-list-api';
@@ -41,6 +42,15 @@ export interface GeneratedListServiceI {
    * rows that this build cannot explain the state of.
    */
   listMine(cursor?: string): Promise<Page<GeneratedListSummary>>;
+
+  /**
+   * The baskets other people shared with the caller, most recently shared first
+   * (`GET /v1/generated-lists/shared`, backend `0114` section 8).
+   *
+   * Still "mine" in this interface's sense: the caller is resolved from their own
+   * token, and the rows are the ones they are a live registered participant of.
+   */
+  listShared(cursor?: string): Promise<Page<SharedGeneratedListSummary>>;
 
   /**
    * Compose a basket (`POST /v1/generated-lists`, backend `0050` section 4).

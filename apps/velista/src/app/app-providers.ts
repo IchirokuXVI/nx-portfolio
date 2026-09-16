@@ -25,6 +25,8 @@ import {
   COMMENT_SERVICE,
   CommentApi,
   ConnectionRecovery,
+  CONTACT_SERVICE,
+  ContactApi,
   gatewayInterceptor,
   GENERATED_LIST_SERVICE,
   GeneratedListApi,
@@ -235,6 +237,9 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // of this one.
   provideService(GENERATED_LIST_SERVICE, GeneratedListApi),
   provideService(BASKET_SERVICE, BasketApi),
+  // The people the reader shares a group with (velista `0085`), for the picker that
+  // shares a basket with them.
+  provideService(CONTACT_SERVICE, ContactApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches
