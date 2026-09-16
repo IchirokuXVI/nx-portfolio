@@ -1,0 +1,48 @@
+@if (groups().length === 0) {
+  <p class="none" role="status">{{ 'share.people.none' | rokuT }}</p>
+} @else {
+  @for (group of groups(); track group.zoneId; let g = $index) {
+    <section [attr.aria-labelledby]="idPrefix + '-group-' + g" class="group">
+      <!--
+        A real heading, so a screen reader can move between groups, and the list
+        below is labelled by it.
+      -->
+      <h3 [id]="idPrefix + '-group-' + g" class="group-name">
+        {{ group.zoneName }}
+      </h3>
+
+      <ul class="people">
+        @for (person of group.people; track person.userId; let p = $index) {
+          @let hint = hints().get(person.userId);
+          @let hintId = idPrefix + '-hint-' + g + '-' + p;
+
+          <!--
+            The whole label is the target, so the tap area is the row and not the box.
+            A busy row keeps its box: it says it is saving rather than going away.
+          -->
+          <li
+            [attr.aria-busy]="busy().has(person.userId) ? 'true' : null"
+            class="person"
+          >
+            <label [class.is-busy]="busy().has(person.userId)" class="choice">
+              <input
+                (change)="onChange(person.userId, $event)"
+                [attr.aria-describedby]="hint ? hintId : null"
+                [checked]="selected().has(person.userId)"
+                [disabled]="disabled()"
+                class="control"
+                type="checkbox"
+              />
+              <span class="choice-body">
+                <span class="name">{{ person.username }}</span>
+                @if (hint) {
+                  <span [id]="hintId" class="hint">{{ hint | rokuT }}</span>
+                }
+              </span>
+            </label>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+}

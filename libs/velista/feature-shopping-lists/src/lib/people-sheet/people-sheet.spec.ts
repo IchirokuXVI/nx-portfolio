@@ -46,7 +46,12 @@ function participant(
   };
 }
 
-async function render(person: BasketParticipant, inspect = true) {
+async function render(
+  person: BasketParticipant,
+  inspect = true,
+  reader: Partial<BasketParticipant> = {},
+  leaves = true
+) {
   TestBed.resetTestingModule();
 
   const me = participant({
@@ -56,7 +61,13 @@ async function render(person: BasketParticipant, inspect = true) {
     guestNumber: null,
     userId: 'u-me',
     shareLinkId: null,
+    ...reader,
   });
+  const sheet = {
+    dismiss: jest.fn().mockResolvedValue(undefined),
+    leaveTo: jest.fn().mockResolvedValue(undefined),
+  };
+  const leaveBasket = jest.fn().mockResolvedValue(leaves);
 
   const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
 
@@ -67,7 +78,7 @@ async function render(person: BasketParticipant, inspect = true) {
       {
         provide: BasketStore,
         useValue: {
-          basket: signal(null),
+          basket: signal({ name: 'Saturday shop', generatedAt: null }),
           state: signal('ready'),
           participants: signal([me, person]),
           participantsById: signal(
@@ -80,16 +91,11 @@ async function render(person: BasketParticipant, inspect = true) {
           present: signal([]),
           seesZoneData: signal(true),
           removeParticipant: jest.fn().mockResolvedValue(undefined),
+          leaveBasket,
         },
       },
       { provide: SessionStore, useValue: { username: signal('Ana') } },
-      {
-        provide: SheetNavigation,
-        useValue: {
-          dismiss: jest.fn().mockResolvedValue(undefined),
-          leaveTo: jest.fn().mockResolvedValue(undefined),
-        },
-      },
+      { provide: SheetNavigation, useValue: sheet },
       {
         provide: Router,
         useValue: {
@@ -114,6 +120,7 @@ async function render(person: BasketParticipant, inspect = true) {
   }).compileComponents();
 
   const fixture = TestBed.createComponent(PeopleSheet);
+  document.body.appendChild(fixture.nativeElement);
   fixture.detectChanges();
 
   if (inspect) {
@@ -122,7 +129,7 @@ async function render(person: BasketParticipant, inspect = true) {
     fixture.detectChanges();
   }
 
-  return fixture;
+  return Object.assign(fixture, { me, sheet, leaveBasket });
 }
 
 /** The `<dd>` beside each `<dt>`, in the order the definition list states them. */
@@ -197,5 +204,151 @@ describe('PeopleSheet: naming the reader', () => {
     const [mine, other] = names(fixture);
     expect(other.guest).toBe('basket.people.guest');
     expect(mine.guest).toBeNull();
+  });
+});
+
+/** Velista `0085`, section 7, test 8: leaving is a registered participant's alone. */
+describe('PeopleSheet: leaving', () => {
+  const owner = participant({
+    id: 'p-owner',
+    kind: 'OWNER',
+    displayName: null,
+    username: 'Marta',
+    guestNumber: null,
+    userId: 'u-marta',
+    shareLinkId: null,
+  });
+
+  /** A registered reader, sent no devices, as an invited member is. */
+  const member: Partial<BasketParticipant> = {
+    kind: 'REGISTERED',
+    username: 'Ana',
+    device: undefined,
+  };
+
+  const buttons = (fixture: Awaited<ReturnType<typeof render>>) =>
+    [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].map(
+      (button) => button.textContent?.trim()
+    );
+
+  const openOwnRow = (fixture: Awaited<ReturnType<typeof render>>) => {
+    fixture.componentInstance['inspect'](fixture.me);
+    fixture.detectChanges();
+  };
+
+  const press = (fixture: Awaited<ReturnType<typeof render>>, key: string) => {
+    const button = [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll('button'),
+    ].find((candidate) => candidate.textContent?.trim() === key);
+    button?.click();
+    fixture.detectChanges();
+  };
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('is offered on a registered participant s own row, devices or not', async () => {
+    const fixture = await render(owner, false, member);
+
+    openOwnRow(fixture);
+
+    expect(buttons(fixture)).toContain('basket.people.leave');
+  });
+
+  it('is not offered on somebody else s row', async () => {
+    const fixture = await render({ ...owner, device: null }, true, member);
+
+    expect(buttons(fixture)).not.toContain('basket.people.leave');
+  });
+
+  it('is never offered to the owner', async () => {
+    const fixture = await render(participant(), false);
+
+    openOwnRow(fixture);
+
+    expect(buttons(fixture)).not.toContain('basket.people.leave');
+  });
+
+  it('is never offered to a guest', async () => {
+    const fixture = await render(owner, false, {
+      kind: 'GUEST',
+      userId: null,
+      device: undefined,
+    });
+
+    openOwnRow(fixture);
+
+    expect(buttons(fixture)).not.toContain('basket.people.leave');
+  });
+
+  it('asks first, with focus on the question', async () => {
+    const fixture = await render(owner, false, member);
+    openOwnRow(fixture);
+
+    press(fixture, 'basket.people.leave');
+    await fixture.whenStable();
+
+    const question = (fixture.nativeElement as HTMLElement).querySelector(
+      'h2'
+    ) as HTMLElement;
+    expect(question.textContent?.trim()).toBe('basket.people.leaveQuestion');
+    expect(document.activeElement).toBe(question);
+    expect(fixture.leaveBasket).not.toHaveBeenCalled();
+  });
+
+  it('calls the route and leaves to the Shared lists tab when confirmed', async () => {
+    const fixture = await render(owner, false, member);
+    openOwnRow(fixture);
+    press(fixture, 'basket.people.leave');
+
+    press(fixture, 'basket.people.leaveConfirm');
+    await fixture.whenStable();
+
+    expect(fixture.leaveBasket).toHaveBeenCalledTimes(1);
+    expect(fixture.sheet.leaveTo).toHaveBeenCalledWith(
+      '/velista/en/shopping-lists?tab=shared'
+    );
+    expect(fixture.sheet.dismiss).not.toHaveBeenCalled();
+  });
+
+  it('stays, and says so, when leaving does not go through', async () => {
+    const fixture = await render(owner, false, member, false);
+    openOwnRow(fixture);
+    press(fixture, 'basket.people.leave');
+
+    press(fixture, 'basket.people.leaveConfirm');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.sheet.leaveTo).not.toHaveBeenCalled();
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.leave-error')
+        ?.textContent?.trim()
+    ).toBe('basket.people.leaveFailed');
+  });
+
+  it('goes back to the person on Stay', async () => {
+    const fixture = await render(owner, false, member);
+    openOwnRow(fixture);
+    press(fixture, 'basket.people.leave');
+
+    press(fixture, 'basket.people.stay');
+
+    expect(buttons(fixture)).toContain('basket.people.leave');
+    expect(fixture.leaveBasket).not.toHaveBeenCalled();
+  });
+
+  it('says an invited member was added rather than that they made the list', async () => {
+    const fixture = await render(owner, false, member);
+
+    openOwnRow(fixture);
+
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.how')
+        ?.textContent?.trim()
+    ).toBe('basket.people.viaInvite');
   });
 });

@@ -156,3 +156,19 @@
   color: var(--app-text-muted);
   cursor: pointer;
 }
+
+// The question's title takes focus by script only, so it draws no ring of its own.
+.title[tabindex='-1']:focus {
+  outline: none;
+}
+
+.leave-error {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-text-sm);
+  color: var(--app-status-danger-fg);
+}
+
+// The question stands apart from the two answers under it.
+.leave-question {
+  margin-block-end: var(--app-space-5);
+}

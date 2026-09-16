@@ -4,16 +4,24 @@ import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   fakeGeneratedListStore,
+  fakeSharedListStore,
   GatewayError,
   provideFakeGeneratedListStore,
+  provideFakeSharedListStore,
   type FakeGeneratedListStore,
+  type FakeSharedListStore,
 } from '@portfolio/velista/data-access';
-import type { GeneratedListSummary } from '@portfolio/velista/models';
+import {
+  formatGeneratedDate,
+  type GeneratedListSummary,
+  type SharedGeneratedListSummary,
+} from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
-import { ErrorState } from '@portfolio/velista/ui';
+import { ErrorState, Tabs } from '@portfolio/velista/ui';
+import { ShoppingListRow } from '../shopping-list-row/shopping-list-row';
 import { ShoppingListsPage } from './shopping-lists-page';
 
 /**
@@ -42,7 +50,10 @@ function basket(overrides: Partial<GeneratedListSummary> = {}) {
 }
 
 async function render(
-  store: FakeGeneratedListStore = fakeGeneratedListStore()
+  store: FakeGeneratedListStore = fakeGeneratedListStore(),
+  shared: FakeSharedListStore = fakeSharedListStore(),
+  /** The URL the page is opened at, which is where the tab is read from. */
+  url = '/'
 ): Promise<ComponentFixture<ShoppingListsPage>> {
   TestBed.resetTestingModule();
 
@@ -53,9 +64,11 @@ async function render(
       provideVelistaTesting(),
       provideFakeBrowserFacade(),
       provideFakeGeneratedListStore(store),
+      provideFakeSharedListStore(shared),
     ],
   }).compileComponents();
 
+  await TestBed.inject(Router).navigateByUrl(url);
   const fixture = TestBed.createComponent(ShoppingListsPage);
   fixture.detectChanges();
   return fixture;
@@ -480,5 +493,142 @@ describe('ShoppingListsPage', () => {
       expect(text(fixture)).toContain('history.row.progress');
       expect(text(fixture)).not.toContain('history.row.got');
     });
+  });
+});
+
+/** A basket somebody else shared with the reader. */
+function sharedBasket(
+  overrides: Partial<SharedGeneratedListSummary> = {}
+): SharedGeneratedListSummary {
+  return {
+    ...basket({ id: 'sh1', name: 'Marta s shop' }),
+    owner: { userId: 'u-marta', name: 'Marta' },
+    sharedAt: new Date('2026-08-19T08:30:00.000Z'),
+    ...overrides,
+  };
+}
+
+/** Velista `0085`, section 5: My lists and Shared lists, tests 5 and 6. */
+describe('ShoppingListsPage: the two tabs', () => {
+  const tabs = (fixture: ComponentFixture<ShoppingListsPage>) =>
+    fixture.debugElement.query(By.directive(Tabs))?.componentInstance as Tabs;
+
+  it('opens on My lists and reads only its store', async () => {
+    const mine = fakeGeneratedListStore();
+    const shared = fakeSharedListStore();
+
+    const fixture = await render(mine, shared);
+
+    expect(tabs(fixture).selected()).toBe('mine');
+    expect(mine.calls).toEqual(['load']);
+    expect(shared.calls).toEqual([]);
+    // The panel on screen is labelled by its tab.
+    const panel = query(fixture, '[role="tabpanel"]:not([hidden])');
+    expect(panel?.getAttribute('aria-labelledby')).toBe('history-tab-mine');
+  });
+
+  it('keeps tab=shared through a reload, reading only the shared store', async () => {
+    const mine = fakeGeneratedListStore();
+    const shared = fakeSharedListStore();
+
+    const fixture = await render(mine, shared, '/?tab=shared');
+
+    expect(tabs(fixture).selected()).toBe('shared');
+    expect(shared.calls).toEqual(['load']);
+    expect(mine.calls).toEqual([]);
+  });
+
+  it('writes the chosen tab into the URL and loads each store once', async () => {
+    const mine = fakeGeneratedListStore();
+    const shared = fakeSharedListStore();
+    const fixture = await render(mine, shared);
+    const router = TestBed.inject(Router);
+
+    fixture.componentInstance.selectTab('shared');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(router.url).toBe('/?tab=shared');
+    expect(shared.calls).toEqual(['load']);
+
+    fixture.componentInstance.selectTab('mine');
+    await fixture.whenStable();
+    fixture.detectChanges();
+    fixture.componentInstance.selectTab('shared');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(router.url).toBe('/?tab=shared');
+    expect(mine.calls).toEqual(['load']);
+    expect(shared.calls).toEqual(['load']);
+  });
+
+  it('draws the owner and the shared date, formatted with Intl', async () => {
+    const shared = fakeSharedListStore();
+    shared.landPage([sharedBasket()]);
+
+    const fixture = await render(undefined, shared, '/?tab=shared');
+
+    const row = fixture.debugElement.query(By.directive(ShoppingListRow))
+      ?.componentInstance as ShoppingListRow;
+    const date = new Date('2026-08-19T08:30:00.000Z');
+    expect(row.sharedBy()).toEqual({
+      owner: 'Marta',
+      date: formatGeneratedDate(date, 'en'),
+    });
+    expect(row.sharedBy()?.date).toBe(
+      new Intl.DateTimeFormat('en', {
+        day: 'numeric',
+        month: 'long',
+        ...(date.getFullYear() === new Date().getFullYear()
+          ? {}
+          : { year: 'numeric' }),
+      }).format(date)
+    );
+    expect(text(fixture)).toContain('history.shared.byOn');
+  });
+
+  it('draws no byline on the reader s own rows', async () => {
+    const fixture = await render(fakeGeneratedListStore([basket()]));
+
+    const row = fixture.debugElement.query(By.directive(ShoppingListRow))
+      ?.componentInstance as ShoppingListRow;
+    expect(row.sharedBy()).toBeNull();
+    expect(text(fixture)).not.toContain('history.shared.byOn');
+  });
+
+  it('says history.shared.empty with no Get list button', async () => {
+    const shared = fakeSharedListStore();
+    shared.landPage([]);
+
+    const fixture = await render(undefined, shared, '/?tab=shared');
+
+    expect(text(fixture)).toContain('history.shared.empty');
+    expect(text(fixture)).not.toContain('getList.title');
+    expect(query(fixture, 'button.primary')).toBeNull();
+  });
+
+  it('opens a shared row at the basket route every basket uses', async () => {
+    const shared = fakeSharedListStore();
+    shared.landPage([sharedBasket()]);
+    const fixture = await render(undefined, shared, '/?tab=shared');
+    const router = TestBed.inject(Router);
+    const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    (query(fixture, 'lib-shopping-list-row button') as HTMLElement).click();
+
+    expect(navigate).toHaveBeenCalledWith(
+      ['..', 'shopping-lists', 'sh1'],
+      expect.anything()
+    );
+  });
+
+  it('retries the shared store from the shared tab', async () => {
+    const shared = fakeSharedListStore([], { state: 'failed' });
+    const fixture = await render(undefined, shared, '/?tab=shared');
+
+    fixture.componentInstance.retry();
+
+    expect(shared.calls).toContain('reload');
   });
 });

@@ -1,3 +1,5 @@
+> **PR:** [#382](https://github.com/IchirokuXVI/nx-portfolio/pull/382)
+
 # 0085: shared lists
 
 > Server half: backend `0114`. This plan does not work without it.

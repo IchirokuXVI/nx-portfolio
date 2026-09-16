@@ -1,0 +1,28 @@
+<div
+  (focusout)="onFocusOut($event)"
+  [attr.aria-label]="labelKey() | rokuT"
+  class="tablist"
+  role="tablist"
+>
+  @for (tab of tabs(); track tab.id) {
+    <!--
+      A click is activation. Enter and Space are handled in the keydown, which
+      prevents the button's own click so a key press selects once.
+    -->
+    <button
+      (click)="choose(tab.id)"
+      (focus)="onFocus(tab.id)"
+      (keydown)="onKeydown($event, tab.id)"
+      [attr.aria-controls]="panelId(tab.id)"
+      [attr.aria-selected]="tab.id === selected()"
+      [attr.tabindex]="tab.id === inOrder() ? 0 : -1"
+      [class.is-selected]="tab.id === selected()"
+      [id]="tabId(tab.id)"
+      class="tab"
+      role="tab"
+      type="button"
+    >
+      {{ tab.labelKey | rokuT }}
+    </button>
+  }
+</div>

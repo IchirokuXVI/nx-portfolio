@@ -65,6 +65,7 @@ function fakeService(options: FakeOptions = {}) {
   let firstReads = 0;
 
   const service: GeneratedListServiceI = {
+    listShared: async () => ({ items: [], nextCursor: null }),
     listMine: async (cursor?: string) => {
       calls.push({
         method: 'listMine',

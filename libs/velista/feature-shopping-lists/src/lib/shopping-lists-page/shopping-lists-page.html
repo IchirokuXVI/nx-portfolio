@@ -19,88 +19,177 @@
     <h1 class="title">{{ 'history.title' | rokuT }}</h1>
   </header>
 
-  @switch (page.kind) {
-    @case ('loading') {
-      <div class="content">
-        <lib-row-skeleton [count]="4" labelKey="history.row.loading" />
-      </div>
-    }
+  <!--
+    My lists and Shared lists (velista 0085, section 5). The tab is the query parameter,
+    so a reload and the back button keep it. Both panels are always in the document so
+    every tab controls something real, and only the one on screen draws anything.
+  -->
+  <lib-tabs
+    (selectedChange)="selectTab($event)"
+    [idPrefix]="tabsId"
+    [selected]="tab()"
+    [tabs]="tabs"
+    labelKey="history.title"
+  />
 
-    @case ('error') {
-      <div class="content">
-        <lib-error-state
-          (copyReference)="copyReference($event)"
-          (retry)="retry()"
-          [body]="'history.error.body' | rokuT"
-          [correlationId]="page.correlationId"
-          [title]="'history.error.title' | rokuT"
-        />
-      </div>
-    }
-
-    @case ('empty') {
-      <!--
-        One sentence and one action (section 3.3). The action is Get shopping list,
-        which is the only thing that can put anything on this page, and it is here
-        rather than in a bottom bar because there is nothing to scroll past it.
-      -->
-      <div class="content">
-        <lib-empty-state
-          [body]="'history.empty.body' | rokuT"
-          [title]="'history.empty.title' | rokuT"
-        >
-          <button (click)="getList()" class="primary" type="button">
-            <lib-basket-icon class="glyph" />
-            {{ 'getList.title' | rokuT }}
-          </button>
-        </lib-empty-state>
-      </div>
-    }
-
-    @case ('populated') {
-      <div (scroll)="onScroll($event)" class="content scroller">
-        <!--
-          One announcement for the page, not one per row (section 7). It is `polite`, so
-          it waits for whatever the reader is in the middle of rather than cutting in.
-
-          The sentence comes from `announced`, written once per page of results, rather
-          than from the row count in this expression. Interpolating the count made the
-          region re-read the whole total whenever the count moved, and the count moves
-          on the quiet refresh every time somebody else in the shop settles a line
-          (plan 0049, section 6).
-        -->
-        <p aria-live="polite" class="visually-hidden" role="status">
-          {{ announced() }}
-        </p>
-
-        <div class="rows">
-          @for (row of page.rows; track row.id) {
-            <lib-shopping-list-row
-              (open)="open($event)"
-              [generatedOn]="generatedOn(row.generatedAt)"
-              [row]="row"
-            />
-          }
-        </div>
-
-        @if (page.loadingMore) {
-          <lib-row-skeleton [count]="2" labelKey="history.row.loading" />
+  <div
+    [attr.aria-labelledby]="tabId('mine')"
+    [hidden]="tab() !== 'mine'"
+    [id]="panelId('mine')"
+    class="panel"
+    role="tabpanel"
+  >
+    @if (tab() === 'mine') {
+      @switch (page.kind) {
+        @case ('loading') {
+          <div class="content">
+            <lib-row-skeleton [count]="4" labelKey="history.row.loading" />
+          </div>
         }
-      </div>
 
-      <!--
-        The app's one bottom bar, not a second copy of it (plan 0061, section 1). The
-        shell owns the rule, the ground and the safe area inset; this screen projects
-        the single button that goes in the row.
-      -->
-      <lib-bottom-action-bar>
-        <button (click)="getList()" class="primary" type="button">
-          <lib-basket-icon class="glyph" />
-          {{ 'getList.title' | rokuT }}
-        </button>
-      </lib-bottom-action-bar>
+        @case ('error') {
+          <div class="content">
+            <lib-error-state
+              (copyReference)="copyReference($event)"
+              (retry)="retry()"
+              [body]="'history.error.body' | rokuT"
+              [correlationId]="page.correlationId"
+              [title]="'history.error.title' | rokuT"
+            />
+          </div>
+        }
+
+        @case ('empty') {
+          <!--
+            One sentence and one action (section 3.3). The action is Get shopping list,
+            which is the only thing that can put anything on this page, and it is here
+            rather than in a bottom bar because there is nothing to scroll past it.
+          -->
+          <div class="content">
+            <lib-empty-state
+              [body]="'history.empty.body' | rokuT"
+              [title]="'history.empty.title' | rokuT"
+            >
+              <button (click)="getList()" class="primary" type="button">
+                <lib-basket-icon class="glyph" />
+                {{ 'getList.title' | rokuT }}
+              </button>
+            </lib-empty-state>
+          </div>
+        }
+
+        @case ('populated') {
+          <div (scroll)="onScroll($event)" class="content scroller">
+            <!--
+              One announcement for the page, not one per row (section 7). It is `polite`, so
+              it waits for whatever the reader is in the middle of rather than cutting in.
+
+              The sentence comes from `announced`, written once per page of results, rather
+              than from the row count in this expression. Interpolating the count made the
+              region re-read the whole total whenever the count moved, and the count moves
+              on the quiet refresh every time somebody else in the shop settles a line
+              (plan 0049, section 6).
+            -->
+            <p aria-live="polite" class="visually-hidden" role="status">
+              {{ announced() }}
+            </p>
+
+            <div class="rows">
+              @for (row of page.rows; track row.id) {
+                <lib-shopping-list-row
+                  (open)="open($event)"
+                  [generatedOn]="generatedOn(row.generatedAt)"
+                  [row]="row"
+                />
+              }
+            </div>
+
+            @if (page.loadingMore) {
+              <lib-row-skeleton [count]="2" labelKey="history.row.loading" />
+            }
+          </div>
+
+          <!--
+            The app's one bottom bar, not a second copy of it (plan 0061, section 1). The
+            shell owns the rule, the ground and the safe area inset; this screen projects
+            the single button that goes in the row.
+          -->
+          <lib-bottom-action-bar>
+            <button (click)="getList()" class="primary" type="button">
+              <lib-basket-icon class="glyph" />
+              {{ 'getList.title' | rokuT }}
+            </button>
+          </lib-bottom-action-bar>
+        }
+      }
     }
-  }
+  </div>
+
+  <div
+    [attr.aria-labelledby]="tabId('shared')"
+    [hidden]="tab() !== 'shared'"
+    [id]="panelId('shared')"
+    class="panel"
+    role="tabpanel"
+  >
+    @if (tab() === 'shared') {
+      @let shared = sharedState();
+
+      @switch (shared.kind) {
+        @case ('loading') {
+          <div class="content">
+            <lib-row-skeleton [count]="4" labelKey="history.row.loading" />
+          </div>
+        }
+
+        @case ('error') {
+          <div class="content">
+            <lib-error-state
+              (copyReference)="copyReference($event)"
+              (retry)="retry()"
+              [body]="'history.error.body' | rokuT"
+              [correlationId]="shared.correlationId"
+              [title]="'history.error.title' | rokuT"
+            />
+          </div>
+        }
+
+        @case ('empty') {
+          <!--
+            One sentence and no action. Nothing the reader can do here puts a list on
+            this tab: somebody else has to share one, so a Get list button would make a
+            list of their own on the other tab.
+          -->
+          <div class="content">
+            <lib-empty-state [title]="'history.shared.empty' | rokuT" body="" />
+          </div>
+        }
+
+        @case ('populated') {
+          <div (scroll)="onScroll($event)" class="content scroller">
+            <p aria-live="polite" class="visually-hidden" role="status">
+              {{ announced() }}
+            </p>
+
+            <div class="rows">
+              @for (row of shared.rows; track row.id) {
+                <lib-shopping-list-row
+                  (open)="open($event)"
+                  [generatedOn]="generatedOn(row.generatedAt)"
+                  [row]="row"
+                  [sharedBy]="{ owner: row.ownerName, date: row.sharedOn }"
+                />
+              }
+            </div>
+
+            @if (shared.loadingMore) {
+              <lib-row-skeleton [count]="2" labelKey="history.row.loading" />
+            }
+          </div>
+        }
+      }
+    }
+  </div>
 </div>
 
 <!--

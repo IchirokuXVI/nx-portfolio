@@ -5,6 +5,7 @@ import type {
   GeneratedListRun,
   GeneratedListSummary,
   Page,
+  SharedGeneratedListSummary,
   WritableGeneratedListStatus,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
@@ -14,6 +15,7 @@ import {
   toGeneratedListRun,
   toGeneratedListSummary,
   toPage,
+  toSharedGeneratedListSummary,
 } from '../mapping/mappers';
 import { required } from '../mapping/required';
 import type { GeneratedListServiceI } from './generated-list-service';
@@ -56,6 +58,22 @@ export class GeneratedListApi implements GeneratedListServiceI {
     return toPage(body, toGeneratedListSummary);
   }
 
+  async listShared(cursor?: string): Promise<Page<SharedGeneratedListSummary>> {
+    let params = new HttpParams().set('limit', HISTORY_PAGE_SIZE);
+    if (cursor !== undefined) {
+      params = params.set('cursor', cursor);
+    }
+
+    const body = await firstValueFrom(
+      this._http.get<unknown>(`${this._lists()}/shared`, {
+        params,
+        context: operation('generatedList.listShared'),
+      })
+    );
+
+    return toPage(body, toSharedGeneratedListSummary);
+  }
+
   /**
    * The request body is built here from our own model rather than spread from it.
    *
@@ -85,6 +103,12 @@ export class GeneratedListApi implements GeneratedListServiceI {
           ...(request.idempotencyKey === undefined
             ? {}
             : { idempotencyKey: request.idempotencyKey }),
+          // Omitted rather than sent empty, so a basket shared with nobody sends the
+          // body it always did (velista `0085`, section 3).
+          ...(request.memberUserIds === undefined ||
+          request.memberUserIds.length === 0
+            ? {}
+            : { memberUserIds: [...request.memberUserIds] }),
         },
         { context: operation('generatedList.create') }
       )

@@ -1201,7 +1201,13 @@
       "viaOwner": "made this list",
       "remove": "Remove from this list",
       "close": "Close",
-      "joinedUnknown": "Not known"
+      "joinedUnknown": "Not known",
+      "leave": "Leave this list",
+      "leaveQuestion": "Leave “{{name}}”? You can come back with the link if you have it.",
+      "leaveConfirm": "Leave",
+      "stay": "Stay",
+      "leaveFailed": "That did not go through. Try again.",
+      "viaInvite": "added by whoever made this list"
     },
     "share": {
       "open": "Share this list",
@@ -1355,7 +1361,10 @@
     "submit": "Generate",
     "submitting": "Generating",
     "cancel": "Cancel",
-    "error": "That did not go through. Try again"
+    "error": "That did not go through. Try again",
+    "people": {
+      "label": "Share with"
+    }
   },
   "history": {
     "title": "Your shopping lists",
@@ -1383,6 +1392,22 @@
     "announce": {
       "loaded_one": "{{count}} shopping list loaded",
       "loaded_other": "{{count}} shopping lists loaded"
+    },
+    "tabs": {
+      "mine": "My lists",
+      "shared": "Shared lists"
+    },
+    "shared": {
+      "byOn": "Shared by {{owner}} on {{date}}",
+      "empty": "Nobody shared a list with you yet."
+    }
+  },
+  "share": {
+    "people": {
+      "title": "People",
+      "none": "Nobody else is in your groups yet.",
+      "linkJoined": "Joined with the link. Removing them also stops the link working for them.",
+      "failed": "That did not save. Try again."
     }
   }
 }

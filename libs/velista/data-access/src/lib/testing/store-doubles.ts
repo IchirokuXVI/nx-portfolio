@@ -19,6 +19,7 @@ import type {
   ResolvedPostalCode,
   SessionTokens,
   SettlementOutcome,
+  SharedGeneratedListSummary,
   ShoppingListsLoad,
   ShoppingListSummary,
   ShoppingProfile,
@@ -41,6 +42,7 @@ import { SessionStore } from '../auth/session-store';
 import { GroupNames } from '../catalog/group-names';
 import { ItemNames } from '../catalog/item-names';
 import { GeneratedListStore } from '../generated-lists/generated-list-store';
+import { SharedListStore } from '../generated-lists/shared-list-store';
 import { LineStore, type LineLoadState } from '../lines/line-store';
 import { ListStore, type ListLoadState } from '../lists/list-store';
 import { MemberNames } from '../memberships/member-names';
@@ -2245,4 +2247,70 @@ export function provideFakeGeneratedListStore(
   store: FakeGeneratedListStore = fakeGeneratedListStore()
 ): Provider {
   return { provide: GeneratedListStore, useValue: store };
+}
+
+/**
+ * A `SharedListStore` in whatever state a spec needs (velista `0085`).
+ *
+ * `fakeGeneratedListStore`'s shape, over the shared listing, and **idle with no pages
+ * by default**: the Shared lists tab is read only when it is first shown, so a store
+ * that had already read something would hide the one thing a page spec checks.
+ */
+export function fakeSharedListStore(
+  initial: readonly SharedGeneratedListSummary[] = [],
+  options: {
+    state?: ShoppingListsLoad;
+    error?: unknown;
+    hasMore?: boolean;
+    pagesLoaded?: number;
+  } = {}
+) {
+  const lists = signal<readonly SharedGeneratedListSummary[]>(initial);
+  const state = signal<ShoppingListsLoad>(options.state ?? 'idle');
+  const error = signal<unknown>(options.error ?? null);
+  const loadingMore = signal(false);
+  const hasMore = signal(options.hasMore ?? false);
+  const pagesLoaded = signal(options.pagesLoaded ?? 0);
+  const calls: string[] = [];
+
+  return {
+    lists: lists.asReadonly(),
+    state: state.asReadonly(),
+    error: error.asReadonly(),
+    loadingMore: loadingMore.asReadonly(),
+    hasMore: hasMore.asReadonly(),
+    pagesLoaded: pagesLoaded.asReadonly(),
+
+    load: async () => {
+      calls.push('load');
+    },
+    reload: async () => {
+      calls.push('reload');
+    },
+    loadMore: async () => {
+      calls.push('loadMore');
+    },
+
+    calls: calls as readonly string[],
+
+    set: (next: readonly SharedGeneratedListSummary[]) => lists.set(next),
+    setState: (next: ShoppingListsLoad, cause: unknown = null) => {
+      state.set(next);
+      error.set(cause);
+    },
+    landPage: (next: readonly SharedGeneratedListSummary[]) => {
+      lists.set(next);
+      state.set('loaded');
+      pagesLoaded.update((n) => n + 1);
+    },
+  };
+}
+
+export type FakeSharedListStore = ReturnType<typeof fakeSharedListStore>;
+
+/** {@link fakeSharedListStore} bound to the real token. */
+export function provideFakeSharedListStore(
+  store: FakeSharedListStore = fakeSharedListStore()
+): Provider {
+  return { provide: SharedListStore, useValue: store };
 }

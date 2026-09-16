@@ -359,6 +359,25 @@ export interface BasketServiceI {
     generatedListId: string,
     participantId: string
   ): Promise<void>;
+
+  /**
+   * Add one of the owner's contacts to the basket
+   * (`POST .../participants`, backend `0114` section 4).
+   *
+   * Owner only, account authenticated. Somebody already on it by link becomes an
+   * invited member, and somebody who was removed or left is brought back.
+   */
+  addParticipant(
+    generatedListId: string,
+    userId: string
+  ): Promise<BasketParticipant>;
+
+  /**
+   * Leave a basket somebody else shared (`DELETE .../participants/mine`, backend
+   * `0114` section 6). A registered participant only: a guest and the owner are
+   * refused.
+   */
+  leaveBasket(generatedListId: string): Promise<void>;
 }
 
 /**

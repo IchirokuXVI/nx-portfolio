@@ -12,6 +12,7 @@ export * from './lib/basket-search';
 export * from './lib/basket-view';
 export * from './lib/compose-basket-view';
 export * from './lib/compose-list-view';
+export * from './lib/contacts';
 export * from './lib/domain';
 export * from './lib/enums';
 export * from './lib/generated-list-view';

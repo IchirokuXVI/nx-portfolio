@@ -1,7 +1,9 @@
+import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContactStore,
   fakeZoneStore,
   GeneratedListStore,
   LIST_SERVICE,
@@ -13,6 +15,7 @@ import {
   type ShoppingProfileServiceI,
 } from '@portfolio/velista/data-access';
 import type {
+  Contact,
   CreateGeneratedListRequest,
   GeneratedListRun,
   MyZone,
@@ -102,6 +105,8 @@ interface Options {
    * every test but the paging one.
    */
   readonly pageSize?: number;
+  /** The reader's contacts, as the flat memberships the contacts read answers. */
+  readonly contacts?: readonly Contact[];
 }
 
 /** One profile, named or not, for the chooser and the scope read. */
@@ -221,6 +226,13 @@ async function render(
       provideFakeZoneStore(fakeZoneStore({ zones: options.zones ?? [zone()] })),
       { provide: LIST_SERVICE, useValue: listService },
       { provide: ShoppingProfileStore, useValue: profiles },
+      {
+        provide: ContactStore,
+        useValue: {
+          contacts: signal(options.contacts ?? []),
+          load: async () => undefined,
+        },
+      },
       { provide: SHOPPING_PROFILE_SERVICE, useValue: profileService },
       // The real store's own behaviour is covered by its spec; here it is a recorder,
       // so what is under test is what the sheet decides to send.
@@ -441,6 +453,52 @@ describe('GetListSheet', () => {
    * This sheet is where the plan puts it, and the test exists because the failure is
    * invisible: nothing breaks, a page simply becomes unreachable.
    */
+  /** Velista `0085`, section 3, test 2. */
+  describe('sharing with people as it is made', () => {
+    const contacts: readonly Contact[] = [
+      { userId: 'u-marta', zoneId: 'z1', username: 'Marta' },
+      { userId: 'u-leo', zoneId: 'z1', username: 'Leo' },
+    ];
+
+    it('draws no Share with section when there is nobody to choose', async () => {
+      const fixture = await render();
+
+      expect(text(fixture)).not.toContain('getList.people.label');
+      expect(query(fixture, 'lib-people-picker')).toBeNull();
+    });
+
+    it('draws Share with after the sources, with nobody chosen', async () => {
+      const fixture = await render({ contacts });
+
+      expect(text(fixture)).toContain('getList.people.label');
+      const boxes = all(fixture, 'lib-people-picker input[type="checkbox"]');
+      expect(boxes).toHaveLength(2);
+      expect(boxes.every((box) => !(box as HTMLInputElement).checked)).toBe(
+        true
+      );
+    });
+
+    it('sends no memberUserIds when nobody is chosen', async () => {
+      const fixture = await render({ contacts });
+
+      await fixture.componentInstance.submit();
+
+      expect(created[0]).not.toHaveProperty('memberUserIds');
+    });
+
+    it('sends memberUserIds for the chosen people', async () => {
+      const fixture = await render({ contacts });
+
+      const boxes = all(fixture, 'lib-people-picker input[type="checkbox"]');
+      // Sorted by name, so Leo is first and Marta second.
+      (boxes[1] as HTMLInputElement).click();
+      fixture.detectChanges();
+      await fixture.componentInstance.submit();
+
+      expect(created[0]?.memberUserIds).toEqual(['u-marta']);
+    });
+  });
+
   describe('the way to the history', () => {
     it('offers it from the header, even with no active basket to have a card', async () => {
       const fixture = await render();

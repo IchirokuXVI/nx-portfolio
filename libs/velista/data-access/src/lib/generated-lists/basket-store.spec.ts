@@ -10,7 +10,9 @@ import {
 } from '@portfolio/velista/models';
 import { Subject } from 'rxjs';
 import { GatewayError } from '../errors';
+import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import type { RealtimeEvent } from '../realtime/realtime-events';
+import { RealtimeMemory } from '../realtime/realtime-memory';
 import { BasketMemory } from './basket-memory';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
@@ -133,6 +135,8 @@ function build(
     revokeShareLink: (id, cascade) => memory.revokeShareLink(id, cascade),
     revokeParticipant: (id, participantId) =>
       memory.revokeParticipant(id, participantId),
+    addParticipant: (id, userId) => memory.addParticipant(id, userId),
+    leaveBasket: () => memory.leaveBasket(),
     ...overrides,
   };
 
@@ -142,6 +146,7 @@ function build(
       { provide: BasketSessionStore, useValue: sessions },
       { provide: BASKET_SERVICE, useValue: service },
       { provide: BasketSocket, useValue: socket },
+      { provide: REALTIME_CLIENT, useExisting: RealtimeMemory },
     ],
   });
 
@@ -1813,5 +1818,79 @@ describe('BasketStore', () => {
       expect(milk(store)?.quantity).toBe(3);
       expect(store.lastSplit()).toBeNull();
     });
+  });
+});
+
+/** Velista `0085`, sections 4, 6 and 7. */
+describe('BasketStore: sharing with people', () => {
+  it('shows the revoked state when the account socket says the basket is unshared', async () => {
+    const sessions = new FakeSessions();
+    sessions.seed('basket-saturday');
+    const { store } = build({}, sessions);
+    await store.open('basket-saturday');
+
+    TestBed.inject(RealtimeMemory).emit('generatedList.unshared', {
+      generatedListId: 'basket-saturday',
+    });
+
+    expect(store.state()).toBe('revoked');
+    expect(sessions.read('basket-saturday')).toBeNull();
+  });
+
+  it('ignores an unshared for another basket', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+
+    TestBed.inject(RealtimeMemory).emit('generatedList.unshared', {
+      generatedListId: 'basket-sunday',
+    });
+
+    expect(store.state()).toBe('ready');
+  });
+
+  it('adds a person and reads the participants again', async () => {
+    const getBasket = jest.fn(() => new BasketMemory().getBasket());
+    const { store } = build({ getBasket });
+    await store.open('basket-saturday');
+    const reads = getBasket.mock.calls.length;
+
+    await expect(store.addParticipant('u-marta')).resolves.toBe(true);
+
+    expect(getBasket.mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it('answers false rather than throwing when an add is refused', async () => {
+    const { store } = build({
+      addParticipant: () => Promise.reject(new Error('refused')),
+    });
+    await store.open('basket-saturday');
+
+    await expect(store.addParticipant('u-marta')).resolves.toBe(false);
+  });
+
+  it('leaves, forgets the session, and does not draw itself revoked on the way out', async () => {
+    const sessions = new FakeSessions();
+    sessions.seed('basket-saturday');
+    const leaveBasket = jest.fn(() => Promise.resolve());
+    const { store } = build({ leaveBasket }, sessions);
+    await store.open('basket-saturday');
+
+    await expect(store.leaveBasket()).resolves.toBe(true);
+    TestBed.inject(RealtimeMemory).emit('generatedList.unshared', {
+      generatedListId: 'basket-saturday',
+    });
+
+    expect(leaveBasket).toHaveBeenCalledWith('basket-saturday');
+    expect(sessions.read('basket-saturday')).toBeNull();
+    expect(store.state()).toBe('ready');
+  });
+
+  it('answers false when leaving is refused', async () => {
+    const { store } = build({
+      leaveBasket: () => Promise.reject(new Error('forbidden')),
+    });
+    await store.open('basket-saturday');
+
+    await expect(store.leaveBasket()).resolves.toBe(false);
   });
 });

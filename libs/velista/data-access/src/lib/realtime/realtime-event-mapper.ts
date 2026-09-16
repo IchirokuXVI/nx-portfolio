@@ -369,6 +369,19 @@ export function toRealtimeEvent(
       return generatedListId === null ? null : { type: name, generatedListId };
     }
 
+    case 'generatedList.shared':
+    case 'generatedList.unshared': {
+      // `{ generatedListId }` rather than the `{ id }` a deletion carries: the
+      // reader is in no room that may read more than the id (backend `0114`).
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const accessTo = str(payload['generatedListId']);
+      return accessTo === null
+        ? null
+        : { type: name, generatedListId: accessTo };
+    }
+
     case 'presence.generatedListUpdated': {
       if (!isRecord(payload)) {
         return null;

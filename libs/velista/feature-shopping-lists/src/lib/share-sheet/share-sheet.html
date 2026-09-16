@@ -49,6 +49,30 @@
           {{ 'basket.share.minting' | rokuT }}
         </p>
       }
+
+      <!--
+        The people from the owner's groups (velista 0085, section 4). A tick adds the
+        person and an untick removes them, each at once, so there is no Save. Somebody
+        who joined by link shows ticked, and their hint says before the untick that
+        removing them is for good.
+      -->
+      @if (isOwner()) {
+        <section aria-labelledby="share-people-title" class="people">
+          <h3 class="people-title" id="share-people-title">
+            {{ 'share.people.title' | rokuT }}
+          </h3>
+          <lib-people-picker
+            (toggled)="togglePerson($event)"
+            [busy]="savingPeople()"
+            [groups]="contactGroups()"
+            [hints]="peopleHints()"
+            [selected]="ticked()"
+          />
+          @if (peopleError(); as key) {
+            <p class="people-error" role="alert">{{ key | rokuT }}</p>
+          }
+        </section>
+      }
     }
 
     <!--

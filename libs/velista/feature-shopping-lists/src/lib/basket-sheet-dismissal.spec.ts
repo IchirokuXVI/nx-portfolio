@@ -9,8 +9,11 @@ import {
 import {
   BasketStore,
   BasketViewStore,
+  ContactStore,
+  fakeZoneStore,
   GeneratedListStore,
   LINE_SERVICE,
+  provideFakeZoneStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
 import {
@@ -204,6 +207,13 @@ async function render(
         provide: GeneratedListStore,
         useValue: { setStatus: jest.fn().mockResolvedValue(true) },
       },
+      // The share sheet's people (velista `0085`). Nobody to choose, since these
+      // tests never tick anyone: what matters is that the injections resolve.
+      {
+        provide: ContactStore,
+        useValue: { contacts: signal([]), load: async () => undefined },
+      },
+      provideFakeZoneStore(fakeZoneStore()),
       { provide: SheetNavigation, useValue: sheets },
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },

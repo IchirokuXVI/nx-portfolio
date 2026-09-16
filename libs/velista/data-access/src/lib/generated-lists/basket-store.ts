@@ -31,6 +31,10 @@ import {
   type LineApprovalStatus,
 } from '@portfolio/velista/models';
 import { GatewayError, hasResponse } from '../errors';
+import {
+  REALTIME_CLIENT,
+  type RealtimeClientI,
+} from '../realtime/realtime-client';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
 import { BasketSocket } from './basket-socket';
@@ -134,6 +138,13 @@ export class BasketStore {
   private readonly _service = inject<BasketServiceI>(BASKET_SERVICE);
   private readonly _sessions = inject(BasketSessionStore);
   private readonly _socket = inject(BasketSocket);
+  /**
+   * The account socket, for the one basket event that cannot reach the basket's own
+   * room: `generatedList.unshared` (velista `0085`, section 6). It is addressed to the
+   * reader's user room, because once access has ended the basket room has already let
+   * this socket go.
+   */
+  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
 
   private readonly _basket = signal<BasketView | null>(null);
   private readonly _state = signal<BasketLoad>('loading');
@@ -155,6 +166,15 @@ export class BasketStore {
 
   /** Which basket this store is about, once it has been told. */
   private _id: string | null = null;
+
+  /**
+   * Whether the reader is leaving this basket on purpose (velista `0085`, section 7).
+   *
+   * Their own `unshared` arrives while the people sheet is navigating away, and the
+   * revoked notice drawn under it for that moment would tell somebody who just pressed
+   * Leave that they were thrown out.
+   */
+  private _leaving = false;
 
   /** The pending coalesced refresh, or null. See {@link _scheduleRefresh}. */
   private _refreshAt: ReturnType<typeof setTimeout> | null = null;
@@ -253,8 +273,26 @@ export class BasketStore {
       }
     });
 
+    // Losing access to the basket on screen: removed, the link revoked with its
+    // people, having left from another device, or the basket deleted. The screen
+    // already has a treatment for exactly this, which a failed renewal reaches too,
+    // so the event lands on the same state rather than on a second notice.
+    const access = this._realtime.events.subscribe((event) => {
+      if (
+        event.type === 'generatedList.unshared' &&
+        !this._leaving &&
+        this._id !== null &&
+        event.generatedListId === this._id
+      ) {
+        this._cancelRefresh();
+        this._sessions.forget(this._id);
+        this._state.set('revoked');
+      }
+    });
+
     inject(DestroyRef).onDestroy(() => {
       subscription.unsubscribe();
+      access.unsubscribe();
       this._cancelRefresh();
     });
   }
@@ -517,6 +555,7 @@ export class BasketStore {
     this._socket.close();
     this._cancelRefresh();
     this._id = null;
+    this._leaving = false;
     this._basket.set(null);
     // A read that is still out was asked for the basket being let go, so it is
     // disowned here: the next `open` starts one of its own rather than waiting on
@@ -1189,6 +1228,52 @@ export class BasketStore {
     }
     await this._service.revokeParticipant(id, participantId);
     await this.refresh();
+  }
+
+  /**
+   * Add one of the owner's contacts (velista `0085`, section 4).
+   *
+   * **False rather than a throw**, because the caller is a checkbox that has to be put
+   * back by hand when the write does not land, not a sheet that stays open on an
+   * error. The participant list is read again on success, so the ticks and the joined
+   * count follow the answer rather than a guess.
+   */
+  async addParticipant(userId: string): Promise<boolean> {
+    const id = this._id;
+    if (id === null) {
+      return false;
+    }
+    try {
+      await this._service.addParticipant(id, userId);
+    } catch {
+      return false;
+    }
+    await this.refresh();
+    return true;
+  }
+
+  /**
+   * Leave this basket, as a registered participant who does not own it (velista
+   * `0085`, section 7).
+   *
+   * The stored session goes with it, so nothing on this device still presents a
+   * credential for a basket the reader walked away from. False on failure, for the
+   * people sheet to stay where it is.
+   */
+  async leaveBasket(): Promise<boolean> {
+    const id = this._id;
+    if (id === null) {
+      return false;
+    }
+    this._leaving = true;
+    try {
+      await this._service.leaveBasket(id);
+    } catch {
+      this._leaving = false;
+      return false;
+    }
+    this._sessions.forget(id);
+    return true;
   }
 
   // --- Internals -------------------------------------------------------------

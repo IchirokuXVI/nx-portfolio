@@ -5,8 +5,18 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore } from '@portfolio/velista/data-access';
-import type { BasketShareLink } from '@portfolio/velista/models';
+import {
+  BasketStore,
+  ContactStore,
+  fakeZoneStore,
+  provideFakeZoneStore,
+} from '@portfolio/velista/data-access';
+import type {
+  BasketParticipant,
+  BasketShareLink,
+  Contact,
+  MyZone,
+} from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -43,8 +53,81 @@ function link(): BasketShareLink {
   };
 }
 
-async function render(browser?: Partial<BrowserFacade>) {
+/** Someone on the basket, as the participant list names them. */
+function participant(
+  overrides: Partial<BasketParticipant> = {}
+): BasketParticipant {
+  return {
+    id: 'p-owner',
+    kind: 'OWNER',
+    displayName: null,
+    username: 'Ana',
+    guestNumber: null,
+    userId: 'u-ana',
+    joinedAt: null,
+    lastSeenAt: null,
+    shareLinkId: null,
+    ...overrides,
+  };
+}
+
+const OWNER = participant();
+
+/** The two people in the owner's group, Leo and Marta, and the group itself. */
+const CONTACTS: readonly Contact[] = [
+  { userId: 'u-leo', zoneId: 'z1', username: 'Leo' },
+  { userId: 'u-marta', zoneId: 'z1', username: 'Marta' },
+];
+
+const ZONE = { id: 'z1', name: 'Flat', myStatus: 'APPROVED' } as MyZone;
+
+interface PeopleOptions {
+  readonly participants?: readonly BasketParticipant[];
+  /** What `addParticipant` answers. True also puts the person on the basket. */
+  readonly addSaves?: boolean;
+  /** Whether `removeParticipant` rejects. */
+  readonly removeFails?: boolean;
+}
+
+async function render(
+  browser?: Partial<BrowserFacade>,
+  people: PeopleOptions = {}
+) {
   TestBed.resetTestingModule();
+
+  const participants = signal<readonly BasketParticipant[]>(
+    people.participants ?? [OWNER]
+  );
+  const store = {
+    basket: signal(null),
+    state: signal('ready'),
+    error: signal(null),
+    // Already minted, which is the pane the trigger lives on.
+    shareLink: signal(link()),
+    share: jest.fn().mockResolvedValue(link()),
+    revokeLink: jest.fn().mockResolvedValue(undefined),
+    loadShareLink: jest.fn().mockResolvedValue(undefined),
+    me: signal(OWNER),
+    participants,
+    addParticipant: jest.fn(async (userId: string) => {
+      if (people.addSaves === false) {
+        return false;
+      }
+      participants.update((held) => [
+        ...held,
+        participant({ id: `p-${userId}`, kind: 'REGISTERED', userId }),
+      ]);
+      return true;
+    }),
+    removeParticipant: jest.fn(async (participantId: string) => {
+      if (people.removeFails) {
+        throw new Error('refused');
+      }
+      participants.update((held) =>
+        held.filter((person) => person.id !== participantId)
+      );
+    }),
+  };
 
   const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
 
@@ -55,18 +138,12 @@ async function render(browser?: Partial<BrowserFacade>) {
       // Absent by default, so every test above runs against the real facade, which in
       // jsdom is a browser with no share sheet and no clipboard.
       ...(browser ? [provideFakeBrowserFacade(undefined, browser)] : []),
+      { provide: BasketStore, useValue: store },
       {
-        provide: BasketStore,
-        useValue: {
-          basket: signal(null),
-          state: signal('ready'),
-          error: signal(null),
-          // Already minted, which is the pane the trigger lives on.
-          shareLink: signal(link()),
-          share: jest.fn().mockResolvedValue(link()),
-          revokeLink: jest.fn().mockResolvedValue(undefined),
-        },
+        provide: ContactStore,
+        useValue: { contacts: signal(CONTACTS), load: async () => undefined },
       },
+      provideFakeZoneStore(fakeZoneStore({ zones: [ZONE] })),
       {
         provide: SheetNavigation,
         useValue: {
@@ -99,7 +176,7 @@ async function render(browser?: Partial<BrowserFacade>) {
 
   const fixture = TestBed.createComponent(ShareSheet);
   fixture.detectChanges();
-  return fixture;
+  return Object.assign(fixture, { store });
 }
 
 /** The footer's controls, in the order they are stacked. */
@@ -238,5 +315,121 @@ describe('ShareSheet: sending the link', () => {
     await fixture.whenStable();
 
     expect(copied).toEqual(['https://velista.app/velista/s/s3cr3t']);
+  });
+});
+
+/** Velista `0085`, section 4, test 3: the owner's people, saved at every tick. */
+describe('ShareSheet: people', () => {
+  const settle = async (fixture: Awaited<ReturnType<typeof render>>) => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  };
+
+  const boxOf = (fixture: Awaited<ReturnType<typeof render>>, name: string) =>
+    [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll(
+        'lib-people-picker label'
+      ),
+    ]
+      .find(
+        (label) => label.querySelector('.name')?.textContent?.trim() === name
+      )
+      ?.querySelector('input') as HTMLInputElement;
+
+  const error = (fixture: Awaited<ReturnType<typeof render>>) =>
+    (fixture.nativeElement as HTMLElement)
+      .querySelector('.people-error')
+      ?.textContent?.trim() ?? null;
+
+  it('ticks the live registered participants, one who joined by link included', async () => {
+    const fixture = await render(undefined, {
+      participants: [
+        OWNER,
+        participant({
+          id: 'p-leo',
+          kind: 'REGISTERED',
+          userId: 'u-leo',
+          shareLinkId: 'sl1',
+        }),
+      ],
+    });
+
+    expect(boxOf(fixture, 'Leo').checked).toBe(true);
+    expect(boxOf(fixture, 'Marta').checked).toBe(false);
+
+    // The link joiner is warned before the untick that it is for good.
+    const hint = document.getElementById(
+      boxOf(fixture, 'Leo').getAttribute('aria-describedby') ?? ''
+    );
+    expect(hint?.textContent?.trim()).toBe('share.people.linkJoined');
+  });
+
+  it('posts at once on a tick', async () => {
+    const fixture = await render();
+
+    boxOf(fixture, 'Marta').click();
+    fixture.detectChanges();
+    await settle(fixture);
+
+    expect(fixture.store.addParticipant).toHaveBeenCalledWith('u-marta');
+    expect(boxOf(fixture, 'Marta').checked).toBe(true);
+    expect(error(fixture)).toBeNull();
+  });
+
+  it('deletes at once on an untick, by participant id', async () => {
+    const fixture = await render(undefined, {
+      participants: [
+        OWNER,
+        participant({ id: 'p-leo', kind: 'REGISTERED', userId: 'u-leo' }),
+      ],
+    });
+
+    boxOf(fixture, 'Leo').click();
+    fixture.detectChanges();
+    await settle(fixture);
+
+    expect(fixture.store.removeParticipant).toHaveBeenCalledWith('p-leo');
+    expect(boxOf(fixture, 'Leo').checked).toBe(false);
+  });
+
+  it('puts the box back and says so when a tick does not save', async () => {
+    const fixture = await render(undefined, { addSaves: false });
+
+    boxOf(fixture, 'Marta').click();
+    fixture.detectChanges();
+    await settle(fixture);
+
+    expect(boxOf(fixture, 'Marta').checked).toBe(false);
+    expect(error(fixture)).toBe('share.people.failed');
+  });
+
+  it('puts the box back and says so when an untick does not save', async () => {
+    const fixture = await render(undefined, {
+      participants: [
+        OWNER,
+        participant({ id: 'p-leo', kind: 'REGISTERED', userId: 'u-leo' }),
+      ],
+      removeFails: true,
+    });
+
+    boxOf(fixture, 'Leo').click();
+    fixture.detectChanges();
+    await settle(fixture);
+
+    expect(boxOf(fixture, 'Leo').checked).toBe(true);
+    expect(error(fixture)).toBe('share.people.failed');
+  });
+
+  it('reads the joined count again when the participants move', async () => {
+    const fixture = await render();
+    expect(fixture.store.loadShareLink).not.toHaveBeenCalled();
+
+    boxOf(fixture, 'Marta').click();
+    fixture.detectChanges();
+    await settle(fixture);
+
+    expect(fixture.store.loadShareLink).toHaveBeenCalled();
   });
 });

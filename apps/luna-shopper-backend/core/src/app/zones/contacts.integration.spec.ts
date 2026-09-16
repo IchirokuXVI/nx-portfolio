@@ -67,32 +67,72 @@ describeIntegration('the caller’s contacts (real Postgres)', () => {
       ).id;
     }
 
-    const roster: [string, string, string, MembershipStatus][] = [
-      [zones.flat, users.caller, 'Me', MembershipStatus.APPROVED],
+    // The four contacts get ids that sort alternately between the two groups,
+    // flat, parents, flat, parents. Ordered by membership id alone the answer
+    // would split both groups, so the group order test cannot pass by the luck
+    // of four random uuids. One random prefix per run keeps them unique.
+    const prefix = randomUUID().slice(0, 34);
+    const contactId = (n: number) => `${prefix}${String(n).padStart(2, '0')}`;
+
+    const roster: [
+      string,
+      string,
+      string,
+      MembershipStatus,
+      string | undefined,
+    ][] = [
+      [zones.flat, users.caller, 'Me', MembershipStatus.APPROVED, undefined],
       [
         zones.flat,
         users.friend,
         'Friend in the flat',
         MembershipStatus.APPROVED,
+        contactId(1),
       ],
-      [zones.flat, users.temporary, 'Temporary', MembershipStatus.APPROVED],
-      [zones.flat, users.applicant, 'Applicant', MembershipStatus.PENDING],
-      [zones.parents, users.caller, 'Me', MembershipStatus.APPROVED],
+      [
+        zones.flat,
+        users.temporary,
+        'Temporary',
+        MembershipStatus.APPROVED,
+        contactId(3),
+      ],
+      [
+        zones.flat,
+        users.applicant,
+        'Applicant',
+        MembershipStatus.PENDING,
+        undefined,
+      ],
+      [zones.parents, users.caller, 'Me', MembershipStatus.APPROVED, undefined],
       [
         zones.parents,
         users.friend,
         'Friend at the parents',
         MembershipStatus.APPROVED,
+        contactId(2),
       ],
-      [zones.parents, users.other, 'Other', MembershipStatus.APPROVED],
+      [
+        zones.parents,
+        users.other,
+        'Other',
+        MembershipStatus.APPROVED,
+        contactId(4),
+      ],
       // The caller is only waiting to join this one, so it contributes nobody.
-      [zones.waiting, users.caller, 'Me', MembershipStatus.PENDING],
-      [zones.waiting, users.stranger, 'Stranger', MembershipStatus.APPROVED],
+      [zones.waiting, users.caller, 'Me', MembershipStatus.PENDING, undefined],
+      [
+        zones.waiting,
+        users.stranger,
+        'Stranger',
+        MembershipStatus.APPROVED,
+        undefined,
+      ],
     ];
     const memberships = dataSource.getRepository(ZoneMembership);
-    for (const [zoneId, userId, username, status] of roster) {
+    for (const [zoneId, userId, username, status, id] of roster) {
       await memberships.save(
         memberships.create({
+          ...(id === undefined ? {} : { id }),
           zoneId,
           userId,
           username,
@@ -151,6 +191,29 @@ describeIntegration('the caller’s contacts (real Postgres)', () => {
     // Four rows at two a page is two pages, and the second says it is the last.
     expect(pages).toBe(2);
     expect(seen.map((row) => row.userId)).not.toContain(users.caller);
+  });
+
+  it('answers every member of one group before any member of the next, across pages', async () => {
+    // One row a page, which is the page size most likely to split a group, and
+    // the boundary every page crosses.
+    const zoneOrder: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const page = await listing.contacts({
+        userId: users.caller,
+        limit: 1,
+        cursor,
+      });
+      zoneOrder.push(...page.items.map((row) => row.zoneId));
+      cursor = page.nextCursor ?? undefined;
+      pages += 1;
+    } while (cursor && pages < 10);
+
+    expect(zoneOrder).toHaveLength(4);
+    // Contiguous: once a group's run ends, it never appears again.
+    const runs = zoneOrder.filter((zoneId, at) => zoneOrder[at - 1] !== zoneId);
+    expect(runs).toHaveLength(new Set(zoneOrder).size);
   });
 
   it('starts from the first page for a cursor that names no membership', async () => {

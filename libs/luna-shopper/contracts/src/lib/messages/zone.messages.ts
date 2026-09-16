@@ -290,10 +290,12 @@ export interface ContactsRequest {
  * rows, one per group, each under the name that group knows them by, because
  * that is the name the caller knows them by there.
  *
- * Neither grouped nor ordered for display, by decision: nothing caps the members
- * of a group or the groups one person joins, so a page is a fixed number of rows
- * however large one group is. A client that draws people by group groups these
- * by `zoneId` with the group names it already holds, and sorts them itself.
+ * Paged by membership, because nothing caps the members of a group or the groups
+ * one person joins, so a page is a fixed number of rows however large one group
+ * is. **Ordered by group**, so every member of one group arrives before any
+ * member of the next and a client can draw each page as it lands. The rows carry
+ * no group name: a client names each `zoneId` with the group names it already
+ * holds.
  */
 export interface ContactView {
   userId: string;
