@@ -1,6 +1,9 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  inject,
+  Injector,
   input,
   output,
 } from '@angular/core';
@@ -33,9 +36,14 @@ let nextPickerId = 0;
  * A native checkbox flips itself before `change` fires, and `[checked]` only writes
  * when its bound value moves. So a tick the container refuses, or a save that fails,
  * would leave a box ticked over a model that says otherwise, and nothing would put it
- * back. Each change writes the box back to what `selected` says **before** emitting,
- * and the container's answer moves it from there through the binding. Optimism is the
- * container's to add, by adding the person to `selected` while the save is out.
+ * back. So after the render that follows each change, the box is set to what `selected`
+ * says. A tick the container takes has moved `selected` by then and the box stays put.
+ * A refused tick returns. Optimism is the container's to add, by adding the person to
+ * `selected` while the save is out.
+ *
+ * **After the render, not before the emit.** Writing the box back first made every
+ * accepted tick draw unticked for the one frame before change detection caught up,
+ * which a browser shows as a flicker and a spec calling `detectChanges` never sees.
  */
 @Component({
   selector: 'lib-people-picker',
@@ -64,17 +72,23 @@ export class PeoplePicker {
 
   protected readonly idPrefix = `people-picker-${nextPickerId++}`;
 
+  private readonly _injector = inject(Injector);
+
   protected onChange(userId: string, event: Event): void {
     const box = event.target as HTMLInputElement;
-    const wanted = box.checked;
 
-    // Back to the model first. See the class docs: the binding is what moves it on.
-    box.checked = this.selected().has(userId);
+    // To the model once the container's answer has rendered. See the class docs.
+    afterNextRender(
+      () => {
+        box.checked = this.selected().has(userId);
+      },
+      { injector: this._injector }
+    );
 
     if (this.busy().has(userId) || this.disabled()) {
       return;
     }
 
-    this.toggled.emit({ userId, selected: wanted });
+    this.toggled.emit({ userId, selected: box.checked });
   }
 }

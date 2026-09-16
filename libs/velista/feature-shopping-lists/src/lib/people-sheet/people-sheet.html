@@ -9,7 +9,12 @@
       title and takes focus when the pane opens, so a screen reader reads what is
       being asked before anything else.
     -->
-    <h2 #leaveQuestion class="title" id="people-title" tabindex="-1">
+    <h2
+      #leaveQuestion
+      class="title leave-question"
+      id="people-title"
+      tabindex="-1"
+    >
       {{ 'basket.people.leaveQuestion' | rokuT: { name: basketName() } }}
     </h2>
 
@@ -69,6 +74,13 @@
       }
     </dl>
 
+    <!-- Only on the reader's own row, and only for a registered member (0085). -->
+    @if (offersLeave()) {
+      <button (click)="askLeave()" class="destructive" type="button">
+        {{ 'basket.people.leave' | rokuT }}
+      </button>
+    }
+
     <!--
       Removing one participant touches nobody else, and their next request is
       refused with no cache to wait out. Only the owner may, and not on
@@ -76,12 +88,6 @@
       so an owner who removed their own row would be locking themselves out of a
       basket nobody else can share.
     -->
-    @if (offersLeave()) {
-      <button (click)="askLeave()" class="destructive" type="button">
-        {{ 'basket.people.leave' | rokuT }}
-      </button>
-    }
-
     @if (isOwner() && person.kind !== 'OWNER') {
       <button
         (click)="remove(person.id)"

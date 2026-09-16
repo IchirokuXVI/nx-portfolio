@@ -47,8 +47,9 @@
   cursor: pointer;
 
   // The ring goes on the label, around the whole row, because the box inside it is
-  // the real control.
-  &:focus-within {
+  // the real control. Keyboard focus only: a tap focuses the box too, and a ring
+  // drawn after every tap reads as two stray lines across the sheet.
+  &:has(.control:focus-visible) {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }

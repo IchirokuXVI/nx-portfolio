@@ -167,3 +167,8 @@
   font-size: var(--app-text-sm);
   color: var(--app-status-danger-fg);
 }
+
+// The question stands apart from the two answers under it.
+.leave-question {
+  margin-block-end: var(--app-space-5);
+}
