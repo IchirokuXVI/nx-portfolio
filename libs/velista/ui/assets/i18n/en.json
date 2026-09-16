@@ -1280,7 +1280,22 @@
       "close": "Close",
       "reverted": "Taken back"
     },
+    "rename": {
+      "label": "Name",
+      "save": "Save",
+      "saved": "Saved",
+      "mergeTitle": "These already have a line called \"{{name}}\"",
+      "mergeExplain": "Merging makes each of them one line, with the amounts added together.",
+      "mergeAsks": "asks for {{quantity}}",
+      "mergeToGet": "{{quantity}} to get",
+      "mergeBasketRow": "This basket",
+      "merge": "Merge",
+      "keepEditing": "Keep editing"
+    },
     "error": {
+      "mergeNeedsApproval": "In {{list}}, that name belongs to an approved line, and this one is not approved yet.",
+      "mergeTooManyProducts": "In {{list}}, together they have more than {{max}} products.",
+      "renameForbidden": "You can no longer change this line's name.",
       "alreadyFinished": "Somebody already finished this line",
       "accessChanged": "Your access to one of the lists behind this line has changed",
       "ownerOnly": "Only whoever made this list can do that",

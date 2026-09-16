@@ -49,7 +49,9 @@ export type BasketOperation =
    * purchase or takes one back. A conflict on it is somebody else finishing the line,
    * which is the settle's sentence and not the generic one.
    */
-  | 'basket.originSettled';
+  | 'basket.originSettled'
+  /** Renaming a line, and the zone lines it came from (velista 0084). */
+  | 'basket.rename';
 
 /** The message any failure falls back to, including one with no code at all. */
 const GENERIC = 'basket.error.failed';
@@ -152,6 +154,10 @@ export function basketErrorKey(
           // generated. The line is still on the screen and still readable, so this
           // says what changed rather than taking the basket away.
           return 'basket.error.accessChanged';
+        case 'basket.rename':
+          // The server asks who may rename per request, against every list behind the
+          // line, so a field drawn from the last basket read can be one write stale.
+          return 'basket.error.renameForbidden';
         case 'basket.share':
         case 'basket.people':
           // The one thing that stays the owner's, even for a registered participant
@@ -166,6 +172,24 @@ export function basketErrorKey(
           return GENERIC;
       }
 
+    case 'line_merge_needs_approval':
+      // A pending line renamed onto an approved one on some list (backend 0112). The
+      // list is named when the refusal says which; backend 0113 puts that name only in
+      // the server's own sentence today, so the unnamed zone sentence stands in.
+      return listNameOf(error) === null
+        ? 'list.error.mergeNeedsApproval'
+        : 'basket.error.mergeNeedsApproval';
+
+    case 'line_merge_too_many_products':
+      // Both sentences interpolate the bound, so without one this is the generic
+      // failure rather than a sentence with a hole in it.
+      if (maxOf(error) === null) {
+        return GENERIC;
+      }
+      return listNameOf(error) === null
+        ? 'list.error.mergeTooManyProducts'
+        : 'basket.error.mergeTooManyProducts';
+
     case 'rate_limited':
       // A run of quick taps through an aisle hitting a bucket. Nothing is wrong and
       // nothing is lost, so the sentence says when to try rather than what broke.
@@ -176,6 +200,35 @@ export function basketErrorKey(
       // gets the generic sentence with the correlation id beside it.
       return GENERIC;
   }
+}
+
+/**
+ * What a refusal's sentence interpolates: the list it names and the product bound.
+ *
+ * Read from `details`, the only machine readable half of a refusal. Absent keys stay
+ * absent, and {@link basketErrorKey} only picks a sentence whose arguments are here.
+ */
+export function basketErrorArgs(
+  error: unknown
+): Readonly<Record<string, unknown>> {
+  const list = listNameOf(error);
+  const max = maxOf(error);
+  return {
+    ...(list === null ? {} : { list }),
+    ...(max === null ? {} : { max }),
+  };
+}
+
+function listNameOf(error: unknown): string | null {
+  const name =
+    error instanceof GatewayError ? error.details?.['listName'] : undefined;
+  return typeof name === 'string' && name !== '' ? name : null;
+}
+
+function maxOf(error: unknown): number | null {
+  const max =
+    error instanceof GatewayError ? error.details?.['max'] : undefined;
+  return typeof max === 'number' && Number.isFinite(max) ? max : null;
 }
 
 /**

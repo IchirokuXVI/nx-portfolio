@@ -19,6 +19,8 @@ import {
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketProduct,
+  type BasketRenameRequest,
+  type BasketRenameResult,
   type BasketSettleRequest,
   type BasketSettleResult,
   type BasketShareLink,
@@ -213,6 +215,15 @@ export class BasketStore {
           // nothing at all for a line the basket does not hold, so an append that
           // arrived as `lineUpdated` would be silently dropped.
           this.append(event.line);
+          return;
+
+        case 'generatedList.lineRemoved':
+          // A rename merged this line into another one (backend `0113`, section 6).
+          // The survivor arrives beside it as `lineUpdated`, and the server sends
+          // this first, so the basket never draws two lines of one name.
+          if (event.generatedListId === this._id) {
+            this.drop(event.lineId);
+          }
           return;
 
         case 'generatedList.participantJoined':
@@ -730,6 +741,34 @@ export class BasketStore {
       );
       this._lastAdded.set(null);
 
+      return result;
+    });
+  }
+
+  /**
+   * Rename a line, and the zone lines it came from (velista `0084`, backend `0113`).
+   *
+   * **From the answer and never optimistically**, for {@link addLine}'s reason, and
+   * for one of its own: a rename can merge, and a row renamed in place that the
+   * server then folds into another would draw two rows of one name for a moment.
+   *
+   * The absorbed line leaves first, then the survivor is merged by id. The survivor
+   * is a line this basket already holds, whichever of the two it is, so `apply`
+   * reaches it.
+   *
+   * Null on failure, and the store's {@link error} holds the refusal: a
+   * `line_merge_required` there is the question the sheet asks next.
+   */
+  async renameLine(
+    lineId: string,
+    body: BasketRenameRequest
+  ): Promise<BasketRenameResult | null> {
+    return this._write(lineId, async (id) => {
+      const result = await this._service.renameLine(id, lineId, body);
+      if (result.absorbedLineId !== null) {
+        this.drop(result.absorbedLineId);
+      }
+      this.apply(result.line);
       return result;
     });
   }

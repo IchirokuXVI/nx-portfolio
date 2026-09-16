@@ -196,3 +196,78 @@ describe('BasketApi.join', () => {
     await done;
   });
 });
+
+/**
+ * **A rename asks before it merges** (velista `0084`). The first request carries no
+ * `confirmMerge` at all, and only the Merge button's request carries `true`.
+ */
+describe('BasketApi.renameLine', () => {
+  let api: BasketApi;
+  let httpMock: HttpTestingController;
+
+  const LINE_VIEW = {
+    id: 'line-1',
+    content: 'Leche entera',
+    quantity: 3,
+    settledQuantity: 0,
+    itemId: null,
+    options: [],
+    position: 0,
+  };
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(withInterceptors([gatewayInterceptor])),
+        provideHttpClientTesting(),
+        provideFakeBrowserFacade(new Map<string, string>()),
+        {
+          provide: APP_API_CONFIG,
+          useValue: {
+            gatewayBaseUrl: GATEWAY,
+            realtimeBaseUrl: 'https://realtime.example',
+          },
+        },
+        { provide: RokuTranslatorService, useValue: { getLocale: () => 'en' } },
+        { provide: APP_VERSION, useValue: '1.4.0' },
+        { provide: AppUpdates, useValue: { checkNow: jest.fn() } },
+        ...VELISTA_DATA_ACCESS_PROVIDERS,
+        BasketApi,
+      ],
+    });
+
+    api = TestBed.inject(BasketApi);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  const url = `${GATEWAY}/v1/generated-lists/${BASKET}/basket/lines/line-1`;
+
+  it('patches the basket route and leaves confirmMerge off the first request', async () => {
+    const done = api.renameLine(BASKET, 'line-1', { content: 'Leche entera' });
+    const req = httpMock.expectOne(url);
+
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ content: 'Leche entera' });
+    req.flush({ line: LINE_VIEW });
+
+    expect((await done).absorbedLineId).toBeNull();
+  });
+
+  it('sends confirmMerge only when it is true, and reads the absorbed line', async () => {
+    const done = api.renameLine(BASKET, 'line-1', {
+      content: 'Leche entera',
+      confirmMerge: true,
+    });
+    const req = httpMock.expectOne(url);
+
+    expect(req.request.body).toEqual({
+      content: 'Leche entera',
+      confirmMerge: true,
+    });
+    req.flush({ line: LINE_VIEW, absorbedLineId: 'line-2' });
+
+    expect((await done).absorbedLineId).toBe('line-2');
+  });
+});

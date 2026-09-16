@@ -340,6 +340,19 @@ export function toRealtimeEvent(
         : { type: name, generatedListId: addedIn, line: added };
     }
 
+    case 'generatedList.lineRemoved': {
+      // Both ids are required: a removal that cannot say which line would remove
+      // nothing, and one that cannot say which basket could remove the wrong one.
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const removedFrom = str(payload['generatedListId']);
+      const removed = str(payload['lineId']);
+      return removedFrom === null || removed === null
+        ? null
+        : { type: name, generatedListId: removedFrom, lineId: removed };
+    }
+
     case 'generatedList.participantJoined':
     case 'generatedList.participantLeft': {
       // The bare participant view, with no basket id on it, and it needs none: it
