@@ -1,0 +1,121 @@
+<lib-sheet-shell
+  (dismiss)="close()"
+  [hasFooter]="true"
+  labelledBy="list-filter-title"
+>
+  <!--
+    Reset sits beside the title, before the first group in the tab order, because it
+    is not the counterweight to a commit: every control here has already applied.
+  -->
+  <div class="head">
+    <h2 class="title" id="list-filter-title">
+      {{ 'basket.view.title' | rokuT }}
+    </h2>
+    <button (click)="reset()" class="reset" type="button">
+      {{ 'list.view.reset' | rokuT }}
+    </button>
+  </div>
+
+  <!-- Real radios in real fieldsets, so a screen reader hears the legend first. -->
+  <fieldset class="group">
+    <legend class="legend">{{ 'list.view.order.legend' | rokuT }}</legend>
+
+    <label [class.picked]="order() === 'list'" class="choice">
+      <input
+        (change)="setOrder('list')"
+        [checked]="order() === 'list'"
+        class="control"
+        name="list-order"
+        type="radio"
+        value="list"
+      />
+      <span class="choice-title">{{ 'list.view.order.list' | rokuT }}</span>
+    </label>
+
+    <label [class.picked]="order() === 'alpha'" class="choice">
+      <input
+        (change)="setOrder('alpha')"
+        [checked]="order() === 'alpha'"
+        class="control"
+        name="list-order"
+        type="radio"
+        value="alpha"
+      />
+      <span class="choice-title">{{ 'list.view.order.alpha' | rokuT }}</span>
+    </label>
+  </fieldset>
+
+  <fieldset class="group">
+    <legend class="legend">{{ 'list.view.view' | rokuT }}</legend>
+
+    <label [class.picked]="view() === 'all'" class="choice">
+      <input
+        (change)="setView('all')"
+        [checked]="view() === 'all'"
+        class="control"
+        name="list-view"
+        type="radio"
+        value="all"
+      />
+      <span class="choice-title">{{ 'list.view.all' | rokuT }}</span>
+    </label>
+
+    <label [class.picked]="view() === 'category'" class="choice">
+      <input
+        (change)="setView('category')"
+        [checked]="view() === 'category'"
+        class="control"
+        name="list-view"
+        type="radio"
+        value="category"
+      />
+      <span class="choice-title">{{ 'list.view.oneCategory' | rokuT }}</span>
+    </label>
+  </fieldset>
+
+  <!--
+    The categories present on this list, in catalog order, with No category last and
+    only when a line has none. Nothing on the page changes until one is picked
+    (section 4). A radiogroup with a visible legend (section 10), and the count is how
+    many lines each one would show.
+  -->
+  @if (view() === 'category') {
+    <fieldset
+      aria-labelledby="list-filter-categories"
+      class="group categories"
+      role="radiogroup"
+    >
+      <legend class="legend" id="list-filter-categories">
+        {{ 'list.view.oneCategory' | rokuT }}
+      </legend>
+
+      @for (row of categories(); track row.category) {
+        <label [class.picked]="category() === row.category" class="choice">
+          <input
+            (change)="pickCategory(row.category)"
+            [checked]="category() === row.category"
+            [value]="row.category"
+            class="control"
+            name="list-category"
+            type="radio"
+          />
+          <span class="choice-title">
+            @if (row.category === noCategory) {
+              {{ 'list.view.noCategory' | rokuT }}
+            } @else {
+              {{ 'basket.category.' + row.category | rokuT }}
+            }
+          </span>
+          <span class="choice-count">{{ row.lines }}</span>
+        </label>
+      }
+    </fieldset>
+  }
+
+  <!-- A way out rather than a commit, saying how many lines are behind it. -->
+  <div class="footer" sheetFooter>
+    <button (click)="close()" class="confirm" type="button">
+      {{ 'basket.view.show' | rokuT: { count: visibleCount() } }}
+    </button>
+  </div>
+</lib-sheet-shell>

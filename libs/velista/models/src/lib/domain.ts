@@ -4,6 +4,7 @@ import type {
   ListPermission,
   MembershipStatus,
   PriceSourceKind,
+  ProductCategory,
   SettlementOutcome,
   UnitOfMeasure,
   UserKind,
@@ -455,6 +456,13 @@ export interface CatalogItem {
   /** What {@link CatalogItem.size} is counted in. Never null; see the fallback. */
   readonly unit: UnitOfMeasure;
   readonly productGroupId: string | null;
+  /**
+   * The aisle the catalog files it under (velista `0082`, section 3).
+   *
+   * Read so the zone list page can show one category at a time. Never null: a value
+   * this build has never heard of reads as `OTHER`, the rule the basket mapper uses.
+   */
+  readonly category: ProductCategory;
   /**
    * The cheapest price this product has at the scopes the reader was resolved to,
    * or null where nothing has been harvested for it.

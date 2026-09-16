@@ -11,6 +11,7 @@ import {
   AssistantMemory,
   CATALOG_SERVICE,
   CatalogMemory,
+  fakeItemNames,
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
@@ -18,6 +19,8 @@ import {
   fakeShoppingProfileStore,
   fakeZoneStore,
   GatewayError,
+  ListViewStore,
+  provideFakeItemNames,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
@@ -28,12 +31,14 @@ import {
   REALTIME_CLIENT,
   RealtimeMemory,
   type AssistantServiceI,
+  type FakeItemNames,
   type FakeLineStore,
   type FakeListStore,
   type FakePresenceOptions,
   type FakeShoppingProfileStore,
 } from '@portfolio/velista/data-access';
 import type {
+  CatalogItem,
   Line,
   LineRowVm,
   ListPermission,
@@ -48,7 +53,12 @@ import {
   provideVelistaTesting,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { LineComposer, LineList, ListHeader } from '@portfolio/velista/ui';
+import {
+  LineComposer,
+  LineList,
+  ListHeader,
+  ListTools,
+} from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { ListPage } from './list-page';
 
@@ -118,6 +128,7 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
     listId: LIST_ID,
     content: 'Sourdough loaf',
     quantity: 1,
+    itemIds: [],
     itemId: null,
     position: 1,
     approvalStatus: 'APPROVED',
@@ -161,6 +172,8 @@ interface Options {
   readonly members?: readonly Membership[];
   /** `?line=`, which a link in an assistant reply carries (plan 0032, section 8). */
   readonly line?: string;
+  /** The products the catalog can name, for the category view (velista `0082`). */
+  readonly items?: readonly CatalogItem[];
 }
 
 async function render(options: Options = {}): Promise<{
@@ -172,6 +185,8 @@ async function render(options: Options = {}): Promise<{
   router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
   tone: { play: jest.Mock };
   profiles: FakeShoppingProfileStore;
+  itemNames: FakeItemNames;
+  view: ListViewStore;
 }> {
   TestBed.resetTestingModule();
 
@@ -193,6 +208,7 @@ async function render(options: Options = {}): Promise<{
     complete: options.complete ?? true,
   });
   const realtime = new RealtimeMemory();
+  const itemNames = fakeItemNames({ items: options.items ?? [] });
   const profiles = fakeShoppingProfileStore();
   const storage = options.storage ?? new Map<string, string>();
   const router = {
@@ -208,6 +224,10 @@ async function render(options: Options = {}): Promise<{
       provideFakeZoneStore(zones),
       provideFakeListStore(lists),
       provideFakeLineStore(lines),
+      // What the route provides beside the page (velista `0082`), real, over the
+      // fakes above, so a spec asserts what the page draws of a real view.
+      ListViewStore,
+      provideFakeItemNames(itemNames),
       provideFakeMemberNames(
         fakeMemberNames(
           { 'user-toni': 'Toni', ...options.names },
@@ -246,7 +266,18 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, lines, lists, realtime, storage, router, tone, profiles };
+  return {
+    fixture,
+    lines,
+    lists,
+    realtime,
+    storage,
+    router,
+    tone,
+    profiles,
+    itemNames,
+    view: TestBed.inject(ListViewStore),
+  };
 }
 
 /**
@@ -1070,3 +1101,216 @@ function rows(fixture: ComponentFixture<ListPage>) {
     .query(By.directive(LineList))
     .componentInstance.lines() as readonly LineRowVm[];
 }
+
+/**
+ * Velista `0082`: the zone list can be searched, put in A to Z order, and narrowed to
+ * one category at a time.
+ */
+describe('ListPage: searching and viewing one category', () => {
+  function product(id: string, category: CatalogItem['category']): CatalogItem {
+    return {
+      id,
+      name: { es: id, en: id },
+      brand: null,
+      size: null,
+      unit: 'UNIT',
+      productGroupId: null,
+      category,
+      offer: null,
+    };
+  }
+
+  const ITEMS = [product('milk', 'DAIRY'), product('carrot', 'PRODUCE')];
+
+  const LINES = [
+    line('ln-milk', { content: 'Leche', position: 1, itemIds: ['milk'] }),
+    line('ln-carrot', {
+      content: 'Zanahorias',
+      position: 2,
+      itemIds: ['carrot'],
+    }),
+    line('ln-bags', { content: 'Bolsas', position: 3 }),
+  ];
+
+  function tools(fixture: ComponentFixture<ListPage>) {
+    const found = fixture.debugElement.query(By.directive(ListTools));
+    return found === null ? null : (found.componentInstance as ListTools);
+  }
+
+  function headerInstance(fixture: ComponentFixture<ListPage>) {
+    return fixture.debugElement.query(By.directive(ListHeader))
+      .componentInstance as ListHeader;
+  }
+
+  it('draws the tools row above the lines, with no chip row, and not in reorder mode', async () => {
+    const { fixture } = await render({ lines: LINES, items: ITEMS });
+
+    expect(tools(fixture)).not.toBeNull();
+    expect(query(fixture, 'lib-chip-row')).toBeNull();
+
+    fixture.componentInstance.startReorder();
+    fixture.detectChanges();
+
+    expect(tools(fixture)).toBeNull();
+  });
+
+  it('asks for the products of the loaded lines, and for new ones as lines arrive', async () => {
+    const { fixture, lines, itemNames } = await render({
+      lines: LINES,
+      items: ITEMS,
+    });
+
+    expect(itemNames.asked.flat()).toEqual(
+      expect.arrayContaining(['milk', 'carrot'])
+    );
+
+    // A line arriving, which is the same signal a socket event writes.
+    await lines.addLine(LIST_ID, 'Pan', 1, ME, {}, ['bread']);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(itemNames.asked[itemNames.asked.length - 1]).toContain('bread');
+  });
+
+  it('counts A to Z and a picked category on the filter badge', async () => {
+    const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+
+    view.setOrder('alpha');
+    fixture.detectChanges();
+    expect(tools(fixture)?.activeCount()).toBe(1);
+
+    view.setView('category');
+    fixture.detectChanges();
+    expect(tools(fixture)?.activeCount()).toBe(1);
+
+    view.pickCategory('DAIRY');
+    fixture.detectChanges();
+    expect(tools(fixture)?.activeCount()).toBe(2);
+  });
+
+  it('draws only the picked category, under an h2 naming it', async () => {
+    const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+
+    view.pickCategory('PRODUCE');
+    fixture.detectChanges();
+
+    expect(rows(fixture).map((row) => row.id)).toEqual(['ln-carrot']);
+    const heading = query(fixture, 'h2.category-heading');
+    expect(heading?.textContent?.trim()).toBe('basket.category.PRODUCE');
+  });
+
+  it('puts a line with no products under No category', async () => {
+    const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+
+    view.pickCategory('NONE');
+    fixture.detectChanges();
+
+    expect(rows(fixture).map((row) => row.id)).toEqual(['ln-bags']);
+    expect(query(fixture, 'h2.category-heading')?.textContent?.trim()).toBe(
+      'list.view.noCategory'
+    );
+  });
+
+  it('orders A to Z and hands the search down for the mark', async () => {
+    const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+
+    view.setOrder('alpha');
+    view.search('LECHE');
+    fixture.detectChanges();
+
+    expect(rows(fixture).map((row) => row.id)).toEqual(['ln-milk']);
+    expect(
+      fixture.debugElement
+        .query(By.directive(LineList))
+        .componentInstance.highlight()
+    ).toBe('leche');
+  });
+
+  it('says so and offers Reset when the view leaves nothing to draw', async () => {
+    const { fixture, view } = await render({
+      lines: [LINES[0]],
+      items: ITEMS,
+    });
+
+    view.pickCategory('PRODUCE');
+    fixture.detectChanges();
+
+    expect(query(fixture, 'lib-line-list')).toBeNull();
+    expect(query(fixture, '.state-title')?.textContent?.trim()).toBe(
+      'list.view.none'
+    );
+
+    (query(fixture, '.state-action') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(rows(fixture).map((row) => row.id)).toEqual(['ln-milk']);
+  });
+
+  describe('reorder waits for the list order (section 7)', () => {
+    it('holds the action under A to Z, a picked category, and a search', async () => {
+      const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+      expect(headerInstance(fixture).reorderHeld()).toBe(false);
+
+      view.setOrder('alpha');
+      fixture.detectChanges();
+      expect(headerInstance(fixture).reorderHeld()).toBe(true);
+      view.setOrder('list');
+
+      view.pickCategory('DAIRY');
+      fixture.detectChanges();
+      expect(headerInstance(fixture).reorderHeld()).toBe(true);
+      view.reset();
+
+      view.search('leche');
+      fixture.detectChanges();
+      expect(headerInstance(fixture).reorderHeld()).toBe(true);
+
+      view.search('');
+      fixture.detectChanges();
+      expect(headerInstance(fixture).reorderHeld()).toBe(false);
+    });
+
+    it('moves nothing when the held action is pressed, and says why', async () => {
+      const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+      view.setOrder('alpha');
+      fixture.detectChanges();
+
+      const button = Array.from(
+        fixture.nativeElement.querySelectorAll('.header-action')
+      ).find((element) =>
+        (element as HTMLElement).textContent?.includes('list.reorder.enter')
+      ) as HTMLButtonElement;
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+
+      button.click();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.reordering()).toBe(false);
+      expect(query(fixture, '.held-message')?.textContent).toContain(
+        'list.reorder.unavailable'
+      );
+    });
+  });
+
+  it('opens the filter sheet under the sheet marker', async () => {
+    const { fixture, router } = await render({ lines: LINES, items: ITEMS });
+
+    fixture.componentInstance.openFilter();
+
+    expect(router.navigate).toHaveBeenCalledWith(
+      ['sheet', 'filter'],
+      expect.anything()
+    );
+  });
+
+  it('gives the view store back when the page is left', async () => {
+    const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+    view.search('leche');
+    view.pickCategory('DAIRY');
+
+    fixture.destroy();
+
+    expect(view.query()).toBe('');
+    expect(view.picked()).toBeNull();
+  });
+});

@@ -9,7 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { LineRowVm } from '@portfolio/velista/models';
+import { basketMatchRange, type LineRowVm } from '@portfolio/velista/models';
 import { LineRow, type LineRowAction } from './line-row';
 
 /** Where a row is, at the moment a drag starts. Read once; the drag never remeasures. */
@@ -91,6 +91,7 @@ interface RowBand {
             [canMoveDown]="!last"
             [canMoveUp]="!first"
             [line]="line"
+            [match]="matchOf(line)"
             [reordering]="reordering()"
           />
         </li>
@@ -125,6 +126,18 @@ export class LineList {
    * scroll to, which is a fact about the DOM that only this template can state.
    */
   readonly markedId = input<string | null>(null);
+
+  /**
+   * The search, folded, or the empty string (velista `0082`, section 6).
+   *
+   * Each row gets the range of its first match in its own name, worked out here with
+   * the basket's `basketMatchRange` so both screens paint the same fragment.
+   */
+  readonly highlight = input('');
+
+  protected matchOf(line: LineRowVm): { start: number; end: number } | null {
+    return basketMatchRange(line.content, this.highlight());
+  }
 
   /** A row was tapped, which opens its detail sheet. */
   readonly opened = output<string>();

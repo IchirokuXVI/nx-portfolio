@@ -14,6 +14,8 @@ import {
   POSTAL_CODE_SOURCES,
   PRICE_SOURCE_KIND_FALLBACK,
   PRICE_SOURCE_KINDS,
+  PRODUCT_CATEGORIES,
+  PRODUCT_CATEGORY_FALLBACK,
   SETTLEMENT_OUTCOME_FALLBACK,
   SETTLEMENT_OUTCOMES,
   UNIT_OF_MEASURE_FALLBACK,
@@ -556,6 +558,13 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
     size: nullableNum(raw['unitSize']),
     unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
     productGroupId: nullableStr(raw['productGroupId']),
+    // Read since velista `0082`, so the zone list page can show one category at a
+    // time. The rule the basket mapper already uses for the same wire field.
+    category: oneOf(
+      raw['category'],
+      PRODUCT_CATEGORIES,
+      PRODUCT_CATEGORY_FALLBACK
+    ),
     offer: toProductOffer(raw['bestOffer']),
   };
 }

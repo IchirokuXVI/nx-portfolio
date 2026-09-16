@@ -1,3 +1,5 @@
+> **PR:** [#374](https://github.com/IchirokuXVI/nx-portfolio/pull/374)
+
 # 0082: searching and sorting a zone list
 
 > The basket can be searched, sorted and grouped (`0074` to `0077`). A zone list cannot, and

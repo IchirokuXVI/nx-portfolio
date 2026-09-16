@@ -478,7 +478,21 @@
       "started": "Poniéndolas en orden. No se puede marcar nada",
       "ended": "Has terminado de ponerlas en orden",
       "moveUp": "Subir {{name}}",
-      "moveDown": "Bajar {{name}}"
+      "moveDown": "Bajar {{name}}",
+      "unavailable": "Para reordenar, usa el orden de la lista, todas las líneas y ninguna búsqueda."
+    },
+    "view": {
+      "order": {
+        "legend": "Orden",
+        "list": "Orden de la lista",
+        "alpha": "De la A a la Z"
+      },
+      "view": "Ver",
+      "all": "Todas las líneas",
+      "oneCategory": "Una categoría",
+      "noCategory": "Sin categoría",
+      "reset": "Restablecer",
+      "none": "Ninguna línea coincide."
     },
     "edit": {
       "title": "Cambiar esta línea",

@@ -75,6 +75,7 @@
         [canReorder]="loaded()?.canReorder ?? false"
         [hasMenu]="(loaded()?.abilities?.canManage ?? false) && !reordering()"
         [header]="list"
+        [reorderHeld]="reorderHeld()"
       />
     }
   }
@@ -110,18 +111,71 @@
         <p class="state-body">{{ 'list.empty.body' | rokuT }}</p>
       </div>
     } @else {
-      <lib-line-list
-        (act)="act($event)"
-        (dismiss)="dismissNote($event)"
-        (opened)="openLine($event)"
-        (quantityChanged)="changeQuantity($event)"
-        (reorderTo)="moveTo($event)"
-        (retry)="retry($event)"
-        [announcement]="announcement()"
-        [lines]="current.lines"
-        [markedId]="markedLine()"
-        [reordering]="reordering()"
-      />
+      <!--
+        The search and the filter (velista 0082, section 2), the basket's row with no
+        chip row: the filter button's badge says that something is on. Sticky at the
+        top of the scroll, and absent in reorder mode, where the order is the thing
+        being edited.
+      -->
+      @if (!reordering()) {
+        <lib-list-tools
+          (openFilter)="openFilter()"
+          (queryChange)="search($event)"
+          [activeCount]="activeCount()"
+          [query]="searchQuery()"
+          [shown]="view()?.lines?.length ?? 0"
+          [total]="current.lines.length"
+          fieldId="list-search"
+        />
+      }
+
+      @let drawn = view();
+      @if (drawn !== null && drawn.lines.length === 0) {
+        <!--
+          Nothing left to draw (section 5). A search quotes what was typed, because
+          the words are the thing to change, and the composer below stays: the thing
+          somebody looked for is very often the next line. Otherwise the view
+          narrowed it away, and Reset puts the order and the category back.
+        -->
+        <div class="state">
+          @if (searching()) {
+            <p class="state-title">
+              {{ 'basket.search.none' | rokuT: { query: searchQuery() } }}
+            </p>
+            <p class="state-body">{{ 'basket.search.noneHint' | rokuT }}</p>
+          } @else {
+            <p class="state-title">{{ 'list.view.none' | rokuT }}</p>
+          }
+          @if (activeCount() > 0) {
+            <button (click)="resetView()" class="state-action" type="button">
+              {{ 'list.view.reset' | rokuT }}
+            </button>
+          }
+        </div>
+      } @else {
+        <!--
+          One category at a time, under one heading naming it (section 5). An h2, one
+          level below the list's name, so the view is navigable and not only visible
+          (section 10).
+        -->
+        @if (headingKey(); as key) {
+          <h2 class="category-heading">{{ key | rokuT }}</h2>
+        }
+
+        <lib-line-list
+          (act)="act($event)"
+          (dismiss)="dismissNote($event)"
+          (opened)="openLine($event)"
+          (quantityChanged)="changeQuantity($event)"
+          (reorderTo)="moveTo($event)"
+          (retry)="retry($event)"
+          [announcement]="announcement()"
+          [highlight]="highlight()"
+          [lines]="drawn?.lines ?? current.lines"
+          [markedId]="markedLine()"
+          [reordering]="reordering()"
+        />
+      }
     }
 
     @if (reordering()) {

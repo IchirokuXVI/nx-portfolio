@@ -75,6 +75,15 @@ export const LINE_QUANTITY_MAX = 100000;
 export const LINE_ITEM_SET_MAX = 100;
 
 /**
+ * How many product ids one catalog lookup may name: `ITEM_LOOKUP_LIMITS.maxIds` in
+ * the contracts, copied for the reason {@link LINE_ITEM_SET_MAX} gives.
+ *
+ * A zone list of sixty lines can name more products than that, which is why
+ * `ItemNames.ensure` splits its request at this size (velista `0082`, section 3).
+ */
+export const ITEM_LOOKUP_MAX_IDS = 500;
+
+/**
  * How far the thumb travels per unit on the quantity reel (velista plan 0043,
  * section 4).
  *

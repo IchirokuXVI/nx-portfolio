@@ -10,6 +10,7 @@ import {
   BasketSocket,
   BasketStore,
   BasketViewStore,
+  ListViewStore,
 } from '@portfolio/velista/data-access';
 import {
   RENDERS_WHILE_CONNECTING,
@@ -263,6 +264,16 @@ function listSheetRoutes(): Route[] {
           (m) => m.ListSettingsSheet
         ),
     }),
+    sheet({
+      // The order and the category view (velista `0082`, section 4). It sets
+      // `ListViewStore`, which the list route provides, and every change applies at
+      // once, as the basket's filter sheet does.
+      path: 'filter',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-lists').then(
+          (m) => m.ListFilterSheet
+        ),
+    }),
   ];
 }
 
@@ -474,6 +485,11 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-lists').then(
                 (m) => m.ListPage
               ),
+            // What the page is showing of the list (velista `0082`). Here and not on
+            // the component, for `BasketViewStore`'s reason: the filter sheet that
+            // sets it is a child route. `ListPage` resets it from its own teardown,
+            // because a route's injector is never destroyed.
+            providers: [ListViewStore],
             children: [...listSheetRoutes()],
           },
           {

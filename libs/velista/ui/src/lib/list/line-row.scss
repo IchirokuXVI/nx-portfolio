@@ -67,6 +67,15 @@
   white-space: nowrap;
 }
 
+// The searched fragment (velista 0082, section 6), painted as the basket row paints
+// it: the amber quiet action tint, with both halves set because a browser's own
+// `<mark>` is yellow with black text. No padding and no weight, so it takes no room.
+.match {
+  border-radius: var(--app-radius-sm);
+  background: var(--app-action-quiet-bg);
+  color: inherit;
+}
+
 // A settled line: at zero, with a purchase behind it. Muted, and **never struck
 // through**. The strikethrough went with the tick that drew it (plan 0043, section
 // 3.2): there is nothing crossed out about a line saying the household is stocked, and

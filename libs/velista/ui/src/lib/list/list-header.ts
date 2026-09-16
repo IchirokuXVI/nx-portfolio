@@ -2,13 +2,20 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
+  linkedSignal,
   output,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import type { ListHeaderVm } from '@portfolio/velista/models';
 import { OfflineIcon } from '../icons/icons';
 import { ListViewers } from '../presence/list-viewers';
+
+const NO_BREAK_SPACE = String.fromCharCode(0x00a0);
 
 /**
  * The top of the list: what it is called, which group it belongs to, and how far the
@@ -45,8 +52,59 @@ export class ListHeader {
   /** Whether reordering is available right now (rule L4). */
   readonly canReorder = input(false);
 
+  /**
+   * Whether reorder has to wait for the list order (velista `0082`, section 7).
+   *
+   * True while A to Z is on, a category is picked, or a search is active. The action
+   * stays visible and **held**, following `AuthActions`: `aria-disabled` and never
+   * `disabled`, because a disabled button swallows its own click and the sentence
+   * explaining why it will not act could never be triggered by the thing pressed.
+   */
+  readonly reorderHeld = input(false);
+
   readonly openSettings = output<void>();
   readonly startReorder = output<void>();
+
+  /**
+   * How many times the held action was pressed since it was last held.
+   *
+   * Linked to {@link reorderHeld}, so it starts again at zero whenever the hold
+   * changes, and the message goes when all three conditions are off.
+   */
+  private readonly _heldTaps = linkedSignal({
+    source: this.reorderHeld,
+    computation: () => 0,
+  });
+
+  /**
+   * What a held press says, or the empty string.
+   *
+   * The region under the header is polite and always in the document, so a sentence
+   * written into it is announced. A second press writes the same words, which a
+   * screen reader does not announce again, so every other press carries a trailing
+   * no-break space: the text changes, the words do not, and each tap is heard once.
+   */
+  readonly heldMessage = computed(() => {
+    const taps = this._heldTaps();
+    if (!this.reorderHeld() || taps === 0) {
+      return '';
+    }
+    return (
+      this._translator.t('list.reorder.unavailable') +
+      (taps % 2 === 0 ? NO_BREAK_SPACE : '')
+    );
+  });
+
+  private readonly _translator = inject(RokuTranslatorService);
+
+  /** The reorder action: enter the mode, or say why it has to wait. */
+  pressReorder(): void {
+    if (this.reorderHeld()) {
+      this._heldTaps.update((taps) => taps + 1);
+      return;
+    }
+    this.startReorder.emit();
+  }
 
   /**
    * The bar's fill, as a percentage.

@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import type {
   CatalogItem,
   CatalogSuggestion,
+  ProductCategory,
   ProductGroup,
   UnitOfMeasure,
 } from '@portfolio/velista/models';
@@ -25,22 +26,22 @@ import type { CatalogServiceI } from './catalog-service';
  * Hacendado, 6 x 1 L" is a real product name and it is the case a row has to survive.
  */
 const MILK: readonly CatalogItem[] = [
-  item('item-milk-hacendado', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 1, 'LITER', 'group-milk'),
-  item('item-milk-hacendado-half', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 0.5, 'LITER', 'group-milk'),
-  item('item-milk-pascual', 'Leche entera Pascual', 'Whole milk', 'Pascual', 1, 'LITER', 'group-milk'),
-  item('item-milk-semi', 'Leche semidesnatada Hacendado, 6 x 1 L', 'Semi-skimmed milk, 6 x 1 L', 'Hacendado', 6, 'LITER', 'group-milk'),
-  item('item-milk-oat', 'Bebida de avena Oatly', 'Oat drink', 'Oatly', 1, 'LITER', 'group-milk'),
+  item('item-milk-hacendado', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 1, 'LITER', 'group-milk', 'DAIRY'),
+  item('item-milk-hacendado-half', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 0.5, 'LITER', 'group-milk', 'DAIRY'),
+  item('item-milk-pascual', 'Leche entera Pascual', 'Whole milk', 'Pascual', 1, 'LITER', 'group-milk', 'DAIRY'),
+  item('item-milk-semi', 'Leche semidesnatada Hacendado, 6 x 1 L', 'Semi-skimmed milk, 6 x 1 L', 'Hacendado', 6, 'LITER', 'group-milk', 'DAIRY'),
+  item('item-milk-oat', 'Bebida de avena Oatly', 'Oat drink', 'Oatly', 1, 'LITER', 'group-milk', 'DAIRY'),
 ];
 
 const BREAD: readonly CatalogItem[] = [
-  item('item-bread-sourdough', 'Pan de masa madre', 'Sourdough loaf', null, 0.5, 'KILOGRAM', 'group-bread'),
+  item('item-bread-sourdough', 'Pan de masa madre', 'Sourdough loaf', null, 0.5, 'KILOGRAM', 'group-bread', 'BAKERY'),
   // No size at all, which is an ordinary state for a harvested product and the one
   // case the row has to draw nothing for rather than guessing a packet.
-  item('item-bread-sliced', 'Pan de molde integral Bimbo', 'Wholemeal sliced bread', 'Bimbo', null, 'UNIT', 'group-bread'),
+  item('item-bread-sliced', 'Pan de molde integral Bimbo', 'Wholemeal sliced bread', 'Bimbo', null, 'UNIT', 'group-bread', 'BAKERY'),
 ];
 
 const OIL: readonly CatalogItem[] = [
-  item('item-oil-hacendado', 'Aceite de oliva virgen extra', 'Extra virgin olive oil', 'Hacendado', 1, 'LITER', 'group-oil'),
+  item('item-oil-hacendado', 'Aceite de oliva virgen extra', 'Extra virgin olive oil', 'Hacendado', 1, 'LITER', 'group-oil', 'PANTRY'),
 ];
 
 const EGGS: readonly CatalogItem[] = [
@@ -48,8 +49,8 @@ const EGGS: readonly CatalogItem[] = [
   // partner below is the case the size is suppressed for: one of a thing is what
   // every product is, so "1 unit" would appear on half the catalog and tell nobody
   // anything.
-  item('item-eggs-dozen', 'Huevos frescos Hacendado', 'Free range eggs', 'Hacendado', 12, 'UNIT', 'group-eggs'),
-  item('item-eggs-single', 'Huevo de codorniz', 'Quail egg', null, 1, 'UNIT', 'group-eggs'),
+  item('item-eggs-dozen', 'Huevos frescos Hacendado', 'Free range eggs', 'Hacendado', 12, 'UNIT', 'group-eggs', 'DAIRY'),
+  item('item-eggs-single', 'Huevo de codorniz', 'Quail egg', null, 1, 'UNIT', 'group-eggs', 'DAIRY'),
 ];
 
 const GROUPS: readonly ProductGroup[] = [
@@ -162,12 +163,22 @@ function item(
   brand: string | null,
   size: number | null,
   unit: UnitOfMeasure,
-  productGroupId: string
+  productGroupId: string,
+  category: ProductCategory
 ): CatalogItem {
   // No offer, on every row. There is one catalog here and no scopes to price it
   // against, so a number would be invented rather than modelled, and unpriced is
   // the state both clusters are permanently in anyway (velista `0063`, section 3).
-  return { id, name: { es, en }, brand, size, unit, productGroupId, offer: null };
+  return {
+    id,
+    name: { es, en },
+    brand,
+    size,
+    unit,
+    productGroupId,
+    category,
+    offer: null,
+  };
 }
 
 function group(id: string, es: string, en: string): ProductGroup {

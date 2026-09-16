@@ -130,6 +130,33 @@ export class LineRow {
   readonly canMoveUp = input(true);
   readonly canMoveDown = input(true);
 
+  /**
+   * Where a search matched inside the line's own name, or null (velista `0082`,
+   * section 6).
+   *
+   * A range and not the query, so the row stays ignorant of how the search folds. Null
+   * for no search and for a line that matched on a product or a category, where there
+   * is nothing in the name to point at.
+   */
+  readonly match = input<{
+    readonly start: number;
+    readonly end: number;
+  } | null>(null);
+
+  /** The name split around the match, or null to draw it whole. */
+  protected readonly highlighted = computed(() => {
+    const range = this.match();
+    const content = this.line().content;
+    if (range === null || range.end > content.length) {
+      return null;
+    }
+    return {
+      before: content.slice(0, range.start),
+      match: content.slice(range.start, range.end),
+      after: content.slice(range.end),
+    };
+  });
+
   /** A tap on the row, which opens the detail sheet. */
   readonly opened = output<string>();
 
