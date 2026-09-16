@@ -87,9 +87,9 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     for (const scope of scopes) {
       report.scope({
         key: scope.externalKey,
-        // A warehouse is not a postal code and not a shop: it is the group of
-        // shops the chain prices together and keys itself.
-        kind: PriceScopeKind.REGION,
+        // A warehouse is a local area (plan 0116, section 3): a small group of
+        // shops the chain prices together and keys itself, below a chain region.
+        kind: PriceScopeKind.LOCAL_AREA,
         name: null,
       });
     }

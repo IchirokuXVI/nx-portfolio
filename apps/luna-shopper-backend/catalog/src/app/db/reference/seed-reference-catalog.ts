@@ -4,7 +4,10 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import { In } from 'typeorm';
-import { recomputeEffectivePrices } from '../../catalog/effective-price.service';
+import {
+  inheritLessSpecificPrices,
+  recomputeEffectivePrices,
+} from '../../catalog/effective-price.service';
 import { writeItemPrices } from '../../catalog/item-price-writer';
 import {
   Item,
@@ -115,7 +118,10 @@ export async function seedReferenceCatalog(
             id: scId,
             supermarketId: sId,
             kind: store.scopeKind,
-            externalKey: store.slug,
+            // A STORE scope is keyed by the shop it prices (plan 0116, section
+            // 5), which is how the catalog recognises a shop's own scope. It was
+            // the slug, and this upsert by id rewrites the key in place.
+            externalKey: locationId(store.slug),
             label: store.scopeLabel,
             priority: DEFAULT_SCOPE_PRIORITY[store.scopeKind],
           },
@@ -189,7 +195,13 @@ async function seedMercadona(
   });
 
   let scopeId: string;
+  let storeScopeId: string | null = null;
   if (chain) {
+    // Every deploy after the first lands here, because the first one created
+    // the chain. So this branch, and not the upsert below, is what moves the
+    // seed's own rows to plan 0116's shape in a running cluster.
+    storeScopeId = await moveSeededMercadona(m);
+
     // A harvest created it, with warehouse scopes of its own. Its default is
     // the scope to price against; the earliest is the fallback for a database
     // whose harvest predates that column being set.
@@ -224,17 +236,20 @@ async function seedMercadona(
         {
           id: scopeId,
           supermarketId: id,
-          // The warehouse the Córdoba receipts were priced by. A REGION
-          // scope rather than a STORE one even here, because that is how the
-          // chain actually prices and a later harvest has to land on the same
-          // shape rather than beside it.
-          kind: 'REGION' as PriceScope['kind'],
+          // The warehouse the Córdoba receipts were priced by. A LOCAL_AREA
+          // scope, because that is how the chain actually prices and a later
+          // harvest has to land on the same shape rather than beside it.
+          //
+          // It was REGION at 300 until plan 0116 (section 4). This upsert by
+          // id is what moves the one warehouse scope each cluster holds, which
+          // is why that plan has no data migration.
+          kind: 'LOCAL_AREA' as PriceScope['kind'],
           externalKey: '4661',
           label: {
             en: 'Córdoba — warehouse 4661',
             es: 'Córdoba — almacén 4661',
           },
-          priority: DEFAULT_SCOPE_PRIORITY.REGION,
+          priority: DEFAULT_SCOPE_PRIORITY.LOCAL_AREA,
         },
       ],
       ['id']
@@ -257,6 +272,10 @@ async function seedMercadona(
       ['id']
     );
     await seedStack(m, locationId('mercadona'), scopeId);
+    // Every shop also prices itself (plan 0116, section 5): the seed names the
+    // warehouse and the shop holds its own STORE scope beside it.
+    storeScopeId = await seedStoreScope(m, id, locationId('mercadona'));
+    await seedStack(m, locationId('mercadona'), storeScopeId);
     report.stores++;
   }
 
@@ -302,6 +321,16 @@ async function seedMercadona(
   }
 
   await writeItems(m, 'mercadona', scopeId, mine, report);
+
+  if (storeScopeId) {
+    // The shop's own scope holds no price of its own, so it answers with what
+    // it inherits from the warehouse, which was only just written. This is the
+    // recompute a stack write through the catalog does.
+    await inheritLessSpecificPrices(
+      m,
+      await m.getRepository(PriceScope).findOneByOrFail({ id: storeScopeId })
+    );
+  }
 }
 
 /**
@@ -383,6 +412,93 @@ async function writeItems(
  * the pair is the table's primary key, so a second run conflicts on it and
  * does nothing rather than failing the deploy.
  */
+/**
+ * The seed's own warehouse and shop, moved to plan 0116's shape on a database
+ * where Mercadona already exists (sections 4 and 5).
+ *
+ * The warehouse row is found by its derived id, so a scope a harvest created is
+ * never touched. It becomes `LOCAL_AREA` at 200 unless the chain already holds
+ * a `LOCAL_AREA 4661` beside it, which the unique index would refuse: that is
+ * a database a harvest reached first, and an operator merges the two by hand.
+ *
+ * Renumbering a priority breaks plan 0105's rule on purpose. The seed's shop
+ * holds no scope between `LOCAL_AREA` and `REGION`, so the move re-ranks
+ * nothing.
+ *
+ * Answers the seeded shop's store scope, or null when that shop does not exist.
+ */
+async function moveSeededMercadona(m: EntityManager): Promise<string | null> {
+  const scopes = m.getRepository(PriceScope);
+  const warehouse = await scopes.findOneBy({ id: priceScopeId('mercadona') });
+  if (warehouse && warehouse.kind !== ('LOCAL_AREA' as PriceScope['kind'])) {
+    const taken = await scopes.findOneBy({
+      supermarketId: warehouse.supermarketId,
+      kind: 'LOCAL_AREA' as PriceScope['kind'],
+      externalKey: warehouse.externalKey ?? '',
+    });
+    if (!taken) {
+      await scopes.update(
+        { id: warehouse.id },
+        {
+          kind: 'LOCAL_AREA' as PriceScope['kind'],
+          priority: DEFAULT_SCOPE_PRIORITY.LOCAL_AREA,
+        }
+      );
+    }
+  }
+
+  const shop = await m
+    .getRepository(SupermarketLocation)
+    .findOneBy({ id: locationId('mercadona') });
+  if (!shop) {
+    return null;
+  }
+  const storeScopeId = await seedStoreScope(m, shop.supermarketId, shop.id);
+  await seedStack(m, shop.id, storeScopeId);
+  return storeScopeId;
+}
+
+/**
+ * A seeded shop's own `STORE` scope, keyed by the shop (plan 0116, section 5).
+ *
+ * Found by its natural key before it is written, because the catalog creates
+ * the same row when an admin edits the shop's stack, and that row carries a
+ * random id. Upserting a derived id over it would collide on the unique index
+ * and fail the deploy.
+ */
+async function seedStoreScope(
+  m: EntityManager,
+  supermarketId: string,
+  supermarketLocationId: string
+): Promise<string> {
+  const scopes = m.getRepository(PriceScope);
+  const held = await scopes.findOne({
+    where: {
+      supermarketId,
+      kind: 'STORE' as PriceScope['kind'],
+      externalKey: supermarketLocationId,
+    },
+  });
+  if (held) {
+    return held.id;
+  }
+  const id = priceScopeId(`store/${supermarketLocationId}`);
+  await scopes.upsert(
+    [
+      {
+        id,
+        supermarketId,
+        kind: 'STORE' as PriceScope['kind'],
+        externalKey: supermarketLocationId,
+        label: null,
+        priority: DEFAULT_SCOPE_PRIORITY.STORE,
+      },
+    ],
+    ['id']
+  );
+  return id;
+}
+
 async function seedStack(
   m: EntityManager,
   supermarketLocationId: string,

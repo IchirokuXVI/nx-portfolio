@@ -213,7 +213,7 @@ describe('MercadonaStoreDiscoveryRunner', () => {
     // Two codes, one warehouse: the scope is declared once and the second code
     // resolving to it declares nothing again.
     expect(report.scopes).toEqual([
-      { key: '4661', kind: PriceScopeKind.REGION, name: 'Almacén 4661' },
+      { key: '4661', kind: PriceScopeKind.LOCAL_AREA, name: 'Almacén 4661' },
     ]);
     expect(report.places).toHaveLength(3);
     // One for the document, one for the counts, two for the two codes.

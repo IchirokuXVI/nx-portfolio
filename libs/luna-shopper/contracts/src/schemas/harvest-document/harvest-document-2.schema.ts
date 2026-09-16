@@ -188,9 +188,11 @@ const scope: JsonSchema = {
         "The source's own key for this group. Matched against PriceScope.externalKey.",
     },
     kind: {
-      enum: ['NATIONAL', 'REGION', 'POSTAL_CODE', 'STORE'],
+      // POSTAL_CODE is the name LOCAL_AREA had before plan 0116. A file that
+      // validated then still validates, and the reader maps it to LOCAL_AREA.
+      enum: ['NATIONAL', 'REGION', 'LOCAL_AREA', 'POSTAL_CODE', 'STORE'],
       description:
-        'What sort of group this is, for a scope that has to be created.',
+        'What sort of group this is, for a scope that has to be created. POSTAL_CODE is the old name of LOCAL_AREA, read as LOCAL_AREA and never written.',
     },
     name: {
       type: ['string', 'null'],

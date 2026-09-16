@@ -156,7 +156,14 @@ describeIntegration('the brands migration (real Postgres)', () => {
     await seedPreMigration();
     await dataSource.runMigrations();
 
-    await dataSource.undoLastMigration();
+    // Back through this migration, counted from the end like
+    // `migrateToJustBefore`, so a later migration does not make this undo it.
+    const index = CATALOG_MIGRATIONS.findIndex(
+      (migration) => migration.name === UNDER_TEST
+    );
+    for (let i = index; i < CATALOG_MIGRATIONS.length; i += 1) {
+      await dataSource.undoLastMigration();
+    }
 
     const columns = await dataSource.query(
       `SELECT column_name FROM information_schema.columns

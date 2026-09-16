@@ -52,17 +52,17 @@ const SCOPES = [
   },
   {
     id: CORDOBA,
-    kind: 'REGION',
+    kind: 'LOCAL_AREA',
     externalKey: '4661',
     label: null,
-    priority: 300,
+    priority: 200,
   },
   {
     id: CORUNA,
-    kind: 'REGION',
+    kind: 'LOCAL_AREA',
     externalKey: '4804',
     label: { en: 'A Coruna' },
-    priority: 300,
+    priority: 200,
   },
 ];
 
