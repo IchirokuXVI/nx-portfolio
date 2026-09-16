@@ -4,6 +4,7 @@ import {
   LINE_QUANTITY_MAX,
   LineApprovalStatus,
   LineItemSource,
+  type LineMergeTooManyProductsDetails,
 } from '@portfolio/luna-shopper/contracts';
 import { LineMergeTooManyProductsException } from '@portfolio/luna-shopper/platform';
 import { In, type EntityManager } from 'typeorm';
@@ -44,10 +45,14 @@ export function assertMergeFits(
 ): void {
   const max = Math.max(LINE_ITEM_SET_MAX, survivorCount, absorbedCount);
   if (unionCount > max) {
+    const details: LineMergeTooManyProductsDetails = {
+      max,
+      offered: unionCount,
+    };
     throw new LineMergeTooManyProductsException(
       `the merged line would hold ${unionCount} products, and a line can hold at most ${max}`,
       {
-        details: { max, offered: unionCount },
+        details: { ...details },
         messageArgs: { max },
       }
     );
