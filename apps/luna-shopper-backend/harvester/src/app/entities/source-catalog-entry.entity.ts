@@ -83,6 +83,27 @@ export class SourceCatalogEntry extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   brand!: string | null;
 
+  /**
+   * `brandKey(brand)`, kept beside the text (plan 0115, section 6).
+   *
+   * **`brand` stays verbatim** and a decision never rewrites it (D8); only this
+   * derived column is added. It is written wherever `brand` is written and
+   * compared nowhere: `sourceGroupChanged` asks about `brand`, and the key
+   * follows it, so it needs no comparison of its own.
+   *
+   * It is what makes the brand suggestions read possible at all: a chain that
+   * prints `MAHOU` and one that prints `Mahou` are two spellings of one key, and
+   * the queue counts keys.
+   */
+  // Partial, because the only read of this column is the suggestions query and
+  // that query is always about the queue: a row that is `ACTIVE` is already a
+  // product and a `REJECTED` one is not tracked, so neither belongs in the index.
+  @Index('ix_source_catalog_entries_queued_brand_key', {
+    where: `"brandKey" IS NOT NULL AND status IN ('CANDIDATE', 'UNRESOLVED')`,
+  })
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  brandKey!: string | null;
+
   /** The only identifier that joins across chains. Leaflets and DEZA rarely fill it. */
   @Index('ix_source_catalog_entries_ean')
   @Column({ type: 'varchar', nullable: true })

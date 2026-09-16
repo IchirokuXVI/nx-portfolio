@@ -31,9 +31,18 @@ import { OneSourceProduct1756900000000 } from './migrations/1756900000000-OneSou
  *     npx nx run luna-shopper-backend-harvester:test-integration
  */
 
-/** Everything before the one under test, which is the state the fold starts in. */
-const BEFORE = HARVESTER_MIGRATIONS.filter(
-  (migration) => migration !== OneSourceProduct1756900000000
+/**
+ * Everything before the one under test, which is the state the fold starts in.
+ *
+ * A prefix of the list, not every migration except this one. Dropping one out
+ * of the middle and keeping its successors only worked while none of them
+ * touched what the fold created: plan 0115 adds an index on
+ * `source_catalog_entries.status`, which is a column this migration is what
+ * adds, so the omitted one is now genuinely a prerequisite of what follows it.
+ */
+const BEFORE = HARVESTER_MIGRATIONS.slice(
+  0,
+  HARVESTER_MIGRATIONS.indexOf(OneSourceProduct1756900000000)
 );
 
 const PROBE_DATABASE = 'luna_harvester_0086_probe';
@@ -370,7 +379,16 @@ describeIntegration('OneSourceProduct1756900000000 (real Postgres)', () => {
   });
 
   it('splits back into three tables on down, and says what it cannot restore', async () => {
-    await probe.undoLastMigration({ transaction: 'each' });
+    // Down to and including the one under test, rather than one step. This is
+    // no longer the last migration in the list, so undoing a single one would
+    // undo whichever plan landed after it instead.
+    for (
+      let i = HARVESTER_MIGRATIONS.indexOf(OneSourceProduct1756900000000);
+      i < HARVESTER_MIGRATIONS.length;
+      i += 1
+    ) {
+      await probe.undoLastMigration({ transaction: 'each' });
+    }
 
     const tables = await probe.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`

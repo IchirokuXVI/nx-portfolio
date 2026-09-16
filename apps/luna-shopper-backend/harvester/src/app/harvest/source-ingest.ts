@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  brandKey,
   HarvestWarningCode,
   ItemSourceMatch,
   PriceSourceKind,
@@ -656,6 +657,9 @@ function fieldsOf(
     sourceKind,
     name: observation.name,
     brand: observation.brand,
+    // Derived here rather than at the call sites, so every observation that
+    // reaches a row carries the key (plan 0115, section 6).
+    brandKey: brandKey(observation.brand),
     ean: observation.ean,
     unitSize: observation.unitSize,
     sizeFormat: observation.sizeFormat,

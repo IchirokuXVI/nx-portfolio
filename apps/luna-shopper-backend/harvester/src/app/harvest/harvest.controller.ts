@@ -16,6 +16,9 @@ import {
   type AdminHarvestDashboard,
   type ApplySourceEntryDecisionsRequest,
   type ApplySourceEntryDecisionsResult,
+  type BrandSpellingsRequest,
+  type BrandSpellingsResult,
+  type BrandSuggestionPage,
   type CreateItemFromSourceEntryRequest,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlaceIdRequest,
@@ -28,6 +31,7 @@ import {
   type HarvestRunPage,
   type HarvestRunView,
   type ImportDiscoveredPlaceRequest,
+  type ListBrandSuggestionsRequest,
   type ListDiscoveredPlacesRequest,
   type ListHarvestRunsRequest,
   type ListPostalCodeDiscoveryRequestsRequest,
@@ -301,6 +305,25 @@ export class HarvestController {
     @Payload() req: ApplySourceEntryDecisionsRequest
   ): Promise<ApplySourceEntryDecisionsResult> {
     return this.entryBatch.applyDecisions(req);
+  }
+
+  /**
+   * The brand keys queued rows carry that no registered brand holds (plan 0115,
+   * section 7). The registry travels in the request: the harvester keeps no copy.
+   */
+  @MessagePattern(SOURCE_ENTRY_PATTERNS.brandSuggestions)
+  brandSuggestions(
+    @Payload() req: ListBrandSuggestionsRequest
+  ): Promise<BrandSuggestionPage> {
+    return this.entries.brandSuggestions(req);
+  }
+
+  /** How each chain spells one registered brand (plan 0115, section 8). */
+  @MessagePattern(SOURCE_ENTRY_PATTERNS.brandSpellings)
+  brandSpellings(
+    @Payload() req: BrandSpellingsRequest
+  ): Promise<BrandSpellingsResult> {
+    return this.entries.brandSpellings(req);
   }
 
   /** Not a product he tracks. The next run that observes the key asks nobody. */
