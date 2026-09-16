@@ -259,6 +259,37 @@ describe('AppHistory', () => {
       expect(history.hasEntryBehind()).toBe(true);
     });
 
+    it('recognises an entry it has popped back onto before', () => {
+      // A popstate that lands renames the entry too: the router writes the new
+      // navigation's id over it with a replace. Going forward and popping back onto the
+      // same entry a second time names it by that new id, which is how cancelling a
+      // delete and then confirming it made the detail sheet forget it had history and
+      // leave by a replace, so back from the list seemed to do nothing (velista 0083).
+      const { history, router } = setUp();
+
+      arriveAt(router, '/velista/en/zones/z1');
+      router.go({ url: '/velista/en/zones/z1/lists/l1' });
+      router.go({ url: '/velista/en/zones/z1/lists/l1/sheet/lines/a/detail' });
+      router.go({
+        url: '/velista/en/zones/z1/lists/l1/sheet/lines/a/confirm/delete',
+      });
+      const detail = router.go({
+        url: '/velista/en/zones/z1/lists/l1/sheet/lines/a/detail',
+        trigger: 'popstate',
+        restoredId: 3,
+      });
+      router.go({
+        url: '/velista/en/zones/z1/lists/l1/sheet/lines/a/confirm/delete',
+      });
+      router.go({
+        url: '/velista/en/zones/z1/lists/l1/sheet/lines/a/detail',
+        trigger: 'popstate',
+        restoredId: detail,
+      });
+
+      expect(history.hasEntryBehind()).toBe(true);
+    });
+
     it('says no when the browser restores an entry this document never wrote', () => {
       const { history, router } = setUp();
 

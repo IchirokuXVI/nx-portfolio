@@ -65,7 +65,11 @@ function bought(
   };
 }
 
-function item(id: string, en: string, brand: string | null = null): CatalogItem {
+function item(
+  id: string,
+  en: string,
+  brand: string | null = null
+): CatalogItem {
   return {
     id,
     name: { es: en, en },
@@ -106,7 +110,9 @@ describe('selectLineDetail', () => {
 
   describe('the estimate', () => {
     it('is absent below three purchases, because two make one interval', () => {
-      expect(select({ settlements: [bought(0), bought(14)] })?.estimate).toBeNull();
+      expect(
+        select({ settlements: [bought(0), bought(14)] })?.estimate
+      ).toBeNull();
     });
 
     it('reads as a phrase from three purchases to six', () => {
@@ -213,9 +219,9 @@ describe('selectLineDetail', () => {
   describe('the choices', () => {
     it('are empty on a free text line and on a line with one product', () => {
       expect(select()?.choices).toEqual([]);
-      expect(select({ line: line({ itemIds: ['item-milk-a'] }) })?.choices).toEqual(
-        []
-      );
+      expect(
+        select({ line: line({ itemIds: ['item-milk-a'] }) })?.choices
+      ).toEqual([]);
     });
 
     it('name every product once there is something to ask', () => {

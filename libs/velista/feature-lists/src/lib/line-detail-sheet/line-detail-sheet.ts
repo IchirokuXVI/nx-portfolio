@@ -209,6 +209,7 @@ export class LineDetailSheet {
   private readonly _saveButton =
     viewChild<ElementRef<HTMLButtonElement>>('saveButton');
   private readonly _question = viewChild<ElementRef<HTMLElement>>('question');
+  private readonly _title = viewChild<ElementRef<HTMLElement>>('title');
 
   /** Whether this client is announcing itself as editing the line. */
   private _announcing = false;
@@ -335,7 +336,12 @@ export class LineDetailSheet {
    */
   private readonly _seed = effect(() => {
     const line = this._line();
-    if (line === undefined) {
+    // Not while a save is out. The store renames the row as the request leaves and
+    // puts the old name back on a refusal, and neither is an update from somebody
+    // else: redrawing from them would replace what the reader typed with the old name
+    // the moment a merge question is asked. The effect runs again when the save ends,
+    // against the line as it then stands.
+    if (line === undefined || this.saving()) {
       return;
     }
 
@@ -596,6 +602,10 @@ export class LineDetailSheet {
     this.merge.set(null);
     this.saved.set(true);
     this._stopEditing();
+    // From the answer, not from what was typed: a merge sums the two amounts and keeps
+    // the survivor's own spelling, so the fields must show the line as it now stands.
+    this.name.set(outcome.line.content);
+    this.amount.set(outcome.line.quantity);
     this._shown = {
       content: outcome.line.content,
       quantity: outcome.line.quantity,
@@ -603,8 +613,18 @@ export class LineDetailSheet {
 
     if (outcome.line.id !== this.lineId()) {
       // This line was the one absorbed. The survivor is the line that remains, so the
-      // reader stays on it rather than on a sheet about a line that is gone.
+      // reader stays on it rather than on a sheet about a line that is gone. The router
+      // reuses this component for the survivor's URL, so the hold ends here.
       await this._sheet.leaveTo(this._lineUrl(outcome.line.id, 'detail'));
+      this._leaving.set(false);
+    }
+
+    if (confirmMerge) {
+      // The pane that held the focused button is gone. Focus goes to the sheet's title,
+      // which keeps it inside the dialog, where Escape and Tab still work.
+      afterNextRender(() => this._title()?.nativeElement.focus(), {
+        injector: this._injector,
+      });
     }
   }
 

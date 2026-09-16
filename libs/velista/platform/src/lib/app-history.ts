@@ -163,6 +163,12 @@ export class AppHistory {
       } else {
         this._replace(event.id);
       }
+    } else if (trigger === 'popstate') {
+      // The browser moved before this was announced, but the router still writes the
+      // popstate's own id over the entry it landed on (`setBrowserUrl` replaces when the
+      // path is the one showing). The next popstate onto this entry names it by that id,
+      // so the record follows the rename, as it does for any other replace.
+      this._replace(event.id);
     }
 
     this._pending = null;

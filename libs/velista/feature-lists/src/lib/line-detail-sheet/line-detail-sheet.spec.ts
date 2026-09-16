@@ -33,7 +33,7 @@ import {
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { QuantityReel, SheetShell } from '@portfolio/velista/ui';
-import { of } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 import { LineDetailSheet } from './line-detail-sheet';
 
 /**
@@ -146,6 +146,22 @@ async function render(options: Options = {}): Promise<{
     listId: LIST_ID,
     lineId: LINE_ID,
   });
+  // A subject, so a navigation to another line of the same route can be played the way
+  // the router plays it: the component is reused and only the parameters change.
+  const params = new BehaviorSubject(map);
+  const snapshot = { paramMap: map, parent: null };
+  sheets.leaveTo.mockImplementation(async (url: string) => {
+    const lineId = /\/lines\/([^/]+)\/detail$/.exec(url)?.[1];
+    if (lineId !== undefined) {
+      const next = convertToParamMap({
+        zoneId: ZONE_ID,
+        listId: LIST_ID,
+        lineId,
+      });
+      snapshot.paramMap = next;
+      params.next(next);
+    }
+  });
 
   await TestBed.configureTestingModule({
     imports: [LineDetailSheet, RokuTranslatorTestingModule.forTesting()],
@@ -168,8 +184,8 @@ async function render(options: Options = {}): Promise<{
       {
         provide: ActivatedRoute,
         useValue: {
-          paramMap: of(map),
-          snapshot: { paramMap: map, parent: null },
+          paramMap: params,
+          snapshot,
           parent: null,
         },
       },
@@ -495,6 +511,29 @@ describe('LineDetailSheet', () => {
       expect(fixture.componentInstance.name()).toBe('Oat milk');
     });
 
+    it('keeps what was typed through the store renaming the line and snapping it back', async () => {
+      // The real store renames the row as the save goes out and puts the old name back
+      // on a refusal. The fields must read neither as an update to redraw from.
+      const { fixture, lines } = await render();
+      lines.answerNextUpdate({ state: 'failed', error: mergeRefusal() });
+      lines.holdWrites();
+
+      type(fixture, 'Bread');
+      saveButton(fixture)?.click();
+      lines.set([line({ content: 'Bread', version: 1 })]);
+      await settle(fixture);
+      lines.set([line()]);
+      await settle(fixture);
+      lines.releaseWrites();
+      await settle(fixture);
+
+      button(fixture, 'list.merge.keepEditing')?.click();
+      await settle(fixture);
+
+      expect(nameField(fixture)?.value).toBe('Bread');
+      expect(saveButton(fixture)?.disabled).toBe(false);
+    });
+
     it('announces the edit on focus, and clears it after a save and on destroy', async () => {
       const { fixture, realtime } = await render();
       const editing = jest.spyOn(realtime, 'setEditingLine');
@@ -610,6 +649,10 @@ describe('LineDetailSheet', () => {
         expect(fixture.componentInstance.merge()).toBeNull();
         // This line survived, so the sheet stays where it is.
         expect(sheets.leaveTo).not.toHaveBeenCalled();
+        // The pane's button is gone, so focus stays in the dialog on its title.
+        expect(document.activeElement).toBe(
+          fixture.nativeElement.querySelector('#line-detail-title')
+        );
       });
 
       it('returns to the fields with the typed values, and focus on Save', async () => {
@@ -652,7 +695,17 @@ describe('LineDetailSheet', () => {
         expect(sheets.leaveTo).toHaveBeenCalledWith(
           `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}/sheet/lines/ln-2/detail`
         );
+        // The reused sheet is about the survivor now, and does not close as if its line
+        // had gone.
         expect(sheets.dismiss).not.toHaveBeenCalled();
+        expect(fixture.componentInstance.lineId()).toBe('ln-2');
+        expect(nameField(fixture)?.value).toBe('Bread');
+        // The fields show the survivor's summed amount, not the amount typed here.
+        expect(fixture.componentInstance.amount()).toBe(5);
+        expect(saveButton(fixture)?.disabled).toBe(true);
+        expect(document.activeElement).toBe(
+          fixture.nativeElement.querySelector('#line-detail-title')
+        );
       });
     });
 
