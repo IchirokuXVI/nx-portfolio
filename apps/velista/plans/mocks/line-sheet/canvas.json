@@ -1,0 +1,62 @@
+{
+  "title": "Velista: the line sheet edits the line",
+  "lede": "The design for plans <code>0083</code> (a zone list line is changed from its detail sheet) and <code>0084</code> (a basket line is renamed from its settle sheet), with backend <code>0112</code> and <code>0113</code> behind them. The name and the amount move into the sheet the reader already opens, with Save, a merge question when the name is taken, and comments and delete reached from the same sheet. Phone only, 390 by 844, Night only: every colour role here is already proven on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Detail.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "0083: the detail sheet at rest, while typing, and saved" },
+    { "file": "DetailMerge.dc.html", "x": 0, "y": 1160, "w": 1330, "h": 1010, "title": "0083: the merge question, a refusal, and saving" },
+    { "file": "DetailReaders.dc.html", "x": 0, "y": 2320, "w": 1330, "h": 1010, "title": "0083: other readers, and the row without its menu" },
+    { "file": "Settle.dc.html", "x": 0, "y": 3480, "w": 1330, "h": 1010, "title": "0084: the settle sheet with the name field" },
+    { "file": "SettleMerge.dc.html", "x": 0, "y": 4640, "w": 1330, "h": 1010, "title": "0084: the merge question, a refusal, and a line added in the shop" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 1390,
+      "y": 0,
+      "w": 440,
+      "text": "ONE PLACE TO CHANGE A LINE. On a zone list the three dots menu and the edit sheet go. The detail sheet the reader already opens holds the name, the amount, Save, comments and delete. In the basket, the settle sheet's title becomes the name field for the readers the server lets rename.\nONE SOLID BUTTON PER SHEET. The solid amber stays on what the reader came to do: I bought this, Got all 3. Save takes the quiet amber the app already uses for a chosen option, tinted and bordered with amber text. It reads as a button and as enabled, and it never competes with the settle button for the thumb.\nSAVE SITS UNDER THE FIELDS IT SAVES, and a rule separates it from everything it does not save. Nothing is written while typing, on blur, or on close. Closing the sheet with changes throws them away, as every velista sheet does."
+    },
+    {
+      "id": "typing",
+      "x": 1390,
+      "y": 560,
+      "w": 440,
+      "text": "WHILE TYPING. The sheet opens on itself (plan 0081), so no keyboard covers it before it is read. When the name field takes focus the keyboard comes up, and the name, the amount, the notice and Save are all above it on a 390 by 844 phone. Nobody types blind or closes the keyboard to reach Save.\nSAVED stays on the button, with a check, until the next change turns it back into Save. It is where the eye already is, and it is a status region, so a screen reader hears it once. The sheet stays open on the saved values.\nTHE HEADER PILL GOES for a reader with an edit scope, because the reel below it is the same number. A reader with no scope keeps today's header."
+    },
+    {
+      "id": "merge",
+      "x": 1390,
+      "y": 1160,
+      "w": 440,
+      "text": "THE MERGE QUESTION REPLACES THE SHEET'S CONTENT, and focus moves to it. The fact comes first and the question second, each on its own line, because the fact is what the reader did not know. One more sentence says that comments and what was bought move too, which is the worry behind the question. Merge is the solid button here, because in this pane it is the only thing to do. Keep editing returns to the fields with the typed values, and focus goes back to Save.\nA MERGE THAT LANDS ON THE OTHER LINE moves the sheet to that line's detail sheet, so the reader never looks at a line that no longer exists.\nREFUSALS show under Save in the danger colour, and the fields keep what was typed."
+    },
+    {
+      "id": "saving",
+      "x": 1390,
+      "y": 1780,
+      "w": 440,
+      "text": "SAVING LOCKS THE SHEET. It cannot be closed, the fields are read only, and the settle buttons, Comments, Delete line and See more details are dimmed until the answer arrives. Two writes to one line never race, and nobody leaves the sheet with a save still in flight."
+    },
+    {
+      "id": "readers",
+      "x": 1390,
+      "y": 2320,
+      "w": 440,
+      "text": "NAME ONLY (the content scope) edits the name. The amount is the number as text, where the reel would be, so the sheet does not change shape between two readers.\nCANNOT EDIT is today's sheet with Comments added.\nCOMMENTS AND DELETE are one row under a rule, below the settle buttons and away from the thumb that reaches for I bought this. Delete line is drawn only for a reader who may delete, and Comments then takes the whole row. The comment count sits in the button, so the row's count and the sheet agree. Both push a sheet of their own, and every way out of it lands back here. A confirmed delete lands on the list.\nTHE ROW keeps its reel and its comment count, the menu is gone, and a tap anywhere else opens the sheet as today."
+    },
+    {
+      "id": "settle",
+      "x": 1390,
+      "y": 3480,
+      "w": 440,
+      "text": "THE BASKET. The name field replaces the title for the owner, and for a registered participant who sees the lists, on a line that came from lists. The owner also renames a line added in the shop. Everybody else, guests first, sees the title exactly as today, in the display face. The field is removed, not disabled, once the trip is finished.\nThe rest of the settle pane does not move. Outstanding, the product, the lists, the three settle buttons and the history link keep their order, so a shopper who knows where Got all is still finds it there.\nThere is one field and no amount here, so Save sits straight under the field, and there is no rule: the outstanding count below it already starts a new block."
+    },
+    {
+      "id": "settleMerge",
+      "x": 1390,
+      "y": 4640,
+      "w": 440,
+      "text": "ONE ROW PER PLACE THE NAME IS TAKEN, not one sentence per place. A rename in the basket can collide on three lists and in the basket at once, and in an aisle a column of rows is read at a glance where three sentences are not. Each row names the list and its group and says what the other line already asks for. The basket's own row says how many are still to get.\nA REFUSAL NAMES THE LIST, because the reader has to know which household's line is in the way.\nA LINE ADDED IN THE SHOP has no lists block, and a merge on it can only touch the basket."
+    }
+  ]
+}
