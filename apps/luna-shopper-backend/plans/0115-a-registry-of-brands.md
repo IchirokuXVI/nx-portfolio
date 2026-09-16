@@ -1,3 +1,5 @@
+> **PR:** [#378](https://github.com/IchirokuXVI/nx-portfolio/pull/378)
+
 # 0115 A registry of brands
 
 > Client halves: `apps/luna-shopper-admin/plans/0027` (the Brands section) and
