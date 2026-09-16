@@ -46,6 +46,21 @@ export class GatewayError extends Error {
   readonly retryAfterSeconds?: number;
   /** Per field messages, by field name. Empty unless the server sent any. */
   readonly fieldErrors: Readonly<Record<string, readonly string[]>>;
+  /**
+   * The machine readable facts a refusal published, by name. Empty for most.
+   *
+   * A backend exception carries a details bag and **only a class that sets
+   * `exposesDetails` puts it on the wire**, which is the backend saying those
+   * facts are part of the API rather than a log line. There are a handful, and
+   * each exists because the client's next act is impossible without them: a
+   * `brand_key_taken` names the brand already holding the key, so the panel that
+   * was refused can offer to open it (backend plan 0115, section 5.3).
+   *
+   * Every value is `unknown`, and a reader narrows its own. This is an error
+   * body, which is the response most likely to arrive as something other than
+   * the house envelope, and rule D4 applies with most force here.
+   */
+  readonly details: Readonly<Record<string, unknown>>;
 
   constructor(init: {
     code: string;
@@ -54,6 +69,7 @@ export class GatewayError extends Error {
     detail?: string;
     retryAfterSeconds?: number;
     fieldErrors?: Readonly<Record<string, readonly string[]>>;
+    details?: Readonly<Record<string, unknown>>;
   }) {
     // For a stack trace and a log, never for a screen. Every operator facing
     // string is chosen by the page from the failure reason.
@@ -67,6 +83,13 @@ export class GatewayError extends Error {
     this.detail = init.detail ?? '';
     this.retryAfterSeconds = init.retryAfterSeconds;
     this.fieldErrors = init.fieldErrors ?? {};
+    this.details = init.details ?? {};
+  }
+
+  /** One published fact, when it is a string. `null` for everything else. */
+  detailString(name: string): string | null {
+    const value = this.details[name];
+    return typeof value === 'string' && value !== '' ? value : null;
   }
 }
 
@@ -100,6 +123,7 @@ export function toGatewayError(error: unknown): GatewayError {
     detail: typeof body?.['detail'] === 'string' ? body['detail'] : '',
     retryAfterSeconds: asWaitSeconds(body?.['retryAfterSeconds']),
     fieldErrors: asFieldErrors(body?.['errors']),
+    details: asRecord(body?.['details']) ?? {},
   });
 }
 

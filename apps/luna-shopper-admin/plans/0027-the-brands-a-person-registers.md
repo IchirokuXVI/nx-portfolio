@@ -1,3 +1,5 @@
+> **PR:** [#381](https://github.com/IchirokuXVI/nx-portfolio/pull/381)
+
 # 0027 The brands a person registers
 
 > Server half: `apps/luna-shopper-backend/plans/0115`. This plan cannot start before it lands:

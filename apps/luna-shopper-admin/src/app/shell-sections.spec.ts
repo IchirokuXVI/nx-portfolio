@@ -17,19 +17,26 @@ import { ADMIN_SECTIONS } from './sections';
  * would give the reference picker two answers to the same question.
  */
 describe('ADMIN_SECTIONS', () => {
-  it('is the five sections the plan names, in order', () => {
+  it('is the six sections the plans name, in order', () => {
     expect(ADMIN_SECTIONS.map((section) => section.key)).toEqual([
       'overview',
       'catalog',
+      'brands',
       'shoppers',
       'harvest',
       'admins',
     ]);
   });
 
-  /** Five is the number the first row holds at a glance. */
-  it('holds five, which is what one row holds', () => {
-    expect(ADMIN_SECTIONS).toHaveLength(5);
+  /**
+   * Around half a dozen is what the first row holds at a glance.
+   *
+   * Six since admin plan 0027, and the sixth is there because of the *second*
+   * row rather than this one: the catalog already holds eight screens, which is
+   * the widest a second row goes, so the brands could not join it.
+   */
+  it('holds six, which is what one row holds', () => {
+    expect(ADMIN_SECTIONS).toHaveLength(6);
   });
 
   /** Eight is the widest second row, and it fits on one line at 1280 pixels. */
@@ -96,8 +103,8 @@ describe('ADMIN_SECTIONS', () => {
   });
 
   /**
-   * The sixteen screens of the plan's table, at the paths it gives them. The
-   * whole list rather than a sample, because the point of the plan is that every
+   * Every resource, at the path its section mounts it under. The whole list
+   * rather than a sample, because the point of admin plan 0022 is that every
    * screen reachable before it is reachable after it.
    */
   it('mounts every resource where the plan says', () => {
@@ -115,6 +122,9 @@ describe('ADMIN_SECTIONS', () => {
     expect(at('prices')).toBe('catalog/prices');
     expect(at('price-policies')).toBe('catalog/price-policies');
     expect(at('location-items')).toBe('catalog/location-items');
+    // `registered` is the brands screen's segment, because the section is the
+    // pair and this is the half that is already registered (admin plan 0027).
+    expect(at('brands')).toBe('brands/registered');
     expect(at('users')).toBe('shoppers/users');
     expect(at('zones')).toBe('shoppers/zones');
     expect(at('memberships')).toBe('shoppers/memberships');
