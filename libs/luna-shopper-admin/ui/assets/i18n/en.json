@@ -76,7 +76,8 @@
       "catalog": "Catalog",
       "shoppers": "Shoppers",
       "harvest": "Harvester",
-      "admins": "Admins"
+      "admins": "Admins",
+      "brands": "Brands"
     }
   },
   "notFound": {
@@ -171,7 +172,9 @@
       "unknown": "That did not work, and the server did not say why.",
       "notAnObject": "Write a JSON object, in braces. A list or a bare value is not what this column holds.",
       "postalCodeUnknown": "That postal code is not in the national table, so it is almost certainly a typo. Nothing was written.",
-      "runInProgress": "The harvester is working on that row right now. Wait for the run to finish and ask again."
+      "runInProgress": "The harvester is working on that row right now. Wait for the run to finish and ask again.",
+      "brandLabelEmpty": "A brand name needs at least one letter or digit. Nothing was written.",
+      "brandKeyTaken": "A brand with this key already exists."
     }
   },
   "catalog": {
@@ -426,6 +429,71 @@
       "SOURCE": "Known",
       "DERIVED": "Guessed",
       "MANUAL": "Typed in"
+    }
+  },
+  "brands": {
+    "nav": {
+      "suggested": "Suggested"
+    },
+    "registered": {
+      "one": "Brand",
+      "many": "Registered brands",
+      "field": {
+        "label": "Name",
+        "key": "Key",
+        "privateLabelSupermarketId": "Private label of",
+        "itemCount": "Products",
+        "updatedAt": "Last changed"
+      },
+      "help": {
+        "label": "How the brand is written everywhere a person reads it. Changing it rewrites the name on every product carrying this brand.",
+        "key": "Made from the name, with everything but letters and digits taken out. It is how every chain’s spelling of this brand meets, and it cannot be typed.",
+        "privateLabelSupermarketId": "Set this only when the brand belongs to one chain, the way Hacendado belongs to Mercadona. Leave it empty for a brand sold everywhere."
+      },
+      "sort": {
+        "label": "By name",
+        "itemCount": "Most products first"
+      },
+      "filter": {
+        "query": "Search by name or key",
+        "privateLabelSupermarketId": "Private label of"
+      },
+      "created": "{{label}} registered. {{count}} products now carry it.",
+      "createdNone": "{{label}} registered. No product carries it yet.",
+      "spellings": {
+        "heading": "How chains spell it",
+        "says": "Every spelling the harvester has seen for this key, chain by chain. A spelling that differs only by case or by an accent is listed too: that is what the key is holding together.",
+        "chain": "Chain",
+        "spelling": "Spelling",
+        "products": "Products",
+        "waiting": "Waiting",
+        "empty": "No harvested product carries this brand."
+      }
+    },
+    "suggested": {
+      "heading": "Suggested brands",
+      "lead": "Brand keys the queue carries that no registered brand holds, the most repeated first.",
+      "search": "Search",
+      "brand": "Brand",
+      "products": "Products",
+      "firstSeen": "First seen",
+      "chains": "Chains",
+      "chain": "{{name}} {{count}}",
+      "chainAria": "{{name}}, {{count}} products",
+      "empty": "No queued product carries an unregistered brand.",
+      "register": {
+        "action": "Register",
+        "panel": "Register this brand",
+        "label": "Name",
+        "privateLabel": "Private label of",
+        "makesKey": "This name makes the key {{key}}.",
+        "noKey": "This name makes no key, so it cannot be a brand.",
+        "keyDiffers": "This name makes a different key, so these products will not be linked.",
+        "openHolder": "Open that brand",
+        "confirm": "Register",
+        "done": "{{label}} registered. {{count}} products now carry it.",
+        "doneNone": "{{label}} registered. No product carries it yet."
+      }
     }
   },
   "harvest": {

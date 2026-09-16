@@ -14,7 +14,11 @@
  * a misspelling is renaming the brand, and aliases are out of scope (section 9).
  *
  * It must stay **browser reachable**: contracts compile under the Angular apps,
- * so this file names no `process` and imports nothing from Node. Its cases live
+ * so this file names no `process` and imports nothing from Node. It has a
+ * secondary entry point of its own, `@portfolio/luna-shopper/contracts/brand-key`,
+ * because the library's barrel re-exports the ajv backed schema validator: the
+ * back office wants this one function and reaching it through the barrel put
+ * 59 kB of JSON schema validation into a browser bundle. Its cases live
  * beside it in `brand-key.cases.json`, because the curation tool is plain `.mjs`
  * and keeps its own copy of this function, proven against the same pairs.
  */
