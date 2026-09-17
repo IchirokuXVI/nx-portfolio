@@ -26,14 +26,14 @@ and **root stays reachable until the replacement accounts are proven** (section
 - The VPS address and its root password or key.
 - Control of the domain's DNS records.
 - Admin on the GitHub repository, to set secrets.
-- Optionally, a Google OAuth client secret and an SMTP password. Both are
-  supported as blank: the Google routes and registration answer 501 rather than
-  the service failing to start, so a cluster with neither is a working cluster
-  with two features off.
+- Optionally, a Google OAuth client secret, an SMTP password and a Gemini API
+  key. All three are supported as blank: the Google routes and registration
+  answer 501, and so does `/v1/assistant`, rather than a service failing to
+  start. A cluster with none of them is a working cluster with three features off.
 - Production only: an S3 compatible bucket and a key for backups.
 
 Decide which environment this machine is before you begin. It selects the values
-file, the `--env` flag and the five DNS names, and nothing else differs.
+file, the `--env` flag and the six DNS names, and nothing else differs.
 
 ## 1. The two keypairs
 
@@ -146,19 +146,22 @@ MetalLB binds it as the `IPAddressPool`, and the chart refuses to render while i
 is empty rather than leaving a LoadBalancer `<pending>` forever with everything
 else looking healthy.
 
-Then point the five records at it. `mfe` carries three remotes, and velista has
-its own origin because it is installable there as a PWA.
+Then point the six records at it. `mfe` carries three remotes, velista has its
+own origin because it is installable there as a PWA, and `admin` serves the
+`luna-shopper-admin` back office.
 
-**The five live in two zones.** The portfolio is on `ichirokuxvi.com`; velista is
-a product with a domain of its own, and its backend (`api.`, `rt.`) exists only to
-serve it, so all three sit under `velista.app`. Both zones point at the same
-cluster address, so this is a naming split rather than a second deploy.
+**The six live in two zones.** The portfolio is on `ichirokuxvi.com`. velista is
+a product with a domain of its own, and its back office (`admin.`) and its backend
+(`api.`, `rt.`) exist only to serve it, so all four sit under `velista.app`. Both
+zones point at the same cluster address, so this is a naming split rather than a
+second deploy.
 
 | Production            | Staging                       |
 | --------------------- | ----------------------------- |
 | `ichirokuxvi.com`     | `staging.ichirokuxvi.com`     |
 | `mfe.ichirokuxvi.com` | `mfe.staging.ichirokuxvi.com` |
 | `velista.app`         | `staging.velista.app`         |
+| `admin.velista.app`   | `admin.staging.velista.app`   |
 | `api.velista.app`     | `api.staging.velista.app`     |
 | `rt.velista.app`      | `rt.staging.velista.app`      |
 
@@ -169,7 +172,7 @@ Each row is its own A record. On the staging side in particular, a record on
 **Move them before the first deploy, and confirm with `dig` rather than a
 browser.** cert-manager requests a certificate per Gateway listener the moment
 the chart applies, and Let's Encrypt rate limits failed validations far more
-tightly than successful ones. Five listeners retrying against records that still
+tightly than successful ones. Six listeners retrying against records that still
 point somewhere else is how you lose the rest of the day. If you are cutting over
 live records, lower their TTL a day ahead.
 
@@ -187,22 +190,25 @@ Two things `.app` adds that `ichirokuxvi.com` did not:
 ## 5. Secrets
 
 **In an interactive shell on the box, as the admin user.** The script prompts for
-the Google client secret and the SMTP password, and a piped or `ssh host "..."`
-invocation takes its "not a terminal" branch and silently leaves both unset.
+the Google client secret, the SMTP password and the Gemini API key (each only when
+the Secret holds no value for it yet). A piped or `ssh host "..."` invocation
+takes its "not a terminal" branch and leaves all three as they are, which on a new
+cluster means unset.
 
 ```sh
 bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --env <env>
 ```
 
 It creates the namespace and the Secrets the chart reads through `secretKeyRef`:
-three database passwords, a JWT keypair, and the connection strings, which are
-derived from the same shell variables as the passwords so the two cannot
-disagree. It writes your plaintext copy to
-`~/luna-shopper-<env>-secrets.txt`.
+four database passwords (auth, core, catalog and harvester), two JWT keypairs (one
+for user tokens, one for admin tokens), the `HARVESTER_ACTOR_ID` uuid, the three
+optional values above, and the connection strings, which are derived from the
+same shell variables as the passwords so the two cannot disagree. It writes your
+plaintext copy to `~/luna-shopper-<env>-secrets.txt`.
 
 Move that file into your password manager and delete it. It holds the JWT
-keypair, and losing that invalidates every issued token at once, logging out
-every user simultaneously.
+keypairs, and losing the user keypair invalidates every issued token at once,
+logging out every user simultaneously.
 
 Re-running is safe: existing values are kept, because Postgres reads
 `POSTGRES_PASSWORD` only when it initialises an empty data directory, so a
@@ -282,7 +288,7 @@ Rollback is the same command with an older version, or `helm rollback`.
 
 ```sh
 kubectl get pods -n nx-portfolio
-kubectl get certificate -n nx-portfolio          # five, all READY=True
+kubectl get certificate -n nx-portfolio          # six, all READY=True
 kubectl get svc -n envoy-gateway-system          # EXTERNAL-IP is your address
 ```
 
@@ -302,7 +308,7 @@ kubectl -n nx-portfolio get events --sort-by=.lastTimestamp | tail -40
 
 ## 10. Production only: the data
 
-A new cluster is an empty database. The three Postgres instances start with
+A new cluster is an empty database. The four Postgres instances start with
 nothing in them, so rebuilding production on a new machine means taking a dump
 from the old one and restoring it with `k8s/helm/restore-database.sh` **before**
 DNS points at the new box. Staging holds nothing worth keeping and is disposable
@@ -362,9 +368,9 @@ deploy step. Chart owned objects are now checked against the render, so the
 preflight passes on a freshly provisioned cluster and the first deploy creates
 the ConfigMap. Fixed in the same change: `GOOGLE_CLIENT_SECRET` and `SMTP_PASS`
 left blank at the prompts were counted as failures, though plan 0026 makes both
-a supported configuration. Only those two may be empty; every other key must
-still carry a value, and one that does not now reads `EMPTY` rather than
-`MISSING`.
+a supported configuration. `GEMINI_API_KEY` later joined them under the same rule
+(plan 0039). Only those three may be empty. Every other key must still carry a
+value, and one that does not now reads `EMPTY` rather than `MISSING`.
 
 **A step works by hand and fails from CI.** CI arrives through
 `ssh host "bash ..."`, which is non interactive and reads no shell profile, so
@@ -392,7 +398,7 @@ ssh -t root@<IP> "bash /tmp/provision-host.sh --lock-root"
 ```
 
 ```sh
-# 4. ipAddress in values.<env>.yaml, commit, move the five DNS records, dig to confirm
+# 4. ipAddress in values.<env>.yaml, commit, move the six DNS records, dig to confirm
 
 # 5. on the box, as the admin user, interactively
 bash ~/nx-portfolio/k8s/bootstrap/provision-release.sh --env <env>

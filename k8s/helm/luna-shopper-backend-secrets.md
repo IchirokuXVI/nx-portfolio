@@ -25,7 +25,7 @@ about correctness rather than convenience:
 - **Nothing checked that the values agreed with each other.** The password inside
   `AUTH_DB_URL` must match `POSTGRES_PASSWORD` in
   `luna-shopper-backend-auth-db-secret`, and that was enforced by a sentence.
-  There are three such pairs, so three chances to make a mistake that presents as
+  There are four such pairs, so four chances to make a mistake that presents as
   somebody else's bug: the pod fails with a SASL authentication error, which reads
   as a broken credential rather than as two credentials that were meant to be one.
   The script derives each URL from the same shell variable that goes into the
@@ -60,19 +60,23 @@ The application secret — `luna-shopper-backend-secrets`:
 | `AUTH_DB_URL`           | `postgres://<user>:<pw>@luna-shopper-backend-auth-db:5432/<db>`                                               |
 | `CORE_DB_URL`           | `postgres://<user>:<pw>@luna-shopper-backend-core-db:5432/<db>`                                               |
 | `CATALOG_DB_URL`        | `postgres://<user>:<pw>@luna-shopper-backend-catalog-db:5432/<db>`                                            |
+| `HARVESTER_DB_URL`      | `postgres://<user>:<pw>@luna-shopper-backend-harvester-db:5432/<db>`                                          |
+| `HARVESTER_ACTOR_ID`    | uuid generated once per cluster. The harvester reads it, and catalog reads it as `SERVICE_ACTOR_IDS`          |
 | `AUTH_JWT_PRIVATE_KEY`  | PEM private key — **only** the auth pod receives it                                                           |
 | `AUTH_JWT_PUBLIC_KEY`   | PEM public key — every service verifies tokens with it                                                        |
 | `ADMIN_JWT_PRIVATE_KEY` | PEM private key for operator tokens — **only** the auth pod receives it (plan 0071)                           |
 | `ADMIN_JWT_PUBLIC_KEY`  | PEM public key for operator tokens — the gateway, catalog and harvester (plan 0072), and core since plan 0074 |
 | `GOOGLE_CLIENT_SECRET`  | Google OAuth client secret. May be empty (plan 0026)                                                          |
 | `SMTP_PASS`             | SMTP submission password. May be empty (plan 0026)                                                            |
+| `GEMINI_API_KEY`        | Gemini provider key, **only** the assistant pod receives it. May be empty (plan 0039)                         |
 
 The split is the point of `_env.tpl`: `role` decides which of these a pod
 receives, so only the auth pod ever sees the private half of the keypair, and a
 service only holds the URL of the database it owns.
 
 Per Postgres instance — `luna-shopper-backend-auth-db-secret`,
-`luna-shopper-backend-core-db-secret`, `luna-shopper-backend-catalog-db-secret`:
+`luna-shopper-backend-core-db-secret`, `luna-shopper-backend-catalog-db-secret`,
+`luna-shopper-backend-harvester-db-secret`:
 
 | Key                 | What it is                                   |
 | ------------------- | -------------------------------------------- |

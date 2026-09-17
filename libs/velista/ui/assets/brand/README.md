@@ -1,8 +1,8 @@
 # Brand assets
 
-The two files here are the **one deliberate exception** to rule N1 (plan 0001), which
+The three files here are the **one deliberate exception** to rule N1 (plan 0001), which
 otherwise keeps the product name out of every filename, class, token, route and
-translation key. The mark is the identity itself, so these two carry it.
+translation key. The mark is the identity itself, so these three carry it.
 
 `AppBrand.wordmarkSrc` and `AppBrand.iconSrc` hold these filenames as **values**, and a
 rename replaces these files and edits the provider and nothing more (plan 0002, section
@@ -40,12 +40,13 @@ the detail is there at all.
 So the small variant drops two scribbles and thickens the survivor to 1.7, keeping it
 well short of the sail's trailing edge so the sail stays one shape instead of being cut
 in half by an amber band. It is a **derivation, not a second identity**: a redraw of the
-mark changes both files, and rule N1's exception still covers the mark rather than
+mark changes all three files, and rule N1's exception still covers the mark rather than
 growing a new member.
 
 ## Regenerating the raster set
 
-Every PNG and the `.ico` in `apps/velista/public` comes from the two tiles here, so
+Every PNG and the `.ico` in `apps/velista/public` comes from the two tiles here
+(`velista-app-icon.svg` and `velista-app-icon-small.svg`), so
 they cannot drift (plan 0013 D6). They are files in `public/`, copied by the assets
 glob, never imported: a TypeScript `import` of a brand SVG puts it through webpack's
 `asset/resource` rule and **fails the velista production build** (plan 0002, section

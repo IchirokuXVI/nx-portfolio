@@ -3,6 +3,11 @@
 > Answers (`A:`) are written by Daniel. `> Note (Claude):` blocks flag things the
 > code shows that an answer may have missed.
 
+> **Out of date in places, as of 2026-09-17.** The questions under **Features** name
+> `feature-news` and `projects`, and neither library exists. The news section is
+> `libs/damoclesSword/ui/src/lib/section-news`. The feature libraries are `feature-about`,
+> `feature-contact`, `feature-home`, `feature-services` and `feature-shell`.
+
 ## The project
 
 **Q: What is Damocle'Sword? What real work does this remote showcase (Starlit Ascension, the VR demos)?**

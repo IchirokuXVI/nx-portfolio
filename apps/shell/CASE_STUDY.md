@@ -4,6 +4,34 @@
 > `> Note (Claude):` blocks flag things the code shows that an answer may have missed.
 > Docker / CI/CD / Kubernetes are documented in `apps/docker/CASE_STUDY.md`.
 
+> **Out of date in places, as of 2026-09-17.** The answers below are a record of an earlier
+> design and are left as written. What the code does now:
+>
+> - **Overview, Why this stack, Module federation topology:** the shell owns no `:locale`
+>   route. `apps/shell/src/app/app.routes.ts` mounts `odontogram`, `damoclesSword` and
+>   `velista` at the top level and `landingV2` at the empty path, below every other mount.
+>   Every URL is `/{mount}/{locale}/{rest}`. There is no `landing` remote.
+> - **Overview:** `velista` is a fourth remote, and it is also a standalone app on its own
+>   origin (`apps/velista/src/app/app-root-route.ts`).
+> - **Overview:** there are two k3s clusters, staging and production, one VPS each
+>   (k8s plan 0002). Routing is the Gateway API with Envoy Gateway, not a reverse proxy.
+> - **Locale-first routing:** each app installs `localeGuard` on its own parent route and
+>   reads `appKey`, `supportedLocales`, `defaultLocale` and `mountPath` from route `data`.
+>   Its pure core is `resolveLocaleSegments`. `localeCorrectionGuard` no longer exists
+>   (see `libs/shared/localization/rokutranslator-angular/src/index.ts`).
+> - **Locale-first routing:** landingV2 stores its locale under `landingV2`, not `landing`
+>   (`LANDING_V2_APP_KEY` in `libs/landing-v2/ui/src/lib/landing-v2-locales.ts`).
+> - **Localization: RokuTranslator:** the shell has no translator
+>   (`apps/shell/src/app/app.config.ts`). Each app calls `provideRokuTranslator` in its own
+>   `apps/<app>/src/app/translation-providers.ts`. The damoclesSword, landingV2 and
+>   odontogram apps start their loads there with `provideEnvironmentInitializer`, not
+>   `provideAppInitializer`, because under the shell a remote does not bootstrap. There is
+>   one `RokuTranslator` and one `RokuLocaleStore` per app.
+> - **Localization: RokuTranslator:** the shared list lives in `module-federation.shared.ts`
+>   at the workspace root, imported by every app config. It sets `singleton: true` with no
+>   `strictVersion`, on purpose. The singleton now removes a duplicate copy of i18next. It
+>   no longer keeps the apps on one locale.
+
 ## Overview
 
 _(Reference summary compiled from the codebase, for the top of a portfolio detail page.)_

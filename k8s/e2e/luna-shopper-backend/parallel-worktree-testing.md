@@ -48,7 +48,7 @@ worktree that is your own dev environment still just uses the plain default
 workflow (no slot flag needed = slot 0).
 
 Within a block the offsets group by kind, so a slot stays readable: services at
-`+0`, databases at `+10`, messaging at `+20`, cache at `+30`, mail at `+40`,
+`+0`, databases at `+10`, the `test` profile's databases at `+14`, messaging at `+20`, cache at `+30`, mail at `+40`,
 observability at `+50`.
 
 |                     | slot 0 (yours)         | slot 1        | slot 2        | slot 3        | …   |
@@ -59,9 +59,13 @@ observability at `+50`.
 | auth                | 3002                   | 43002         | 43102         | 43202         | …   |
 | core                | 3003                   | 43003         | 43103         | 43203         | …   |
 | catalog             | 3004                   | 43004         | 43104         | 43204         | …   |
+| harvester           | 3005                   | 43005         | 43105         | 43205         | …   |
+| assistant           | 3006                   | 43006         | 43106         | 43206         | …   |
 | auth-db             | 5432                   | 43010         | 43110         | 43210         | …   |
 | core-db             | 5433                   | 43011         | 43111         | 43211         | …   |
 | catalog-db          | 5434                   | 43012         | 43112         | 43212         | …   |
+| harvester-db        | 5435                   | 43013         | 43113         | 43213         | …   |
+| test dbs (`test`)   | 5442..5445             | 43014..43017  | 43114..43117  | 43214..43217  | …   |
 | nats (client / mon) | 4222 / 8222            | 43020 / 43021 | 43120 / 43121 | 43220 / 43221 | …   |
 | redis               | 6379                   | 43030         | 43130         | 43230         | …   |
 | smtp / mailpit ui   | 1025 / 8025            | 43040 / 43041 | 43140 / 43141 | 43240 / 43241 | …   |
@@ -119,15 +123,18 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
 ```
 
 ```
-  SLOT COMPOSE PROJECT      INFRA     SERVICES  OBSERV  CLAIMED BY
-  0    luna-shopper-backend 8/8       5/5       0/5     D:/Projects/nx-portfolio
-  1    luna-slot1           8/8       5/5       0/5     D:/Projects/.../worktrees/my-branch  (this one)
+  SLOT COMPOSE PROJECT      INFRA     SERVICES  OBSERV  TEST   CLAIMED BY
+  0    luna-shopper-backend 9/9       7/7       0/5     0/4    D:/Projects/nx-portfolio
+  1    luna-slot1           9/9       7/7       0/5     0/4    D:/Projects/.../worktrees/my-branch  (this one)
 ```
 
 A claim and a listener are both checked because either alone would lie: a
 worktree configured but not started would collide the moment it does, and an open
 port nobody claims is something outside this repository that would collide right
-now. `OBSERV 0/5` is normal, the profile is opt in.
+now. `INFRA` counts the four databases, NATS and its monitor, Redis, SMTP and
+Mailpit. `SERVICES` counts all seven services. `OBSERV 0/5` and `TEST 0/4` are
+normal, because both profiles are opt in. A slot with no claim, no lock and no
+listener gets no row.
 
 ## Configure and run a slot
 
@@ -338,7 +345,9 @@ docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \
 # run migrations for this slot's databases, then serve / test
 npx nx run luna-shopper-backend-auth:migration:run
 npx nx run luna-shopper-backend-core:migration:run
-npx nx serve luna-shopper-backend-gateway     # + realtime / auth / core / catalog
+npx nx run luna-shopper-backend-catalog:migration:run
+npx nx run luna-shopper-backend-harvester:migration:run
+npx nx serve luna-shopper-backend-gateway     # + realtime / auth / core / catalog / harvester / assistant
 ```
 
 `luna-slot.sh` is idempotent: re-run it with the same N to refresh the files, or
@@ -363,11 +372,12 @@ instance that happens to be up.
 Two consequences, and they pull in opposite directions:
 
 - **`CORS_ORIGINS` is a list**, so `luna-slot` writes **every** front end slot's
-  two origins, not this slot's. A backend has no way to know which front ends will
-  call it and no reason to care, and an origin it was not told about fails with a
-  CORS error that says nothing about slots. Twenty entries in a git ignored file
-  removes the whole class of problem. (It used to be hardcoded to `localhost:4200`,
-  so any front end past slot 0 got a gateway that refused its own browser.)
+  three origins (shell, velista and `luna-shopper-admin`), not this slot's. A
+  backend has no way to know which front ends will call it and no reason to care,
+  and an origin it was not told about fails with a CORS error that says nothing
+  about slots. Thirty entries (slots 0 to 9) in a git ignored file removes the
+  whole class of problem. (It used to be hardcoded to `localhost:4200`, so any
+  front end past slot 0 got a gateway that refused its own browser.)
 - **`APP_BASE_URL` and the two `MAIL_*_BASE_URL` are singular**: they are where
   the Google callback and the verification links send a browser, and a redirect
   can only have one target. So they name one front end, chosen with

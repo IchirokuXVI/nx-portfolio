@@ -6,9 +6,13 @@ the harvester can import: a `HarvestDocument`, backend plan `0086` section
 6.1, which is the one file schema the file import reads whoever produced the
 file.
 
-The contract is
+The contract this folder writes and validates against is
 `libs/luna-shopper/contracts/src/schemas/harvest-document/harvest-document-1.schema.ts`,
-and it is the only authority. Nothing here restates it.
+and nothing here restates it. `to-harvest-document.mjs` writes `schema_version: 1`
+and `validate.mjs` loads that schema by default. The contracts library also holds
+`harvest-document-2.schema.ts`, and `HARVEST_DOCUMENT_CURRENT_VERSION` in
+`harvest-document-registry.ts` is 2, so version 2 is what the backend writes. The
+registry still maps version 1, so a document this command produces stays readable.
 
 **It is an operator's tool, and no deployed process loads it.** The harvester's
 `FILE_IMPORT` mode consumes the finished document, so it used to live inside
@@ -21,7 +25,13 @@ for every chain against what one chain prints:
 | `luna-shopper/leaflet-chains` | `libs/luna-shopper/tools/leaflet/chains` | One folder per chain: `layout.md`, `prompt.txt`, `headings.mjs`, `baseline.json` |
 
 `leaflet-cli` names `leaflet-chains` in its `implicitDependencies`, so an edit
-to `dia/prompt.txt` marks the command affected and runs its tests.
+to `chains/src/dia/prompt.txt` marks the command affected and runs its tests.
+
+A chain folder lives at `libs/luna-shopper/tools/leaflet/chains/src/<slug>/`
+(`chains.mjs` resolves it), and every `chains/src/<slug>/` path below is relative to
+`libs/luna-shopper/tools/leaflet/`. Four chains have a folder: `deza`, `dia`,
+`el-jamon` and `lidl`. Only `deza` and `el-jamon` have a `baseline.json`, because a
+baseline is written only once a reading is accepted (procedure (b), step 6).
 
 ## What is here
 
@@ -33,10 +43,10 @@ to `dia/prompt.txt` marks the command affected and runs its tests.
 | `drift-check.mjs`             | Compares a build's statistics with the chain's `baseline.json` and refuses a reading that drifted too far. |
 | `validate.mjs`                | Validates a built document against the contract itself, not a copy of it.                                  |
 | `AGENT-PROMPT.md`             | The prompt to paste to a model agent that writes a new chain's folder.                                     |
-| `chains/<slug>/prompt.txt`    | What a model is asked for one page of that chain's leaflet.                                                |
-| `chains/<slug>/headings.mjs`  | That chain's heading vocabulary, its fixed pages, its render dpi, and the model it has used so far.        |
-| `chains/<slug>/layout.md`     | What one page of that chain's leaflet looks like, for a person (and a model) to check before reading.      |
-| `chains/<slug>/baseline.json` | That chain's own statistics from its last accepted reading. `drift-check.mjs`'s reference point.           |
+| `chains/src/<slug>/prompt.txt`    | What a model is asked for one page of that chain's leaflet.                                                |
+| `chains/src/<slug>/headings.mjs`  | That chain's heading vocabulary, its fixed pages, its render dpi, and the model it has used so far.        |
+| `chains/src/<slug>/layout.md`     | What one page of that chain's leaflet looks like, for a person (and a model) to check before reading.      |
+| `chains/src/<slug>/baseline.json` | That chain's own statistics from its last accepted reading. `drift-check.mjs`'s reference point.           |
 
 The command's own parts sit beside `cli.mjs`: `chains.mjs` resolves a slug,
 `census.mjs` and `render.mjs` are steps 1 and 2, `layout-check.mjs` is step 3,
@@ -46,7 +56,7 @@ The command's own parts sit beside `cli.mjs`: `chains.mjs` resolves a slug,
 **One leaflet's own values never belong in a chain's script.** A leaflet's own
 PDF, its page count, which pages carry no department heading, its printed
 validity window, and which tool actually read it: none of that is fixed across
-every leaflet a chain prints, so none of it lives in `chains/<slug>/`. It lives
+every leaflet a chain prints, so none of it lives in `chains/src/<slug>/`. It lives
 in that leaflet's own `leaflet.json`, beside its page readings under
 `tmp/leaflet/<slug>-import/`, and it is not committed: it is working material,
 same as the readings themselves.
@@ -98,8 +108,7 @@ is where it now lives, for every chain alike.
    Jamon text layer reading and 2 of its OCR reading.
 
 Roughly two fifths of a leaflet therefore reaches no basket line, because
-`bestOffer` ranks on `price`. Backlog `0011` records the consequence and the
-design that removes it. It is a known limitation the owner accepted.
+`bestOffer` ranks on `price`. It is a known limitation the owner accepted.
 
 ## What a leaflet field becomes
 
@@ -133,7 +142,7 @@ the other bound would put a made up date on 296 prices.
 The owner will not check every leaflet by hand, so two things stand in for
 that check.
 
-**`chains/<slug>/layout.md`** is a short prose description of one page of that
+**`chains/src/<slug>/layout.md`** is a short prose description of one page of that
 chain's leaflet: the tile layout, the price badge, the decimal separator,
 loyalty badges or none, the heading banner, and typical products per page. A
 new leaflet's first three page images get checked against it before anything
@@ -149,7 +158,7 @@ brand, the distinct unit price label patterns (a label's own numbers folded to
 `#`, so `LITRO 1'18` and `LITRO 3'61` count once), the distinct department
 headings, and which of those headings the chain's own `headings.mjs` cannot
 resolve. `drift-check.mjs --report <out.report.json> --chain <slug>` compares
-those against `chains/<slug>/baseline.json` and prints every one that left its
+those against `chains/src/<slug>/baseline.json` and prints every one that left its
 band, with exit code 1:
 
 - A share that moved more than 15 points from the baseline, either direction.
@@ -162,7 +171,7 @@ band, with exit code 1:
 A refused reading is not proof the reading is wrong. It is a signal that the
 leaflet, or the way it was read, no longer looks like the one the baseline was
 built from, and a person should look before it reaches an upload.
-`build-document.mjs --update-baseline` rewrites `chains/<slug>/baseline.json`
+`build-document.mjs --update-baseline` rewrites `chains/src/<slug>/baseline.json`
 from the current report, once a person has accepted the reading it came from.
 
 ## Procedure (a): a new leaflet of a known chain
@@ -179,15 +188,15 @@ typed without it is dropped in silence. `--help` prints every flag.
 It does eight things, in order, and each one can refuse.
 
 1. **Census.** Page count, page size and which pages carry a text layer. It is
-   printed first, because the two chains read so far are not the same kind of
-   document: El Jamon is 40 pages with text on 28 of them, Deza is 62 pages of
-   flat images.
+   printed first, because leaflets are not all the same kind of document. Of the
+   first two chains read, El Jamon is 40 pages with text on 28 of them, and Deza
+   is 62 pages of flat images.
 2. **Render.** Every page to a PNG under `<out>/pages/`, at the dpi
-   `chains/<slug>/headings.mjs` names, which `--dpi` overrides. It shells out to
+   `chains/src/<slug>/headings.mjs` names, which `--dpi` overrides. It shells out to
    `pdftoppm`, then `magick`, then a Python with PyMuPDF, and prints the install
    line for each when it finds none. `--pdf <directory>` of `page_NN.png` skips
    this step, which is how LIDL is read.
-3. **Layout check.** `chains/<slug>/layout.md` against the first three pages. A
+3. **Layout check.** `chains/src/<slug>/layout.md` against the first three pages. A
    mismatch stops the run and names what differs. An answer the check could not
    read carries on, and the raw text of it is kept as
    `<out>/import/layout-check.attempt_1.txt` so you can see what the model said.
@@ -255,7 +264,7 @@ npx nx run luna-shopper/leaflet-cli:read -- --out <out> --resume --engine manual
 ```
 
 A Claude Code session already reads a PNG with its Read tool and the tokens are
-already paid for. `PROMPT.md` carries `chains/<slug>/prompt.txt` byte for byte,
+already paid for. `PROMPT.md` carries `chains/src/<slug>/prompt.txt` byte for byte,
 so it cannot drift from the chain's own rules, and it is generated every run and
 never committed. The pick up refuses a reading it cannot trust rather than
 repairing one: a `page_NN.json` that is not a JSON array is named by page and
@@ -294,7 +303,7 @@ node libs/luna-shopper/tools/leaflet/cli/src/to-harvest-document.mjs \
   tmp/leaflet/eljamon.vision.json
 ```
 
-`chains/el-jamon/baseline.json` still exists, generated from that same
+`chains/src/el-jamon/baseline.json` still exists, generated from that same
 reading, so `drift-check.mjs` has something to compare a future El Jamon
 reading against once it does move to per page images and this procedure.
 
@@ -302,22 +311,22 @@ reading against once it does move to per page images and this procedure.
 
 Write these before any model reads a single page, in this order.
 
-1. **`chains/<slug>/layout.md`.** Look at three pages of the new leaflet and
+1. **`chains/src/<slug>/layout.md`.** Look at three pages of the new leaflet and
    describe what one page looks like: the tile layout, the price badge, the
    decimal separator, loyalty badges or none, the heading banner, typical
    products per page.
-2. **`chains/<slug>/prompt.txt`.** Copy the closest existing chain's prompt
+2. **`chains/src/<slug>/prompt.txt`.** Copy the closest existing chain's prompt
    and adapt it. The rules that usually change between chains: the decimal
    separator, the price badge's shape, whether there is a loyalty mechanic at
    all, how a promotion is worded, and the heading banner's own vocabulary.
-3. **`chains/<slug>/headings.mjs`.** The department heading vocabulary this
+3. **`chains/src/<slug>/headings.mjs`.** The department heading vocabulary this
    chain prints, folded (accents stripped, upper cased) onto the schema's own
    slugs, plus this chain's default fixed pages and the model name a first
    reading expects to use.
 4. Read the whole leaflet through `build-document.mjs`, as in procedure (a).
 5. A person spot checks three pages against the built document.
 6. Once accepted, run `build-document.mjs --update-baseline` to create
-   `chains/<slug>/baseline.json`. There is no baseline before this step, so
+   `chains/src/<slug>/baseline.json`. There is no baseline before this step, so
    `drift-check.mjs` has nothing to compare the first reading against; from
    the second leaflet on, it guards every reading after this one.
 

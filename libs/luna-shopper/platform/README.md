@@ -1,7 +1,8 @@
 # @portfolio/luna-shopper/platform
 
 The cross cutting platform conventions every Luna Shopper service follows, built
-once here so all four services (gateway, auth, core, realtime) behave identically
+once here so all seven services (gateway, realtime, auth, core, catalog, harvester,
+assistant) behave identically
 and a future .NET or Spring service has a written spec to match. Implements
 **plan 0004**.
 
@@ -29,7 +30,9 @@ setupSwagger(app, { title, description });     // gateway only
   enables shutdown hooks.
 - **`PlatformHealthModule.forRoot`** exposes `GET /health/live` and
   `GET /health/ready` (Terminus). Pass `readiness` to add the service's dependency
-  checks (DB, NATS) as those clients land in later plans.
+  checks. Every service passes one: core, for example, injects
+  `TypeOrmHealthIndicator` and `MicroserviceHealthIndicator` for its database and
+  NATS.
 
 ## Building blocks (used by feature plans 0005+)
 
@@ -43,7 +46,7 @@ setupSwagger(app, { title, description });     // gateway only
 | Localization | `resolveLocale`, `SUPPORTED_LOCALES`, `DEFAULT_LOCALE` |
 | Pagination | `Page`, `PageQueryDto`, `encodeCursor`, `decodeCursor`, `clampPageSize`, `buildPage` |
 | Idempotency | `IdempotencyStore`, `runOnce`, `commandStepKey` |
-| Rate limit buckets | `THROTTLE_LIMITS`, `createThrottlerOptions`, `THROTTLE_MULTIPLIER` (raises every limit at once, for a development stack) |
+| Rate limit buckets | `THROTTLE_LIMITS`, `createThrottlerOptions`, `THROTTLE_MULTIPLIER_VARIABLE` and `readThrottleMultiplier` (the `THROTTLE_MULTIPLIER` environment variable, which raises every limit at once, for a development stack) |
 | NATS correlation | `buildNatsHeaders`, `readCorrelationFromHeaders`, `readLocaleFromHeaders` |
 
 ## Guarantees (plan 0004 exit criteria)
@@ -60,12 +63,11 @@ setupSwagger(app, { title, description });     // gateway only
 - Rate limits protect the open surfaces; cursor pagination and idempotency
   primitives are ready for the feature controllers and event consumers.
 
-## What is deferred
+## Readiness
 
-The primitives above exist and are unit tested, but are applied to real
-controllers, DTOs, DB and NATS clients in the feature plans (0005+). Readiness
-currently checks liveness, the shutdown gate and a heap ceiling; DB and NATS
-indicators are added with those clients.
+Readiness always checks the shutdown gate and a heap ceiling (512 MB). Each
+service adds its own dependency indicators through `PlatformHealthModule.forRoot`
+(`readiness`), so an outage of something that service depends on turns it not ready.
 
 ## Test
 

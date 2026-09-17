@@ -6,12 +6,13 @@ honest across service boundaries. This is the concrete implementation of
 
 ## Layers
 
-| Layer               | Tool                          | Where                                                       | Needs infra |
-| ------------------- | ----------------------------- | ----------------------------------------------------------- | ----------- |
-| **Unit**            | Jest (`@nx/jest`)             | colocated `*.spec.ts`, broker + DB mocked                   | no          |
-| **Schema contract** | Jest + Ajv                    | `libs/luna-shopper/contracts/src/schemas/*.spec.ts`         | no          |
-| **Integration**     | Jest, real Postgres/NATS      | `*.integration.spec.ts` under the `test-integration` target | yes         |
-| **End to end**      | Playwright (`@nx/playwright`) | `apps/luna-shopper-backend-e2e`                             | yes         |
+| Layer                  | Tool                          | Where                                                                 | Needs infra |
+| ---------------------- | ----------------------------- | --------------------------------------------------------------------- | ----------- |
+| **Unit**               | Jest (`@nx/jest`)             | colocated `*.spec.ts`, broker + DB mocked                             | no          |
+| **Schema contract**    | Jest + Ajv                    | `libs/luna-shopper/contracts/src/schemas/*.spec.ts`                   | no          |
+| **Integration**        | Jest, real Postgres/NATS      | `*.integration.spec.ts` under the `test-integration` target           | yes         |
+| **End to end**         | Playwright (`@nx/playwright`) | `apps/luna-shopper-backend-e2e`                                       | yes         |
+| **Browser end to end** | Playwright (`@nx/playwright`) | `apps/velista-luna-e2e`, velista in a browser against the Luna images | yes         |
 
 `nx affected` runs the right unit + schema tests per change, mirroring CI. The
 infra-backed layers are gated so they never break the fast, infra-free suite.
@@ -45,7 +46,7 @@ including volumes. Cleanup is guaranteed even when the suite fails, and the exit
 code is the suite's:
 
 ```sh
-# integration (real Postgres), for auth, core and catalog
+# integration (real Postgres), for auth, core, catalog and harvester
 npx nx run luna-shopper-backend:test-integration:stack
 
 # e2e (gateway REST + realtime SSE), building and starting the six services
@@ -70,10 +71,11 @@ docker compose --env-file k8s/e2e/luna-shopper-backend/.env.slot \
 npx nx run luna-shopper-backend-auth:migration:run
 npx nx run luna-shopper-backend-core:migration:run
 npx nx run luna-shopper-backend-catalog:migration:run
+npx nx run luna-shopper-backend-harvester:migration:run
 
 # Every port below comes from the file luna-slot.sh just wrote, never from a
 # number typed into this document. It carries the whole slot: the databases, the
-# broker, and the five services. Writing the numbers out here is how this section
+# broker, and every service. Writing the numbers out here is how this section
 # went stale once already, naming a `default + N*100` scheme that had been
 # replaced by the 43000 band, so the commands pointed at dead ports.
 set -a; . k8s/e2e/luna-shopper-backend/.env.slot; set +a
@@ -87,7 +89,7 @@ LUNA_INTEGRATION=1 npx nx run luna-shopper-backend-core:test-integration
 LUNA_INTEGRATION=1 NATS_URL="nats://localhost:$LUNA_NATS_PORT" \
   npx nx run luna-shopper/platform:test-integration
 
-# e2e: start the five services, then point the suite at THEIR ports. The default
+# e2e: start the six services, then point the suite at THEIR ports. The default
 # is :3000/:3001, which on a slot is either nothing (so the suite skips itself and
 # reports a green run that tested nothing) or somebody else's stack.
 bash k8s/e2e/luna-shopper-backend/run-services.sh start
@@ -112,8 +114,8 @@ they are a lie: a green check that proves nothing. So there is one more variable
 | `LUNA_REQUIRE_STACK` | a stack was brought up **on purpose**; an intended skip is now a **failure** |
 | `E2E_SEED`           | seed the demo world in the Playwright global setup                           |
 
-`LUNA_REQUIRE_STACK` is set by both CI tiers and by the `*:stack` targets, and by
-nothing else. Where it is set, a missing `LUNA_INTEGRATION`, an unreachable
+`LUNA_REQUIRE_STACK` is set by every CI job that brings a Luna stack up and by the
+`*:stack` targets, and by nothing else. Where it is set, a missing `LUNA_INTEGRATION`, an unreachable
 gateway, or a missing `E2E_SEED` fails the run rather than skipping it.
 
 Each gate has exactly **one** definition, which is what makes that inversion
@@ -153,34 +155,56 @@ pacts will assert.
 
 ## CI
 
-Every layer runs, in two tiers of fidelity (plan 0015, section 2).
+Every layer runs, in two tiers of fidelity (plan 0015, section 2), plus a browser
+gate (velista plan 0080).
 
-|                   | Where                                  | Services run as         | What it protects                                                              |
-| ----------------- | -------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- |
-| **Unit + schema** | `pr.yml`, job `verify`                 | n/a                     | the fast, infra-free layer                                                    |
-| **Tier 1**        | `pr.yml`, job `verify-infra`           | `node dist/.../main.js` | application correctness; fast enough to block a merge on                      |
-| **Tier 2**        | `docker-ci.yml`, before `helm upgrade` | the just built images   | image shape: entrypoint, non root user, runtime deps, `SIGTERM`, baked config |
+|                   | Where                                   | Services run as         | What it protects                                                              |
+| ----------------- | --------------------------------------- | ----------------------- | ----------------------------------------------------------------------------- |
+| **Unit + schema** | `pr.yml`, job `verify`                  | n/a                     | the fast, infra-free layer                                                    |
+| **Tier 1**        | `pr.yml`, job `verify-infra`            | `node dist/.../main.js` | application correctness; fast enough to block a merge on                      |
+| **Tier 2**        | `docker-ci.yml`, job `e2e-luna`         | the just built images   | image shape: entrypoint, non root user, runtime deps, `SIGTERM`, baked config |
+| **Browser gate**  | `docker-ci.yml`, job `e2e-velista-luna` | the just built images   | velista in a real browser against a real, seeded backend                      |
+
+`verify-infra` brings the compose stack up with `stack.sh up` (which also runs the
+migrations), runs the affected projects' `test-integration` targets followed by
+`assert-integration-ran.js`, starts the six services with `run-services.sh start`,
+and runs `luna-shopper-backend-e2e` against them with `E2E_SEED=1`.
+
+`docker-ci.yml` has three e2e gates, and each one blocks the deploy when it fails:
+
+- `e2e-frontend` runs the affected micro frontend e2e suites against the staging
+  frontend images (`k8s/e2e/portfolio-frontend/compose.yml`). It tests no Luna
+  service.
+- `e2e-luna` is tier 2. It pulls the Luna images at the `staging` tag and runs
+  `stack.sh e2e-images`, the same suite as tier 1 against those images.
+- `e2e-velista-luna` stands both stacks up on one runner: the Luna images through
+  `stack.sh e2e-up`, then the frontend images behind the reverse proxy with
+  `compose.luna.yml`. It then runs `nx e2e velista-luna-e2e`. It runs only when
+  that suite is affected.
+
+What holds across these jobs:
 
 - Both `pr.yml` jobs are required checks on `main` and `dev`. That is what keeps
   the property this repo already relies on: every commit reaching those branches
   is tested, so the release workflow does not retest it.
-- `verify-infra` **skips itself entirely** when no `luna-shopper` project is
-  affected, so a pull request touching only the Angular micro frontends pays
-  nothing beyond `npm ci`. `nx affected` further narrows which services'
+- `verify-infra` **skips every step after its affected check** when no
+  `luna-shopper` project is affected, so a pull request touching only the Angular
+  micro frontends pays nothing beyond `npm ci`. `nx affected` further narrows which services'
   integration suites run; e2e is all or nothing, because it exercises the whole
   system.
-- Tier 2 runs _before_ the `helm upgrade` and the `kubectl rollout restart`, so a
-  red suite stops the deploy and a broken image never reaches staging. It costs
-  the stack boot and the suite, not a rebuild: `docker-ci.yml` already built those
-  images on the way to staging.
-- Both tiers set `LUNA_REQUIRE_STACK=1`, so a suite that would skip fails instead,
-  and `COMPOSE_PROJECT_NAME` per run, so a retried or overlapping run can never
+- The three gates run _before_ the `helm upgrade` and the `kubectl rollout
+  restart`, so a red suite stops the deploy and a broken image never reaches
+  staging. It costs the stack boot and the suite, not a rebuild: `docker-ci.yml`
+  already built those images on the way to staging.
+- Tier 1, tier 2 and the browser gate set `LUNA_REQUIRE_STACK=1`, so a suite that
+  would skip fails instead, and `COMPOSE_PROJECT_NAME` per run, so a retried or overlapping run can never
   adopt a previous run's volumes.
 - Retries are **1 for e2e in CI only** and **zero for integration**: an
   integration test that passes on retry is hiding a real ordering or isolation
   bug, and `runInBand` is already set, so there is no concurrency to blame.
-- On failure both tiers upload the Playwright HTML report and traces, the compose
-  logs, the per service logs, and the Jest JSON summaries. An infra backed suite
+- On failure every Luna job uploads its diagnostics: the Playwright HTML report
+  and traces, the compose logs, and where they exist the per service logs and the
+  Jest JSON summaries. An infra backed suite
   that fails opaquely gets disabled within a month, so the diagnostics are part of
   the design.
 
