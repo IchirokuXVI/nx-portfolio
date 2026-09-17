@@ -31,9 +31,16 @@ export interface PolicyRow {
 
 export interface EffectivePriceInput {
   /**
-   * The current row per kind at the scope being computed **and** at the chain's
-   * NATIONAL scope (plan 0080, section 6). "Current" is the newest `observedAt`
-   * per (scope, kind); the caller's `DISTINCT ON` is what makes that true.
+   * Current rows of the product across the shop's stack: the scope being
+   * computed and every scope it falls through to (plan 0080, section 6; plan
+   * 0105, section 4). "Current" is the newest `observedAt` per (scope, kind),
+   * and the caller's `DISTINCT ON` is what makes that true.
+   *
+   * The caller may hand over every current row, or only the ones that can
+   * matter (plan 0117, section 5): the narrowest eligible row per kind, or,
+   * when there is none, the newest enabled row for the stale tier. Both give
+   * the same answer, because every step below keeps a row it was handed only
+   * if the step would have kept it from the full set.
    */
   rows: readonly PriceRow[];
   /** The scope being computed. The most specific of the set, by construction. */
@@ -50,6 +57,14 @@ export interface EffectivePriceInput {
   scopePriorities?: ReadonlyMap<string, number>;
   policies: readonly PolicyRow[];
   now: Date;
+  /**
+   * The earliest `validFrom` still ahead among enabled current rows the caller
+   * did **not** hand over, because a row that is not valid yet is filtered out
+   * of {@link rows} by a caller that filters in SQL (plan 0117, section 6).
+   * Absent when {@link rows} holds every current row, which is what the pure
+   * specs pass.
+   */
+  nextValidFrom?: Date | null;
 }
 
 export interface EffectivePrice {
@@ -79,70 +94,56 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * remembered, which is what lets undo, replay and reimport touch only their own
  * rows.
  *
- * 1. Per kind, the more specific scope wins: a regional leaflet at a warehouse
- *    scope beats the national one for that kind, in that warehouse (section 6),
- *    and with three tiers it is the lowest `priority` that has a row of that
- *    kind (plan 0105, section 4). **Per product, not per scope**: a region that
- *    prices 400 of a chain's 4,000 products answers for those 400, and the
- *    other 3,600 fall through to national.
- * 2. Filter to eligible rows: the kind is enabled, `now` is inside the window
- *    where one is set, the age is within `maxAgeDays` where one is set, and an
- *    `ADMIN` row passes its protection test or is past it (section 4.2).
- * 3. Take the highest priority. A protected and undisputed `ADMIN` row ranks
- *    above every priority in the table.
- * 4. Break ties by the most recent `lastObservedAt`.
- * 5. Nothing eligible: the newest enabled row of any kind, flagged stale
+ * The order is plan 0117, section 2, and it matters:
+ *
+ * 1. The rows are already current per (scope, kind), so an older row never
+ *    stands in for a newer one that is not valid yet.
+ * 2. Keep the eligible rows: the kind is enabled, `now` is inside the window
+ *    where one is set, and the age is within `maxAgeDays` where one is set.
+ * 3. Per kind, the narrowest eligible scope wins (plan 0105, section 4). **Only
+ *    among prices valid now**: a warehouse walked once months ago does not
+ *    hide the region price written this morning. Per product, not per scope.
+ * 4. A protected `ADMIN` row disputed by one of those rows is dropped (section
+ *    4.2). An expired automated row has said nothing new and disputes nothing.
+ * 5. Take the highest priority. A protected and undisputed `ADMIN` row ranks
+ *    above every priority in the table. Ties go to the newest `lastObservedAt`.
+ * 6. Nothing eligible: the newest enabled row of the stack, flagged stale
  *    (section 5). An expired leaflet is included; a disabled kind is not.
  */
 export function resolveEffectivePrice(
   input: EffectivePriceInput
 ): EffectivePrice {
   const policies = new Map(input.policies.map((p) => [p.sourceKind, p]));
-  const candidates = narrowestPerKind(
+  const now = input.now.getTime();
+  const chosen = narrowestEligiblePerKind(
     input.rows,
     input.priceScopeId,
+    input.policies,
+    input.now,
     input.scopePriorities
   );
-  const enabled = candidates.filter(
-    (row) => policies.get(row.sourceKind)?.enabled === true
+
+  // An ADMIN row inside its window and disputed is not eligible: a source that
+  // said something new displaces it at once. Past the window it competes at
+  // its policy priority like any other row.
+  const survivors = chosen.filter(
+    (row) => !(isProtected(row, now) && isDisputed(row, chosen))
   );
-  const now = input.now.getTime();
 
-  const disputed = (row: PriceRow) => isDisputed(row, candidates);
-  const eligible = enabled.filter((row) => {
-    const policy = policies.get(row.sourceKind);
-    if (!policy) {
-      return false;
-    }
-    if (row.validFrom && row.validFrom.getTime() > now) {
-      return false;
-    }
-    if (row.validUntil && row.validUntil.getTime() <= now) {
-      return false;
-    }
-    if (
-      policy.maxAgeDays !== null &&
-      now - row.lastObservedAt.getTime() > policy.maxAgeDays * DAY_MS
-    ) {
-      return false;
-    }
-    // An ADMIN row inside its window and disputed is not eligible: a source
-    // that said something new displaces it at once. Past the window it
-    // competes at its policy priority like any other row.
-    if (isProtected(row, now) && disputed(row)) {
-      return false;
-    }
-    return true;
-  });
+  const nextBoundaryAt = boundaryOf(
+    chosen,
+    input.rows,
+    policies,
+    now,
+    input.nextValidFrom ?? null
+  );
 
-  const nextBoundaryAt = boundaryOf(candidates, policies, now);
-
-  if (eligible.length > 0) {
+  if (survivors.length > 0) {
     const rank = (row: PriceRow): number =>
       isProtected(row, now)
         ? Number.NEGATIVE_INFINITY
         : (policies.get(row.sourceKind)?.priority ?? Number.POSITIVE_INFINITY);
-    const [best] = [...eligible].sort(
+    const [best] = [...survivors].sort(
       (a, b) =>
         rank(a) - rank(b) ||
         b.lastObservedAt.getTime() - a.lastObservedAt.getTime()
@@ -150,20 +151,82 @@ export function resolveEffectivePrice(
     return { row: best, stale: false, nextBoundaryAt };
   }
 
-  const [newest] = [...enabled].sort(
-    (a, b) => b.lastObservedAt.getTime() - a.lastObservedAt.getTime()
-  );
+  // Newest first, and on a tie the narrower scope, so the stale answer does not
+  // depend on the order the rows arrived in.
+  const narrower = narrownessOf(input.priceScopeId, input.scopePriorities);
+  const [newest] = input.rows
+    .filter((row) => policies.get(row.sourceKind)?.enabled === true)
+    .sort(
+      (a, b) =>
+        b.lastObservedAt.getTime() - a.lastObservedAt.getTime() ||
+        narrower(a, b)
+    );
   return { row: newest ?? null, stale: newest !== undefined, nextBoundaryAt };
+}
+
+/**
+ * Steps 2 and 3 of plan 0117, section 2: the narrowest row of each kind among
+ * the rows valid now.
+ *
+ * Exported because the price writer takes an `ADMIN` row's snapshot from this
+ * same set (section 4), so what a correction records and what later disputes
+ * it are one function. The SQL in `effective-price.service.ts` computes the same
+ * set, and `effective-price.spec.ts` pins the rule it follows.
+ */
+export function narrowestEligiblePerKind(
+  rows: readonly PriceRow[],
+  priceScopeId: string,
+  policies: readonly PolicyRow[],
+  now: Date,
+  scopePriorities?: ReadonlyMap<string, number>
+): PriceRow[] {
+  const byKind = new Map(policies.map((p) => [p.sourceKind, p]));
+  return narrowestPerKind(
+    rows.filter((row) => isEligible(row, byKind.get(row.sourceKind), now)),
+    priceScopeId,
+    scopePriorities
+  );
+}
+
+/**
+ * Whether a row may be shown as it is now: its kind is enabled, `now` is inside
+ * its window, and it is younger than its kind's max age.
+ *
+ * The age test is strict at the boundary, like `validUntil`: at
+ * `lastObservedAt + maxAgeDays` the row is expired, so the instant the sweep
+ * is woken for is an instant the answer really changes at.
+ */
+export function isEligible(
+  row: PriceRow,
+  policy: PolicyRow | undefined,
+  now: Date
+): boolean {
+  if (!policy || !policy.enabled) {
+    return false;
+  }
+  const at = now.getTime();
+  if (row.validFrom && row.validFrom.getTime() > at) {
+    return false;
+  }
+  if (row.validUntil && row.validUntil.getTime() <= at) {
+    return false;
+  }
+  const expiry = ageExpiryOf(row, policy);
+  return expiry === null || expiry > at;
 }
 
 /**
  * The protection test of section 4.2, inverted: does any automated kind
  * disagree with what this `ADMIN` row recorded?
  *
- * A kind with a current row and no entry disagrees the moment it appears: a
- * source reporting for the first time is new information by construction. A
- * kind whose current row differs from its entry disagrees. A kind in the
- * snapshot with no current row any more is ignored.
+ * The rows compared against are the narrowest **eligible** row of each kind
+ * (plan 0117, section 4): a source that has not spoken within its max age has
+ * said nothing new, so it cannot displace a hand correction.
+ *
+ * A kind with a row and no entry disagrees the moment it appears: a source
+ * reporting for the first time is new information by construction. A kind
+ * whose row differs from its entry disagrees. A kind in the snapshot with no
+ * row any more is ignored.
  */
 export function isDisputed(
   admin: PriceRow,
@@ -216,17 +279,7 @@ export function narrowestPerKind(
   priceScopeId: string,
   scopePriorities?: ReadonlyMap<string, number>
 ): PriceRow[] {
-  const priorityOf = (row: PriceRow): number => {
-    const stated = scopePriorities?.get(row.priceScopeId);
-    if (stated !== undefined) {
-      return stated;
-    }
-    // No map, or a scope the caller did not rank: the two tier rule.
-    return row.priceScopeId === priceScopeId
-      ? Number.NEGATIVE_INFINITY
-      : Number.POSITIVE_INFINITY;
-  };
-
+  const narrower = narrownessOf(priceScopeId, scopePriorities);
   const byKind = new Map<PriceSourceKind, PriceRow>();
   for (const row of rows) {
     const held = byKind.get(row.sourceKind);
@@ -237,63 +290,103 @@ export function narrowestPerKind(
   return [...byKind.values()];
 
   function beats(row: PriceRow, held: PriceRow): boolean {
-    // Compared and not subtracted: the fallback ranks are infinities, and
-    // `Infinity - Infinity` is NaN, which reads as "not equal" and then loses
-    // every comparison, so two unranked rows would never reach the tie breaks.
-    const mine = priorityOf(row);
-    const theirs = priorityOf(held);
-    if (mine !== theirs) {
-      return mine < theirs;
-    }
-    if (
-      (row.priceScopeId === priceScopeId) !==
-      (held.priceScopeId === priceScopeId)
-    ) {
-      return row.priceScopeId === priceScopeId;
+    const order = narrower(row, held);
+    if (order !== 0) {
+      return order < 0;
     }
     return row.lastObservedAt.getTime() > held.lastObservedAt.getTime();
   }
 }
 
 /**
- * The minimum, over the rows looked at, of the four instants the answer can
- * change at without a write (section 7): a `validFrom` still ahead, a
- * `validUntil` not yet reached, an `ADMIN` row's `protectedUntil`, and
- * `lastObservedAt + maxAgeDays` for a kind with a max age. The fourth is the
- * one a plan that counted three would forget, and forgetting it shows a seven
- * day old crawl price as eligible forever.
+ * A comparator by scope alone: negative when `a` sits at a more specific scope
+ * than `b`. The lower priority first, then the scope being computed.
+ */
+function narrownessOf(
+  priceScopeId: string,
+  scopePriorities?: ReadonlyMap<string, number>
+): (a: PriceRow, b: PriceRow) => number {
+  const priorityOf = (row: PriceRow): number => {
+    const stated = scopePriorities?.get(row.priceScopeId);
+    if (stated !== undefined) {
+      return stated;
+    }
+    // No map, or a scope the caller did not rank: the two tier rule.
+    return row.priceScopeId === priceScopeId
+      ? Number.NEGATIVE_INFINITY
+      : Number.POSITIVE_INFINITY;
+  };
+  return (a, b) => {
+    // Compared and not subtracted: the fallback ranks are infinities, and
+    // `Infinity - Infinity` is NaN, which reads as "not equal" and then loses
+    // every comparison, so two unranked rows would never reach the tie breaks.
+    const mine = priorityOf(a);
+    const theirs = priorityOf(b);
+    if (mine !== theirs) {
+      return mine < theirs ? -1 : 1;
+    }
+    const aHere = a.priceScopeId === priceScopeId;
+    const bHere = b.priceScopeId === priceScopeId;
+    if (aHere === bHere) {
+      return 0;
+    }
+    return aHere ? -1 : 1;
+  };
+}
+
+/** `lastObservedAt + maxAgeDays` in epoch milliseconds, or null when the kind never ages. */
+function ageExpiryOf(row: PriceRow, policy: PolicyRow): number | null {
+  return policy.maxAgeDays === null
+    ? null
+    : row.lastObservedAt.getTime() + policy.maxAgeDays * DAY_MS;
+}
+
+/**
+ * The earliest instant the answer can change at without a write (plan 0117,
+ * section 6):
+ *
+ * - each chosen row's expiry, its `validUntil` or `lastObservedAt + maxAgeDays`,
+ *   because when it expires the next scope of its kind answers.
+ * - a chosen `ADMIN` row's `protectedUntil`, disputed or not, because either
+ *   way its rank changes then.
+ * - the earliest `validFrom` still ahead among the enabled current rows,
+ *   because a row that becomes valid can win.
+ *
+ * A wider eligible row that was not chosen cannot change the answer by
+ * expiring, and a narrower row that already expired cannot come back without a
+ * write, which recomputes the key anyway. The stale tier chooses nothing, so it
+ * carries only the `validFrom` term.
  */
 function boundaryOf(
+  chosen: readonly PriceRow[],
   rows: readonly PriceRow[],
   policies: ReadonlyMap<PriceSourceKind, PolicyRow>,
-  now: number
+  now: number,
+  nextValidFrom: Date | null
 ): Date | null {
   let earliest: number | null = null;
-  const consider = (at: Date | null) => {
-    if (at === null) {
-      return;
-    }
-    const time = at.getTime();
-    if (time > now && (earliest === null || time < earliest)) {
+  const consider = (time: number | null) => {
+    if (time !== null && time > now && (earliest === null || time < earliest)) {
       earliest = time;
     }
   };
-  for (const row of rows) {
+  for (const row of chosen) {
     const policy = policies.get(row.sourceKind);
-    if (!policy || !policy.enabled) {
+    if (!policy) {
       continue;
     }
-    consider(row.validFrom);
-    consider(row.validUntil);
+    consider(row.validUntil?.getTime() ?? null);
+    consider(ageExpiryOf(row, policy));
     if (row.sourceKind === PriceSourceKind.ADMIN) {
-      consider(row.protectedUntil);
-    }
-    if (policy.maxAgeDays !== null) {
-      consider(
-        new Date(row.lastObservedAt.getTime() + policy.maxAgeDays * DAY_MS)
-      );
+      consider(row.protectedUntil?.getTime() ?? null);
     }
   }
+  for (const row of rows) {
+    if (policies.get(row.sourceKind)?.enabled === true) {
+      consider(row.validFrom?.getTime() ?? null);
+    }
+  }
+  consider(nextValidFrom?.getTime() ?? null);
   return earliest === null ? null : new Date(earliest);
 }
 

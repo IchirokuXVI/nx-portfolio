@@ -23,6 +23,8 @@ import {
   PriceScope,
   Supermarket,
   SupermarketItem,
+  SupermarketLocation,
+  SupermarketLocationPriceScope,
 } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import { EffectivePriceService } from './effective-price.service';
@@ -559,6 +561,145 @@ describeIntegration('item prices (real Postgres)', () => {
         priority: 50,
       });
       expect(Number((await shown(warehouseId))?.price)).toBe(1.19);
+    });
+  });
+
+  /**
+   * Section 1 of plan 0117, end to end: a shop whose stack is its own scope, a
+   * local area, a chain region and the chain's NATIONAL. The local area was
+   * walked once long ago, the region yesterday.
+   */
+  describe('an expired price falls through to the next scope (plan 0117)', () => {
+    async function shopStack() {
+      const localArea = await scopes.create({
+        userId: OPERATOR,
+        supermarketId: chainId,
+        kind: PriceScopeKind.LOCAL_AREA,
+        externalKey: '4661',
+      });
+      const region = await scopes.create({
+        userId: OPERATOR,
+        supermarketId: chainId,
+        kind: PriceScopeKind.REGION,
+        externalKey: 'andalucia',
+      });
+      const shops = dataSource.getRepository(SupermarketLocation);
+      const shop = await shops.save(shops.create({ supermarketId: chainId }));
+      const store = await scopes.create({
+        userId: OPERATOR,
+        supermarketId: chainId,
+        kind: PriceScopeKind.STORE,
+        externalKey: shop.id,
+      });
+      const stack = dataSource.getRepository(SupermarketLocationPriceScope);
+      await stack.save(
+        [store, localArea, region].map((scope) =>
+          stack.create({
+            supermarketLocationId: shop.id,
+            priceScopeId: scope.id,
+          })
+        )
+      );
+      return { store, localArea, region };
+    }
+
+    it('shows the region price at the shop once the local area price is past its max age, and the stale fallback after that', async () => {
+      const { store, localArea, region } = await shopStack();
+      const walked = new Date(Date.now() - 19 * DAY_MS);
+      const yesterday = new Date(Date.now() - DAY_MS);
+
+      await crawl(1.19, walked, localArea.id);
+      await crawl(1.25, yesterday, region.id);
+      // Recomputed on purpose as well, not only through the write's fan out,
+      // so the assertion reads the resolution rather than the key discovery.
+      await new EffectivePriceService().recompute(dataSource.manager, [
+        { itemId, priceScopeId: store.id },
+      ]);
+
+      const atShop = await shown(store.id);
+      expect(Number(atShop?.price)).toBe(1.25);
+      expect(atShop?.stale).toBe(false);
+      // The region's own expiry is the next instant the answer can change.
+      expect(atShop?.nextBoundaryAt).toEqual(
+        new Date(yesterday.getTime() + 7 * DAY_MS)
+      );
+
+      // Past the region's max age too: nothing is eligible, and the sweep
+      // shows the newest enabled row, flagged.
+      const later = new Date(yesterday.getTime() + 8 * DAY_MS);
+      expect(await sweep.tick(later)).toBeGreaterThan(0);
+      const stale = await shown(store.id);
+      expect(Number(stale?.price)).toBe(1.25);
+      expect(stale?.stale).toBe(true);
+      expect(stale?.nextBoundaryAt).toBeNull();
+    });
+
+    it('takes an ADMIN snapshot from the narrowest eligible tier, by priority', async () => {
+      const { store, localArea, region } = await shopStack();
+      await crawl(1.19, new Date(Date.now() - 19 * DAY_MS), localArea.id);
+      await crawl(1.25, new Date(), region.id);
+
+      const typed = await prices.add({
+        userId: OPERATOR,
+        itemId,
+        priceScopeId: store.id,
+        sourceKind: PriceSourceKind.ADMIN,
+        price: 1.29,
+        currency: 'EUR',
+      });
+      expect(typed.overrides).toEqual({
+        OFFICIAL_API: { price: 1.25, unitPrice: null },
+      });
+      // The expired local area row does not dispute the correction.
+      expect(Number((await shown(store.id))?.price)).toBe(1.29);
+    });
+
+    it('does not let an older row at a scope stand in for a newer one that is not valid yet', async () => {
+      const { store, region } = await shopStack();
+      const leaflet = (
+        scopeId: string,
+        price: number,
+        from: Date,
+        until: Date
+      ) =>
+        prices.addBatch({
+          userId: HARVESTER,
+          priceScopeId: scopeId,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          sourceRunId: RUN,
+          entries: [
+            {
+              itemId,
+              price,
+              currency: 'EUR',
+              observedAt: new Date(from.getTime() - DAY_MS).toISOString(),
+              validFrom: from.toISOString(),
+              validUntil: until.toISOString(),
+            },
+          ],
+        });
+      const now = Date.now();
+      await leaflet(
+        region.id,
+        1.09,
+        new Date(now - 3 * DAY_MS),
+        new Date(now + 4 * DAY_MS)
+      );
+      await leaflet(
+        store.id,
+        0.99,
+        new Date(now - 5 * DAY_MS),
+        new Date(now + 2 * DAY_MS)
+      );
+      const nextWeek = new Date(now + 3 * DAY_MS);
+      await leaflet(store.id, 0.89, nextWeek, new Date(now + 10 * DAY_MS));
+
+      const atShop = await shown(store.id);
+      // Not 0.99: the store's current leaflet is next week's, so the store
+      // has nothing valid to say and the region answers.
+      expect(Number(atShop?.price)).toBe(1.09);
+      // The region closes after the store's leaflet opens.
+      expect(atShop?.nextBoundaryAt).toEqual(nextWeek);
     });
   });
 });
