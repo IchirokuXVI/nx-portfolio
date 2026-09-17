@@ -1,3 +1,5 @@
+> **PR:** [#96](https://github.com/IchirokuXVI/nx-portfolio/pull/96)
+
 # 0047: the line screens finish what they started
 
 > Plan `0043` built two screens, the line detail sheet and the line page, and left seven

@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`7b103c1d5`](https://github.com/IchirokuXVI/nx-portfolio/commit/7b103c1d5204c8e2d02c7e187e082d0873647889) on `dev`, with no pull request of its own.
+
 # 0002 Give staging its own cluster
 
 Staging and production currently share one k3s node, one Helm release, one namespace, one

@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`a6ba6cb70`](https://github.com/IchirokuXVI/nx-portfolio/commit/a6ba6cb70f89bbf9ea857d6cc6807c2ee1c5558f) on `dev`, with no pull request of its own.
+
 # 0001 Create the Luna Shopper apps
 
 First execution plan. It sets the overall architecture and scaffolds the empty

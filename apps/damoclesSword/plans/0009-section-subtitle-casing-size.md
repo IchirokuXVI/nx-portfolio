@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`542e0b877`](https://github.com/IchirokuXVI/nx-portfolio/commit/542e0b8777fc5534119f018f2dfdd1cfce4ad740) on `dev`, with no pull request of its own.
+
 # Plan 0009 — Form/sub‑section titles: fix casing and size
 
 **Points:** R5 (your finding #5) + R7 (was C4). Related to Plan 0006 (these headings are genuine titles, so they *keep* Audiowide — the issue here is casing and size, not the font choice).

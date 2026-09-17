@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`ab7995c32`](https://github.com/IchirokuXVI/nx-portfolio/commit/ab7995c324f677393d23988b96f178b0dfaae42b) on `dev`, with no pull request of its own.
+
 # 0001 Velista frontend: overview and architecture
 
 > Paths are repo relative. Never use relative imports across lib boundaries, use the

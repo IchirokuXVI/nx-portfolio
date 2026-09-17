@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`6827f77b2`](https://github.com/IchirokuXVI/nx-portfolio/commit/6827f77b2a30469d2532a13e1f4a7da1d2b61e19) on `dev`, with no pull request of its own.
+
 # 0008 Account merge (per zone)
 
 Adds the owner approved, single zone account merge to `luna-shopper-backend-core`, plus the note on

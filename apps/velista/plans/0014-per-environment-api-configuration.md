@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`3ac21b109`](https://github.com/IchirokuXVI/nx-portfolio/commit/3ac21b109f4a4aa5321da1712f16039c65320cd6) on `dev`, with no pull request of its own.
+
 # 0014. Per environment API configuration
 
 Velista is the only frontend in this workspace that talks to a backend, which makes it the

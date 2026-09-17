@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`5b8e297ea`](https://github.com/IchirokuXVI/nx-portfolio/commit/5b8e297ea7edcd013631f70de1f6cb295217e59c) on `dev`, with no pull request of its own.
+
 # 0012. The list: its lines, and editing them
 
 > Prerequisite reading: `0004` (the transport, rules D1 to D5, and **section 7.2**,

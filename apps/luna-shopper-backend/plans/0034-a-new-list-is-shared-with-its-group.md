@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`cddb2cb53`](https://github.com/IchirokuXVI/nx-portfolio/commit/cddb2cb53b052db02f4aef665cf599f0f9cb31f0) on `dev`, with no pull request of its own.
+
 # 0034: a new list is shared with its group
 
 > Prerequisite reading: `0007` section 1 (lists, and `list_access` as the access table)

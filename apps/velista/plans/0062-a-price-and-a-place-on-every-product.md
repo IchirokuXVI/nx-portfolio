@@ -1,3 +1,5 @@
+> **PR:** [#141](https://github.com/IchirokuXVI/nx-portfolio/pull/141)
+
 # 0062: a price and a place on every product
 
 > Server half: `apps/luna-shopper-backend/plans/0066`, which owns every rule about what a price is,

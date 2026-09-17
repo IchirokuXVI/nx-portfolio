@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`8393dc84e`](https://github.com/IchirokuXVI/nx-portfolio/commit/8393dc84e23842d13338f28fd0211db7fdb9679c) on `dev`, with no pull request of its own.
+
 # 0005 — Contact page (Worker C)
 
 > Executor note: do the steps in order; do not skip verification. Paths are

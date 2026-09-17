@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`57e5ebc31`](https://github.com/IchirokuXVI/nx-portfolio/commit/57e5ebc317c7801808bfbf9bffb119c2b58a03a5) on `dev`, with no pull request of its own.
+
 # 0030 The user's own channel
 
 > Depends on 0009 (realtime), 0018 (global username) and 0028 (the Redis backplane).

@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`c66a34776`](https://github.com/IchirokuXVI/nx-portfolio/commit/c66a347767b2735b8e09ca5349d6b7b0010b9835) on `dev`, with no pull request of its own.
+
 # 0001: an e2e suite that runs against a slot
 
 > Written after the fact, from commit `c66a347`. The work is on `dev`; this plan records

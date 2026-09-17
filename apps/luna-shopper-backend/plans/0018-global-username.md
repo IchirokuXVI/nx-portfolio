@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`c2c4f863d`](https://github.com/IchirokuXVI/nx-portfolio/commit/c2c4f863d5e99f0472d694d6dd4d487b59e0dd82) on `dev`, with no pull request of its own.
+
 # 0018 Global username
 
 Today the only human readable name a user has is `ZoneMembership.username`, chosen per zone at

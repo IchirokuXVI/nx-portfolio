@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`58a4bd721`](https://github.com/IchirokuXVI/nx-portfolio/commit/58a4bd72151418cb5084bf00b369f31aaee0fd5d) on `dev`, with no pull request of its own.
+
 # 0028 Redis: cache, presence and the socket backplane
 
 Introduces the Redis instance that plans 0001 (section 2.4), 0002 (section 1), 0003, 0009

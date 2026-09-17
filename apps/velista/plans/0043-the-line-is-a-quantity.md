@@ -1,3 +1,5 @@
+> **PR:** [#87](https://github.com/IchirokuXVI/nx-portfolio/pull/87)
+
 # 0043 The line is a quantity, and it has a history
 
 > **This plan revises `0012`**, the list page, which was built when a line carried a trip

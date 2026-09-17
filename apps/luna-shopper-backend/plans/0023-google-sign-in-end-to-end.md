@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`59f783c6a`](https://github.com/IchirokuXVI/nx-portfolio/commit/59f783c6a41bf9661ce2f867e9f1a7e176455511) on `dev`, with no pull request of its own.
+
 # 0023 Google sign in, end to end
 
 Google login is built on both sides and works on neither. The passport dance runs, the profile

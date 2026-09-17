@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`9c8561147`](https://github.com/IchirokuXVI/nx-portfolio/commit/9c85611470e3225eb123b584b84a92edc82634a0) on `dev`, with no pull request of its own.
+
 # 0003: App owned locale routing
 
 ## Implementation status

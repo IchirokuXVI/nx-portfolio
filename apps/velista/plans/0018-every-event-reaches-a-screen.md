@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`c560a68de`](https://github.com/IchirokuXVI/nx-portfolio/commit/c560a68de56d22a1b952d771672d38759946a002) on `dev`, with no pull request of its own.
+
 # 0018: every event reaches a screen
 
 > Prerequisite reading: `0004` section 6.5 (events into stores) and section 7.1 (why

@@ -1,3 +1,5 @@
+> **PR:** [#71](https://github.com/IchirokuXVI/nx-portfolio/pull/71)
+
 # 0043 The assistant removes a line, and settles one
 
 > **Two more tools, and one of them is a deletion.** The assistant can take a line off a

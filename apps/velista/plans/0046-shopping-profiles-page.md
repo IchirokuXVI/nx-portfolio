@@ -1,3 +1,5 @@
+> **PR:** [#81](https://github.com/IchirokuXVI/nx-portfolio/pull/81)
+
 # 0046 Shopping profiles: where you shop, per profile
 
 > **This is a page plan** and follows the template in `0001` section 9.

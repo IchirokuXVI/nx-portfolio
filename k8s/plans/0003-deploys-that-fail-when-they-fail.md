@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`319fd496a`](https://github.com/IchirokuXVI/nx-portfolio/commit/319fd496ac2fb05f5dbcda05782bf1a55ac45d1b) on `dev`, with no pull request of its own.
+
 # 0003 Deploys that fail when they fail
 
 Neither deploy path waits for anything. `helm upgrade` returns as soon as the API server has

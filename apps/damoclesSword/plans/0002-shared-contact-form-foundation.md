@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`ca3f45523`](https://github.com/IchirokuXVI/nx-portfolio/commit/ca3f45523bf891eb20ea42c0278a90cf24b3d825) on `dev`, with no pull request of its own.
+
 # 0002 — Shared foundation (contact form, form button, info card, contact service)
 
 > Status: **DONE** (built on `dev` before the parallel page workers). This file

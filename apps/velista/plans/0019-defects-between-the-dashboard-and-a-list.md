@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`016d75cfc`](https://github.com/IchirokuXVI/nx-portfolio/commit/016d75cfc8071b581fe04ff256143a788b6dcf57) on `dev`, with no pull request of its own.
+
 # 0019: the defects between the dashboard and a list
 
 > Prerequisite reading: `0003` (the home page), `0011` (the first defect pass, whose

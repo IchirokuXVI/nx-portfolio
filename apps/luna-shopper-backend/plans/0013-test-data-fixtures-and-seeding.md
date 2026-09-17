@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`0deff0229`](https://github.com/IchirokuXVI/nx-portfolio/commit/0deff022984736c036f491292874ee71fedc310b) on `dev`, with no pull request of its own.
+
 # 0013 Test data, fixtures, and seeding
 
 Defines how Luna Shopper produces and manages test data across every layer: in memory

@@ -1,3 +1,5 @@
+> **PR:** [#126](https://github.com/IchirokuXVI/nx-portfolio/pull/126)
+
 # 0053: adding a line in the aisle
 
 > Server half: `apps/luna-shopper-backend/plans/0055`, which owns every rule this plan renders.

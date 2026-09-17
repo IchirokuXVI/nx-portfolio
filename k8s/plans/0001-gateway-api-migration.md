@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`f8ad6bbe4`](https://github.com/IchirokuXVI/nx-portfolio/commit/f8ad6bbe471eadad7d474821ddc7bf5eec96f98a) on `dev`, with no pull request of its own.
+
 # 0001 Move routing to the Gateway API
 
 First plan in `k8s/`. It replaces the hand templated nginx reverse proxy with the

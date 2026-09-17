@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`788eaf715`](https://github.com/IchirokuXVI/nx-portfolio/commit/788eaf715102584962bf575646411c997b2ece8a) on `dev`, with no pull request of its own.
+
 # 0024 Previewing a join code, and naming the approver
 
 Two small, purely additive reads. Neither fixes a defect; both remove a place where a screen that

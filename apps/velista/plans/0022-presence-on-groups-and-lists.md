@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`2df838321`](https://github.com/IchirokuXVI/nx-portfolio/commit/2df83832198971015a2282118c94be1ba5ba37cf) on `dev`, with no pull request of its own.
+
 # 0022: presence on groups and lists
 
 > Prerequisite reading: `0017` (presence over the socket, which built all of this) and

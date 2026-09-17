@@ -1,3 +1,5 @@
+> **PR:** [#28](https://github.com/IchirokuXVI/nx-portfolio/pull/28)
+
 # Section Centralization Refactor
 
 > Executor note: this plan is written to be executed step by step. Do the steps in

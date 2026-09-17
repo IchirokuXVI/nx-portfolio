@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`d1691dfb8`](https://github.com/IchirokuXVI/nx-portfolio/commit/d1691dfb8e7758560be4dcc924a85ab4fc191ee3) on `dev`, with no pull request of its own.
+
 # 0022 Password reset
 
 There is no password reset in this system. No endpoint, no token type, no mail template, nothing

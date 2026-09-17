@@ -1,3 +1,5 @@
+> **PR:** [#78](https://github.com/IchirokuXVI/nx-portfolio/pull/78)
+
 # 0046 One list to link, and answers to offer
 
 > **A link is only useful when there is one place to go.** Plan `0039` rule A3 emits a

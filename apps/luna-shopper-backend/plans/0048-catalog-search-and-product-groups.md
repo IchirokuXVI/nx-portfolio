@@ -1,3 +1,5 @@
+> **PR:** [#79](https://github.com/IchirokuXVI/nx-portfolio/pull/79)
+
 # 0048 Catalog search, and the product group
 
 Carved out of backlog 0001 sections 3.2 to 3.4, which designed classification and search as

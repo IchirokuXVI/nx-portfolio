@@ -1,3 +1,5 @@
+> **PR:** [#143](https://github.com/IchirokuXVI/nx-portfolio/pull/143)
+
 # 0067 — A normalized catalog, built from real receipts
 
 ## 1. What this is for

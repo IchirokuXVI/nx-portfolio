@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`020bb2511`](https://github.com/IchirokuXVI/nx-portfolio/commit/020bb25118d3b7856ada980935f609aade3fa6cd) on `dev`, with no pull request of its own.
+
 # 0009 Realtime (WebSocket and SSE)
 
 Builds `luna-shopper-backend-realtime`, the dedicated service that pushes the domain events published

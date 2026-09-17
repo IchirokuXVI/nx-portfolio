@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`bf8ec75e0`](https://github.com/IchirokuXVI/nx-portfolio/commit/bf8ec75e0cca5e9ba75d161846aa1a401aa25247) on `dev`, with no pull request of its own.
+
 # 0007 Shopping lists, lines, and comments
 
 Second domain slice of `luna-shopper-backend-core`: the actual shopping lists inside a zone, their per

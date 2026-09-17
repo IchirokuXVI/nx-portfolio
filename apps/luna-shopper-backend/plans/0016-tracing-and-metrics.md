@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`6ba5a99e8`](https://github.com/IchirokuXVI/nx-portfolio/commit/6ba5a99e85c11f442094d0b1d72916df9a9b883e) on `dev`, with no pull request of its own.
+
 # 0016 Distributed tracing and metrics in the platform library
 
 Plan 0004 section 3 designed the correlation id as "tracing in its lightest form" and named full

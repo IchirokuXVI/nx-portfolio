@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`542e0b877`](https://github.com/IchirokuXVI/nx-portfolio/commit/542e0b8777fc5534119f018f2dfdd1cfce4ad740) on `dev`, with no pull request of its own.
+
 # Plan 0006 — Establish an Audiowide usage rule (titles only)
 
 **Point:** R1 (your finding #1). **Foundational** — plans 0007, 0008, 0009 depend on the rule defined here.

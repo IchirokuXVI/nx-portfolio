@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`77c3d515d`](https://github.com/IchirokuXVI/nx-portfolio/commit/77c3d515dd74e0f9dab86af8ec33b32f371c5ab9) on `dev`, with no pull request of its own.
+
 # 0026: joining a group left it stale, and its new member nameless
 
 > Prerequisite reading: `0016` section 3.2 (refused rooms and the "not live" notice),

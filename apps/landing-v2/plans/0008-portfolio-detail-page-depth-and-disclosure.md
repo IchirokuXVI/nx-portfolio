@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`e8303519f`](https://github.com/IchirokuXVI/nx-portfolio/commit/e8303519fd125a1bcea2e44d3f141f035466e7f3) on `dev`, with no pull request of its own.
+
 # 0008 — Portfolio detail page: more depth, real progressive disclosure, tighter meta
 
 > Repo-relative paths. Aliases only across lib boundaries. Commit locally only.

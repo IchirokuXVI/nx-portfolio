@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`dc6409c77`](https://github.com/IchirokuXVI/nx-portfolio/commit/dc6409c7770c191406902e48efab0a998947df0b) on `dev`, with no pull request of its own.
+
 # 0021: events that are addressed to you
 
 > Prerequisite reading: `0004` section 6.5 (events into stores), `0015` section on rule

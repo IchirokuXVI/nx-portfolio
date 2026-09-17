@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`d12c07ec0`](https://github.com/IchirokuXVI/nx-portfolio/commit/d12c07ec0e42c387c36999aa5a73ce31876d959c) on `dev`, with no pull request of its own.
+
 # 0004 Data access, auth, and realtime
 
 > Prerequisite reading: `0001` (D5 library layout, D6 data and auth posture, the

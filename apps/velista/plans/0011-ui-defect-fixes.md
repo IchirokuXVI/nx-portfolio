@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`fb3ea3835`](https://github.com/IchirokuXVI/nx-portfolio/commit/fb3ea3835707eba61960afc1e1bd8d149173fcdb) on `dev`, with no pull request of its own.
+
 # 0011 UI defect fixes
 
 Seven defects found by using the app after `0010` landed. They are unrelated to each

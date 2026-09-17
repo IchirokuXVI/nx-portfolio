@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`83e92c6ce`](https://github.com/IchirokuXVI/nx-portfolio/commit/83e92c6ce8901eeb30e768a00e137b9ac9f012ff) on `dev`, with no pull request of its own.
+
 # 0008. The way in: creating a group, and joining with a code
 
 > Prerequisite reading: `0003` (the home page and its states), `0007` (the split that

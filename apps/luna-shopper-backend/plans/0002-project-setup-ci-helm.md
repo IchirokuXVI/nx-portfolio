@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`16e8455c9`](https://github.com/IchirokuXVI/nx-portfolio/commit/16e8455c9f8dbfd2689984a76ae5c9ff93ba4bd1) on `dev`, with no pull request of its own.
+
 # 0002 Project setup: config, Docker, Helm, CI, zero downtime
 
 Second plan. It turns the empty apps from 0001 into deployable, configurable services and

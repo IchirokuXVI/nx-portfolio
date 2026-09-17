@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`733afb58f`](https://github.com/IchirokuXVI/nx-portfolio/commit/733afb58f0bf18932950373629dcdc857dc85618) on `dev`, with no pull request of its own.
+
 # 0001: landing-v2 redesign: overview & index
 
 > Paths are repo-relative to `D:\Projects\nx-portfolio`. Never use relative imports

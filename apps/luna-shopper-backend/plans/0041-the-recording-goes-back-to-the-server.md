@@ -1,3 +1,5 @@
+> **PR:** [#66](https://github.com/IchirokuXVI/nx-portfolio/pull/66)
+
 # 0041 The recording goes back to the server
 
 > **Voice input for the assistant, and a reversal.** The panel already records, and

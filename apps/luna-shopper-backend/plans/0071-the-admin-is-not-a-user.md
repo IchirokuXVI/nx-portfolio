@@ -1,3 +1,5 @@
+> **PR:** [#171](https://github.com/IchirokuXVI/nx-portfolio/pull/171)
+
 # 0071 The admin is not a user
 
 The back office needs an operator to log in as, and today there is no such thing. What the code
