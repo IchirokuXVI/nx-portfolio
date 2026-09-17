@@ -18,6 +18,7 @@ on top of them, and the page built from both.
 | `profiles/`       | `0046` shopping profiles: where you shop, per profile                                                                                            | https://claude.ai/code/artifact/8c20e218-365e-45ad-a401-e96b4ed1252d |
 | `basket-filter/`  | `0074` to `0078` finding a line in the basket: search, the filter sheet, grouping, one shop's prices, with backend `0109` and `0110` behind them | https://claude.ai/code/artifact/82b53f55-a8a6-41bc-a019-6222a23f44c5 |
 | `line-sheet/`     | `0083` the line sheet edits the line and `0084` renaming a line from the basket, with backend `0112` and `0113` behind them                      | https://claude.ai/artifact/4zbiAsWxFJFQokU29JouLs                    |
+| `list-trips/`     | `0088` the zone list grouped by trip and `0089` lines the list suggests, with backend `0122` and `0123` behind them. One working page, not a canvas: see its README | https://claude.ai/artifact/2g3FFABu4JMAt8RLrdLgFR                    |
 | `brand/`          | The mark itself. Source of truth for both, see below                                                                                             |                                                                      |
 
 ## How a folder is put together
