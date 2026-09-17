@@ -384,7 +384,7 @@ describe('AppShellRoutes', () => {
           (provider) => (provider as { name?: string }).name
         );
 
-        expect(provided).toEqual(['ListViewStore']);
+        expect(provided).toEqual(['ListViewStore', 'TripStore']);
       });
 
       it('guards none of the sheets, because write access is not knowable', () => {

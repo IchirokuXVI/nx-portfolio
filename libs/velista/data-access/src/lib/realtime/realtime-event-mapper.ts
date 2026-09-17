@@ -146,6 +146,14 @@ export function toRealtimeEvent(
       return listId === null ? null : { type: name, listId };
     }
 
+    case 'list.tripsChanged': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const listId = str(payload['listId']);
+      return listId === null ? null : { type: name, listId };
+    }
+
     case 'list.myAccessChanged': {
       if (!isRecord(payload)) {
         return null;

@@ -126,6 +126,13 @@ export type RealtimeEvent =
     }
   | { readonly type: 'list.deleted'; readonly listId: string }
   | { readonly type: 'list.accessChanged'; readonly listId: string }
+  /**
+   * Read this list's trips again (backend `0122`, section 6), on the list room.
+   *
+   * It says nothing else, so it cannot leak and cannot drift from the read. A basket was
+   * created, renamed, ended or deleted, or gained or lost an origin in this list.
+   */
+  | { readonly type: 'list.tripsChanged'; readonly listId: string }
   | {
       /**
        * The **caller's own** effective permissions on one list changed, on the user
@@ -414,6 +421,7 @@ export const REALTIME_EVENT_NAMES = [
   'list.updated',
   'list.deleted',
   'list.accessChanged',
+  'list.tripsChanged',
   'list.myAccessChanged',
   'line.added',
   'line.updated',

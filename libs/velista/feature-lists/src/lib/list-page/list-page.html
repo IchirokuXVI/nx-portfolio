@@ -71,11 +71,8 @@
     @if (header(); as list) {
       <lib-list-header
         (openSettings)="openSettings()"
-        (startReorder)="startReorder()"
-        [canReorder]="loaded()?.canReorder ?? false"
         [hasMenu]="(loaded()?.abilities?.canManage ?? false) && !reordering()"
         [header]="list"
-        [reorderHeld]="reorderHeld()"
       />
     }
   }
@@ -123,14 +120,14 @@
           (queryChange)="search($event)"
           [activeCount]="activeCount()"
           [query]="searchQuery()"
-          [shown]="view()?.lines?.length ?? 0"
+          [shown]="shownCount()"
           [total]="current.lines.length"
           fieldId="list-search"
         />
       }
 
-      @let drawn = view();
-      @if (drawn !== null && drawn.lines.length === 0) {
+      @let shown = groups();
+      @if (nothingShown()) {
         <!--
           Nothing left to draw (section 5). A search quotes what was typed, because
           the words are the thing to change, and the composer below stays: the thing
@@ -162,6 +159,20 @@
           <h2 class="category-heading">{{ key | rokuT }}</h2>
         }
 
+        <!--
+          The groups (velista 0088). A search flattens the page: every matching line
+          once, with its reel and no heading, which is how a line that lives only in
+          old trips is found and raised again. Otherwise To buy comes first, then the
+          live trips, then the past ones, each folded until somebody opens it.
+        -->
+        @if (shown?.kind === 'groups') {
+          <lib-to-buy-heading
+            (startReorder)="startReorder()"
+            [canReorder]="canReorder() && !reordering()"
+            [reorderHeld]="reorderHeld()"
+          />
+        }
+
         <lib-line-list
           (act)="act($event)"
           (dismiss)="dismissNote($event)"
@@ -171,10 +182,48 @@
           (retry)="retry($event)"
           [announcement]="announcement()"
           [highlight]="highlight()"
-          [lines]="drawn?.lines ?? current.lines"
+          [lines]="drawnLines()"
           [markedId]="markedLine()"
           [reordering]="reordering()"
         />
+
+        @if (shown?.kind === 'groups' && !reordering()) {
+          <!--
+            A failed read of the trips never blocks the lines. It is said here, under
+            To buy, with a retry, the way the page reports a failed load.
+          -->
+          @if (tripsFailed()) {
+            <div class="trips-failed">
+              <p class="trips-failed-body">{{ 'list.trips.failed' | rokuT }}</p>
+              <button (click)="retryTrips()" class="state-action" type="button">
+                {{ 'list.trips.retry' | rokuT }}
+              </button>
+            </div>
+          }
+
+          @if (tripGroups().length > 0) {
+            <div class="trips">
+              @for (group of tripGroups(); track group.key) {
+                <lib-trip-group
+                  (opened)="openLine($event)"
+                  (toggled)="toggleTrip($event)"
+                  [group]="group"
+                />
+              }
+            </div>
+          }
+
+          @if (tripsHasMore()) {
+            <button
+              (click)="loadOlderTrips()"
+              [attr.aria-busy]="tripsLoadingMore() ? 'true' : null"
+              class="trips-older"
+              type="button"
+            >
+              {{ 'list.trips.older' | rokuT }}
+            </button>
+          }
+        }
       }
     }
 

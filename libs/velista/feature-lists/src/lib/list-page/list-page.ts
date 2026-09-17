@@ -31,6 +31,7 @@ import {
   REALTIME_CLIENT,
   SessionStore,
   ShoppingProfileStore,
+  TripStore,
   ZoneStore,
   type AssistantServiceI,
   type CatalogServiceI,
@@ -40,9 +41,13 @@ import {
   APP_BASE_PATH,
   LINE_VOICE_MAX_SECONDS,
   NO_CATEGORY,
+  reorderWithinSlots,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
+  tripKey,
   type CatalogSuggestion,
+  type Line,
+  type LineRowVm,
   type ListGoneReason,
   type ListPageState,
   type ListViewerVm,
@@ -75,6 +80,8 @@ import {
   ListTools,
   RowSkeleton,
   SpinnerIcon,
+  ToBuyHeading,
+  TripGroup,
   type LineRowAction,
 } from '@portfolio/velista/ui';
 import {
@@ -84,6 +91,7 @@ import {
   type ListOperation,
 } from '../list-error-copy';
 import { selectListState } from '../select-list-state';
+import { selectTripGroups } from '../select-trip-groups';
 import { voiceFailureCopy } from '../voice-error-copy';
 
 /**
@@ -141,6 +149,8 @@ import { voiceFailureCopy } from '../voice-error-copy';
     ListTools,
     RowSkeleton,
     SpinnerIcon,
+    ToBuyHeading,
+    TripGroup,
   ],
   templateUrl: './list-page.html',
   styleUrl: './list-page.scss',
@@ -433,15 +443,171 @@ export class ListPage {
   // --- The search, the order and one category (velista 0082) ----------------
 
   /**
-   * The rows actually drawn, and the category heading above them or null.
-   *
-   * `current.lines` is already in list order, which is what "List order" keeps. The
-   * rules are `composeListView`; nothing here narrows anything by hand.
+   * The trips of this list (velista `0088`). Route provided beside `ListViewStore`, and
+   * given back from this page's teardown for the same reason.
    */
-  readonly view = computed(() => {
+  private readonly _trips = inject(TripStore);
+
+  /** The lines as the store holds them, by id, for the facts a group is decided on. */
+  private readonly _lineById = computed(
+    () =>
+      new Map<string, Line>(
+        this._lines
+          .forList(this.listId())()
+          .lines.map((line) => [line.id, line])
+      )
+  );
+
+  /**
+   * What the page draws: To buy and the trips, or one flat search (velista `0088`).
+   *
+   * `current.lines` is already in list order with rejected lines last. The rules are
+   * `composeListGroups`; nothing here narrows anything by hand.
+   */
+  readonly groups = computed(() => {
     const page = this.loaded();
-    return page === null ? null : this._view.compose(page.lines);
+    if (page === null) {
+      return null;
+    }
+
+    const lines = this._lineById();
+    return this._view.composeGroups<LineRowVm>({
+      lines: page.lines,
+      factsOf: (lineId) => {
+        const line = lines.get(lineId);
+        return line === undefined
+          ? null
+          : {
+              quantity: line.quantity,
+              boughtCount: line.boughtCount,
+              claimed: line.claimed,
+              rejected: line.approvalStatus === 'REJECTED',
+            };
+      },
+      live: this._trips.live(),
+      past: this._trips.past(),
+      rowsOf: (key) => this._trips.rows().get(key),
+      reordering: this.reordering(),
+    });
   });
+
+  /** The rows of To buy, or of the search. Empty before the lines land. */
+  readonly drawnLines = computed<readonly LineRowVm[]>(() => {
+    const shown = this.groups();
+    if (shown === null) {
+      return [];
+    }
+    return shown.kind === 'flat' ? shown.lines : shown.toBuy;
+  });
+
+  /** The trip folds, as `lib-trip-group` draws them. None while searching or reordering. */
+  readonly tripGroups = computed(() => {
+    const shown = this.groups();
+    if (shown === null || shown.kind === 'flat') {
+      return [];
+    }
+    const lines = this._lineById();
+    const zoneId = this.zoneId();
+    return selectTripGroups({
+      groups: shown.trips,
+      lineOf: (lineId) => lines.get(lineId) ?? null,
+      nameOf: (userId) => this._names.nameOf(zoneId, userId),
+      locale: this._locale(),
+      now: new Date(),
+    });
+  });
+
+  /** Whether the first read of the trips failed, which is said under To buy. */
+  readonly tripsFailed = computed(() => this._trips.state() === 'failed');
+
+  readonly tripsHasMore = this._trips.hasMore;
+
+  readonly tripsLoadingMore = this._trips.loadingMore;
+
+  /**
+   * How many distinct lines the page draws, for the tools row's count: To buy, and the
+   * rows of every trip whose rows have arrived.
+   */
+  readonly shownCount = computed(() => {
+    const shown = this.groups();
+    if (shown === null) {
+      return 0;
+    }
+    if (shown.kind === 'flat') {
+      return shown.lines.length;
+    }
+    const ids = new Set(shown.toBuy.map((line) => line.id));
+    for (const group of shown.trips) {
+      for (const joined of group.rows ?? []) {
+        ids.add(joined.line.id);
+      }
+    }
+    return ids.size;
+  });
+
+  /**
+   * Whether nothing at all is left to draw under the current search or view, which
+   * draws the no match sentence (velista `0082`, section 5).
+   */
+  readonly nothingShown = computed(() => {
+    const shown = this.groups();
+    if (shown === null) {
+      return false;
+    }
+    if (shown.kind === 'flat') {
+      return shown.lines.length === 0;
+    }
+    return (
+      this.activeCount() > 0 &&
+      shown.toBuy.length === 0 &&
+      shown.trips.length === 0
+    );
+  });
+
+  /**
+   * Whether To buy offers the reorder action (velista `0088`, section 7).
+   *
+   * The complete list, `WRITE`, and more than one line To buy would draw in reorder
+   * mode. `MANAGE` too, because the action sat behind the header's menu until it moved
+   * here and who may reach it did not change.
+   */
+  readonly canReorder = computed(() => {
+    const page = this.loaded();
+    if (page === null || !page.canReorder || !page.abilities.canManage) {
+      return false;
+    }
+    return this._reorderable().length > 1;
+  });
+
+  /** The ids To buy draws in reorder mode, in list order. */
+  private readonly _reorderable = computed(() => {
+    const page = this.loaded();
+    if (page === null) {
+      return [];
+    }
+    const lines = this._lineById();
+    return page.lines
+      .filter((row) => {
+        const line = lines.get(row.id);
+        return (
+          line !== undefined && line.quantity > 0 && !this._heldByLive(line)
+        );
+      })
+      .map((row) => row.id);
+  });
+
+  /** A claimed line whose live trip's rows have arrived is drawn by that trip. */
+  private _heldByLive(line: Line): boolean {
+    if (!line.claimed) {
+      return false;
+    }
+    const rows = this._trips.rows();
+    return this._trips
+      .live()
+      .some((trip) =>
+        (rows.get(tripKey(trip)) ?? []).some((row) => row.lineId === line.id)
+      );
+  }
 
   /** What is in the search field, for the tools row and the no match sentence. */
   readonly searchQuery = this._view.query;
@@ -459,7 +625,7 @@ export class ListPage {
 
   /** The heading's words, as a key: a category's label, or "No category". */
   readonly headingKey = computed(() => {
-    const category = this.view()?.category ?? null;
+    const category = this.groups()?.category ?? null;
     if (category === null) {
       return null;
     }
@@ -487,6 +653,37 @@ export class ListPage {
     effect(() => {
       const listId = this.listId();
       untracked(() => this._view.open(listId));
+    });
+
+    // The trips, beside the lines and never in front of them (velista 0088, section 8).
+    effect(() => {
+      const listId = this.listId();
+      untracked(() => this._trips.open(listId));
+    });
+
+    // The newest live trip is open when the trips first arrive, once per visit.
+    effect(() => {
+      if (this._trips.state() !== 'loaded') {
+        return;
+      }
+      const newest = this._trips.live()[0];
+      untracked(() =>
+        this._view.seedOpenTrip(newest === undefined ? null : tripKey(newest))
+      );
+    });
+
+    // Rows load on first open and stay loaded for the visit. The store asks only for a
+    // trip it has not asked for, so this can run on every change to the heads.
+    effect(() => {
+      const open = this._view.openTrips();
+      const trips = [...this._trips.live(), ...this._trips.past()];
+      untracked(() => {
+        for (const trip of trips) {
+          if (open.has(tripKey(trip))) {
+            this._trips.ensureRows(trip);
+          }
+        }
+      });
     });
 
     // The products on every line, for the category view and the search (section 3).
@@ -672,6 +869,7 @@ export class ListPage {
       // The view store is provided on the route and is never destroyed, so it is
       // given back here, as the basket page gives back `BasketViewStore`.
       this._view.leave();
+      this._trips.leave();
       this.announcement.set('');
       if (this._markTimer !== null) {
         clearTimeout(this._markTimer);
@@ -1164,6 +1362,31 @@ export class ListPage {
     void this._openSheet(['settings']);
   }
 
+  /** A trip's head was pressed. What is open is remembered for the visit. */
+  toggleTrip(key: string): void {
+    this._view.toggleTrip(key);
+  }
+
+  /**
+   * "Show older trips" (velista 0088, section 10). Focus stays on the button, and how
+   * many trips arrived is said through the page's polite region.
+   */
+  async loadOlderTrips(): Promise<void> {
+    const outcome = await this._trips.loadMore();
+    this.announcement.set(
+      outcome.state === 'failed'
+        ? this._translator.t('list.trips.olderFailed')
+        : this._translator.t('list.trips.arrived', undefined, undefined, {
+            count: outcome.added,
+          })
+    );
+  }
+
+  /** The failed first read of the trips, asked again. The lines were never blocked. */
+  retryTrips(): void {
+    this._trips.retry();
+  }
+
   retryLoad(): void {
     this._errorKey.set(null);
     void this._loadLines(this.listId());
@@ -1245,20 +1468,21 @@ export class ListPage {
       return;
     }
 
-    const ids = current.lines.map((line) => line.id);
+    // To buy is what moves (velista 0088, section 7). The lines it shows take the slots
+    // they held among all the list's lines, and every other line keeps its own, so the
+    // whole order is still sent and nothing hidden from the person moves.
+    const all = current.lines.map((line) => line.id);
+    const ids = this._reorderable();
     const from = ids.indexOf(lineId);
     if (from < 0) {
       return;
     }
 
     const to = destination(from);
-    if (to < 0 || to >= ids.length || to === from) {
+    const next = reorderWithinSlots(all, ids, lineId, to);
+    if (next === null) {
       return;
     }
-
-    const next = [...ids];
-    next.splice(from, 1);
-    next.splice(to, 0, lineId);
 
     const outcome = await this._lines.reorder(this.listId(), next);
     if (outcome === 'failed') {

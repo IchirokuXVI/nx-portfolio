@@ -667,6 +667,30 @@
       "keeps": "Los comentarios y lo comprado se van con ella.",
       "confirm": "Juntar",
       "keepEditing": "Seguir editando"
+    },
+    "trips": {
+      "toBuy": "Por comprar",
+      "loose": "Compras sueltas",
+      "labelNamed": "{{name}} · {{date}}",
+      "bought": "{{bought}} de {{total}} comprados",
+      "lines": "{{count}} líneas",
+      "liveBy": "{{name}} está comprando",
+      "live": "Alguien está comprando",
+      "older": "Ver compras anteriores",
+      "olderFailed": "No se han cargado las compras más antiguas.",
+      "arrived": "Se muestran {{count}} compras anteriores",
+      "failed": "No se han cargado las compras anteriores.",
+      "retry": "Reintentar",
+      "row": {
+        "boughtOf": "{{bought}} de {{asked}} comprados",
+        "bought": "{{bought}} comprados",
+        "left": "quedan {{count}}",
+        "partly": "Comprado en parte",
+        "notAvailable": "No había en la tienda",
+        "notBought": "Estaba en la lista y nadie lo compró",
+        "boughtBy": "Comprado · {{name}}",
+        "nowAsks": "La lista pide ahora {{count}}"
+      }
     }
   },
   "account": {
