@@ -2,8 +2,10 @@ import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunWrites,
   HarvestWarningCode,
   PriceSourceKind,
   type AdapterKey,
@@ -114,6 +116,39 @@ export class RunExecutor implements OnApplicationShutdown {
       sizeFormat: row.sizeFormat,
       categoryPath: row.categoryPath ?? [],
     }));
+  }
+
+  /**
+   * What the chain already knows, for a walk that fetches only new details
+   * (plan 0119, section 4): the external ids whose row carries an EAN, and the
+   * ids whose row has none.
+   *
+   * Read by the chain alone and not by source kind, because that is how the
+   * ingest finds a row for an observation. Two columns, once, before the walk
+   * starts, so the runner receives data rather than a repository. **Both sets
+   * are empty for `ALL` and for a backfill**, and then nothing is read at all.
+   */
+  private async knownProducts(
+    supermarketId: string,
+    details: HarvestDetailFetch,
+    detailBackfill: boolean
+  ): Promise<{
+    knownExternalIds: Set<string>;
+    externalIdsWithoutEan: Set<string>;
+  }> {
+    const knownExternalIds = new Set<string>();
+    const externalIdsWithoutEan = new Set<string>();
+    if (details !== HarvestDetailFetch.NEW || detailBackfill) {
+      return { knownExternalIds, externalIdsWithoutEan };
+    }
+    const rows = await this.entries.find({
+      select: { externalId: true, ean: true },
+      where: { supermarketId },
+    });
+    for (const row of rows) {
+      (row.ean ? knownExternalIds : externalIdsWithoutEan).add(row.externalId);
+    }
+    return { knownExternalIds, externalIdsWithoutEan };
   }
 
   /**
@@ -284,6 +319,12 @@ export class RunExecutor implements OnApplicationShutdown {
         await this.sources.recordRunStarted(source);
       }
 
+      // What the run writes and which details it fetches, as the spawn stored
+      // them (plan 0119). A run stored before either existed reads as what
+      // every run did then: both writes, every detail.
+      const writes = readWrites(run.input['writes']);
+      const details = readDetails(run.input['details']);
+
       // Where a walked scope's writes are copied to (plan 0118). Resolved here,
       // before the sink, so a runner never learns that a copy exists.
       const copies =
@@ -313,6 +354,7 @@ export class RunExecutor implements OnApplicationShutdown {
                 // trusted: `false` here is the whole of D3.
                 autoImportPlaces: source?.autoImportPlaces ?? false,
                 copiesOf: (scopeId) => copies.get(scopeId) ?? [],
+                writes,
               },
               {
                 ingest: this.ingest,
@@ -389,6 +431,15 @@ export class RunExecutor implements OnApplicationShutdown {
                     requireSource(source)
                   )
                 : undefined,
+              // What the chain already knows, loaded here rather than by the
+              // runner (plan 0119, section 4), and only when it can save a
+              // request.
+              details,
+              ...(await this.knownProducts(
+                run.supermarketId as string,
+                details,
+                detailBackfill
+              )),
             },
             requireSource(source)
           );
@@ -419,7 +470,13 @@ export class RunExecutor implements OnApplicationShutdown {
 
       if (sink) {
         const written = await sink.drain();
-        for (const from of copiesNotWritten(copies, written)) {
+        // A run that writes no prices by choice leaves every copy source
+        // unpriced, and that is not news worth a warning each.
+        const copySources =
+          writes === HarvestRunWrites.AVAILABILITY
+            ? []
+            : copiesNotWritten(copies, written);
+        for (const from of copySources) {
           context.warn({
             code: HarvestWarningCode.COPY_SOURCE_NOT_WRITTEN,
             message:
@@ -434,6 +491,11 @@ export class RunExecutor implements OnApplicationShutdown {
           ...(await this.store.load(runId)).report,
           ...describeWrites(written),
           ...describeCopies(copies, written),
+          // The resolved settings, beside what they produced (plan 0119,
+          // section 8).
+          ...(run.mode === HarvestRunMode.CATALOG_DISCOVERY
+            ? { writes, details }
+            : {}),
         });
       } else if (imported) {
         await this.store.setReport(runId, {
@@ -624,6 +686,27 @@ function readScopeCopies(value: unknown): { from: string; to: string[] }[] {
       to: Array.isArray(copy.to) ? copy.to.map(String) : [],
     }))
     .filter((copy) => copy.from !== '');
+}
+
+/**
+ * What a run writes, as its stored input says (plan 0119, section 2). Anything
+ * else, including a run stored before the field existed, is both.
+ */
+export function readWrites(value: unknown): HarvestRunWrites {
+  return Object.values(HarvestRunWrites).includes(value as HarvestRunWrites)
+    ? (value as HarvestRunWrites)
+    : HarvestRunWrites.PRICES_AND_AVAILABILITY;
+}
+
+/**
+ * Which details a run fetches, as its stored input says. Only a stored `NEW`
+ * skips anything: a run stored before the field existed fetched every detail,
+ * and reading it back as `NEW` would change what an old pending run does.
+ */
+export function readDetails(value: unknown): HarvestDetailFetch {
+  return value === HarvestDetailFetch.NEW
+    ? HarvestDetailFetch.NEW
+    : HarvestDetailFetch.ALL;
 }
 
 /** The scopes copied from that received no price read at them (plan 0118, section 7). */

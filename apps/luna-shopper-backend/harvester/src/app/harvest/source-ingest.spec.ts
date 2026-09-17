@@ -1,4 +1,5 @@
 import {
+  HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
   PriceSourceKind,
@@ -12,6 +13,7 @@ import { entryKey } from './matching';
 import type { RunContext } from './run-context';
 import {
   SourceIngest,
+  type PartialSourceObservation,
   type SourceObservation,
   type SourceObservationPrice,
 } from './source-ingest';
@@ -1235,5 +1237,202 @@ describe('SourceIngest, a price copied to other scopes (plan 0118)', () => {
     const { copies } = await session.close();
 
     expect(copies.pricesCopied).toEqual(new Map([[SCOPE, 2]]));
+  });
+});
+
+/**
+ * A product reported from the listing alone, because its detail was known
+ * (plan 0119, section 6), and a run that writes only part of what it read
+ * (section 7).
+ */
+describe('SourceIngest, a partial observation (plan 0119)', () => {
+  const EAN = '8480000135636';
+  const LAST_SEEN = new Date('2026-09-01T00:00:00.000Z');
+
+  /** The row a full read of 4241 wrote last week. */
+  const known = {
+    externalId: '4241',
+    name: 'Aceite de oliva virgen extra',
+    brand: 'Hacendado',
+    brandKey: 'hacendado',
+    ean: EAN,
+    unitSize: 1,
+    sizeFormat: 'l',
+    categoryPath: ['Aceite'],
+    url: 'https://fixtures.test/product/4241',
+    extra: { packaging: 'Garrafa' },
+    status: SourceEntryStatus.ACTIVE,
+    itemId: 'item-1',
+    matchedBy: ItemSourceMatch.EAN,
+    confidence: 1,
+    timesSeen: 3,
+    lastSeenAt: LAST_SEEN,
+    lastRunId: OTHER_RUN,
+  };
+
+  function partial(
+    over: Partial<PartialSourceObservation> = {}
+  ): PartialSourceObservation {
+    return {
+      externalId: '4241',
+      detailFetched: false,
+      observedAt: new Date('2026-09-05T10:00:00.000Z'),
+      prices: [{ scopeKey: null, ...PRICE }],
+      ...over,
+    };
+  }
+
+  it('keeps the stored identity, moves the seen fields and writes its prices', async () => {
+    const { ingest, context, saved, priceRows, catalog } = build({
+      rows: [known],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { outcomes, counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [partial()],
+    });
+
+    // The last full read's name, brand and EAN, untouched: nothing here said
+    // otherwise, and a null would have blanked them.
+    expect(saved[0]).toMatchObject({
+      name: 'Aceite de oliva virgen extra',
+      brand: 'Hacendado',
+      brandKey: 'hacendado',
+      ean: EAN,
+      unitSize: 1,
+      sizeFormat: 'l',
+      url: 'https://fixtures.test/product/4241',
+      extra: { packaging: 'Garrafa' },
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-1',
+      timesSeen: 4,
+      lastRunId: RUN,
+    });
+    expect(saved[0].lastSeenAt.getTime()).toBeGreaterThan(LAST_SEEN.getTime());
+    expect(outcomes[0]).toMatchObject({
+      rung: 1,
+      created: false,
+      itemId: 'item-1',
+    });
+
+    // Unchanged, because the chain's description of the product did not move.
+    expect(counters).toMatchObject({
+      created: 0,
+      updated: 0,
+      unchanged: 1,
+      pricesRecorded: 1,
+      pricesWritten: 1,
+    });
+    // The price row carries the stored bag, which is what the last read said.
+    expect(priceRows).toEqual([
+      expect.objectContaining({
+        entryId: 'held-1',
+        priceScopeId: SCOPE,
+        price: 1.19,
+        details: { packaging: 'Garrafa' },
+      }),
+    ]);
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips a partial observation for a product with no row, with a warning', async () => {
+    const { ingest, context, saved, priceRows, catalog, warnings } = build({
+      rows: [],
+    });
+
+    const { outcomes, counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [partial({ externalId: '9001' })],
+    });
+
+    // No row with no name and no EAN, and no price with nowhere to hang it.
+    expect(saved).toEqual([]);
+    expect(outcomes).toEqual([]);
+    expect(priceRows).toEqual([]);
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+    expect(counters).toMatchObject({ created: 0, updated: 0, unchanged: 0 });
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        code: HarvestWarningCode.DETAIL_SKIPPED_UNKNOWN,
+        offerId: '9001',
+      }),
+    ]);
+  });
+
+  it('keeps the outcomes and prices of the others in a chunk with a skipped one', async () => {
+    const { ingest, context, priceRows } = build({
+      rows: [known],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { outcomes } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [partial({ externalId: '9001' }), partial()],
+    });
+
+    // The skipped one leaves no gap that shifts the next one's price onto it.
+    expect(outcomes.map((outcome) => outcome.entry.externalId)).toEqual([
+      '4241',
+    ]);
+    expect(priceRows.map((row) => row.entryId)).toEqual(['held-1']);
+  });
+
+  it('writes no price and no source_entry_prices row when the run writes availability only', async () => {
+    const { ingest, context, saved, priceRows, catalog, warnings } = build({
+      rows: [known],
+    });
+
+    const { counters, copies } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      // No default scope either: a run that places no price has nothing to
+      // warn about.
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      writes: HarvestRunWrites.AVAILABILITY,
+      copiesOf: () => ['a-target'],
+      observations: [
+        partial(),
+        observation({ externalId: '9001', name: 'Vinagre', price: PRICE }),
+      ],
+    });
+
+    // The products are still ingested.
+    expect(saved.map((row) => row.externalId)).toEqual(['4241', '9001']);
+    expect(priceRows).toEqual([]);
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+    expect(warnings).toEqual([]);
+    expect(counters).toMatchObject({ pricesRecorded: 0, pricesWritten: 0 });
+    // ...and neither are the copies.
+    expect(copies.pricesCopied.size).toBe(0);
+    expect(copies.pricedScopes.size).toBe(0);
+  });
+
+  it('writes prices and their copies when the run writes prices only', async () => {
+    const { ingest, context, priceRows, catalog } = build({
+      rows: [known],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      writes: HarvestRunWrites.PRICES,
+      copiesOf: (scopeId) => (scopeId === SCOPE ? ['a-target'] : []),
+      observations: [partial()],
+    });
+
+    expect(priceRows.map((row) => row.priceScopeId)).toEqual([
+      SCOPE,
+      'a-target',
+    ]);
+    expect(catalog.addPrices).toHaveBeenCalledTimes(2);
   });
 });

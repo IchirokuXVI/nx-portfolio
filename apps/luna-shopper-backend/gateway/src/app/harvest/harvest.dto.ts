@@ -3,8 +3,10 @@ import {
   ADAPTER_KEYS,
   BULK_DECISION_MAX_OPERATIONS,
   DiscoveredPlaceStatus,
+  HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunWrites,
   ItemCategory,
   PostalCodeDiscoveryStatus,
   PriceSourceKind,
@@ -158,6 +160,25 @@ export class SpawnHarvestRunDto {
   @ValidateNested({ each: true })
   @Type(() => ScopeCopyDto)
   scopeCopies?: ScopeCopyDto[];
+
+  @ApiPropertyOptional({
+    enum: HarvestRunWrites,
+    default: HarvestRunWrites.PRICES_AND_AVAILABILITY,
+    description:
+      'What the run writes of what it read (plan 0119). CATALOG_DISCOVERY only, and never with `detailBackfill`. Products are ingested whatever it says; it decides whether the prices, the availability or both are written, for walked scopes and copies alike. `PRICES` is refused for an adapter that states no price. It saves no request: prices and availability come from the same listing walk. The resolved value is stored on the run.',
+  })
+  @IsOptional()
+  @IsEnum(HarvestRunWrites)
+  writes?: HarvestRunWrites;
+
+  @ApiPropertyOptional({
+    enum: HarvestDetailFetch,
+    description:
+      'Which products a walk fetches the detail of (plan 0119). CATALOG_DISCOVERY only, and only for an adapter whose capability `skipsKnownDetails` is true (`mercadona-api`), where it defaults to `NEW`: the detail of a product whose row has no EAN yet, or has no row. `ALL` fetches every detail, which is what a walk of ten warehouses where every product is known costs about 5,700 requests for instead of 1,510. Stating it for any other adapter is refused, and leaving it out resolves to `ALL`. The resolved value is stored on the run.',
+  })
+  @IsOptional()
+  @IsEnum(HarvestDetailFetch)
+  details?: HarvestDetailFetch;
 }
 
 /** One walked scope and the scopes its prices and availability are copied to (plan 0118). */

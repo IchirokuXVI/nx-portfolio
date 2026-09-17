@@ -1,5 +1,8 @@
 import type { ConfigService } from '@nestjs/config';
-import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestDetailFetch,
+  PriceScopeKind,
+} from '@portfolio/luna-shopper/contracts';
 import type { SupermarketSource } from '../entities';
 import type { CatalogDiscoveryInput, RunPriceScope } from './catalog-runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
@@ -440,6 +443,167 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
         productsDetailed: 3,
       })
     );
+  });
+
+  describe('details: only new products are fetched (plan 0119)', () => {
+    /** A walk of these warehouses that knows these products. */
+    function knowing(
+      known: readonly string[],
+      options: {
+        details?: HarvestDetailFetch;
+        withoutEan?: readonly string[];
+        warehouses?: readonly string[];
+      } = {}
+    ): CatalogDiscoveryInput {
+      return {
+        ...walking(...(options.warehouses ?? ['4661', '4149'])),
+        details: options.details ?? HarvestDetailFetch.NEW,
+        knownExternalIds: new Set(known),
+        externalIdsWithoutEan: new Set(options.withoutEan ?? []),
+      };
+    }
+
+    const detailCalls = (urls: readonly string[]) =>
+      urls.filter((url) => url.includes('/products/'));
+
+    it('makes no detail request when every product is known', async () => {
+      const { urls, fetchImpl } = stubFetch({});
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(
+        context,
+        report,
+        knowing(['4241', '7012', '9001']),
+        source()
+      );
+
+      // Two tree walks of four requests each, and nothing else.
+      expect(detailCalls(urls)).toEqual([]);
+      expect(urls).toHaveLength(4);
+      expect(report.products).toEqual([]);
+      expect(
+        report.partialProducts.map((product) => product.externalId).sort()
+      ).toEqual(['4241', '7012', '9001']);
+      expect(
+        report.partialProducts.every(
+          (product) => product.detailFetched === false
+        )
+      ).toBe(true);
+    });
+
+    it('reports a known product with its prices and no identity field', async () => {
+      const { fetchImpl } = stubFetch({});
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(
+        context,
+        report,
+        knowing(['4241', '7012', '9001']),
+        source()
+      );
+
+      const shared = report.partialProducts.find(
+        (product) => product.externalId === '4241'
+      );
+      // A null for a field it did not read would blank the stored one, so the
+      // field is not there at all (plan 0119, section 6).
+      expect(Object.keys(shared ?? {}).sort()).toEqual([
+        'detailFetched',
+        'externalId',
+        'observedAt',
+        'prices',
+      ]);
+      // One price per warehouse that listed it, from that warehouse's listing,
+      // exactly as a product read whole carries.
+      expect(shared?.prices).toEqual([
+        {
+          scopeKey: '4661',
+          price: 8.75,
+          currency: 'EUR',
+          unitPrice: 8.75,
+          unitPriceLabel: 'L',
+          validFrom: null,
+          validUntil: null,
+        },
+        expect.objectContaining({ scopeKey: '4149', price: 9.99 }),
+      ]);
+    });
+
+    it('fetches the detail of the one product it does not know', async () => {
+      const { urls, fetchImpl } = stubFetch({});
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(context, report, knowing(['4241', '7012']), source());
+
+      expect(detailCalls(urls)).toHaveLength(1);
+      expect(detailCalls(urls)[0]).toContain('/products/9001/');
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        '9001',
+      ]);
+      expect(report.partialProducts).toHaveLength(2);
+    });
+
+    it('fetches every detail with ALL, whatever it knows', async () => {
+      const { urls, fetchImpl } = stubFetch({});
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(
+        context,
+        report,
+        knowing(['4241', '7012', '9001'], { details: HarvestDetailFetch.ALL }),
+        source()
+      );
+
+      expect(detailCalls(urls)).toHaveLength(3);
+      expect(report.partialProducts).toEqual([]);
+      expect(report.products).toHaveLength(3);
+    });
+
+    it('states the requests made, the ones skipped and the rows with no EAN', async () => {
+      const { fetchImpl } = stubFetch({});
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      // 4241 is known, 7012 has a row with no EAN, and 9001 has no row.
+      await runner.run(
+        context,
+        report,
+        knowing(['4241'], { withoutEan: ['7012'] }),
+        source()
+      );
+
+      expect(context.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productsDetailed: 2,
+          productsDetailSkipped: 1,
+          productsWithoutEan: 1,
+        })
+      );
+    });
+
+    it('still names what each warehouse lacks when nothing was fetched', async () => {
+      const { fetchImpl } = stubFetch({});
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(
+        context,
+        report,
+        knowing(['4241', '7012', '9001']),
+        source()
+      );
+
+      // Phase 3 reads the listings, not the details, so a skipped detail
+      // changes nothing about the absences.
+      expect(report.completed).toEqual(['4661', '4149']);
+      expect(report.availabilities).toEqual([
+        { externalId: '9001', available: false, scopeKey: '4661' },
+      ]);
+    });
   });
 
   it('refuses to walk with no warehouse to walk', async () => {

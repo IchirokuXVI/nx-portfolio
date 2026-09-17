@@ -54,6 +54,43 @@ export enum HarvestRunMode {
 }
 
 /**
+ * What a `CATALOG_DISCOVERY` writes of what it read (plan 0119, section 7).
+ *
+ * Products are ingested whatever this says: rows are created, the seen fields
+ * move and the review queue fills. It decides only the prices and the
+ * availability, and it is enforced where those are written, so every adapter
+ * and every copy (plan 0118) obeys it without a runner knowing.
+ *
+ * **It saves no request.** Prices and availability come from the same listing
+ * walk, so a run that writes one of them fetches what a run that writes both
+ * fetches. The saving for Mercadona is {@link HarvestDetailFetch.NEW}.
+ */
+export enum HarvestRunWrites {
+  PRICES_AND_AVAILABILITY = 'PRICES_AND_AVAILABILITY',
+  PRICES = 'PRICES',
+  AVAILABILITY = 'AVAILABILITY',
+}
+
+/**
+ * Which products a catalog discovery fetches the detail of (plan 0119, section
+ * 5).
+ *
+ * The detail exists for the EAN and the brand, and neither changes from one
+ * week to the next, so fetching it for 4,232 products every run was paying for
+ * an answer the harvester already held. Only an adapter whose capability
+ * `skipsKnownDetails` is true takes a choice here; every other one is `ALL`.
+ */
+export enum HarvestDetailFetch {
+  /**
+   * Fetch the detail of a product the harvester does not know yet: one with no
+   * row for the chain, or a row with no EAN.
+   */
+  NEW = 'NEW',
+  /** Fetch every product's detail, as every run did before plan 0119. */
+  ALL = 'ALL',
+}
+
+/**
  * Who asked for a run. Every run in plan 0038 is MANUAL: the scheduler is
  * deferred to backlog 0001 section 7.6, and section 8.1 leans on "a person asked
  * for this" as the reason the fetching is defensible at all. SCHEDULED and SYSTEM
@@ -232,6 +269,15 @@ export enum HarvestWarningCode {
    * which kind is right and corrects the row by hand.
    */
   SCOPE_KIND_MISMATCH = 'SCOPE_KIND_MISMATCH',
+  /**
+   * A product was reported from the listing alone, because its detail was
+   * known, and by the time the ingest reached it the chain had no row for it
+   * (plan 0119, section 6).
+   *
+   * Nothing is written for it. A row with no name and no EAN is worse than one
+   * that waits a week for the next run to fetch the detail.
+   */
+  DETAIL_SKIPPED_UNKNOWN = 'DETAIL_SKIPPED_UNKNOWN',
 }
 
 /**

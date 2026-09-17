@@ -1,9 +1,11 @@
 import { ConfigService } from '@nestjs/config';
 import {
   DEFAULT_SCOPE_PRIORITY,
+  HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  HarvestRunWrites,
   PriceScopeKind,
   PriceSourceKind,
   type HarvestDocument,
@@ -1114,6 +1116,156 @@ describe('HarvestRunService.spawn, scope copies (plan 0118)', () => {
       new RegExp(`${FOREIGN} does not belong to this chain`)
     );
   });
+});
+
+/**
+ * What a walk writes and which details it fetches (plan 0119, section 3).
+ *
+ * Every refusal has a case, and so does the rule that a default is not a
+ * statement: an adapter with no detail phase is refused `details` only when a
+ * caller names it.
+ */
+describe('HarvestRunService.spawn, writes and details (plan 0119)', () => {
+  function payloadOf(store: HarvestRunStore): Record<string, unknown> {
+    return (store.create as jest.Mock).mock.calls[0][0].payload;
+  }
+
+  it('stores the resolved defaults for a Mercadona walk: both writes, new details', async () => {
+    const { service, store } = build();
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      priceScopeIds: [SCOPE],
+    });
+
+    // Stored rather than implied, so the run still says what it did after a
+    // default changes.
+    expect(payloadOf(store)).toEqual(
+      expect.objectContaining({
+        writes: HarvestRunWrites.PRICES_AND_AVAILABILITY,
+        details: HarvestDetailFetch.NEW,
+      })
+    );
+  });
+
+  it('stores what a Mercadona walk states', async () => {
+    const { service, store } = build();
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      priceScopeIds: [SCOPE],
+      writes: HarvestRunWrites.AVAILABILITY,
+      details: HarvestDetailFetch.ALL,
+    });
+
+    expect(payloadOf(store)).toEqual(
+      expect.objectContaining({
+        writes: HarvestRunWrites.AVAILABILITY,
+        details: HarvestDetailFetch.ALL,
+      })
+    );
+  });
+
+  it('resolves an unstated details to ALL for an adapter with no detail phase', async () => {
+    const { service, store } = build({ source: { adapterKey: 'lidl-api' } });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      writes: HarvestRunWrites.PRICES,
+    });
+
+    expect(payloadOf(store)).toEqual(
+      expect.objectContaining({
+        writes: HarvestRunWrites.PRICES,
+        details: HarvestDetailFetch.ALL,
+      })
+    );
+  });
+
+  it('refuses details stated for an adapter with no detail phase to skip', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'carrefour-web' },
+    });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeId: 'a-scope',
+        details: HarvestDetailFetch.ALL,
+      })
+    ).rejects.toThrow(/no detail phase/);
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses writes PRICES for an adapter that states no price', async () => {
+    const { service } = build({ source: { adapterKey: 'deza-web' } });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        writes: HarvestRunWrites.PRICES,
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('accepts writes AVAILABILITY for an adapter that states no price', async () => {
+    const { service, store } = build({ source: { adapterKey: 'deza-web' } });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      writes: HarvestRunWrites.AVAILABILITY,
+    });
+
+    expect(payloadOf(store)).toEqual(
+      expect.objectContaining({ writes: HarvestRunWrites.AVAILABILITY })
+    );
+  });
+
+  it('refuses writes on a backfill, which is not a walk', async () => {
+    const { service } = build({ source: { adapterKey: 'carrefour-web' } });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        detailBackfill: true,
+        writes: HarvestRunWrites.PRICES_AND_AVAILABILITY,
+      })
+    ).rejects.toThrow(/backfill/i);
+  });
+
+  it.each([
+    ['writes', { writes: HarvestRunWrites.PRICES }],
+    ['details', { details: HarvestDetailFetch.NEW }],
+  ])(
+    'refuses %s on a mode other than a catalog discovery',
+    async (_, option) => {
+      const { service, store } = build();
+
+      await expect(
+        service.spawn({
+          userId: ADMIN,
+          mode: HarvestRunMode.STORE_DISCOVERY,
+          postalCode: '14013',
+          ...option,
+        })
+      ).rejects.toThrow(/CATALOG_DISCOVERY/);
+      expect(store.create).not.toHaveBeenCalled();
+    }
+  );
 });
 
 describe('HarvestRunService.abort', () => {
