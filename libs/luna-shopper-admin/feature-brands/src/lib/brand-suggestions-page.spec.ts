@@ -130,7 +130,7 @@ async function boot(before?: () => void) {
   const fixture = TestBed.createComponent(TestHost);
   fixture.detectChanges();
 
-  await TestBed.inject(Router).navigateByUrl('/suggested');
+  await TestBed.inject(Router).navigateByUrl('/suggested-brands');
   await settle(fixture);
 
   return fixture;
@@ -296,7 +296,7 @@ describe('BrandSuggestionsPage', () => {
     expect(text(fixture)).toContain('resource.list.noMatch');
   });
 
-  it('opens a panel under the row with its spelling already in it', async () => {
+  it('opens a panel under the row with its spelling capitalized', async () => {
     const fixture = await boot();
 
     registerButton(fixture, 'mahou')?.click();
@@ -305,8 +305,38 @@ describe('BrandSuggestionsPage', () => {
     const label = fixture.nativeElement.querySelector(
       '[data-label]'
     ) as HTMLInputElement;
-    expect(label.value).toBe('MAHOU');
+    expect(label.value).toBe('Mahou');
     expect(text(fixture)).toContain('brands.suggested.register.makesKey');
+  });
+
+  it('reverts to the chain spelling and capitalizes it again', async () => {
+    const fixture = await boot();
+
+    registerButton(fixture, 'mahou')?.click();
+    await settle(fixture);
+
+    const label = () =>
+      fixture.nativeElement.querySelector('[data-label]') as HTMLInputElement;
+    const button = (marker: string) =>
+      fixture.nativeElement.querySelector(
+        `[data-${marker}]`
+      ) as HTMLButtonElement;
+
+    // Already capitalized, so only revert has something to do.
+    expect(button('capitalize').disabled).toBe(true);
+    expect(button('revert').disabled).toBe(false);
+
+    button('revert').click();
+    await settle(fixture);
+    expect(label().value).toBe('MAHOU');
+    expect(button('revert').disabled).toBe(true);
+    expect(button('capitalize').disabled).toBe(false);
+
+    type(label(), 'MAHOU cinco ESTRELLAS');
+    await settle(fixture);
+    button('capitalize').click();
+    await settle(fixture);
+    expect(label().value).toBe('Mahou Cinco Estrellas');
   });
 
   /**
@@ -418,12 +448,12 @@ describe('BrandSuggestionsPage', () => {
     expect(text(fixture)).toContain('resource.error.brandKeyTaken');
 
     // Built by `ResourceRegistry.pathOf`, never from a literal segment.
-    expect(page(fixture).holderLink()).toEqual(['/', 'registered', 'br_mahou']);
+    expect(page(fixture).holderLink()).toEqual(['/', 'brands', 'br_mahou']);
     expect(
       (
         fixture.nativeElement.querySelector('.panel a') as HTMLAnchorElement
       ).getAttribute('href')
-    ).toBe('/registered/br_mahou');
+    ).toBe('/brands/br_mahou');
   });
 
   it('says what an empty label is, and offers no link', async () => {

@@ -26,9 +26,8 @@ export type { Brand };
  */
 export const BRANDS = defineResource<Brand>({
   name: 'brands',
-  // Under the brands section, which `brandsRoutes` redirects into: the section
-  // is the pair of screens, and this is the half that is already registered.
-  segment: 'registered',
+  // Under the harvester section, beside the suggested brands it is filled from.
+  segment: 'brands',
   labels: {
     one: 'brands.registered.one',
     many: 'brands.registered.many',

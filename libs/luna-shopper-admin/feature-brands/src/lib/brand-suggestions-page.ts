@@ -25,6 +25,7 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { ReferencePicker, Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
+import { capitalizeBrand } from './brand-capitalization';
 import { BrandsGateway, type BrandSuggestion } from './brands-gateway';
 
 /**
@@ -211,8 +212,13 @@ const SEARCH_DELAY_MS = 250;
                 </th>
                 <td class="figure">{{ count(row.productCount) }}</td>
                 <td>
-                  <span>{{ instant(row.firstSeenAt) }}</span>
-                  <span class="muted">{{ since(row.firstSeenAt) }}</span>
+                  <!-- The date over its age, as the brand sits over its key.
+                       Two bare spans side by side touched, because Angular
+                       drops the whitespace between two elements. -->
+                  <span class="stack">
+                    <span>{{ instant(row.firstSeenAt) }}</span>
+                    <span class="muted">{{ since(row.firstSeenAt) }}</span>
+                  </span>
                 </td>
                 <td>
                   <ul class="chips">
@@ -304,6 +310,28 @@ const SEARCH_DELAY_MS = 250;
             data-label
           />
         </label>
+
+        <!-- The name starts capitalized, so the chain's own spelling is the one
+             a press brings back, and each button is disabled while the name
+             already is what it would write. -->
+        <div class="controls">
+          <button
+            (click)="capitalize()"
+            [disabled]="saving() || label() === capitalized()"
+            type="button"
+            data-capitalize
+          >
+            {{ 'brands.suggested.register.capitalize' | rokuT }}
+          </button>
+          <button
+            (click)="revert()"
+            [disabled]="saving() || label() === original()"
+            type="button"
+            data-revert
+          >
+            {{ 'brands.suggested.register.revert' | rokuT }}
+          </button>
+        </div>
 
         <p aria-live="polite" class="live-key">
           @if (liveKey() === '') {
@@ -670,6 +698,9 @@ export class BrandSuggestionsPage implements OnDestroy {
   /** Which row's panel is open, by key. `null` when none is. */
   readonly openKey = signal<string | null>(null);
   readonly label = signal('');
+  /** The open row's spelling as the chain printed it, which revert restores. */
+  readonly original = signal('');
+  readonly capitalized = computed(() => capitalizeBrand(this.label()));
   readonly chainId = signal('');
   readonly saving = signal(false);
   private readonly _panelError = signal<GatewayError | null>(null);
@@ -771,6 +802,16 @@ export class BrandSuggestionsPage implements OnDestroy {
     this.label.set((event.target as HTMLInputElement).value);
   }
 
+  /** Write the name with only the first letter of each word in capitals. */
+  capitalize(): void {
+    this.label.set(this.capitalized());
+  }
+
+  /** Put back the spelling the chain printed. */
+  revert(): void {
+    this.label.set(this.original());
+  }
+
   reload(): void {
     void this._load();
   }
@@ -779,10 +820,15 @@ export class BrandSuggestionsPage implements OnDestroy {
     void this._loadMore();
   }
 
-  /** Open the panel under one row, with its spelling already in the label. */
+  /**
+   * Open the panel under one row, with its spelling already capitalized in the
+   * label. Chains mostly print brands in capitals, so the capitalized name is
+   * the one a person keeps far more often than the printed one.
+   */
   startRegister(row: BrandSuggestion): void {
     this.openKey.set(row.key);
-    this.label.set(row.spelling);
+    this.original.set(row.spelling);
+    this.label.set(capitalizeBrand(row.spelling));
     this.chainId.set('');
     this._panelError.set(null);
     this.done.set(null);

@@ -17,11 +17,10 @@ import { ADMIN_SECTIONS } from './sections';
  * would give the reference picker two answers to the same question.
  */
 describe('ADMIN_SECTIONS', () => {
-  it('is the six sections the plans name, in order', () => {
+  it('is the five sections the plans name, in order', () => {
     expect(ADMIN_SECTIONS.map((section) => section.key)).toEqual([
       'overview',
       'catalog',
-      'brands',
       'shoppers',
       'harvest',
       'admins',
@@ -31,18 +30,22 @@ describe('ADMIN_SECTIONS', () => {
   /**
    * Around half a dozen is what the first row holds at a glance.
    *
-   * Six since admin plan 0027, and the sixth is there because of the *second*
-   * row rather than this one: the catalog already holds eight screens, which is
-   * the widest a second row goes, so the brands could not join it.
+   * Admin plan 0027 added a sixth, Brands, and it went again: one tab for two
+   * screens was a click for nothing, and the tab went unmarked on the
+   * registered list. Both brand screens are in the harvester now.
    */
-  it('holds six, which is what one row holds', () => {
-    expect(ADMIN_SECTIONS).toHaveLength(6);
+  it('holds five, which is what one row holds', () => {
+    expect(ADMIN_SECTIONS).toHaveLength(5);
   });
 
-  /** Eight is the widest second row, and it fits on one line at 1280 pixels. */
-  it('gives no section more than eight screens', () => {
+  /**
+   * Ten is the widest second row. Eight fit on one line at 1280 pixels, and the
+   * harvester's ten wrap onto a second line, which the row allows. A section
+   * that needs more than ten is two sections.
+   */
+  it('gives no section more than ten screens', () => {
     for (const section of ADMIN_SECTIONS) {
-      expect(sectionScreens(section).length).toBeLessThanOrEqual(8);
+      expect(sectionScreens(section).length).toBeLessThanOrEqual(10);
     }
   });
 
@@ -122,9 +125,6 @@ describe('ADMIN_SECTIONS', () => {
     expect(at('prices')).toBe('catalog/prices');
     expect(at('price-policies')).toBe('catalog/price-policies');
     expect(at('location-items')).toBe('catalog/location-items');
-    // `registered` is the brands screen's segment, because the section is the
-    // pair and this is the half that is already registered (admin plan 0027).
-    expect(at('brands')).toBe('brands/registered');
     expect(at('users')).toBe('shoppers/users');
     expect(at('zones')).toBe('shoppers/zones');
     expect(at('memberships')).toBe('shoppers/memberships');
@@ -134,6 +134,8 @@ describe('ADMIN_SECTIONS', () => {
     // own name for a generated list.
     expect(at('baskets')).toBe('shoppers/shopping-lists');
     expect(at('postal-codes')).toBe('harvest/postal-codes');
+    // Beside the suggested brands, which are keys the harvested queue carries.
+    expect(at('brands')).toBe('harvest/brands');
     // The one section that keeps the root, because it has one screen.
     expect(at('admins')).toBe('admins');
   });
