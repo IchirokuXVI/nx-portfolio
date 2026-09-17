@@ -77,6 +77,11 @@ function build(
     conflicts?: Array<Record<string, unknown>>;
     /** What the ingest counted, which the sink carries into the report. */
     counters?: Partial<SourceIngestCounters>;
+    /** The scopes this run copies to, by the scope copied from (plan 0118). */
+    copies?: Record<string, string[]>;
+    /** What the ingest said its copies wrote. */
+    pricesCopied?: Record<string, number>;
+    pricedScopes?: string[];
   } = {}
 ) {
   const pushed: SourceObservation[][] = [];
@@ -91,6 +96,10 @@ function build(
       pricesWritten: 0,
       pricesConfirmed: 0,
       ...options.counters,
+    },
+    copies: {
+      pricedScopes: new Set(options.pricedScopes ?? []),
+      pricesCopied: new Map(Object.entries(options.pricesCopied ?? {})),
     },
   }));
   const ingest = {
@@ -185,6 +194,7 @@ function build(
       // Every chain is untrusted until an operator says otherwise (plan 0107,
       // D2); the trusted path has its own spec.
       autoImportPlaces: false,
+      copiesOf: (scopeId) => options.copies?.[scopeId] ?? [],
     },
     { ingest, scopes, places, shops, catalog, entries }
   );
@@ -302,6 +312,61 @@ describe('RunReportSink', () => {
       .calls[0][1] as Array<{ itemId: string; available: boolean }>;
     expect(entries).toContainEqual({ itemId: 'item-seen', available: true });
     expect(entries).toContainEqual({ itemId: 'item-gone', available: false });
+  });
+
+  it('writes the same availability at every scope the walked one is copied to (plan 0118)', async () => {
+    const { sink, catalog } = build({
+      resolves: { seen: { itemId: 'item-seen', active: true } },
+      tracked: [{ externalId: 'gone', itemId: 'item-gone' }],
+      copies: { [SCOPE]: ['scope-w2', 'scope-region'] },
+    });
+
+    sink.product(observation({ externalId: 'seen' }));
+    sink.assortmentComplete(null);
+    const written = await sink.drain();
+
+    const calls = (catalog.setAvailability as jest.Mock).mock.calls as Array<
+      [string, Array<{ itemId: string; available: boolean }>]
+    >;
+    expect(calls.map(([scopeId]) => scopeId)).toEqual([
+      SCOPE,
+      'scope-w2',
+      'scope-region',
+    ]);
+    // The negative half is copied too: it is part of the one statement.
+    for (const [, entries] of calls) {
+      expect(entries).toEqual(calls[0][1]);
+      expect(entries).toContainEqual({ itemId: 'item-gone', available: false });
+    }
+    // The walked scope's number keeps its meaning, and the copies are apart.
+    expect(written.availabilityWritten).toBe(2);
+    expect(written.availabilityCopied).toEqual({ [SCOPE]: 4 });
+  });
+
+  it('carries what the copies wrote into the result', async () => {
+    const { sink } = build({
+      pricedScopes: [SCOPE],
+      pricesCopied: { [SCOPE]: 12 },
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    const written = await sink.drain();
+
+    expect(written.pricedScopes).toEqual([SCOPE]);
+    expect(written.pricesCopied).toEqual({ [SCOPE]: 12 });
+  });
+
+  it('hands the ingest the copies, so a price is copied where it is written', async () => {
+    const { sink, opened } = build({ copies: { [SCOPE]: ['scope-w2'] } });
+
+    sink.product(observation({ externalId: 'a' }));
+    await sink.drain();
+
+    const copiesOf = (
+      opened[0] as { copiesOf: (scopeId: string) => readonly string[] }
+    ).copiesOf;
+    expect(copiesOf(SCOPE)).toEqual(['scope-w2']);
+    expect(copiesOf('scope-w2')).toEqual([]);
   });
 
   it('says nothing at all when the run did not walk a whole assortment', async () => {

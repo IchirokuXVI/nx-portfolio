@@ -622,6 +622,11 @@ export interface ItemOfferView {
   observedAt: string | null;
   /** Null when there is no price row at all. */
   sourceKind: PriceSourceKind | null;
+  /**
+   * The scope the effective row was read at, when a run copied it here from
+   * another (plan 0118). Null for a price read at this scope itself.
+   */
+  priceCopiedFromScopeId: string | null;
   /** Plan 0080, section 5: shown because nothing better exists, not because it is current. */
   stale: boolean;
 }
@@ -742,6 +747,12 @@ export interface SupermarketItemView {
   /** The effective row's kind. Null when no row prices this key at all. */
   sourceKind: PriceSourceKind | null;
   /**
+   * The scope the effective row was read at, when a run copied it here from
+   * another (plan 0118). Null for a price read at this scope itself. A scope
+   * deleted since shows as its raw id: the record outlives the scope.
+   */
+  priceCopiedFromScopeId: string | null;
+  /**
    * Nothing eligible priced this key, so the newest row of any kind is shown
    * and flagged (plan 0080, section 5). A number with a date beats a blank.
    */
@@ -840,6 +851,12 @@ export interface ItemPriceView {
   sourceRunId: string | null;
   /** The run that last moved `lastObservedAt`. Plan 0082 reads it. */
   lastObservedRunId: string | null;
+  /**
+   * The scope this price was read at, when a run copied it to this one (plan
+   * 0118). Null for a price read here. No foreign key: it names a scope that
+   * may since have been deleted.
+   */
+  copiedFromScopeId: string | null;
   /** `ADMIN` rows only. */
   overrides: ItemPriceOverrides | null;
   /** `ADMIN` rows only: `observedAt` plus seven days. */
@@ -1511,6 +1528,12 @@ export interface AddItemPriceBatchRequest extends AdminCredential {
   priceScopeId: string;
   sourceKind: PriceSourceKind;
   sourceRunId?: string | null;
+  /**
+   * The scope every entry was read at, when the batch is a copy of it (plan
+   * 0118, section 5). A scope of the same chain, and never `priceScopeId`
+   * itself. Stated once for the batch because a run sends one batch per scope.
+   */
+  copiedFromScopeId?: string | null;
   entries: ItemPriceBatchEntry[];
 }
 

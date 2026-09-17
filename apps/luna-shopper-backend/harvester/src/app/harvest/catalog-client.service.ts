@@ -355,13 +355,18 @@ export class CatalogClient {
     // migration has no run to name, because the column it came from never
     // recorded which walk had written the number.
     sourceRunId: string | null,
-    sourceKind: PriceSourceKind = PriceSourceKind.OFFICIAL_API
+    sourceKind: PriceSourceKind = PriceSourceKind.OFFICIAL_API,
+    // The scope these prices were read at, when the batch copies them to
+    // `priceScopeId` (plan 0118, section 5). Sent only when set, so a batch
+    // read at its own scope is the message it always was.
+    copiedFromScopeId: string | null = null
   ): Promise<AddItemPriceBatchResult> {
     return this.send(ITEM_PRICE_PATTERNS.addBatch, {
       userId: this.actor(),
       priceScopeId,
       sourceKind,
       sourceRunId,
+      ...(copiedFromScopeId ? { copiedFromScopeId } : {}),
       entries,
     });
   }

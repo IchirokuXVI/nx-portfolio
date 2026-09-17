@@ -266,17 +266,44 @@ describe('SourceEntryService', () => {
         NATIONAL,
         [expect.objectContaining({ itemId: 'item-1', price: 1.19 })],
         'run-monday',
-        PriceSourceKind.OFFICIAL_API
+        PriceSourceKind.OFFICIAL_API,
+        null
       );
       expect(addPrices).toHaveBeenNthCalledWith(
         2,
         CORDOBA,
         [expect.objectContaining({ price: 1.09 })],
         'run-tuesday',
-        PriceSourceKind.OFFICIAL_API
+        PriceSourceKind.OFFICIAL_API,
+        null
       );
       expect(result.pricesWritten).toBe(2);
       expect(result.createdItem).toBeNull();
+    });
+
+    it('keeps a copied price’s provenance when it is accepted later (plan 0118)', async () => {
+      const { service, addPrices } = build({
+        row: entry({
+          prices: [
+            price({
+              id: 'p-cordoba',
+              priceScopeId: CORDOBA,
+              price: 1.09,
+              copiedFromScopeId: NATIONAL,
+            }),
+          ],
+        }),
+      });
+
+      await service.accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-1' });
+
+      expect(addPrices).toHaveBeenCalledWith(
+        CORDOBA,
+        [expect.objectContaining({ price: 1.09 })],
+        'run-monday',
+        PriceSourceKind.OFFICIAL_API,
+        NATIONAL
+      );
     });
 
     it('writes nothing for a window that has closed', async () => {

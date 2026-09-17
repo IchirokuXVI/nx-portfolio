@@ -523,6 +523,119 @@ describeIntegration('item prices (real Postgres)', () => {
     });
   });
 
+  describe('a copy of another scope (plan 0118)', () => {
+    let targetId: string;
+
+    beforeEach(async () => {
+      targetId = (
+        await scopes.create({
+          userId: OPERATOR,
+          supermarketId: chainId,
+          kind: PriceScopeKind.REGION,
+          externalKey: '4804',
+        })
+      ).id;
+    });
+
+    function copy(price: number, observedAt: Date, from = warehouseId) {
+      return prices.addBatch({
+        userId: HARVESTER,
+        priceScopeId: targetId,
+        sourceKind: PriceSourceKind.OFFICIAL_API,
+        sourceRunId: RUN,
+        copiedFromScopeId: from,
+        entries: [
+          {
+            itemId,
+            price,
+            currency: 'EUR',
+            observedAt: observedAt.toISOString(),
+          },
+        ],
+      });
+    }
+
+    it('records the scope it was read at, and materializes it', async () => {
+      await copy(1.19, new Date());
+
+      const rows = await dataSource
+        .getRepository(ItemPrice)
+        .findBy({ priceScopeId: targetId });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].copiedFromScopeId).toBe(warehouseId);
+      const row = await shown(targetId);
+      expect(Number(row?.price)).toBe(1.19);
+      expect(row?.priceCopiedFromScopeId).toBe(warehouseId);
+    });
+
+    it('confirms a copy of the same value from the same scope', async () => {
+      const earlier = new Date(Date.now() - DAY_MS);
+      expect(await copy(1.19, earlier)).toEqual({ inserted: 1, confirmed: 0 });
+      expect(await copy(1.19, new Date())).toEqual({
+        inserted: 0,
+        confirmed: 1,
+      });
+    });
+
+    it('inserts a direct walk of the same value, which is a different statement', async () => {
+      // Section 5.2: confirming here would leave the copy's provenance on a
+      // price that was since read at the target itself.
+      await copy(1.19, new Date(Date.now() - DAY_MS));
+      expect(await crawl(1.19, new Date(), targetId)).toEqual({
+        inserted: 1,
+        confirmed: 0,
+      });
+
+      const row = await shown(targetId);
+      expect(Number(row?.price)).toBe(1.19);
+      expect(row?.priceCopiedFromScopeId).toBeNull();
+    });
+
+    it('refuses a batch copied from the scope it writes to', async () => {
+      await expect(copy(1.19, new Date(), targetId)).rejects.toThrow(
+        new RegExp(targetId)
+      );
+    });
+
+    it('refuses a batch copied from a scope of another chain', async () => {
+      const supermarkets = dataSource.getRepository(Supermarket);
+      const other = await supermarkets.save(
+        supermarkets.create({ name: { en: 'Other', es: 'Otra' } })
+      );
+      const foreign = await scopes.create({
+        userId: OPERATOR,
+        supermarketId: other.id,
+        kind: PriceScopeKind.REGION,
+        externalKey: '4661',
+      });
+
+      await expect(copy(1.19, new Date(), foreign.id)).rejects.toThrow(
+        new RegExp(foreign.id)
+      );
+      expect(
+        await dataSource
+          .getRepository(ItemPrice)
+          .countBy({ priceScopeId: targetId })
+      ).toBe(0);
+    });
+
+    it('goes with the run when the run is reverted (section 8)', async () => {
+      await crawl(1.19, new Date());
+      await copy(1.19, new Date());
+
+      await prices.deleteByRun({ userId: HARVESTER, sourceRunId: RUN });
+
+      expect(
+        await dataSource
+          .getRepository(ItemPrice)
+          .countBy({ priceScopeId: targetId })
+      ).toBe(0);
+      const row = await shown(targetId);
+      expect(row?.price ?? null).toBeNull();
+      expect(row?.priceCopiedFromScopeId ?? null).toBeNull();
+    });
+  });
+
   describe('delete and policy', () => {
     it('removing the effective row recomputes the materialized one', async () => {
       await crawl(1.19, new Date());

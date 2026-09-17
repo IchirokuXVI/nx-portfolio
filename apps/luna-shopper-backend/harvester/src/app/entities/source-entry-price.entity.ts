@@ -86,4 +86,12 @@ export class SourceEntryPrice extends BaseEntity {
   @Index('ix_source_entry_prices_run')
   @Column({ type: 'uuid', nullable: true })
   runId!: string | null;
+
+  /**
+   * The scope this price was read at, when the run copied it to this row's
+   * scope (plan 0118, section 5). Null for a price read at its own scope.
+   * Opaque like `priceScopeId`, and kept when the scope it names is deleted.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  copiedFromScopeId!: string | null;
 }

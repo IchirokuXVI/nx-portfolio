@@ -88,7 +88,10 @@ export class SourceEntryPriceWriter {
           },
         ],
         price.runId,
-        entry.sourceKind
+        entry.sourceKind,
+        // A copied row keeps its provenance when a person accepts it later
+        // (plan 0118): the price was still read at the other scope.
+        price.copiedFromScopeId ?? null
       );
       written += result.inserted;
     }

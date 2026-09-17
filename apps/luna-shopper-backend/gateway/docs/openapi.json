@@ -24454,6 +24454,28 @@
           "entries"
         ]
       },
+      "ScopeCopyDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "uuid",
+            "description": "A scope the run writes, by id."
+          },
+          "to": {
+            "description": "The scopes that receive a copy of what the run wrote at `from`. At least one.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      },
       "SpawnHarvestRunDto": {
         "type": "object",
         "properties": {
@@ -24518,6 +24540,13 @@
             "type": "boolean",
             "default": false,
             "description": "Read product pages for the EAN instead of crawling the assortment (plan 0090, section 12.1). `carrefour-web` only. A crawl reads 851 listing pages in about an hour; a backfill reads one page per product that has no EAN yet, of the order of 18,000 the first time, so the two are never one run. Stopping a backfill costs nothing: an EAN is written as it is read, and a product that has one is never fetched again."
+          },
+          "scopeCopies": {
+            "description": "Scopes that also receive what the run writes at a walked scope (plan 0118). CATALOG_DISCOVERY only, and never with `detailBackfill`. A copy fetches nothing, so a target is any tier and needs no key of the chain’s own. `from` is a scope the run writes: one of `priceScopeIds` for `mercadona-api`, `priceScopeId` for an adapter given one scope, and any keyed scope of the chain for `lidl-api`. Each `from` appears once, every target once in the whole run, and no target is walked by the run. Every copied price records the scope it was read at.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScopeCopyDto"
+            }
           }
         },
         "required": [
@@ -26851,6 +26880,12 @@
               }
             ]
           },
+          "priceCopiedFromScopeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "stale": {
             "type": "boolean"
           },
@@ -27182,6 +27217,12 @@
               }
             ]
           },
+          "priceCopiedFromScopeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "stale": {
             "type": "boolean"
           }
@@ -27395,6 +27436,12 @@
             ]
           },
           "lastObservedRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "copiedFromScopeId": {
             "type": [
               "string",
               "null"
@@ -28189,6 +28236,12 @@
               }
             ]
           },
+          "priceCopiedFromScopeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "stale": {
             "type": "boolean"
           },
@@ -28681,6 +28734,8 @@
           "EXTRACTOR",
           "UNKNOWN_PRICE_SCOPE",
           "NO_PRICE_SCOPE",
+          "COPY_TARGET_GONE",
+          "COPY_SOURCE_NOT_WRITTEN",
           "SCOPE_KIND_MISMATCH"
         ]
       },

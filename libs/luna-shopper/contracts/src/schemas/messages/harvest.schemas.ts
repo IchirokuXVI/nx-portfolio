@@ -770,6 +770,15 @@ const spawnRunRequest = object(
     // same chain, asking a second question of the same pages, and never at the
     // same time as a price crawl.
     detailBackfill: boolean(),
+    // The scopes that also receive what the run writes at a walked scope (plan
+    // 0118). The rules that relate them to the walk live in the harvester's
+    // spawn validation, which a saved preset goes through as well.
+    scopeCopies: array({
+      type: 'object',
+      additionalProperties: false,
+      required: ['from', 'to'],
+      properties: { from: string(), to: array(string()) },
+    }),
   },
   ['userId', 'mode']
 );

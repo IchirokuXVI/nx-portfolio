@@ -879,6 +879,243 @@ describe('HarvestRunService.spawn', () => {
   });
 });
 
+/**
+ * One walk written to several scopes (plan 0118, section 3).
+ *
+ * Every rule has a refusing case, and every refusal names the scope it is
+ * about, because the operator has to find that scope on a form of dozens.
+ */
+describe('HarvestRunService.spawn, scope copies (plan 0118)', () => {
+  const ANDALUCIA = '5efa0000-0000-4000-a000-0000000000a1';
+  const BARCELONA = '5efa0000-0000-4000-a000-0000000000b1';
+  const W2 = '5efa0000-0000-4000-a000-0000000000a2';
+  const W3 = '5efa0000-0000-4000-a000-0000000000a3';
+  const W21 = '5efa0000-0000-4000-a000-0000000000b2';
+  const NATIONAL = '5efa0000-0000-4000-a000-0000000000c1';
+  const SHOP = '5efa0000-0000-4000-a000-0000000000d1';
+  const FOREIGN = '5efa0000-0000-4000-a000-00000000ffff';
+
+  /** A Mercadona chain with two walked warehouses, three more, a nationwide scope and a shop. */
+  const chain = [
+    warehouse({ id: ANDALUCIA, externalKey: '4661' }),
+    warehouse({ id: BARCELONA, externalKey: '3947' }),
+    warehouse({ id: W2, externalKey: '4662' }),
+    warehouse({ id: W3, externalKey: '4663' }),
+    warehouse({ id: W21, externalKey: '3948' }),
+    warehouse({
+      id: NATIONAL,
+      kind: PriceScopeKind.NATIONAL,
+      externalKey: null,
+      priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.NATIONAL],
+    }),
+    warehouse({
+      id: SHOP,
+      kind: PriceScopeKind.STORE,
+      externalKey: null,
+      priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.STORE],
+    }),
+  ];
+
+  function mercadona(scopeCopies: { from: string; to: string[] }[]) {
+    const built = build({ scopes: chain });
+    const spawn = () =>
+      built.service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeIds: [ANDALUCIA, BARCELONA],
+        scopeCopies,
+      });
+    return { ...built, spawn };
+  }
+
+  it('accepts the owner’s two group example and stores the copies on the run', async () => {
+    const copies = [
+      { from: ANDALUCIA, to: [W2, W3] },
+      { from: BARCELONA, to: [W21] },
+    ];
+    const { spawn, store } = mercadona(copies);
+
+    await spawn();
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          priceScopeIds: [ANDALUCIA, BARCELONA],
+          scopeCopies: copies,
+        }),
+      })
+    );
+  });
+
+  it('accepts a NATIONAL target and a STORE target, which carry no key and sit outside the band', async () => {
+    const { spawn, store } = mercadona([
+      { from: ANDALUCIA, to: [NATIONAL, SHOP] },
+    ]);
+
+    await spawn();
+
+    expect(store.create).toHaveBeenCalled();
+  });
+
+  it('refuses copies on a mode other than a catalog discovery', async () => {
+    const { service, store } = build({ scopes: chain });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.STORE_DISCOVERY,
+        postalCode: '14013',
+        scopeCopies: [{ from: ANDALUCIA, to: [W2] }],
+      })
+    ).rejects.toThrow(/CATALOG_DISCOVERY/);
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses copies on a backfill, which writes no scope', async () => {
+    const { service } = build({
+      source: { adapterKey: 'carrefour-web' },
+      scopes: chain,
+    });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        detailBackfill: true,
+        scopeCopies: [{ from: ANDALUCIA, to: [W2] }],
+      })
+    ).rejects.toThrow(/backfill/i);
+  });
+
+  it('refuses a from that is not one of the walked scopes, naming it', async () => {
+    const { spawn } = mercadona([{ from: W3, to: [W2] }]);
+
+    await expect(spawn()).rejects.toThrow(new RegExp(`${W3} is not a scope`));
+  });
+
+  it('refuses a from of another chain, naming it', async () => {
+    const { spawn } = mercadona([{ from: FOREIGN, to: [W2] }]);
+
+    await expect(spawn()).rejects.toThrow(new RegExp(FOREIGN));
+  });
+
+  it('takes the one scope of an adapter that is given one as the only from', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'carrefour-web' },
+      scopes: chain,
+    });
+    const spawn = (from: string) =>
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeId: ANDALUCIA,
+        scopeCopies: [{ from, to: [W2] }],
+      });
+
+    await expect(spawn(BARCELONA)).rejects.toThrow(new RegExp(BARCELONA));
+    await spawn(ANDALUCIA);
+    expect(store.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts any keyed scope as a from for a chain that names its own regions', async () => {
+    // LIDL's week decides which regions a run writes, so the spawn cannot, and a
+    // region the week never names is a warning at the end of the run instead.
+    const { service, store } = build({
+      source: { adapterKey: 'lidl-api' },
+      scopes: chain,
+    });
+    const spawn = (from: string) =>
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        scopeCopies: [{ from, to: [W2] }],
+      });
+
+    await expect(spawn(NATIONAL)).rejects.toThrow(new RegExp(NATIONAL));
+    await spawn(W3);
+    expect(store.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a from named twice, naming it', async () => {
+    const { spawn } = mercadona([
+      { from: ANDALUCIA, to: [W2] },
+      { from: ANDALUCIA, to: [W3] },
+    ]);
+
+    await expect(spawn()).rejects.toThrow(
+      new RegExp(`${ANDALUCIA} is copied from twice`)
+    );
+  });
+
+  it('refuses a copy with no target, naming its from', async () => {
+    const { spawn } = mercadona([{ from: ANDALUCIA, to: [] }]);
+
+    await expect(spawn()).rejects.toThrow(
+      new RegExp(`${ANDALUCIA} names no scope`)
+    );
+  });
+
+  it('refuses a target that receives two copies, naming it', async () => {
+    const { spawn } = mercadona([
+      { from: ANDALUCIA, to: [W2] },
+      { from: BARCELONA, to: [W2] },
+    ]);
+
+    await expect(spawn()).rejects.toThrow(
+      new RegExp(`${W2} receives two copies`)
+    );
+  });
+
+  it('refuses a target named twice under one from', async () => {
+    const { spawn } = mercadona([{ from: ANDALUCIA, to: [W2, W2] }]);
+
+    await expect(spawn()).rejects.toThrow(
+      new RegExp(`${W2} receives two copies`)
+    );
+  });
+
+  it('refuses a target the run walks, naming it', async () => {
+    const { spawn } = mercadona([{ from: ANDALUCIA, to: [BARCELONA] }]);
+
+    await expect(spawn()).rejects.toThrow(
+      new RegExp(`${BARCELONA} is walked by this run`)
+    );
+  });
+
+  it('refuses a target that is another copy’s from, naming it', async () => {
+    // LIDL, because there a from is not necessarily a walked scope, so this is
+    // the one case the walked check alone would not catch.
+    const { service } = build({
+      source: { adapterKey: 'lidl-api' },
+      scopes: chain,
+    });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        scopeCopies: [
+          { from: W2, to: [W3] },
+          { from: W3, to: [W21] },
+        ],
+      })
+    ).rejects.toThrow(new RegExp(`${W3} is walked by this run`));
+  });
+
+  it('refuses a target of another chain, naming it', async () => {
+    const { spawn } = mercadona([{ from: ANDALUCIA, to: [FOREIGN] }]);
+
+    await expect(spawn()).rejects.toThrow(
+      new RegExp(`${FOREIGN} does not belong to this chain`)
+    );
+  });
+});
+
 describe('HarvestRunService.abort', () => {
   it('records the request and cancels the in flight requests', async () => {
     const { service, store, executor } = build();

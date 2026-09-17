@@ -348,6 +348,9 @@ const itemOfferView = object(
     unitPriceLabel: nullableString(),
     observedAt: nullableString(),
     sourceKind: nullableSourceKind(),
+    // Plan 0118. Stated but not required, so a reader built before it keeps
+    // validating what it holds.
+    priceCopiedFromScopeId: nullableString(),
     stale: boolean(),
   },
   [
@@ -445,6 +448,9 @@ const supermarketItemProperties = () => ({
   unitPriceLabel: nullableString(),
   observedAt: nullableString(),
   sourceKind: nullableSourceKind(),
+  // Plan 0118. Stated but not required, so a reader built before it keeps
+  // validating what it holds.
+  priceCopiedFromScopeId: nullableString(),
   stale: boolean(),
   validUntil: nullableString(),
   itemPriceId: nullableString(),
@@ -529,6 +535,8 @@ const itemPriceView = object(
     validUntil: nullableString(),
     sourceRunId: nullableString(),
     lastObservedRunId: nullableString(),
+    // Plan 0118. Stated but not required, like the materialized one.
+    copiedFromScopeId: nullableString(),
     overrides: {
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceOverrides), { type: 'null' }],
     },
@@ -1184,6 +1192,8 @@ const addItemPriceBatchRequest = object(
     priceScopeId: nonEmptyString(),
     sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
     sourceRunId: nullableString(),
+    // The scope a copied batch was read at (plan 0118, section 5).
+    copiedFromScopeId: nullableString(),
     entries: array(ref(CATALOG_SCHEMA_IDS.itemPriceBatchEntry)),
   },
   ['userId', 'priceScopeId', 'sourceKind', 'entries']

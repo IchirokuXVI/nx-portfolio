@@ -214,6 +214,17 @@ export enum HarvestWarningCode {
    */
   NO_PRICE_SCOPE = 'NO_PRICE_SCOPE',
   /**
+   * A scope this run was to copy to was deleted after the spawn, so it
+   * receives nothing (plan 0118, section 4). The rest of the copies still run.
+   */
+  COPY_TARGET_GONE = 'COPY_TARGET_GONE',
+  /**
+   * A scope this run was to copy from received no price, so its targets
+   * received none either (plan 0118, section 7). For LIDL this is a region the
+   * week's offers did not name.
+   */
+  COPY_SOURCE_NOT_WRITTEN = 'COPY_SOURCE_NOT_WRITTEN',
+  /**
    * A run declared a scope key that catalog holds under another kind, for
    * example `LOCAL_AREA 4661` against `REGION 4661` (plan 0116, section 6).
    *

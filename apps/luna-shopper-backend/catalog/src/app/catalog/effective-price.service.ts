@@ -246,6 +246,7 @@ function applyEffective(
     unitPriceLabel: row ? row.unitPriceLabel : null,
     priceObservedAt: row ? row.lastObservedAt : null,
     priceSourceKind: row ? row.sourceKind : null,
+    priceCopiedFromScopeId: row ? (row.copiedFromScopeId ?? null) : null,
     itemPriceId: row ? row.id : null,
     stale,
     validUntil: row ? row.validUntil : null,
@@ -258,6 +259,7 @@ function applyEffective(
     (target.unitPriceLabel ?? null) === next.unitPriceLabel &&
     sameInstant(target.priceObservedAt, next.priceObservedAt) &&
     (target.priceSourceKind ?? null) === next.priceSourceKind &&
+    (target.priceCopiedFromScopeId ?? null) === next.priceCopiedFromScopeId &&
     (target.itemPriceId ?? null) === next.itemPriceId &&
     (target.stale ?? false) === next.stale &&
     sameInstant(target.validUntil, next.validUntil) &&

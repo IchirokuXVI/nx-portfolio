@@ -261,6 +261,7 @@ export function toItemOfferView(row: SupermarketItem): ItemOfferView {
     unitPriceLabel: row.unitPriceLabel,
     observedAt: toInstant(row.priceObservedAt),
     sourceKind: row.priceSourceKind ?? null,
+    priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,
     stale: row.stale ?? false,
   };
 }
@@ -278,6 +279,7 @@ export function toSupermarketItemView(
     unitPriceLabel: row.unitPriceLabel,
     observedAt: toInstant(row.priceObservedAt),
     sourceKind: row.priceSourceKind ?? null,
+    priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,
     stale: row.stale ?? false,
     validUntil: toInstant(row.validUntil),
     itemPriceId: row.itemPriceId ?? null,
@@ -301,6 +303,7 @@ export function toItemPriceView(row: ItemPrice): ItemPriceView {
     validUntil: toInstant(row.validUntil),
     sourceRunId: row.sourceRunId ?? null,
     lastObservedRunId: row.lastObservedRunId ?? null,
+    copiedFromScopeId: row.copiedFromScopeId ?? null,
     overrides: row.overrides ?? null,
     protectedUntil: toInstant(row.protectedUntil),
     // Loaded only by the history read (plan 0081, section 6.4). An unloaded

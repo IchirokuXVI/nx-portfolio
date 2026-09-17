@@ -845,6 +845,31 @@ export interface SpawnHarvestRunRequest extends AdminCredential {
    * fetched again.
    */
   detailBackfill?: boolean;
+  /**
+   * The scopes that also receive what this run writes at a walked scope (plan
+   * 0118).
+   *
+   * A copy fetches nothing: 52 Mercadona warehouses fall into 10 price
+   * signatures, so one walk per group written to every member of it costs a
+   * tenth of the requests. Every copied row records the scope it was read at.
+   * `CATALOG_DISCOVERY` only, and never with {@link detailBackfill}.
+   */
+  scopeCopies?: ScopeCopy[];
+}
+
+/**
+ * One walked scope and the scopes its prices and availability are copied to
+ * (plan 0118, section 2).
+ *
+ * A target is any tier and needs no `externalKey`, because nothing is fetched
+ * for it. It receives a copy from one `from` at most, and it is never walked in
+ * the same run, so a copy never lands on top of a walk.
+ */
+export interface ScopeCopy {
+  /** A scope the run writes, by id. */
+  from: string;
+  /** The scopes that receive a copy of what the run wrote at `from`. */
+  to: string[];
 }
 
 /**
