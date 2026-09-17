@@ -173,19 +173,76 @@
           />
         }
 
-        <lib-line-list
-          (act)="act($event)"
-          (dismiss)="dismissNote($event)"
-          (opened)="openLine($event)"
-          (quantityChanged)="changeQuantity($event)"
-          (reorderTo)="moveTo($event)"
-          (retry)="retry($event)"
-          [announcement]="announcement()"
-          [highlight]="highlight()"
-          [lines]="drawnLines()"
-          [markedId]="markedLine()"
-          [reordering]="reordering()"
-        />
+        @if (dueSection(); as due) {
+          <!--
+            The lines the list suggests (velista 0089, section 2), inside To buy after
+            its wanted lines and before its lines at zero. So To buy is drawn in two
+            lists around them, and the page's one polite region stays on the first.
+            Never drawn in reorder mode, where To buy is one list again.
+          -->
+          <lib-line-list
+            (act)="act($event)"
+            (dismiss)="dismissNote($event)"
+            (opened)="openLine($event)"
+            (quantityChanged)="changeQuantity($event)"
+            (retry)="retry($event)"
+            [announcement]="announcement()"
+            [highlight]="highlight()"
+            [lines]="wantedLines()"
+            [markedId]="markedLine()"
+          />
+
+          <section aria-labelledby="due-label" class="due">
+            <!-- One level below To buy, and no fold and no count: it is part of To buy. -->
+            <h3 class="due-label" id="due-label">
+              {{ 'list.due.label' | rokuT }}
+            </h3>
+            <ul class="due-rows">
+              @for (row of due.rows; track row.lineId) {
+                <li>
+                  <lib-due-line-row
+                    (added)="addDueLine($event)"
+                    (opened)="openLine($event)"
+                    [addsOnStep]="dueAddsOnStep"
+                    [row]="row"
+                  />
+                </li>
+              }
+            </ul>
+            @if (due.hiddenCount > 0) {
+              <button (click)="showMoreDue()" class="due-more" type="button">
+                {{ 'list.due.more' | rokuT }}
+              </button>
+            }
+          </section>
+
+          @if (restLines().length > 0) {
+            <lib-line-list
+              (act)="act($event)"
+              (dismiss)="dismissNote($event)"
+              (opened)="openLine($event)"
+              (quantityChanged)="changeQuantity($event)"
+              (retry)="retry($event)"
+              [highlight]="highlight()"
+              [lines]="restLines()"
+              [markedId]="markedLine()"
+            />
+          }
+        } @else {
+          <lib-line-list
+            (act)="act($event)"
+            (dismiss)="dismissNote($event)"
+            (opened)="openLine($event)"
+            (quantityChanged)="changeQuantity($event)"
+            (reorderTo)="moveTo($event)"
+            (retry)="retry($event)"
+            [announcement]="announcement()"
+            [highlight]="highlight()"
+            [lines]="drawnLines()"
+            [markedId]="markedLine()"
+            [reordering]="reordering()"
+          />
+        }
 
         @if (shown?.kind === 'groups' && !reordering()) {
           <!--

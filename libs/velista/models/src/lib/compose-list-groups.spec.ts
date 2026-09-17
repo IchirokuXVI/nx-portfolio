@@ -59,6 +59,7 @@ function compose(
     reordering?: boolean;
     state?: Partial<ListViewState>;
     query?: string;
+    due?: readonly string[];
   } = {}
 ) {
   const facts = new Map(
@@ -83,6 +84,7 @@ function compose(
     rowsOf: (key) => options.rows?.[key],
     openKeys: new Set(options.open ?? []),
     reordering: options.reordering ?? false,
+    dueLineIds: options.due,
   };
   const context: ListViewContext = {
     query: options.query ?? '',
@@ -298,6 +300,88 @@ describe('composeListGroups (velista 0088)', () => {
       expect(ids(view.toBuy)).toEqual(['bread']);
       expect(view.trips).toEqual([]);
     });
+  });
+});
+
+describe('composeListGroups, the due lines (velista 0089)', () => {
+  const bought = { quantity: 0, boughtCount: 3 };
+
+  it('draws the due lines in the server order and says where the wanted lines end', () => {
+    const view = groups(
+      compose(
+        [
+          { id: 'bread' },
+          { id: 'eggs', ...bought },
+          { id: 'saffron', quantity: 0 },
+          { id: 'coffee', ...bought },
+        ],
+        { due: ['coffee', 'eggs'] }
+      )
+    );
+
+    expect(ids(view.due)).toEqual(['coffee', 'eggs']);
+    expect(ids(view.toBuy)).toEqual(['bread', 'saffron']);
+    expect(view.wantedCount).toBe(1);
+  });
+
+  it('leaves out a due line whose line is above zero or is not held (test 3)', () => {
+    const view = groups(
+      compose(
+        [
+          { id: 'eggs', quantity: 2, boughtCount: 3 },
+          { id: 'coffee', ...bought },
+        ],
+        {
+          due: ['eggs', 'gone', 'coffee'],
+        }
+      )
+    );
+
+    expect(ids(view.due)).toEqual(['coffee']);
+  });
+
+  it('leaves out a rejected or claimed line, and names a line once', () => {
+    const view = groups(
+      compose(
+        [
+          { id: 'eggs', ...bought, rejected: true },
+          { id: 'milk', ...bought, claimed: true },
+          { id: 'coffee', ...bought },
+        ],
+        { due: ['eggs', 'milk', 'coffee', 'coffee'] }
+      )
+    );
+
+    expect(ids(view.due)).toEqual(['coffee']);
+  });
+
+  it('draws none in reorder mode, during a search, or when nothing is due (test 4)', () => {
+    const seeds = [{ id: 'bread' }, { id: 'eggs', ...bought }];
+
+    expect(
+      groups(compose(seeds, { due: ['eggs'], reordering: true })).due
+    ).toEqual([]);
+    expect(compose(seeds, { due: ['eggs'], query: 'egg' }).kind).toBe('flat');
+    expect(groups(compose(seeds, { due: [] })).due).toEqual([]);
+    expect(groups(compose(seeds)).due).toEqual([]);
+  });
+
+  it('keeps only the due lines of the category on view, in the server order (test 5)', () => {
+    const view = groups(
+      compose(
+        [
+          { id: 'yogurt', ...bought, category: 'DAIRY', content: 'Yogurt' },
+          { id: 'coffee', ...bought, category: 'PANTRY', content: 'Coffee' },
+          { id: 'butter', ...bought, category: 'DAIRY', content: 'Butter' },
+        ],
+        {
+          due: ['yogurt', 'coffee', 'butter'],
+          state: { view: 'category', category: 'DAIRY', order: 'alpha' },
+        }
+      )
+    );
+
+    expect(ids(view.due)).toEqual(['yogurt', 'butter']);
   });
 });
 

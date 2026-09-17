@@ -1,3 +1,5 @@
+> **PR:** [#407](https://github.com/IchirokuXVI/nx-portfolio/pull/407)
+
 # 0089: lines the list suggests
 
 > Backend half: `apps/luna-shopper-backend/plans/0123`. Build `0088` first.
@@ -12,6 +14,16 @@
 > Prerequisite reading: `0088`, backend `0123` sections 2 to 5, `0043` section 6 (the
 > composer's suggestions, which are a different thing and keep their name), and
 > `select-line-detail.ts` for `estimateFrom`.
+>
+> **Amended on 2026-09-17, before it was built.** The product owner changed the row in
+> three ways, and sections 2, 3, 5, 6, 7 and 8 below say the amended design:
+>
+> 1. A due row carries a quantity stepper that starts at the suggested amount, and the
+>    button adds the amount the stepper shows.
+> 2. Changing the amount can add the line by itself. That is a switch in code,
+>    `DUE_LINE_ADDS_ON_STEP`, and it is **off** in this version.
+> 3. The section draws three due lines, and "Show more suggestions" draws the rest. The
+>    server answers every due line for this (backend `0125`), and no longer stops at 20.
 
 ## Brief for the agent
 
@@ -22,9 +34,12 @@ line with one tap, and make the line sheet's estimate merge purchases as the ser
 
 ### Context
 
-- Backend `0123` serves `GET /v1/lists/:id/suggestions`: at most 20 rows of `lineId`,
-  `reason` (`PERIOD` or `STAPLE`), `periodDays`, `daysSinceBought`, `tripsWith`,
-  `tripsSeen`, `quantity`, already ordered. There is no event and nothing is dismissed.
+- Backend `0123` serves `GET /v1/lists/:id/suggestions`: rows of `lineId`, `reason`
+  (`PERIOD` or `STAPLE`), `periodDays`, `daysSinceBought`, `tripsWith`, `tripsSeen`,
+  `quantity`, already ordered. Backend `0125` takes the cap of 20 away, so the answer is
+  every due line. There is no event and nothing is dismissed.
+- `QuantityStepper` in `libs/velista/ui/src/lib/list/` is the composer's stepper. The due
+  row reuses it with a floor of one.
 - `0088` draws To buy as the page's first group and owns the refetch signal (`0088`
   section 8).
 - A row's write ability is `LineRowVm.adjustable`, and the quantity write is the one the
@@ -78,7 +93,8 @@ estimate change, each with the spec run.
 | ------------------------------------- | -------------------------------------------------- |
 | `DueLine` and its mapper              | `models`, `data-access/src/lib/due-lines/`         |
 | `DueLineStore`                        | `data-access/src/lib/due-lines/`                   |
-| `lib-due-line-row`                    | `libs/velista/ui/src/lib/list/`                    |
+| `lib-due-line-row`, with a stepper    | `libs/velista/ui/src/lib/list/`                    |
+| `DUE_LINES_SHOWN`, `DUE_LINE_ADDS_ON_STEP` | `models` `due-lines.ts`                       |
 | The section under To buy              | `feature-lists` `list-page.*`, the composed view   |
 | `estimateFrom` merges close purchases | `feature-lists` `select-line-detail.ts`            |
 | Copy                                  | `en.json`, `es.json`                               |
@@ -103,11 +119,27 @@ role over the attention tint, no reel.
   is already above zero, is not drawn. The second case is what makes a tap feel instant.
 - The reason, one sentence. `PERIOD`: "Every 7 days · last bought 5 days ago", the second
   half from `Intl.RelativeTimeFormat`. `STAPLE`: "In 5 of your last 6 shopping lists".
-- One button, "Add 2", the number being `quantity`. It sets the line's quantity to that
-  amount through the reel's own write. The line then appears among the lines of To buy at
-  its list position, and the row goes. A failed write puts the row back and reports as a
-  failed reel write does.
+- A quantity stepper, `lib-quantity-stepper`, starting at `quantity` and never below one.
+  Moving it writes nothing while `DUE_LINE_ADDS_ON_STEP` is off.
+- One button, "Add 2", the number being what the stepper shows. It sets the line's
+  quantity to that amount through the reel's own write. The line then appears among the
+  lines of To buy at its list position, and the row goes. A failed write puts the row
+  back and says why through the page's polite region, because the line's own row, where a
+  failed reel write reports, is not drawn while the line is at zero.
 - Tapping the name opens the line detail sheet, as everywhere.
+
+**Adding on a change of the amount is a switch.** `DUE_LINE_ADDS_ON_STEP` in `models`
+decides it, and it is `false` in this version. With it on, a change of the stepper that
+stays quiet for `DUE_LINE_STEP_QUIET_MS` (the reel's own idle window, 1600 ms) adds the
+line at the chosen amount. It waits instead of adding on the first press, because the row
+leaves the section the moment its line is above zero, and it would take the stepper away
+from somebody who meant to press three times. The button stays, for the suggested amount
+as it is.
+
+**Three, then all.** The section draws the first `DUE_LINES_SHOWN` (3) due lines. When
+more are due, "Show more suggestions" under the rows draws every one of them for the rest
+of the visit to that list, and goes away. The rest are already held, so pressing it asks
+for nothing. Taking one of the three draws the next due line in its place at once.
 
 **Nothing dismisses a row.** Somebody who does not want the line does not add it, and it
 stays. A dismissal that lasts a day on the device is planned as a later improvement.
@@ -118,6 +150,10 @@ stays. A dismissal that lasts a day on the device is planned as a later improvem
   them. A failure draws no section and says nothing: the list works without it.
 - It reads again on `0088`'s signal, coalesced with it, because a settle and the end of a
   basket are exactly what change the answer. An overtaken answer is dropped.
+- It holds every due line the server answers. Which three are drawn, and whether "Show
+  more suggestions" was pressed, is page state, never stored.
+- The store is provided by the page component, not by the route: nothing else reads it,
+  and a component injector is destroyed with the page.
 - A due line enters and leaves without animation beyond the row's own fade. The section
   label goes with its last row.
 
@@ -139,14 +175,20 @@ trip wrote two settlements.
 | `list.due.staple`        | In {{with}} of your last {{seen}} shopping lists   | En {{with}} de tus últimas {{seen}} listas         |
 | `list.due.add`           | Add {{count}}                                      | Añadir {{count}}                                   |
 | `list.due.addLabel`      | Add {{count}} of {{name}} to the list              | Añadir {{count}} de {{name}} a la lista            |
+| `list.due.quantityLabel` | How many of {{name}}                               | Cuántos de {{name}}                                |
+| `list.due.more`          | Show more suggestions                              | Ver más sugerencias                                |
+| `list.due.added`         | {{name}} added to the list                         | {{name}} añadido a la lista                        |
 
 ## 6. Accessibility
 
 - The label is a heading one level below To buy.
 - The button's accessible name is `list.due.addLabel`, because "Add 2" twenty times over
-  says nothing to a screen reader.
-- After a tap, focus moves to the next due row's button, or to the label's section when
-  none is left, and the polite status element says the line was added.
+  says nothing to a screen reader. The stepper's is `list.due.quantityLabel` for the same
+  reason.
+- After a tap, focus moves to the next due row's button, or to the added line's row when
+  no due row is left (the section and its label go with the last row), and the polite
+  status element says the line was added.
+- "Show more suggestions" moves focus to the first row it drew.
 
 ## 7. Tests
 
@@ -155,8 +197,13 @@ trip wrote two settlements.
 3. A due line whose line is above zero, or not held, is not drawn.
 4. The section is absent in reorder mode, during a search, and when the answer is empty.
 5. A category view keeps only due lines of that category.
-6. Add writes `quantity` through the reel's write, the row goes at once, and a failed write
-   brings it back.
+6. Add writes the stepper's amount through the reel's write, the row goes at once, and a
+   failed write brings it back. The stepper starts at `quantity` and stops at one.
+10. With `DUE_LINE_ADDS_ON_STEP` off a change of the amount writes nothing. With it on, a
+    burst of presses is one add after the quiet window, and pressing the button during
+    the wait adds once.
+11. Three rows are drawn, "Show more suggestions" draws every one, and it is absent at
+    three or fewer.
 7. `PERIOD` and `STAPLE` rows draw their sentences, the relative day through `Intl`. A
    period of one day uses `periodOne`.
 8. The store reads again on the shared signal, once per burst.
@@ -166,7 +213,10 @@ trip wrote two settlements.
 ## 8. Acceptance criteria
 
 - [ ] A writer sees, under what is to buy, the lines at zero that are due, with the reason.
-- [ ] One tap puts a due line back on the list at its usual amount.
+- [ ] One tap puts a due line back on the list at its usual amount, or at the amount the
+      stepper was moved to.
+- [ ] Moving the stepper adds nothing while `DUE_LINE_ADDS_ON_STEP` is off.
+- [ ] Three due lines are drawn, and "Show more suggestions" draws the rest.
 - [ ] No line is created and nothing is stored on the device.
 - [ ] A line that a live basket holds is never offered.
 - [ ] The line sheet and the list state the same period for the same line.

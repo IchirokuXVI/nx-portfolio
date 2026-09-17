@@ -27,6 +27,8 @@ import {
   ConnectionRecovery,
   CONTACT_SERVICE,
   ContactApi,
+  DUE_LINE_SERVICE,
+  DueLineApi,
   gatewayInterceptor,
   GENERATED_LIST_SERVICE,
   GeneratedListApi,
@@ -197,6 +199,8 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   provideService(COMMENT_SERVICE, CommentApi),
   // The trips of a zone list (velista `0088`). The same reason again.
   provideService(TRIP_SERVICE, TripApi),
+  // The lines a zone list suggests (velista `0089`). The same reason again.
+  provideService(DUE_LINE_SERVICE, DueLineApi),
 
   // The account screen (plan 0015). A seventh time, and still nothing new: `AccountApi`
   // reaches this injector's `HttpClient`, so the token's default resolving at the root

@@ -28,9 +28,9 @@ import {
   imports: [RokuTranslatorPipe],
   template: `
     <div
-      [attr.aria-label]="'list.add.quantity' | rokuT"
+      [attr.aria-label]="label() ?? ('list.add.quantity' | rokuT)"
       [attr.aria-valuemax]="max"
-      [attr.aria-valuemin]="min"
+      [attr.aria-valuemin]="min()"
       [attr.aria-valuenow]="value()"
       class="stepper"
       role="spinbutton"
@@ -67,11 +67,23 @@ export class QuantityStepper {
   /** Whether the whole control is out of action, while a submit is in flight. */
   readonly disabled = input(false);
 
-  readonly min = LINE_QUANTITY_MIN;
+  /**
+   * The lowest value the control reaches. A line's own floor unless the caller needs a
+   * higher one: a due line's add starts at one, because adding nothing is not an add
+   * (velista `0089`, section 2).
+   */
+  readonly min = input(LINE_QUANTITY_MIN);
   readonly max = LINE_QUANTITY_MAX;
 
+  /**
+   * The control's accessible name, already translated, or null for "How many". A row
+   * that repeats the control per line names the line in it, because twenty controls
+   * called "How many" say nothing apart.
+   */
+  readonly label = input<string | null>(null);
+
   readonly canDecrease = computed(
-    () => !this.disabled() && this.value() > this.min
+    () => !this.disabled() && this.value() > this.min()
   );
   readonly canIncrease = computed(
     () => !this.disabled() && this.value() < this.max
@@ -79,7 +91,7 @@ export class QuantityStepper {
 
   step(by: number): void {
     const next = this.value() + by;
-    if (next < this.min || next > this.max) {
+    if (next < this.min() || next > this.max) {
       return;
     }
 
