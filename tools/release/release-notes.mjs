@@ -12,6 +12,7 @@
 // trusted as a complete account of a range rather than a best effort one.
 //
 //   node tools/release/release-notes.mjs                       # last tag to HEAD
+//   node tools/release/release-notes.mjs --version v0.3.2      # the same, linked to the tag
 //   node tools/release/release-notes.mjs --from v0.3.1 --to v0.3.2
 //   node tools/release/release-notes.mjs --to v0.3.2 --out notes.md
 //   node tools/release/release-notes.mjs --audit                # only the offenders
@@ -34,7 +35,8 @@ const USAGE = `Usage: node tools/release/release-notes.mjs [options]
 
   --from <ref>     Start of the range, exclusive. Default: the tag before --to.
   --to <ref>       End of the range, inclusive. Default: HEAD.
-  --version <v>    Title the notes with this version. Default: --to, when it is a tag.
+  --version <v>    Title the notes with this version, and end the changelog link there.
+                   Default: --to, when it is a tag. With neither, the link is left out.
   --all            Also print the sections a user cannot see (docs, ci, chore, ...).
   --audit          Print only the titles that break the rules, and exit 1 if any do.
   --strict         Print the notes, but exit 1 if any title breaks the rules.
@@ -254,6 +256,16 @@ function label(entry) {
   return `- ${scope}${parsed.summary} (${link})`;
 }
 
+// Where the "Full changelog" link ends. Never HEAD: a release keeps its notes,
+// and a link to HEAD grows to show every later change as part of that release.
+// The version comes first because it names the release even when the notes are
+// written before its tag exists.
+function compareEnd({ to, version }) {
+  if (version) return version;
+  if (to && to !== 'HEAD') return to;
+  return null;
+}
+
 function render({ entries, rollups, from, to, version, all, repo }) {
   const lines = [];
   const shown = new Map();
@@ -330,9 +342,10 @@ function render({ entries, rollups, from, to, version, all, repo }) {
   ];
   lines.push(`<sub>${counts.join(', ')}.</sub>`, '');
 
-  if (repo && from && to) {
+  const end = compareEnd({ to, version });
+  if (repo && from && end) {
     lines.push(
-      `**Full changelog**: https://github.com/${repo}/compare/${from}...${to}`,
+      `**Full changelog**: https://github.com/${repo}/compare/${from}...${end}`,
       ''
     );
   }
@@ -494,6 +507,13 @@ function main(argv) {
     return options.strict && badTitles.length ? 1 : 0;
   }
 
+  if (from && !compareEnd({ to, version })) {
+    console.error(
+      'No "Full changelog" link: the range ends at HEAD, which moves on after the release.\n' +
+        'Pass --version <tag> (or --to <tag>) to link the notes to the release tag.'
+    );
+  }
+
   const markdown = render({
     entries,
     rollups,
@@ -528,4 +548,13 @@ if (
   }
 }
 
-export { collect, isRollup, label, main, parseArgs, pullRequestNumber, render };
+export {
+  collect,
+  compareEnd,
+  isRollup,
+  label,
+  main,
+  parseArgs,
+  pullRequestNumber,
+  render,
+};
