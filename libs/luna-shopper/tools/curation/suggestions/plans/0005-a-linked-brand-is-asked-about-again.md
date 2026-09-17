@@ -1,3 +1,5 @@
+> **PR:** [#405](https://github.com/IchirokuXVI/nx-portfolio/pull/405)
+
 # 0005 A linked brand is asked about again
 
 > Depends on `apps/luna-shopper-backend/plans/0124`, which lets a registered brand point at the

@@ -7,13 +7,17 @@ import {
   brandKey,
   buildDecisionSchema,
   buildSystemPrompt,
+  canonicalBrand,
   carriesBrand,
   carriesGlitch,
   carriesSize,
+  findBrand,
+  findCanonicalBrand,
   indexBrands,
   loadPromptTemplate,
   loadVocabularies,
   normalizeName,
+  privateLabelLines,
 } from './rules.mjs';
 
 function fixture(name) {
@@ -132,14 +136,98 @@ test('indexBrands keys the registry by brandKey', () => {
     key: 'hacendado',
     label: 'Hacendado',
     privateLabelSupermarketId: 'sm-mercadona',
+    // The fixture's older rows carry no such field, which is what a gateway
+    // predating plan 0124 answers, and a row without it is an unlinked brand.
+    canonicalBrandId: null,
   });
   assert.equal(brands.get('carbonell').privateLabelSupermarketId, null);
   assert.equal(brands.get('Hacendado'), undefined);
 });
 
+test('indexBrands keeps the link and looks a brand up by its id', () => {
+  const brands = indexBrands(BRANDS);
+  assert.equal(brands.get('deborah48h').canonicalBrandId, 'brand-deborah');
+  assert.equal(brands.get('deborah').canonicalBrandId, null);
+  // The second lookup, which is the one a link is resolved through: a link
+  // names its target by id and nothing else in the run holds an id.
+  assert.equal(brands.byId.get('brand-deborah'), brands.get('deborah'));
+  assert.equal(brands.byId.get('nobody'), undefined);
+});
+
 test('indexBrands drops a row whose label has no key', () => {
   const brands = indexBrands([{ id: 'b1', key: null, label: '---' }]);
   assert.equal(brands.size, 0);
+});
+
+test('canonicalBrand answers one hop, and an unlinked brand is its own', () => {
+  const brands = indexBrands(BRANDS);
+  const spelling = brands.get('deborah48h');
+  assert.equal(canonicalBrand(brands, spelling), brands.get('deborah'));
+  assert.equal(findCanonicalBrand(brands, 'DEBORAH 48H').label, 'Deborah');
+
+  // A row with no field at all, and a row whose field is null, both read as
+  // the brand itself.
+  assert.equal(
+    canonicalBrand(brands, brands.get('hacendado')).key,
+    'hacendado'
+  );
+  assert.equal(canonicalBrand(brands, brands.get('deborah')).key, 'deborah');
+  assert.equal(canonicalBrand(brands, null), null);
+  assert.equal(findCanonicalBrand(brands, '+Proteínas'), null);
+});
+
+test('canonicalBrand never walks a second hop', () => {
+  // The backend refuses a link onto a linked brand under row locks (plan 0124
+  // section 3), so a chain cannot exist. If one ever reached this snapshot it
+  // is resolved once and left there, rather than followed into a loop.
+  const brands = indexBrands([
+    { id: 'b1', key: 'one', label: 'One', canonicalBrandId: 'b2' },
+    { id: 'b2', key: 'two', label: 'Two', canonicalBrandId: 'b3' },
+    { id: 'b3', key: 'three', label: 'Three', canonicalBrandId: 'b1' },
+  ]);
+  assert.equal(canonicalBrand(brands, brands.get('one')).key, 'two');
+});
+
+test('a link onto an id the snapshot does not hold reads as unlinked', () => {
+  // The registry is read once and a person can link a brand a minute later, so
+  // the id can name a row this snapshot never saw. The brand in hand is still
+  // a registered brand, and losing it would be the worse answer.
+  const brands = indexBrands([
+    { id: 'b1', key: 'one', label: 'One', canonicalBrandId: 'written-later' },
+  ]);
+  assert.equal(canonicalBrand(brands, brands.get('one')).key, 'one');
+  // And a row naming itself, which the backend's own check forbids.
+  const self = indexBrands([
+    { id: 'b1', key: 'one', label: 'One', canonicalBrandId: 'b1' },
+  ]);
+  assert.equal(canonicalBrand(self, self.get('one')).key, 'one');
+});
+
+test('the private label list holds canonical brands only', () => {
+  const lines = privateLabelLines(
+    indexBrands([
+      ...BRANDS,
+      {
+        id: 'brand-hacendado-plus',
+        key: 'hacendadoproteinas',
+        label: 'Hacendado +Proteínas',
+        // A linked brand owns no chain (plan 0124 section 2). This one carries
+        // one anyway, so the filter is proven rather than the fixture.
+        privateLabelSupermarketId: 'sm-mercadona',
+        canonicalBrandId: 'brand-hacendado',
+      },
+    ]),
+    SUPERMARKETS
+  );
+  assert.deepEqual(
+    lines.map((entry) => entry.label),
+    ['Hacendado', 'Ifa Unnia']
+  );
+});
+
+test('findBrand still answers the row the spelling names, link or no link', () => {
+  const brands = indexBrands(BRANDS);
+  assert.equal(findBrand(brands, 'DEBORAH 48H').key, 'deborah48h');
 });
 
 test('the vocabularies come from the committed OpenAPI document', () => {
@@ -185,6 +273,19 @@ test('the prompt names brandMatch and the range rule', () => {
   assert.match(template, /BRAND_DIFFERS_FROM_SOURCE/);
   // A range is never a brand, which is the defect the registry was built for.
   assert.match(template, /A range, a flavour or a claim is never a brand/);
+});
+
+test('the prompt names printedAs and what a linked spelling leaves behind', () => {
+  const template = loadPromptTemplate();
+  // A packet field the prompt does not name is a field the model ignores, so
+  // the pair is pinned here as `brandMatch` itself is.
+  assert.match(template, /entry\.brandMatch\.printedAs/);
+  assert.match(template, /BRAND_IS_LINKED/);
+  // The half of the instruction that is not "write the label": what the
+  // spelling adds stays in the name, which is what makes the second attempt
+  // able to answer differently from the first.
+  assert.match(template, /keep what the spelling adds/);
+  assert.match(template, /48H/);
 });
 
 test('the decision schema takes its enums from the same two vocabularies', () => {

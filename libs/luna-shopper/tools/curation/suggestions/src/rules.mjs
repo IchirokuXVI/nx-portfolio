@@ -184,21 +184,34 @@ export function loadVocabularies(docUrl = OPENAPI_URL) {
  * The rows are whatever `GET /v1/admin/catalog/brands` answered, read once per
  * run and kept in the run directory. A row whose label has no key is dropped:
  * catalog cannot hold one either, so it can never be the answer to a lookup.
+ *
+ * The map carries a second lookup, `byId`, beside its own keys (plan 0005). A
+ * link names the brand it points at by id, and resolving one is a lookup on
+ * every CREATE that writes a brand, so the map is built once here rather than
+ * scanned once per row. A row with no `canonicalBrandId` is an unlinked brand,
+ * which is also every row a gateway that predates plan `0124` answers.
  */
 export function indexBrands(raw) {
   const byKey = new Map();
+  const byId = new Map();
   for (const row of raw ?? []) {
     const key = row?.key ?? brandKey(row?.label);
     if (!key) {
       continue;
     }
-    byKey.set(key, {
+    const brand = {
       id: row.id ?? null,
       key,
       label: row.label ?? null,
       privateLabelSupermarketId: row.privateLabelSupermarketId ?? null,
-    });
+      canonicalBrandId: row.canonicalBrandId ?? null,
+    };
+    byKey.set(key, brand);
+    if (brand.id) {
+      byId.set(brand.id, brand);
+    }
   }
+  byKey.byId = byId;
   return byKey;
 }
 
@@ -209,6 +222,34 @@ export function findBrand(brands, text) {
     return null;
   }
   return brands?.get(key) ?? null;
+}
+
+/**
+ * The brand a registered brand is really a spelling of, or the brand itself.
+ *
+ * One hop, and never a second one. The backend enforces one level under row
+ * locks (plan `0124` section 3), so a link cannot point at a linked brand and
+ * there is no chain here to walk.
+ *
+ * An id the registry does not hold answers the brand itself rather than null.
+ * That is a snapshot read while somebody was writing, and the brand in hand is
+ * still a registered brand: treating it as unlinked costs a row the retry it
+ * would have had, where answering null would lose the brand altogether.
+ */
+export function canonicalBrand(brands, brand) {
+  if (!brand) {
+    return null;
+  }
+  const canonicalId = brand.canonicalBrandId;
+  if (!canonicalId || canonicalId === brand.id) {
+    return brand;
+  }
+  return brands?.byId?.get(canonicalId) ?? brand;
+}
+
+/** The canonical brand a spelling names, through a link if there is one. */
+export function findCanonicalBrand(brands, text) {
+  return canonicalBrand(brands, findBrand(brands, text));
 }
 
 /** The chains by id, so a private label can name the chain that owns it. */
@@ -233,11 +274,20 @@ export function chainNamesById(supermarkets) {
  */
 export const PRIVATE_LABEL_WARN_LINES = 40;
 
-/** The registry's private label brands, each with the chain that owns it. */
+/**
+ * The registry's private label brands, each with the chain that owns it.
+ *
+ * Canonical brands only. A linked brand owns no chain (plan `0124` section 2),
+ * and its canonical brand is already a line of this list, so listing the
+ * spelling beside it would bill every row of the run for a second name of one
+ * house label.
+ */
 export function privateLabelLines(brands, supermarkets) {
   const names = chainNamesById(supermarkets);
   return [...(brands?.values() ?? [])]
-    .filter((brand) => brand.privateLabelSupermarketId)
+    .filter(
+      (brand) => brand.privateLabelSupermarketId && !brand.canonicalBrandId
+    )
     .map((brand) => ({
       label: brand.label,
       chain:

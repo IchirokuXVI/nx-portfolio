@@ -50,6 +50,27 @@ const BRANDS = [
   },
 ];
 
+/** The same, plus a brand a person registered as a spelling of another (plan 0005). */
+const LINKED_BRANDS = [
+  ...BRANDS,
+  {
+    id: 'b-deborah',
+    key: 'deborah',
+    label: 'Deborah',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: null,
+    itemCount: 12,
+  },
+  {
+    id: 'b-deborah-48h',
+    key: 'deborah48h',
+    label: 'DEBORAH 48H',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: 'b-deborah',
+    itemCount: 0,
+  },
+];
+
 function entry(id, name, overrides = {}) {
   return {
     id,
@@ -734,6 +755,127 @@ test('decide reads the snapshot and never asks the gateway for a brand', async (
       .filter((call) => call.path === '/v1/admin/catalog/brands'),
     []
   );
+});
+
+test('a CREATE writing a registered spelling is asked once more', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [entry('e1', 'Máscara de pestañas', { brand: 'DEBORAH 48H' })],
+    brands: LINKED_BRANDS,
+  });
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: {
+      ...CREATE_MILK,
+      item: { ...CREATE_MILK.item, brand: 'DEBORAH 48H' },
+    },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  // The registry answers the question, so the row buys the second attempt the
+  // one retry it already had, with the correct brand named in the detail.
+  assert.equal(answer.retryable, true);
+  assert.equal(answer.accepted, false);
+  assert.equal(answer.decision, null);
+  assert.deepEqual(
+    answer.issues.map((i) => i.code),
+    ['BRAND_IS_LINKED']
+  );
+  assert.match(answer.issues[0].detail, /so the brand is "Deborah"/);
+  assert.equal(readJsonl(join(dir, 'decisions.jsonl')).length, 1);
+  assert.equal(w.rehearsalCatalog.rows.length, 0);
+});
+
+test('the second answer naming the brand is recorded as the model decided', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [entry('e1', 'Máscara de pestañas', { brand: 'DEBORAH 48H' })],
+    brands: LINKED_BRANDS,
+  });
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { ...CREATE_MILK, item: { ...CREATE_MILK.item, brand: 'Deborah' } },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  // The printed brand is a spelling of the one written, so the source check is
+  // quiet too: that is the pair of them comparing canonical brands.
+  assert.equal(answer.decision.decision, 'CREATE');
+  assert.deepEqual(answer.issues, []);
+});
+
+test('--final records a second linked spelling as a REVIEW carrying the code', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [entry('e1', 'Máscara de pestañas', { brand: 'DEBORAH 48H' })],
+    brands: LINKED_BRANDS,
+  });
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: {
+      ...CREATE_MILK,
+      item: { ...CREATE_MILK.item, brand: 'DEBORAH 48H' },
+    },
+    final: true,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.retryable, false);
+  assert.equal(answer.decision.decision, 'REVIEW');
+  assert.equal(answer.decision.proposedDecision, 'CREATE');
+  assert.ok(answer.issues.some((i) => i.code === 'BRAND_IS_LINKED'));
+  assert.equal(w.rehearsalCatalog.rows.length, 0);
+});
+
+test('a row raising both retryable codes carries both details into one retry', async () => {
+  // There is one retry budget and two codes that spend it, so a row that earns
+  // both has to be told both things at once or the second attempt fixes one
+  // defect and is recorded for the other. `decide` answers every retryable
+  // issue it found, and the orchestrator joins their details into the single
+  // re-ask it sends.
+  const dir = runDir();
+  const w = world({
+    entries: [entry('e1', 'Máscara de pestañas', { brand: 'DEBORAH 48H' })],
+    brands: LINKED_BRANDS,
+  });
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: {
+      ...CREATE_MILK,
+      item: {
+        ...CREATE_MILK.item,
+        nameEs: 'May1onesa',
+        nameEn: null,
+        brand: 'DEBORAH 48H',
+      },
+    },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.retryable, true);
+  assert.deepEqual(answer.issues.map((i) => i.code).sort(), [
+    'BRAND_IS_LINKED',
+    'NAME_GLITCH',
+  ]);
+  for (const found of answer.issues) {
+    assert.ok(found.detail.length > 0, found.code);
+  }
 });
 
 test('a CREATE with no brand is never demoted for it', async () => {
