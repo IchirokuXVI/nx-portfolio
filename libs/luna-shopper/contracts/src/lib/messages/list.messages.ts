@@ -3,6 +3,8 @@ import type {
   LineApprovalStatus,
   ListPermission,
   SettlementOutcome,
+  TripKind,
+  TripRowOutcome,
 } from '../enums/list.enums';
 import type { PageQuery, Paginated } from '../pagination';
 
@@ -27,6 +29,13 @@ export const LIST_PATTERNS = {
    * question is asked, not what it is about.
    */
   holdingItem: 'list.holdingItem',
+  /**
+   * The shopping trips that touched a list, newest first (plan 0122, section 3).
+   * Live trips ride on the first response, ended ones come a page at a time.
+   */
+  trips: 'list.trips',
+  /** What one trip did to each zone line of the list (plan 0122, section 4). */
+  tripRows: 'list.tripRows',
 } as const;
 
 export const LINE_PATTERNS = {
@@ -1067,6 +1076,96 @@ export const VOICE_COMMENT_MAX_BYTES = 2 * 1024 * 1024;
 /** Normalises a content type for the allowlist check: lowercase, no parameters. */
 export function baseContentType(value: string): string {
   return (value.split(';')[0] ?? '').trim().toLowerCase();
+}
+
+/**
+ * One shopping trip that touched a list (plan 0122, section 3).
+ *
+ * A trip says its name, its date and what it did to **this** list. It never says
+ * what else the basket holds, who takes part, where it shops or what anything
+ * costs (section 5). Naming a basket to a reader of the list is the one thing
+ * plan 0052 refused and this plan allows, and it is allowed here and on the list
+ * room only.
+ */
+export interface TripView {
+  /** The basket id, or the id of the session's earliest settlement. */
+  id: string;
+  kind: TripKind;
+  /** `BASKET` only. Null is "shown as its date". */
+  name: string | null;
+  /** Whether the basket still claims its lines. Always false for `LOOSE`. */
+  live: boolean;
+  /** `generatedAt`, or the earliest `settledAt` of the session. */
+  startedAt: string;
+  /** Zone lines of this list the trip touched, and that still exist. */
+  lineCount: number;
+  /** Of those, the ones whose row says `BOUGHT`. */
+  boughtLineCount: number;
+}
+
+/**
+ * A page of trips (plan 0122, section 3).
+ *
+ * Not the house page, because it has two parts. Live trips are bounded by the
+ * claim window and a client needs all of them, so they ride whole on the first
+ * response and are `[]` on every response to a cursor. Ended trips grow without
+ * bound and are paged.
+ */
+export interface TripPage {
+  live: TripView[];
+  items: TripView[];
+  nextCursor: string | null;
+}
+
+/**
+ * What one trip did to one zone line (plan 0122, section 4).
+ *
+ * It carries no name and no current quantity: a client holds every line of the
+ * list and joins on `lineId`. The numbers are derived from origins and
+ * settlements on every read, and they freeze by themselves when the basket ends.
+ */
+export interface TripRowView {
+  lineId: string;
+  /** `BASKET`: what this trip's origins asked of the line. `LOOSE`: null. */
+  asked: number | null;
+  /** Units in this trip's standing `BOUGHT` settlements of the line. */
+  bought: number;
+  /** `BASKET`: `max(0, asked - bought)`. `LOOSE`: null. */
+  left: number | null;
+  outcome: TripRowOutcome;
+  /** `LOOSE` only: the latest buyer, or null if they have left the zone. */
+  settledByUserId: string | null;
+}
+
+export type TripRowPage = Paginated<TripRowView>;
+
+/** The trips of one list. `READ`. */
+export interface ListTripsRequest {
+  userId: string;
+  listId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/** The rows of one trip of one list. `READ`. */
+export interface ListTripRowsRequest {
+  userId: string;
+  listId: string;
+  kind: TripKind;
+  tripId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * The payload of {@link RealtimeEvent.ListTripsChanged}, on the `list:{listId}`
+ * room (plan 0122, section 6).
+ *
+ * It says "read the trips again" and nothing else, so it cannot leak a basket
+ * and cannot drift from the read.
+ */
+export interface ListTripsChangedEvent {
+  listId: string;
 }
 
 export type ListPage = Paginated<ListView>;

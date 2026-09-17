@@ -44,6 +44,7 @@ import {
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
 import { toLineView } from '../lists/list.mappers';
+import { announceTripsChanged } from '../lists/trips/trips.announce';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
@@ -607,6 +608,12 @@ export class GeneratedListOriginsService {
       // correct write.
       await this.claims.announceReleased([ref]);
     }
+
+    // What this trip asked of the list has moved, whether an origin was gained,
+    // lost or only changed its number (plan 0122, section 6). One event for the
+    // one list this write touched. A row that creates its line goes through
+    // `promote`, which says it for itself.
+    announceTripsChanged(this.events, [req.sourceListId]);
 
     return {
       line: await this.generated.basketLineViewFor(line, seesZoneData),

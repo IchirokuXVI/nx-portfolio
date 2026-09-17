@@ -2498,6 +2498,20 @@ export type EnumsSourceEntryStatus =
 export type EnumsSourceLocationStatus = 'ACTIVE' | 'UNMAPPED' | 'IGNORED';
 
 /**
+ * `enums.TripKind` in the gateway's OpenAPI document.
+ */
+export type EnumsTripKind = 'BASKET' | 'LOOSE';
+
+/**
+ * `enums.TripRowOutcome` in the gateway's OpenAPI document.
+ */
+export type EnumsTripRowOutcome =
+  | 'BOUGHT'
+  | 'PARTLY'
+  | 'NOT_AVAILABLE'
+  | 'NOT_BOUGHT';
+
+/**
  * `enums.UnitOfMeasure` in the gateway's OpenAPI document.
  */
 export type EnumsUnitOfMeasure =
@@ -3584,6 +3598,50 @@ export type ListListView = {
   myPermissions: EnumsListPermission[];
   createdAt: string;
   updatedAt: string;
+};
+
+/**
+ * `list.TripPage` in the gateway's OpenAPI document.
+ */
+export type ListTripPage = {
+  live: ListTripView[];
+  items: ListTripView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `list.TripRowPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type ListTripRowPage = {
+  items: ListTripRowView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `list.TripRowView` in the gateway's OpenAPI document.
+ */
+export type ListTripRowView = {
+  lineId: string;
+  asked: number | null;
+  bought: number;
+  left: number | null;
+  outcome: EnumsTripRowOutcome;
+  settledByUserId: string | null;
+};
+
+/**
+ * `list.TripView` in the gateway's OpenAPI document.
+ */
+export type ListTripView = {
+  id: string;
+  kind: EnumsTripKind;
+  name: string | null;
+  live: boolean;
+  startedAt: string;
+  lineCount: number;
+  boughtLineCount: number;
 };
 
 /**

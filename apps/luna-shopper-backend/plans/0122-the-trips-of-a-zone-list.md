@@ -1,3 +1,5 @@
+> **PR:** [#398](https://github.com/IchirokuXVI/nx-portfolio/pull/398)
+
 # 0122: the trips of a zone list
 
 > Client half: `apps/velista/plans/0088`. Mock: `apps/velista/plans/mocks/list-trips/`.

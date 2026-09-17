@@ -27,6 +27,7 @@ import {
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
+import { announceTripsChanged } from '../lists/trips/trips.announce';
 import {
   checkContent,
   checkOptions,
@@ -334,6 +335,13 @@ export class GeneratedListLineService {
     await this.lines.delete({ id: line.id });
     await this.announceList(req.userId, list);
     await this.claims.announceReleased(refs);
+    // The origins went with the line, so each list they named is asked for one
+    // line less by this trip (plan 0122, section 6). The refs already say which
+    // lists those were, and they were read before the delete.
+    announceTripsChanged(
+      this.events,
+      refs.map((ref) => ref.listId)
+    );
     return { id: line.id };
   }
 
@@ -479,6 +487,11 @@ export class GeneratedListLineService {
       this.waiting.announce(
         await this.waiting.rehome(line.id, this.lines.manager)
       );
+      // The basket now draws from this list, so the list has a trip it did not
+      // have, or a trip that asks for one line more (plan 0122, section 6).
+      // Here rather than in each caller, because every origin an added line
+      // gains is written by this method.
+      announceTripsChanged(this.events, [targetListId]);
     }
 
     return {

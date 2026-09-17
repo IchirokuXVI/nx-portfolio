@@ -54,6 +54,8 @@ interface Harness {
   promotions: unknown[][];
   saved: Partial<GeneratedListLine>[];
   events: RealtimeEvent[];
+  /** The lists told to read their trips again (plan 0122, section 6). */
+  tripsChanged: (string | undefined)[];
   claims: FakeLineClaims;
   /** Every rename the line service handed to the rename service (plan 0113). */
   renames: {
@@ -108,6 +110,7 @@ function build(options: {
   const promotions: unknown[][] = [];
   const saved: Partial<GeneratedListLine>[] = [];
   const events: RealtimeEvent[] = [];
+  const tripsChanged: Harness['tripsChanged'] = [];
 
   const lineRepo = {
     findOne: async ({ where }: { where: { id: string } }) =>
@@ -196,6 +199,10 @@ function build(options: {
     emitToUsers: (event: RealtimeEvent) => {
       events.push(event);
     },
+    // Only `list.tripsChanged` goes this way from here (plan 0122, section 6).
+    emitTo: (_event: RealtimeEvent, audience: { listId?: string }) => {
+      tripsChanged.push(audience.listId);
+    },
   } as unknown as CoreEventsPublisher;
 
   const claims = fakeLineClaims({}, () => options.claiming ?? []);
@@ -243,7 +250,16 @@ function build(options: {
     renameService
   );
 
-  return { service, zoneAdds, promotions, saved, events, claims, renames };
+  return {
+    service,
+    zoneAdds,
+    promotions,
+    saved,
+    events,
+    tripsChanged,
+    claims,
+    renames,
+  };
 }
 
 describe('editing a basket line', () => {
@@ -400,8 +416,11 @@ describe('editing a basket line', () => {
     // The line leaves the basket, so nobody is out buying it any more. The zone
     // line itself is untouched and stays wanted, which is the distinction the
     // test above is about and this one does not disturb.
-    const { service, claims } = build({
-      claiming: [{ zoneId: ZONE, listId: TARGET_LIST, lineId: 'zl-1' }],
+    const { service, claims, tripsChanged } = build({
+      claiming: [
+        { zoneId: ZONE, listId: TARGET_LIST, lineId: 'zl-1' },
+        { zoneId: ZONE, listId: TARGET_LIST, lineId: 'zl-2' },
+      ],
     });
 
     await service.deleteLine({
@@ -411,8 +430,11 @@ describe('editing a basket line', () => {
     });
 
     expect(claims.calls).toEqual([
-      { claimed: false, claimedByUserId: null, lineIds: ['zl-1'] },
+      { claimed: false, claimedByUserId: null, lineIds: ['zl-1', 'zl-2'] },
     ]);
+    // The origins went with the line, so the list they named reads its trips
+    // again (plan 0122, section 6): once for the list, not once for each line.
+    expect(tripsChanged).toEqual([TARGET_LIST]);
   });
 });
 

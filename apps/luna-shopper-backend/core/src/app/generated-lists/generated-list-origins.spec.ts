@@ -125,6 +125,8 @@ interface Harness {
   settlements: SettlementSeed[];
   claims: FakeLineClaims;
   events: { event: RealtimeEvent; listId?: string; payload?: unknown }[];
+  /** The lists told to read their trips again (plan 0122, section 6). */
+  tripsChanged: (string | undefined)[];
   /** Every `promote` this write made, which is how a line reaches a new list. */
   promotions: PromotionCall[];
 }
@@ -208,6 +210,7 @@ function build(
     ...Object.entries(options.carriedBy ?? {}),
   ]);
   const events: Harness['events'] = [];
+  const tripsChanged: Harness['tripsChanged'] = [];
   const promotions: PromotionCall[] = [];
 
   /**
@@ -477,6 +480,11 @@ function build(
     ) => events.push({ event, listId, payload }),
     emitToGeneratedList: (event: RealtimeEvent) => events.push({ event }),
     emitToUsers: (event: RealtimeEvent) => events.push({ event }),
+    // Only `list.tripsChanged` goes this way from here (plan 0122, section 6).
+    // Kept apart from `events`, which pins what the zone and the basket hear.
+    emitTo: (_event: RealtimeEvent, audience: { listId?: string }) => {
+      tripsChanged.push(audience.listId);
+    },
   } as unknown as CoreEventsPublisher;
 
   const service = new GeneratedListOriginsService(
@@ -546,6 +554,7 @@ function build(
     settlements,
     claims,
     events,
+    tripsChanged,
     promotions,
   };
 }
@@ -871,6 +880,9 @@ describe('raising and lowering a contribution (section 5)', () => {
     expect(harness.origins[0].quantity).toBe(4);
     expect(result.listQuantity).toBe(7);
     expect(result.origin?.contributed).toBe(4);
+    // What this trip asked of the list has moved, so the list's room reads its
+    // trips again (plan 0122, section 6). Once, and for that list alone.
+    expect(harness.tripsChanged).toEqual([LIST_A]);
   });
 
   it('writes no settlement, moves no bought indicator, and never says line.settled', async () => {
@@ -1001,6 +1013,7 @@ describe('the floor and the stale read (sections 5 and 5.2)', () => {
     expect(harness.basketLine.quantity).toBe(2);
     expect(harness.origins[0].quantity).toBe(2);
     expect(harness.events).toEqual([]);
+    expect(harness.tripsChanged).toEqual([]);
   });
 
   it('writes nothing and does not fail when the number did not move', async () => {
@@ -1016,6 +1029,7 @@ describe('the floor and the stale read (sections 5 and 5.2)', () => {
     expect(result.origin?.contributed).toBe(2);
     expect(harness.zoneLines.get(LINE_A)?.version).toBe(1);
     expect(harness.events).toEqual([]);
+    expect(harness.tripsChanged).toEqual([]);
   });
 });
 

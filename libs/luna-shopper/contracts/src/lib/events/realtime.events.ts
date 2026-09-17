@@ -60,6 +60,16 @@ export enum RealtimeEvent {
    * granted access was never in the room to receive it.
    */
   ListMyAccessChanged = 'list.myAccessChanged',
+  /**
+   * A basket that touches this list changed (plan 0122, section 6), on the
+   * `list:{listId}` room and nowhere else.
+   *
+   * The payload is {@link ListTripsChangedEvent}, the list id alone. It says
+   * "read the trips again", so it cannot leak a basket and cannot drift from the
+   * read. Purchases need no such event: `line.settled` and `line.claimChanged`
+   * already reach a client on the list page.
+   */
+  ListTripsChanged = 'list.tripsChanged',
   LineAdded = 'line.added',
   LineUpdated = 'line.updated',
   /**
@@ -291,6 +301,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.ListDeleted,
   RealtimeEvent.ListAccessChanged,
   RealtimeEvent.ListMyAccessChanged,
+  RealtimeEvent.ListTripsChanged,
   RealtimeEvent.LineAdded,
   RealtimeEvent.LineUpdated,
   RealtimeEvent.LineSettled,
