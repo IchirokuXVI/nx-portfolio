@@ -524,8 +524,8 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
     });
   });
 
-  describe('the ceiling and the order (test 11)', () => {
-    it('answers twenty of twenty five due lines, the most overdue first', async () => {
+  describe('every due line, in order (test 11, amended by plan 0125)', () => {
+    it('answers all twenty five due lines, the most overdue first', async () => {
       const flat = await list('Flat');
       const byOverdue: string[] = [];
       // Created least overdue first, so position order is the reverse of the
@@ -538,8 +538,8 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
 
       const rows = await read(flat);
 
-      expect(rows).toHaveLength(20);
-      expect(rows.map((row) => row.lineId)).toEqual(byOverdue.slice(0, 20));
+      expect(rows).toHaveLength(25);
+      expect(rows.map((row) => row.lineId)).toEqual(byOverdue);
     });
   });
 

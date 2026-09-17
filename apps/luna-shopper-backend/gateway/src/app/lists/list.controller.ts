@@ -344,8 +344,8 @@ export class ListsController {
    *
    * A suggestion is an existing line offering to come back, never a new line, so
    * a row carries the line id and the numbers behind the offer and the client
-   * joins it on the lines it already holds. Not paged: at most twenty rows, the
-   * most overdue first.
+   * joins it on the lines it already holds. Not paged and not capped: every due
+   * line, the most overdue first (plan 0125).
    *
    * `READ` on the list, and the gate is core's. Nothing is stored and there is no
    * event: a client reads again on the signals it already hears.

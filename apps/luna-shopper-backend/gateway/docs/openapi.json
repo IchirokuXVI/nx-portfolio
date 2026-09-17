@@ -33122,8 +33122,7 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/list.LineSuggestionView"
-            },
-            "maxItems": 20
+            }
           }
         },
         "required": [

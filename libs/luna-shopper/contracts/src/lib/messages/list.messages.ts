@@ -39,7 +39,7 @@ export const LIST_PATTERNS = {
   tripRows: 'list.tripRows',
   /**
    * Which lines of a list at zero are due again (plan 0123, section 5). Not
-   * paged: at most {@link LINE_SUGGESTION_MAX} rows.
+   * paged, and not capped: every due line (plan 0125).
    */
   suggestions: 'list.suggestions',
 } as const;
@@ -1174,9 +1174,6 @@ export interface ListTripsChangedEvent {
   listId: string;
 }
 
-/** The most rows one {@link LIST_PATTERNS.suggestions} read answers with. */
-export const LINE_SUGGESTION_MAX = 20;
-
 /**
  * A line at zero offering to come back (plan 0123, section 5).
  *
@@ -1203,8 +1200,9 @@ export interface LineSuggestionView {
 /**
  * The suggestions of one list, in the order a client shows them.
  *
- * Not the house page: there is no cursor, because the read answers at most
- * {@link LINE_SUGGESTION_MAX} rows and never more.
+ * Not the house page: there is no cursor and no ceiling. The read answers every
+ * due line (plan 0125), and the client decides how many of them to draw. The
+ * answer is bounded by the lines of the list, which the client already holds.
  */
 export interface LineSuggestionPage {
   items: LineSuggestionView[];
