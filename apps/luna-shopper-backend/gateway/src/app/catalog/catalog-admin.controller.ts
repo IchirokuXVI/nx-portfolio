@@ -35,6 +35,7 @@ import {
   type BrandView,
   type CreateBrandResult,
   type CreateItemsResult,
+  type DeleteBrandResult,
   type ItemPage,
   type ItemPricePage,
   type ItemPriceView,
@@ -557,12 +558,15 @@ export class AdminCatalogProductGroupsController {
  *
  * A brand used to be free text on every table, so `+Proteinas` sat as a brand on
  * 24 Mercadona products when it is a range of Hacendado, and nobody could list
- * the brands the catalog holds because there was no such list. These four routes
- * are the list, plus the one read that says how each chain spells a brand.
+ * the brands the catalog holds because there was no such list. These routes are
+ * the list, plus the one read that says how each chain spells a brand.
  *
- * **There is no delete** (plan 0115, section 9), and there is no `key` anywhere
- * in a request body: the key is made from the label, and editing the label is
- * the only thing that changes it.
+ * **The only brand that can be deleted is a spelling of another** (plan 0124).
+ * Everything else still cannot be removed, by section 9 of plan 0115, because
+ * its products have nowhere to go.
+ *
+ * There is no `key` anywhere in a request body: the key is made from the label,
+ * and editing the label is the only thing that changes it.
  */
 @ApiTags('admin-catalog')
 @ApiBearerAuth('access-token')
@@ -713,6 +717,29 @@ export class AdminCatalogBrandsController {
       ...adminCredential(admin),
       brandId: id,
       ...dto,
+    });
+  }
+
+  /**
+   * Remove a spelling (plan 0124).
+   *
+   * **The only brand that can be deleted is one linked to another**, and every
+   * other brand answers 409 `brand_not_linked`. Deleting a spelling puts its
+   * products back where it found them, unbranded and still carrying the text
+   * the chain printed, so the key returns to the suggestions list on its own and
+   * registering it again picks the same products up. `movedItems` is how many
+   * went back.
+   */
+  @Delete(':id')
+  @ApiContractResponse(BRAND_PATTERNS.delete)
+  @ApiProblemResponses({ conflict: true })
+  remove(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<DeleteBrandResult> {
+    return this.nats.send<DeleteBrandResult>(BRAND_PATTERNS.delete, {
+      ...adminCredential(admin),
+      brandId: id,
     });
   }
 }

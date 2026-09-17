@@ -39,6 +39,8 @@ import {
   type CreateProductGroupRequest,
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
+  type DeleteBrandRequest,
+  type DeleteBrandResult,
   type DeleteItemPricesByRunRequest,
   type DeleteItemPricesByRunResult,
   type FindItemByEanRequest,
@@ -78,6 +80,8 @@ import {
   type ProductGroupOfferPage,
   type ProductGroupPage,
   type ProductGroupView,
+  type RegisterBrandSuggestionRequest,
+  type RegisterBrandSuggestionResult,
   type ResolvedScopesView,
   type ResolveNearestPostalCodeRequest,
   type ResolvePriceScopesRequest,
@@ -388,6 +392,30 @@ export class CatalogController {
   @MessagePattern(BRAND_PATTERNS.update)
   updateBrand(@Payload() req: UpdateBrandRequest): Promise<UpdateBrandResult> {
     return this.brands.update(req);
+  }
+
+  /**
+   * Register a suggestion under the name a person typed (plan 0124, section 5).
+   *
+   * One message rather than a create and a link, because a failure between two
+   * of them leaves the suggestion half registered.
+   */
+  @MessagePattern(BRAND_PATTERNS.registerSuggestion)
+  registerBrandSuggestion(
+    @Payload() req: RegisterBrandSuggestionRequest
+  ): Promise<RegisterBrandSuggestionResult> {
+    return this.brands.registerSuggestion(req);
+  }
+
+  /**
+   * Remove a spelling (plan 0124).
+   *
+   * The only brand a person may delete: its products go back to unbranded and
+   * its key returns to the suggestions list. Every other brand is refused.
+   */
+  @MessagePattern(BRAND_PATTERNS.delete)
+  deleteBrand(@Payload() req: DeleteBrandRequest): Promise<DeleteBrandResult> {
+    return this.brands.remove(req);
   }
 
   @MessagePattern(BRAND_PATTERNS.get)

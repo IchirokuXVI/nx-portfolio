@@ -17863,6 +17863,99 @@
         "tags": [
           "admin-catalog"
         ]
+      },
+      "delete": {
+        "operationId": "AdminCatalogBrandsController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `brand.delete` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.DeleteBrandResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
       }
     },
     "/v1/admin/catalog/brand-suggestions": {
@@ -28430,6 +28523,24 @@
         ],
         "additionalProperties": false
       },
+      "catalog.DeleteBrandResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "movedItems": {
+            "type": "integer",
+            "description": "Products that went back to unbranded, keeping the text this spelling was printed as."
+          }
+        },
+        "required": [
+          "id",
+          "movedItems"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ItemOfferView": {
         "type": "object",
         "properties": {
@@ -34499,6 +34610,8 @@
               "brand_link_to_self",
               "brand_link_too_deep",
               "brand_link_owns_no_chain",
+              "brand_link_keeps_key",
+              "brand_not_linked",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

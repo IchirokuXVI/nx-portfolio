@@ -1084,14 +1084,20 @@ export class ItemService {
   }
 
   /**
-   * The registered brands the given texts key to, by key (plan 0115,
-   * section 4).
+   * The brand each of the given texts belongs to, by key (plan 0115, section 4,
+   * and plan 0124, section 4.1).
    *
    * **One query for a whole batch**, which is why it takes a list rather than a
    * string: `createMany` resolves every distinct key of the file at once, and a
    * per product lookup would be a thousand round trips for a registry of a few
    * hundred rows. A single write calls it with one text, which is the same code
    * path with a list of one.
+   *
+   * The value is the **canonical** brand of the row a key found, not the row
+   * itself, because that is what a product belongs to: a text printed
+   * `DEBORAH 48H` reads `Deborah` from the moment somebody says the two are one
+   * brand. One extra query for the canonical brands of whatever the first query
+   * found, and only when something it found is linked.
    */
   private async registeredBrands(
     texts: readonly (string | null | undefined)[]
@@ -1107,7 +1113,27 @@ export class ItemService {
       return new Map();
     }
     const rows = await this.brands.find({ where: { key: In(keys) } });
-    return new Map(rows.map((row) => [row.key, row]));
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const missing = [
+      ...new Set(
+        rows
+          .map((row) => row.canonicalBrandId)
+          .filter((id): id is string => Boolean(id) && !byId.has(id as string))
+      ),
+    ];
+    if (missing.length > 0) {
+      for (const canonical of await this.brands.find({
+        where: { id: In(missing) },
+      })) {
+        byId.set(canonical.id, canonical);
+      }
+    }
+    return new Map(
+      rows.map((row) => [
+        row.key,
+        (row.canonicalBrandId ? byId.get(row.canonicalBrandId) : row) ?? row,
+      ])
+    );
   }
 
   /**
@@ -1123,7 +1149,10 @@ export class ItemService {
    *    request sent, so `MAHOU` from a Carrefour accept is stored as `Mahou`.
    *    The label is copied onto `brand` rather than joined at read time because
    *    the search trigger, the trigram index and the ranking all read that
-   *    column.
+   *    column. When the key belongs to a spelling of another brand, the id and
+   *    the label are the **canonical** brand's (plan 0124, section 4.1), while
+   *    `brandKey` stays the key of the text as printed: that key is the only
+   *    thing that can bring this product back if the link is ever undone.
    * 3. An unregistered brand is **still accepted**, trimmed, with its key beside
    *    it and no `brandId`. Refusing it is the curator's decision (curation plan
    *    `0004`) and not the catalog's: a person creating a product by hand in the

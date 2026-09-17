@@ -521,6 +521,8 @@ export type ProblemDetails = {
     | 'brand_link_to_self'
     | 'brand_link_too_deep'
     | 'brand_link_owns_no_chain'
+    | 'brand_link_keeps_key'
+    | 'brand_not_linked'
     | 'internal';
   detail?: string;
   message: string;
@@ -1817,6 +1819,14 @@ export type CatalogCreateBrandResult = {
   createdAt: string;
   updatedAt: string;
   linkedItems: number;
+};
+
+/**
+ * `catalog.DeleteBrandResult` in the gateway's OpenAPI document.
+ */
+export type CatalogDeleteBrandResult = {
+  id: string;
+  movedItems: number;
 };
 
 /**

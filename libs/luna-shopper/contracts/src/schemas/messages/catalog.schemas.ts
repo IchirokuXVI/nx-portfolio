@@ -74,6 +74,8 @@ export const CATALOG_SCHEMA_IDS = {
   registerBrandSuggestionRequest: schemaId(
     'msg/brand.registerSuggestion/request'
   ),
+  deleteBrandRequest: schemaId('msg/brand.delete/request'),
+  deleteBrandResult: schemaId('catalog/DeleteBrandResult'),
   brandIdRequest: schemaId('msg/brand.get/request'),
   listBrandsRequest: schemaId('msg/brand.list/request'),
   brandKeysRequest: schemaId('msg/brand.keys/request'),
@@ -1188,6 +1190,24 @@ const registerBrandSuggestionRequest = object(
   },
   ['userId', 'spelling', 'label']
 );
+const deleteBrandRequest = object(
+  CATALOG_SCHEMA_IDS.deleteBrandRequest,
+  { ...adminCredentialProperties, brandId: nonEmptyString() },
+  ['userId', 'brandId']
+);
+// The `id` every other admin catalog delete answers with, plus the number of
+// products the removal put back to unbranded.
+const deleteBrandResult = object(
+  CATALOG_SCHEMA_IDS.deleteBrandResult,
+  {
+    id: nonEmptyString(),
+    movedItems: integer({
+      description:
+        'Products that went back to unbranded, keeping the text this spelling was printed as.',
+    }),
+  },
+  ['id', 'movedItems']
+);
 // A read, so no admin token: the gate on the route is the guard, as every other
 // admin catalog read here is.
 const brandIdRequest = object(
@@ -1886,6 +1906,8 @@ export const catalogSchemas: JsonSchema[] = [
   createBrandRequest,
   updateBrandRequest,
   registerBrandSuggestionRequest,
+  deleteBrandRequest,
+  deleteBrandResult,
   brandIdRequest,
   listBrandsRequest,
   brandKeysRequest,
@@ -2074,6 +2096,10 @@ export const catalogMessageContracts: Record<
   [BRAND_PATTERNS.registerSuggestion]: {
     request: CATALOG_SCHEMA_IDS.registerBrandSuggestionRequest,
     response: CATALOG_SCHEMA_IDS.registerBrandSuggestionResult,
+  },
+  [BRAND_PATTERNS.delete]: {
+    request: CATALOG_SCHEMA_IDS.deleteBrandRequest,
+    response: CATALOG_SCHEMA_IDS.deleteBrandResult,
   },
   [BRAND_PATTERNS.get]: {
     request: CATALOG_SCHEMA_IDS.brandIdRequest,

@@ -140,6 +140,14 @@ export const ERROR_CATALOG: Record<
     en: 'A brand that is a spelling of another owns no private label chain. The chain belongs to the brand it points at.',
     es: 'Una marca que es la grafía de otra no tiene cadena de marca blanca. La cadena pertenece a la marca a la que apunta.',
   },
+  [ERROR_CODES.BRAND_NOT_LINKED]: {
+    en: 'Only a spelling linked to another brand can be deleted.',
+    es: 'Solo se puede borrar una grafía enlazada a otra marca.',
+  },
+  [ERROR_CODES.BRAND_LINK_KEEPS_KEY]: {
+    en: 'A spelling of another brand keeps its key. Register the other spelling as its own brand.',
+    es: 'La grafía de otra marca conserva su clave. Registra la otra grafía como una marca propia.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',
