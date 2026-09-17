@@ -20,6 +20,7 @@ export * from './lib/resource/field-control';
 export * from './lib/resource/localized-text-control';
 export * from './lib/resource/reference-lookup';
 export * from './lib/resource/reference-picker';
+export * from './lib/resource/references-control';
 export * from './lib/resource/resource-cell';
 export * from './lib/resource/resource-filters';
 export * from './lib/resource/resource-form';

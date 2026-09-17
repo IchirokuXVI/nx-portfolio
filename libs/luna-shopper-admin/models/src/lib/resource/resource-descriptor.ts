@@ -3,6 +3,7 @@ import type {
   EnumOption,
   FieldDescriptor,
   FieldName,
+  FilterValue,
   ResourceRow,
 } from './resource-field';
 
@@ -27,8 +28,11 @@ export interface ResourceQuery {
   readonly limit?: number;
   /** One of {@link ResourceDescriptor.sorts}, sent as `order`. */
   readonly order?: string;
-  /** Filter values by query parameter name, empty ones already dropped. */
-  readonly filters?: Readonly<Record<string, string>>;
+  /**
+   * Filter values by query parameter name, empty ones already dropped. A list
+   * is sent as one parameter per entry.
+   */
+  readonly filters?: Readonly<Record<string, FilterValue>>;
 }
 
 /**

@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import {
   compositeIdOf,
   isReferenceNone,
+  type FilterValue,
   type ResourceGateway,
   type ResourcePage,
   type ResourceQuery,
@@ -188,13 +189,20 @@ function cursorIndex(cursor: string | undefined): number {
  */
 function matches(
   row: ResourceRow,
-  filters: Readonly<Record<string, string>> | undefined
+  filters: Readonly<Record<string, FilterValue>> | undefined
 ): boolean {
   if (filters === undefined) {
     return true;
   }
 
   return Object.entries(filters).every(([param, value]) => {
+    // A repeated parameter asks for rows matching any of its entries.
+    if (typeof value !== 'string') {
+      return (
+        value.length === 0 ||
+        value.some((entry) => matches(row, { [param]: entry }))
+      );
+    }
     if (value === '') {
       return true;
     }

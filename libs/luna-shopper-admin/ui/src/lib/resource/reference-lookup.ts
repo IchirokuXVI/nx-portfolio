@@ -10,21 +10,31 @@
  * library that must not. The app composes one and hands it down.
  */
 
+import type {
+  ReferenceScope,
+  ResourceRow,
+} from '@portfolio/luna-shopper-admin/models';
+
+/**
+ * Declared in `models` since admin plan 0028, because a field descriptor names
+ * it, and exported from here as well for everything that already imports it
+ * beside the lookup.
+ */
+export type { ReferenceScope };
+
 /** One row of the resource being pointed at, as the picker shows it. */
 export interface ReferenceOption {
   readonly id: string;
   readonly title: string;
+  /**
+   * The row itself, when the lookup read one.
+   *
+   * A `references` field asks its descriptor whether a target is locked, and
+   * that is a question about the target's own columns (admin plan 0028,
+   * section 4.1). Optional, because a search result is only ever drawn by name.
+   */
+  readonly row?: ResourceRow;
 }
-
-/**
- * Values the picker's own screen fixes, by query parameter name.
- *
- * Not everything a picker offers can be listed from nothing. A chain's shops
- * are read at `/supermarkets/{id}/locations`, so a picker over them answers an
- * empty page until the chain is named, and the chain is a fact about the screen
- * rather than something the operator types (admin plan 0011, section 4).
- */
-export type ReferenceScope = Readonly<Record<string, string>>;
 
 export interface ReferenceLookup {
   /**

@@ -39,6 +39,7 @@ export type DraftValue =
   | string
   | boolean
   | null
+  | readonly string[]
   | Readonly<Record<string, string>>;
 
 /** Every editable field's control value, by field name. */
@@ -59,6 +60,8 @@ export function emptyValue<T extends ResourceRow>(
       return field.initial ?? false;
     case 'localized-text':
       return emptyLocalizedText(field.locales);
+    case 'references':
+      return [];
     default:
       return '';
   }
@@ -121,6 +124,12 @@ function toDraftValue<T extends ResourceRow>(
       return typeof value === 'boolean' ? value : null;
     }
     return value === true;
+  }
+
+  if (field.kind === 'references') {
+    return Array.isArray(value)
+      ? value.filter((id): id is string => typeof id === 'string')
+      : [];
   }
 
   if (field.kind === 'localized-text') {
@@ -187,16 +196,39 @@ export function isEmptyValue(value: DraftValue): boolean {
   if (typeof value === 'string') {
     return value.trim() === '';
   }
+  if (isIdList(value)) {
+    return value.length === 0;
+  }
   return Object.values(value).every((entry) => entry.trim() === '');
 }
 
-/** Whether two control values are the same answer. */
+/** Whether a control value is a list of ids, which only `references` holds. */
+function isIdList(value: DraftValue): value is readonly string[] {
+  return Array.isArray(value);
+}
+
+/**
+ * Whether two control values are the same answer.
+ *
+ * Two lists of ids are the same answer when they hold the same ids, in any
+ * order (admin plan 0028, section 3). A shop's stack is ranked by each scope's
+ * own priority, so the order the form holds them in is not something the
+ * operator said.
+ */
 export function sameValue(left: DraftValue, right: DraftValue): boolean {
   if (typeof left !== 'object' || typeof right !== 'object') {
     return left === right;
   }
   if (left === null || right === null) {
     return left === right;
+  }
+  if (isIdList(left) || isIdList(right)) {
+    if (!isIdList(left) || !isIdList(right)) {
+      return false;
+    }
+    const held = new Set(left);
+    const other = new Set(right);
+    return held.size === other.size && [...held].every((id) => other.has(id));
   }
 
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
@@ -386,6 +418,7 @@ function validateField<T extends ResourceRow>(
 
     case 'boolean':
     case 'reference':
+    case 'references':
       break;
   }
 
@@ -421,6 +454,12 @@ function toWireValue<T extends ResourceRow>(
     return field.list === true
       ? fromLocalizedLines(value, field.locales)
       : presentLocalizedText(value);
+  }
+
+  if (field.kind === 'references') {
+    // Whole, every time. The list is the answer, and a change to it is not a
+    // patch of one entry.
+    return isIdList(value) ? [...value] : [];
   }
 
   if (field.kind === 'json') {
@@ -493,6 +532,13 @@ export function toInput<T extends ResourceRow>(
     }
 
     const value = draft[field.name] ?? emptyValue(field);
+
+    if (field.kind === 'references' && mode === 'edit') {
+      // An edit that emptied the list asked for an empty list, which is a
+      // real request rather than nothing typed.
+      input[field.name] = toWireValue(field, value);
+      continue;
+    }
 
     if (isEmptyValue(value) && field.nullable !== true) {
       // Empty, and the column has no null to put there. Leaving it out is the

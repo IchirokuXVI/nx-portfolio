@@ -121,6 +121,13 @@
       "clear": "Clear",
       "none": "None"
     },
+    "references": {
+      "empty": "None yet.",
+      "remove": "Remove {{name}}",
+      "removeShort": "Remove",
+      "locked": "Always kept. This one cannot be removed.",
+      "needsScope": "Fill in the fields above before you add any."
+    },
     "form": {
       "create": "New {{name}}",
       "edit": "Edit {{name}}",
@@ -203,8 +210,8 @@
       "many": "Shops",
       "id": "Identifier",
       "supermarketId": "Chain",
-      "priceScopeId": "Price scope",
-      "priceScopeIdHelp": "Which prices this shop uses. Leave it empty when you create the shop, and catalog gives the shop a scope of its own.",
+      "priceScopeIds": "Price scopes",
+      "priceScopeIdsHelp": "The most specific scope with a valid price answers. A single shop scope is always kept, and a new shop gets one automatically.",
       "label": "Name",
       "address": "Address",
       "city": "Town",
@@ -239,6 +246,7 @@
       "label": "Label",
       "labelHelp": "A name for people to read. Harvested scopes have none, and are shown by their kind and source key instead.",
       "priority": "How specific",
+      "priorityCustom": "Custom ({{priority}})",
       "priorityHelp": "Which of a shop's scopes it is quoted from. A shop can sell at several, and the most specific one that has a price for a product is the price that shop charges. It is set from the kind when the scope is made and changed through the API, because moving it re-ranks every shop that holds it.",
       "filter": {
         "supermarketId": "Chain"
@@ -414,7 +422,7 @@
     "priceScopeKind": {
       "NATIONAL": "Nationwide",
       "REGION": "Chain region",
-      "POSTAL_CODE": "Postal code area",
+      "LOCAL_AREA": "Local area",
       "STORE": "Single shop"
     },
     "priceSourceKind": {

@@ -90,6 +90,7 @@ export interface FieldChange {
               (valueChange)="
                 valueChange.emit({ name: field.name, value: $event })
               "
+              [context]="context()"
               [controlId]="controlId(field)"
               [disabled]="busy()"
               [field]="field"
@@ -285,6 +286,12 @@ export class ResourceForm {
   /** A key for a failure that belongs to no field. */
   readonly errorKey = input<string | null>(null);
   readonly busy = input(false);
+  /**
+   * The row as the form holds it: the row read, with the draft over it. A
+   * `references` field reads its scope and its locks from this (admin plan
+   * 0028, section 3). Empty for a create until something is typed.
+   */
+  readonly context = input<ResourceRow>({});
   readonly lookup = input<ReferenceLookup>({
     search: async () => [],
     resolve: async () => null,

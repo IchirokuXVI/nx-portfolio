@@ -80,6 +80,7 @@ const STRING_FIELD_KINDS: readonly string[] = [
         (save)="submit()"
         (valueChange)="change($event)"
         [busy]="store.busy()"
+        [context]="context()"
         [draft]="store.draft()"
         [errorKey]="bannerKey()"
         [fields]="descriptor.fields"
@@ -170,6 +171,19 @@ export class ResourceFormPage {
    */
   readonly titleArgs = computed(() => ({
     name: this._translator.t(this.descriptor.labels.one),
+  }));
+
+  /**
+   * The row as the form holds it: what was read, with the draft over it.
+   *
+   * A `references` field scopes its picker and decides its locks from this
+   * (admin plan 0028, section 3). The draft alone is not enough, because it
+   * holds only what this mode may change, and a shop's chain is fixed once the
+   * shop exists.
+   */
+  readonly context = computed<ResourceRow>(() => ({
+    ...(this.store.row() ?? {}),
+    ...this.store.draft(),
   }));
 
   /** What this row is called, once it has been read. */

@@ -23,13 +23,22 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
 const MERCADONA = 'sm_mercadona';
 const CONSUM = 'sm_consum';
 
+/** The id of a seeded Mercadona shop's own `STORE` scope. */
+function storeScopeOf(shop: string): string {
+  return `ps_store_${shop}`;
+}
+
 /**
  * Scopes.
  *
  * Mercadona is a warehouse chain: one scope, several shops, one price for all
- * of them. Consum has no automated source here, so it gets a `STORE` scope of
- * its own per shop, which is exactly how a hand typed price is made to work with
- * no special case.
+ * of them. Consum has no automated source here, so its shop is priced at its
+ * `STORE` scope alone, which is exactly how a hand typed price is made to work
+ * with no special case.
+ *
+ * Every shop holds a `STORE` scope of its own, keyed on the shop's id, beside
+ * whatever else it sells at (backend plan 0116), so the Mercadona shops carry
+ * one each as well (admin plan 0028, section 4.4).
  */
 export const PRICE_SCOPE_SEED: readonly Wire.CatalogPriceScopeView[] = [
   {
@@ -70,10 +79,20 @@ export const PRICE_SCOPE_SEED: readonly Wire.CatalogPriceScopeView[] = [
     id: 'ps_consum_centro',
     supermarketId: CONSUM,
     kind: 'STORE',
-    externalKey: null,
+    externalKey: 'loc_consum_centro',
     label: null,
     priority: 100,
   },
+  ...['loc_cordoba_centro', 'loc_cordoba_oeste', 'loc_sierra'].map(
+    (shop): Wire.CatalogPriceScopeView => ({
+      id: storeScopeOf(shop),
+      supermarketId: MERCADONA,
+      kind: 'STORE',
+      externalKey: shop,
+      label: null,
+      priority: 100,
+    })
+  ),
 ];
 
 /**
@@ -89,8 +108,9 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
   {
     id: 'loc_cordoba_centro',
     supermarketId: MERCADONA,
-    priceScopeId: 'ps_mercadona_4661',
-    priceScopeIds: ['ps_mercadona_4661'],
+    // The head of the stack, which is the most specific scope.
+    priceScopeId: storeScopeOf('loc_cordoba_centro'),
+    priceScopeIds: [storeScopeOf('loc_cordoba_centro'), 'ps_mercadona_4661'],
     label: null,
     address: 'Avenida del Gran Capitán 12',
     city: 'Córdoba',
@@ -105,8 +125,9 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
   {
     id: 'loc_cordoba_oeste',
     supermarketId: MERCADONA,
-    priceScopeId: 'ps_mercadona_4661',
-    priceScopeIds: ['ps_mercadona_4661'],
+    // The head of the stack, which is the most specific scope.
+    priceScopeId: storeScopeOf('loc_cordoba_oeste'),
+    priceScopeIds: [storeScopeOf('loc_cordoba_oeste'), 'ps_mercadona_4661'],
     label: null,
     address: 'Calle Historiador Domínguez Ortiz 4',
     city: 'Córdoba',
@@ -122,8 +143,9 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
   {
     id: 'loc_sierra',
     supermarketId: MERCADONA,
-    priceScopeId: 'ps_mercadona_3421',
-    priceScopeIds: ['ps_mercadona_3421'],
+    // The head of the stack, which is the most specific scope.
+    priceScopeId: storeScopeOf('loc_sierra'),
+    priceScopeIds: [storeScopeOf('loc_sierra'), 'ps_mercadona_3421'],
     label: null,
     address: 'Carretera de Trassierra km 8',
     city: null,
