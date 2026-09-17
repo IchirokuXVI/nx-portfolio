@@ -3,6 +3,11 @@
 > Repo relative paths. Aliases only across library boundaries. Builds on `0004` (the
 > landing grid and its cards), `0005` (the `projects/:slug` detail route) and `0008` (the
 > paragraph list `detail-section`, `detail-toc` and `tech-chip-group` pieces).
+>
+> **Mocks:** `apps/landing-v2/docs/mocks/landing.html` and
+> `apps/landing-v2/docs/mocks/velista-detail.html`. Open them from disk. Each has a
+> Desktop and Mobile toggle, and a notes list under the page. Where this plan and a mock
+> disagree, the plan wins.
 
 ## Brief for the agent
 
@@ -85,7 +90,7 @@ at `/{locale}/projects/velista` with a general description of the project.
 
 ### Progress evidence
 
-Report each checkpoint (data, card, detail page, i18n, specs, live check) with the command
+Compare the served pages with the two mocks at desktop and at 390 px. Report each checkpoint (data, card, detail page, i18n, specs, live check) with the command
 output or the file that proves it. Claim the live check only after loading both locales
 through the shell.
 
@@ -199,27 +204,32 @@ relative link as the card.
 
 Structure, top to bottom:
 
-1. **Own domain note**, first in `[body]`: one short paragraph saying Velista has its own
+1. **Own domain note**, first in `[body]`: a status badge reading "In production · early
+   development" (the landing hero's availability badge style, i18n key
+   `landingV2.detail.velista.status`), one short paragraph saying Velista has its own
    domain, and an external link to `https://velista.app` (`target="_blank"`,
    `rel="noopener"`, visible text `velista.app`). The URL is a constant in the component,
-   not translated. Style it as a note distinct from body prose, reusing the landingV2
-   tokens in `styles/_variables.scss`.
+   not translated. Style it as a panel distinct from body prose (surface background, gold
+   left border), reusing the landingV2 tokens in `styles/_variables.scss`.
 2. **Sections** as `DetailSection` paragraph lists (below).
 3. **`[side]`**: `DetailToc` over the sections, then `TechChipGroup` with the groups below.
 
 ### Sections
 
 Keys follow `0008`: `landingV2.detail.velista.sections.<id>.title` and
-`.p1`, `.p2`, and so on. Every section is two to four short paragraphs. Write the final
-prose from these facts and do not add claims beyond them.
+`.p1`, `.p2`, and so on. Every section is two to four short paragraphs. The proposed
+English copy is in `velista-detail.html`. Use it as the starting point, and do not add
+claims beyond the facts below. The catalog section also carries a small kicker above its
+heading (`sections.catalog.kicker`, "The hardest part"), styled like the chip group
+titles in gold.
 
 | id | Title | Content |
 | --- | --- | --- |
 | `overview` | Overview | A shared shopping list app: people join a group, keep lists together and shop from one basket. **It is in production with real users, and it is still in early development**, so it changes every week. It lives on its own domain and installs as an app on a phone. |
 | `stack` | Stack | Frontend: Angular 21, standalone and zoneless, installable as a PWA, also mounted inside this portfolio as a micro-frontend. Backend: seven NestJS services (gateway, realtime, auth, core, catalog, harvester, assistant) talking over NATS, four Postgres databases through TypeORM, Redis, and Socket.IO for real time updates. An assistant built on Gemini adds lines from text or a voice recording. A separate back office manages the catalog. Deployed with Docker, Helm and k3s, with staging and production clusters. Tested with Jest and Playwright, including an e2e suite that shops against a real backend. |
 | `evolution` | How it grew | It started as a shared list for a group, inside the portfolio. Real time updates and presence came next, then its own domain and the installable app. After that came the assistant, the shared basket that gathers lines from several lists for one trip, and guests. The latest stage is prices: a catalog of real products, shops found by postal code, and the harvester that keeps them current. |
-| `catalog` | The hardest part: the catalog | Keeping a valid catalog and valid prices. The same product arrives from several chains under different names and formats, and names exist in two languages. Every price a source gives is kept side by side, and a policy decides on each read which one a shopper sees, with prices scoped to a shop, a region or a chain and falling through when one expires. A bad merge or a stale price is visible to a real shopper at the till. |
-| `harvester` | The harvester | Every supermarket publishes differently: a JSON API, pages that print no price, weekly offers that vary across dozens of regions, a site that only answers a real browser, and printed leaflets read by a model. Automation proposes, and a person approves before a printed name is bound to a product. |
+| `catalog` | A catalog you can trust | Keeping a valid catalog and valid prices. The same product arrives from several chains under different names and formats, and names exist in two languages. Every price a source gives is kept side by side, and a policy decides on each read which one a shopper sees, with prices scoped to a shop, a region or a chain and falling through when one expires. A bad merge or a stale price is visible to a real shopper at the till. **Records do not enter the catalog on their own: I created a set of libraries to handle their acceptance** (`libs/luna-shopper/tools/curation`: a model reviews each waiting record against the written naming and merge rules, and the decisions are applied as one file that lands whole or not at all). |
+| `harvester` | The harvester | Every supermarket publishes differently: a JSON API, pages that print no price, weekly offers that vary across dozens of regions, a site that only answers a real browser, and printed leaflets read by a model. A fuzzy match never writes a price by itself: the offer waits until it is accepted. Each chain is switched on or off by a row in the database, without a deploy. |
 | `baskets` | Baskets and lists | A line can be asked for by several lists at once, split by the product actually bought, renamed into another line, and settled only when the trip finishes. All of it updates live for everyone shopping together, including guests without an account. |
 
 ### Chips
@@ -233,7 +243,7 @@ Group titles are i18n keys: `landingV2.detail.velista.chips.frontend`, `.backend
 
 ### i18n keys
 
-Add under `landingV2.detail.velista`: `domain_note`, the section titles and paragraphs, and
+Add under `landingV2.detail.velista`: `status`, `domain_note`, `sections.catalog.kicker`, the section titles and paragraphs, and
 the three chip group titles. Spanish runs longer, so check wrapping in both locales.
 
 ## Tests
@@ -261,8 +271,9 @@ the three chip group titles. Spanish runs longer, so check wrapping in both loca
 - [ ] On mobile every card is one column and nothing scrolls horizontally from 320 px.
 - [ ] Velista's card and detail page links are relative. `velista.app` appears in
       `libs/landing-v2` only in `velista-content`.
-- [ ] `/en/projects/velista` and `/es/projects/velista` render the domain note, the six
-      sections, the table of contents and the chips.
+- [ ] `/en/projects/velista` and `/es/projects/velista` render the status badge, the domain
+      note, the six sections, the table of contents and the chips, and match the mocks.
+- [ ] The catalog section names the libraries built to accept records into the catalog.
 - [ ] The overview says Velista is in production with real users and in early development,
       with no user count.
 - [ ] Lint and tests pass for `landing-v2/data-access`, `landing-v2/ui` and

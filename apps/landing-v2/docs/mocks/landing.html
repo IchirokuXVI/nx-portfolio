@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Landing Velista Mock</title>
+    <!--
+      Mock for landingV2 plan 0009: the landing page with Velista as the main card.
+      Self contained: open it straight from disk. The screenshots are the real card
+      assets, read by relative path from libs/landing-v2/data-access/src/assets.
+      The layout uses container queries on .frame so the Desktop / Mobile toggle
+      reflows the page the way the 720px media queries do in the app.
+    -->
+    <style>
+      :root {
+        --ground: #0d0d0f;
+        --surface: #151517;
+        --surface-raised: #1b1b1e;
+        --hairline: rgba(255, 255, 255, 0.09);
+        --text: #ededf0;
+        --muted: #9a9aa2;
+        --accent: #f2d45b;
+        --accent-dim: #b89a3e;
+        --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          'Helvetica Neue', Arial, sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas,
+          'Liberation Mono', monospace;
+        --radius: 10px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #070708;
+        color: var(--text);
+        font-family: var(--font-display);
+      }
+
+      a {
+        color: inherit;
+      }
+
+      /* Mock chrome, not part of the design */
+      .mockbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        padding: 0.6rem 1rem;
+        background: #000;
+        border-bottom: 1px solid var(--hairline);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+
+      .mockbar strong {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      .mockbar__toggle {
+        display: inline-flex;
+        border: 1px solid var(--hairline);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+
+      .mockbar__toggle button {
+        padding: 0.3rem 0.8rem;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .mockbar__toggle button[aria-pressed='true'] {
+        background: var(--accent);
+        color: var(--ground);
+      }
+
+      .stage {
+        padding: 1.5rem 0;
+      }
+
+      .frame {
+        container-type: inline-size;
+        margin: 0 auto;
+        width: 100%;
+        background: var(--ground);
+        transition: max-width 0.25s ease;
+      }
+
+      .frame--mobile {
+        max-width: 390px;
+        border: 1px solid var(--hairline);
+        border-radius: 18px;
+        overflow: hidden;
+      }
+
+      .note {
+        display: inline-block;
+        margin-left: 0.4rem;
+        padding: 0.1rem 0.45rem;
+        border: 1px dashed rgba(242, 212, 91, 0.6);
+        border-radius: 999px;
+        color: var(--accent);
+        font-family: var(--font-mono);
+        font-size: 0.62rem;
+        font-weight: 400;
+        letter-spacing: 0;
+        vertical-align: middle;
+        white-space: nowrap;
+      }
+
+      .notes {
+        max-width: 1160px;
+        margin: 1.5rem auto 0;
+        padding: 0 1rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.6;
+      }
+
+      .notes h2 {
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      /* Page */
+      .inner {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding-left: clamp(1rem, 4cqi, 2.5rem);
+        padding-right: clamp(1rem, 4cqi, 2.5rem);
+      }
+
+      .header .inner {
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .brand__mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--ground);
+        font-weight: 700;
+        font-size: 0.9rem;
+      }
+
+      .header__actions {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+
+      .lang {
+        display: inline-flex;
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius);
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+      }
+
+      .lang span {
+        padding: 0.45rem 0.6rem;
+        color: var(--muted);
+      }
+
+      .lang span:first-child {
+        color: var(--accent);
+      }
+
+      .btn-outline {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 0.9rem;
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius);
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .icon {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+      }
+
+      .hero .inner {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 2.5rem;
+        align-items: center;
+        padding-top: clamp(2.5rem, 8cqi, 5rem);
+        padding-bottom: clamp(3rem, 6cqi, 4rem);
+      }
+
+      @container (min-width: 720px) {
+        .hero .inner {
+          grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+          gap: 3rem;
+        }
+      }
+
+      .hero__content {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        align-self: flex-start;
+        padding: 0.35rem 0.75rem;
+        border: 1px solid var(--hairline);
+        border-radius: 999px;
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+      }
+
+      .badge__dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .hero h1 {
+        margin: 0;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        line-height: 1.05;
+        font-size: clamp(2.5rem, 6cqi, 4rem);
+      }
+
+      .hero__role {
+        margin: 0;
+        font-family: var(--font-mono);
+        color: var(--accent);
+        font-size: 0.95rem;
+      }
+
+      .hero__subtitle {
+        margin: 0;
+        max-width: 52ch;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .hero__actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 0.5rem;
+      }
+
+      .btn-accent {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.7rem 1.1rem;
+        border-radius: var(--radius);
+        background: var(--accent);
+        color: var(--ground);
+        font-weight: 700;
+        font-size: 0.9rem;
+        text-decoration: none;
+      }
+
+      .socials {
+        display: flex;
+        gap: 0.75rem;
+      }
+
+      .socials span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border: 1px solid var(--hairline);
+        border-radius: 50%;
+        color: var(--muted);
+      }
+
+      .facts {
+        margin: 0;
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius);
+        background: var(--surface);
+      }
+
+      .facts div {
+        display: grid;
+        grid-template-columns: 6.5rem 1fr;
+        gap: 1rem;
+        padding: 0.9rem 1.1rem;
+      }
+
+      .facts div + div {
+        border-top: 1px solid var(--hairline);
+      }
+
+      .facts dt {
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+      }
+
+      .facts dd {
+        margin: 0;
+        font-size: 0.9rem;
+      }
+
+      .projects .inner {
+        padding-top: clamp(2rem, 5cqi, 3.5rem);
+        padding-bottom: clamp(3rem, 6cqi, 5rem);
+      }
+
+      .projects h2 {
+        margin: 0 0 1.5rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        font-size: clamp(1.5rem, 3cqi, 2rem);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+
+      @container (min-width: 720px) {
+        .grid {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .grid__wide {
+          grid-column: 1 / -1;
+        }
+      }
+
+      .card {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius);
+        background: var(--surface);
+        overflow: hidden;
+      }
+
+      .card__media {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        aspect-ratio: 16 / 9;
+        background: var(--surface-raised);
+        text-decoration: none;
+        overflow: hidden;
+      }
+
+      .card__media img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .card__initial {
+        font-weight: 800;
+        font-size: clamp(2.5rem, 6cqi, 3.5rem);
+        color: rgba(242, 212, 91, 0.35);
+      }
+
+      .card__body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        padding: clamp(1.1rem, 2.5cqi, 1.6rem);
+        min-width: 0;
+      }
+
+      .card__title {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        font-size: 1.15rem;
+        font-weight: 700;
+      }
+
+      .card__title a {
+        text-decoration: none;
+      }
+
+      .card__repo {
+        color: var(--muted);
+      }
+
+      .card__tagline {
+        margin: 0;
+        color: var(--accent);
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+      }
+
+      .card__description {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.55;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin: 0.2rem 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .tags li {
+        padding: 0.25rem 0.6rem;
+        border: 1px solid var(--hairline);
+        border-radius: 999px;
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        white-space: nowrap;
+      }
+
+      .card__actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1.25rem;
+        margin-top: auto;
+        padding-top: 0.5rem;
+      }
+
+      .card__view {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-decoration: none;
+      }
+
+      .card__view--disabled {
+        color: var(--muted);
+        opacity: 0.6;
+      }
+
+      /* Featured card: the only one after plan 0009 */
+      .card--featured .card__initial {
+        font-size: clamp(3.5rem, 9cqi, 6rem);
+      }
+
+
+      @container (min-width: 720px) {
+        .card--featured {
+          display: grid;
+          grid-template-columns: 1.1fr 1fr;
+        }
+
+        .card--featured .card__media {
+          aspect-ratio: auto;
+          height: 100%;
+          min-height: 340px;
+        }
+
+        .card--featured .card__body {
+          justify-content: center;
+          gap: 0.8rem;
+          padding: 2.25rem;
+        }
+
+        .card--featured .card__title {
+          font-size: 1.6rem;
+          letter-spacing: -0.02em;
+        }
+
+        .card--featured .card__description {
+          font-size: 0.98rem;
+          max-width: 46ch;
+        }
+      }
+
+      .footer .inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding-top: 2.5rem;
+        padding-bottom: 2.5rem;
+        border-top: 1px solid var(--hairline);
+      }
+
+      .footer p {
+        margin: 0;
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mockbar">
+      <span><strong>Mock</strong> · landingV2 plan 0009 · landing page</span>
+      <span class="mockbar__toggle" role="group" aria-label="Viewport">
+        <button type="button" aria-pressed="true" data-view="desktop">
+          Desktop
+        </button>
+        <button type="button" aria-pressed="false" data-view="mobile">
+          Mobile
+        </button>
+      </span>
+    </div>
+
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="i-github" viewBox="0 0 16 16">
+        <path
+          fill="currentColor"
+          d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.34c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"
+        />
+      </symbol>
+      <symbol id="i-arrow" viewBox="0 0 16 16">
+        <path
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M3 8h10M9 4l4 4-4 4"
+        />
+      </symbol>
+      <symbol id="i-download" viewBox="0 0 16 16">
+        <path
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10"
+        />
+      </symbol>
+    </svg>
+
+    <div class="stage">
+      <div class="frame" id="frame">
+        <header class="header">
+          <div class="inner">
+            <a class="brand" href="#"
+              ><span class="brand__mark">D</span><span>Daniel</span></a
+            >
+            <div class="header__actions">
+              <span class="lang"><span>EN</span><span>ES</span></span>
+              <a class="btn-outline" href="#"
+                ><svg class="icon"><use href="#i-download" /></svg>Download
+                CV</a
+              >
+            </div>
+          </div>
+        </header>
+
+        <section class="hero">
+          <div class="inner">
+            <div class="hero__content">
+              <span class="badge"
+                ><span class="badge__dot"></span>Available for work</span
+              >
+              <h1>I'm Daniel</h1>
+              <p class="hero__role">Full-stack developer · Angular · Nx</p>
+              <p class="hero__subtitle">
+                Coding lover and problem solver, building solutions that make
+                hard tasks easier and automating the easy ones.
+              </p>
+              <div class="hero__actions">
+                <a class="btn-accent" href="#"
+                  ><svg class="icon"><use href="#i-download" /></svg>Download
+                  CV</a
+                >
+                <span class="socials"
+                  ><span><svg class="icon"><use href="#i-github" /></svg></span
+                  ><span>in</span><span>@</span></span
+                >
+              </div>
+            </div>
+            <dl class="facts">
+              <div><dt>FOCUS</dt><dd>Web apps &amp; automation</dd></div>
+              <div><dt>STACK</dt><dd>Angular · Nx · TypeScript</dd></div>
+              <div><dt>ALSO</dt><dd>Docker · k8s · CI/CD</dd></div>
+            </dl>
+          </div>
+        </section>
+
+        <section class="projects">
+          <div class="inner">
+            <h2>Projects</h2>
+            <div class="grid">
+              <!-- Velista: first, full width, the only featured card -->
+              <div class="grid__wide">
+                <article class="card card--featured">
+                  <a class="card__media" href="#/en/projects/velista"
+                    ><span class="card__initial">V</span></a
+                  >
+                  <div class="card__body">
+                    <h3 class="card__title">
+                      <a href="#/en/projects/velista">Velista</a>
+                      <span class="card__repo" aria-label="Velista on GitHub"
+                        ><svg class="icon"><use href="#i-github" /></svg
+                      ></span>
+                    </h3>
+                    <p class="card__tagline">
+                      A shared shopping list app, live in production
+                    </p>
+                    <p class="card__description">
+                      A collaborative shopping list app for groups and
+                      households, with real time lists, a shared basket for the
+                      trip and prices from real supermarkets. It runs on its own
+                      domain with real users and is still in early development.
+                    </p>
+                    <ul class="tags">
+                      <li>Angular</li>
+                      <li>NestJS</li>
+                      <li>PWA</li>
+                    </ul>
+                    <div class="card__actions">
+                      <a class="card__view" href="#/en/projects/velista"
+                        >More details<svg class="icon">
+                          <use href="#i-arrow" /></svg
+                      ></a>
+                      <a class="card__view" href="#/velista/en"
+                        >View project<svg class="icon">
+                          <use href="#i-arrow" /></svg
+                      ></a>
+                      <span class="note">/velista/en, relative</span>
+                    </div>
+                  </div>
+                </article>
+              </div>
+
+              <article class="card">
+                <a class="card__media" href="#"
+                  ><img
+                    src="../../../../libs/landing-v2/data-access/src/assets/portfolio_card.png"
+                    alt="Portfolio"
+                /></a>
+                <div class="card__body">
+                  <h3 class="card__title">
+                    <a href="#">Portfolio</a
+                    ><span class="card__repo"
+                      ><svg class="icon"><use href="#i-github" /></svg
+                    ></span>
+                  </h3>
+                  <p class="card__tagline">
+                    This site: an Nx module-federation monorepo
+                  </p>
+                  <p class="card__description">
+                    My personal portfolio website built with NX and different
+                    technologies, primarily Angular 21. It is a very complete
+                    project with module federation, translation, testing and
+                    CI/CD.
+                  </p>
+                  <ul class="tags">
+                    <li>Angular</li>
+                    <li>Nx</li>
+                    <li>Module Federation</li>
+                  </ul>
+                  <div class="card__actions">
+                    <a class="card__view" href="#"
+                      >More details<svg class="icon"><use href="#i-arrow" /></svg
+                    ></a>
+                    <span class="card__view card__view--disabled"
+                      >View project<svg class="icon"><use href="#i-arrow" /></svg
+                    ></span>
+                  </div>
+                </div>
+              </article>
+
+              <article class="card">
+                <a class="card__media" href="#"
+                  ><img
+                    src="../../../../libs/landing-v2/data-access/src/assets/damoclesSword_screenshot.png"
+                    alt="Damocle'Sword"
+                /></a>
+                <div class="card__body">
+                  <h3 class="card__title">
+                    <a href="#">Damocle'Sword</a
+                    ><span class="card__repo"
+                      ><svg class="icon"><use href="#i-github" /></svg
+                    ></span>
+                  </h3>
+                  <p class="card__tagline">VR game studio business site</p>
+                  <p class="card__description">
+                    A marketing site for Damocle'Sword, a VR game studio, built
+                    as an Angular micro-frontend with a translated component
+                    system and a reactive contact form.
+                  </p>
+                  <ul class="tags">
+                    <li>Angular</li>
+                    <li>VR</li>
+                    <li>Micro-frontend</li>
+                  </ul>
+                  <div class="card__actions">
+                    <a class="card__view" href="#"
+                      >More details<svg class="icon"><use href="#i-arrow" /></svg
+                    ></a>
+                    <a class="card__view" href="#"
+                      >View project<svg class="icon"><use href="#i-arrow" /></svg
+                    ></a>
+                  </div>
+                </div>
+              </article>
+
+              <article class="card">
+                <a class="card__media" href="#"
+                  ><img
+                    src="../../../../libs/landing-v2/data-access/src/assets/odontogram_screenshot.png"
+                    alt="Odontogram"
+                /></a>
+                <div class="card__body">
+                  <h3 class="card__title">
+                    <a href="#">Odontogram</a
+                    ><span class="card__repo"
+                      ><svg class="icon"><use href="#i-github" /></svg
+                    ></span>
+                  </h3>
+                  <p class="card__tagline">
+                    Dental chart with per-zone treatments &amp; patient history
+                  </p>
+                  <p class="card__description">
+                    Full odontogram to save treatments and keep the history of
+                    patients. One of my first UI projects made solely by me.
+                  </p>
+                  <ul class="tags">
+                    <li>Angular</li>
+                    <li>SVG</li>
+                  </ul>
+                  <div class="card__actions">
+                    <a class="card__view" href="#"
+                      >More details<svg class="icon"><use href="#i-arrow" /></svg
+                    ></a>
+                    <a class="card__view" href="#"
+                      >View project<svg class="icon"><use href="#i-arrow" /></svg
+                    ></a>
+                  </div>
+                </div>
+              </article>
+
+              <article class="card">
+                <a class="card__media" href="#"
+                  ><img
+                    src="../../../../libs/landing-v2/data-access/src/assets/pos_screenshot.png"
+                    alt="Restaurant Point Of Sale"
+                /></a>
+                <div class="card__body">
+                  <h3 class="card__title">
+                    <span>Restaurant Point Of Sale</span
+                    ><span class="card__repo"
+                      ><svg class="icon"><use href="#i-github" /></svg
+                    ></span>
+                  </h3>
+                  <p class="card__tagline">
+                    Full restaurant POS with remote printing &amp; live sync
+                  </p>
+                  <p class="card__description">
+                    My biggest project so far. Complete POS with support for
+                    remote printing over the internet, WebSocket, and a
+                    dedicated mobile view.
+                  </p>
+                  <ul class="tags">
+                    <li>Angular</li>
+                    <li>WebSocket</li>
+                    <li>Responsive</li>
+                  </ul>
+                  <div class="card__actions">
+                    <span class="card__view card__view--disabled"
+                      >View project<svg class="icon"><use href="#i-arrow" /></svg
+                    ></span>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <footer class="footer">
+          <div class="inner">
+            <span class="brand__mark">D</span>
+            <p>© 2026 Daniel · Built with Angular &amp; Nx</p>
+          </div>
+        </footer>
+      </div>
+    </div>
+
+    <section class="notes">
+      <h2>Notes</h2>
+      <ul>
+        <li>
+          Velista is the only card with <code>columnSpan: 2</code> and
+          <code>featured: true</code>. Its media is taller (340px minimum) and
+          its title is larger than the other cards.
+        </li>
+        <li>
+          Portfolio and Damocle'Sword drop to one column and pair up, then
+          Odontogram and the point of sale project.
+        </li>
+        <li>
+          Velista has no screenshot yet, so it shows the placeholder initial
+          (plan 0009 D4). A screenshot later is a data change.
+        </li>
+        <li>
+          The "In production" status badge lives on the detail page only. On
+          the card, the tagline and description carry that fact.
+        </li>
+        <li>
+          Card copy is abbreviated here for the other projects. The app keeps
+          their current text.
+        </li>
+      </ul>
+    </section>
+
+    <script>
+      (() => {
+        const frame = document.getElementById('frame');
+        const buttons = document.querySelectorAll('[data-view]');
+        buttons.forEach((button) =>
+          button.addEventListener('click', () => {
+            const mobile = button.dataset.view === 'mobile';
+            frame.classList.toggle('frame--mobile', mobile);
+            buttons.forEach((b) =>
+              b.setAttribute('aria-pressed', String(b === button))
+            );
+          })
+        );
+      })();
+    </script>
+  </body>
+</html>
