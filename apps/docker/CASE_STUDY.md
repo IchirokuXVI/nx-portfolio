@@ -4,14 +4,37 @@
 > code shows that an answer may have missed. This covers the whole build/deploy
 > foundation: the custom Nx docker plugin, Dockerfiles, CI/CD, and k3s/Helm.
 
-> **Superseded in places, as of 2026-08-29.** `k8s/plans/0007` changed the build
-> topology: apps are compiled once, outside Docker, in a digest pinned `node:24`, the
-> images are a base plus a `COPY` of the finished bundle, the executor pushes with
-> `buildx --push` instead of `--load` plus `docker push`, and both workflows are split
-> into per phase jobs. Answers and notes below that describe a build stage inside each
-> image, `forwardEnv` carrying `MFE_BASE_URL`, or `--push` as a future improvement
-> describe how it worked before that plan. They are left as written rather than
-> rewritten, because they are a record of the reasoning at the time.
+> **Superseded in places, as of 2026-09-17.** The answers below are left as written,
+> because they are a record of the reasoning at the time. What the code does now:
+>
+> - **Build topology (`k8s/plans/0007`):** apps compile once, outside Docker, in a digest
+>   pinned `node:24-slim` (`BUILD_IMAGE` in `.github/workflows/docker-ci.yml`). The
+>   executor pushes with `buildx --push`, not `--load` plus `docker push`. Text about a
+>   build stage inside each image, `forwardEnv` carrying `MFE_BASE_URL`, or `--push` as a
+>   future improvement describes the time before that plan.
+> - **The custom Nx docker plugin:** the list of build contexts misses `dist`, which every
+>   app `build:docker` target uses (`"context": "dist"` in `apps/<app>/project.json`).
+> - **The custom Nx docker plugin, CI/CD:** no app is `FROM` the builder image. Each
+>   `apps/<app>/src/Dockerfile` is `FROM nx-portfolio/local-http-server` plus a `COPY` of
+>   the bundle. CI does not build the builder at all. It stays only for the local full stack.
+> - **Dockerfiles:** `apps/docker` now holds only `builder` and `local-http-server`. The
+>   `certbot` and `reverse-proxy` apps are gone.
+> - **CI/CD:** tests do not run in `builder:latest`. The `lint-test` job runs in
+>   `BUILD_IMAGE` beside the image builds, and the workflow is split into parallel jobs.
+> - **Kubernetes / Helm deploy:** there are two clusters, one VPS each (k8s plan 0002).
+>   The chart describes one environment, chosen by `values.production.yaml` or
+>   `values.staging.yaml`. `env`, `staging.enabled`, `productionImageTag`,
+>   `stagingImageTag` and `/root/helm-live/prod-tag.yaml` are gone. Production deploys
+>   with `k8s/helm/deploy-release.sh <version>`.
+> - **Kubernetes / Helm deploy:** routing is the Gateway API (`k8s/helm/templates/gateway`)
+>   with Envoy Gateway as the data plane, installed by `k8s/bootstrap/install.sh`. MetalLB
+>   (`templates/ipadd-pool.yaml.tpl`) still advertises the address, now for the Envoy
+>   LoadBalancer Service in `envoy-gateway-system`.
+> - **Kubernetes / Helm deploy (TLS, reverse proxy):** the `init-certs` container, the
+>   certbot sidecar, `_nginx.conf.tpl` and `shareProcessNamespace` are gone. cert-manager
+>   with a ClusterIssuer issues certificates, installed by `k8s/bootstrap/install.sh`.
+> - **Kubernetes / Helm deploy:** `k8s/e2e/compose.yml` is now
+>   `k8s/e2e/portfolio-frontend/compose.yml`.
 
 ## The custom Nx docker plugin (`tools/docker`, `@portfolio/docker`)
 

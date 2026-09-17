@@ -44,14 +44,15 @@ is `feat` or `fix`, and both may name the same plan number.
 ### Scope
 
 The scope names an area of the workspace, not an Nx project: `velista` covers
-the app and every `libs/velista/*` library, `luna` covers the whole backend, and
-a service name covers one service. The list is in `tools/release/rules.mjs` and
-that file is the authority:
+the app and every `libs/velista/*` library, `luna` covers the whole backend,
+a service name covers one service, and `admin` covers the back office
+(`luna-shopper-admin`). The list is in `tools/release/rules.mjs` and that file
+is the authority:
 
 `shell`, `odontogram`, `damoclesSword`, `landingV2`, `velista`, `luna`,
 `luna-shopper`, `gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`,
-`assistant`, `contracts`, `shared`, `i18n`, `k8s`, `helm`, `docker`, `ci`,
-`tools`, `e2e`, `deps`, `release`.
+`assistant`, `contracts`, `admin`, `luna-shopper-admin`, `shared`, `i18n`,
+`k8s`, `helm`, `docker`, `ci`, `tools`, `e2e`, `deps`, `release`.
 
 The scope is optional, and a change that genuinely spans areas may carry several
 separated by commas: `docs(luna,velista): ...`. Adding a new area to the
@@ -117,6 +118,15 @@ gh release create v0.3.2 --title v0.3.2 --notes-file notes.md
 
 # Which titles in a range would need renaming (exit 1 if any)
 node tools/release/release-notes.mjs --audit --from v0.3.1
+
+# The notes, but exit 1 if any title in the range breaks the rules
+node tools/release/release-notes.mjs --strict --from v0.3.1 --to v0.3.2
+
+# From commit subjects instead of pull requests, with no `gh` login needed
+node tools/release/release-notes.mjs --commits --from v0.3.1
+
+# Machine readable output, titled with a version other than --to
+node tools/release/release-notes.mjs --json --version v0.3.2 --from v0.3.1
 
 # Validate one title, which is what CI does with the pull request's own
 node tools/release/release-notes.mjs --check "feat(velista): a card for the list"

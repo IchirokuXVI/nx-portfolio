@@ -2,7 +2,8 @@
 
 The Helm chart in [`helm/`](./helm) deploys the whole system as one release: the
 `shell` host, the `odontogram`, `damoclesSword`, `landingV2` and `velista` remotes,
-and the Luna Shopper backend behind velista. The same chart runs in three shapes:
+the `luna-shopper-admin` back office, and the Luna Shopper backend behind velista.
+The same chart runs in three shapes:
 
 | Environment | Driven by | Notes |
 | --- | --- | --- |
@@ -78,22 +79,22 @@ default) sets `gateway.enabled: false` and stays the zero setup path.
 ## Local quickstart (port mode — the default)
 
 Port mode exposes every app on its own `localhost:<port>`: shell on **80**, remotes
-on **8081–8084**. No hosts-file edits, no admin, no reverse proxy.
+on **8082–8084**. No hosts-file edits, no admin, no reverse proxy.
 
 The shell bakes its remote URLs at build time, so it is told where the remotes live
 via `MFE_REMOTE_URLS` (a per-remote `name=url` map). The shell's own port is not baked
 and can change freely.
 
 ```sh
-# 1. Base images (dev-tagged). Build these first: the app images build FROM them.
-npx nx run docker/builder:build --configuration=development
+# 1. The base image (dev-tagged). Build it first: the app images are FROM it.
 npx nx run docker/local-http-server:build --configuration=development
 
-# 2. The five app images, development configuration. MFE_REMOTE_URLS is baked into
-#    the shell only (the remotes ignore it).
-export MFE_REMOTE_URLS="landing=http://localhost:8081,odontogram=http://localhost:8082,damoclesSword=http://localhost:8083,landingV2=http://localhost:8084"
+# 2. The four app images, development configuration. Each build:docker runs the
+#    app's `nx build` first (dependsOn), so MFE_REMOTE_URLS has to be set in the
+#    shell that runs Nx. Only the shell bundle bakes it (the remotes ignore it).
+export MFE_REMOTE_URLS="odontogram=http://localhost:8082,damoclesSword=http://localhost:8083,landingV2=http://localhost:8084"
 npx nx run-many -t build:docker --configuration=development \
-  --projects shell,landing,odontogram,damoclesSword,landingV2
+  --projects shell,odontogram,damoclesSword,landingV2
 
 # 3. Deploy.
 helm upgrade --install nx-portfolio helm \
@@ -105,30 +106,35 @@ helm upgrade --install nx-portfolio helm \
 kubectl get pods -n nx-portfolio
 ```
 
-> Prefer the remote ports to line up with the dev-serve ports (shell 4200, remotes
-> 4201–4204)? Then set those `lbPort`s in `values.localhost.yaml` and build the shell
-> with **no** env — a development build's default string remotes already resolve to
-> `http://localhost:4201..4204`. `MFE_REMOTE_URLS` is only needed when the ports
-> differ, as they do above.
+> Prefer the remote ports to line up with the dev-serve ports (shell 4200,
+> odontogram 4202, damoclesSword 4203, landingV2 4204)? Then set those `lbPort`s in
+> `values.localhost.yaml` and build the shell with **no** env. A development build's
+> default string remotes already resolve to each remote's dev-serve port.
+> `MFE_REMOTE_URLS` is only needed when the ports differ, as they do above.
 
-The app images build inside `builder:dev` (which runs `npm ci` for the whole
-monorepo), so the first run takes a while; later runs reuse the Buildx layer cache.
+**The local overlays deploy four apps, not six.** `values.localhost.yaml`,
+`values.localhost-mfe.yaml` and `values.local.yaml` each replace the whole `apps`
+list with `shell`, `odontogram`, `damoclesSword` and `landingV2`. `velista` and
+`luna-shopper-admin` come only from the `apps` list in `values.yaml`, so the shell's
+`/velista` mount has no remote to load in a local deployment.
+
+There is no build stage inside an app image (k8s plan 0007). `nx build` runs on the
+host, and `build:docker` sets `"context": "dist"`, so the image only copies the
+finished `dist/apps/<project>` bundle onto `local-http-server`. The first run takes as
+long as the Angular builds, and later runs reuse the Nx cache. The `docker/builder`
+image (the whole workspace after `npm ci`) is not part of this flow: no app image is
+FROM it.
 
 ### Rebuilding after a code change
 
-The app images build `FROM builder:dev`, which froze a copy of the repo (`COPY . .`)
-when it was built. So a source change is **not** picked up by rebuilding the app image
-alone — refresh `builder:dev` first, then rebuild the app image, then roll the
-deployment (the tag stays `dev`, so Kubernetes needs the restart to re-pull):
+Rebuild the app image, then roll the deployment. `build:docker` runs `nx build` first,
+so the bundle picks up the source change. The tag stays `dev`, so Kubernetes needs the
+restart to use the new image:
 
 ```sh
-npx nx run docker/builder:build --configuration=development   # refresh the frozen source
 npx nx run odontogram:build:docker --configuration=development
 kubectl rollout restart deployment/odontogram -n nx-portfolio
 ```
-
-`builder:dev`'s `npm ci` layer is cached (unless `package*.json` changed), so the
-refresh is mostly just re-copying the working tree.
 
 ---
 
@@ -152,11 +158,13 @@ only by the issuer name.
 The shell resolves its remotes by build-time precedence: **`MFE_REMOTE_URLS`** (an
 explicit per-remote `name=url` map, for distinct origins/ports) → **`MFE_BASE_URL`** (a
 single host, remotes at `${base}/<remote>`) → default string remotes (each remote's
-dev-serve port). Both env vars are plumbed through the docker `build` executor into
-the shell Dockerfile.
+dev-serve port). Both env vars are read from the environment of the shell's
+`nx build`, by `apps/shell/webpack.config.ts` (development) and
+`apps/shell/webpack.prod.config.ts` (production), through the shared helpers in
+`apps/shell/remote-urls.ts`. They are not Docker build args.
 
 Why three? A locale-less deep link such as `/odontogram` must reach the **shell**
-(which redirects to `/en/odontogram`), not the remote's blank entry page. In
+(where odontogram's locale guard inserts the locale, giving `/odontogram/en`), not the remote's blank entry page. In
 production the shell and remotes live on separate hosts, so there is no clash. Port
 mode reproduces that with separate ports; mfe-path reproduces it with a path prefix;
 the hostnames overlay reproduces it literally but needs hosts-file entries:
@@ -195,14 +203,14 @@ npx playwright test -c apps/landing-v2-e2e/playwright.config.ts --project=chromi
 npx cypress run --project apps/shell-e2e --browser electron
 ```
 
-> `odontogram-e2e` currently fails to compile (`TS5095`: its tsconfig sets
-> `module: commonjs` under the workspace's `moduleResolution: bundler`)
-> and its specs predate the through-shell routing. That is a pre-existing issue,
-> unrelated to the deployment.
+> `odontogram-e2e` compiles again (its tsconfig pins `moduleResolution: node10`) and
+> its specs drive the shell's `/odontogram` mount. CI still excludes it, because
+> neither `shell:serve` nor `shell:serve-static` serves a history API fallback, so
+> its deep links answer 404 there. See `apps/odontogram-e2e/cypress.config.ts`.
 
 ### e2e against the published images (what CI runs)
 
-`e2e/compose.yml` stands up the **published** images (default: the `staging` tag)
+`k8s/e2e/portfolio-frontend/compose.yml` stands up the **published** images (default: the `staging` tag)
 behind its own nginx on the staging hostnames, mirroring the Kubernetes topology,
 so the exact shell image, which bakes the staging MFE host, is tested unchanged.
 That stack is Docker Compose and deliberately keeps nginx: it exists to test the
@@ -212,12 +220,12 @@ CI runs this after pushing the staging images and before deploying, so a failure
 gates the deploy. To run it yourself:
 
 ```sh
-echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com" | sudo tee -a /etc/hosts
+echo "127.0.0.1 staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com staging.velista.app" | sudo tee -a /etc/hosts
 docker login ghcr.io                                   # only if a package is still private
-docker compose -f e2e/compose.yml up -d --pull always
+docker compose -f k8s/e2e/portfolio-frontend/compose.yml up -d --pull always
 E2E_BASE_URL=https://staging.ichirokuxvi.com \
   npx playwright test -c apps/damoclesSword-e2e/playwright.config.ts --project=chromium
-docker compose -f e2e/compose.yml down -v
+docker compose -f k8s/e2e/portfolio-frontend/compose.yml down -v
 ```
 
 Override `E2E_IMAGE_PREFIX` / `E2E_IMAGE_TAG` to point at other images (e.g. a
@@ -236,15 +244,15 @@ release version instead of `staging`).
   Docker Desktop image store; another cluster won't see them without a registry push.
 - **A rebuilt image isn't picked up.** The tag stays `dev`, so `helm upgrade` alone
   won't restart a pod. `kubectl rollout restart deployment/<app>`.
-- **A source change didn't show up in the container.** The app images build `FROM
-  builder:dev`, which froze the repo at its own build time. Rebuild `builder:dev`
-  before the app image (see "Rebuilding after a code change"). This also applies to
-  `MFE_REMOTE_URLS` / `MFE_BASE_URL` behavior changes in `apps/shell/webpack.config.ts`.
+- **A source change didn't show up in the container.** Check that the image was
+  rebuilt through `build:docker` (which runs `nx build` first) and that the deployment
+  was restarted. A change to `MFE_REMOTE_URLS` / `MFE_BASE_URL` needs the shell
+  rebuilt with the new value in the environment of that `nx build`.
 - **Nx returns a cached "success" but no image is built.** The docker build/push
   executor is marked non-cacheable in `nx.json` (`@portfolio/docker:build` →
   `cache: false`) precisely because a Docker image is a side effect Nx can't track. If
   you re-enable caching, pass `--skip-nx-cache`.
-- **Port already in use (4200–4204, or 80/443 for the other overlays).** Something
+- **Port already in use (80 and 8082–8084 in port mode, or 80/443 for the other overlays).** Something
   else (a running `nx serve`, IIS, another service) holds the port. Stop it, or use a
   different overlay.
 - **The Service to reach is not in `nx-portfolio`.** Envoy Gateway provisions a data
