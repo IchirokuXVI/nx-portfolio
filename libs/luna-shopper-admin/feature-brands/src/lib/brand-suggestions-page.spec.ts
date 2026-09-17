@@ -25,7 +25,11 @@ import {
 import { BRAND_SUGGESTION_SEED } from './brand-seed';
 import { BrandSuggestionsPage } from './brand-suggestions-page';
 import { BRANDS } from './brands';
-import { BrandsGateway, type BrandCreated } from './brands-gateway';
+import {
+  BrandsGateway,
+  type Brand,
+  type SuggestionRegistered,
+} from './brands-gateway';
 import { brandsRoutes } from './routes';
 
 /**
@@ -174,7 +178,8 @@ function answers(
   return { items, nextCursor };
 }
 
-function created(overrides: Partial<BrandCreated> = {}): BrandCreated {
+/** One brand, as the register answers with it. */
+function brand(overrides: Partial<Brand> = {}): Brand {
   return {
     id: 'br_mahou',
     key: 'mahou',
@@ -186,6 +191,18 @@ function created(overrides: Partial<BrandCreated> = {}): BrandCreated {
     linkCount: 0,
     createdAt: '2026-09-16T10:00:00.000Z',
     updatedAt: '2026-09-16T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/** What the register route answered: a brand, and maybe a spelling of it. */
+function registered(
+  overrides: Partial<SuggestionRegistered> = {}
+): SuggestionRegistered {
+  return {
+    brand: brand(),
+    linked: null,
+    canonicalCreated: true,
     linkedItems: 58,
     ...overrides,
   };
@@ -343,10 +360,11 @@ describe('BrandSuggestionsPage', () => {
   });
 
   /**
-   * `MAHOU` and `Mahou` make one key, so both link the products. `Mahou 5
-   * Estrellas` does not, and the operator has to be told before they save.
+   * `MAHOU` and `Mahou` make one key, so both are one register and one brand.
+   * `Mahou 5 Estrellas` is its own brand, and this row becomes a spelling of
+   * it: the panel says so before the press rather than after.
    */
-  it('warns only while the label would make a different key', async () => {
+  it('says what a different key will do, and renames the button', async () => {
     const fixture = await boot();
 
     registerButton(fixture, 'mahou')?.click();
@@ -359,16 +377,22 @@ describe('BrandSuggestionsPage', () => {
     type(label, 'Mahou');
     await settle(fixture);
     expect(page(fixture).keyDiffers()).toBe(false);
-    expect(text(fixture)).not.toContain('brands.suggested.register.keyDiffers');
+    expect(text(fixture)).not.toContain('brands.suggested.register.linksTo');
+    expect(confirmButton(fixture).textContent).toContain(
+      'brands.suggested.register.confirm'
+    );
 
     type(label, 'Mahou 5 Estrellas');
     await settle(fixture);
     expect(page(fixture).keyDiffers()).toBe(true);
-    expect(text(fixture)).toContain('brands.suggested.register.keyDiffers');
+    expect(text(fixture)).toContain('brands.suggested.register.linksTo');
+    expect(confirmButton(fixture).textContent).toContain(
+      'brands.suggested.register.confirmLink'
+    );
 
     type(label, 'Mahou');
     await settle(fixture);
-    expect(text(fixture)).not.toContain('brands.suggested.register.keyDiffers');
+    expect(text(fixture)).not.toContain('brands.suggested.register.linksTo');
   });
 
   it('registers the row, takes it out of the list and moves on', async () => {
@@ -376,8 +400,8 @@ describe('BrandSuggestionsPage', () => {
     const fixture = await boot(() => {
       spies.push(
         jest
-          .spyOn(TestBed.inject(BrandsGateway), 'register')
-          .mockResolvedValue(created())
+          .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+          .mockResolvedValue(registered())
       );
     });
 
@@ -396,7 +420,9 @@ describe('BrandSuggestionsPage', () => {
     confirmButton(fixture).click();
     await settle(fixture);
 
-    expect(spies[0]).toHaveBeenCalledWith('Mahou', 'sm_mercadona');
+    // The chain's own spelling, capitalized, which is what a linked brand ends
+    // up called. The typed name is the second argument and the chain the third.
+    expect(spies[0]).toHaveBeenCalledWith('Mahou', 'Mahou', 'sm_mercadona');
 
     // The key is registered, so it is no longer a suggestion.
     expect(
@@ -414,8 +440,8 @@ describe('BrandSuggestionsPage', () => {
   it('says so differently when the brand linked nothing', async () => {
     const fixture = await boot(() => {
       jest
-        .spyOn(TestBed.inject(BrandsGateway), 'register')
-        .mockResolvedValue(created({ linkedItems: 0 }));
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockResolvedValue(registered({ linkedItems: 0 }));
     });
 
     registerButton(fixture, 'mahou')?.click();
@@ -426,20 +452,169 @@ describe('BrandSuggestionsPage', () => {
     expect(text(fixture)).toContain('brands.suggested.register.doneNone');
   });
 
+  /** The suggestion became a spelling of the typed name, which the notice says. */
+  it('says what was linked to what, when it linked one', async () => {
+    const fixture = await boot(() => {
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockResolvedValue(
+          registered({
+            brand: brand({ id: 'br_mahou5', key: 'mahou5estrellas' }),
+            linked: brand({ label: 'Mahou', canonicalBrandId: 'br_mahou5' }),
+            linkedItems: 58,
+          })
+        );
+    });
+
+    registerButton(fixture, 'mahou')?.click();
+    await settle(fixture);
+    confirmButton(fixture).click();
+    await settle(fixture);
+
+    expect(text(fixture)).toContain('brands.suggested.register.doneLinked');
+    expect(text(fixture)).not.toContain('brands.suggested.register.done"');
+    expect(page(fixture).done()).toEqual({
+      label: 'Mahou',
+      spelling: 'Mahou',
+      linked: 58,
+      chainKept: false,
+    });
+  });
+
+  /**
+   * The chain applies to a brand the register created. A typed name that was
+   * already registered kept the chain it had, and the picker was on screen, so
+   * the notice says so rather than letting the operator assume it took.
+   */
+  it('says the chain was kept when the name was already registered', async () => {
+    const fixture = await boot(() => {
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockResolvedValue(
+          registered({
+            linked: brand({ id: 'br_spelling' }),
+            canonicalCreated: false,
+          })
+        );
+    });
+
+    registerButton(fixture, 'mahou')?.click();
+    await settle(fixture);
+    page(fixture).chainId.set('sm_mercadona');
+    await settle(fixture);
+    confirmButton(fixture).click();
+    await settle(fixture);
+
+    expect(text(fixture)).toContain('brands.suggested.register.chainKept');
+  });
+
+  /** Nothing was picked, so nothing was ignored and there is nothing to say. */
+  it('keeps quiet about the chain when none was picked', async () => {
+    const fixture = await boot(() => {
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockResolvedValue(
+          registered({
+            linked: brand({ id: 'br_spelling' }),
+            canonicalCreated: false,
+          })
+        );
+    });
+
+    registerButton(fixture, 'mahou')?.click();
+    await settle(fixture);
+    confirmButton(fixture).click();
+    await settle(fixture);
+
+    expect(text(fixture)).not.toContain('brands.suggested.register.chainKept');
+  });
+
+  /**
+   * The same key case answers `canonicalCreated: true` and links nothing, so
+   * the chain was not ignored and the notice must not say it was. Reading that
+   * flag without `linked` first would have said it on every plain register.
+   */
+  it('keeps quiet about the chain when nothing was linked', async () => {
+    const fixture = await boot(() => {
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockResolvedValue(registered());
+    });
+
+    registerButton(fixture, 'mahou')?.click();
+    await settle(fixture);
+    page(fixture).chainId.set('sm_mercadona');
+    await settle(fixture);
+    confirmButton(fixture).click();
+    await settle(fixture);
+
+    expect(text(fixture)).not.toContain('brands.suggested.register.chainKept');
+  });
+
+  /**
+   * Somebody linked the brand this name spells between the panel opening and
+   * the press, so the register would make a chain of spellings. The sentence is
+   * its own, and the link goes to the brand that breaks the rule.
+   */
+  it('reads a too deep refusal, with a link to the brand it names', async () => {
+    const fixture = await boot(() => {
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockRejectedValue(
+          new GatewayError({
+            code: 'brand_link_too_deep',
+            status: 409,
+            correlationId: '',
+            details: { brandId: 'br_deep' },
+          })
+        );
+    });
+
+    registerButton(fixture, 'mahou')?.click();
+    await settle(fixture);
+    confirmButton(fixture).click();
+    await settle(fixture);
+
+    expect(page(fixture).openKey()).toBe('mahou');
+    expect(text(fixture)).toContain('resource.error.brandLinkTooDeep');
+    expect(page(fixture).holderLink()).toEqual(['/', 'brands', 'br_deep']);
+  });
+
+  /**
+   * Every chain opens that chain's queued rows for this brand, and the queue's
+   * own default status is the one the chip counted.
+   */
+  it('opens the source products of a chain and this brand', async () => {
+    const fixture = await boot();
+    const chips = [
+      ...brandRows(fixture)[0].querySelectorAll('a.chip'),
+    ] as HTMLAnchorElement[];
+
+    expect(chips).toHaveLength(2);
+    expect(chips[0].getAttribute('href')).toBe(
+      '/harvest/entries?supermarketId=sm_carrefour&brandKey=mahou'
+    );
+    expect(chips[1].getAttribute('href')).toBe(
+      '/harvest/entries?supermarketId=sm_mercadona&brandKey=mahou'
+    );
+  });
+
   /**
    * The panel stays open, holding everything typed: a refused register is a
    * decision to make again, not one to make from scratch.
    */
   it('keeps the panel open on a taken key, with a link to the brand holding it', async () => {
     const fixture = await boot(() => {
-      jest.spyOn(TestBed.inject(BrandsGateway), 'register').mockRejectedValue(
-        new GatewayError({
-          code: 'brand_key_taken',
-          status: 409,
-          correlationId: '',
-          details: { brandId: 'br_mahou' },
-        })
-      );
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockRejectedValue(
+          new GatewayError({
+            code: 'brand_key_taken',
+            status: 409,
+            correlationId: '',
+            details: { brandId: 'br_mahou' },
+          })
+        );
     });
 
     registerButton(fixture, 'mahou')?.click();
@@ -461,13 +636,15 @@ describe('BrandSuggestionsPage', () => {
 
   it('says what an empty label is, and offers no link', async () => {
     const fixture = await boot(() => {
-      jest.spyOn(TestBed.inject(BrandsGateway), 'register').mockRejectedValue(
-        new GatewayError({
-          code: 'brand_label_empty',
-          status: 400,
-          correlationId: '',
-        })
-      );
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockRejectedValue(
+          new GatewayError({
+            code: 'brand_label_empty',
+            status: 400,
+            correlationId: '',
+          })
+        );
     });
 
     registerButton(fixture, 'mahou')?.click();

@@ -180,7 +180,13 @@
       "postalCodeUnknown": "That postal code is not in the national table, so it is almost certainly a typo. Nothing was written.",
       "runInProgress": "The harvester is working on that row right now. Wait for the run to finish and ask again.",
       "brandLabelEmpty": "A brand name needs at least one letter or digit. Nothing was written.",
-      "brandKeyTaken": "A brand with this key already exists."
+      "brandKeyTaken": "A brand with this key already exists.",
+      "brandLinkToSelf": "A brand cannot be a spelling of itself.",
+      "brandLinkTooDeep": "That link makes a chain of spellings. Only one level is allowed.",
+      "brandLinkOwnsNoChain": "A spelling of another brand has no chain of its own. Set the chain on the brand it spells.",
+      "brandLinkKeepsKey": "A spelling of another brand keeps its key. Register the other spelling as its own brand.",
+      "brandNotLinked": "Only a spelling linked to another brand can be deleted.",
+      "openRow": "Open the row it names."
     }
   },
   "catalog": {
@@ -450,12 +456,14 @@
       "field": {
         "label": "Name",
         "key": "Key",
+        "canonicalBrandId": "Same brand as",
         "privateLabelSupermarketId": "Exclusive brand of chain",
         "itemCount": "Products",
         "updatedAt": "Last changed"
       },
       "help": {
         "label": "How the brand is written everywhere a person reads it. Changing it rewrites the name on every product carrying this brand.",
+        "canonicalBrandId": "Set this when the name is only another spelling of a brand, the way DEBORAH 48H is Deborah. Its products move to that brand.",
         "key": "Made from the name, with everything but letters and digits taken out. It is how every chain’s spelling of this brand meets, and it cannot be typed.",
         "privateLabelSupermarketId": "Set this only when the brand belongs to one chain, the way Hacendado belongs to Mercadona. Leave it empty for a brand sold everywhere."
       },
@@ -465,10 +473,20 @@
       },
       "filter": {
         "query": "Search by name or key",
-        "privateLabelSupermarketId": "Exclusive brand of chain"
+        "privateLabelSupermarketId": "Exclusive brand of chain",
+        "canonicalBrandId": "Spellings of"
       },
       "created": "{{label}} registered. {{count}} products now carry it.",
       "createdNone": "{{label}} registered. No product carries it yet.",
+      "moved": "{{count}} products moved to {{label}}.",
+      "links": {
+        "spellingOf": "This brand is a spelling of {{label}}. Its products are counted on {{label}}.",
+        "heading": "Spellings linked to this brand",
+        "open": "Open that brand",
+        "delete": "Delete this spelling",
+        "deleteBody": "Delete {{spelling}}? Its products go back to no brand, and the spelling returns to Suggested brands.",
+        "deleteConfirm": "Delete"
+      },
       "spellings": {
         "heading": "How chains spell it",
         "says": "Every spelling the harvester has seen for this key, chain by chain. A spelling that differs only by case or by an accent is listed too: that is what the key is holding together.",
@@ -488,7 +506,7 @@
       "firstSeen": "First seen",
       "chains": "Chains",
       "chain": "{{name}} {{count}}",
-      "chainAria": "{{name}}, {{count}} products",
+      "chainAria": "{{name}}, {{count}} products. Open them in Source products.",
       "empty": "No queued product carries an unregistered brand.",
       "register": {
         "action": "Register",
@@ -499,11 +517,14 @@
         "revert": "Revert to original",
         "makesKey": "This name makes the key {{key}}.",
         "noKey": "This name makes no key, so it cannot be a brand.",
-        "keyDiffers": "This name makes a different key, so these products will not be linked.",
+        "linksTo": "{{spelling}} will be registered as a spelling of {{label}}, and its products will move to {{label}}.",
         "openHolder": "Open that brand",
         "confirm": "Register",
+        "confirmLink": "Register and link",
         "done": "{{label}} registered. {{count}} products now carry it.",
-        "doneNone": "{{label}} registered. No product carries it yet."
+        "doneNone": "{{label}} registered. No product carries it yet.",
+        "doneLinked": "{{spelling}} linked to {{label}}. {{count}} products now carry {{label}}.",
+        "chainKept": "{{label}} was already registered, so its chain was kept."
       }
     }
   },
@@ -884,7 +905,10 @@
         "status": "State",
         "queued": "Waiting for a decision",
         "sourceKind": "What named it",
-        "anyKind": "Anything"
+        "anyKind": "Anything",
+        "brand": "Brand",
+        "brandKey": "Filtering on the key {{key}}.",
+        "brandNoKey": "This text makes no key, so nothing matches it."
       },
       "prices": {
         "heading": "What it costs, by scope",

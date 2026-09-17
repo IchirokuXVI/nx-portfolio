@@ -5,6 +5,7 @@ import {
   effect,
   inject,
   signal,
+  type OnDestroy,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -39,6 +40,7 @@ import {
   ReferencePicker,
   type QueueReport,
 } from '@portfolio/luna-shopper-admin/ui';
+import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import {
   proposalOf,
   toSourceEntryRow,
@@ -84,6 +86,9 @@ const UNITS: readonly Wire.EnumsUnitOfMeasure[] = [
 
 /** How far the scope read walks, to give a price line a name rather than a uuid. */
 const SCOPE_PAGE = 100;
+
+/** How long typing in the brand filter settles before a read goes out. */
+const BRAND_SEARCH_DELAY_MS = 250;
 
 /**
  * Everything a source named and nobody has decided (admin plan 0014, section 1).
@@ -171,6 +176,35 @@ const SCOPE_PAGE = 100;
           }
         </select>
       </label>
+
+      <!-- Any spelling, and the key it makes shown under it, because the filter
+           is on the key and not on the text: ELPOZO and El Pozo find the same
+           rows (backend plan 0124, section 7). -->
+      <div class="field">
+        <label for="entries-brand">{{
+          'harvest.entries.filter.brand' | rokuT
+        }}</label>
+        <input
+          (input)="typeBrand($event)"
+          [value]="brandText()"
+          autocapitalize="none"
+          autocomplete="off"
+          autocorrect="off"
+          id="entries-brand"
+          spellcheck="false"
+          type="search"
+          data-brand
+        />
+        @if (brandText().trim() !== '') {
+          <p aria-live="polite" class="hint live-key">
+            @if (brandFilterKey(); as key) {
+              {{ 'harvest.entries.filter.brandKey' | rokuT: { key } }}
+            } @else {
+              {{ 'harvest.entries.filter.brandNoKey' | rokuT }}
+            }
+          </p>
+        }
+      </div>
 
       <label>
         <span>{{ 'harvest.entries.filter.sourceKind' | rokuT }}</span>
@@ -550,6 +584,13 @@ const SCOPE_PAGE = 100;
       color: var(--admin-ink-muted);
     }
 
+    /* The key the typed brand makes, in the muted monospace a key wears
+       everywhere in this app. */
+    .live-key {
+      font-family: monospace;
+      font-size: 0.8125rem;
+    }
+
     .filters,
     .identity,
     .row {
@@ -726,7 +767,7 @@ const SCOPE_PAGE = 100;
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class EntriesQueuePage {
+export class EntriesQueuePage implements OnDestroy {
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _content = inject(ContentLocaleStore);
   private readonly _route = inject(ActivatedRoute);
@@ -762,6 +803,18 @@ export class EntriesQueuePage {
    */
   readonly status = signal<SourceEntryStatus | ''>('');
   readonly sourceKind = signal<OfficialSourceKind | ''>('');
+
+  /** The brand, as it was typed. The key it makes is what goes out. */
+  readonly brandText = signal('');
+
+  /**
+   * The key that text makes, or `null` when it makes none.
+   *
+   * The same `brandKey` catalog, the harvester and the gateway use, so what the
+   * line under the input shows is what the rows are filed under rather than an
+   * approximation of it.
+   */
+  readonly brandFilterKey = computed(() => brandKey(this.brandText()));
 
   /** The product to bind to. Preselected from the proposal where there is one. */
   readonly itemId = signal('');
@@ -841,6 +894,9 @@ export class EntriesQueuePage {
    */
   private readonly _sizeAsRead = signal('');
 
+  /** The brand filter's settle, so a screen left mid typing reloads nothing. */
+  private _brandTimer: ReturnType<typeof setTimeout> | null = null;
+
   readonly errorKey = computed(() =>
     gatewayErrorKey(this.queue?.error() ?? null)
   );
@@ -851,6 +907,12 @@ export class EntriesQueuePage {
     // everywhere else, and then the queue opens on all of them.
     this.chosen.set(
       this._route.snapshot.queryParamMap.get('supermarketId') ?? ''
+    );
+    // The brand a suggested brands chip named, beside the chain it named. Read
+    // as text and shown as text, because the input holds a spelling and the key
+    // is what it makes: a key is a legal spelling of itself.
+    this.brandText.set(
+      this._route.snapshot.queryParamMap.get('brandKey') ?? ''
     );
     this.reload();
 
@@ -869,6 +931,12 @@ export class EntriesQueuePage {
         void this._ensureScopes(chain);
       }
     });
+  }
+
+  ngOnDestroy(): void {
+    if (this._brandTimer !== null) {
+      clearTimeout(this._brandTimer);
+    }
   }
 
   readonly row = computed<SourceEntryRow | null>(() => {
@@ -1024,6 +1092,41 @@ export class EntriesQueuePage {
     this.reload();
   }
 
+  /**
+   * The brand filter, after the typing settles.
+   *
+   * The same 250 ms the suggestions search uses, because this is the same act:
+   * a text input whose every keystroke would otherwise be a read of the queue.
+   */
+  typeBrand(event: Event): void {
+    this.brandText.set((event.target as HTMLInputElement).value);
+
+    if (this._brandTimer !== null) {
+      clearTimeout(this._brandTimer);
+    }
+    this._brandTimer = setTimeout(() => {
+      this._brandTimer = null;
+      this.reload();
+    }, BRAND_SEARCH_DELAY_MS);
+  }
+
+  /**
+   * What the brand filter sends, or `null` for no filter at all.
+   *
+   * Three answers from two. A text that makes a key sends the key, which is
+   * what the rows are filed under. A text that makes none is still sent, as
+   * itself: the route matches nothing against it, so the operator sees an empty
+   * list, which is the truth about a brand spelled out of punctuation. Only an
+   * empty box is no filter.
+   */
+  private _brandFilterValue(): string | null {
+    const typed = this.brandText().trim();
+    if (typed === '') {
+      return null;
+    }
+    return this.brandFilterKey() ?? typed;
+  }
+
   /** The chain's name for the badge, or `''` while nothing has named it. */
   chainName(supermarketId: string): string {
     return this._chainNames().get(supermarketId) ?? '';
@@ -1038,6 +1141,7 @@ export class EntriesQueuePage {
    */
   reload(): void {
     const supermarketId = this.chosen();
+    const brandKeyFilter = this._brandFilterValue();
 
     this.written.set(null);
     this.report.set(null);
@@ -1054,6 +1158,7 @@ export class EntriesQueuePage {
             // `UNRESOLVED` together, which is what is waiting for a person.
             ...(status === '' ? {} : { status }),
             ...(sourceKind === '' ? {} : { sourceKind }),
+            ...(brandKeyFilter === null ? {} : { brandKey: brandKeyFilter }),
             cursor,
           });
           this.shell.observeReachable();

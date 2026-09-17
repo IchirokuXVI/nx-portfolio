@@ -4,10 +4,12 @@ import {
   input,
   output,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   isEditable,
   type DraftValue,
+  type ErrorLinkTarget,
   type FieldDescriptor,
   type FieldMessage,
   type FormMode,
@@ -55,7 +57,7 @@ export interface FieldChange {
  */
 @Component({
   selector: 'lib-resource-form',
-  imports: [RokuTranslatorPipe, FieldControl, ResourceCellView],
+  imports: [RokuTranslatorPipe, RouterLink, FieldControl, ResourceCellView],
   template: `
     <!-- The native submit event, not ngSubmit. This form holds no ngModel, so
          importing FormsModule for one output would pull a whole forms
@@ -127,8 +129,17 @@ export interface FieldChange {
         </div>
       }
 
+      <!-- The refusal, and where it points when the descriptor said it points
+           anywhere. A brand link refused for being too deep names the brand
+           that breaks the one level rule, and a sentence about a row the
+           operator cannot reach is half an answer. -->
       @if (errorKey(); as key) {
-        <p class="banner" role="alert">{{ key | rokuT }}</p>
+        <p class="banner" role="alert">
+          {{ key | rokuT }}
+          @if (errorLink(); as link) {
+            <a [routerLink]="link.commands">{{ link.labelKey | rokuT }}</a>
+          }
+        </p>
       }
 
       <div class="controls">
@@ -215,6 +226,12 @@ export interface FieldChange {
       font-size: 0.875rem;
     }
 
+    /* Part of the sentence rather than a control beside it, so it takes the
+       banner's own colour and keeps the underline that says it is a link. */
+    .banner a {
+      color: inherit;
+    }
+
     .controls {
       display: flex;
       flex-wrap: wrap;
@@ -285,6 +302,16 @@ export class ResourceForm {
   readonly strayErrors = input<readonly string[]>([]);
   /** A key for a failure that belongs to no field. */
   readonly errorKey = input<string | null>(null);
+  /**
+   * The row that failure named, when it named one.
+   *
+   * `ResourceDescriptor.errorLinks` decides which codes carry one and what
+   * their `details` mean; the **page** resolves it, because only the page can
+   * ask the registry where a resource is mounted. This component knows a
+   * sentence, a set of router commands and a key for the words on them, and
+   * nothing about brands.
+   */
+  readonly errorLink = input<ErrorLinkTarget | null>(null);
   readonly busy = input(false);
   /**
    * The row as the form holds it: the row read, with the draft over it. A

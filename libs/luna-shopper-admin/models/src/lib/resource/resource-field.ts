@@ -182,11 +182,14 @@ export interface ReferenceField<T extends ResourceRow> extends FieldBase<T> {
    * The row property that carries the target's name, for a read that joins it
    * on (admin plan 0023, section 3).
    *
-   * The property holds a localized text, and the cell renders it exactly as a
-   * `localized-text` field would: through the content locales, with the missing
-   * locale markers, falling back to the id when the text is empty or the
-   * property is null. Display only, like {@link FieldBase.read}: the form still
-   * writes `name`.
+   * The property holds either a localized text or a plain string. A localized
+   * text renders exactly as a `localized-text` field would: through the content
+   * locales, with the missing locale markers. A plain string renders verbatim,
+   * which is what a label that is not localized is: a brand carries one
+   * `canonicalLabel`, because a brand is spelled the same in both content
+   * languages. Either way the cell falls back to the id when the name is empty
+   * or the property is null. Display only, like {@link FieldBase.read}: the form
+   * still writes `name`.
    *
    * Mutually exclusive with {@link nameLookup}. A field that declares neither
    * keeps its id, and that is the guard against the request storm plan 0004

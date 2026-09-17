@@ -32,6 +32,17 @@ export const BRANDS_PATH = '/v1/admin/catalog/brands';
 export const BRAND_SUGGESTIONS_PATH = '/v1/admin/catalog/brand-suggestions';
 
 /**
+ * Where a suggestion is registered under a name of its own choosing.
+ *
+ * Not a {@link ResourceSource}, and that is the one read or write of this
+ * section that is not. It creates up to two brands and links them in one
+ * transaction (backend plan 0124, section 5), so it answers neither a row nor a
+ * page: `{ brand, linked, canonicalCreated, linkedItems }`. A source describes a
+ * collection, and this is a command.
+ */
+export const BRAND_REGISTER_SUGGESTION_PATH = `${BRANDS_PATH}/register-suggestion`;
+
+/**
  * The spellings read, as a template rather than a URL.
  *
  * Nothing ever requests this string: the collection is always addressed through

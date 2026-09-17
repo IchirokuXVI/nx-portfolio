@@ -1,6 +1,6 @@
 import { provideLocationMocks } from '@angular/common/testing';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
@@ -68,7 +68,14 @@ function recorded(): {
   return { service, calls };
 }
 
-async function render() {
+/**
+ * The screen, optionally arrived at from a link that named its filters.
+ *
+ * The query parameters are put on the URL **before** the component exists,
+ * because it reads them once when it starts: the run screen links here with a
+ * chain, and a suggested brands chip links here with a chain and a brand.
+ */
+async function render(queryParams: Record<string, string> = {}) {
   const { service, calls } = recorded();
 
   TestBed.resetTestingModule();
@@ -106,6 +113,10 @@ async function render() {
     ],
   }).compileComponents();
 
+  if (Object.keys(queryParams).length > 0) {
+    await TestBed.inject(Router).navigate([], { queryParams });
+  }
+
   const fixture = TestBed.createComponent(EntriesQueuePage);
   fixture.detectChanges();
   await drain();
@@ -129,6 +140,25 @@ const named = (
   calls: { name: string; args: unknown[] }[],
   name: string
 ): unknown[][] => calls.filter((call) => call.name === name).map((c) => c.args);
+
+/** Type into the brand filter, the way a person would. */
+function typeBrand(fixture: ComponentFixture<EntriesQueuePage>, value: string) {
+  const input = fixture.nativeElement.querySelector(
+    '[data-brand]'
+  ) as HTMLInputElement;
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+}
+
+/** Lets a settle pass and the read that follows it finish, then redraws. */
+async function settled(
+  fixture: ComponentFixture<EntriesQueuePage>,
+  ms: number
+) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  await drain();
+  fixture.detectChanges();
+}
 
 const text = (fixture: ComponentFixture<EntriesQueuePage>): string =>
   fixture.nativeElement.textContent;
@@ -167,6 +197,28 @@ describe('the one queue, with no chain chosen', () => {
       'entry-galletas',
       'entry-leche-leaflet',
     ]);
+  });
+
+  /**
+   * What a suggested brands chip links to: one chain and one brand, both read
+   * off the URL when the screen starts. The key arrives as text, because a key
+   * is a legal spelling of itself and the box holds spellings.
+   */
+  it('opens on the chain and the brand a link named', async () => {
+    const { fixture, calls } = await render({
+      supermarketId: MERCADONA,
+      brandKey: 'hacendado',
+    });
+
+    expect(named(calls, 'listEntries').at(-1)?.[0]).toMatchObject({
+      supermarketId: MERCADONA,
+      brandKey: 'hacendado',
+    });
+    expect(fixture.componentInstance.brandText()).toBe('hacendado');
+    expect(
+      (fixture.nativeElement.querySelector('[data-brand]') as HTMLInputElement)
+        .value
+    ).toBe('hacendado');
   });
 
   /**
@@ -278,6 +330,61 @@ describe('the one queue, reading', () => {
     expect(page.queue?.items().map((entry) => entry.id)).toEqual([
       'entry-agua',
     ]);
+  });
+
+  /**
+   * The brand filter is on the **key** and never on the text, which is what
+   * lets one spelling find the rows every chain printed differently (backend
+   * plan 0124, section 7). The rows come out of the memory harvester, so the
+   * twin's own filter is under test here as well as the page's.
+   */
+  it('sends the key the typed brand makes, after the settle', async () => {
+    const { fixture, calls, page } = await opened(MERCADONA);
+
+    typeBrand(fixture, 'hacendado!');
+    // Past the typing settle, which is 250 ms.
+    await settled(fixture, 320);
+
+    expect(page.brandFilterKey()).toBe('hacendado');
+    expect(named(calls, 'listEntries').at(-1)?.[0]).toMatchObject({
+      brandKey: 'hacendado',
+    });
+    expect(text(fixture)).toContain('harvest.entries.filter.brandKey');
+    expect(
+      page.queue?.items().every((entry) => entry.brand === 'Hacendado')
+    ).toBe(true);
+  });
+
+  /**
+   * A text that makes no key is still sent, as itself: the route matches
+   * nothing against it, so the answer is an empty list rather than a refusal or
+   * a filter that quietly did nothing.
+   */
+  it('sends a text that makes no key, and says it will match nothing', async () => {
+    const { fixture, calls, page } = await opened(MERCADONA);
+
+    typeBrand(fixture, '---');
+    await settled(fixture, 320);
+
+    expect(page.brandFilterKey()).toBeNull();
+    expect(named(calls, 'listEntries').at(-1)?.[0]).toMatchObject({
+      brandKey: '---',
+    });
+    expect(text(fixture)).toContain('harvest.entries.filter.brandNoKey');
+    expect(page.queue?.items()).toEqual([]);
+  });
+
+  it('sends no brand at all when the box is emptied', async () => {
+    const { fixture, calls } = await opened(MERCADONA);
+
+    typeBrand(fixture, 'Hacendado');
+    await settled(fixture, 320);
+    typeBrand(fixture, '   ');
+    await settled(fixture, 320);
+
+    expect(named(calls, 'listEntries').at(-1)?.[0]).not.toHaveProperty(
+      'brandKey'
+    );
   });
 
   /**

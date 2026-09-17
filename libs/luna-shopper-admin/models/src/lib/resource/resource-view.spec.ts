@@ -237,6 +237,74 @@ describe('a reference that names its target from the row', () => {
   });
 });
 
+/**
+ * The same, for a joined label that is one string rather than one per locale.
+ *
+ * A brand is spelled the same in both content languages, so `canonicalLabel` is
+ * a plain string. Read as a localized text it normalizes to `{}`, and the column
+ * drew the raw uuid.
+ */
+describe('a reference whose joined name is a plain string', () => {
+  interface BrandRow {
+    id: string;
+    canonicalBrandId: string | null;
+    canonicalLabel: string | null;
+  }
+
+  const brands = defineResource<BrandRow>({
+    name: 'brands',
+    segment: 'brands',
+    labels: { one: 'brands.one', many: 'brands.many' },
+    title: (entry) => entry.id,
+    fields: [
+      {
+        kind: 'reference',
+        name: 'canonicalBrandId',
+        label: 'brands.canonical',
+        resource: 'brands',
+        nameFrom: 'canonicalLabel',
+        nullable: true,
+      },
+    ],
+    list: { columns: ['canonicalBrandId'], compact: ['canonicalBrandId'] },
+    gateway: () => {
+      throw new Error('not used');
+    },
+  });
+
+  const cellOf = (canonicalLabel: string | null) =>
+    toRowView(
+      brands,
+      { id: 'br_48h', canonicalBrandId: 'br_deborah', canonicalLabel },
+      options
+    ).cells['canonicalBrandId'];
+
+  it('renders the string verbatim, with no locale markers', () => {
+    expect(cellOf('Deborah')).toEqual({
+      text: 'Deborah',
+      reference: { resource: 'brands', id: 'br_deborah' },
+    });
+  });
+
+  it('falls back to the id when the string is empty', () => {
+    expect(cellOf('')).toEqual({
+      text: 'br_deborah',
+      reference: { resource: 'brands', id: 'br_deborah' },
+    });
+  });
+
+  /** A brand that points at nothing has no cell to draw at all. */
+  it('says nothing when the reference itself is null', () => {
+    expect(
+      toRowView(
+        brands,
+        { id: 'br_deborah', canonicalBrandId: null, canonicalLabel: null },
+        options
+      ).cells['canonicalBrandId']
+    ).toEqual({ text: '', key: EMPTY_VALUE_KEY });
+  });
+});
+
 describe('toRowView', () => {
   it('carries the id and what the descriptor calls the row', () => {
     const view = toRowView(descriptor, row, options);

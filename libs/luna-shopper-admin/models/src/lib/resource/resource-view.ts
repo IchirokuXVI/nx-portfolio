@@ -191,12 +191,23 @@ export function toCell<T extends ResourceRow>(
       const reference = { resource: field.resource, id };
       if (field.nameFrom !== undefined) {
         const name = row[field.nameFrom];
-        const text = localizedTextValue(name, options.contentLocales);
-        if (text !== '') {
-          const missing = missingLocales(name, options.contentLocales);
-          return missing.length === 0
-            ? { text, reference }
-            : { text, missing, reference };
+        // A plain string as well as a localized text, because a joined label is
+        // not always localized: a brand carries one `canonicalLabel`, since a
+        // brand is spelled the same in both content languages. A string
+        // normalizes to `{}` through the localized reading below, so without
+        // this branch such a cell would fall back to the raw uuid.
+        if (typeof name === 'string') {
+          if (name !== '') {
+            return { text: name, reference };
+          }
+        } else {
+          const text = localizedTextValue(name, options.contentLocales);
+          if (text !== '') {
+            const missing = missingLocales(name, options.contentLocales);
+            return missing.length === 0
+              ? { text, reference }
+              : { text, missing, reference };
+          }
         }
       }
       return { text: id, reference };
