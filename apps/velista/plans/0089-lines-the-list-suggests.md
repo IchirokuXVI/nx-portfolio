@@ -1,3 +1,5 @@
+> **PR:** [#407](https://github.com/IchirokuXVI/nx-portfolio/pull/407)
+
 # 0089: lines the list suggests
 
 > Backend half: `apps/luna-shopper-backend/plans/0123`. Build `0088` first.
