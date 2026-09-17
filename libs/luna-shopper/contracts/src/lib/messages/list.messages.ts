@@ -1,6 +1,7 @@
 import type {
   CommentTranscription,
   LineApprovalStatus,
+  LineSuggestionReason,
   ListPermission,
   SettlementOutcome,
   TripKind,
@@ -36,6 +37,11 @@ export const LIST_PATTERNS = {
   trips: 'list.trips',
   /** What one trip did to each zone line of the list (plan 0122, section 4). */
   tripRows: 'list.tripRows',
+  /**
+   * Which lines of a list at zero are due again (plan 0123, section 5). Not
+   * paged: at most {@link LINE_SUGGESTION_MAX} rows.
+   */
+  suggestions: 'list.suggestions',
 } as const;
 
 export const LINE_PATTERNS = {
@@ -1165,6 +1171,48 @@ export interface ListTripRowsRequest {
  * and cannot drift from the read.
  */
 export interface ListTripsChangedEvent {
+  listId: string;
+}
+
+/** The most rows one {@link LIST_PATTERNS.suggestions} read answers with. */
+export const LINE_SUGGESTION_MAX = 20;
+
+/**
+ * A line at zero offering to come back (plan 0123, section 5).
+ *
+ * Never a new line: it names an existing line of the list, which the client
+ * already holds and joins on `lineId`. Nothing is stored, so a suggestion nobody
+ * takes stays until the line is wanted again.
+ */
+export interface LineSuggestionView {
+  lineId: string;
+  /** `PERIOD` wins when both rules hold. */
+  reason: LineSuggestionReason;
+  /** `PERIOD` only: the median days between purchases. */
+  periodDays: number | null;
+  /** Whole days since the line was last bought, for both reasons. */
+  daysSinceBought: number;
+  /** `STAPLE` only: of the recent ended basket trips, how many asked for it. */
+  tripsWith: number | null;
+  /** `STAPLE` only: how many recent ended basket trips were looked at. */
+  tripsSeen: number | null;
+  /** What to add: what the newest ended basket asked, else the last purchase. */
+  quantity: number;
+}
+
+/**
+ * The suggestions of one list, in the order a client shows them.
+ *
+ * Not the house page: there is no cursor, because the read answers at most
+ * {@link LINE_SUGGESTION_MAX} rows and never more.
+ */
+export interface LineSuggestionPage {
+  items: LineSuggestionView[];
+}
+
+/** The suggestions of one list. `READ`. */
+export interface ListSuggestionsRequest {
+  userId: string;
   listId: string;
 }
 

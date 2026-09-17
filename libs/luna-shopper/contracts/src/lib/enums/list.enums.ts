@@ -153,3 +153,15 @@ export enum TripRowOutcome {
   /** The trip asked for the line and bought none of it. */
   NOT_BOUGHT = 'NOT_BOUGHT',
 }
+
+/**
+ * Why a line at zero is offered back to its list (plan 0123, section 5).
+ *
+ * `PERIOD` wins when both hold, because it carries the more useful number.
+ */
+export enum LineSuggestionReason {
+  /** The household buys it about every so many days, and that time has come. */
+  PERIOD = 'PERIOD',
+  /** It was in every basket, or every other basket, of the list's recent trips. */
+  STAPLE = 'STAPLE',
+}

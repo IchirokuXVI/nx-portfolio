@@ -15,6 +15,7 @@ import {
   CommentTranscription,
   LineApprovalStatus,
   LineStatus,
+  LineSuggestionReason,
   ListPermission,
   SettlementOutcome,
   TripKind,
@@ -57,6 +58,8 @@ export const ENUM_IDS = {
   tripKind: schemaId('enums/TripKind'),
   /** What one trip did to one zone line (plan 0122, section 4). */
   tripRowOutcome: schemaId('enums/TripRowOutcome'),
+  /** Why a line at zero is offered back to its list (plan 0123, section 5). */
+  lineSuggestionReason: schemaId('enums/LineSuggestionReason'),
 } as const;
 
 export const enumSchemas: JsonSchema[] = [
@@ -81,4 +84,5 @@ export const enumSchemas: JsonSchema[] = [
   ),
   enumOf(ENUM_IDS.tripKind, Object.values(TripKind)),
   enumOf(ENUM_IDS.tripRowOutcome, Object.values(TripRowOutcome)),
+  enumOf(ENUM_IDS.lineSuggestionReason, Object.values(LineSuggestionReason)),
 ];

@@ -37,11 +37,13 @@ import {
   type LinePage,
   type LineSettlementPage,
   type LineSettlementResult,
+  type LineSuggestionPage,
   type LineView,
   type ListAccessView,
   type ListPage,
   type ListsHoldingItemRequest,
   type ListsHoldingItemResult,
+  type ListSuggestionsRequest,
   type ListTripRowsRequest,
   type ListTripsRequest,
   type ListView,
@@ -335,6 +337,27 @@ export class ListsController {
       limit: query.limit,
     };
     return this.nats.send<TripRowPage>(LIST_PATTERNS.tripRows, req);
+  }
+
+  /**
+   * Which lines of this list at zero are due again (plan 0123, section 5).
+   *
+   * A suggestion is an existing line offering to come back, never a new line, so
+   * a row carries the line id and the numbers behind the offer and the client
+   * joins it on the lines it already holds. Not paged: at most twenty rows, the
+   * most overdue first.
+   *
+   * `READ` on the list, and the gate is core's. Nothing is stored and there is no
+   * event: a client reads again on the signals it already hears.
+   */
+  @Get(':id/suggestions')
+  @ApiContractResponse(LIST_PATTERNS.suggestions)
+  listSuggestions(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string
+  ): Promise<LineSuggestionPage> {
+    const req: ListSuggestionsRequest = { userId: user.userId, listId: id };
+    return this.nats.send<LineSuggestionPage>(LIST_PATTERNS.suggestions, req);
   }
 
   @Get(':id/lines')

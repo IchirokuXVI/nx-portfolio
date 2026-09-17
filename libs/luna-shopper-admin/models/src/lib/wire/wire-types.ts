@@ -2393,6 +2393,11 @@ export type EnumsItemSourceMatch =
 export type EnumsLineApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 /**
+ * `enums.LineSuggestionReason` in the gateway's OpenAPI document.
+ */
+export type EnumsLineSuggestionReason = 'PERIOD' | 'STAPLE';
+
+/**
  * `enums.ListPermission` in the gateway's OpenAPI document.
  */
 export type EnumsListPermission = 'READ' | 'WRITE' | 'DECIDE' | 'MANAGE';
@@ -3512,6 +3517,26 @@ export type ListLineSettlementView = {
   settledByUserId: string;
   settledAt: string;
   revertedAt: string | null;
+};
+
+/**
+ * `list.LineSuggestionPage` in the gateway's OpenAPI document.
+ */
+export type ListLineSuggestionPage = {
+  items: ListLineSuggestionView[];
+};
+
+/**
+ * `list.LineSuggestionView` in the gateway's OpenAPI document.
+ */
+export type ListLineSuggestionView = {
+  lineId: string;
+  reason: EnumsLineSuggestionReason;
+  periodDays: number | null;
+  daysSinceBought: number;
+  tripsWith: number | null;
+  tripsSeen: number | null;
+  quantity: number;
 };
 
 /**

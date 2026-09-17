@@ -24,6 +24,8 @@ import { ProductGroupSyncController } from './product-group-sync.controller';
 import { ProductGroupSyncService } from './product-group-sync.service';
 import { SettlementService } from './settlement.service';
 import { SharedListGrantModule } from './shared-list-grant.module';
+import { SuggestionsController } from './suggestions/suggestions.controller';
+import { SuggestionsService } from './suggestions/suggestions.service';
 import { TripsController } from './trips/trips.controller';
 import { TripsService } from './trips/trips.service';
 
@@ -56,7 +58,12 @@ import { TripsService } from './trips/trips.service';
     // 0070, section 5.1).
     IdempotencyModule,
   ],
-  controllers: [ListController, ProductGroupSyncController, TripsController],
+  controllers: [
+    ListController,
+    ProductGroupSyncController,
+    TripsController,
+    SuggestionsController,
+  ],
   providers: [
     ListService,
     LineService,
@@ -67,6 +74,8 @@ import { TripsService } from './trips/trips.service';
     SettlementService,
     // The shopping trips that touched a list, derived on read (plan 0122).
     TripsService,
+    // The lines at zero a list offers back, derived on read (plan 0123).
+    SuggestionsService,
     ListAccessService,
     // Catalog's group membership, reconciled into subscribed lines (plan 0070).
     ProductGroupSyncService,
