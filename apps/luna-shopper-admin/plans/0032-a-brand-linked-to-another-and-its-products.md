@@ -1,3 +1,5 @@
+> **PR:** [#410](https://github.com/IchirokuXVI/nx-portfolio/pull/410)
+
 # 0032 A brand linked to another, and its products
 
 > Backend half: `apps/luna-shopper-backend/plans/0124`. Builds on PR #403, which moved both brand
@@ -259,3 +261,31 @@ focus ring, the same size.
 npx nx run-many -t lint test -p luna-shopper-admin luna-shopper-admin/feature-brands luna-shopper-admin/feature-harvest luna-shopper-admin/feature-resource luna-shopper-admin/data-access luna-shopper-admin/ui
 npx nx build luna-shopper-admin
 ```
+
+## 10. Decisions taken while building
+
+A review of this plan against the code, and the build itself, settled what the sections above
+left open. Where a line here differs from the text above, this line is what was built.
+
+- **The generic form can link to the row a refusal names** (section 2.3). The form could only
+  show one sentence, and this plan put it off limits. The user widened the scope:
+  `ResourceDescriptor.errorLinks` maps an error code to `{ detail, resource, label? }`,
+  `ResourceFormPage.bannerLink` resolves it through `ResourceRegistry.pathOf`, and `ResourceForm`
+  draws the link inside the existing alert. `BRANDS` declares it for `brand_link_too_deep` and
+  `brand_key_taken`.
+- **A linked brand can be deleted** (backend plan `0124`, section 12). The generic list has one
+  `canDelete` flag for the whole table, so the control is a button in the linked state of the
+  detail block, with the confirm dialog. `resource.error.brandNotLinked` reads the refusal.
+- **A linked brand keeps its key.** `resource.error.brandLinkKeepsKey` reads the refusal of a
+  rename that would change it.
+- **`nameFrom` can name a plain string** (section 2.1). The list cell read only a localized text,
+  so `canonicalLabel` would have drawn a uuid. The change is in `models`, outside the written scope.
+- **The sentence of section 2.2 cannot hold a link**, because a translated sentence carries no
+  anchor. The block draws the sentence and an "Open that brand" link beside it.
+- **`registerSuggestion` has an in memory twin**, so the register panel works with no backend. It
+  runs only against the memory gateways. `BrandsGateway.register` had no caller left and is gone.
+- **The chain kept notice needs `linked` as well**, because the backend answers
+  `canonicalCreated: true` in the same key case.
+- **A brand filter value that makes no key is sent as typed** (section 4), so the server answers
+  an empty list, as the backend defines.
+- **An edit that moves products says so**: "{{count}} products moved to {{label}}."
