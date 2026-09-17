@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -29,6 +30,7 @@ import {
 import { formatInstant } from './format-instant';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
+import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
 
 /**
  * One run, watched (plan 0006, section 2).
@@ -111,6 +113,101 @@ import { HarvestShell } from './harvest-shell';
         }
       </dl>
 
+      <!-- What a walk wrote and fetched (admin plan 0029, section 6): the
+           settings it resolved, its detail phase, and the scopes it copied
+           to. Drawn only where the report says any of it, so an import and a
+           run from before backend plans 0118 and 0119 read as they did. -->
+      @if (hasReport()) {
+        <section class="report">
+          <h2>{{ 'harvest.run.report.heading' | rokuT }}</h2>
+          <dl class="facts">
+            @if (report().writes !== '') {
+              <div>
+                <dt>{{ 'harvest.run.report.writes' | rokuT }}</dt>
+                <dd>
+                  {{ 'harvest.runs.start.writes.' + report().writes | rokuT }}
+                </dd>
+              </div>
+            }
+            @if (report().detailFetch !== '') {
+              <div>
+                <dt>{{ 'harvest.run.report.details' | rokuT }}</dt>
+                <dd>
+                  {{
+                    'harvest.runs.start.details.' + report().detailFetch | rokuT
+                  }}
+                </dd>
+              </div>
+            }
+            @if (report().details; as counts) {
+              <div>
+                <dt>{{ 'harvest.run.report.detailRequested' | rokuT }}</dt>
+                <dd class="count">{{ counts.requested }}</dd>
+              </div>
+              <div>
+                <dt>{{ 'harvest.run.report.detailSkipped' | rokuT }}</dt>
+                <dd class="count">{{ counts.skipped }}</dd>
+              </div>
+              <div>
+                <dt>{{ 'harvest.run.report.detailWithoutEan' | rokuT }}</dt>
+                <dd class="count">{{ counts.withoutEan }}</dd>
+              </div>
+            }
+          </dl>
+
+          @if (report().copies.length > 0) {
+            <table class="copies">
+              <caption>
+                {{
+                  'harvest.run.report.copies.caption' | rokuT
+                }}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">
+                    {{ 'harvest.run.report.copies.from' | rokuT }}
+                  </th>
+                  <th scope="col">
+                    {{ 'harvest.run.report.copies.to' | rokuT }}
+                  </th>
+                  <th class="number" scope="col">
+                    {{ 'harvest.run.report.copies.prices' | rokuT }}
+                  </th>
+                  <th class="number" scope="col">
+                    {{ 'harvest.run.report.copies.availability' | rokuT }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (copy of report().copies; track copy.from) {
+                  <tr>
+                    <th scope="row">{{ scopeName(copy.from) }}</th>
+                    <td>
+                      {{ targetNames(copy.from, copy.to) }}
+                      @if (hiddenTargets(copy.from, copy.to) > 0) {
+                        <button
+                          (click)="expandCopy(copy.from)"
+                          class="more"
+                          type="button"
+                        >
+                          {{
+                            'harvest.run.report.copies.more'
+                              | rokuT
+                                : { count: hiddenTargets(copy.from, copy.to) }
+                          }}
+                        </button>
+                      }
+                    </td>
+                    <td class="number">{{ copy.pricesCopied }}</td>
+                    <td class="number">{{ copy.availabilityCopied }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </section>
+      }
+
       <!-- The export (admin plan 0014, section 2). Offered on a finished walk
            and a finished import, and on nothing else: those are the two runs
            that hold rows worth carrying to another cluster. It is a read, so it
@@ -149,32 +246,34 @@ import { HarvestShell } from './harvest-shell';
             }}</span>
           </p>
         }
+      }
 
-        @if (warnings().length > 0) {
-          <section class="warnings">
-            <h2>{{ 'harvest.run.warnings.heading' | rokuT }}</h2>
-            <p class="note">{{ 'harvest.run.warnings.lead' | rokuT }}</p>
-            <ul>
-              @for (warning of warnings(); track warning.key) {
-                <li>
-                  <span class="code">{{
-                    'harvest.warning.' + warning.code | rokuT
-                  }}</span>
-                  @if (warning.offerId !== '') {
-                    <span class="offer">{{ warning.offerId }}</span>
-                  }
-                  @if (warning.page !== '') {
-                    <span class="page">{{ warning.page }}</span>
-                  }
-                  @if (warning.name !== '') {
-                    <strong>{{ warning.name }}</strong>
-                  }
-                  <span class="message">{{ warning.message }}</span>
-                </li>
-              }
-            </ul>
-          </section>
-        }
+      <!-- Every run's warnings, and not only an import's: a walk that copies
+           warns too (backend plan 0118). A run with none draws nothing. -->
+      @if (warnings().length > 0) {
+        <section class="warnings">
+          <h2>{{ 'harvest.run.warnings.heading' | rokuT }}</h2>
+          <p class="note">{{ 'harvest.run.warnings.lead' | rokuT }}</p>
+          <ul>
+            @for (warning of warnings(); track warning.key) {
+              <li>
+                <span class="code">{{
+                  'harvest.warning.' + warning.code | rokuT
+                }}</span>
+                @if (warning.offerId !== '') {
+                  <span class="offer">{{ warning.offerId }}</span>
+                }
+                @if (warning.page !== '') {
+                  <span class="page">{{ warning.page }}</span>
+                }
+                @if (warning.name !== '') {
+                  <strong>{{ warning.name }}</strong>
+                }
+                <span class="message">{{ warning.message }}</span>
+              </li>
+            }
+          </ul>
+        </section>
       }
 
       @if (run.revertedAt !== null) {
@@ -352,6 +451,60 @@ import { HarvestShell } from './harvest-shell';
       cursor: default;
     }
 
+    .report {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-3);
+      inline-size: 100%;
+    }
+
+    .report h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    dd.count,
+    .copies .number {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .copies {
+      inline-size: 100%;
+      border-collapse: collapse;
+    }
+
+    .copies caption {
+      margin-block-end: var(--admin-space-2);
+      font-size: 0.8125rem;
+      text-align: start;
+      color: var(--admin-ink-muted);
+    }
+
+    .copies th,
+    .copies td {
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border-block-end: 1px solid var(--admin-border);
+      text-align: start;
+      vertical-align: baseline;
+    }
+
+    .copies thead th {
+      font-size: 0.75rem;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--admin-ink-muted);
+    }
+
+    .copies .number {
+      text-align: end;
+    }
+
+    .more {
+      margin-inline-start: var(--admin-space-2);
+      cursor: pointer;
+    }
+
     .code {
       padding: 0 var(--admin-space-2);
       border-radius: var(--admin-radius);
@@ -443,6 +596,51 @@ export class RunPage {
 
   readonly exporting = signal(false);
   readonly exportFailed = signal(false);
+
+  /** The copies, detail counts and settings a walk reported (plan 0029). */
+  readonly report = computed(() => readRunReport(this.watch.run()?.report));
+
+  readonly hasReport = computed(() => {
+    const report = this.report();
+    return (
+      report.writes !== '' ||
+      report.detailFetch !== '' ||
+      report.details !== null ||
+      report.copies.length > 0
+    );
+  });
+
+  /** The scopes named in the copies table, by id, once the lookup answered. */
+  private readonly _scopeNames = signal<ReadonlyMap<string, string>>(new Map());
+  private readonly _askedScopes = new Set<string>();
+  /** Copies whose targets were opened past the first five. */
+  private readonly _expanded = signal<ReadonlySet<string>>(new Set());
+
+  /**
+   * A scope's name, and its raw id until the lookup answers or when it finds
+   * nothing, which is what a scope deleted since the run is.
+   */
+  scopeName(id: string): string {
+    return this._scopeNames().get(id) ?? id;
+  }
+
+  /** The targets drawn, by name: five, or every one once opened. */
+  targetNames(from: string, to: readonly string[]): string {
+    const shown = this._expanded().has(from)
+      ? to
+      : to.slice(0, COPY_TARGETS_SHOWN);
+    return shown.map((id) => this.scopeName(id)).join(', ');
+  }
+
+  hiddenTargets(from: string, to: readonly string[]): number {
+    return this._expanded().has(from)
+      ? 0
+      : Math.max(0, to.length - COPY_TARGETS_SHOWN);
+  }
+
+  expandCopy(from: string): void {
+    this._expanded.update((held) => new Set(held).add(from));
+  }
 
   /** Offer id, code and message, for what the import dropped and why. */
   readonly warnings = computed(() => runWarningRows(this.watch.run()));
@@ -600,6 +798,17 @@ export class RunPage {
     }
   }
 
+  private async _resolveScope(id: string): Promise<void> {
+    try {
+      const option = await this._references.resolve('price-scopes', id);
+      if (option !== null) {
+        this._scopeNames.update((held) => new Map(held).set(id, option.title));
+      }
+    } catch {
+      // The raw id stays, which is what an unknown scope shows anyway.
+    }
+  }
+
   async revert(): Promise<void> {
     await this.watch.revert();
     this.confirming.set(false);
@@ -607,6 +816,19 @@ export class RunPage {
 
   constructor() {
     this.watch.start();
+
+    // Every scope the copies name, asked once each. A run is polled, so the
+    // report is read many times and the same ids must not be looked up again.
+    effect(() => {
+      for (const copy of this.report().copies) {
+        for (const id of [copy.from, ...copy.to]) {
+          if (!this._askedScopes.has(id)) {
+            this._askedScopes.add(id);
+            void this._resolveScope(id);
+          }
+        }
+      }
+    });
 
     // On the component, never on a route provider. A route's injector is not
     // destroyed when the screen leaves, so teardown declared there never runs

@@ -17,6 +17,7 @@ import {
 import {
   gatewayErrorKey,
   RESOURCE_ID_PARAM,
+  ResourceReferences,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   compositeParts,
@@ -36,6 +37,11 @@ export interface PriceHistoryRow {
   readonly lastObservedAt: string;
   readonly window: string;
   readonly runId: string;
+  /**
+   * The scope a copied price was read at, by name, or `''` for a price read
+   * where it is (admin plan 0029, section 5).
+   */
+  readonly copiedFrom: string;
   /** True while an `ADMIN` row is inside its protection window. */
   readonly protected: boolean;
   /** "Overriding an official 1.19", one per kind the row recorded. Empty for other kinds. */
@@ -95,6 +101,11 @@ export interface PriceHistoryRow {
             <dd>{{ row.unitPrice }}</dd>
             <dt>{{ 'catalog.prices.sourceKind' | rokuT }}</dt>
             <dd>{{ row.kindLabel }}</dd>
+            <!-- Nothing at all for a price read where it is, not a dash. -->
+            @if (row.copiedFrom !== '') {
+              <dt>{{ 'catalog.prices.priceCopiedFromScopeId' | rokuT }}</dt>
+              <dd class="copied">{{ row.copiedFrom }}</dd>
+            }
             <dt>{{ 'catalog.prices.observedAt' | rokuT }}</dt>
             <dd>{{ row.observedAt }}</dd>
             <dt>{{ 'catalog.prices.validUntil' | rokuT }}</dt>
@@ -154,6 +165,12 @@ export interface PriceHistoryRow {
                       {{ row.runId }}
                     }
                   </span>
+                  @if (row.copiedFrom) {
+                    <span class="muted copied">
+                      {{ 'catalog.prices.priceCopiedFromScopeId' | rokuT }}
+                      {{ row.copiedFrom }}
+                    </span>
+                  }
                   @for (line of row.overriding; track line) {
                     <span class="muted overriding">{{ line }}</span>
                   }
@@ -316,6 +333,12 @@ export class PriceDetailPage {
     this._gateways.for<Wire.CatalogAdminSupermarketItemView>(priceSource());
   private readonly _rows =
     this._gateways.for<Wire.CatalogItemPriceView>(itemPriceSource());
+  /** Names a copied price's source scope (admin plan 0029, section 5). */
+  private readonly _references = inject(ResourceReferences);
+  private readonly _copySourceNames = signal<ReadonlyMap<string, string>>(
+    new Map()
+  );
+  private readonly _askedCopySources = new Set<string>();
 
   /** The pair the route carries, as one composite id. */
   readonly id = this._route.snapshot.paramMap.get(RESOURCE_ID_PARAM) ?? '';
@@ -344,6 +367,7 @@ export class PriceDetailPage {
       price: money(row.price, row.currency),
       unitPrice: unit(row.unitPrice, row.unitPriceLabel),
       kindLabel: this._kindLabel(row.sourceKind),
+      copiedFrom: this._scopeName(row.priceCopiedFromScopeId),
       observedAt: this._instant(row.observedAt),
       validUntil: this._instant(row.validUntil),
       stale: row.stale,
@@ -362,6 +386,7 @@ export class PriceDetailPage {
       lastObservedAt: this._instant(row.lastObservedAt),
       window: this._window(row.validFrom, row.validUntil),
       runId: row.sourceRunId ?? '',
+      copiedFrom: this._scopeName(row.copiedFromScopeId),
       protected:
         row.protectedUntil !== null &&
         new Date(row.protectedUntil).getTime() > now,
@@ -396,6 +421,10 @@ export class PriceDetailPage {
       ]);
       this._effectiveRow.set(effective);
       this._historyRows.set(history.items);
+      this._nameCopySources([
+        effective?.priceCopiedFromScopeId,
+        ...history.items.map((row) => row.copiedFromScopeId),
+      ]);
     } catch (error) {
       this._effectiveRow.set(null);
       this._historyRows.set([]);
@@ -406,6 +435,42 @@ export class PriceDetailPage {
       );
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  /**
+   * A copy source's name, the raw id until the lookup answers or when it finds
+   * no scope, and `''` for a price that was not copied.
+   */
+  private _scopeName(id: string | null | undefined): string {
+    if (id === null || id === undefined || id === '') {
+      return '';
+    }
+    return this._copySourceNames().get(id) ?? id;
+  }
+
+  /** Ask the price scopes lookup for every copy source not yet named. */
+  private _nameCopySources(ids: readonly (string | null | undefined)[]): void {
+    for (const id of new Set(ids)) {
+      if (id === null || id === undefined || id === '') {
+        continue;
+      }
+      if (this._askedCopySources.has(id)) {
+        continue;
+      }
+      this._askedCopySources.add(id);
+      this._references
+        .resolve('price-scopes', id)
+        .then((option) => {
+          if (option !== null) {
+            this._copySourceNames.update((held) =>
+              new Map(held).set(id, option.title)
+            );
+          }
+        })
+        .catch(() => {
+          // The raw id stays, which is what an unknown scope shows anyway.
+        });
     }
   }
 

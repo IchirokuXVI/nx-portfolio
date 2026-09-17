@@ -174,7 +174,27 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     documentSha256: null,
     abortRequestedAt: null,
     error: null,
-    report: {},
+    // A walk of one warehouse that copied what it read to the chain's
+    // national scope, with the detail phase skipping what it already knew
+    // (backend plans 0118 and 0119), so the run screen's report renders with
+    // nothing listening.
+    report: {
+      warehouses: ['4661'],
+      productsListed: 4232,
+      productsDetailed: 140,
+      productsDetailSkipped: 4092,
+      productsWithoutEan: 22,
+      writes: 'PRICES_AND_AVAILABILITY',
+      details: 'NEW',
+      copies: [
+        {
+          from: '55555555-5555-4555-8555-555555555554',
+          to: [MERCADONA_NATIONAL],
+          pricesCopied: 4210,
+          availabilityCopied: 4232,
+        },
+      ],
+    },
     correlationId: 'seed-correlation-5',
     requestedByUserId: null,
     revertedAt: null,

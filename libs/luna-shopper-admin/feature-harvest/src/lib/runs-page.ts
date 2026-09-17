@@ -41,6 +41,7 @@ import {
 import { formatInstant } from './format-instant';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
+import { ScopeCopies, type CopyMessage } from './scope-copies';
 
 /** What the reverted filter can be asked for. `any` sends no filter at all. */
 const REVERTED_OPTIONS = ['any', 'reverted', 'standing'] as const;
@@ -81,6 +82,34 @@ const SCOPE_PAGE = 100;
 const MAX_SCOPE_PAGES = 5;
 
 /**
+ * The kinds the walk list reads (admin plan 0029, section 2).
+ *
+ * Every kind but `STORE`. Every shop has a scope of its own since backend plan
+ * 0116, so a chain like Mercadona holds about 1,675 of them, and five pages of a
+ * hundred would end before the warehouses did. No walk targets a shop scope: no
+ * adapter's band reaches its priority. A copy may, which is why the copy lists
+ * search the server instead of reading this page.
+ */
+const WALK_LIST_KINDS: readonly string[] = ['LOCAL_AREA', 'REGION', 'NATIONAL'];
+
+/** What a catalog discovery writes (backend plan 0119), in the order offered. */
+const WRITES = ['PRICES_AND_AVAILABILITY', 'PRICES', 'AVAILABILITY'] as const;
+type RunWrites = (typeof WRITES)[number];
+
+/** Which product details a walk fetches (backend plan 0119). */
+const DETAILS = ['NEW', 'ALL'] as const;
+type RunDetails = (typeof DETAILS)[number];
+
+/**
+ * The key of the one copy list a walk of one scope has.
+ *
+ * Not the scope's id, because the operator can change the scope under a list
+ * they already filled in, and the copies belong to the walk rather than to the
+ * id that was chosen first. The id is read when the body is built.
+ */
+const SINGLE_SCOPE = '';
+
+/**
  * The facts this form uses, out of the table the gateway publishes. The table
  * also carries the language a source prints in, which the form does not draw
  * (backend plan 0111, section 7).
@@ -90,6 +119,11 @@ interface AdapterCapabilities {
   readonly scopesItsOwn: boolean;
   readonly listsItsOwnStores: boolean;
   readonly hasProductPages: boolean;
+  /**
+   * Whether a walk has a detail phase that a known product can skip, so a run
+   * takes `details` (backend plan 0119, section 3).
+   */
+  readonly skipsKnownDetails: boolean;
   /**
    * The scope priorities this adapter's walk may write, and null for an adapter
    * whose walk is given no scopes (backend plan 0108, section 4).
@@ -111,6 +145,7 @@ const UNKNOWN_ADAPTER: AdapterCapabilities = {
   scopesItsOwn: false,
   listsItsOwnStores: false,
   hasProductPages: false,
+  skipsKnownDetails: false,
   walkablePriorities: null,
 };
 
@@ -163,6 +198,7 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
     HarvestNotice,
     ReferencePicker,
     RunRowView,
+    ScopeCopies,
     SwitchPanel,
   ],
   template: `
@@ -238,6 +274,20 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
             <p class="attribution">
               {{ 'harvest.runs.start.priceScopeHelp' | rokuT }}
             </p>
+            <!-- The one list a walk of one scope has (admin plan 0029,
+                 section 1). -->
+            <lib-scope-copies
+              (targetsChange)="changeCopies(singleScope, $event)"
+              [conflicts]="conflictsOf(singleScope)"
+              [controlId]="'run-copies'"
+              [lookup]="references"
+              [refusal]="refusalOf(singleScope)"
+              [scope]="scopeFilter()"
+              [targets]="copiesOf(singleScope)"
+            />
+            <p class="attribution">
+              {{ 'harvest.runs.start.copies.help' | rokuT }}
+            </p>
           </div>
         }
 
@@ -256,7 +306,10 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
               <ul class="scopes">
                 @for (choice of scopeChoices(); track choice.id) {
                   <li>
-                    <label [class.refused]="!choice.walkable">
+                    <label
+                      [class.conflict]="isCopyTarget(choice.id)"
+                      [class.refused]="!choice.walkable"
+                    >
                       <input
                         (change)="toggleScope(choice.id, $event)"
                         [checked]="choice.chosen"
@@ -272,7 +325,84 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
             <p class="attribution">
               {{ 'harvest.runs.start.priceScopesHelp' | rokuT }}
             </p>
+
+            <!-- One copy list per ticked warehouse, in the order they were
+                 ticked (admin plan 0029, section 3). Below the checkboxes
+                 rather than inside them: that list scrolls, and a chip picker
+                 opening its results inside a twelve rem scroll box is a
+                 control nobody can read. -->
+            @if (priceScopeIds().length > 0 || droppedCopies().length > 0) {
+              <div class="copies">
+                @for (id of priceScopeIds(); track id) {
+                  <lib-scope-copies
+                    (targetsChange)="changeCopies(id, $event)"
+                    [conflicts]="conflictsOf(id)"
+                    [controlId]="'run-copies-' + id"
+                    [fromTitle]="titleOf(id)"
+                    [lookup]="references"
+                    [refusal]="refusalOf(id)"
+                    [scope]="scopeFilter()"
+                    [targets]="copiesOf(id)"
+                  />
+                }
+                @for (id of droppedCopies(); track id) {
+                  <p class="dropped" role="status">
+                    {{
+                      'harvest.runs.start.copies.dropped'
+                        | rokuT: { scope: titleOf(id) }
+                    }}
+                  </p>
+                }
+                <p class="attribution">
+                  {{ 'harvest.runs.start.copies.help' | rokuT }}
+                </p>
+              </div>
+            }
           </div>
+        }
+
+        <!-- What a walk writes, and which details it fetches (backend plan
+             0119). Sent whenever shown, so the run's stored input says what
+             the operator saw rather than what a default was that day. -->
+        @if (offersWrites()) {
+          <fieldset class="choice">
+            <legend>{{ 'harvest.runs.start.writes.label' | rokuT }}</legend>
+            @for (option of writeOptions(); track option) {
+              <label class="radio">
+                <input
+                  (change)="writes.set(option)"
+                  [checked]="chosenWrites() === option"
+                  [value]="option"
+                  name="writes"
+                  type="radio"
+                />
+                <span>{{ 'harvest.runs.start.writes.' + option | rokuT }}</span>
+              </label>
+            }
+          </fieldset>
+        }
+
+        @if (offersDetails()) {
+          <fieldset class="choice">
+            <legend>{{ 'harvest.runs.start.details.label' | rokuT }}</legend>
+            @for (option of detailOptions; track option) {
+              <label class="radio">
+                <input
+                  (change)="details.set(option)"
+                  [checked]="details() === option"
+                  [value]="option"
+                  name="details"
+                  type="radio"
+                />
+                <span>{{
+                  'harvest.runs.start.details.' + option | rokuT
+                }}</span>
+              </label>
+            }
+            <p class="attribution">
+              {{ 'harvest.runs.start.details.help' | rokuT }}
+            </p>
+          </fieldset>
         }
 
         <!-- A chain that publishes its own shop list names every one of them
@@ -529,6 +659,54 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
     .scopes label.refused {
       opacity: 0.55;
     }
+
+    /* A walked scope that is also a copy target somewhere. The message under
+       that list says which, and start stays disabled until one goes. */
+    .scopes label.conflict {
+      outline: 1px solid var(--admin-danger);
+      outline-offset: 2px;
+      border-radius: var(--admin-radius);
+    }
+
+    .copies {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+      margin-block-start: var(--admin-space-2);
+    }
+
+    .dropped {
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .choice {
+      display: flex;
+      flex: 1 1 12rem;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .choice legend {
+      margin-block-end: var(--admin-space-1);
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .choice label.radio {
+      flex: 0 0 auto;
+      flex-direction: row;
+      gap: var(--admin-space-2);
+      align-items: center;
+    }
+
+    .choice label.radio span {
+      font-size: inherit;
+      color: inherit;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -576,6 +754,34 @@ export class RunsPage {
    * refuses it for every other one.
    */
   readonly detailBackfill = signal(false);
+
+  /** The key of the one copy list a walk of one scope has, for the template. */
+  readonly singleScope = SINGLE_SCOPE;
+  readonly detailOptions = DETAILS;
+
+  /**
+   * The scopes each walked scope is copied to, by the walked scope's id, or by
+   * {@link SINGLE_SCOPE} for a walk of one scope (admin plan 0029, section 3).
+   *
+   * Targets in the order they were added, which is the order they are sent.
+   */
+  readonly copies = signal<ReadonlyMap<string, readonly string[]>>(new Map());
+  /** The last addition refused on each list, until that list changes. */
+  private readonly _copyRefusals = signal<ReadonlyMap<string, CopyMessage>>(
+    new Map()
+  );
+  /**
+   * Walked scopes that were unticked while they held copies.
+   *
+   * The copies are gone, and the form says so in the list's place until the
+   * scope is ticked again or a run is started, because a list that simply
+   * vanished with its targets reads as a list that was never filled in.
+   */
+  readonly droppedCopies = signal<readonly string[]>([]);
+
+  /** What the walk writes, as chosen. {@link chosenWrites} is what is sent. */
+  readonly writes = signal<RunWrites>('PRICES_AND_AVAILABILITY');
+  readonly details = signal<RunDetails>('NEW');
 
   /**
    * The reverted filter (backend plan 0082, section 6), as three choices rather
@@ -706,6 +912,82 @@ export class RunsPage {
       this.mode() === 'CATALOG_DISCOVERY' && this.capabilities().hasProductPages
   );
 
+  /**
+   * Whether this run is asked what it writes (admin plan 0029, section 4).
+   *
+   * Every catalog discovery that is a walk, for an adapter this build knows.
+   * An adapter it does not know answers no to `writesPrices`, and a group that
+   * then offered only availability would send a claim about a chain that may
+   * well price. Leaving the field out lets the spawn apply its own default.
+   */
+  readonly offersWrites = computed(
+    () =>
+      this.mode() === 'CATALOG_DISCOVERY' &&
+      !this.detailBackfill() &&
+      this.adapterKey() in Wire.HarvestAdapterCapabilityTable
+  );
+
+  /**
+   * The writes this adapter can be asked for. A source that states no price
+   * cannot write one, so availability is all there is to choose.
+   */
+  readonly writeOptions = computed<readonly RunWrites[]>(() =>
+    this.capabilities().writesPrices ? WRITES : ['AVAILABILITY']
+  );
+
+  /** The choice, or the first option where the choice is not on offer. */
+  readonly chosenWrites = computed(() => {
+    const options = this.writeOptions();
+    return options.includes(this.writes()) ? this.writes() : options[0];
+  });
+
+  /** Whether this walk has a detail phase a known product can skip. */
+  readonly offersDetails = computed(
+    () =>
+      this.mode() === 'CATALOG_DISCOVERY' &&
+      !this.detailBackfill() &&
+      this.capabilities().skipsKnownDetails
+  );
+
+  /**
+   * The keys of the copy lists on screen, in the order they are sent.
+   *
+   * A walked scope's own id where the adapter takes a list, and the one list
+   * of a single scope walk otherwise. A hidden list sends nothing.
+   */
+  readonly copyKeys = computed<readonly string[]>(() => {
+    if (this.needsScopeList()) {
+      return this.priceScopeIds();
+    }
+    return this.needsScope() ? [SINGLE_SCOPE] : [];
+  });
+
+  /** The scopes this run walks, which no list may copy to. */
+  readonly walkedIds = computed<readonly string[]>(() => {
+    if (this.needsScopeList()) {
+      return this.priceScopeIds();
+    }
+    return this.needsScope() && this.priceScopeId() !== ''
+      ? [this.priceScopeId()]
+      : [];
+  });
+
+  /**
+   * Every target that is also walked, by the list that holds it.
+   *
+   * The form refuses such a target when it is added, but ticking a warehouse
+   * that is already a target somewhere is allowed, since either one may be
+   * the mistake. Until one of them goes, this names it and start is disabled.
+   */
+  readonly copyConflicts = computed(() => {
+    const walked = new Set(this.walkedIds());
+    return this.copyKeys().flatMap((key) =>
+      this.copiesOf(key)
+        .filter((id) => walked.has(id))
+        .map((target) => ({ key, target }))
+    );
+  });
+
   /** The chain the scope picker reads within, which it cannot read without. */
   readonly scopeFilter = computed(() => ({
     supermarketId: this.supermarketId().trim(),
@@ -724,6 +1006,10 @@ export class RunsPage {
     if (this.needsScopeList() && this.priceScopeIds().length === 0) {
       return false;
     }
+    // A conflict on screen is a refusal the form can see coming.
+    if (this.copyConflicts().length > 0) {
+      return false;
+    }
     return !this.needsScope() || this.priceScopeId() !== '';
   });
 
@@ -734,6 +1020,98 @@ export class RunsPage {
     // Appended rather than sorted, so the run walks them in the order the
     // operator ticked them and the first one ticked is the first one walked.
     this.priceScopeIds.set(on ? [...held, id] : held);
+
+    const dropped = this.droppedCopies().filter((entry) => entry !== id);
+    if (!on && this.copiesOf(id).length > 0) {
+      dropped.push(id);
+    }
+    this.droppedCopies.set(dropped);
+    if (!on) {
+      this._setCopies(id, null);
+    }
+  }
+
+  /** The scopes one list copies to. */
+  copiesOf(key: string): readonly string[] {
+    return this.copies().get(key) ?? [];
+  }
+
+  refusalOf(key: string): CopyMessage | null {
+    return this._copyRefusals().get(key) ?? null;
+  }
+
+  /** The names of the targets on one list that are also walked. */
+  conflictsOf(key: string): readonly string[] {
+    return this.copyConflicts()
+      .filter((conflict) => conflict.key === key)
+      .map((conflict) => this.titleOf(conflict.target));
+  }
+
+  /** Whether a scope is a copy target on any list on screen. */
+  isCopyTarget(id: string): boolean {
+    return this.copyKeys().some((key) => this.copiesOf(key).includes(id));
+  }
+
+  /**
+   * A scope's name, from the walk list where it is on it, and its id where it
+   * is not. A copy target can be a shop scope, which that list never reads.
+   */
+  titleOf(id: string): string {
+    const scope = this.scopes().find((entry) => entry.id === id);
+    return scope === undefined ? id : scopeTitle(scope);
+  }
+
+  /**
+   * A list changed. An addition is checked against the two mistakes the form
+   * can see (admin plan 0029, section 3) and refused inline; the server is the
+   * authority on every other rule, and says so on start.
+   */
+  changeCopies(key: string, next: readonly string[]): void {
+    const previous = this.copiesOf(key);
+    for (const id of next.filter((entry) => !previous.includes(entry))) {
+      if (this.walkedIds().includes(id)) {
+        this._refuse(key, { key: 'harvest.runs.start.copies.walked' });
+        return;
+      }
+      const other = this.copyKeys().find(
+        (entry) => entry !== key && this.copiesOf(entry).includes(id)
+      );
+      if (other !== undefined) {
+        this._refuse(key, {
+          key: 'harvest.runs.start.copies.alreadyCopied',
+          args: { scope: this.titleOf(this._fromOf(other)) },
+        });
+        return;
+      }
+    }
+    this._setCopies(key, next);
+  }
+
+  /** The scope a list copies from. */
+  private _fromOf(key: string): string {
+    return key === SINGLE_SCOPE ? this.priceScopeId() : key;
+  }
+
+  private _refuse(key: string, message: CopyMessage): void {
+    this._copyRefusals.update((held) => new Map(held).set(key, message));
+  }
+
+  /** Replace one list, or drop it with `null`, and clear its refusal. */
+  private _setCopies(key: string, targets: readonly string[] | null): void {
+    this.copies.update((held) => {
+      const next = new Map(held);
+      if (targets === null || targets.length === 0) {
+        next.delete(key);
+      } else {
+        next.set(key, [...targets]);
+      }
+      return next;
+    });
+    this._copyRefusals.update((held) => {
+      const next = new Map(held);
+      next.delete(key);
+      return next;
+    });
   }
 
   /**
@@ -778,6 +1156,13 @@ export class RunsPage {
     // and the switch is hidden while the adapter is unknown, so a value left
     // set here would be sent by a form that never showed it.
     this.detailBackfill.set(false);
+    // Copies name scopes of the previous chain, and what a walk writes is a
+    // question about the next chain's adapter, so both start over.
+    this.copies.set(new Map());
+    this._copyRefusals.set(new Map());
+    this.droppedCopies.set([]);
+    this.writes.set('PRICES_AND_AVAILABILITY');
+    this.details.set('NEW');
     void this._readAdapter();
   }
 
@@ -835,7 +1220,7 @@ export class RunsPage {
       for (let page = 0; page < MAX_SCOPE_PAGES; page += 1) {
         const answer = await this._scopes.list({
           cursor,
-          filters: { supermarketId },
+          filters: { supermarketId, kind: WALK_LIST_KINDS },
           limit: SCOPE_PAGE,
         });
         held.push(...answer.items);
@@ -984,6 +1369,8 @@ export class RunsPage {
 
     this.starting.set(true);
     this._spawnError.set(null);
+    // The notice about dropped copies has been read by the time a run starts.
+    this.droppedCopies.set([]);
 
     try {
       await this._service.spawnRun(this._input());
@@ -1038,6 +1425,20 @@ export class RunsPage {
     // so a chain that covers none is not told it covers an empty list.
     if (this.needsScopeList() && this.priceScopeIds().length > 0) {
       input.priceScopeIds = [...this.priceScopeIds()];
+    }
+    // Every list on screen with a target, in the order the scopes were ticked
+    // and the targets added. A list with none sends nothing for its scope.
+    const scopeCopies = this.copyKeys()
+      .map((key) => ({ from: this._fromOf(key), to: [...this.copiesOf(key)] }))
+      .filter((copy) => copy.from !== '' && copy.to.length > 0);
+    if (scopeCopies.length > 0) {
+      input.scopeCopies = scopeCopies;
+    }
+    if (this.offersWrites()) {
+      input.writes = this.chosenWrites();
+    }
+    if (this.offersDetails()) {
+      input.details = this.details();
     }
     const optional = {
       supermarketId: this.supermarketId().trim(),

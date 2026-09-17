@@ -216,6 +216,22 @@ describe('the effective price list', () => {
     expect(headers).toContain('catalog.prices.observedAt');
     expect(headers).toContain('catalog.prices.stale');
   });
+
+  /**
+   * Admin plan 0029, section 5: a price a run copied names the scope it was
+   * read at, through the price scopes lookup rather than as its id.
+   */
+  it('names the scope a copied price was read at', async () => {
+    const fixture = await boot('/prices');
+    await settle(fixture);
+    await settle(fixture);
+
+    const headers = [...fixture.nativeElement.querySelectorAll('thead th')].map(
+      (cell) => (cell as HTMLElement).textContent?.trim()
+    );
+    expect(headers).toContain('catalog.prices.priceCopiedFromScopeId');
+    expect(rowsText(fixture)).toContain('REGION 3421');
+  });
 });
 
 describe('a price and its history', () => {
@@ -259,6 +275,26 @@ describe('a price and its history', () => {
     await settle(fixture);
 
     expect(fixture.nativeElement.querySelectorAll('.rows li')).toHaveLength(1);
+  });
+
+  /** Admin plan 0029, section 5, on the detail: the row and the history. */
+  it('names where a copied price was read, and says nothing for one that was not', async () => {
+    const copied = await boot('/prices/it_milk_1l~ps_mercadona_4661');
+    await settle(copied);
+    await settle(copied);
+
+    expect(copied.nativeElement.querySelector('dd.copied')?.textContent).toBe(
+      'REGION 3421'
+    );
+    expect(
+      copied.nativeElement.querySelector('.rows li .copied')?.textContent
+    ).toContain('REGION 3421');
+
+    const read = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
+    await settle(read);
+    await settle(read);
+
+    expect(text(read)).not.toContain('catalog.prices.priceCopiedFromScopeId');
   });
 
   it('offers to add a price, which is the form and not an edit', async () => {
