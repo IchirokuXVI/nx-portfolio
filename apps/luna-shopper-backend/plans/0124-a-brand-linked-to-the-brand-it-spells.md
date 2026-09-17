@@ -1,3 +1,5 @@
+> **PR:** [#409](https://github.com/IchirokuXVI/nx-portfolio/pull/409)
+
 # 0124 A brand linked to the brand it spells
 
 > Client halves: `apps/luna-shopper-admin/plans/0032` (the back office) and
@@ -323,3 +325,39 @@ npx nx run luna-shopper-backend-gateway:openapi
 npx nx run luna-shopper-admin/models:wire-types
 npx nx test luna-shopper-admin/models
 ```
+
+## 12. Decisions taken while building
+
+A review of this plan against the code, and the build itself, settled what the sections above
+left open. Where a line here differs from the text above, this line is what was built.
+
+- **A linked brand keeps its key.** A rename of a linked brand to a label that makes another key
+  is refused with `brand_link_keeps_key` (409). A label that keeps the key is allowed, and so is
+  an unlink and a rename in one request. Without the rule the old key came back as a suggestion,
+  a later item with that spelling lost its brand, and an unlink found nothing.
+- **A linked brand can be deleted, and only a linked one.** `DELETE /v1/admin/catalog/brands/:id`
+  answers `{ id, movedItems }`. The products carrying its key on its canonical brand go back to
+  no brand, with the deleted label as their brand text, which is the state before the spelling
+  was registered. Its key returns to the suggestions by itself. Any other brand answers
+  `brand_not_linked` (409), so section 9 of plan `0115` still holds for every real brand.
+- **Lock first, then check, then write** (section 3). The update used to write the row before
+  anything else, and two requests linking `A` to `B` and `B` to `A` would deadlock.
+- **Section 5 locks too.** The canonical brand from step 3 is locked and read again before step 4
+  inserts the link. `linkedItems` is the sum over both keys. `canonicalCreated` is true in the
+  same key case.
+- **`brand_link_owns_no_chain` judges the resulting row** (section 2). A link sent alone clears
+  the chain the row held, and an unlink does not restore it. A chain set on a brand that is
+  linked, or sent beside a link, is refused.
+- **The move runs before the rename rewrites** when one update carries both. The other order
+  leaves returning products with the new label and the old key.
+- **The update answers `UpdateBrandResult`**, the view plus `movedItems`, always present.
+- **`GET :id/spellings` reads one page of links** (100). The harvester caps its own answer at 200
+  rows.
+
+### A known cost, not fixed here
+
+The harvester's `ItemMatchIndex` (`matching.ts`, rung 3) keys on `items.brand`, the label. After
+a link rewrites the label to the canonical one, a new source row printed with the linked spelling
+no longer matches by name, brand and size, and two look alike products can share one bucket,
+which matches nothing. Catalog search by the printed spelling also stops finding moved items.
+EAN and source reference matching are not affected. The follow up is a plan of its own.
