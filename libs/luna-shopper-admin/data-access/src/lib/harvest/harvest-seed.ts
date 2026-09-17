@@ -32,6 +32,13 @@ const MERCADONA_NATIONAL = '55555555-5555-4555-8555-555555555551';
 const DEZA_NATIONAL = '55555555-5555-4555-8555-555555555552';
 const DEZA_CORDOBA = '55555555-5555-4555-8555-555555555553';
 
+/** The two warehouses the seeded preset walks (backend plan 0108). */
+const MERCADONA_4661 = '55555555-5555-4555-8555-555555555554';
+const MERCADONA_4804 = '55555555-5555-4555-8555-555555555555';
+
+/** Fixed, so a spec can name the seeded preset and the run started from it. */
+export const MERCADONA_WEEKLY_PRESET = '66666666-6666-4666-8666-666666666661';
+
 const NOW = '2026-09-03T10:00:00.000Z';
 
 export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
@@ -188,7 +195,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
       details: 'NEW',
       copies: [
         {
-          from: '55555555-5555-4555-8555-555555555554',
+          from: MERCADONA_4661,
           to: [MERCADONA_NATIONAL],
           pricesCopied: 4210,
           availabilityCopied: 4232,
@@ -200,6 +207,9 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     revertedAt: null,
     revertedByUserId: null,
     revertedPriceCount: null,
+    // Started from the seeded preset (admin plan 0030), so the runs list has a
+    // preset name to draw and the presets screen a latest run.
+    presetId: MERCADONA_WEEKLY_PRESET,
   },
   {
     id: 'run-store-aborted',
@@ -990,3 +1000,30 @@ export const POSTAL_CODE_DISCOVERY_SEED: readonly Wire.HarvestPostalCodeDiscover
       locatedInIt: counts(0, 0, 0),
     },
   ];
+
+/**
+ * The saved runs (admin plan 0030, section 6; backend plan 0120).
+ *
+ * One Mercadona walk of two warehouses with copies, which is the long form a
+ * preset exists to save. `lastRun` is not seeded: the memory back end reads it
+ * off the runs, as the harvester does, so the two cannot disagree.
+ */
+export const HARVEST_RUN_PRESET_SEED: readonly Omit<
+  Wire.HarvestHarvestRunPresetView,
+  'lastRun'
+>[] = [
+  {
+    id: MERCADONA_WEEKLY_PRESET,
+    supermarketId: MERCADONA,
+    name: 'Weekly warehouses',
+    input: {
+      mode: 'CATALOG_DISCOVERY',
+      priceScopeIds: [MERCADONA_4661, MERCADONA_4804],
+      scopeCopies: [{ from: MERCADONA_4661, to: [MERCADONA_NATIONAL] }],
+      writes: 'PRICES_AND_AVAILABILITY',
+      details: 'NEW',
+    },
+    createdAt: '2026-08-28T08:00:00.000Z',
+    updatedAt: '2026-08-28T08:00:00.000Z',
+  },
+];

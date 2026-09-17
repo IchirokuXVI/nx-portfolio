@@ -3,6 +3,7 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { GatewayError } from '../gateway-error';
 import {
   DISCOVERED_PLACE_SEED,
+  HARVEST_RUN_PRESET_SEED,
   HARVEST_RUN_SEED,
   POSTAL_CODE_DISCOVERY_SEED,
   SOURCE_ENTRY_SEED,
@@ -13,6 +14,8 @@ import type {
   AcceptSourceEntryInput,
   CreateItemFromSourceEntryInput,
   EntryQuery,
+  HarvestRunPresetInput,
+  HarvestRunPresetPatch,
   HarvestServiceI,
   ImportHarvestDocumentInput,
   PageQuery,
@@ -59,6 +62,9 @@ export class HarvestMemory implements HarvestServiceI {
     clone(SOURCE_LOCATION_SEED);
   private readonly _postalCodes: Wire.HarvestPostalCodeDiscoveryRequestView[] =
     clone(POSTAL_CODE_DISCOVERY_SEED);
+  private readonly _presets: StoredPreset[] = HARVEST_RUN_PRESET_SEED.map(
+    (preset) => ({ ...preset, input: copyInput(preset.input) })
+  );
 
   private _nextId = 1;
 
@@ -133,10 +139,101 @@ export class HarvestMemory implements HarvestServiceI {
         (query.mode === undefined || run.mode === query.mode) &&
         (query.status === undefined || run.status === query.status) &&
         (query.reverted === undefined ||
-          query.reverted === (run.revertedAt !== null))
+          query.reverted === (run.revertedAt !== null)) &&
+        (query.presetId === undefined || run.presetId === query.presetId)
     );
 
     return page(matching, query);
+  }
+
+  /**
+   * The saved runs, ordered by name as the harvester orders them (backend plan
+   * 0120, section 5), each with its latest run read off the runs.
+   */
+  async listPresets(
+    supermarketId?: string,
+    cursor?: string
+  ): Promise<Wire.HarvestHarvestRunPresetPage> {
+    const matching = this._presets
+      .filter(
+        (preset) =>
+          supermarketId === undefined ||
+          supermarketId === '' ||
+          preset.supermarketId === supermarketId
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const answer = page(matching, { cursor });
+    return {
+      items: answer.items.map((preset) => this._presetView(preset)),
+      nextCursor: answer.nextCursor,
+    };
+  }
+
+  async readPreset(id: string): Promise<Wire.HarvestHarvestRunPresetView> {
+    return this._presetView(this._preset(id));
+  }
+
+  /**
+   * Save a request under a name.
+   *
+   * The duplicate name refusal is the harvester's own: a 409 compared without
+   * case within the chain, naming the preset that holds the name, so the
+   * screen's conflict branch is reachable with nothing listening.
+   */
+  async createPreset(
+    supermarketId: string,
+    name: string,
+    input: HarvestRunPresetInput
+  ): Promise<Wire.HarvestHarvestRunPresetView> {
+    const trimmed = this._presetName(supermarketId, name, null);
+    const now = new Date().toISOString();
+    const preset: StoredPreset = {
+      id: mintPresetId(this._nextId++),
+      supermarketId,
+      name: trimmed,
+      input: copyInput(input),
+      createdAt: now,
+      updatedAt: now,
+    };
+    this._presets.push(preset);
+    return this._presetView(preset);
+  }
+
+  async updatePreset(
+    id: string,
+    patch: HarvestRunPresetPatch
+  ): Promise<Wire.HarvestHarvestRunPresetView> {
+    const preset = this._preset(id);
+    if (patch.name !== undefined) {
+      preset.name = this._presetName(preset.supermarketId, patch.name, id);
+    }
+    if (patch.input !== undefined) {
+      preset.input = copyInput(patch.input);
+    }
+    preset.updatedAt = new Date().toISOString();
+    return this._presetView(preset);
+  }
+
+  async deletePreset(id: string): Promise<void> {
+    const preset = this._preset(id);
+    this._presets.splice(this._presets.indexOf(preset), 1);
+  }
+
+  /**
+   * A spawn of the saved request, with the chain added back and the run
+   * recording the preset it came from (backend plan 0120, section 7).
+   */
+  async startPreset(id: string): Promise<Wire.HarvestHarvestRunView> {
+    const preset = this._preset(id);
+    const run = await this.spawnRun({
+      ...copyInput(preset.input),
+      supermarketId: preset.supermarketId,
+    });
+    const stored = this._runs.find((candidate) => candidate.id === run.id);
+    if (stored !== undefined) {
+      stored.presetId = preset.id;
+    }
+    return { ...run, presetId: preset.id };
   }
 
   async readRun(id: string): Promise<Wire.HarvestHarvestRunView> {
@@ -854,6 +951,66 @@ export class HarvestMemory implements HarvestServiceI {
     place.supermarketLocationId = supermarketLocationId;
     return { ...place };
   }
+
+  private _preset(id: string): StoredPreset {
+    const preset = this._presets.find((candidate) => candidate.id === id);
+    if (preset === undefined) {
+      throw notFound();
+    }
+    return preset;
+  }
+
+  /** A trimmed name, refused when empty or when the chain already holds it. */
+  private _presetName(
+    supermarketId: string,
+    name: string,
+    exceptId: string | null
+  ): string {
+    const trimmed = name.trim();
+    if (trimmed === '') {
+      throw new GatewayError({
+        code: 'validation_failed',
+        status: 400,
+        correlationId: '',
+        detail: 'A preset needs a name.',
+      });
+    }
+    const existing = this._presets.find(
+      (preset) =>
+        preset.id !== exceptId &&
+        preset.supermarketId === supermarketId &&
+        preset.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (existing !== undefined) {
+      throw new GatewayError({
+        code: 'conflict',
+        status: 409,
+        correlationId: '',
+        detail:
+          `This chain already has a preset named "${existing.name}": ` +
+          `${existing.id}. Names are compared without case.`,
+      });
+    }
+    return trimmed;
+  }
+
+  private _presetView(preset: StoredPreset): Wire.HarvestHarvestRunPresetView {
+    const latest = this._runs
+      .filter((run) => run.presetId === preset.id)
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))[0];
+    return {
+      ...preset,
+      input: copyInput(preset.input),
+      lastRun:
+        latest === undefined
+          ? null
+          : {
+              id: latest.id,
+              status: latest.status,
+              requestedAt: latest.requestedAt,
+            },
+    };
+  }
 }
 
 /**
@@ -912,6 +1069,18 @@ function clone<T>(rows: readonly T[]): T[] {
  * refusal it could not link anywhere, which is a state that exists nowhere but
  * here.
  */
+/** A preset as the memory back end holds it: its latest run is read, not kept. */
+type StoredPreset = Omit<Wire.HarvestHarvestRunPresetView, 'lastRun'>;
+
+/** A deep copy of a saved request, so no caller holds the stored one. */
+function copyInput<T>(input: T): T {
+  return JSON.parse(JSON.stringify(input)) as T;
+}
+
+function mintPresetId(index: number): string {
+  return `66666666-0000-4000-8000-${String(index).padStart(12, '0')}`;
+}
+
 function mintRunId(index: number): string {
   return `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
 }

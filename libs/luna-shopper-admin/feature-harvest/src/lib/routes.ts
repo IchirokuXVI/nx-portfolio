@@ -4,6 +4,7 @@ import { EntriesQueuePage } from './entries-queue-page';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { ImportUploadPage } from './import-upload-page';
 import { PlacesQueuePage } from './places-queue-page';
+import { PresetsPage } from './presets-page';
 import { RunPage } from './run-page';
 import { RunsPage } from './runs-page';
 import { ShopsQueuePage } from './shops-queue-page';
@@ -51,6 +52,8 @@ export function harvestRoutes(): Route[] {
   return [
     { path: 'runs', component: RunsPage },
     { path: 'runs/:id', component: RunPage },
+    // Saved run requests, started, edited and deleted (admin plan 0030).
+    { path: 'presets', component: PresetsPage },
     { path: 'places', component: PlacesQueuePage },
     { path: 'entries', component: EntriesQueuePage },
     // The two halves of a file (admin plan 0014, section 2): the document
@@ -88,6 +91,7 @@ export function harvestRoutes(): Route[] {
  */
 export const HARVEST_LINKS: readonly ShellLink[] = [
   { path: `/${HARVEST_SEGMENT}/runs`, label: 'harvest.nav.runs' },
+  { path: `/${HARVEST_SEGMENT}/presets`, label: 'harvest.nav.presets' },
   { path: `/${HARVEST_SEGMENT}/places`, label: 'harvest.nav.places' },
   { path: `/${HARVEST_SEGMENT}/entries`, label: 'harvest.nav.entries' },
   {

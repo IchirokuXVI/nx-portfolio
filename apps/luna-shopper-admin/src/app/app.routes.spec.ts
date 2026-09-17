@@ -163,6 +163,7 @@ describe('appRoutes', () => {
     ['/shoppers/shopping-lists', 'the baskets'],
     ['/harvest', 'the harvester dashboard'],
     ['/harvest/runs', 'the runs'],
+    ['/harvest/presets', 'the run presets'],
     ['/harvest/places', 'the discovered places'],
     ['/harvest/entries', 'the source products'],
     ['/harvest/imports/upload', 'the import'],
