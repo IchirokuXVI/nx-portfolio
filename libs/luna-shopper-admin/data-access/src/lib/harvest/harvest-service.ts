@@ -39,6 +39,41 @@ export interface HarvestServiceI {
    */
   revertRun(id: string): Promise<Wire.HarvestHarvestRunView>;
 
+  /**
+   * One chain's saved run requests, ordered by name (admin plan 0030, section
+   * 6; backend plan 0120). Absent, every chain's.
+   */
+  listPresets(
+    supermarketId?: string,
+    cursor?: string
+  ): Promise<Wire.HarvestHarvestRunPresetPage>;
+  readPreset(id: string): Promise<Wire.HarvestHarvestRunPresetView>;
+  /**
+   * Save a request under a name.
+   *
+   * Validated exactly as a spawn is, so a preset that saves is a run that can
+   * start. A name the chain already holds, in any case, is a 409.
+   */
+  createPreset(
+    supermarketId: string,
+    name: string,
+    input: HarvestRunPresetInput
+  ): Promise<Wire.HarvestHarvestRunPresetView>;
+  /** `input` replaces the saved one whole. The chain never changes. */
+  updatePreset(
+    id: string,
+    patch: HarvestRunPresetPatch
+  ): Promise<Wire.HarvestHarvestRunPresetView>;
+  /** Runs started from the preset keep their record and their `presetId`. */
+  deletePreset(id: string): Promise<void>;
+  /**
+   * Start a run from the preset, with nothing else in the body.
+   *
+   * Validated again, so a scope deleted since the preset was saved is a
+   * refusal naming the scope and the preset, and no run is created.
+   */
+  startPreset(id: string): Promise<Wire.HarvestHarvestRunView>;
+
   listPlaces(query: PlaceQuery): Promise<Wire.HarvestDiscoveredPlacePage>;
   placeGroups(
     query: PlaceGroupQuery
@@ -231,7 +266,16 @@ export interface RunQuery extends PageQuery {
    * is still the COMPLETED or FAILED run it was and the list draws both facts.
    */
   readonly reverted?: boolean;
+  /** Runs started from one preset (backend plan 0120, section 7). */
+  readonly presetId?: string;
 }
+
+/**
+ * What a preset holds: a spawn request without its chain, which is the preset's
+ * own column (backend plan 0120, section 3).
+ */
+export type HarvestRunPresetInput = Wire.HarvestRunPresetInputDto;
+export type HarvestRunPresetPatch = Wire.UpdateHarvestRunPresetDto;
 
 export interface PlaceQuery extends PageQuery {
   readonly runId?: string;

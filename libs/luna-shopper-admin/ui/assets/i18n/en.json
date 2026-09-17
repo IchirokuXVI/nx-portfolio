@@ -509,6 +509,7 @@
   "harvest": {
     "nav": {
       "runs": "Runs",
+      "presets": "Presets",
       "places": "Discovered places",
       "entries": "Source products",
       "import": "Import a file",
@@ -643,7 +644,9 @@
       "empty": "No runs have been recorded.",
       "row": {
         "counts": "{{processed}} processed, {{failed}} failed",
-        "reverted": "Reverted {{when}}"
+        "reverted": "Reverted {{when}}",
+        "preset": "From preset {{name}}",
+        "deletedPreset": "Deleted preset"
       },
       "filter": {
         "reverted": "Reverted runs",
@@ -651,7 +654,9 @@
           "any": "Show both",
           "reverted": "Only reverted",
           "standing": "Only runs that still stand"
-        }
+        },
+        "preset": "Preset",
+        "presetAny": "Any preset"
       },
       "start": {
         "heading": "Start a run",
@@ -695,7 +700,57 @@
           "NEW": "New products only",
           "ALL": "Every product",
           "help": "A product the harvester already knows keeps the EAN and brand it was read with. Choose every product to read them again."
+        },
+        "missingScope": "This scope no longer exists. Remove it to save.",
+        "removeMissingScope": "Remove"
+      }
+    },
+    "presets": {
+      "heading": "Run presets",
+      "chain": "Chain",
+      "chooseChain": "Choose a chain to see its presets.",
+      "empty": "This chain has no presets. Save one from the runs page, or create one here.",
+      "new": "New preset",
+      "newHeading": "New preset",
+      "editHeading": "Edit preset",
+      "name": "Name",
+      "nameTaken": "This chain already has a preset with that name. Names are compared without case.",
+      "save": "Save preset",
+      "saving": "Saving…",
+      "saveFailed": "The preset was not saved. The server said:",
+      "start": "Start",
+      "starting": "Starting…",
+      "edit": "Edit",
+      "more": "Show more presets",
+      "neverRun": "Never run",
+      "alreadyRunning": "A run is already in progress. Only one runs at a time, so wait for it or abort it first.",
+      "refused": "The run did not start. The server said:",
+      "startFailed": "The run did not start, and the server did not say why.",
+      "summary": {
+        "warehouses": "{{count}} warehouses",
+        "oneScope": "One price scope",
+        "copies": "{{count}} copies",
+        "backfill": "EAN backfill",
+        "postalCodes": "{{count}} postal codes",
+        "aroundPostalCode": "Around a postal code",
+        "everyShop": "Every shop",
+        "details": {
+          "NEW": "New products only",
+          "ALL": "Every product"
         }
+      },
+      "delete": {
+        "action": "Delete",
+        "heading": "Delete this preset?",
+        "body": "The preset \"{{name}}\" will be deleted. Runs started from this preset keep their record.",
+        "confirm": "Delete preset",
+        "failed": "The preset was not deleted."
+      },
+      "saveAs": {
+        "action": "Save as preset",
+        "heading": "Save as preset",
+        "saved": "Saved as \"{{name}}\".",
+        "open": "Open the preset"
       }
     },
     "run": {
