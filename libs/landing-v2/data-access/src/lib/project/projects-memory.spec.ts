@@ -116,6 +116,13 @@ describe('ProjectMemory', () => {
     await expect(odontogram?.image).resolves.toBe('asset-file-stub');
   });
 
+  it('resolves the Velista screenshot import', async () => {
+    const projects = await firstValueFrom(service.getList('en'));
+    const velista = projects.find((p) => p.id === '5');
+
+    await expect(velista?.image).resolves.toBe('asset-file-stub');
+  });
+
   it('resolves the Portfolio card image import', async () => {
     const projects = await firstValueFrom(service.getList('en'));
     const portfolio = projects.find((p) => p.id === '1');

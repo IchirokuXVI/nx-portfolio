@@ -85,7 +85,7 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     locale: 'en',
     tagline: 'A shared shopping list app, live in production',
     description:
-      'A collaborative shopping list app for groups and households, with real time lists, a shared basket for the trip and prices from real supermarkets. It runs on its own domain with real users and is still in early development.',
+      'A shared shopping list app for groups and households, with real time lists and a shared basket for the trip. It searches the supermarkets around you and tells you where each product you buy is cheapest, every single week, and it is powered by an AI assistant that adds what you need from a sentence or a voice note. It runs on its own domain with real users and is still in early development.',
   },
   {
     id: '10',
@@ -93,6 +93,6 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     locale: 'es',
     tagline: 'Una app de listas de la compra compartidas, en producción',
     description:
-      'Una app colaborativa de listas de la compra para grupos y hogares, con listas en tiempo real, una cesta compartida para ir a comprar y precios de supermercados reales. Funciona en su propio dominio con usuarios reales y sigue en una fase temprana de desarrollo.',
+      'Una app de listas de la compra compartidas para grupos y hogares, con listas en tiempo real y una cesta compartida para ir a comprar. Busca los supermercados que tienes cerca y te dice dónde está más barato cada producto que compras, todas las semanas, y cuenta con un asistente de IA que añade lo que necesitas a partir de una frase o una nota de voz. Funciona en su propio dominio con usuarios reales y sigue en una fase temprana de desarrollo.',
   },
 ];
