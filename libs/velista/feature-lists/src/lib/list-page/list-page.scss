@@ -231,6 +231,39 @@ lib-line-composer {
   gap: var(--app-space-2);
 }
 
+// The lines the list suggests, inside To buy (velista 0089, section 2). No fold and no
+// count, so it reads as part of To buy: a small label in the attention role, the rows,
+// and "Show more suggestions" when more than three are due.
+.due {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.due-label {
+  margin: 0 0 0 var(--app-space-hair);
+  font-size: var(--app-text-2xs);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-status-attention-fg);
+}
+
+.due-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.due-more {
+  @include list-page.quiet-action;
+
+  align-self: flex-start;
+}
+
 // A failed read of the trips, said under To buy. Quiet, because To buy is fully usable.
 .trips-failed {
   display: flex;

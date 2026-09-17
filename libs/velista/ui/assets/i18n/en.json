@@ -691,6 +691,17 @@
         "boughtBy": "Bought · {{name}}",
         "nowAsks": "The list now asks for {{count}}"
       }
+    },
+    "due": {
+      "label": "You usually buy these about now",
+      "period": "Every {{days}} days · last bought {{when}}",
+      "periodOne": "Every day · last bought {{when}}",
+      "staple": "In {{with}} of your last {{seen}} shopping lists",
+      "add": "Add {{count}}",
+      "addLabel": "Add {{count}} of {{name}} to the list",
+      "quantityLabel": "How many of {{name}}",
+      "more": "Show more suggestions",
+      "added": "{{name}} added to the list"
     }
   },
   "account": {

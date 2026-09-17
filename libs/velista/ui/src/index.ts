@@ -42,6 +42,7 @@ export * from './lib/list/audio-player';
 export * from './lib/list/chip-row';
 export * from './lib/list/comment-composer';
 export * from './lib/list/comment-row';
+export * from './lib/list/due-line-row';
 export * from './lib/list/line-composer';
 export * from './lib/list/line-list';
 export * from './lib/list/line-row';

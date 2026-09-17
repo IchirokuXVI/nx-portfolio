@@ -39,6 +39,11 @@ export interface ListGroupsInput<T extends ListViewLine> {
   /** The keys of the trips somebody has open. */
   readonly openKeys: ReadonlySet<string>;
   readonly reordering: boolean;
+  /**
+   * The ids of the lines the list suggests, in the server's order (velista `0089`).
+   * Absent or empty draws no due line.
+   */
+  readonly dueLineIds?: readonly string[];
 }
 
 /** One trip row joined to the line it is about. */
@@ -65,6 +70,13 @@ export type ListGroupsView<T extends ListViewLine> =
   | {
       readonly kind: 'groups';
       readonly toBuy: readonly T[];
+      /**
+       * How many rows at the start of `toBuy` are wanted lines. The due lines are drawn
+       * after them and before the lines at zero (velista `0089`, section 2).
+       */
+      readonly wantedCount: number;
+      /** The due lines to draw, in the server's order. Empty in reorder mode. */
+      readonly due: readonly T[];
       readonly category: ListCategoryPick | null;
       readonly trips: readonly TripGroup<T>[];
     };
@@ -82,6 +94,13 @@ export type ListGroupsView<T extends ListViewLine> =
  * ## Reorder mode (section 7)
  *
  * To buy alone, without the lines at zero and without any trip.
+ *
+ * ## The due lines (velista `0089`, section 2)
+ *
+ * The lines the list suggests, in the server's order, kept only while the line is held,
+ * is at zero, is not rejected and is not claimed. A line raised above zero leaves at
+ * once, which is what makes an add feel instant. A category keeps only the due lines in
+ * it. None in reorder mode, and none during a search, which is flat.
  */
 export function composeListGroups<T extends ListViewLine>(
   input: ListGroupsInput<T>,
@@ -137,13 +156,23 @@ export function composeListGroups<T extends ListViewLine>(
     }
   }
 
+  const narrowedWanted = narrow(wanted);
   const toBuy = input.reordering
-    ? narrow(wanted)
-    : [...narrow(wanted), ...narrow(neverBought), ...narrow(rejected)];
+    ? narrowedWanted
+    : [...narrowedWanted, ...narrow(neverBought), ...narrow(rejected)];
 
   if (input.reordering) {
-    return { kind: 'groups', toBuy, category, trips: [] };
+    return {
+      kind: 'groups',
+      toBuy,
+      wantedCount: narrowedWanted.length,
+      due: [],
+      category,
+      trips: [],
+    };
   }
+
+  const due = dueLinesOf(input, narrow);
 
   const byId = new Map(input.lines.map((line) => [line.id, line]));
   const trips: TripGroup<T>[] = [];
@@ -181,7 +210,49 @@ export function composeListGroups<T extends ListViewLine>(
     trips.push({ key, trip, open: input.openKeys.has(key), rows });
   }
 
-  return { kind: 'groups', toBuy, category, trips };
+  return {
+    kind: 'groups',
+    toBuy,
+    wantedCount: narrowedWanted.length,
+    due,
+    category,
+    trips,
+  };
+}
+
+/** The due lines still worth offering, narrowed by the view, in the server's order. */
+function dueLinesOf<T extends ListViewLine>(
+  input: ListGroupsInput<T>,
+  narrow: (lines: readonly T[]) => readonly T[]
+): readonly T[] {
+  const ids = input.dueLineIds ?? [];
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const byId = new Map(input.lines.map((line) => [line.id, line]));
+  const offered: T[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    const line = byId.get(id);
+    const facts = input.factsOf(id);
+    if (
+      line === undefined ||
+      facts === null ||
+      seen.has(id) ||
+      facts.quantity > 0 ||
+      facts.rejected ||
+      facts.claimed
+    ) {
+      continue;
+    }
+    seen.add(id);
+    offered.push(line);
+  }
+
+  // The view decides membership only. The order stays the server's, most due first.
+  const kept = new Set(narrow(offered).map((line) => line.id));
+  return offered.filter((line) => kept.has(line.id));
 }
 
 /**

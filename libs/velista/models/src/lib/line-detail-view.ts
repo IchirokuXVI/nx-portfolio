@@ -16,6 +16,15 @@ import type { LineIndicator } from './list-view';
 export const ESTIMATE_MIN_PURCHASES = 3;
 
 /**
+ * Two purchases closer than this are one purchase: twelve hours (velista `0089`,
+ * section 4). Backend `0123` section 3 step 1 folds with the same number, so the line
+ * sheet and the list state the same period for the same line.
+ *
+ * Elapsed time and never a calendar day, so no time zone decides it.
+ */
+export const PURCHASE_MERGE_MS = 12 * 60 * 60 * 1000;
+
+/**
  * The last purchase count that still reads as a phrase rather than a number
  * (velista plan 0047, section 5).
  *

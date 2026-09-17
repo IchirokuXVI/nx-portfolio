@@ -1,4 +1,5 @@
 import {
+  afterNextRender,
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
@@ -6,6 +7,7 @@ import {
   DestroyRef,
   effect,
   inject,
+  Injector,
   signal,
   untracked,
   viewChild,
@@ -20,6 +22,7 @@ import {
 import {
   ASSISTANT_SERVICE,
   CATALOG_SERVICE,
+  DueLineStore,
   ItemNames,
   LineStore,
   ListStore,
@@ -39,6 +42,7 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  DUE_LINE_ADDS_ON_STEP,
   LINE_VOICE_MAX_SECONDS,
   NO_CATEGORY,
   reorderWithinSlots,
@@ -72,6 +76,7 @@ import {
   AppBar,
   ChevronLeftIcon,
   CloseIcon,
+  DueLineRow,
   ErrorState,
   LineComposer,
   LineList,
@@ -90,6 +95,7 @@ import {
   listErrorKey,
   type ListOperation,
 } from '../list-error-copy';
+import { selectDueLines } from '../select-due-lines';
 import { selectListState } from '../select-list-state';
 import { selectTripGroups } from '../select-trip-groups';
 import { voiceFailureCopy } from '../voice-error-copy';
@@ -141,6 +147,7 @@ import { voiceFailureCopy } from '../voice-error-copy';
     AppBar,
     ChevronLeftIcon,
     CloseIcon,
+    DueLineRow,
     ErrorState,
     LineComposer,
     LineList,
@@ -169,7 +176,12 @@ import { voiceFailureCopy } from '../voice-error-copy';
   // `warnAtSeconds` equals the cap on purpose. The warning strip earns its place
   // in the assistant panel at five minutes; a thirty second cap does not, and
   // there is no clock on this row for the same reason (section 4.1).
+  //
+  // `DueLineStore` is here too, and not on the route beside `TripStore`: nothing but this
+  // page reads it, and a component's injector is destroyed with the page, so the store
+  // gives its list back without a teardown call (velista `0089`, section 3).
   providers: [
+    DueLineStore,
     AudioRecorder,
     {
       provide: RECORDING_LIMITS,
@@ -448,6 +460,17 @@ export class ListPage {
    */
   private readonly _trips = inject(TripStore);
 
+  /** The lines the list suggests (velista `0089`). Read after the lines, never before. */
+  private readonly _dueLines = inject(DueLineStore);
+
+  /** Whether "Show more suggestions" was pressed on this visit to this list. */
+  private readonly _dueExpanded = signal(false);
+
+  /** Whether a change of a due row's amount adds the line by itself. Off for now. */
+  readonly dueAddsOnStep = DUE_LINE_ADDS_ON_STEP;
+
+  private readonly _injector = inject(Injector);
+
   /** The lines as the store holds them, by id, for the facts a group is decided on. */
   private readonly _lineById = computed(
     () =>
@@ -488,7 +511,56 @@ export class ListPage {
       past: this._trips.past(),
       rowsOf: (key) => this._trips.rows().get(key),
       reordering: this.reordering(),
+      // Only an answer about this list: the store may still hold the list somebody
+      // came from for the frame before it opens this one.
+      dueLineIds:
+        this._dueLines.listId() === this.listId()
+          ? this._dueLines.lines().map((due) => due.lineId)
+          : [],
     });
+  });
+
+  /**
+   * The due rows under To buy (velista `0089`, section 2), or null when the section is
+   * not drawn: during a search, in reorder mode, for a reader, and when nothing is due.
+   */
+  readonly dueSection = computed(() => {
+    const shown = this.groups();
+    const page = this.loaded();
+    if (
+      shown === null ||
+      shown.kind !== 'groups' ||
+      page === null ||
+      this.reordering() ||
+      !page.abilities.canDecide
+    ) {
+      return null;
+    }
+
+    const byId = new Map(
+      this._dueLines.lines().map((due) => [due.lineId, due])
+    );
+    const section = selectDueLines({
+      rows: shown.due,
+      dueOf: (lineId) => byId.get(lineId),
+      locale: this._locale(),
+      expanded: this._dueExpanded(),
+    });
+    return section.rows.length === 0 ? null : section;
+  });
+
+  /** To buy's wanted lines, drawn above the due rows when there are any. */
+  readonly wantedLines = computed<readonly LineRowVm[]>(() => {
+    const shown = this.groups();
+    return shown?.kind === 'groups'
+      ? shown.toBuy.slice(0, shown.wantedCount)
+      : [];
+  });
+
+  /** To buy's lines at zero and rejected lines, drawn below the due rows. */
+  readonly restLines = computed<readonly LineRowVm[]>(() => {
+    const shown = this.groups();
+    return shown?.kind === 'groups' ? shown.toBuy.slice(shown.wantedCount) : [];
   });
 
   /** The rows of To buy, or of the search. Empty before the lines land. */
@@ -659,6 +731,22 @@ export class ListPage {
     effect(() => {
       const listId = this.listId();
       untracked(() => this._trips.open(listId));
+    });
+
+    // Another list starts folded to three suggestions again (velista 0089, section 2).
+    effect(() => {
+      this.listId();
+      untracked(() => this._dueExpanded.set(false));
+    });
+
+    // The due lines, once the lines have arrived and never in front of them (velista
+    // 0089, section 3). `open` asks nothing for a list it already holds, so this can
+    // run on every change of the page's state.
+    effect(() => {
+      const listId = this.listId();
+      if (this.state().kind === 'loaded') {
+        untracked(() => this._dueLines.open(listId));
+      }
     });
 
     // The newest live trip is open when the trips first arrive, once per visit.
@@ -1360,6 +1448,76 @@ export class ListPage {
 
   openSettings(): void {
     void this._openSheet(['settings']);
+  }
+
+  /** "Show more suggestions": every due line, and focus to the first one it drew. */
+  showMoreDue(): void {
+    const before = this.dueSection()?.rows.length ?? 0;
+    this._dueExpanded.set(true);
+
+    const next = this.dueSection()?.rows[before];
+    if (next !== undefined) {
+      this._focusAfterRender(`[data-due-line-id="${next.lineId}"] .add`);
+    }
+  }
+
+  /**
+   * A due line taken (velista `0089`, sections 2 and 6).
+   *
+   * The reel's own write, from zero to the chosen amount, so the line is raised exactly
+   * as a drag would raise it. The write is optimistic, so the line is above zero before
+   * this awaits anything and the row leaves the section at once. A failed write puts the
+   * quantity back, which brings the row back, and says why through the polite region:
+   * the line's own row, where a reel write reports, is not drawn while it is at zero.
+   *
+   * Focus moves to the next due row's button, or to the line just added when none is
+   * left, and the polite region says the line was added.
+   */
+  async addDueLine(event: { lineId: string; quantity: number }): Promise<void> {
+    const page = this.loaded();
+    const line = this._lineById().get(event.lineId);
+    if (page === null || !page.abilities.canDecide || line === undefined) {
+      return;
+    }
+    const delta = event.quantity - line.quantity;
+    if (delta <= 0) {
+      return;
+    }
+
+    const rows = this.dueSection()?.rows ?? [];
+    const at = rows.findIndex((row) => row.lineId === event.lineId);
+    const pending = this._lines.addQuantity(event.lineId, delta);
+
+    const next = this.dueSection()?.rows[Math.max(0, at)];
+    this._focusAfterRender(
+      next === undefined
+        ? `[data-line-id="${event.lineId}"] .row`
+        : `[data-due-line-id="${next.lineId}"] .add`
+    );
+
+    const outcome = await pending;
+    if (outcome === 'failed') {
+      this._reportPageError(this._lines.errorOf(this.listId()), 'lines.write');
+      return;
+    }
+
+    this.announcement.set(
+      this._translator.t('list.due.added', undefined, undefined, {
+        name: line.content,
+      })
+    );
+  }
+
+  /** Focus the first element matching `selector` in the column, once it is drawn. */
+  private _focusAfterRender(selector: string): void {
+    afterNextRender(
+      () => {
+        this._column()
+          ?.nativeElement.querySelector<HTMLElement>(selector)
+          ?.focus();
+      },
+      { injector: this._injector }
+    );
   }
 
   /** A trip's head was pressed. What is open is remembered for the visit. */
