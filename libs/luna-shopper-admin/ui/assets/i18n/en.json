@@ -76,8 +76,7 @@
       "catalog": "Catalog",
       "shoppers": "Shoppers",
       "harvest": "Harvester",
-      "admins": "Admins",
-      "brands": "Brands"
+      "admins": "Admins"
     }
   },
   "notFound": {
@@ -443,7 +442,7 @@
   },
   "brands": {
     "nav": {
-      "suggested": "Suggested"
+      "suggested": "Suggested brands"
     },
     "registered": {
       "one": "Brand",
@@ -451,7 +450,7 @@
       "field": {
         "label": "Name",
         "key": "Key",
-        "privateLabelSupermarketId": "Private label of",
+        "privateLabelSupermarketId": "Exclusive brand of chain",
         "itemCount": "Products",
         "updatedAt": "Last changed"
       },
@@ -466,7 +465,7 @@
       },
       "filter": {
         "query": "Search by name or key",
-        "privateLabelSupermarketId": "Private label of"
+        "privateLabelSupermarketId": "Exclusive brand of chain"
       },
       "created": "{{label}} registered. {{count}} products now carry it.",
       "createdNone": "{{label}} registered. No product carries it yet.",
@@ -495,7 +494,9 @@
         "action": "Register",
         "panel": "Register this brand",
         "label": "Name",
-        "privateLabel": "Private label of",
+        "privateLabel": "Exclusive brand of chain",
+        "capitalize": "Capitalize",
+        "revert": "Revert to original",
         "makesKey": "This name makes the key {{key}}.",
         "noKey": "This name makes no key, so it cannot be a brand.",
         "keyDiffers": "This name makes a different key, so these products will not be linked.",

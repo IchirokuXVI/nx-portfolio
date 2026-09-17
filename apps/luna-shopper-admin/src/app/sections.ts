@@ -1,7 +1,6 @@
 import {
   BRANDS,
   BRANDS_LINKS,
-  BRANDS_SEGMENT,
   brandsRoutes,
 } from '@portfolio/luna-shopper-admin/feature-brands';
 import {
@@ -59,9 +58,11 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * sources". Around half a dozen is what the first row holds at a glance, and
  * eight is the widest second row.
  *
- * There are six since admin plan 0027, and the sixth is there because of the
- * second number rather than the first: the catalog already holds eight screens,
- * so the brands could not join it without pushing its row onto two lines.
+ * Admin plan 0027 added a sixth, Brands, for two screens, and it is gone again:
+ * a tab for two screens was a click between the operator and both of them, and
+ * the tab went unmarked on the registered list because it pointed at the other
+ * one. Both brand screens are in the harvester, whose queues they are worked
+ * beside.
  *
  * The list stays the app's, for the reason `ResourceRegistry` already gives: it
  * is the app that decides which screens exist. It is what the route table is
@@ -89,8 +90,7 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * ## Order
  *
  * The sections run in the order an operator meets them: the overview, then the
- * catalog, which is the half that gets edited, then the brands, which are a
- * catalog table that ran out of room in the catalog's own row; then the people
+ * catalog, which is the half that gets edited; then the people
  * and what they share, which is read far more often than it is touched; then the
  * harvester, which produces most of the catalog; then the admin table, which is
  * opened to answer one question and never to change anything.
@@ -134,23 +134,6 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     ],
   },
   {
-    // **A section of its own, because the catalog is full.** Catalog already
-    // holds eight screens, which is the widest second row, so a ninth would push
-    // it onto two lines. It sits next to the catalog rather than inside the
-    // harvester because a registered brand is catalog data: the harvester only
-    // says which keys are still waiting for one.
-    //
-    // **No home**, so `/brands` is the registered list through the redirect in
-    // `brandsRoutes`. A dashboard summarising two screens would be a click
-    // between the operator and both of them, which is `0004`'s argument.
-    key: 'brands',
-    label: 'shell.sections.brands',
-    segment: BRANDS_SEGMENT,
-    resources: [BRANDS],
-    screens: brandsRoutes(),
-    links: BRANDS_LINKS,
-  },
-  {
     key: 'shoppers',
     label: 'shell.sections.shoppers',
     segment: SHOPPERS_SEGMENT,
@@ -164,9 +147,15 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     label: 'shell.sections.harvest',
     segment: HARVEST_SEGMENT,
     home: HarvestDashboard,
-    resources: [POSTAL_CODES],
-    screens: harvestRoutes(),
-    links: HARVEST_LINKS,
+    // The brands are here rather than in the catalog, although a registered
+    // brand is catalog data. The suggestions are keys the harvested queue
+    // carries, a person registers them while working that queue, and the
+    // catalog's row is already full. `BRANDS` comes before `POSTAL_CODES` and
+    // `BRANDS_LINKS` after `HARVEST_LINKS`, so the two brand screens sit side
+    // by side: hand written links are drawn first, then resources.
+    resources: [BRANDS, POSTAL_CODES],
+    screens: [...harvestRoutes(), ...brandsRoutes()],
+    links: [...HARVEST_LINKS, ...BRANDS_LINKS],
   },
   {
     // **A section with one screen has no segment**, so the admins list stays at

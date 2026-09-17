@@ -84,7 +84,7 @@ const SUPERMARKETS = defineResource<Wire.CatalogSupermarketView>({
 });
 
 /**
- * Both resources at the root rather than under `/brands`.
+ * Both resources at the root rather than under `/harvest`.
  *
  * This file is about the screen, not about where the app hangs it: the mount is
  * asserted in `shell-sections.spec.ts`, against the real sections.
@@ -145,7 +145,7 @@ const spellingRows = (fixture: ComponentFixture<TestHost>) =>
 
 describe('BrandDetailPage', () => {
   it('draws the brand in the generic form, above the spellings', async () => {
-    const fixture = await boot('/registered/br_elpozo');
+    const fixture = await boot('/brands/br_elpozo');
 
     // The form is the generic one, reading the same descriptor off the route.
     expect(
@@ -161,7 +161,7 @@ describe('BrandDetailPage', () => {
   });
 
   it('groups the spellings by chain, each chain named once', async () => {
-    const fixture = await boot('/registered/br_elpozo');
+    const fixture = await boot('/brands/br_elpozo');
     const rows = spellingRows(fixture);
 
     // Three rows: two Carrefour spellings and one Mercadona.
@@ -185,7 +185,7 @@ describe('BrandDetailPage', () => {
 
   /** Seeing `ELPOZO` beside `El Pozo` is the point of the block. */
   it('lists a spelling that differs from the label only by case', async () => {
-    const fixture = await boot('/registered/br_elpozo');
+    const fixture = await boot('/brands/br_elpozo');
     const spellings = spellingRows(fixture).map((row) =>
       row.querySelector('.spelling')?.textContent?.trim()
     );
@@ -195,7 +195,7 @@ describe('BrandDetailPage', () => {
 
   /** The normal state of a brand somebody registered by hand. */
   it('says so plainly when no harvested product carries the brand', async () => {
-    const fixture = await boot('/registered/br_campofrio');
+    const fixture = await boot('/brands/br_campofrio');
 
     expect(text(fixture)).toContain('brands.registered.spellings.empty');
     expect(spellingRows(fixture)).toHaveLength(0);
@@ -205,7 +205,7 @@ describe('BrandDetailPage', () => {
    * The two are different questions, and only one of them is out.
    */
   it('shows a failed read in that block alone, leaving the form usable', async () => {
-    const fixture = await boot('/registered/br_elpozo', () => {
+    const fixture = await boot('/brands/br_elpozo', () => {
       jest
         .spyOn(TestBed.inject(BrandsGateway), 'spellings')
         .mockRejectedValue(
