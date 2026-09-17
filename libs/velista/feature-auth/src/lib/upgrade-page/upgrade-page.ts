@@ -92,11 +92,20 @@ export class UpgradePage {
 
   readonly email = signal('');
   readonly password = signal('');
+  readonly confirmPassword = signal('');
   readonly submitting = signal(false);
   readonly error = signal<AuthErrorCopy | null>(null);
 
+  /**
+   * All three fields non empty, and nothing else. The match is answered by `submit`
+   * rather than by a disabled button, for the reason `RegisterPage.canSubmit` gives.
+   */
   readonly canSubmit = computed(
-    () => this.email() !== '' && this.password() !== '' && !this.submitting()
+    () =>
+      this.email() !== '' &&
+      this.password() !== '' &&
+      this.confirmPassword() !== '' &&
+      !this.submitting()
   );
 
   /**
@@ -128,6 +137,18 @@ export class UpgradePage {
 
   async submit(): Promise<void> {
     if (!this.canSubmit()) {
+      return;
+    }
+
+    // The same check `RegisterPage` makes, for the same reason: the server sees one
+    // password and cannot know it was mistyped. Here a typo costs more than on
+    // register, because the account being locked is the one holding every group.
+    if (this.password() !== this.confirmPassword()) {
+      this.error.set({
+        key: 'auth.error.passwordMismatch',
+        placement: 'password',
+      });
+      this._focusConfirmField();
       return;
     }
 
@@ -191,6 +212,13 @@ export class UpgradePage {
   private _focusFirstField(): void {
     this._host.nativeElement
       .querySelector<HTMLInputElement>('input[type="email"]')
+      ?.focus();
+  }
+
+  /** By id, because the reveal toggle swaps the input's type. See `RegisterPage`. */
+  private _focusConfirmField(): void {
+    this._host.nativeElement
+      .querySelector<HTMLInputElement>('#upgrade-confirm-password')
       ?.focus();
   }
 }

@@ -33,6 +33,21 @@
       fieldId="upgrade-password"
     />
 
+    <!-- Typed twice, as on register: nothing else anywhere can catch a typo in it.
+         No rule sentence, because the rule is stated once above. -->
+    <lib-password-field
+      [(value)]="confirmPassword"
+      [describedBy]="error()?.placement === 'email' ? null : errorId"
+      [hideLabel]="'auth.field.hidePassword' | rokuT"
+      [invalid]="error() !== null && error()?.placement !== 'email'"
+      [label]="'auth.field.confirmPassword' | rokuT"
+      [placeholder]="'auth.field.confirmPasswordPlaceholder' | rokuT"
+      [readOnly]="submitting()"
+      [showLabel]="'auth.field.showPassword' | rokuT"
+      autocomplete="new-password"
+      fieldId="upgrade-confirm-password"
+    />
+
     @if (error(); as rejection) {
       <lib-form-error [message]="rejection.key | rokuT" [messageId]="errorId" />
     }
