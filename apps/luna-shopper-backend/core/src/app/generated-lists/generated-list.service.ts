@@ -39,6 +39,11 @@ import {
   LineSettlement,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import {
+  announceTripsChanged,
+  tripListsOfBasket,
+  tripListsOfOwner,
+} from '../lists/trips/trips.announce';
 import { ProfileService } from '../profiles/profile.service';
 import { GeneratedListMembersService } from './generated-list-members.service';
 import {
@@ -152,6 +157,15 @@ export class GeneratedListService {
     private readonly members: GeneratedListMembersService
   ) {}
 
+  /**
+   * The query function `trips.announce` reads a basket's origin lists through:
+   * the repository's own, as every other raw read in this service goes.
+   */
+  private readonly tripQuery = (
+    sql: string,
+    parameters: unknown[]
+  ): Promise<unknown> => this.lists.query(sql, parameters);
+
   // --- The run ---------------------------------------------------------------
 
   /**
@@ -245,6 +259,14 @@ export class GeneratedListService {
     // shared with three guests is still one person's trip from the household's
     // point of view.
     this.claims.announce(true, req.userId, await this.claims.refsOf(saved.id));
+    // And each list it drew from has a new trip (plan 0122, section 6). Asked of
+    // the origins that were written rather than of the sources that were named:
+    // a source every line of which another basket already carries contributed
+    // nothing, and its list has no new trip to read.
+    announceTripsChanged(
+      this.events,
+      await tripListsOfBasket(this.tripQuery, saved.id)
+    );
     return { list: view, skipped };
   }
 
@@ -772,6 +794,7 @@ export class GeneratedListService {
   async update(req: UpdateGeneratedListRequest): Promise<GeneratedListView> {
     const list = await this.load(req.userId, req.generatedListId);
     const wasLive = isLiveGeneratedList(list.status);
+    const before = { name: list.name, status: list.status };
     if (req.name !== undefined) {
       list.name = checkName(req.name);
     }
@@ -806,6 +829,17 @@ export class GeneratedListService {
         await this.claims.refsOf(saved.id)
       );
     }
+
+    // A trip's head is the basket's name and whether it is live, so either one
+    // moving is a reason to read the trips again (plan 0122, section 6). The
+    // sweep finishes a basket through this method, so it is covered here too.
+    // A change of the default target list is neither, and says nothing.
+    if (saved.name !== before.name || saved.status !== before.status) {
+      announceTripsChanged(
+        this.events,
+        await tripListsOfBasket(this.tripQuery, saved.id)
+      );
+    }
     return view;
   }
 
@@ -828,6 +862,9 @@ export class GeneratedListService {
     // Before the delete too, for the same reason: the participant rows go with
     // the basket (plan 0114, section 10).
     const shared = await this.members.liveRegistered(list.id);
+    // And before the delete once more (plan 0122, section 6): which lists lose a
+    // basket trip is written in the origins, and they cascade away with it.
+    const tripLists = await tripListsOfBasket(this.tripQuery, list.id);
     await this.lists.delete({ id: list.id });
     // The owner's own sessions, as before, and since plan 0114 the basket's room
     // as well: a deleted basket used to tell nobody on it, and the room is the
@@ -844,6 +881,8 @@ export class GeneratedListService {
       }
     }
     await this.claims.announceReleased(refs);
+    // The basket trip is gone, and whatever it bought now reads as loose trips.
+    announceTripsChanged(this.events, tripLists);
     return { id: list.id };
   }
 
@@ -857,7 +896,11 @@ export class GeneratedListService {
    * purchase.
    */
   async deleteForUser(userId: string): Promise<number> {
+    // Before the delete, as `delete` reads them (plan 0122, section 6): every
+    // list one of these baskets drew from loses a basket trip.
+    const tripLists = await tripListsOfOwner(this.tripQuery, userId);
     const result = await this.lists.delete({ ownerUserId: userId });
+    announceTripsChanged(this.events, tripLists);
     return result.affected ?? 0;
   }
 

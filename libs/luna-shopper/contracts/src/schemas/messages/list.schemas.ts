@@ -62,6 +62,13 @@ export const LIST_SCHEMA_IDS = {
   listHoldingItemView: schemaId('list/ListHoldingItemView'),
   listsHoldingItemRequest: schemaId('msg/list.holdingItem/request'),
   listsHoldingItemResult: schemaId('msg/list.holdingItem/response'),
+  tripView: schemaId('list/TripView'),
+  tripPage: schemaId('list/TripPage'),
+  tripRowView: schemaId('list/TripRowView'),
+  tripRowPage: schemaId('list/TripRowPage'),
+  listTripsChangedEvent: schemaId('list/ListTripsChangedEvent'),
+  listTripsRequest: schemaId('msg/list.trips/request'),
+  listTripRowsRequest: schemaId('msg/list.tripRows/request'),
   reorderRequest: schemaId('msg/line.reorder/request'),
   deleteLineRequest: schemaId('msg/line.delete/request'),
   listLinesRequest: schemaId('msg/line.list/request'),
@@ -604,6 +611,86 @@ const listsHoldingItemResult = object(
   },
   ['lists', 'hasMore']
 );
+// One trip that touched a list (plan 0122, section 3). The name and id of a
+// basket are served here on purpose, which is section 5's narrow reversal of plan
+// 0052: these reads and the list room only, behind the list's `READ` check.
+const tripView = object(
+  LIST_SCHEMA_IDS.tripView,
+  {
+    id: nonEmptyString(),
+    kind: ref(ENUM_IDS.tripKind),
+    name: nullableString(),
+    live: boolean(),
+    startedAt: string({ format: 'date-time' }),
+    lineCount: integer({ minimum: 0 }),
+    boughtLineCount: integer({ minimum: 0 }),
+  },
+  ['id', 'kind', 'name', 'live', 'startedAt', 'lineCount', 'boughtLineCount']
+);
+
+// Not `paginated`, because it has two parts: live trips whole on the first
+// response, ended trips a page at a time (section 2).
+const tripPage = object(
+  LIST_SCHEMA_IDS.tripPage,
+  {
+    live: array(ref(LIST_SCHEMA_IDS.tripView)),
+    items: array(ref(LIST_SCHEMA_IDS.tripView)),
+    nextCursor: nullableString(),
+  },
+  ['live', 'items', 'nextCursor']
+);
+
+// What one trip did to one zone line (section 4). `asked` and `left` are null
+// for a loose trip, which asked for nothing: it is a record of purchases alone.
+const tripRowView = object(
+  LIST_SCHEMA_IDS.tripRowView,
+  {
+    lineId: nonEmptyString(),
+    asked: { type: ['integer', 'null'], minimum: 0 },
+    bought: integer({ minimum: 0 }),
+    left: { type: ['integer', 'null'], minimum: 0 },
+    outcome: ref(ENUM_IDS.tripRowOutcome),
+    settledByUserId: nullableString(),
+  },
+  ['lineId', 'asked', 'bought', 'left', 'outcome', 'settledByUserId']
+);
+
+const tripRowPage = paginated(
+  LIST_SCHEMA_IDS.tripRowPage,
+  LIST_SCHEMA_IDS.tripRowView
+);
+
+// The list room's "read the trips again" (section 6). One field, so it cannot
+// leak a basket and cannot drift from the read.
+const listTripsChangedEvent = object(
+  LIST_SCHEMA_IDS.listTripsChangedEvent,
+  { listId: nonEmptyString() },
+  ['listId']
+);
+
+const listTripsRequest = object(
+  LIST_SCHEMA_IDS.listTripsRequest,
+  {
+    userId: nonEmptyString(),
+    listId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'listId']
+);
+const listTripRowsRequest = object(
+  LIST_SCHEMA_IDS.listTripRowsRequest,
+  {
+    userId: nonEmptyString(),
+    listId: nonEmptyString(),
+    kind: ref(ENUM_IDS.tripKind),
+    tripId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'listId', 'kind', 'tripId']
+);
+
 const reorderRequest = object(
   LIST_SCHEMA_IDS.reorderRequest,
   {
@@ -718,6 +805,13 @@ export const listSchemas: JsonSchema[] = [
   listHoldingItemView,
   listsHoldingItemRequest,
   listsHoldingItemResult,
+  tripView,
+  tripPage,
+  tripRowView,
+  tripRowPage,
+  listTripsChangedEvent,
+  listTripsRequest,
+  listTripRowsRequest,
   reorderRequest,
   deleteLineRequest,
   listLinesRequest,
@@ -759,6 +853,14 @@ export const listMessageContracts: Record<
   [LIST_PATTERNS.holdingItem]: {
     request: LIST_SCHEMA_IDS.listsHoldingItemRequest,
     response: LIST_SCHEMA_IDS.listsHoldingItemResult,
+  },
+  [LIST_PATTERNS.trips]: {
+    request: LIST_SCHEMA_IDS.listTripsRequest,
+    response: LIST_SCHEMA_IDS.tripPage,
+  },
+  [LIST_PATTERNS.tripRows]: {
+    request: LIST_SCHEMA_IDS.listTripRowsRequest,
+    response: LIST_SCHEMA_IDS.tripRowPage,
   },
   [LINE_PATTERNS.add]: {
     request: LIST_SCHEMA_IDS.addLineRequest,

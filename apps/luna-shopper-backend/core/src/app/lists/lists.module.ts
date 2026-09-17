@@ -24,6 +24,8 @@ import { ProductGroupSyncController } from './product-group-sync.controller';
 import { ProductGroupSyncService } from './product-group-sync.service';
 import { SettlementService } from './settlement.service';
 import { SharedListGrantModule } from './shared-list-grant.module';
+import { TripsController } from './trips/trips.controller';
+import { TripsService } from './trips/trips.service';
 
 /**
  * Shopping lists, lines and comments (plan 0007): the second domain slice of
@@ -54,7 +56,7 @@ import { SharedListGrantModule } from './shared-list-grant.module';
     // 0070, section 5.1).
     IdempotencyModule,
   ],
-  controllers: [ListController, ProductGroupSyncController],
+  controllers: [ListController, ProductGroupSyncController, TripsController],
   providers: [
     ListService,
     LineService,
@@ -63,6 +65,8 @@ import { SharedListGrantModule } from './shared-list-grant.module';
     LineMergeService,
     CommentService,
     SettlementService,
+    // The shopping trips that touched a list, derived on read (plan 0122).
+    TripsService,
     ListAccessService,
     // Catalog's group membership, reconciled into subscribed lines (plan 0070).
     ProductGroupSyncService,

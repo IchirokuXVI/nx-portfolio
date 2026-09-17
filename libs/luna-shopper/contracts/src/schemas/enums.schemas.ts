@@ -17,6 +17,8 @@ import {
   LineStatus,
   ListPermission,
   SettlementOutcome,
+  TripKind,
+  TripRowOutcome,
 } from '../lib/enums/list.enums';
 import { MergeRequestStatus } from '../lib/enums/merge.enums';
 import {
@@ -51,6 +53,10 @@ export const ENUM_IDS = {
   participantKind: schemaId('enums/ParticipantKind'),
   /** Why a matching list cannot be adopted into a basket line (plan 0057, section 3.2). */
   originUnavailableReason: schemaId('enums/OriginUnavailableReason'),
+  /** A basket, or a run of purchases made by hand (plan 0122, section 3). */
+  tripKind: schemaId('enums/TripKind'),
+  /** What one trip did to one zone line (plan 0122, section 4). */
+  tripRowOutcome: schemaId('enums/TripRowOutcome'),
 } as const;
 
 export const enumSchemas: JsonSchema[] = [
@@ -73,4 +79,6 @@ export const enumSchemas: JsonSchema[] = [
     ENUM_IDS.originUnavailableReason,
     Object.values(OriginUnavailableReason)
   ),
+  enumOf(ENUM_IDS.tripKind, Object.values(TripKind)),
+  enumOf(ENUM_IDS.tripRowOutcome, Object.values(TripRowOutcome)),
 ];
