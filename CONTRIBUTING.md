@@ -107,8 +107,9 @@ them, and groups the conforming titles by section. It runs on plain Node with no
 install step, so a release can be cut from a bare checkout.
 
 ```sh
-# Everything since the last tag, ready to paste into a draft release
-node tools/release/release-notes.mjs
+# Everything since the last tag, before the tag exists. --version names the
+# release, and the changelog link ends at that tag.
+node tools/release/release-notes.mjs --version v0.3.2 --out notes.md
 
 # One release exactly, written to a file
 node tools/release/release-notes.mjs --from v0.3.1 --to v0.3.2 --out notes.md
@@ -135,6 +136,10 @@ Three things it does on purpose:
   commit hash rather than by number, and the count at the foot of the notes says
   how much of it there was. The notes are meant to be a complete account of a
   range rather than a best effort one.
+- **The changelog link never ends at `HEAD`.** It ends at `--version`. With no
+  version, it ends at a `--to` other than `HEAD`. With neither, the script
+  leaves the link out and says so on stderr. A link to `HEAD` keeps growing after the release,
+  so it shows later work as part of the release.
 
 Its tests run without Nx, and cover the rules themselves:
 
