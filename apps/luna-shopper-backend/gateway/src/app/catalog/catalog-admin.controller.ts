@@ -924,6 +924,7 @@ export class AdminCatalogPriceScopesController {
     @Query() query: ListPriceScopesQueryDto
   ): Promise<PriceScopePage> {
     return this.nats.send<PriceScopePage>(PRICE_SCOPE_PATTERNS.list, {
+      kinds: query.kind,
       userId: admin.adminId,
       supermarketId: query.supermarketId,
       cursor: query.cursor,

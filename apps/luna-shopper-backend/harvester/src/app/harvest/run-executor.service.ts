@@ -319,7 +319,8 @@ export class RunExecutor implements OnApplicationShutdown {
                 scopes: run.supermarketId
                   ? this.scopes.forRun(
                       run.supermarketId,
-                      source?.adapterKey ?? null
+                      source?.adapterKey ?? null,
+                      (warning) => context.warn(warning)
                     )
                   : null,
                 places: this.places,

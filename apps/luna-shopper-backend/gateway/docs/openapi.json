@@ -12928,6 +12928,24 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "name": "kind",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Only scopes of these kinds (plan 0116, section 7). A chain holds one STORE scope per shop, so a caller after its warehouses names LOCAL_AREA rather than paging past every shop. Omit it for every kind.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NATIONAL",
+                  "REGION",
+                  "LOCAL_AREA",
+                  "STORE"
+                ]
+              }
+            }
           }
         ],
         "responses": {
@@ -18323,6 +18341,24 @@
             "schema": {
               "format": "uuid",
               "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Only scopes of these kinds (plan 0116, section 7). A chain holds one STORE scope per shop, so a caller after its warehouses names LOCAL_AREA rather than paging past every shop. Omit it for every kind.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NATIONAL",
+                  "REGION",
+                  "LOCAL_AREA",
+                  "STORE"
+                ]
+              }
             }
           }
         ],
@@ -24289,7 +24325,7 @@
             "enum": [
               "NATIONAL",
               "REGION",
-              "POSTAL_CODE",
+              "LOCAL_AREA",
               "STORE"
             ]
           },
@@ -24311,7 +24347,7 @@
           "priority": {
             "type": "number",
             "minimum": 0,
-            "description": "How specific the scope is (plan 0105, section 2.1). Lower is more specific, and within one shop the most specific scope that has a price for a product is the price that shop charges. Omit it and the scope takes the default for its kind: 100 STORE, 200 POSTAL_CODE, 300 REGION, 1000 NATIONAL. The gaps are what let a tier nobody anticipated be a number rather than a migration."
+            "description": "How specific the scope is (plan 0105, section 2.1). Lower is more specific, and within one shop the most specific scope that has a price for a product is the price that shop charges. Omit it and the scope takes the default for its kind: 100 STORE, 200 LOCAL_AREA, 300 REGION, 1000 NATIONAL. The gaps are what let a tier nobody anticipated be a number rather than a migration."
           }
         },
         "required": [
@@ -24327,7 +24363,7 @@
             "enum": [
               "NATIONAL",
               "REGION",
-              "POSTAL_CODE",
+              "LOCAL_AREA",
               "STORE"
             ]
           },
@@ -28699,7 +28735,8 @@
           "UNKNOWN_PRICE_SCOPE",
           "NO_PRICE_SCOPE",
           "COPY_TARGET_GONE",
-          "COPY_SOURCE_NOT_WRITTEN"
+          "COPY_SOURCE_NOT_WRITTEN",
+          "SCOPE_KIND_MISMATCH"
         ]
       },
       "enums.ItemCategory": {
@@ -28812,7 +28849,7 @@
         "enum": [
           "NATIONAL",
           "REGION",
-          "POSTAL_CODE",
+          "LOCAL_AREA",
           "STORE"
         ]
       },
@@ -30180,7 +30217,7 @@
       },
       "harvest.AdapterCapabilityTable": {
         "type": "object",
-        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes REGION rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.",
+        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.",
         "const": {
           "mercadona-api": {
             "writesPrices": true,
@@ -30189,8 +30226,8 @@
             "hasProductPages": false,
             "printedLocale": "es",
             "walkablePriorities": {
-              "min": 300,
-              "max": 300
+              "min": 200,
+              "max": 200
             }
           },
           "deza-web": {

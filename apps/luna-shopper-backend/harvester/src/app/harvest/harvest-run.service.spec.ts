@@ -74,10 +74,10 @@ function warehouse(
   return {
     id: SCOPE,
     supermarketId: SUPERMARKET,
-    kind: PriceScopeKind.REGION,
+    kind: PriceScopeKind.LOCAL_AREA,
     externalKey: '4661',
     label: null,
-    priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
+    priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
     ...patch,
   };
 }

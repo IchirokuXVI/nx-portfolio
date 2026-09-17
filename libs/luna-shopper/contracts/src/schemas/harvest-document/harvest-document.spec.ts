@@ -378,6 +378,18 @@ describe('the harvest document, version 2', () => {
     ]);
   });
 
+  it('accepts a local area under its current name and its old one', () => {
+    // Plan 0116, section 2.1: POSTAL_CODE is what LOCAL_AREA was called, and a
+    // file that validated before the rename still validates after it.
+    for (const kind of ['LOCAL_AREA', 'POSTAL_CODE'] as const) {
+      const result = validateHarvestDocument(
+        v2({ scopes: [{ key: '58', kind, name: null }] })
+      );
+
+      expect(result.failures).toEqual([]);
+    }
+  });
+
   it('accepts a document with no scopes at all, which is every leaflet', () => {
     const result = validateHarvestDocument(
       v2({

@@ -201,11 +201,11 @@ export class MercadonaStoreDiscoveryRunner implements StoreDiscoveryRunner {
         declared.add(warehouse);
         report.scope({
           key: warehouse,
-          // A warehouse is not a postal code and not a shop: it is the group of
-          // shops the chain prices together and names itself. Its priority
-          // comes from the kind (plan 0105), so a national price still wins
-          // where a warehouse states none.
-          kind: PriceScopeKind.REGION,
+          // A warehouse is a local area (plan 0116, section 3): a small group of
+          // shops the chain prices together and names itself. Its priority comes
+          // from the kind (plan 0105), so a national price still wins where a
+          // warehouse states none.
+          kind: PriceScopeKind.LOCAL_AREA,
           name: `Almacén ${warehouse}`,
         });
       }

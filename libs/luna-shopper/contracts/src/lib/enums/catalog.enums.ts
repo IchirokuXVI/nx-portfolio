@@ -27,15 +27,22 @@ export enum UnitOfMeasure {
 export enum PriceScopeKind {
   NATIONAL = 'NATIONAL',
   /**
-   * A grouping the chain defines and names itself, whatever it calls it.
+   * A large grouping the chain defines and names itself, whatever it calls it.
    *
-   * Mercadona calls it a warehouse and keys it `4661`. LIDL calls it an offer
-   * region and keys it `26`. Neither is a postal code and neither is a shop, and
-   * the two behave identically here, so they are one kind. This value was
-   * `WAREHOUSE` until plan 0089 found the second chain that needed it.
+   * LIDL calls it an offer region and keys it `26`, and there are 59 of them.
+   * It is not a postal code and not a shop. This value was `WAREHOUSE` until
+   * plan 0089 found the second chain that needed it, and plan 0116 moved the
+   * first one, Mercadona's warehouses, down to {@link LOCAL_AREA}.
    */
   REGION = 'REGION',
-  POSTAL_CODE = 'POSTAL_CODE',
+  /**
+   * A small grouping the chain names, for example a Mercadona warehouse keyed
+   * `4661` (plan 0116, section 2).
+   *
+   * This value was `POSTAL_CODE`, which nothing ever created. Plan 0116 renamed
+   * it rather than adding a fifth kind beside it, so no row changed meaning.
+   */
+  LOCAL_AREA = 'LOCAL_AREA',
   STORE = 'STORE',
 }
 
@@ -55,7 +62,7 @@ export enum PriceScopeKind {
  */
 export const DEFAULT_SCOPE_PRIORITY: Record<PriceScopeKind, number> = {
   [PriceScopeKind.STORE]: 100,
-  [PriceScopeKind.POSTAL_CODE]: 200,
+  [PriceScopeKind.LOCAL_AREA]: 200,
   [PriceScopeKind.REGION]: 300,
   [PriceScopeKind.NATIONAL]: 1000,
 };

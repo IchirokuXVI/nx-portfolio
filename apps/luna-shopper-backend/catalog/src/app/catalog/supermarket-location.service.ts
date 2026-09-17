@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   PostalCodeSource,
+  PriceScopeKind,
   type CountLocationsByPostalCodeRequest,
   type CreateSupermarketLocationRequest,
   type ListSupermarketLocationsRequest,
@@ -38,6 +39,18 @@ import { idsOf, LocationScopeService } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
+
+/**
+ * A named stack plus the shop's own `STORE` scope (plan 0116, section 5).
+ *
+ * The position is irrelevant, because a stack is ranked by priority.
+ */
+function withStoreScope(
+  named: readonly string[],
+  store: Pick<PriceScope, 'id'>
+): string[] {
+  return named.includes(store.id) ? [...named] : [...named, store.id];
+}
 
 interface LocationCursor {
   value: string;
@@ -77,10 +90,12 @@ export class SupermarketLocationService {
   /**
    * Create a store.
    *
-   * Every location must price against a scope, and a caller that names none gets
-   * a `STORE` scope of its own (plan 0038, section 5.1). That is what keeps hand
-   * entered supermarkets working exactly as they did before scopes existed: the
-   * per store shape is still expressible, it is just no longer the only one.
+   * Every location prices against its own `STORE` scope, whatever else it is
+   * given (plan 0116, section 5). A caller that names no scope gets that one
+   * alone, which is what keeps hand entered supermarkets working exactly as they
+   * did before scopes existed (plan 0038, section 5.1). A caller that names a
+   * warehouse gets the warehouse and the store scope, so a price typed for that
+   * one shop always has somewhere to go.
    *
    * The id is generated here rather than by the database because the scope and
    * the location each need the other's key: the scope's `externalKey` is the
@@ -110,7 +125,8 @@ export class SupermarketLocationService {
     const namedScopeIds = await this.requestedStack(
       req.priceScopeId,
       req.priceScopeIds,
-      req.supermarketId
+      req.supermarketId,
+      id
     );
 
     const draft = this.locations.create({
@@ -132,21 +148,18 @@ export class SupermarketLocationService {
     await this.fillPostalCodeFromCentroid(draft);
 
     const saved = await this.audit.write(actor, async (tx) => {
-      const stack =
-        namedScopeIds.length > 0
-          ? namedScopeIds
-          : [
-              (
-                await this.scopes.ensureStoreScope(
-                  tx,
-                  req.supermarketId,
-                  id,
-                  req.label ?? null
-                )
-              ).id,
-            ];
+      const store = await this.scopes.ensureStoreScope(
+        tx,
+        req.supermarketId,
+        id,
+        req.label ?? null
+      );
       const row = await tx.create(SupermarketLocation, draft);
-      await this.writeStack(tx.manager, id, stack);
+      await this.writeStack(
+        tx.manager,
+        id,
+        withStoreScope(namedScopeIds, store)
+      );
       return row;
     });
     return toSupermarketLocationView(saved, await this.stackOf(saved.id));
@@ -159,11 +172,16 @@ export class SupermarketLocationService {
    * Order is not kept: the stack is ranked by each scope's own `priority`, so
    * the order a caller happened to list them in decides nothing and pretending
    * otherwise would make two equivalent requests look different.
+   *
+   * A `STORE` scope is accepted only when it is this shop's own (plan 0116,
+   * section 5). A shop quoted from another shop's hand entered prices is a
+   * mistake nobody makes on purpose.
    */
   private async requestedStack(
     single: string | undefined,
     plural: string[] | undefined,
-    supermarketId: string
+    supermarketId: string,
+    supermarketLocationId: string
   ): Promise<string[]> {
     if (single !== undefined && plural !== undefined) {
       throw new ValidationException(
@@ -173,7 +191,18 @@ export class SupermarketLocationService {
     const named = plural ?? (single === undefined ? [] : [single]);
     const unique = [...new Set(named)];
     for (const priceScopeId of unique) {
-      await this.scopes.requireScopeOf(priceScopeId, supermarketId);
+      const scope = await this.scopes.requireScopeOf(
+        priceScopeId,
+        supermarketId
+      );
+      if (
+        scope.kind === PriceScopeKind.STORE &&
+        scope.externalKey !== supermarketLocationId
+      ) {
+        throw new ValidationException(
+          `Price scope ${priceScopeId} is the STORE scope of another shop`
+        );
+      }
     }
     return unique;
   }
@@ -239,7 +268,8 @@ export class SupermarketLocationService {
     const namedScopeIds = await this.requestedStack(
       req.priceScopeId,
       req.priceScopeIds,
-      row.supermarketId
+      row.supermarketId,
+      row.id
     );
     if (namedScopeIds.length === 0 && req.priceScopeIds?.length === 0) {
       throw new ValidationException(
@@ -284,7 +314,19 @@ export class SupermarketLocationService {
     const saved = await this.audit.write(actor, async (tx) => {
       const updated = await tx.update(SupermarketLocation, before, row);
       if (namedScopeIds.length > 0) {
-        await this.writeStack(tx.manager, row.id, namedScopeIds);
+        // The store scope is implied, the same way it is on create (plan 0116,
+        // section 5), and a shop created before that rule gains one here.
+        const store = await this.scopes.ensureStoreScope(
+          tx,
+          row.supermarketId,
+          row.id,
+          row.label
+        );
+        await this.writeStack(
+          tx.manager,
+          row.id,
+          withStoreScope(namedScopeIds, store)
+        );
       }
       return updated;
     });

@@ -1370,6 +1370,7 @@ const listPriceScopesRequest = object(
   {
     userId: nonEmptyString(),
     supermarketId: string(),
+    kinds: array(ref(CATALOG_SCHEMA_IDS.priceScopeKind)),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),

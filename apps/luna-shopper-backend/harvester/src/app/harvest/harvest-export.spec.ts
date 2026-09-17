@@ -26,6 +26,7 @@ import { SourceIngest } from './source-ingest';
  */
 
 const RUN = 'run-monday';
+const WAREHOUSE = '33333333-3333-4333-8333-333333333399';
 const CHAIN = '11111111-1111-4111-8111-111111111111';
 const NATIONAL = '22222222-2222-4222-8222-222222222222';
 const CORDOBA = '33333333-3333-4333-8333-333333333333';
@@ -468,5 +469,46 @@ describe('importing a run this backend exported', () => {
     expect((parts.priceRows[0]['validUntil'] as Date).toISOString()).toBe(
       '2026-09-23T22:00:00.000Z'
     );
+  });
+
+  it('writes a warehouse as LOCAL_AREA', () => {
+    // Plan 0116, section 2.1: the exporter writes the kind's current name.
+    const document = buildHarvestDocument({
+      run: { id: RUN, supermarketId: CHAIN, priceScopeId: WAREHOUSE },
+      scopes: [
+        { id: WAREHOUSE, externalKey: '4661', kind: 'LOCAL_AREA', name: null },
+      ],
+      entries: [entry({ prices: [price({ priceScopeId: WAREHOUSE })] })],
+      producedAt: PRODUCED,
+    });
+
+    expect(document.scopes).toEqual([{ key: '4661', kind: 'LOCAL_AREA' }]);
+  });
+
+  it('still imports a document that says POSTAL_CODE, as a LOCAL_AREA scope', async () => {
+    // Plan 0116, section 2.1: a version 2 file somebody kept from before the
+    // rename validates and imports under the kind's current name.
+    const built = buildHarvestDocument({
+      run: { id: RUN, supermarketId: CHAIN, priceScopeId: WAREHOUSE },
+      scopes: [
+        { id: WAREHOUSE, externalKey: '4661', kind: 'LOCAL_AREA', name: null },
+      ],
+      entries: [entry({ prices: [price({ priceScopeId: WAREHOUSE })] })],
+      producedAt: PRODUCED,
+    });
+    const document = {
+      ...built,
+      scopes: [{ key: '4661', kind: 'POSTAL_CODE' as const }],
+    };
+    document.sha256 = digestOf(document);
+
+    expect(validateHarvestDocument(document).failures).toEqual([]);
+
+    const parts = importInto(document);
+    await parts.run();
+
+    expect(parts.createdScopes).toEqual([
+      { externalKey: '4661', kind: 'LOCAL_AREA' },
+    ]);
   });
 });

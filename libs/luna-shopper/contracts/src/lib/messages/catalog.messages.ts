@@ -1697,6 +1697,14 @@ export interface PriceScopeIdRequest extends AdminCredential {
 export interface ListPriceScopesRequest extends PageQuery {
   userId: string;
   supermarketId?: string;
+  /**
+   * Only scopes of these kinds, and every kind when absent (plan 0116, section 7).
+   *
+   * Every shop holds its own `STORE` scope, so a chain with a thousand shops and
+   * two hundred warehouses answers the warehouses last unless a caller asks for
+   * them by kind.
+   */
+  kinds?: PriceScopeKind[];
 }
 
 // --- Resolving a place into scopes (plan 0049, sections 1.1 and 3.1) --------

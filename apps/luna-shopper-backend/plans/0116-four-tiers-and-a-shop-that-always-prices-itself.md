@@ -1,3 +1,5 @@
+> **PR:** [#383](https://github.com/IchirokuXVI/nx-portfolio/pull/383)
+
 # 0116: four tiers, and a shop that always prices itself
 
 > Admin half: `apps/luna-shopper-admin/plans/0028`.
@@ -155,6 +157,22 @@ between `LOCAL_AREA` and `REGION` for the move to re-rank against.
 
 The seeded Mercadona shop takes the stack rule of section 5 like any other shop, so the seed names
 its warehouse and the catalog adds the shop's `STORE` scope.
+
+### 4.1 Found while building: the upsert runs only once
+
+**The paragraph above is true of a fresh database and false of a cluster.** `seedMercadona` looks
+the chain up by brand key first, and upserts the chain, `4661` and the shop only when it finds
+none. The first deploy created the chain, so every later deploy takes the other branch and never
+reaches the upsert. That branch now calls `moveSeededMercadona`. It moves the scope whose id is
+the seed's derived id to `LOCAL_AREA` at 200, and gives the seeded shop its `STORE` scope and the
+prices it inherits. A scope a harvest created has another id and is never touched. A rehearsal on
+a throwaway Postgres set the rows back to `REGION` 300 and ran the built `seed-reference.js`
+twice. The first run moved them, and the second changed nothing.
+
+The seed writes its rows directly rather than through `SupermarketLocationService`, so it applies
+section 5 itself. That includes the two reference stores, whose `STORE` scopes were keyed by slug
+and are now keyed by shop id. Keyed by slug, an admin edit of their stack would have added a
+second store scope beside the first.
 
 ## 5. Every shop holds its `STORE` scope
 

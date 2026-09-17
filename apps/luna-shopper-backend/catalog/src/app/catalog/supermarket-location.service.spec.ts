@@ -1,6 +1,10 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { PostalCodeSource } from '@portfolio/luna-shopper/contracts';
+import {
+  PostalCodeSource,
+  PriceScopeKind,
+} from '@portfolio/luna-shopper/contracts';
+import { ValidationException } from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
 // `SupermarketLocation` is a value here: the audit double keys on the class.
 import {
@@ -182,7 +186,7 @@ function build(points: PostalCodePoint[] = CENTROIDS) {
     stacks,
     config
   );
-  return { service, locations, stored, audit, stacks, effective };
+  return { service, locations, stored, audit, stacks, effective, scopes };
 }
 
 /** Everything a create needs beyond the field under test. */
@@ -410,6 +414,182 @@ describe('SupermarketLocationService postal codes', () => {
 
     expect(view.postalCodeSource).toBe(PostalCodeSource.DERIVED);
     expect(view.priceScopeId).toBe(SCOPE);
+  });
+});
+
+/**
+ * Every shop holds its own STORE scope (plan 0116, section 5).
+ *
+ * The scopes double answers from a small table: two scopes of the chain that
+ * are not a shop's, and a store scope per shop id created on demand, keyed the
+ * way the real `ensureStoreScope` keys it.
+ */
+describe('SupermarketLocationService stack rule', () => {
+  const WAREHOUSE = 'scope-warehouse-4661';
+  const REGION = 'scope-region-andalucia';
+  const OTHER_SHOP_STORE = 'scope-store-other';
+
+  function withScopes() {
+    const built = build();
+    const table = new Map<string, Partial<PriceScope>>([
+      [WAREHOUSE, { id: WAREHOUSE, kind: PriceScopeKind.LOCAL_AREA }],
+      [REGION, { id: REGION, kind: PriceScopeKind.REGION }],
+      [
+        OTHER_SHOP_STORE,
+        {
+          id: OTHER_SHOP_STORE,
+          kind: PriceScopeKind.STORE,
+          externalKey: 'another-shop',
+        },
+      ],
+    ]);
+    const storeOf = (locationId: string) => `store-of-${locationId}`;
+    const ensureStoreScope = built.scopes.ensureStoreScope as jest.Mock;
+    ensureStoreScope.mockImplementation(
+      async (_tx: unknown, _chain: string, locationId: string) => {
+        const scope = {
+          id: storeOf(locationId),
+          kind: PriceScopeKind.STORE,
+          externalKey: locationId,
+        };
+        table.set(scope.id, scope);
+        return scope;
+      }
+    );
+    (built.scopes.requireScopeOf as jest.Mock).mockImplementation(
+      async (id: string) => table.get(id)
+    );
+    const stackOf = (locationId: string): string[] =>
+      (built.stacks.setStack as jest.Mock).mock.calls
+        .filter((call) => call[1] === locationId)
+        .map((call) => call[2] as string[])
+        .pop() ?? [];
+    return { ...built, ensureStoreScope, storeOf, stackOf };
+  }
+
+  it('writes a named warehouse and the new store scope on create', async () => {
+    const { service, storeOf, stackOf } = withScopes();
+
+    const view = await service.create({ ...CREATE, priceScopeId: WAREHOUSE });
+
+    expect(stackOf(view.id).sort()).toEqual(
+      [WAREHOUSE, storeOf(view.id)].sort()
+    );
+  });
+
+  it('writes the store scope alone when a create names no scope', async () => {
+    const { service, storeOf, stackOf } = withScopes();
+
+    const view = await service.create({ ...CREATE });
+
+    expect(stackOf(view.id)).toEqual([storeOf(view.id)]);
+  });
+
+  it('keeps the store scope when an update names only a region', async () => {
+    const { service, storeOf, stackOf } = withScopes();
+    const created = await service.create({
+      ...CREATE,
+      priceScopeId: WAREHOUSE,
+    });
+
+    await service.update({
+      userId: OWNER,
+      supermarketLocationId: created.id,
+      priceScopeIds: [REGION],
+    });
+
+    expect(stackOf(created.id).sort()).toEqual(
+      [REGION, storeOf(created.id)].sort()
+    );
+  });
+
+  it('gives a shop with no store scope one on a stack update', async () => {
+    // A shop created before plan 0116 may hold only a warehouse. The update
+    // asks for its store scope, which `ensureStoreScope` creates when absent.
+    const { service, stored, ensureStoreScope, storeOf, stackOf } =
+      withScopes();
+    stored.push({
+      id: 'old-shop',
+      supermarketId: CHAIN,
+      label: null,
+      country: null,
+      postalCode: null,
+      latitude: null,
+      longitude: null,
+    } as SupermarketLocation);
+
+    await service.update({
+      userId: OWNER,
+      supermarketLocationId: 'old-shop',
+      priceScopeIds: [WAREHOUSE],
+    });
+
+    expect(ensureStoreScope).toHaveBeenCalledWith(
+      expect.anything(),
+      CHAIN,
+      'old-shop',
+      null
+    );
+    expect(stackOf('old-shop').sort()).toEqual(
+      [WAREHOUSE, storeOf('old-shop')].sort()
+    );
+  });
+
+  it('accepts the shop naming its own store scope, once', async () => {
+    const { service, storeOf, stackOf } = withScopes();
+    const created = await service.create({ ...CREATE });
+
+    await service.update({
+      userId: OWNER,
+      supermarketLocationId: created.id,
+      priceScopeIds: [storeOf(created.id), WAREHOUSE],
+    });
+
+    expect(stackOf(created.id).sort()).toEqual(
+      [WAREHOUSE, storeOf(created.id)].sort()
+    );
+  });
+
+  it("refuses another shop's store scope", async () => {
+    const { service, stackOf } = withScopes();
+    const created = await service.create({ ...CREATE });
+
+    await expect(
+      service.update({
+        userId: OWNER,
+        supermarketLocationId: created.id,
+        priceScopeIds: [OTHER_SHOP_STORE],
+      })
+    ).rejects.toThrow(ValidationException);
+    await expect(
+      service.update({
+        userId: OWNER,
+        supermarketLocationId: created.id,
+        priceScopeIds: [OTHER_SHOP_STORE],
+      })
+    ).rejects.toThrow(OTHER_SHOP_STORE);
+    expect(stackOf(created.id)).not.toContain(OTHER_SHOP_STORE);
+  });
+
+  it("refuses another shop's store scope on create too", async () => {
+    const { service } = withScopes();
+
+    await expect(
+      service.create({ ...CREATE, priceScopeIds: [OTHER_SHOP_STORE] })
+    ).rejects.toThrow(ValidationException);
+  });
+
+  it('still refuses an explicitly empty stack', async () => {
+    const { service } = withScopes();
+    const created = await service.create({ ...CREATE });
+
+    await expect(
+      service.update({
+        userId: OWNER,
+        supermarketLocationId: created.id,
+        priceScopeIds: [],
+      })
+    ).rejects.toThrow('A shop must sell at one scope at least');
   });
 });
 

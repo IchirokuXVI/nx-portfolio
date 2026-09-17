@@ -15,8 +15,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * outlive the scope it names: a deleted warehouse cascades its own prices away
  * and its copies at a region stay priced.
  */
-export class ScopeCopies1757400000000 implements MigrationInterface {
-  name = 'ScopeCopies1757400000000';
+export class ScopeCopies1757500000000 implements MigrationInterface {
+  name = 'ScopeCopies1757500000000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

@@ -141,6 +141,11 @@ export class PriceScopeService {
     if (req.supermarketId) {
       qb.andWhere('s."supermarketId" = :sid', { sid: req.supermarketId });
     }
+    if (req.kinds && req.kinds.length > 0) {
+      // Plan 0116, section 7: a chain holds a STORE scope per shop, so its
+      // warehouses would otherwise sit behind every one of them.
+      qb.andWhere('s."kind" IN (:...kinds)', { kinds: req.kinds });
+    }
     if (cursor) {
       qb.andWhere('(s."createdAt", s.id) < (:cv, :cid)', {
         cv: cursor.value,

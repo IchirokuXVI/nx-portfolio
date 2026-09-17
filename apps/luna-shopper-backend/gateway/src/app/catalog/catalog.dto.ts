@@ -510,7 +510,7 @@ export class CreatePriceScopeDto {
     type: Number,
     minimum: 0,
     description:
-      'How specific the scope is (plan 0105, section 2.1). Lower is more specific, and within one shop the most specific scope that has a price for a product is the price that shop charges. Omit it and the scope takes the default for its kind: 100 STORE, 200 POSTAL_CODE, 300 REGION, 1000 NATIONAL. The gaps are what let a tier nobody anticipated be a number rather than a migration.',
+      'How specific the scope is (plan 0105, section 2.1). Lower is more specific, and within one shop the most specific scope that has a price for a product is the price that shop charges. Omit it and the scope takes the default for its kind: 100 STORE, 200 LOCAL_AREA, 300 REGION, 1000 NATIONAL. The gaps are what let a tier nobody anticipated be a number rather than a migration.',
   })
   @IsOptional()
   @IsInt()
@@ -802,6 +802,10 @@ export class CatalogListQueryDto extends PageQueryDto {
  * Both scope lists were written that way and neither had been called, so both
  * answered 400 to the one parameter they document.
  */
+/** `?x=a&x=b` for one value arrives as a string; every list parameter needs it. */
+const asArray = ({ value }: { value: unknown }) =>
+  value === undefined || Array.isArray(value) ? value : [value];
+
 export class ListPriceScopesQueryDto extends PageQueryDto {
   @ApiPropertyOptional({
     format: 'uuid',
@@ -810,6 +814,20 @@ export class ListPriceScopesQueryDto extends PageQueryDto {
   @IsOptional()
   @IsUUID()
   supermarketId?: string;
+
+  @ApiPropertyOptional({
+    name: 'kind',
+    enum: PriceScopeKind,
+    isArray: true,
+    description:
+      'Repeatable. Only scopes of these kinds (plan 0116, section 7). A chain holds one STORE scope per shop, so a caller after its warehouses names LOCAL_AREA rather than paging past every shop. Omit it for every kind.',
+  })
+  @IsOptional()
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMaxSize(Object.values(PriceScopeKind).length)
+  @IsEnum(PriceScopeKind, { each: true })
+  kind?: PriceScopeKind[];
 }
 
 /**
@@ -837,10 +855,6 @@ export class SearchOrderQueryDto extends PageQueryDto {
 
 /** How many postal codes or chains one read may name. Same reasoning, smaller. */
 const MAX_SELECTORS = 20;
-
-/** `?x=a&x=b` for one value arrives as a string; every list parameter needs it. */
-const asArray = ({ value }: { value: unknown }) =>
-  value === undefined || Array.isArray(value) ? value : [value];
 
 /**
  * A flag as a query string spells it: `?flag=true`, or bare `?flag`, which

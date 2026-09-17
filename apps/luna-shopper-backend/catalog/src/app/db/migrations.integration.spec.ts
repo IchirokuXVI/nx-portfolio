@@ -140,6 +140,21 @@ describeIntegration('catalog schema (real Postgres)', () => {
     expect(names.has('price_source_kind')).toBe(true);
   });
 
+  it('names the four scope tiers in order (plan 0116, section 2)', async () => {
+    const rows = await dataSource.query(
+      `SELECT e.enumlabel FROM pg_enum e
+       JOIN pg_type t ON t.oid = e.enumtypid
+       WHERE t.typname = 'price_scope_kind'
+       ORDER BY e.enumsortorder`
+    );
+    expect(rows.map((r: { enumlabel: string }) => r.enumlabel)).toEqual([
+      'NATIONAL',
+      'REGION',
+      'LOCAL_AREA',
+      'STORE',
+    ]);
+  });
+
   it('keys prices on the scope and not on the store any more (plan 0038, section 5.2)', async () => {
     const columns = await dataSource.query(
       `SELECT column_name FROM information_schema.columns
