@@ -401,7 +401,7 @@ export class ShareLinkController {
   @ApiComposedResponse(GENERATED_LIST_SHARING_SCHEMA_IDS.joinResult, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, notFound: true })
+  @ApiProblemResponses({ body: true, participant: true, notFound: true })
   async join(
     @Param('secret') secret: string,
     @Body() dto: JoinGeneratedListDto,
@@ -470,7 +470,7 @@ export class GeneratedListParticipantController {
    */
   @Get(':id/basket')
   @ApiComposedResponse(GENERATED_LIST_SHARING_SCHEMA_IDS.basketResult)
-  @ApiProblemResponses({ auth: true, notFound: true })
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async getBasket(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string
@@ -805,6 +805,7 @@ export class GeneratedListParticipantController {
   })
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     notFound: true,
     finishedBasket: true,
@@ -850,6 +851,7 @@ export class GeneratedListParticipantController {
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.renameLine)
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     membership: true,
     finishedBasket: true,
@@ -905,7 +907,7 @@ export class GeneratedListParticipantController {
       'The dropdown, in the order it is to be drawn: every matching group first, then the individual products. The same body /v1/catalog/suggest answers, field for field.',
     schema: componentRef(SUGGEST_SCHEMA),
   })
-  @ApiProblemResponses({ auth: true, notFound: true })
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async suggest(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
@@ -1046,6 +1048,7 @@ export class GeneratedListParticipantController {
   // 0056, section 3.2): the request is well formed and the state refuses it.
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     notFound: true,
     conflict: true,
@@ -1086,6 +1089,7 @@ export class GeneratedListParticipantController {
   // malformed quantity.
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     notFound: true,
     conflict: true,
@@ -1148,6 +1152,7 @@ export class GeneratedListParticipantController {
   })
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     notFound: true,
     conflict: true,
@@ -1189,7 +1194,12 @@ export class GeneratedListParticipantController {
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.reopenLine, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ auth: true, notFound: true, conflict: true })
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    notFound: true,
+    conflict: true,
+  })
   reopen(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
@@ -1231,7 +1241,7 @@ export class GeneratedListParticipantController {
    */
   @Get(':id/lines/:lineId/origins')
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.lineOrigins)
-  @ApiProblemResponses({ auth: true, notFound: true })
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   lineOrigins(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
@@ -1271,7 +1281,12 @@ export class GeneratedListParticipantController {
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ auth: true, body: true, notFound: true })
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    body: true,
+    notFound: true,
+  })
   setOriginQuantity(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
@@ -1322,6 +1337,7 @@ export class GeneratedListParticipantController {
   })
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     notFound: true,
     conflict: true,
@@ -1370,7 +1386,7 @@ export class GeneratedListParticipantController {
   /** Who else is on this basket, for the shop screen. */
   @Get(':id/participants/mine')
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantList)
-  @ApiProblemResponses({ auth: true, notFound: true })
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   listParticipants(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string
@@ -1402,6 +1418,7 @@ export class GeneratedListParticipantController {
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantLeave)
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     membership: true,
     notFound: true,
@@ -1432,7 +1449,7 @@ export class GeneratedListParticipantController {
     GENERATED_LIST_SHARING_SCHEMA_IDS.participantTokenResult,
     { status: HttpStatus.CREATED }
   )
-  @ApiProblemResponses({ auth: true, notFound: true })
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async refreshToken(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string

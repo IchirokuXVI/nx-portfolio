@@ -120,6 +120,20 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
       connection.reportReachable();
 
       if (error.status === 401 && !skipAuth) {
+        // A basket refusing this person is a 401 about the basket and not about the
+        // account: a member removed from a shared list still holds a good token.
+        // Refreshing and retrying would be refused the same way, and that second
+        // refusal is what `reportRejected` reads as a dead account, so a removed
+        // member was signed out of the whole app. It goes straight to the caller.
+        const refused = toGatewayError(
+          error.error,
+          error.status,
+          correlationId
+        );
+        if (refused.code === 'not_a_participant') {
+          return throwError(() => refused);
+        }
+
         return retryAfterRefresh(
           stamped,
           next,

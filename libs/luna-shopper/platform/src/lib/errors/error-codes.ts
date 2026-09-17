@@ -12,6 +12,17 @@ import { HttpStatus } from '@nestjs/common';
 export const ERROR_CODES = {
   VALIDATION_FAILED: 'validation_failed',
   UNAUTHORIZED: 'unauthorized',
+  /**
+   * The credential names no live participant of this basket: removed, left,
+   * revoked with the link, or never joined (plan 0051, section 3.3).
+   *
+   * A 401 like {@link UNAUTHORIZED}, because to the basket surface the credential
+   * is refused, but its own code because it says nothing about the account. A
+   * signed in member removed from a basket still holds a perfectly good token,
+   * and a client that read this as `unauthorized` refreshed that token, was
+   * refused again, and signed the person out of the whole app.
+   */
+  NOT_A_PARTICIPANT: 'not_a_participant',
   FORBIDDEN: 'forbidden',
   NOT_FOUND: 'not_found',
   CONFLICT: 'conflict',
@@ -176,6 +187,9 @@ const UPGRADE_REQUIRED = 426 as HttpStatus;
 export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.VALIDATION_FAILED]: HttpStatus.BAD_REQUEST,
   [ERROR_CODES.UNAUTHORIZED]: HttpStatus.UNAUTHORIZED,
+  // 401 and not 403, so a client that has read "refused" from a 401 since plan
+  // 0051 keeps reading it. The code is what tells it the account is not at fault.
+  [ERROR_CODES.NOT_A_PARTICIPANT]: HttpStatus.UNAUTHORIZED,
   [ERROR_CODES.FORBIDDEN]: HttpStatus.FORBIDDEN,
   [ERROR_CODES.NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ERROR_CODES.CONFLICT]: HttpStatus.CONFLICT,

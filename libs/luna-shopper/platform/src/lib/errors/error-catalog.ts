@@ -25,6 +25,10 @@ export const ERROR_CATALOG: Record<
     en: 'You need to sign in to do that.',
     es: 'Necesitas iniciar sesión para hacer eso.',
   },
+  [ERROR_CODES.NOT_A_PARTICIPANT]: {
+    en: 'You are no longer part of this shopping list.',
+    es: 'Ya no formas parte de esta lista de la compra.',
+  },
   [ERROR_CODES.FORBIDDEN]: {
     en: 'You do not have permission to do that.',
     es: 'No tienes permiso para hacer eso.',

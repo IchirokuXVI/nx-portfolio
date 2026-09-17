@@ -7,7 +7,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   GeneratedListFinishedException,
-  UnauthorizedException,
+  NotAParticipantException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import type {
@@ -589,7 +589,7 @@ describe('a basket that is finished takes no new lines (section 3.3)', () => {
 describe('a revoked participant is refused on their next action', () => {
   it('refuses the add, because the row is read live and not cached', async () => {
     const harness = build({ participant: null });
-    await expect(add(harness)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(add(harness)).rejects.toBeInstanceOf(NotAParticipantException);
     expect(harness.saved).toEqual([]);
   });
 
@@ -600,7 +600,7 @@ describe('a revoked participant is refused on their next action', () => {
         generatedListId: BASKET,
         participantId: GUEST_PARTICIPANT,
       })
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).rejects.toBeInstanceOf(NotAParticipantException);
   });
 });
 

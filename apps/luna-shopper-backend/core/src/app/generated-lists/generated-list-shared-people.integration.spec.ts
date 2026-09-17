@@ -12,7 +12,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
-  UnauthorizedException,
+  NotAParticipantException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import {
@@ -499,7 +499,7 @@ describeIntegration(
 
         await expect(
           sharing.join({ secret: link.secret, userId: users.friend })
-        ).rejects.toBeInstanceOf(UnauthorizedException);
+        ).rejects.toBeInstanceOf(NotAParticipantException);
       });
 
       it('refuses a person whose link was revoked with its people, even through the next link', async () => {
@@ -523,7 +523,7 @@ describeIntegration(
         expect(next.id).not.toBe(first.id);
         await expect(
           sharing.join({ secret: next.secret, userId: users.friend })
-        ).rejects.toBeInstanceOf(UnauthorizedException);
+        ).rejects.toBeInstanceOf(NotAParticipantException);
       });
 
       it('brings back a person who left, and the link holds them again', async () => {

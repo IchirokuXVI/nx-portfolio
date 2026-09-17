@@ -69,6 +69,16 @@ export class UnauthorizedException extends DomainException {
   readonly code = ERROR_CODES.UNAUTHORIZED;
 }
 
+/**
+ * The credential names no live participant of the basket addressed (plan 0051,
+ * section 3.3). A 401 that says nothing about the account behind it, so a client
+ * must not answer it by refreshing or ending the session. See
+ * `ERROR_CODES.NOT_A_PARTICIPANT`.
+ */
+export class NotAParticipantException extends DomainException {
+  readonly code = ERROR_CODES.NOT_A_PARTICIPANT;
+}
+
 /** Authenticated, but not allowed to perform this action (or on this zone). */
 export class ForbiddenException extends DomainException {
   readonly code = ERROR_CODES.FORBIDDEN;
