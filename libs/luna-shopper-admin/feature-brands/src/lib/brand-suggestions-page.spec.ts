@@ -513,7 +513,12 @@ describe('BrandSuggestionsPage', () => {
     const fixture = await boot(() => {
       jest
         .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
-        .mockResolvedValue(registered({ canonicalCreated: false }));
+        .mockResolvedValue(
+          registered({
+            linked: brand({ id: 'br_spelling' }),
+            canonicalCreated: false,
+          })
+        );
     });
 
     registerButton(fixture, 'mahou')?.click();
@@ -522,6 +527,57 @@ describe('BrandSuggestionsPage', () => {
     await settle(fixture);
 
     expect(text(fixture)).not.toContain('brands.suggested.register.chainKept');
+  });
+
+  /**
+   * The same key case answers `canonicalCreated: true` and links nothing, so
+   * the chain was not ignored and the notice must not say it was. Reading that
+   * flag without `linked` first would have said it on every plain register.
+   */
+  it('keeps quiet about the chain when nothing was linked', async () => {
+    const fixture = await boot(() => {
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockResolvedValue(registered());
+    });
+
+    registerButton(fixture, 'mahou')?.click();
+    await settle(fixture);
+    page(fixture).chainId.set('sm_mercadona');
+    await settle(fixture);
+    confirmButton(fixture).click();
+    await settle(fixture);
+
+    expect(text(fixture)).not.toContain('brands.suggested.register.chainKept');
+  });
+
+  /**
+   * Somebody linked the brand this name spells between the panel opening and
+   * the press, so the register would make a chain of spellings. The sentence is
+   * its own, and the link goes to the brand that breaks the rule.
+   */
+  it('reads a too deep refusal, with a link to the brand it names', async () => {
+    const fixture = await boot(() => {
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockRejectedValue(
+          new GatewayError({
+            code: 'brand_link_too_deep',
+            status: 409,
+            correlationId: '',
+            details: { brandId: 'br_deep' },
+          })
+        );
+    });
+
+    registerButton(fixture, 'mahou')?.click();
+    await settle(fixture);
+    confirmButton(fixture).click();
+    await settle(fixture);
+
+    expect(page(fixture).openKey()).toBe('mahou');
+    expect(text(fixture)).toContain('resource.error.brandLinkTooDeep');
+    expect(page(fixture).holderLink()).toEqual(['/', 'brands', 'br_deep']);
   });
 
   /**

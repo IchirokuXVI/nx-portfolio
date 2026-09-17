@@ -831,7 +831,13 @@ export class BrandSuggestionsPage implements OnDestroy {
   readonly panelErrorKey = computed(() => gatewayErrorKey(this._panelError()));
 
   /**
-   * Where the brand already holding this key lives, or nothing.
+   * Where the brand this refusal named lives, or nothing.
+   *
+   * Two refusals name one: the key is already taken, or the name typed is
+   * itself a spelling of something and linking to it would make a chain. The
+   * second only happens when somebody linked that brand between this panel
+   * being opened and the press, and both leave the operator wanting the same
+   * thing, which is to look at the brand in question.
    *
    * Built from `ResourceRegistry.pathOf`, never from the segment: where a
    * resource is mounted is its section's business, and a link written by hand
@@ -839,7 +845,10 @@ export class BrandSuggestionsPage implements OnDestroy {
    */
   readonly holderLink = computed<readonly string[] | null>(() => {
     const error = this._panelError();
-    if (error === null || error.code !== 'brand_key_taken') {
+    if (
+      error === null ||
+      (error.code !== 'brand_key_taken' && error.code !== 'brand_link_too_deep')
+    ) {
       return null;
     }
 
@@ -976,9 +985,14 @@ export class BrandSuggestionsPage implements OnDestroy {
         label: registered.brand.label,
         spelling: registered.linked?.label ?? null,
         linked: registered.linkedItems,
-        // A chain was picked and the name named a brand that was already there,
-        // so the chain that counts is the one that brand already had.
-        chainKept: chainId !== '' && !registered.canonicalCreated,
+        // A chain was picked, the name made a brand of its own, and that brand
+        // was already registered, so the chain that counts is the one it had.
+        // `linked` first, because `canonicalCreated` is true for the same key
+        // case as well and nothing was ignored there.
+        chainKept:
+          chainId !== '' &&
+          registered.linked !== null &&
+          !registered.canonicalCreated,
       });
 
       this._focusLater(
