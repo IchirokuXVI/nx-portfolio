@@ -194,6 +194,15 @@ export type CreateGeneratedListDto = {
 };
 
 /**
+ * `CreateHarvestRunPresetDto` in the gateway's OpenAPI document.
+ */
+export type CreateHarvestRunPresetDto = {
+  supermarketId: string;
+  name: string;
+  input: HarvestRunPresetInputDto;
+};
+
+/**
  * `CreateItemDto` in the gateway's OpenAPI document.
  */
 export type CreateItemDto = {
@@ -365,6 +374,24 @@ export type GeneratedListLineShareDto = {
 export type GeneratedListSourceDto = {
   zoneId: string;
   listId?: string | null;
+};
+
+/**
+ * `HarvestRunPresetInputDto` in the gateway's OpenAPI document.
+ */
+export type HarvestRunPresetInputDto = {
+  mode: 'STORE_DISCOVERY' | 'CATALOG_DISCOVERY' | 'FILE_IMPORT';
+  priceScopeId?: string;
+  priceScopeIds?: string[];
+  postalCode?: string;
+  country?: string;
+  radiusMetres?: number;
+  brandKeys?: string[];
+  postalCodes?: string[];
+  detailBackfill?: boolean;
+  scopeCopies?: ScopeCopyDto[];
+  writes?: 'PRICES_AND_AVAILABILITY' | 'PRICES' | 'AVAILABILITY';
+  details?: 'NEW' | 'ALL';
 };
 
 /**
@@ -896,6 +923,14 @@ export type UpdateGeneratedListLineDto = {
   itemId?: string | null;
   targetListId?: string | null;
   confirmMerge?: boolean;
+};
+
+/**
+ * `UpdateHarvestRunPresetDto` in the gateway's OpenAPI document.
+ */
+export type UpdateHarvestRunPresetDto = {
+  name?: string;
+  input?: HarvestRunPresetInputDto;
 };
 
 /**
@@ -2273,6 +2308,11 @@ export type EnumsGeneratedListStatus =
 export type EnumsGenerationScope = 'ALL' | 'SELECTED';
 
 /**
+ * `enums.HarvestDetailFetch` in the gateway's OpenAPI document.
+ */
+export type EnumsHarvestDetailFetch = 'NEW' | 'ALL';
+
+/**
  * `enums.HarvestRunMode` in the gateway's OpenAPI document.
  */
 export type EnumsHarvestRunMode =
@@ -2295,6 +2335,14 @@ export type EnumsHarvestRunStatus =
  * `enums.HarvestRunTrigger` in the gateway's OpenAPI document.
  */
 export type EnumsHarvestRunTrigger = 'MANUAL' | 'SCHEDULED' | 'SYSTEM';
+
+/**
+ * `enums.HarvestRunWrites` in the gateway's OpenAPI document.
+ */
+export type EnumsHarvestRunWrites =
+  | 'PRICES_AND_AVAILABILITY'
+  | 'PRICES'
+  | 'AVAILABILITY';
 
 /**
  * `enums.HarvestWarningCode` in the gateway's OpenAPI document.
@@ -3070,6 +3118,59 @@ export type HarvestHarvestRunPage = {
 };
 
 /**
+ * `harvest.HarvestRunPresetInput` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestRunPresetInput = {
+  mode: EnumsHarvestRunMode;
+  priceScopeId?: string;
+  priceScopeIds?: string[];
+  postalCode?: string;
+  country?: string;
+  radiusMetres?: number;
+  brandKeys?: string[];
+  postalCodes?: string[];
+  detailBackfill?: boolean;
+  scopeCopies?: {
+    from: string;
+    to: string[];
+  }[];
+  writes?: EnumsHarvestRunWrites;
+  details?: EnumsHarvestDetailFetch;
+};
+
+/**
+ * `harvest.HarvestRunPresetLastRun` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestRunPresetLastRun = {
+  id: string;
+  status: EnumsHarvestRunStatus;
+  requestedAt: string;
+};
+
+/**
+ * `harvest.HarvestRunPresetPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestHarvestRunPresetPage = {
+  items: HarvestHarvestRunPresetView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.HarvestRunPresetView` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestRunPresetView = {
+  id: string;
+  supermarketId: string;
+  name: string;
+  input: HarvestHarvestRunPresetInput;
+  createdAt: string;
+  updatedAt: string;
+  lastRun: HarvestHarvestRunPresetLastRun | null;
+};
+
+/**
  * `harvest.HarvestRunView` in the gateway's OpenAPI document.
  */
 export type HarvestHarvestRunView = {
@@ -3105,6 +3206,7 @@ export type HarvestHarvestRunView = {
   revertedAt: string | null;
   revertedByUserId: string | null;
   revertedPriceCount: number | null;
+  presetId?: string | null;
 };
 
 /**

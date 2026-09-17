@@ -10,6 +10,7 @@ import { PostalCodeQueueSurface1757000000000 } from './1757000000000-PostalCodeQ
 import { AutoImportPlaces1757100000000 } from './1757100000000-AutoImportPlaces';
 import { SourceEntryBrandKey1757200000000 } from './1757200000000-SourceEntryBrandKey';
 import { ScopeCopies1757300000000 } from './1757300000000-ScopeCopies';
+import { RunPresets1757400000000 } from './1757400000000-RunPresets';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -32,4 +33,5 @@ export const HARVESTER_MIGRATIONS = [
   AutoImportPlaces1757100000000,
   SourceEntryBrandKey1757200000000,
   ScopeCopies1757300000000,
+  RunPresets1757400000000,
 ];

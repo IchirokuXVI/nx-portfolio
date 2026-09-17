@@ -15,11 +15,17 @@ import {
   ConflictException,
   ForbiddenException,
   NotConfiguredException,
+  NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
-import type { HarvestRun, SupermarketSource } from '../entities';
+import type {
+  HarvestRun,
+  HarvestRunPreset,
+  SupermarketSource,
+} from '../entities';
 import type { CatalogClient } from './catalog-client.service';
+import type { HarvestRunPresetStore } from './harvest-run-preset.store';
 import { HarvestRunService } from './harvest-run.service';
 import {
   ActiveRunExistsError,
@@ -158,6 +164,8 @@ function build(
     run?: HarvestRun;
     /** What catalog holds for this chain, for the scope list cases. */
     scopes?: PriceScopeView[];
+    /** The preset `load` answers, for the start from a preset cases. */
+    preset?: HarvestRunPreset;
   } = {}
 ) {
   const admin = {
@@ -267,6 +275,15 @@ function build(
     listAllPriceScopes: jest.fn(async () => overrides.scopes ?? [warehouse()]),
   } as unknown as CatalogClient;
 
+  const presets = {
+    load: jest.fn(async (presetId: string) => {
+      if (!overrides.preset || overrides.preset.id !== presetId) {
+        throw new NotFoundException('Harvest run preset not found');
+      }
+      return overrides.preset;
+    }),
+  } as unknown as HarvestRunPresetStore;
+
   const service = new HarvestRunService(
     store,
     executor,
@@ -274,7 +291,8 @@ function build(
     rows,
     catalog,
     admin,
-    config
+    config,
+    presets
   );
   return { service, store, executor, sources, rows, catalog, created };
 }
@@ -1266,6 +1284,262 @@ describe('HarvestRunService.spawn, writes and details (plan 0119)', () => {
       expect(store.create).not.toHaveBeenCalled();
     }
   );
+});
+
+/**
+ * The request a validation resolves, which is what a preset saves (plan 0120,
+ * section 3).
+ *
+ * The property that matters is the round trip: the resolved request validates
+ * again to the very payload the first validation answered. A preset that stored
+ * a value its own validation refuses would save and then never start, which is
+ * what storing `details: ALL` for a DEZA walk or `writes` on a backfill would do.
+ */
+describe('HarvestRunService.validateRequest, the resolved request (plan 0120)', () => {
+  const W2 = '5efa0000-0000-4000-a000-0000000000a2';
+
+  const cases: Array<{
+    name: string;
+    adapterKey: string;
+    request: Parameters<HarvestRunService['validateRequest']>[0];
+  }> = [
+    {
+      name: 'a Mercadona walk with copies and every default',
+      adapterKey: 'mercadona-api',
+      request: {
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeIds: [SCOPE],
+        scopeCopies: [{ from: SCOPE, to: [W2] }],
+      },
+    },
+    {
+      name: 'a Mercadona walk that states writes and details',
+      adapterKey: 'mercadona-api',
+      request: {
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeIds: [SCOPE],
+        writes: HarvestRunWrites.PRICES,
+        details: HarvestDetailFetch.ALL,
+      },
+    },
+    {
+      name: 'a Carrefour walk on one scope',
+      adapterKey: 'carrefour-web',
+      request: {
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeId: SCOPE,
+      },
+    },
+    {
+      name: 'a Carrefour backfill',
+      adapterKey: 'carrefour-web',
+      request: {
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        detailBackfill: true,
+      },
+    },
+    {
+      name: 'a DEZA walk writing availability',
+      adapterKey: 'deza-web',
+      request: {
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        writes: HarvestRunWrites.AVAILABILITY,
+      },
+    },
+    {
+      name: 'a LIDL walk',
+      adapterKey: 'lidl-api',
+      request: {
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+      },
+    },
+    {
+      name: 'a store discovery of a chain that names its own shops',
+      adapterKey: 'mercadona-api',
+      request: {
+        mode: HarvestRunMode.STORE_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        postalCodes: [' 14013 ', ''],
+      },
+    },
+  ];
+
+  it.each(cases)('validates $name again to the same payload', async (c) => {
+    const { service } = build({
+      source: { adapterKey: c.adapterKey },
+      scopes: [warehouse(), warehouse({ id: W2, externalKey: null })],
+    });
+    const source = { adapterKey: c.adapterKey } as SupermarketSource;
+
+    const first = await service.validateRequest(c.request, source);
+    const again = await service.validateRequest(
+      { ...first.request, supermarketId: SUPERMARKET },
+      source
+    );
+
+    expect(again.payload).toEqual(first.payload);
+    expect(again.request).toEqual(first.request);
+  });
+
+  it('resolves the plan 0119 defaults into the request, not only the payload', async () => {
+    const { service } = build();
+
+    const { request } = await service.validateRequest(
+      {
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeIds: [SCOPE],
+      },
+      { adapterKey: 'mercadona-api' } as SupermarketSource
+    );
+
+    expect(request).toEqual({
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      priceScopeIds: [SCOPE],
+      writes: HarvestRunWrites.PRICES_AND_AVAILABILITY,
+      details: HarvestDetailFetch.NEW,
+    });
+  });
+
+  it('refuses a chain with no configured source, as a spawn does', async () => {
+    const { service } = build();
+
+    await expect(
+      service.validateRequest(
+        {
+          mode: HarvestRunMode.CATALOG_DISCOVERY,
+          supermarketId: SUPERMARKET,
+          priceScopeIds: [SCOPE],
+        },
+        null
+      )
+    ).rejects.toThrow(/no configured source/);
+  });
+});
+
+/** Starting a run from a saved preset (plan 0120, sections 4 and 7). */
+describe('HarvestRunService.spawnFromPreset (plan 0120)', () => {
+  const PRESET = '5efa0000-0000-4000-a000-0000000000e1';
+  const GONE = '5efa0000-0000-4000-a000-0000000000e2';
+
+  function preset(over: Partial<HarvestRunPreset> = {}): HarvestRunPreset {
+    return {
+      id: PRESET,
+      supermarketId: SUPERMARKET,
+      name: 'Weekly Mercadona',
+      input: {
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        priceScopeIds: [SCOPE],
+        writes: HarvestRunWrites.PRICES_AND_AVAILABILITY,
+        details: HarvestDetailFetch.NEW,
+      },
+      createdByUserId: ADMIN,
+      updatedByUserId: ADMIN,
+      createdAt: new Date('2026-09-01T09:00:00.000Z'),
+      updatedAt: new Date('2026-09-01T09:00:00.000Z'),
+      ...over,
+    } as HarvestRunPreset;
+  }
+
+  it('starts a run with a copy of the input and the preset id', async () => {
+    const { service, store, executor } = build({ preset: preset() });
+
+    const view = await service.spawnFromPreset({
+      userId: ADMIN,
+      presetId: PRESET,
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        trigger: HarvestRunTrigger.MANUAL,
+        supermarketId: SUPERMARKET,
+        requestedByUserId: ADMIN,
+        presetId: PRESET,
+        payload: {
+          supermarketId: SUPERMARKET,
+          priceScopeId: null,
+          priceScopeIds: [SCOPE],
+          detailBackfill: false,
+          scopeCopies: [],
+          writes: HarvestRunWrites.PRICES_AND_AVAILABILITY,
+          details: HarvestDetailFetch.NEW,
+        },
+      })
+    );
+    expect(executor.start).toHaveBeenCalledWith('run-1');
+    expect(view.presetId).toBe(PRESET);
+  });
+
+  it('refuses a preset naming a scope that is gone, naming both, and creates no run', async () => {
+    const { service, store } = build({
+      preset: preset({
+        input: {
+          mode: HarvestRunMode.CATALOG_DISCOVERY,
+          priceScopeIds: [SCOPE, GONE],
+        },
+      }),
+    });
+    const start = () =>
+      service.spawnFromPreset({ userId: ADMIN, presetId: PRESET });
+
+    await expect(start()).rejects.toBeInstanceOf(ValidationException);
+    await expect(start()).rejects.toThrow(
+      new RegExp(`Weekly Mercadona.*${PRESET}.*${GONE} does not belong`)
+    );
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('conflicts, as a spawn does, while the chain has a run in flight', async () => {
+    const { service } = build({
+      preset: preset(),
+      createImpl: (async () => {
+        throw new ActiveRunExistsError('run-already-going');
+      }) as unknown as HarvestRunStore['create'],
+    });
+
+    await expect(
+      service.spawnFromPreset({ userId: ADMIN, presetId: PRESET })
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('refuses a disabled source, which is about the moment and not the preset', async () => {
+    const { service, store } = build({
+      preset: preset(),
+      source: { enabled: false },
+    });
+
+    await expect(
+      service.spawnFromPreset({ userId: ADMIN, presetId: PRESET })
+    ).rejects.toThrow(/source is disabled/);
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('answers not found for an unknown preset', async () => {
+    const { service } = build({ preset: preset() });
+
+    await expect(
+      service.spawnFromPreset({ userId: ADMIN, presetId: GONE })
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('refuses when HARVEST_ENABLED is false, and is gated', async () => {
+    const off = build({ preset: preset(), config: { harvestEnabled: false } });
+    await expect(
+      off.service.spawnFromPreset({ userId: ADMIN, presetId: PRESET })
+    ).rejects.toBeInstanceOf(NotConfiguredException);
+
+    const on = build({ preset: preset() });
+    await expect(
+      on.service.spawnFromPreset({ userId: 'someone', presetId: PRESET })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
 });
 
 describe('HarvestRunService.abort', () => {

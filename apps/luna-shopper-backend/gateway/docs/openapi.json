@@ -19075,6 +19075,16 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "presetId",
+            "required": false,
+            "in": "query",
+            "description": "The runs started from this preset (plan 0120). A deleted preset still filters its runs, which keep its id.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -19500,6 +19510,593 @@
           },
           "500": {
             "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/presets": {
+      "get": {
+        "operationId": "AdminHarvestPresetsController_list_v1",
+        "parameters": [
+          {
+            "name": "supermarketId",
+            "required": false,
+            "in": "query",
+            "description": "One chain’s presets. Absent lists every chain’s.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `harvestPreset.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestRunPresetPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "post": {
+        "operationId": "AdminHarvestPresetsController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHarvestRunPresetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `harvestPreset.create` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestRunPresetView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/presets/{id}": {
+      "get": {
+        "operationId": "AdminHarvestPresetsController_get_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `harvestPreset.get` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestRunPresetView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "put": {
+        "operationId": "AdminHarvestPresetsController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHarvestRunPresetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `harvestPreset.update` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestRunPresetView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminHarvestPresetsController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `harvestPreset.delete` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/presets/{id}/runs": {
+      "post": {
+        "operationId": "AdminHarvestPresetsController_start_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The `harvest.spawnFromPreset` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestRunView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`not_configured` — That sign in method is not available on this server.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -21554,6 +22151,16 @@
             "description": "Reverted runs only, or unreverted runs only (plan 0082). Absent lists both. A filter of its own rather than a status, because a revert does not change how the run ended.",
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "presetId",
+            "required": false,
+            "in": "query",
+            "description": "The runs started from this preset (plan 0120). A deleted preset still filters its runs, which keep its id.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
             }
           }
         ],
@@ -24570,6 +25177,142 @@
         "required": [
           "mode"
         ]
+      },
+      "HarvestRunPresetInputDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "STORE_DISCOVERY",
+              "CATALOG_DISCOVERY",
+              "FILE_IMPORT"
+            ]
+          },
+          "priceScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead."
+          },
+          "priceScopeIds": {
+            "description": "The scopes a `mercadona-api` CATALOG_DISCOVERY covers, one warehouse each, and required and non-empty for one. Each scope’s own `externalKey` is the warehouse the walk fetches, so a run cannot walk one warehouse and label its prices with another. A list and not one id because the detail phase, which is where the eighteen minutes go, is shared across warehouses: six of them cost about 5,300 requests together against 26,298 apart. A scope with no key is refused, and so is one whose priority is outside the band the adapter’s walk may write.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "postalCode": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "Required for STORE_DISCOVERY, unless the chain named publishes its own shop list. It decides the price scope through the chain’s own resolver; the radius below decides the store list. Two questions, two sources (plan 0038, section 2.8). A chain that names its own shops needs neither, and filters with `postalCodes` instead."
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 2,
+            "default": "es"
+          },
+          "radiusMetres": {
+            "type": "number",
+            "minimum": 100,
+            "maximum": 50000,
+            "default": 3000,
+            "description": "A radius, never a postcode filter: two thirds of OSM stores carry no postcode, and a postal code’s bounding box spans a whole city. 3 km returned 26 supermarkets around 14013."
+          },
+          "brandKeys": {
+            "description": "Restrict the report to these `brand:wikidata` keys.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "postalCodes": {
+            "description": "Restrict a STORE_DISCOVERY of a chain that publishes its own shop list to the shops in these postal codes. It matches each shop’s own code exactly and is never a radius: the chain states the code, so an exact match is a well posed question where a bounding box is not. An empty list is every shop the chain publishes; the document is one request either way, and what the filter saves is the warehouse lookup per code.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "detailBackfill": {
+            "type": "boolean",
+            "default": false,
+            "description": "Read product pages for the EAN instead of crawling the assortment (plan 0090, section 12.1). `carrefour-web` only. A crawl reads 851 listing pages in about an hour; a backfill reads one page per product that has no EAN yet, of the order of 18,000 the first time, so the two are never one run. Stopping a backfill costs nothing: an EAN is written as it is read, and a product that has one is never fetched again."
+          },
+          "scopeCopies": {
+            "description": "Scopes that also receive what the run writes at a walked scope (plan 0118). CATALOG_DISCOVERY only, and never with `detailBackfill`. A copy fetches nothing, so a target is any tier and needs no key of the chain’s own. `from` is a scope the run writes: one of `priceScopeIds` for `mercadona-api`, `priceScopeId` for an adapter given one scope, and any keyed scope of the chain for `lidl-api`. Each `from` appears once, every target once in the whole run, and no target is walked by the run. Every copied price records the scope it was read at.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScopeCopyDto"
+            }
+          },
+          "writes": {
+            "type": "string",
+            "enum": [
+              "PRICES_AND_AVAILABILITY",
+              "PRICES",
+              "AVAILABILITY"
+            ],
+            "default": "PRICES_AND_AVAILABILITY",
+            "description": "What the run writes of what it read (plan 0119). CATALOG_DISCOVERY only, and never with `detailBackfill`. Products are ingested whatever it says; it decides whether the prices, the availability or both are written, for walked scopes and copies alike. `PRICES` is refused for an adapter that states no price. It saves no request: prices and availability come from the same listing walk. The resolved value is stored on the run."
+          },
+          "details": {
+            "type": "string",
+            "enum": [
+              "NEW",
+              "ALL"
+            ],
+            "description": "Which products a walk fetches the detail of (plan 0119). CATALOG_DISCOVERY only, and only for an adapter whose capability `skipsKnownDetails` is true (`mercadona-api`), where it defaults to `NEW`: the detail of a product whose row has no EAN yet, or has no row. `ALL` fetches every detail, which is what a walk of ten warehouses where every product is known costs about 5,700 requests for instead of 1,510. Stating it for any other adapter is refused, and leaving it out resolves to `ALL`. The resolved value is stored on the run."
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "CreateHarvestRunPresetDto": {
+        "type": "object",
+        "properties": {
+          "supermarketId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chain the preset belongs to. It never changes: a request that fits one chain’s scopes names nothing of another’s."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "Unique within the chain regardless of case. A duplicate answers 409 naming the preset that holds the name."
+          },
+          "input": {
+            "description": "The run request, validated as a spawn is. What is stored is the request with the defaults resolved, so a preset that saved `details: NEW` keeps saying it if the default changes. `FILE_IMPORT` is refused, because it needs a document uploaded at the time, and so is a store discovery around a postal code, which belongs to no chain.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HarvestRunPresetInputDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "supermarketId",
+          "name",
+          "input"
+        ]
+      },
+      "UpdateHarvestRunPresetDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "Unique within the chain regardless of case."
+          },
+          "input": {
+            "description": "Replaces the saved input whole, and is validated again. Runs already started from the preset keep the input they were started with.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HarvestRunPresetInputDto"
+              }
+            ]
+          }
+        }
       },
       "ImportHarvestDocumentDto": {
         "type": "object",
@@ -28714,6 +29457,13 @@
           "SELECTED"
         ]
       },
+      "enums.HarvestDetailFetch": {
+        "type": "string",
+        "enum": [
+          "NEW",
+          "ALL"
+        ]
+      },
       "enums.HarvestRunMode": {
         "type": "string",
         "enum": [
@@ -28739,6 +29489,14 @@
           "MANUAL",
           "SCHEDULED",
           "SYSTEM"
+        ]
+      },
+      "enums.HarvestRunWrites": {
+        "type": "string",
+        "enum": [
+          "PRICES_AND_AVAILABILITY",
+          "PRICES",
+          "AVAILABILITY"
         ]
       },
       "enums.HarvestWarningCode": {
@@ -30698,6 +31456,173 @@
           }
         }
       },
+      "harvest.HarvestRunPresetInput": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/enums.HarvestRunMode"
+          },
+          "priceScopeId": {
+            "type": "string"
+          },
+          "priceScopeIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "radiusMetres": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "brandKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "postalCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "detailBackfill": {
+            "type": "boolean"
+          },
+          "scopeCopies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "from",
+                "to"
+              ],
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "writes": {
+            "$ref": "#/components/schemas/enums.HarvestRunWrites"
+          },
+          "details": {
+            "$ref": "#/components/schemas/enums.HarvestDetailFetch"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.HarvestRunPresetLastRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.HarvestRunStatus"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "requestedAt"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.HarvestRunPresetPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.HarvestRunPresetView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "harvest.HarvestRunPresetView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "input": {
+            "$ref": "#/components/schemas/harvest.HarvestRunPresetInput"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastRun": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/harvest.HarvestRunPresetLastRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "supermarketId",
+          "name",
+          "input",
+          "createdAt",
+          "updatedAt",
+          "lastRun"
+        ],
+        "additionalProperties": false
+      },
       "harvest.HarvestRunView": {
         "type": "object",
         "properties": {
@@ -30849,6 +31774,12 @@
           "revertedPriceCount": {
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "presetId": {
+            "type": [
+              "string",
               "null"
             ]
           }
