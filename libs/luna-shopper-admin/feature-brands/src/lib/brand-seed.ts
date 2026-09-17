@@ -16,11 +16,16 @@ export type SeededSpelling = Wire.HarvestBrandSpellingView & {
 /**
  * Brands to show when there is no backend.
  *
- * Four, one of them a private label, because the private label column is the
+ * Six, one of them a private label, because the private label column is the
  * one an operator is most likely to get wrong and a seed that never exercised it
  * would demonstrate nothing. Real Spanish brands, for the reason
  * `SUPERMARKET_SEED` gives: `elpozo` and `El Pozo` meeting on one key is the
  * whole point of the registry, and `brand-1` would show none of it.
+ *
+ * The last two are the linked pair (backend plan 0124): `DEBORAH 48H` is a
+ * spelling of `Deborah`, so the three states of the links block are all
+ * reachable without a server. A linked brand counts no products of its own,
+ * because its items belong to the brand it spells.
  */
 export const BRAND_SEED: readonly Wire.CatalogBrandView[] = [
   {
@@ -73,6 +78,34 @@ export const BRAND_SEED: readonly Wire.CatalogBrandView[] = [
     linkCount: 0,
     createdAt: '2026-09-01T08:00:00.000Z',
     updatedAt: '2026-09-01T08:00:00.000Z',
+  },
+  {
+    id: 'br_deborah',
+    key: 'deborah',
+    label: 'Deborah',
+    privateLabelSupermarketId: null,
+    // Its own products, and the ones the spelling below brought with it.
+    itemCount: 74,
+    canonicalBrandId: null,
+    canonicalLabel: null,
+    linkCount: 1,
+    createdAt: '2026-04-18T10:20:00.000Z',
+    updatedAt: '2026-09-12T13:05:00.000Z',
+  },
+  {
+    id: 'br_deborah48h',
+    key: 'deborah48h',
+    label: 'DEBORAH 48H',
+    // A linked brand owns no chain: the brand it spells is where that belongs.
+    privateLabelSupermarketId: null,
+    // Zero, and not a gap in the seed. Every product printed `DEBORAH 48H`
+    // carries `Deborah`, which is what the link is for.
+    itemCount: 0,
+    canonicalBrandId: 'br_deborah',
+    canonicalLabel: 'Deborah',
+    linkCount: 0,
+    createdAt: '2026-09-12T13:05:00.000Z',
+    updatedAt: '2026-09-12T13:05:00.000Z',
   },
 ];
 

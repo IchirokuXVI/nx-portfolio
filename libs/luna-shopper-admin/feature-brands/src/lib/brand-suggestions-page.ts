@@ -17,6 +17,7 @@ import {
   ChainNames,
   formatInstant,
   formatSince,
+  HARVEST_SEGMENT,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   gatewayErrorKey,
@@ -87,12 +88,32 @@ const SEARCH_DELAY_MS = 250;
 
     @if (done(); as said) {
       <p class="done" role="status">
-        {{
-          (said.linked === 0
-            ? 'brands.suggested.register.doneNone'
-            : 'brands.suggested.register.done'
-          ) | rokuT: { label: said.label, count: said.linked }
-        }}
+        @if (said.spelling !== null) {
+          {{
+            'brands.suggested.register.doneLinked'
+              | rokuT
+                : {
+                    spelling: said.spelling,
+                    label: said.label,
+                    count: said.linked,
+                  }
+          }}
+        } @else {
+          {{
+            (said.linked === 0
+              ? 'brands.suggested.register.doneNone'
+              : 'brands.suggested.register.done'
+            ) | rokuT: { label: said.label, count: said.linked }
+          }}
+        }
+        <!-- The chain applies to a brand this register created, and the typed
+             name named one that was already there, so what was picked was
+             ignored. Said out loud, because the picker was on screen. -->
+        @if (said.chainKept) {
+          <span class="kept">{{
+            'brands.suggested.register.chainKept' | rokuT: { label: said.label }
+          }}</span>
+        }
       </p>
     }
 
@@ -141,27 +162,36 @@ const SEARCH_DELAY_MS = 250;
 
               <ul class="chips">
                 @for (chain of row.chains; track chain.supermarketId) {
-                  <li class="chip">
-                    <span aria-hidden="true">
-                      {{
-                        'brands.suggested.chain'
-                          | rokuT
-                            : {
-                                name: names.nameOf(chain.supermarketId),
-                                count: count(chain.productCount),
-                              }
-                      }}
-                    </span>
-                    <span class="sr-only">
-                      {{
-                        'brands.suggested.chainAria'
-                          | rokuT
-                            : {
-                                name: names.nameOf(chain.supermarketId),
-                                count: count(chain.productCount),
-                              }
-                      }}
-                    </span>
+                  <li>
+                    <a
+                      [queryParams]="{
+                        supermarketId: chain.supermarketId,
+                        brandKey: row.key,
+                      }"
+                      [routerLink]="entriesLink"
+                      class="chip"
+                    >
+                      <span aria-hidden="true">
+                        {{
+                          'brands.suggested.chain'
+                            | rokuT
+                              : {
+                                  name: names.nameOf(chain.supermarketId),
+                                  count: count(chain.productCount),
+                                }
+                        }}
+                      </span>
+                      <span class="sr-only">
+                        {{
+                          'brands.suggested.chainAria'
+                            | rokuT
+                              : {
+                                  name: names.nameOf(chain.supermarketId),
+                                  count: count(chain.productCount),
+                                }
+                        }}
+                      </span>
+                    </a>
                   </li>
                 }
               </ul>
@@ -223,27 +253,36 @@ const SEARCH_DELAY_MS = 250;
                 <td>
                   <ul class="chips">
                     @for (chain of row.chains; track chain.supermarketId) {
-                      <li class="chip">
-                        <span aria-hidden="true">
-                          {{
-                            'brands.suggested.chain'
-                              | rokuT
-                                : {
-                                    name: names.nameOf(chain.supermarketId),
-                                    count: count(chain.productCount),
-                                  }
-                          }}
-                        </span>
-                        <span class="sr-only">
-                          {{
-                            'brands.suggested.chainAria'
-                              | rokuT
-                                : {
-                                    name: names.nameOf(chain.supermarketId),
-                                    count: count(chain.productCount),
-                                  }
-                          }}
-                        </span>
+                      <li>
+                        <a
+                          [queryParams]="{
+                            supermarketId: chain.supermarketId,
+                            brandKey: row.key,
+                          }"
+                          [routerLink]="entriesLink"
+                          class="chip"
+                        >
+                          <span aria-hidden="true">
+                            {{
+                              'brands.suggested.chain'
+                                | rokuT
+                                  : {
+                                      name: names.nameOf(chain.supermarketId),
+                                      count: count(chain.productCount),
+                                    }
+                            }}
+                          </span>
+                          <span class="sr-only">
+                            {{
+                              'brands.suggested.chainAria'
+                                | rokuT
+                                  : {
+                                      name: names.nameOf(chain.supermarketId),
+                                      count: count(chain.productCount),
+                                    }
+                            }}
+                          </span>
+                        </a>
                       </li>
                     }
                   </ul>
@@ -341,9 +380,13 @@ const SEARCH_DELAY_MS = 250;
               'brands.suggested.register.makesKey' | rokuT: { key: liveKey() }
             }}
           }
+          <!-- A name that makes a different key no longer leaves the products
+               behind: the register links the suggestion to the name instead, so
+               the line says what is about to happen rather than warning. -->
           @if (keyDiffers()) {
             <span class="warn">{{
-              'brands.suggested.register.keyDiffers' | rokuT
+              'brands.suggested.register.linksTo'
+                | rokuT: { spelling: original(), label: label() }
             }}</span>
           }
         </p>
@@ -382,7 +425,9 @@ const SEARCH_DELAY_MS = 250;
             {{
               (saving()
                 ? 'resource.action.working'
-                : 'brands.suggested.register.confirm'
+                : keyDiffers()
+                  ? 'brands.suggested.register.confirmLink'
+                  : 'brands.suggested.register.confirm'
               ) | rokuT
             }}
           </button>
@@ -446,6 +491,12 @@ const SEARCH_DELAY_MS = 250;
       border-color: var(--admin-danger);
       background: var(--admin-danger-wash);
       color: var(--admin-ink);
+    }
+
+    /* The second sentence of the notice, on its own line: it is about the chain
+       picker rather than about what was registered. */
+    .kept {
+      display: block;
     }
 
     .done {
@@ -591,6 +642,26 @@ const SEARCH_DELAY_MS = 250;
       white-space: nowrap;
     }
 
+    /* A chip is a link now, and keeps its shape: inline-block so the padding
+       still makes one, the page's own ink rather than a browser blue, and the
+       underline kept for the hover and the focus, where it says this is a link
+       rather than a label. */
+    a.chip {
+      display: inline-block;
+      color: inherit;
+      text-decoration: none;
+    }
+
+    a.chip:hover,
+    a.chip:focus-visible {
+      text-decoration: underline;
+    }
+
+    a.chip:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
+    }
+
     .panel {
       display: flex;
       flex-direction: column;
@@ -706,15 +777,30 @@ export class BrandSuggestionsPage implements OnDestroy {
   private readonly _panelError = signal<GatewayError | null>(null);
 
   /**
-   * What the last register linked, until the next one starts.
+   * What the last register did, until the next one starts.
    *
-   * The label and the count rather than a finished sentence, because this
-   * screen draws its own notice and can interpolate them where they are read.
+   * The parts rather than a finished sentence, because this screen draws its own
+   * notice and can interpolate them where they are read. `spelling` is the
+   * linked brand's name, and `null` when the typed name made the suggestion's
+   * own key and there was nothing to link.
    */
   readonly done = signal<{
     readonly label: string;
+    readonly spelling: string | null;
     readonly linked: number;
+    readonly chainKept: boolean;
   } | null>(null);
+
+  /**
+   * Where a chain chip goes: the source products queue, filtered.
+   *
+   * `HARVEST_SEGMENT` and a plain segment, because the entries queue is a hand
+   * written screen rather than a resource, and `ResourceRegistry.pathOf` only
+   * answers for resources. No status on the link: the queue's own default is
+   * `CANDIDATE` and `UNRESOLVED`, which is exactly what the chip counted, so the
+   * list it opens holds the number it showed.
+   */
+  readonly entriesLink: readonly string[] = ['/', HARVEST_SEGMENT, 'entries'];
 
   /**
    * The key this label would make, live.
@@ -728,12 +814,14 @@ export class BrandSuggestionsPage implements OnDestroy {
   readonly liveKey = computed(() => brandKey(this.label()) ?? '');
 
   /**
-   * Whether the label being typed would leave this row's products behind.
+   * Whether the label being typed makes a key of its own.
    *
    * The whole reason the panel prefills the spelling and lets it be edited is
-   * that `MAHOU` should become `Mahou`. Both make `mahou`, so both link the
-   * products. `Mahou 5 Estrellas` does not, and the operator has to be told
-   * before they save rather than after, when the row is gone and nothing moved.
+   * that `MAHOU` should become `Mahou`. Both make `mahou`, so both are one
+   * register and one brand. `Mahou 5 Estrellas` is not: that name is its own
+   * brand, and this row becomes a spelling of it (backend plan 0124, section 5).
+   * It used to be a warning, because the products were left behind; now it is
+   * what the register is about to do, said before it happens.
    */
   readonly keyDiffers = computed(() => {
     const open = this.openKey();
@@ -846,7 +934,16 @@ export class BrandSuggestionsPage implements OnDestroy {
   }
 
   /**
-   * Register the open row, as a brand.
+   * Register the open row, as a brand or as a spelling of one.
+   *
+   * **One request either way.** The route takes the suggestion's spelling and
+   * the typed name and decides between the two: the same key is an ordinary
+   * create, and a different one creates the brand the name spells, registers
+   * this row beside it and links them. Two requests from here would leave a
+   * suggestion half registered whenever the second one failed.
+   *
+   * The spelling posted is the chain's, capitalized, which is what the linked
+   * brand ends up called: `DEBORAH 48H` is a shout, not a name.
    *
    * On success the row leaves the list, because it is no longer a suggestion:
    * the key is registered, so the read it came from would not answer it again.
@@ -864,7 +961,8 @@ export class BrandSuggestionsPage implements OnDestroy {
 
     try {
       const chainId = this.chainId();
-      const created = await this._brands.register(
+      const registered = await this._brands.registerSuggestion(
+        capitalizeBrand(this.original()),
         this.label(),
         chainId === '' ? null : chainId
       );
@@ -875,8 +973,12 @@ export class BrandSuggestionsPage implements OnDestroy {
       this.rows.set(remaining);
       this.openKey.set(null);
       this.done.set({
-        label: created.label,
-        linked: created.linkedItems ?? 0,
+        label: registered.brand.label,
+        spelling: registered.linked?.label ?? null,
+        linked: registered.linkedItems,
+        // A chain was picked and the name named a brand that was already there,
+        // so the chain that counts is the one that brand already had.
+        chainKept: chainId !== '' && !registered.canonicalCreated,
       });
 
       this._focusLater(

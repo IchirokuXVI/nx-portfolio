@@ -1,11 +1,13 @@
 import { provideLocationMocks } from '@angular/common/testing';
 import { Component, inject } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
   DeploymentStore,
+  GatewayError,
   RESOURCE_GATEWAYS,
   ServerReachability,
   SessionStorage,
@@ -20,6 +22,7 @@ import {
   defineResource,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
+import { BrandDetailPage } from './brand-detail-page';
 import { BRANDS } from './brands';
 import { BrandsGateway } from './brands-gateway';
 
@@ -143,6 +146,19 @@ const spellingRows = (fixture: ComponentFixture<TestHost>) =>
     ...fixture.nativeElement.querySelectorAll('.panel tbody tr'),
   ] as HTMLElement[];
 
+/** The links block, which is absent for a brand that is neither. */
+const linksBlock = (fixture: ComponentFixture<TestHost>) =>
+  fixture.nativeElement.querySelector('[data-links]') as HTMLElement | null;
+
+const deleteButton = (fixture: ComponentFixture<TestHost>) =>
+  fixture.nativeElement.querySelector(
+    '[data-delete]'
+  ) as HTMLButtonElement | null;
+
+const detail = (fixture: ComponentFixture<TestHost>) =>
+  fixture.debugElement.query(By.directive(BrandDetailPage))
+    .componentInstance as BrandDetailPage;
+
 describe('BrandDetailPage', () => {
   it('draws the brand in the generic form, above the spellings', async () => {
     const fixture = await boot('/brands/br_elpozo');
@@ -223,5 +239,139 @@ describe('BrandDetailPage', () => {
     ) as HTMLInputElement;
     expect(label.value).toBe('El Pozo');
     expect(label.disabled).toBe(false);
+  });
+});
+
+/**
+ * What a brand is linked to, and what is linked to it (admin plan 0032, section
+ * 2.2).
+ *
+ * Three states, all three of them in the seed: `DEBORAH 48H` is a spelling of
+ * `Deborah`, `Deborah` has one spelling, and every other brand is neither and
+ * draws no block at all.
+ */
+describe('the links block', () => {
+  it('names the brand a spelling belongs to, and links to it', async () => {
+    const fixture = await boot('/brands/br_deborah48h');
+
+    expect(text(fixture)).toContain('brands.registered.links.spellingOf');
+    expect(detail(fixture).canonicalLink()).toEqual([
+      '/',
+      'brands',
+      'br_deborah',
+    ]);
+
+    // Built by `ResourceRegistry.pathOf`, never from a literal segment.
+    const link = linksBlock(fixture)?.querySelector('a') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe('/brands/br_deborah');
+  });
+
+  it('lists what is linked to a brand, each a link of its own', async () => {
+    const fixture = await boot('/brands/br_deborah');
+
+    expect(text(fixture)).toContain('brands.registered.links.heading');
+
+    const links = [
+      ...(linksBlock(fixture)?.querySelectorAll('.links a') ?? []),
+    ] as HTMLAnchorElement[];
+
+    expect(links.map((link) => link.textContent?.trim())).toEqual([
+      'DEBORAH 48H',
+    ]);
+    expect(links[0].getAttribute('href')).toBe('/brands/br_deborah48h');
+  });
+
+  /** Most brands are neither, and the honest block for that is no block. */
+  it('draws nothing for a brand that is neither', async () => {
+    const fixture = await boot('/brands/br_campofrio');
+
+    expect(linksBlock(fixture)).toBeNull();
+    expect(text(fixture)).not.toContain('brands.registered.links.heading');
+  });
+
+  it('shows a failed links read in that block alone', async () => {
+    const fixture = await boot('/brands/br_deborah', () => {
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'links')
+        .mockRejectedValue(
+          new GatewayError({ code: 'conflict', status: 409, correlationId: '' })
+        );
+    });
+
+    expect(
+      linksBlock(fixture)?.querySelector('[role="alert"]')?.textContent
+    ).toContain('resource.error.conflict');
+
+    // The brand above it is still there, still editable.
+    expect(
+      (
+        fixture.nativeElement.querySelector(
+          'input#field-label'
+        ) as HTMLInputElement
+      ).disabled
+    ).toBe(false);
+  });
+});
+
+/**
+ * Deleting a spelling (backend plan 0124).
+ *
+ * Only a linked brand can be deleted, so only a linked brand offers it. The
+ * control is here rather than on the list because the list cannot say which
+ * rows are legal without a button refused on most of them.
+ */
+describe('deleting a spelling', () => {
+  it('offers the control for a spelling and for nothing else', async () => {
+    expect(deleteButton(await boot('/brands/br_deborah48h'))).not.toBeNull();
+    expect(deleteButton(await boot('/brands/br_deborah'))).toBeNull();
+    expect(deleteButton(await boot('/brands/br_campofrio'))).toBeNull();
+  });
+
+  it('asks first, and deletes on the answer', async () => {
+    const spies: jest.SpyInstance[] = [];
+    const fixture = await boot('/brands/br_deborah48h', () => {
+      spies.push(
+        jest
+          .spyOn(TestBed.inject(BrandsGateway), 'remove')
+          .mockResolvedValue(undefined)
+      );
+    });
+
+    deleteButton(fixture)?.click();
+    await settle(fixture);
+
+    const dialog = fixture.nativeElement.querySelector('lib-confirm-dialog');
+    expect(dialog).not.toBeNull();
+    expect(dialog.textContent).toContain('brands.registered.links.deleteBody');
+    expect(spies[0]).not.toHaveBeenCalled();
+
+    await detail(fixture).remove();
+    await settle(fixture);
+
+    expect(spies[0]).toHaveBeenCalledWith('br_deborah48h');
+
+    // The row is gone, so the list is where the operator goes next, and the
+    // path comes from the registry rather than from a literal segment.
+    expect(TestBed.inject(Router).url).toBe('/brands');
+  });
+
+  it('says why when the gateway refuses, and stays put', async () => {
+    const fixture = await boot('/brands/br_deborah48h', () => {
+      jest.spyOn(TestBed.inject(BrandsGateway), 'remove').mockRejectedValue(
+        new GatewayError({
+          code: 'brand_not_linked',
+          status: 409,
+          correlationId: '',
+        })
+      );
+    });
+
+    await detail(fixture).remove();
+    await settle(fixture);
+
+    expect(linksBlock(fixture)?.textContent).toContain(
+      'resource.error.brandNotLinked'
+    );
+    expect(TestBed.inject(Router).url).toBe('/brands/br_deborah48h');
   });
 });
