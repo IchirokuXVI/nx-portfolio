@@ -38,6 +38,31 @@ describe('gatewayErrorKey', () => {
   });
 
   /**
+   * The five a link between brands adds (backend plan 0124).
+   *
+   * Each is its own sentence rather than the generic conflict, because each
+   * names a different fix: unlink first, set the chain on the brand it spells,
+   * register the other spelling, or leave the name alone.
+   */
+  it('names every way a brand link can be refused', () => {
+    expect(gatewayErrorKey(failure({ code: 'brand_link_to_self' }))).toBe(
+      'resource.error.brandLinkToSelf'
+    );
+    expect(gatewayErrorKey(failure({ code: 'brand_link_too_deep' }))).toBe(
+      'resource.error.brandLinkTooDeep'
+    );
+    expect(gatewayErrorKey(failure({ code: 'brand_link_owns_no_chain' }))).toBe(
+      'resource.error.brandLinkOwnsNoChain'
+    );
+    expect(gatewayErrorKey(failure({ code: 'brand_link_keeps_key' }))).toBe(
+      'resource.error.brandLinkKeepsKey'
+    );
+    expect(gatewayErrorKey(failure({ code: 'brand_not_linked' }))).toBe(
+      'resource.error.brandNotLinked'
+    );
+  });
+
+  /**
    * A body that did not reach this app intact is what a proxy answering instead
    * of the gateway looks like, and the status is all that survives it.
    */

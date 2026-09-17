@@ -57,6 +57,32 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
       // which brand: the refusal publishes its id, so the screen that was
       // refused can offer to open it instead of only apologising.
       return 'resource.error.brandKeyTaken';
+    case 'brand_link_to_self':
+      // A brand asked to be a spelling of itself (backend plan 0124, section 3).
+      // The picker offers every brand, including the one being edited, because
+      // the one level rule is the server's and a client that pre filtered would
+      // be a second copy of it.
+      return 'resource.error.brandLinkToSelf';
+    case 'brand_link_too_deep':
+      // A link that would make a chain of spellings, either because the target
+      // is itself a spelling or because this brand already has spellings
+      // pointing at it. The refusal names the brand that breaks the rule, so
+      // the form offers to open it.
+      return 'resource.error.brandLinkTooDeep';
+    case 'brand_link_owns_no_chain':
+      // A spelling of another brand has no private label chain of its own: the
+      // brand it spells is where that belongs.
+      return 'resource.error.brandLinkOwnsNoChain';
+    case 'brand_link_keeps_key':
+      // A linked brand renamed into a name that makes another key. The link is
+      // what holds the spelling's own key to the brand it spells, so a rename
+      // that changed the key would leave its products behind.
+      return 'resource.error.brandLinkKeepsKey';
+    case 'brand_not_linked':
+      // A delete asked for a brand that is not a spelling of another one. Only
+      // a linked brand can be deleted, because only its products have somewhere
+      // to go back to.
+      return 'resource.error.brandNotLinked';
     case 'run_in_progress':
       // A row the harvester is working on right now. A conflict, but the useful
       // half is which conflict: waiting for the run to finish is the whole of

@@ -17,6 +17,8 @@ import {
 import {
   isEditable,
   toCell,
+  type ErrorLink,
+  type ErrorLinkTarget,
   type FieldMessage,
   type FormMode,
   type ResourceCell,
@@ -29,7 +31,7 @@ import {
   type FieldChange,
 } from '@portfolio/luna-shopper-admin/ui';
 import { gatewayErrorKey } from './gateway-error-key';
-import { ResourceReferences } from './resource-registry';
+import { ResourceReferences, ResourceRegistry } from './resource-registry';
 import {
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
@@ -83,6 +85,7 @@ const STRING_FIELD_KINDS: readonly string[] = [
         [context]="context()"
         [draft]="store.draft()"
         [errorKey]="bannerKey()"
+        [errorLink]="bannerLink()"
         [fields]="descriptor.fields"
         [lookup]="references"
         [messages]="messages()"
@@ -134,6 +137,7 @@ export class ResourceFormPage {
   private readonly _router = inject(Router);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _content = inject(ContentLocaleStore);
+  private readonly _registry = inject(ResourceRegistry);
 
   readonly references = inject(ResourceReferences);
 
@@ -244,6 +248,44 @@ export class ResourceFormPage {
     return Object.keys(error.fieldErrors).length > 0
       ? null
       : gatewayErrorKey(error);
+  });
+
+  /**
+   * The row the banner's refusal named, as somewhere to go.
+   *
+   * A handful of refusals publish an id in `details` because the operator's
+   * next act is impossible without it, and `ResourceDescriptor.errorLinks` is
+   * where a resource says which ones and what they mean. Resolved here rather
+   * than in the form, because the registry is what knows where a resource is
+   * mounted and a path written by hand would break the day a section moves.
+   *
+   * `null` whenever there is no banner, so a refusal explained field by field
+   * cannot leave a link hanging under nothing.
+   */
+  readonly bannerLink = computed<ErrorLinkTarget | null>(() => {
+    const error = this.store.error();
+    if (error === null || this.bannerKey() === null) {
+      return null;
+    }
+
+    const declared: ErrorLink | undefined =
+      this.descriptor.errorLinks?.[error.code];
+    if (declared === undefined) {
+      return null;
+    }
+
+    const id = error.detailString(declared.detail);
+    const path = this._registry.pathOf(declared.resource);
+    if (id === null || path === null) {
+      return null;
+    }
+
+    return {
+      commands: [...path, id],
+      // The least a link can say, for a resource that did not name its own
+      // words. Every one that does reads better than this.
+      labelKey: declared.label ?? 'resource.error.openRow',
+    };
   });
 
   // Drawn only while `store.status()` is `'error'`, so the fallback is for the
