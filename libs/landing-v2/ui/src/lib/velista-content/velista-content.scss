@@ -1,0 +1,118 @@
+@import '../styles/variables';
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+.velista-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2.25rem;
+}
+
+// The own domain panel: set apart from the body prose by a surface and a gold
+// rule, so the fact that Velista lives elsewhere is read before any section.
+.velista-domain {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid $hairline;
+  border-left: 3px solid $accent;
+  border-radius: $radius;
+  background-color: $surface;
+
+  // The landing hero's availability badge, without its pulse: this is a
+  // standing fact, not a live signal.
+  &__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    align-self: flex-start;
+    padding: 0.25rem 0.65rem;
+    border: 1px solid $hairline;
+    border-radius: 999px;
+    color: $muted;
+    font-family: $font-mono;
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+  }
+
+  &__dot {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: $accent;
+  }
+
+  &__note {
+    margin: 0;
+    color: $text;
+    line-height: 1.6;
+    overflow-wrap: break-word;
+  }
+
+  &__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    align-self: flex-start;
+    border-bottom: 1px solid rgba($accent, 0.35);
+    color: $accent;
+    font-family: $font-mono;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: border-color 0.2s ease;
+
+    &:hover,
+    &:focus-visible {
+      border-bottom-color: $accent;
+    }
+  }
+
+  // The shared arrow, turned to point out of the page.
+  &__link-icon {
+    width: 14px;
+    height: 14px;
+    transform: rotate(-45deg);
+  }
+}
+
+.velista-section__kicker {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: $accent;
+  font-family: $font-mono;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.velista-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+
+  // Desktop only: the mobile page is one column, where the chips lead the body.
+  &__toc {
+    display: none;
+  }
+
+  @media (min-width: $breakpoint-desktop) {
+    position: sticky;
+    top: 1.5rem;
+
+    &__toc {
+      display: block;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .velista-domain__link {
+    transition: none;
+  }
+}

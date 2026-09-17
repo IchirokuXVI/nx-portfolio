@@ -77,4 +77,22 @@ export const PROJECTS_TRANSLATIONS: readonly ProjectTranslation[] = [
     description:
       'Mi proyecto más grande hasta ahora. TPV completo con soporte para impresión remota a través de internet (no solo local), WebSocket, totalmente responsive con una vista exclusiva para móviles para un uso más sencillo y muchas más funcionalidades.',
   },
+
+  // Velista
+  {
+    id: '9',
+    projectId: '5',
+    locale: 'en',
+    tagline: 'A shared shopping list app, live in production',
+    description:
+      'A collaborative shopping list app for groups and households, with real time lists, a shared basket for the trip and prices from real supermarkets. It runs on its own domain with real users and is still in early development.',
+  },
+  {
+    id: '10',
+    projectId: '5',
+    locale: 'es',
+    tagline: 'Una app de listas de la compra compartidas, en producción',
+    description:
+      'Una app colaborativa de listas de la compra para grupos y hogares, con listas en tiempo real, una cesta compartida para ir a comprar y precios de supermercados reales. Funciona en su propio dominio con usuarios reales y sigue en una fase temprana de desarrollo.',
+  },
 ];

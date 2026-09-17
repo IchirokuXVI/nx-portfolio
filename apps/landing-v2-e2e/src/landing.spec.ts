@@ -26,11 +26,15 @@ test.describe('landingV2 landing page', () => {
     );
   });
 
-  test('projects grid renders at least 4 cards (brief #3/#4)', async ({
+  test('projects grid renders at least 5 cards, Velista first (plan 0009)', async ({
     page,
   }) => {
     const cards = page.locator('lib-landing-v2-project-card');
-    expect(await cards.count()).toBeGreaterThanOrEqual(4);
+    await expect(cards.first()).toBeVisible();
+    expect(await cards.count()).toBeGreaterThanOrEqual(5);
+    await expect(cards.first().locator('.project-card__title')).toContainText(
+      'Velista'
+    );
   });
 
   test('the header CV link downloads the résumé', async ({ page }) => {

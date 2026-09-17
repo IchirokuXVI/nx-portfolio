@@ -65,9 +65,13 @@ export class ProjectMemory implements ProjectServiceI {
         project.detailSlug !== undefined
           ? `/${locale}/projects/${project.detailSlug}`
           : undefined,
+      // Every app owns its locale below its own mount (`/{mount}/{locale}`),
+      // so the mount comes first. Portfolio's empty slug is this landing page.
       appLink:
         project.appSlug !== undefined
-          ? `/${locale}${project.appSlug ? `/${project.appSlug}` : ''}`
+          ? project.appSlug
+            ? `/${project.appSlug}/${locale}`
+            : `/${locale}`
           : undefined,
       // An empty appSlug means the live app is the site root itself, so the
       // card is showing a project you are already inside.

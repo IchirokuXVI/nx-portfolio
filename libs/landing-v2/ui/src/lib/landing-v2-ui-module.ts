@@ -15,6 +15,7 @@ import { ProjectGrid } from './project-grid/project-grid';
 import { SiteFooter } from './site-footer/site-footer';
 import { SiteHeader } from './site-header/site-header';
 import { TechChipGroup } from './tech-chip-group/tech-chip-group';
+import { VelistaContent } from './velista-content/velista-content';
 
 const components = [
   Landing,
@@ -32,6 +33,7 @@ const components = [
   PortfolioContent,
   OdontogramContent,
   DamoclesContent,
+  VelistaContent,
 ];
 
 /**

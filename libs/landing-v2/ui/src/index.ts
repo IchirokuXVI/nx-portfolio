@@ -17,3 +17,4 @@ export * from './lib/site-footer/site-footer';
 export * from './lib/site-header/site-header';
 export * from './lib/tech-chip-group/tech-chip-group';
 export * from './lib/translations';
+export * from './lib/velista-content/velista-content';

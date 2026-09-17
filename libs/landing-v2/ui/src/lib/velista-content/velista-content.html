@@ -1,0 +1,57 @@
+<!-- No heroImage: Velista has no screenshot yet (plan 0009 D4). -->
+<lib-landing-v2-detail-page-shell
+  [appLink]="project().appLink"
+  [heroImage]="project().image"
+  [repoLink]="project().repoLink"
+  [tagline]="project().tagline"
+  [title]="project().name"
+>
+  <div body class="velista-body">
+    <aside
+      [attr.aria-label]="key + '.domain_label' | rokuT"
+      class="velista-domain"
+    >
+      <span class="velista-domain__status">
+        <span aria-hidden="true" class="velista-domain__dot"></span>
+        {{ key + '.status' | rokuT }}
+      </span>
+      <p class="velista-domain__note">{{ key + '.domain_note' | rokuT }}</p>
+      <a
+        [href]="origin"
+        class="velista-domain__link"
+        rel="noopener"
+        target="_blank"
+      >
+        velista.app
+        <lib-arrow-icon aria-hidden="true" class="velista-domain__link-icon" />
+      </a>
+    </aside>
+
+    @for (section of sections; track section.id) {
+      <div class="velista-section">
+        @if (section.kickerKey) {
+          <span class="velista-section__kicker">
+            {{ section.kickerKey | rokuT }}
+          </span>
+        }
+        <lib-landing-v2-detail-section
+          [heading]="section.headingKey | rokuT"
+          [paragraphKeys]="section.paragraphKeys"
+          [sectionId]="section.id"
+        />
+      </div>
+    }
+  </div>
+
+  <div class="velista-side" side>
+    <div class="velista-side__toc">
+      <lib-landing-v2-detail-toc [items]="tocItems" />
+    </div>
+    @for (group of chipGroups; track group.headingKey) {
+      <lib-landing-v2-tech-chip-group
+        [chips]="group.chips"
+        [heading]="group.headingKey | rokuT"
+      />
+    }
+  </div>
+</lib-landing-v2-detail-page-shell>
