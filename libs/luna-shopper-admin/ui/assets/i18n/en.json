@@ -670,7 +670,27 @@
         "detailBackfill": "Read product pages for the missing EANs",
         "detailBackfillHelp": "A second pass over the pages this chain already has, asking each one for its barcode rather than its price. It writes no price, so it needs no scope, and it takes far longer than a walk. Only offered for a chain whose products have a page to read.",
         "fileImport": "A file import starts from the document itself: the file says what was observed, and you say which chain, which scope and what observed it. Drop it on the import screen.",
-        "openUpload": "Go to the file import"
+        "openUpload": "Go to the file import",
+        "copies": {
+          "heading": "Copy to",
+          "headingFor": "Copy {{scope}} to",
+          "help": "Optional. What the run reads at a walked scope is also written to every scope in its list, of any tier, shop scopes included. A copy fetches nothing, and each scope takes one copy at most.",
+          "walked": "This scope is walked in this run.",
+          "alreadyCopied": "Already copied from {{scope}}.",
+          "dropped": "{{scope}} was unticked, so the scopes it was copied to were removed. Tick it again to choose them again."
+        },
+        "writes": {
+          "label": "What the run writes",
+          "PRICES_AND_AVAILABILITY": "Prices and availability",
+          "PRICES": "Prices only",
+          "AVAILABILITY": "Availability only"
+        },
+        "details": {
+          "label": "Product details",
+          "NEW": "New products only",
+          "ALL": "Every product",
+          "help": "A product the harvester already knows keeps the EAN and brand it was read with. Choose every product to read them again."
+        }
       }
     },
     "run": {

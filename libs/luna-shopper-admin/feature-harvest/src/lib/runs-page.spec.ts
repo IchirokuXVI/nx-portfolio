@@ -135,6 +135,7 @@ async function render(
   adapters: Readonly<Record<string, string>> = {}
 ) {
   const { service, spawned, listed } = spawnRecorder(refusal, adapters);
+  const scopeReads: unknown[] = [];
 
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -150,7 +151,10 @@ async function render(
         provide: RESOURCE_GATEWAYS,
         useValue: {
           for: () => ({
-            list: async () => ({ items: SCOPES, nextCursor: null }),
+            list: async (query: unknown) => {
+              scopeReads.push(query);
+              return { items: SCOPES, nextCursor: null };
+            },
           }),
         },
       },
@@ -183,7 +187,12 @@ async function render(
   await drain();
   fixture.detectChanges();
 
-  return { fixture: fixture as ComponentFixture<RunsPage>, spawned, listed };
+  return {
+    fixture: fixture as ComponentFixture<RunsPage>,
+    spawned,
+    listed,
+    scopeReads,
+  };
 }
 
 /** The form, pointed at one chain and given time to read its source row. */
@@ -328,6 +337,9 @@ describe('the run form, the price scope a walk writes to', () => {
       mode: 'CATALOG_DISCOVERY',
       supermarketId: MERCADONA,
       priceScopeIds: [CORUNA, CORDOBA],
+      // Sent whenever the groups are shown (admin plan 0029, section 4).
+      writes: 'PRICES_AND_AVAILABILITY',
+      details: 'NEW',
     });
   });
 
@@ -382,6 +394,7 @@ describe('the run form, the price scope a walk writes to', () => {
       mode: 'CATALOG_DISCOVERY',
       supermarketId: DEZA,
       priceScopeId: NATIONAL,
+      writes: 'PRICES_AND_AVAILABILITY',
     });
   });
 
@@ -405,6 +418,8 @@ describe('the run form, the price scope a walk writes to', () => {
     expect(spawned[0]).toEqual({
       mode: 'CATALOG_DISCOVERY',
       supermarketId: DEZA,
+      // A site that prints no price has only availability to write.
+      writes: 'AVAILABILITY',
     });
   });
 
@@ -433,6 +448,7 @@ describe('the run form, the price scope a walk writes to', () => {
       mode: 'CATALOG_DISCOVERY',
       supermarketId: DEZA,
       priceScopeId: NATIONAL,
+      writes: 'PRICES_AND_AVAILABILITY',
     });
   });
 
@@ -470,6 +486,7 @@ describe('the run form, the price scope a walk writes to', () => {
       scopesItsOwn: false,
       listsItsOwnStores: false,
       hasProductPages: false,
+      skipsKnownDetails: false,
       // Null and not a band: an adapter this build has never heard of is given
       // no scopes to write, like every other answer here.
       walkablePriorities: null,
@@ -625,6 +642,277 @@ describe('the run form, the price scope a walk writes to', () => {
 });
 
 /**
+ * The walk list, which reads no shop scopes (admin plan 0029, section 2).
+ *
+ * Every shop has a scope since backend plan 0116, and five pages of a hundred
+ * would run out before a chain with about 1,675 of them reached its warehouses.
+ */
+describe('the run form, the scopes the walk list reads', () => {
+  it('asks for every kind but a shop scope', async () => {
+    const { fixture, scopeReads } = await render();
+    await chain(fixture, MERCADONA);
+
+    expect(scopeReads).toEqual([
+      expect.objectContaining({
+        filters: {
+          supermarketId: MERCADONA,
+          kind: ['LOCAL_AREA', 'REGION', 'NATIONAL'],
+        },
+      }),
+    ]);
+  });
+});
+
+/** Where a walked scope is copied to (admin plan 0029, section 3). */
+describe('the run form, the scopes a walk is copied to', () => {
+  const REGION = 'scope-region-galicia';
+  const SHOP = 'scope-store-15006';
+  const OTHER_SHOP = 'scope-store-14013';
+
+  it('sends each walked scope with its targets, in the order both were chosen', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.toggleScope(CORUNA, ticked(true));
+    page.toggleScope(CORDOBA, ticked(true));
+    page.changeCopies(CORDOBA, [OTHER_SHOP]);
+    page.changeCopies(CORUNA, [REGION]);
+    page.changeCopies(CORUNA, [REGION, SHOP]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('lib-scope-copies')).toHaveLength(2);
+    await page.start();
+    await drain();
+
+    expect(spawned[0]).toMatchObject({
+      priceScopeIds: [CORUNA, CORDOBA],
+      scopeCopies: [
+        { from: CORUNA, to: [REGION, SHOP] },
+        { from: CORDOBA, to: [OTHER_SHOP] },
+      ],
+    });
+  });
+
+  it('sends nothing for a walked scope whose list is empty', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.toggleScope(CORUNA, ticked(true));
+    page.changeCopies(CORUNA, [SHOP]);
+    page.changeCopies(CORUNA, []);
+    await page.start();
+    await drain();
+
+    expect(spawned[0]).not.toHaveProperty('scopeCopies');
+  });
+
+  it('refuses a walked scope as a target, inline and before any request', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.toggleScope(CORUNA, ticked(true));
+    page.toggleScope(CORDOBA, ticked(true));
+    page.changeCopies(CORUNA, [CORDOBA]);
+    fixture.detectChanges();
+
+    expect(page.copiesOf(CORUNA)).toEqual([]);
+    expect(page.refusalOf(CORUNA)).toEqual({
+      key: 'harvest.runs.start.copies.walked',
+    });
+    expect(text(fixture)).toContain('harvest.runs.start.copies.walked');
+    expect(spawned).toEqual([]);
+  });
+
+  it('refuses a target already copied from another walked scope', async () => {
+    const { fixture } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.toggleScope(CORUNA, ticked(true));
+    page.toggleScope(CORDOBA, ticked(true));
+    page.changeCopies(CORUNA, [SHOP]);
+    page.changeCopies(CORDOBA, [SHOP]);
+    fixture.detectChanges();
+
+    expect(page.copiesOf(CORDOBA)).toEqual([]);
+    expect(page.refusalOf(CORDOBA)).toEqual({
+      key: 'harvest.runs.start.copies.alreadyCopied',
+      args: { scope: '4804 — A Coruna' },
+    });
+    expect(text(fixture)).toContain('harvest.runs.start.copies.alreadyCopied');
+
+    // The next accepted change clears the message.
+    page.changeCopies(CORDOBA, [OTHER_SHOP]);
+    expect(page.refusalOf(CORDOBA)).toBeNull();
+  });
+
+  it('holds start while a ticked scope is also a target, until one goes', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.toggleScope(CORUNA, ticked(true));
+    page.changeCopies(CORUNA, [CORDOBA]);
+    page.toggleScope(CORDOBA, ticked(true));
+    fixture.detectChanges();
+
+    expect(page.conflictsOf(CORUNA)).toEqual(['4661']);
+    expect(page.isCopyTarget(CORDOBA)).toBe(true);
+    expect(page.ready()).toBe(false);
+    const start: HTMLButtonElement =
+      fixture.nativeElement.querySelector('button.primary');
+    expect(start.disabled).toBe(true);
+    await page.start();
+    expect(spawned).toEqual([]);
+
+    page.changeCopies(CORUNA, []);
+    fixture.detectChanges();
+    expect(page.ready()).toBe(true);
+  });
+
+  it('drops the copies of a scope that is unticked, and says so', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.toggleScope(CORUNA, ticked(true));
+    page.toggleScope(CORDOBA, ticked(true));
+    page.changeCopies(CORUNA, [SHOP]);
+    page.toggleScope(CORUNA, ticked(false));
+    fixture.detectChanges();
+
+    expect(page.copiesOf(CORUNA)).toEqual([]);
+    expect(page.droppedCopies()).toEqual([CORUNA]);
+    expect(text(fixture)).toContain('harvest.runs.start.copies.dropped');
+
+    // Ticked again, the notice goes and the list is empty.
+    page.toggleScope(CORUNA, ticked(true));
+    expect(page.droppedCopies()).toEqual([]);
+    page.toggleScope(CORUNA, ticked(false));
+    page.toggleScope(CORUNA, ticked(true));
+    await page.start();
+    await drain();
+    expect(spawned[0]).not.toHaveProperty('scopeCopies');
+  });
+
+  it('draws one list under the scope picker for a walk of one scope', async () => {
+    const { fixture, spawned } = await render(undefined, {
+      [DEZA]: 'carrefour-web',
+    });
+    await chain(fixture, DEZA);
+    const page = fixture.componentInstance;
+
+    expect(fixture.nativeElement.querySelectorAll('lib-scope-copies')).toHaveLength(1);
+    page.changeCopies(page.singleScope, [NATIONAL]);
+    expect(page.refusalOf(page.singleScope)?.key).toBe(
+      'harvest.runs.start.copies.walked'
+    );
+    page.changeCopies(page.singleScope, [SHOP]);
+    await page.start();
+    await drain();
+
+    expect(spawned[0]).toMatchObject({
+      priceScopeId: NATIONAL,
+      scopeCopies: [{ from: NATIONAL, to: [SHOP] }],
+    });
+  });
+
+  it('forgets every copy when the chain changes', async () => {
+    const { fixture } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.toggleScope(CORUNA, ticked(true));
+    page.changeCopies(CORUNA, [SHOP]);
+    await chain(fixture, DEZA);
+
+    expect(page.copies().size).toBe(0);
+  });
+});
+
+/** What a walk writes and which details it fetches (admin plan 0029, section 4). */
+describe('the run form, what a walk writes and fetches', () => {
+  it('offers all three writes and both details for a chain that has both', async () => {
+    const { fixture } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    expect(page.writeOptions()).toEqual([
+      'PRICES_AND_AVAILABILITY',
+      'PRICES',
+      'AVAILABILITY',
+    ]);
+    expect(page.offersDetails()).toBe(true);
+    expect(text(fixture)).toContain('harvest.runs.start.details.help');
+  });
+
+  it('sends what was chosen', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+
+    page.toggleScope(CORDOBA, ticked(true));
+    const radios = fixture.nativeElement.querySelectorAll(
+      'input[type="radio"]'
+    ) as NodeListOf<HTMLInputElement>;
+    Array.from(radios)
+      .find((radio) => radio.value === 'PRICES')!
+      .dispatchEvent(new Event('change'));
+    Array.from(radios)
+      .find((radio) => radio.value === 'ALL')!
+      .dispatchEvent(new Event('change'));
+    await page.start();
+    await drain();
+
+    expect(spawned[0]).toMatchObject({ writes: 'PRICES', details: 'ALL' });
+  });
+
+  it('hides details for an adapter with no detail phase to skip', async () => {
+    const { fixture, spawned } = await render(undefined, {
+      [DEZA]: 'carrefour-web',
+    });
+    await chain(fixture, DEZA);
+    const page = fixture.componentInstance;
+
+    expect(page.offersDetails()).toBe(false);
+    expect(text(fixture)).not.toContain('harvest.runs.start.details.label');
+    await page.start();
+    await drain();
+    expect(spawned[0]).not.toHaveProperty('details');
+  });
+
+  it('offers no prices only for an adapter that writes no price', async () => {
+    const { fixture } = await render();
+    await chain(fixture, DEZA);
+    const page = fixture.componentInstance;
+
+    expect(page.writeOptions()).toEqual(['AVAILABILITY']);
+    expect(text(fixture)).not.toContain('harvest.runs.start.writes.PRICES');
+  });
+
+  it('asks nothing of a backfill or of an adapter it does not know', async () => {
+    const { fixture, spawned } = await render(undefined, {
+      [DEZA]: 'aldi-web',
+    });
+    await chain(fixture, DEZA);
+    const page = fixture.componentInstance;
+
+    expect(page.offersWrites()).toBe(false);
+    await page.start();
+    await drain();
+    expect(spawned[0]).not.toHaveProperty('writes');
+
+    await chain(fixture, MERCADONA);
+    page.detailBackfill.set(true);
+    expect(page.offersWrites()).toBe(false);
+    expect(page.offersDetails()).toBe(false);
+  });
+});
+
+/**
  * What the server said, on the screen that asked (the reported defect).
  *
  * A spawn is refused for a chain with no source row, for a source switched off
@@ -681,6 +969,33 @@ describe('the run form, a refusal the server explained', () => {
       'priceScopeId must be a UUID',
     ]);
     expect(text(fixture)).not.toContain('Bad Request');
+  });
+
+  /**
+   * The server is the authority on every copy rule the form does not check
+   * (admin plan 0029, constraints), and its refusal names the scope.
+   */
+  it('draws a copy refusal that names a scope', async () => {
+    const { fixture } = await render(
+      refusal({
+        code: 'validation_failed',
+        status: 400,
+        detail:
+          'The price scope scope-store-9 does not belong to this chain, so it ' +
+          'cannot receive a copy of its prices.',
+      })
+    );
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+    page.toggleScope(CORUNA, ticked(true));
+    page.changeCopies(CORUNA, ['scope-store-9']);
+
+    await page.start();
+    await drain();
+    fixture.detectChanges();
+
+    expect(text(fixture)).toContain('The price scope scope-store-9');
+    expect(page.blockedKey()).toBe('harvest.runs.start.refused');
   });
 
   /** A failure that really did arrive with nothing in it still says so. */
