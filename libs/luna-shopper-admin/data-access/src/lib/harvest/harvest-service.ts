@@ -279,6 +279,12 @@ export type HarvestRunPresetPatch = Wire.UpdateHarvestRunPresetDto;
 
 export interface PlaceQuery extends PageQuery {
   readonly runId?: string;
+  /**
+   * A place's **chain**, as OpenStreetMap or Wikidata identifies it: the
+   * `brand:wikidata` tag, which is what groups `Dia` and `Maxi Dia` under one
+   * shop chain. Not a product brand, and not the same thing as
+   * {@link EntryQuery.brandKey}, which happens to share the name.
+   */
   readonly brandKey?: string;
   readonly status?: string;
   /**
@@ -327,6 +333,18 @@ export interface EntryQuery extends PageQuery {
    */
   readonly sourceKind?: OfficialSourceKind;
   readonly query?: string;
+  /**
+   * The **product** brand a row carries, as its normalized key (backend plan
+   * 0124, section 7).
+   *
+   * `brandKey` of the printed brand text, which is how `ELPOZO` and `El Pozo`
+   * meet. Not the chain key {@link PlaceQuery.brandKey} carries, which is an
+   * OpenStreetMap identity for a shop and has nothing to do with this.
+   *
+   * A value that makes no key matches nothing rather than being refused, so a
+   * person typing punctuation gets an empty list and not an error.
+   */
+  readonly brandKey?: string;
 }
 
 /**

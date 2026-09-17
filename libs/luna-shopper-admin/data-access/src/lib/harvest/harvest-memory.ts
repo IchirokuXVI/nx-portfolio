@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import { GatewayError } from '../gateway-error';
 import {
   DISCOVERED_PLACE_SEED,
@@ -375,6 +376,11 @@ export class HarvestMemory implements HarvestServiceI {
           : entry.status === query.status) &&
         (query.sourceKind === undefined ||
           entry.sourceKind === query.sourceKind) &&
+        // The key the row's own brand text makes, compared to the key that was
+        // asked for. A value that makes no key matches nothing, which is what
+        // the route does with it: `brandKey` never answers punctuation.
+        (query.brandKey === undefined ||
+          brandKey(entry.brand ?? '') === query.brandKey) &&
         (term === '' ||
           entry.name.toLowerCase().includes(term) ||
           (entry.brand ?? '').toLowerCase().includes(term) ||
