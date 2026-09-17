@@ -40,7 +40,7 @@ test.describe('the owner and a guest', () => {
 
   test.afterAll(async () => {
     await guest?.context().close();
-    await alice.dispose();
+    await alice?.dispose();
   });
 
   test('shop one basket together, until the link is revoked', async ({
