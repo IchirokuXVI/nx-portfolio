@@ -1,3 +1,5 @@
+> **PR:** [#385](https://github.com/IchirokuXVI/nx-portfolio/pull/385)
+
 # 0117: an expired price falls through to the next scope
 
 > A shop's stack is Single shop, Local area, Chain region and Nationwide (plan 0116). Today the
