@@ -6781,6 +6781,91 @@
         ]
       }
     },
+    "/v1/lists/{id}/suggestions": {
+      "get": {
+        "operationId": "ListsController_listSuggestions_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `list.suggestions` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/list.LineSuggestionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "lists"
+        ]
+      }
+    },
     "/v1/lists/{id}/lines": {
       "get": {
         "operationId": "ListsController_listLines_v1",
@@ -29760,6 +29845,13 @@
           "REJECTED"
         ]
       },
+      "enums.LineSuggestionReason": {
+        "type": "string",
+        "enum": [
+          "PERIOD",
+          "STAPLE"
+        ]
+      },
       "enums.ListPermission": {
         "type": "string",
         "enum": [
@@ -33020,6 +33112,72 @@
           "settledByUserId",
           "settledAt",
           "revertedAt"
+        ],
+        "additionalProperties": false
+      },
+      "list.LineSuggestionPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.LineSuggestionView"
+            },
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "list.LineSuggestionView": {
+        "type": "object",
+        "properties": {
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "$ref": "#/components/schemas/enums.LineSuggestionReason"
+          },
+          "periodDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "daysSinceBought": {
+            "type": "integer"
+          },
+          "tripsWith": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "tripsSeen": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "lineId",
+          "reason",
+          "periodDays",
+          "daysSinceBought",
+          "tripsWith",
+          "tripsSeen",
+          "quantity"
         ],
         "additionalProperties": false
       },

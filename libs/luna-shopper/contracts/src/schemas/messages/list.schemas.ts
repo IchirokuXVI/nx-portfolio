@@ -6,6 +6,7 @@ import {
   LINE_PATTERNS,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  LINE_SUGGESTION_MAX,
   LIST_PATTERNS,
 } from '../../lib/messages/list.messages';
 import {
@@ -69,6 +70,9 @@ export const LIST_SCHEMA_IDS = {
   listTripsChangedEvent: schemaId('list/ListTripsChangedEvent'),
   listTripsRequest: schemaId('msg/list.trips/request'),
   listTripRowsRequest: schemaId('msg/list.tripRows/request'),
+  lineSuggestionView: schemaId('list/LineSuggestionView'),
+  lineSuggestionPage: schemaId('list/LineSuggestionPage'),
+  listSuggestionsRequest: schemaId('msg/list.suggestions/request'),
   reorderRequest: schemaId('msg/line.reorder/request'),
   deleteLineRequest: schemaId('msg/line.delete/request'),
   listLinesRequest: schemaId('msg/line.list/request'),
@@ -691,6 +695,51 @@ const listTripRowsRequest = object(
   ['userId', 'listId', 'kind', 'tripId']
 );
 
+// A line at zero offering to come back (plan 0123, section 5). The period and the
+// trip counts are null for the reason that does not use them.
+const lineSuggestionView = object(
+  LIST_SCHEMA_IDS.lineSuggestionView,
+  {
+    lineId: nonEmptyString(),
+    reason: ref(ENUM_IDS.lineSuggestionReason),
+    periodDays: { type: ['integer', 'null'], minimum: 1 },
+    daysSinceBought: integer(),
+    tripsWith: { type: ['integer', 'null'], minimum: 0 },
+    tripsSeen: { type: ['integer', 'null'], minimum: 0 },
+    quantity: integer({ minimum: 1 }),
+  },
+  [
+    'lineId',
+    'reason',
+    'periodDays',
+    'daysSinceBought',
+    'tripsWith',
+    'tripsSeen',
+    'quantity',
+  ]
+);
+
+// Not `paginated`: there is no cursor, only a ceiling.
+const lineSuggestionPage = object(
+  LIST_SCHEMA_IDS.lineSuggestionPage,
+  {
+    items: {
+      ...array(ref(LIST_SCHEMA_IDS.lineSuggestionView)),
+      maxItems: LINE_SUGGESTION_MAX,
+    },
+  },
+  ['items']
+);
+
+const listSuggestionsRequest = object(
+  LIST_SCHEMA_IDS.listSuggestionsRequest,
+  {
+    userId: nonEmptyString(),
+    listId: nonEmptyString(),
+  },
+  ['userId', 'listId']
+);
+
 const reorderRequest = object(
   LIST_SCHEMA_IDS.reorderRequest,
   {
@@ -812,6 +861,9 @@ export const listSchemas: JsonSchema[] = [
   listTripsChangedEvent,
   listTripsRequest,
   listTripRowsRequest,
+  lineSuggestionView,
+  lineSuggestionPage,
+  listSuggestionsRequest,
   reorderRequest,
   deleteLineRequest,
   listLinesRequest,
@@ -861,6 +913,10 @@ export const listMessageContracts: Record<
   [LIST_PATTERNS.tripRows]: {
     request: LIST_SCHEMA_IDS.listTripRowsRequest,
     response: LIST_SCHEMA_IDS.tripRowPage,
+  },
+  [LIST_PATTERNS.suggestions]: {
+    request: LIST_SCHEMA_IDS.listSuggestionsRequest,
+    response: LIST_SCHEMA_IDS.lineSuggestionPage,
   },
   [LINE_PATTERNS.add]: {
     request: LIST_SCHEMA_IDS.addLineRequest,
