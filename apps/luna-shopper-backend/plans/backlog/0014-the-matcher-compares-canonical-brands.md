@@ -45,10 +45,6 @@ Compare brands as the registry does, by key and through the link, and never as t
    id, and to load that once per run beside `loadCatalogItems`. Check first whether `ItemView`
    carries `brandId`, because the index is built from `ItemView` rows.
 
-   This also repairs a smaller gap that plan `0115` opened: `HACENDADO.` and `Hacendado` make one
-   brand key and two `normalizeName` results only when punctuation splits a word, which is rare,
-   but it is the same class of defect.
-
 2. **The shared bucket.** When a key holds two items that sit on one canonical brand, the run
    report names the pair as a likely duplicate. It stays unmatched. No automated merge, by the
    rule plan `0081` set.
