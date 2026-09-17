@@ -30,12 +30,15 @@ import {
   provideFakeZoneStore,
   REALTIME_CLIENT,
   RealtimeMemory,
+  TRIP_SERVICE,
+  TripStore,
   type AssistantServiceI,
   type FakeItemNames,
   type FakeLineStore,
   type FakeListStore,
   type FakePresenceOptions,
   type FakeShoppingProfileStore,
+  type TripServiceI,
 } from '@portfolio/velista/data-access';
 import type {
   CatalogItem,
@@ -45,6 +48,9 @@ import type {
   Membership,
   MyZone,
   ShoppingListSummary,
+  Trip,
+  TripPage,
+  TripRow,
   ZoneRole,
 } from '@portfolio/velista/models';
 import {
@@ -58,6 +64,8 @@ import {
   LineList,
   ListHeader,
   ListTools,
+  ToBuyHeading,
+  TripGroup,
 } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { ListPage } from './list-page';
@@ -174,6 +182,10 @@ interface Options {
   readonly line?: string;
   /** The products the catalog can name, for the category view (velista `0082`). */
   readonly items?: readonly CatalogItem[];
+  /** The first page of trips, or a failure (velista `0088`). None by default. */
+  readonly trips?: TripPage | 'fail';
+  /** Each trip's rows, by trip id. */
+  readonly tripRows?: Readonly<Record<string, readonly TripRow[]>>;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -187,6 +199,8 @@ async function render(options: Options = {}): Promise<{
   profiles: FakeShoppingProfileStore;
   itemNames: FakeItemNames;
   view: ListViewStore;
+  trips: TripStore;
+  tripCalls: { heads: number; rows: string[] };
 }> {
   TestBed.resetTestingModule();
 
@@ -211,6 +225,20 @@ async function render(options: Options = {}): Promise<{
   const itemNames = fakeItemNames({ items: options.items ?? [] });
   const profiles = fakeShoppingProfileStore();
   const storage = options.storage ?? new Map<string, string>();
+  const tripCalls = { heads: 0, rows: [] as string[] };
+  const tripService: TripServiceI = {
+    listTrips: async () => {
+      tripCalls.heads += 1;
+      if (options.trips === 'fail') {
+        throw new Error('offline');
+      }
+      return options.trips ?? { live: [], items: [], nextCursor: null };
+    },
+    listTripRows: async (_listId, _kind, tripId) => {
+      tripCalls.rows.push(tripId);
+      return { items: options.tripRows?.[tripId] ?? [], nextCursor: null };
+    },
+  };
   const router = {
     navigate: jest.fn().mockResolvedValue(true),
     navigateByUrl: jest.fn().mockResolvedValue(true),
@@ -227,6 +255,9 @@ async function render(options: Options = {}): Promise<{
       // What the route provides beside the page (velista `0082`), real, over the
       // fakes above, so a spec asserts what the page draws of a real view.
       ListViewStore,
+      // Beside it on the route (velista `0088`), real, over a service the spec answers.
+      TripStore,
+      { provide: TRIP_SERVICE, useValue: tripService },
       provideFakeItemNames(itemNames),
       provideFakeMemberNames(
         fakeMemberNames(
@@ -277,6 +308,8 @@ async function render(options: Options = {}): Promise<{
     profiles,
     itemNames,
     view: TestBed.inject(ListViewStore),
+    trips: TestBed.inject(TripStore),
+    tripCalls,
   };
 }
 
@@ -1130,9 +1163,9 @@ describe('ListPage: searching and viewing one category', () => {
     return found === null ? null : (found.componentInstance as ListTools);
   }
 
-  function headerInstance(fixture: ComponentFixture<ListPage>) {
-    return fixture.debugElement.query(By.directive(ListHeader))
-      .componentInstance as ListHeader;
+  function toBuyHeading(fixture: ComponentFixture<ListPage>) {
+    return fixture.debugElement.query(By.directive(ToBuyHeading))
+      .componentInstance as ToBuyHeading;
   }
 
   it('draws the tools row above the lines, with no chip row, and not in reorder mode', async () => {
@@ -1242,25 +1275,28 @@ describe('ListPage: searching and viewing one category', () => {
   describe('reorder waits for the list order (section 7)', () => {
     it('holds the action under A to Z, a picked category, and a search', async () => {
       const { fixture, view } = await render({ lines: LINES, items: ITEMS });
-      expect(headerInstance(fixture).reorderHeld()).toBe(false);
+      expect(toBuyHeading(fixture).reorderHeld()).toBe(false);
 
       view.setOrder('alpha');
       fixture.detectChanges();
-      expect(headerInstance(fixture).reorderHeld()).toBe(true);
+      expect(toBuyHeading(fixture).reorderHeld()).toBe(true);
       view.setOrder('list');
 
       view.pickCategory('DAIRY');
       fixture.detectChanges();
-      expect(headerInstance(fixture).reorderHeld()).toBe(true);
+      expect(toBuyHeading(fixture).reorderHeld()).toBe(true);
       view.reset();
 
+      // A search flattens the page, so there is no To buy heading to hold at all
+      // (velista `0088`, section 6). The hold itself still stands.
       view.search('leche');
       fixture.detectChanges();
-      expect(headerInstance(fixture).reorderHeld()).toBe(true);
+      expect(fixture.componentInstance.reorderHeld()).toBe(true);
+      expect(query(fixture, 'lib-to-buy-heading')).toBeNull();
 
       view.search('');
       fixture.detectChanges();
-      expect(headerInstance(fixture).reorderHeld()).toBe(false);
+      expect(toBuyHeading(fixture).reorderHeld()).toBe(false);
     });
 
     it('moves nothing when the held action is pressed, and says why', async () => {
@@ -1269,7 +1305,7 @@ describe('ListPage: searching and viewing one category', () => {
       fixture.detectChanges();
 
       const button = Array.from(
-        fixture.nativeElement.querySelectorAll('.header-action')
+        fixture.nativeElement.querySelectorAll('lib-to-buy-heading .action')
       ).find((element) =>
         (element as HTMLElement).textContent?.includes('list.reorder.enter')
       ) as HTMLButtonElement;
@@ -1305,5 +1341,212 @@ describe('ListPage: searching and viewing one category', () => {
 
     expect(view.query()).toBe('');
     expect(view.picked()).toBeNull();
+  });
+});
+
+/** Velista `0088`: the zone list grouped by trip. */
+describe('ListPage: the zone list grouped by trip', () => {
+  function trip(id: string, overrides: Partial<Trip> = {}): Trip {
+    return {
+      id,
+      kind: 'BASKET',
+      name: null,
+      live: false,
+      startedAt: new Date('2026-09-12T10:00:00.000Z'),
+      lineCount: 1,
+      boughtLineCount: 1,
+      ...overrides,
+    };
+  }
+
+  function tripRow(lineId: string, overrides: Partial<TripRow> = {}): TripRow {
+    return {
+      lineId,
+      asked: 1,
+      bought: 0,
+      left: 1,
+      outcome: 'NOT_BOUGHT',
+      settledByUserId: null,
+      ...overrides,
+    };
+  }
+
+  async function settle(fixture: ComponentFixture<ListPage>): Promise<void> {
+    for (let turn = 0; turn < 3; turn += 1) {
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+  }
+
+  function groups(fixture: ComponentFixture<ListPage>) {
+    return fixture.debugElement
+      .queryAll(By.directive(TripGroup))
+      .map((found) => (found.componentInstance as TripGroup).group());
+  }
+
+  const LIVE = trip('b-live', { live: true, name: 'Thursday shop' });
+  const PAST = trip('b-past', { name: 'Weekend shop' });
+
+  const LINES = [
+    line('bread', { content: 'Bread', position: 1, quantity: 2 }),
+    line('rice', {
+      content: 'Rice',
+      position: 2,
+      quantity: 1,
+      claimed: true,
+      claimedByUserId: 'user-toni',
+    }),
+    line('milk', {
+      content: 'Milk',
+      position: 3,
+      quantity: 0,
+      boughtCount: 4,
+    }),
+    line('saffron', {
+      content: 'Saffron',
+      position: 4,
+      quantity: 0,
+      boughtCount: 0,
+    }),
+    line('eggs', { content: 'Eggs', position: 5, quantity: 3 }),
+  ];
+
+  async function grouped() {
+    const rendered = await render({
+      lines: LINES,
+      trips: { live: [LIVE], items: [PAST], nextCursor: null },
+      tripRows: {
+        'b-live': [tripRow('rice')],
+        'b-past': [tripRow('milk', { outcome: 'BOUGHT', bought: 2, left: 0 })],
+      },
+    });
+    await settle(rendered.fixture);
+    return rendered;
+  }
+
+  it('costs one heads read and one rows read on arrival, the newest live trip open', async () => {
+    const { fixture, tripCalls } = await grouped();
+
+    expect(tripCalls.heads).toBe(1);
+    expect(tripCalls.rows).toEqual(['b-live']);
+    expect(groups(fixture).map((group) => [group.key, group.open])).toEqual([
+      ['BASKET:b-live', true],
+      ['BASKET:b-past', false],
+    ]);
+  });
+
+  it('draws To buy first, a claimed line in its live trip, and a zero line never bought last', async () => {
+    const { fixture } = await grouped();
+
+    expect(rows(fixture).map((row) => row.id)).toEqual([
+      'bread',
+      'eggs',
+      'saffron',
+    ]);
+    const [live] = groups(fixture);
+    expect(live.rows?.map((row) => [row.lineId, row.mark])).toEqual([
+      ['rice', 'claimed'],
+    ]);
+    expect(live.liveBy).toBe('Toni');
+  });
+
+  it("asks for a past trip's rows when it opens, and not again on a second opening", async () => {
+    const { fixture, tripCalls } = await grouped();
+
+    fixture.componentInstance.toggleTrip('BASKET:b-past');
+    await settle(fixture);
+    fixture.componentInstance.toggleTrip('BASKET:b-past');
+    fixture.componentInstance.toggleTrip('BASKET:b-past');
+    await settle(fixture);
+
+    expect(tripCalls.rows).toEqual(['b-live', 'b-past']);
+    expect(groups(fixture)[1].rows?.map((row) => row.lineId)).toEqual(['milk']);
+  });
+
+  it('opens the line when a trip row is tapped', async () => {
+    const { fixture, router } = await grouped();
+
+    fixture.debugElement
+      .query(By.directive(TripGroup))
+      .triggerEventHandler('opened', 'rice');
+
+    expect(router.navigate).toHaveBeenCalledWith(
+      ['sheet', 'lines', 'rice', 'detail'],
+      expect.anything()
+    );
+  });
+
+  it('flattens the page while searching, and puts the groups back as they were (test 10)', async () => {
+    const { fixture, view } = await grouped();
+    fixture.componentInstance.toggleTrip('BASKET:b-past');
+    await settle(fixture);
+
+    view.search('milk');
+    fixture.detectChanges();
+
+    expect(groups(fixture)).toEqual([]);
+    expect(query(fixture, 'lib-to-buy-heading')).toBeNull();
+    // A line at zero that lives only in an old trip is found, with its reel.
+    expect(rows(fixture).map((row) => row.id)).toEqual(['milk']);
+
+    view.search('');
+    fixture.detectChanges();
+
+    expect(groups(fixture).map((group) => group.open)).toEqual([true, true]);
+  });
+
+  it('shows To buy alone in reorder mode, and keeps every unseen line in its slot (test 12)', async () => {
+    const { fixture, lines } = await grouped();
+
+    fixture.componentInstance.startReorder();
+    fixture.detectChanges();
+
+    expect(groups(fixture)).toEqual([]);
+    expect(rows(fixture).map((row) => row.id)).toEqual(['bread', 'eggs']);
+
+    await fixture.componentInstance.moveTo({ lineId: 'eggs', to: 0 });
+
+    expect(lines.calls).toContainEqual({
+      kind: 'reorder',
+      orderedLineIds: ['eggs', 'rice', 'milk', 'saffron', 'bread'],
+    });
+  });
+
+  it('keeps the lines usable when the trips fail, and offers a retry (test 13)', async () => {
+    const { fixture, tripCalls } = await render({
+      lines: LINES,
+      trips: 'fail',
+    });
+    await settle(fixture);
+
+    expect(rows(fixture).length).toBeGreaterThan(0);
+    expect(query(fixture, '.trips-failed')?.textContent).toContain(
+      'list.trips.failed'
+    );
+
+    (
+      query(fixture, '.trips-failed .state-action') as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+
+    expect(tripCalls.heads).toBe(2);
+  });
+
+  it('draws nothing under To buy when the list has no history', async () => {
+    const { fixture } = await render({ lines: LINES });
+    await settle(fixture);
+
+    expect(query(fixture, 'lib-to-buy-heading')).not.toBeNull();
+    expect(groups(fixture)).toEqual([]);
+    expect(query(fixture, '.trips-older')).toBeNull();
+  });
+
+  it('gives the trips back when the page is left', async () => {
+    const { fixture, trips } = await grouped();
+
+    fixture.destroy();
+
+    expect(trips.state()).toBe('idle');
+    expect(trips.live()).toEqual([]);
   });
 });

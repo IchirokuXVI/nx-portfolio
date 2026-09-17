@@ -1,0 +1,119 @@
+:host {
+  display: block;
+}
+
+// The line row's shape and height, so a fold's skeletons and its rows are the same
+// size and the fold opens to its final height once.
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  width: 100%;
+  min-height: var(--app-line-row-height);
+  padding: var(--app-space-2) var(--app-space-3);
+  background: var(--app-surface-raised);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// A past trip's row: no raised surface and secondary text. Never struck through
+// (`0043`): the record is not finished with, the trip is.
+.row.quiet {
+  background: transparent;
+
+  .content {
+    color: var(--app-text-secondary);
+  }
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  flex: 1;
+  min-width: 0;
+}
+
+.content {
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.marks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-hair) var(--app-space-4);
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+}
+
+.glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.mark-bought,
+.mark-partly {
+  color: var(--app-status-success-fg);
+}
+
+.mark-notAvailable {
+  color: var(--app-status-danger-fg);
+}
+
+.mark-claimed {
+  color: var(--app-status-info-fg);
+}
+
+.dot {
+  flex-shrink: 0;
+  width: var(--app-dot-size);
+  height: var(--app-dot-size);
+  border-radius: var(--app-radius-full);
+  background: currentColor;
+}
+
+// Where the reel sits on a line row: what this trip left, and under it what it bought.
+.tally {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  min-width: var(--app-quantity-width);
+  line-height: var(--app-leading-heading);
+  text-align: end;
+}
+
+.left {
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+
+.left.zero {
+  color: var(--app-text-muted);
+}
+
+.bought {
+  font-size: var(--app-text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+}

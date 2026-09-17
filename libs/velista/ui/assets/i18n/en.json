@@ -667,6 +667,30 @@
       "keeps": "Comments and what was bought move with it.",
       "confirm": "Merge",
       "keepEditing": "Keep editing"
+    },
+    "trips": {
+      "toBuy": "To buy",
+      "loose": "Loose buys",
+      "labelNamed": "{{name}} · {{date}}",
+      "bought": "{{bought}} of {{total}} bought",
+      "lines": "{{count}} lines",
+      "liveBy": "{{name}} is buying now",
+      "live": "Somebody is buying now",
+      "older": "Show older trips",
+      "olderFailed": "The older trips did not load.",
+      "arrived": "{{count}} older trips shown",
+      "failed": "The past trips did not load.",
+      "retry": "Try again",
+      "row": {
+        "boughtOf": "bought {{bought}} of {{asked}}",
+        "bought": "bought {{bought}}",
+        "left": "{{count}} left",
+        "partly": "Bought some",
+        "notAvailable": "Not in the shop",
+        "notBought": "Was on the list, nobody bought it",
+        "boughtBy": "Bought · {{name}}",
+        "nowAsks": "The list now asks for {{count}}"
+      }
     }
   },
   "account": {

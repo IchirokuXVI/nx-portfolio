@@ -195,3 +195,31 @@ describe('ListViewStore', () => {
     expect(view.visibleCount()).toBe(0);
   });
 });
+
+/** Velista `0088`, section 4: what is open is remembered for the visit. */
+describe('ListViewStore: open trips', () => {
+  it('opens the newest live trip once per visit, and a closed one stays closed', () => {
+    const view = harness(new Map());
+
+    view.seedOpenTrip('BASKET:b-live');
+    expect([...view.openTrips()]).toEqual(['BASKET:b-live']);
+
+    view.toggleTrip('BASKET:b-live');
+    view.seedOpenTrip('BASKET:b-live');
+    expect([...view.openTrips()]).toEqual([]);
+  });
+
+  it('keeps what is open through a search, and forgets it when the list changes', () => {
+    const view = harness(new Map());
+    view.toggleTrip('LOOSE:s-1');
+
+    view.search('leche');
+    view.search('');
+    expect([...view.openTrips()]).toEqual(['LOOSE:s-1']);
+
+    view.open('list-2');
+    expect([...view.openTrips()]).toEqual([]);
+    view.seedOpenTrip('BASKET:b-2');
+    expect([...view.openTrips()]).toEqual(['BASKET:b-2']);
+  });
+});

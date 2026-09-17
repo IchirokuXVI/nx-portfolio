@@ -4,6 +4,7 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  composeListGroups,
   composeListView,
   DEFAULT_LIST_VIEW_STATE,
   foldForSearch,
@@ -16,6 +17,8 @@ import {
   pickedListCategory,
   type Line,
   type ListCategoryPick,
+  type ListGroupsInput,
+  type ListGroupsView,
   type ListView,
   type ListViewContext,
   type ListViewLine,
@@ -185,6 +188,73 @@ export class ListViewStore {
   }
 
   /**
+   * The page as groups, or as one flat search (velista `0088`).
+   *
+   * The same choices and lookups as {@link compose}, and the open trips this store
+   * remembers for the visit.
+   */
+  composeGroups<T extends ListViewLine>(
+    input: Omit<ListGroupsInput<T>, 'openKeys'>
+  ): ListGroupsView<T> {
+    return composeListGroups(
+      { ...input, openKeys: this._openTrips() },
+      this._state(),
+      this._context()
+    );
+  }
+
+  private readonly _openTrips = signal<ReadonlySet<string>>(new Set());
+
+  /** Whether the newest live trip was opened for this visit already. */
+  private _tripsSeeded = false;
+
+  /**
+   * The trips somebody has open, by trip key (velista `0088`, section 4).
+   *
+   * Remembered for the visit and never stored: a fold is about what somebody was looking
+   * at a moment ago, and the next visit starts from the newest live trip again.
+   */
+  readonly openTrips = this._openTrips.asReadonly();
+
+  /** Open a closed trip, or close an open one. */
+  toggleTrip(key: string): void {
+    this._openTrips.update((open) => {
+      const next = new Set(open);
+      if (!next.delete(key)) {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  /** Close a trip, for a group the page no longer draws. */
+  closeTrip(key: string): void {
+    if (!this._openTrips().has(key)) {
+      return;
+    }
+    this._openTrips.update((open) => {
+      const next = new Set(open);
+      next.delete(key);
+      return next;
+    });
+  }
+
+  /**
+   * The trips have arrived for the first time this visit: open the newest live one
+   * (section 2). Once per visit, so a trip somebody closed stays closed through every
+   * refetch.
+   */
+  seedOpenTrip(key: string | null): void {
+    if (this._tripsSeeded) {
+      return;
+    }
+    this._tripsSeeded = true;
+    if (key !== null) {
+      this._openTrips.update((open) => new Set(open).add(key));
+    }
+  }
+
+  /**
    * The page has a list to show, which is also the moment the order is restored.
    *
    * Another list in the same page instance starts from what the device remembers,
@@ -199,6 +269,7 @@ export class ListViewStore {
     this._listId.set(listId);
     this._query.set('');
     this._state.set(DEFAULT_LIST_VIEW_STATE);
+    this._forgetTrips();
     this._restore();
   }
 
@@ -261,6 +332,12 @@ export class ListViewStore {
     this._listId.set(null);
     this._query.set('');
     this._state.set(DEFAULT_LIST_VIEW_STATE);
+    this._forgetTrips();
+  }
+
+  private _forgetTrips(): void {
+    this._openTrips.set(new Set());
+    this._tripsSeeded = false;
   }
 
   /**

@@ -345,6 +345,22 @@ export const LINES_PAGE_SIZE = 100;
 export const SETTLEMENTS_PAGE_SIZE = 20;
 
 /**
+ * Trip heads per request on the zone list (velista `0088`, section 8). The gateway's
+ * default, and a screenful of folded labels.
+ */
+export const TRIPS_PAGE_SIZE = 20;
+
+/** Rows per request of one opened trip. The gateway's maximum, read to the end. */
+export const TRIP_ROWS_PAGE_SIZE = 100;
+
+/**
+ * How long the zone list waits for a burst of trip signals to go quiet before it reads
+ * the heads again (velista `0088`, section 8). A basket settling ten lines is ten
+ * events and one read.
+ */
+export const TRIPS_REFETCH_QUIET_MS = 400;
+
+/**
  * `CreateGeneratedListDto.name` and `UpdateGeneratedListDto.name`, which is
  * `GENERATED_LIST_LIMITS.nameMaxLength` in the contracts (backend plan 0050).
  *

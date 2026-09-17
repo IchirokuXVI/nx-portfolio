@@ -223,6 +223,38 @@ lib-line-composer {
   margin-block-start: var(--app-space-4);
 }
 
+// The trips under To buy (velista 0088). The page's own gap separates To buy from the
+// first fold, and a smaller one separates one fold's head from the next.
+.trips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+// A failed read of the trips, said under To buy. Quiet, because To buy is fully usable.
+.trips-failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2) var(--app-space-3);
+}
+
+.trips-failed-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.trips-failed .state-action {
+  margin-block-start: 0;
+}
+
+.trips-older {
+  @include list-page.quiet-action;
+
+  align-self: center;
+}
+
 // Ends the mode. Full width and prominent, because while it is on screen it is the
 // only thing the person is trying to do.
 .reorder-done {

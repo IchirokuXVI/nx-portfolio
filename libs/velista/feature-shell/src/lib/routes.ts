@@ -11,6 +11,7 @@ import {
   BasketStore,
   BasketViewStore,
   ListViewStore,
+  TripStore,
 } from '@portfolio/velista/data-access';
 import {
   RENDERS_WHILE_CONNECTING,
@@ -491,8 +492,9 @@ export const AppShellRoutes: Route[] = [
             // What the page is showing of the list (velista `0082`). Here and not on
             // the component, for `BasketViewStore`'s reason: the filter sheet that
             // sets it is a child route. `ListPage` resets it from its own teardown,
-            // because a route's injector is never destroyed.
-            providers: [ListViewStore],
+            // because a route's injector is never destroyed. `TripStore` beside it
+            // (velista `0088`), for the same visit and the same teardown.
+            providers: [ListViewStore, TripStore],
             children: [...listSheetRoutes()],
           },
           {

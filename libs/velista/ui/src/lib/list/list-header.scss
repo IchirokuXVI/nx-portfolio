@@ -59,26 +59,6 @@
   }
 }
 
-// The held reorder action (velista 0082, section 7): still the accent, dimmed, and
-// still pressable, following `AuthActions`.
-.header-action.held {
-  opacity: 0.5;
-}
-
-// The sentence a held press answers with. Takes no room while it is empty, so the
-// header is exactly the height it was for everybody who never presses it.
-.held-message {
-  margin: var(--app-space-2) 0 0;
-  font-size: var(--app-text-xs);
-  line-height: var(--app-leading-body);
-  color: var(--app-text-muted);
-  text-wrap: pretty;
-
-  &:empty {
-    margin: 0;
-  }
-}
-
 .progress-line {
   margin: var(--app-space-3) 0 var(--app-space-1);
   font-size: var(--app-text-xs);

@@ -44,6 +44,8 @@ import {
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileApi,
   StartupProbe,
+  TRIP_SERVICE,
+  TripApi,
   VELISTA_DATA_ACCESS_PROVIDERS,
   ZONE_SERVICE,
   ZoneApi,
@@ -193,6 +195,8 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // nothing new about either: both reach this injector's `HttpClient`.
   provideService(LINE_SERVICE, LineApi),
   provideService(COMMENT_SERVICE, CommentApi),
+  // The trips of a zone list (velista `0088`). The same reason again.
+  provideService(TRIP_SERVICE, TripApi),
 
   // The account screen (plan 0015). A seventh time, and still nothing new: `AccountApi`
   // reaches this injector's `HttpClient`, so the token's default resolving at the root
