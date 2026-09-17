@@ -104,6 +104,8 @@ export class HarvestRunStore {
     payload: Record<string, unknown>;
     /** A file import's document digest, and null for every other mode. */
     documentSha256?: string | null;
+    /** The preset the run was started from (plan 0120), null for a typed one. */
+    presetId?: string | null;
   }): Promise<HarvestRun> {
     try {
       return await this.runs.save(
@@ -117,6 +119,7 @@ export class HarvestRunStore {
           correlationId: input.correlationId,
           input: input.payload,
           documentSha256: input.documentSha256 ?? null,
+          presetId: input.presetId ?? null,
           status: HarvestRunStatus.PENDING,
           requestedAt: new Date(),
         })

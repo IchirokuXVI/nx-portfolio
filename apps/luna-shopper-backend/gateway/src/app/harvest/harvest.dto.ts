@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import {
   ADAPTER_KEYS,
   BULK_DECISION_MAX_OPERATIONS,
@@ -582,6 +582,15 @@ export class HarvestRunListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsBoolean()
   reverted?: boolean;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The runs started from this preset (plan 0120). A deleted preset still filters its runs, which keep its id.',
+  })
+  @IsOptional()
+  @IsUUID()
+  presetId?: string;
 }
 
 export class DiscoveredPlaceListQueryDto extends PageQueryDto {
@@ -764,4 +773,79 @@ export class AddPostalCodeDiscoveryDto {
   })
   @IsBoolean()
   discoverNow!: boolean;
+}
+
+/**
+ * What a preset saves (plan 0120, section 3): the body a run is started with,
+ * less `supermarketId`, which is the preset's own field.
+ *
+ * Derived from {@link SpawnHarvestRunDto} rather than restated, so a field a run
+ * gains is a field a preset takes. The harvester validates it exactly as it
+ * validates a spawn, when the preset is saved and again when a run starts from it.
+ */
+export class HarvestRunPresetInputDto extends OmitType(SpawnHarvestRunDto, [
+  'supermarketId',
+] as const) {}
+
+/** Save a run request under a name (plan 0120, section 5). */
+export class CreateHarvestRunPresetDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The chain the preset belongs to. It never changes: a request that fits one chain’s scopes names nothing of another’s.',
+  })
+  @IsUUID()
+  supermarketId!: string;
+
+  @ApiProperty({
+    maxLength: 80,
+    description:
+      'Unique within the chain regardless of case. A duplicate answers 409 naming the preset that holds the name.',
+  })
+  @IsString()
+  @MaxLength(80)
+  name!: string;
+
+  @ApiProperty({
+    type: () => HarvestRunPresetInputDto,
+    description:
+      'The run request, validated as a spawn is. What is stored is the request with the defaults resolved, so a preset that saved `details: NEW` keeps saying it if the default changes. `FILE_IMPORT` is refused, because it needs a document uploaded at the time, and so is a store discovery around a postal code, which belongs to no chain.',
+  })
+  @IsObject()
+  @ValidateNested()
+  @Type(() => HarvestRunPresetInputDto)
+  input!: HarvestRunPresetInputDto;
+}
+
+/** Rename a preset, replace its input, or both (plan 0120, section 5). */
+export class UpdateHarvestRunPresetDto {
+  @ApiPropertyOptional({
+    maxLength: 80,
+    description: 'Unique within the chain regardless of case.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  name?: string;
+
+  @ApiPropertyOptional({
+    type: () => HarvestRunPresetInputDto,
+    description:
+      'Replaces the saved input whole, and is validated again. Runs already started from the preset keep the input they were started with.',
+  })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => HarvestRunPresetInputDto)
+  input?: HarvestRunPresetInputDto;
+}
+
+export class HarvestRunPresetListQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'One chain’s presets. Absent lists every chain’s.',
+  })
+  @IsOptional()
+  @IsUUID()
+  supermarketId?: string;
 }

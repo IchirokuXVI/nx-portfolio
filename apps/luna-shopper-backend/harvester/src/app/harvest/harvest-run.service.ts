@@ -14,9 +14,12 @@ import {
   PriceSourceKind,
   adapterCapabilities,
   type AdapterCapabilities,
+  type AdminCredential,
   type HarvestDocument,
   type HarvestRunIdRequest,
   type HarvestRunPage,
+  type HarvestRunPresetIdRequest,
+  type HarvestRunPresetInput,
   type HarvestRunView,
   type ListHarvestRunsRequest,
   type ScopeCopy,
@@ -35,6 +38,7 @@ import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { readHarvestDocument } from './harvest-document.reader';
+import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import {
   ActiveRunExistsError,
   DocumentAlreadyImportedError,
@@ -50,6 +54,24 @@ import { SupermarketSourceService } from './supermarket-source.service';
 interface RunCursor {
   value: string;
   id: string;
+}
+
+/** A spawn's request without the credential, which is what a preset rebuilds. */
+export type RunRequest = Omit<SpawnHarvestRunRequest, keyof AdminCredential>;
+
+/** What {@link HarvestRunService.validateRequest} answers. */
+export interface ValidatedRunRequest {
+  supermarketId: string | null;
+  priceScopeId: string | null;
+  /** What the run stores in `harvest_runs.input`. */
+  payload: Record<string, unknown>;
+  documentSha256: string | null;
+  /**
+   * The request with its defaults resolved and every field it does not state
+   * left out, which is what a preset saves (plan 0120, section 3). Validating
+   * it again answers the same payload.
+   */
+  request: HarvestRunPresetInput;
 }
 
 /**
@@ -126,7 +148,8 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     private readonly rows: SourceEntryService,
     private readonly catalog: CatalogClient,
     private readonly admin: PlatformAdminService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly presets: HarvestRunPresetStore
   ) {}
 
   private settings(): HarvesterConfig {
@@ -156,36 +179,89 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
 
   async spawn(req: SpawnHarvestRunRequest): Promise<HarvestRunView> {
     await this.admin.requireAdmin(req);
-    const settings = this.settings();
-    if (!settings.harvestEnabled) {
-      // A statement about the server, not about the request: nothing the caller
-      // changes makes this succeed, and nothing is broken. That is exactly what
-      // NotConfiguredException means, and it renders as 501.
-      throw new NotConfiguredException(
-        'Harvesting is disabled on this deployment (HARVEST_ENABLED is false).'
-      );
-    }
-
+    this.requireHarvesting();
     // The source is loaded **before** the validation rather than after it,
     // because `CATALOG_DISCOVERY` decides whether a price scope is required by
     // reading this row's `adapterKey` (plan 0086, section 9).
     const source = req.supermarketId
       ? await this.sources.findBySupermarket(req.supermarketId)
       : null;
-    // A FILE_IMPORT needs no source and must not be refused for wanting one
-    // (plan 0081, section 1). `SupermarketSource` is fetching configuration, an
-    // upload fetches nothing, and a chain with no adapter at all still gets rows
-    // that look exactly like a walk's. The run still carries `sourceId: null`
-    // where the chain does have one, because no source was used.
-    const needsSource = req.mode !== HarvestRunMode.FILE_IMPORT;
-    const { supermarketId, priceScopeId, payload, documentSha256 } =
-      await this.validate(req, source);
-    if (needsSource && supermarketId && !source) {
-      throw new ValidationException(
-        'That supermarket has no configured source. Create one with ' +
-          'supermarketSource.upsert before starting a run.'
+    return this.start(req, source, await this.validateRequest(req, source), {
+      userId: req.userId,
+      presetId: null,
+    });
+  }
+
+  /**
+   * Start a run from a saved preset (plan 0120, section 4).
+   *
+   * **The preset is validated again**, through the same {@link validateRequest}
+   * a spawn uses. A scope a preset names can be deleted after the preset is
+   * saved, and silently dropping a target is worse for a saved run than for a
+   * typed one, because nobody is looking at the form when it happens. So the
+   * refusal is the spawn's own, with the preset named in front of it, and no run
+   * is created.
+   *
+   * The run stores a copy of the input as it validated now and the preset's id
+   * beside it, so editing the preset later never rewrites what the run did.
+   * `trigger` stays `MANUAL`: a person started it.
+   */
+  async spawnFromPreset(
+    req: HarvestRunPresetIdRequest
+  ): Promise<HarvestRunView> {
+    await this.admin.requireAdmin(req);
+    this.requireHarvesting();
+    const preset = await this.presets.load(req.presetId);
+    const request: RunRequest = {
+      ...preset.input,
+      supermarketId: preset.supermarketId,
+    };
+    const source = await this.sources.findBySupermarket(preset.supermarketId);
+    let validated: ValidatedRunRequest;
+    try {
+      validated = await this.validateRequest(request, source);
+    } catch (error) {
+      if (error instanceof ValidationException) {
+        throw new ValidationException(
+          `The preset "${preset.name}" (${preset.id}) cannot start a run: ` +
+            error.message,
+          { details: error.details, cause: error }
+        );
+      }
+      throw error;
+    }
+    return this.start(request, source, validated, {
+      userId: req.userId,
+      presetId: preset.id,
+    });
+  }
+
+  /**
+   * A statement about the server, not about the request: nothing the caller
+   * changes makes this succeed, and nothing is broken. That is exactly what
+   * NotConfiguredException means, and it renders as 501.
+   */
+  private requireHarvesting(): void {
+    if (!this.settings().harvestEnabled) {
+      throw new NotConfiguredException(
+        'Harvesting is disabled on this deployment (HARVEST_ENABLED is false).'
       );
     }
+  }
+
+  /**
+   * Create the run a validated request describes, after the checks about the
+   * moment rather than the request (plan 0120, section 4): a source switched
+   * off, and a run of the chain already in flight.
+   */
+  private async start(
+    req: RunRequest,
+    source: SupermarketSource | null,
+    validated: ValidatedRunRequest,
+    origin: { userId: string; presetId: string | null }
+  ): Promise<HarvestRunView> {
+    const { supermarketId, priceScopeId, payload, documentSha256 } = validated;
+    const needsSource = req.mode !== HarvestRunMode.FILE_IMPORT;
     if (needsSource && source && !source.enabled) {
       throw new ValidationException(
         'That source is disabled. Enable it with supermarketSource.setEnabled.'
@@ -199,10 +275,11 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         supermarketId,
         sourceId: needsSource ? (source?.id ?? null) : null,
         priceScopeId,
-        requestedByUserId: req.userId,
+        requestedByUserId: origin.userId,
         correlationId: getRequestContext()?.correlationId ?? null,
         payload,
         documentSha256,
+        presetId: origin.presetId,
       });
       // The reaper compares heartbeats, so a run gets one the moment it exists
       // rather than when it starts working: a process that dies in between would
@@ -355,6 +432,9 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     if (req.status) {
       qb.andWhere('r.status = :status', { status: req.status });
     }
+    if (req.presetId) {
+      qb.andWhere('r."presetId" = :pid', { pid: req.presetId });
+    }
     if (req.reverted !== undefined) {
       // A filter of its own rather than a status (plan 0082, section 6): a
       // revert does not change how the run ended.
@@ -407,19 +487,48 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Everything about a run request that holds whenever it is asked (plan 0120,
+   * section 4): the mode, the chain and its source, the scopes and their bands,
+   * the copies, `writes`, `details` and the postal codes.
+   *
+   * **A spawn and a preset are validated by this one function.** A preset calls
+   * it when it is saved and again when a run starts from it, so a preset that
+   * saves is a run that can start as long as nothing changed in between. What a
+   * spawn checks about the moment, harvesting switched off, a source switched
+   * off and a run already in flight, stays in the spawn.
+   */
+  async validateRequest(
+    req: RunRequest,
+    source: SupermarketSource | null
+  ): Promise<ValidatedRunRequest> {
+    const validated = await this.validate(req, source);
+    // A FILE_IMPORT needs no source and must not be refused for wanting one
+    // (plan 0081, section 1). `SupermarketSource` is fetching configuration, an
+    // upload fetches nothing, and a chain with no adapter at all still gets rows
+    // that look exactly like a walk's. The run still carries `sourceId: null`
+    // where the chain does have one, because no source was used.
+    if (
+      req.mode !== HarvestRunMode.FILE_IMPORT &&
+      validated.supermarketId &&
+      !source
+    ) {
+      throw new ValidationException(
+        'That supermarket has no configured source. Create one with ' +
+          'supermarketSource.upsert before starting a run.'
+      );
+    }
+    return validated;
+  }
+
+  /**
    * Which fields a mode actually needs, checked once here rather than in each
    * runner. A STORE_DISCOVERY belongs to a postal code and a radius; the other
    * two belong to a chain and a scope, and only one of them insists on the scope.
    */
   private async validate(
-    req: SpawnHarvestRunRequest,
+    req: RunRequest,
     source: SupermarketSource | null
-  ): Promise<{
-    supermarketId: string | null;
-    priceScopeId: string | null;
-    payload: Record<string, unknown>;
-    documentSha256: string | null;
-  }> {
+  ): Promise<ValidatedRunRequest> {
     // A copy writes what a walk read, and only a catalog discovery walks (plan
     // 0118, section 3). Refused before the mode's own checks, so every other
     // mode says so rather than ignoring the field.
@@ -462,25 +571,30 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
             'chain it names publishes its own shop list.'
         );
       }
+      const discovery = {
+        country: req.country ?? 'es',
+        // Section 11's recommendation: 3 km returned 26 supermarkets around
+        // 14013 while the wider box returned 75. The review step makes a small
+        // over-fetch cheap and a large one tedious.
+        radiusMetres: req.radiusMetres ?? 3000,
+        brandKeys: req.brandKeys ?? [],
+        // The shops a chain's own list is filtered to (plan 0106, section 4).
+        // Not a centre and not a radius: it matches each shop's own code
+        // exactly, and an empty list is every shop. The OpenStreetMap case
+        // has a centre already and ignores it.
+        postalCodes: (req.postalCodes ?? [])
+          .map((code) => code.trim())
+          .filter((code) => code !== ''),
+      };
       return {
         supermarketId: namesOwnShops ? (req.supermarketId as string) : null,
         priceScopeId: null,
         documentSha256: null,
-        payload: {
-          postalCode: req.postalCode ?? '',
-          country: req.country ?? 'es',
-          // Section 11's recommendation: 3 km returned 26 supermarkets around
-          // 14013 while the wider box returned 75. The review step makes a small
-          // over-fetch cheap and a large one tedious.
-          radiusMetres: req.radiusMetres ?? 3000,
-          brandKeys: req.brandKeys ?? [],
-          // The shops a chain's own list is filtered to (plan 0106, section 4).
-          // Not a centre and not a radius: it matches each shop's own code
-          // exactly, and an empty list is every shop. The OpenStreetMap case
-          // has a centre already and ignores it.
-          postalCodes: (req.postalCodes ?? [])
-            .map((code) => code.trim())
-            .filter((code) => code !== ''),
+        payload: { postalCode: req.postalCode ?? '', ...discovery },
+        request: {
+          mode: req.mode,
+          ...(req.postalCode ? { postalCode: req.postalCode } : {}),
+          ...discovery,
         },
       };
     }
@@ -568,6 +682,19 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         writes,
         details,
       },
+      // The same request, stated so that validating it again answers the same
+      // payload (plan 0120, section 3). A resolved value is left out only where
+      // stating it would be refused: `writes` on a backfill, and `details` for
+      // an adapter with no detail phase, where `ALL` is the only value there is.
+      request: {
+        mode: req.mode,
+        ...(req.priceScopeId ? { priceScopeId: req.priceScopeId } : {}),
+        ...(priceScopeIds.length > 0 ? { priceScopeIds } : {}),
+        ...(detailBackfill ? { detailBackfill } : {}),
+        ...(scopeCopies.length > 0 ? { scopeCopies } : {}),
+        ...(detailBackfill ? {} : { writes }),
+        ...(capabilities.skipsKnownDetails ? { details } : {}),
+      },
     };
   }
 
@@ -580,7 +707,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
    * to `ALL`, which is what that adapter does anyway.
    */
   private walkOptions(
-    req: SpawnHarvestRunRequest,
+    req: RunRequest,
     capabilities: AdapterCapabilities,
     detailBackfill: boolean
   ): { writes: HarvestRunWrites; details: HarvestDetailFetch } {
@@ -818,12 +945,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
    * none at all resolves to none, which is what a walk's export is: a storefront
    * price has no window.
    */
-  private validateFileImport(req: SpawnHarvestRunRequest): {
-    supermarketId: string | null;
-    priceScopeId: string | null;
-    payload: Record<string, unknown>;
-    documentSha256: string | null;
-  } {
+  private validateFileImport(req: RunRequest): ValidatedRunRequest {
     if (!req.supermarketId) {
       throw new ValidationException(
         'A file import needs the chain the file is about. `chain_id` in the ' +
@@ -884,6 +1006,12 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
             }
           : {}),
         document,
+      },
+      // Never saved: a file import is not a preset, because it needs a
+      // document uploaded at the time.
+      request: {
+        mode: req.mode,
+        ...(req.priceScopeId ? { priceScopeId: req.priceScopeId } : {}),
       },
     };
   }

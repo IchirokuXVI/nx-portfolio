@@ -24,6 +24,7 @@ import {
 import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
+  HARVEST_PRESET_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
@@ -86,6 +87,7 @@ describe('contract schemas', () => {
       ...Object.values(PRODUCT_GROUP_PATTERNS),
       ...Object.values(POSTAL_CODE_PATTERNS),
       ...Object.values(HARVEST_PATTERNS),
+      ...Object.values(HARVEST_PRESET_PATTERNS),
       ...Object.values(DISCOVERED_PLACE_PATTERNS),
       ...Object.values(SOURCE_ENTRY_PATTERNS),
       ...Object.values(SUPERMARKET_SOURCE_PATTERNS),

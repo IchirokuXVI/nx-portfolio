@@ -4,6 +4,7 @@ import {
   ADMIN_DASHBOARD_PATTERNS,
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
+  HARVEST_PRESET_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
   POSTAL_CODE_EVENTS,
   SOURCE_ENTRY_PATTERNS,
@@ -19,6 +20,7 @@ import {
   type BrandSpellingsRequest,
   type BrandSpellingsResult,
   type BrandSuggestionPage,
+  type CreateHarvestRunPresetRequest,
   type CreateItemFromSourceEntryRequest,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlaceIdRequest,
@@ -29,10 +31,14 @@ import {
   type HarvestRunExportResult,
   type HarvestRunIdRequest,
   type HarvestRunPage,
+  type HarvestRunPresetIdRequest,
+  type HarvestRunPresetPage,
+  type HarvestRunPresetView,
   type HarvestRunView,
   type ImportDiscoveredPlaceRequest,
   type ListBrandSuggestionsRequest,
   type ListDiscoveredPlacesRequest,
+  type ListHarvestRunPresetsRequest,
   type ListHarvestRunsRequest,
   type ListPostalCodeDiscoveryRequestsRequest,
   type ListSourceEntriesRequest,
@@ -56,10 +62,12 @@ import {
   type SupermarketSourceIdRequest,
   type SupermarketSourcePage,
   type SupermarketSourceView,
+  type UpdateHarvestRunPresetRequest,
   type UpsertSupermarketSourceRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { HarvestDashboardService } from './dashboard.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
+import { HarvestRunPresetService } from './harvest-run-preset.service';
 import { HarvestRunService } from './harvest-run.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { SourceEntryBatchService } from './source-entry-batch.service';
@@ -90,7 +98,8 @@ export class HarvestController {
     private readonly shops: SourceLocationService,
     private readonly sources: SupermarketSourceService,
     private readonly discovery: PostalCodeDiscoveryService,
-    private readonly dashboard: HarvestDashboardService
+    private readonly dashboard: HarvestDashboardService,
+    private readonly presets: HarvestRunPresetService
   ) {}
 
   // --- The back office dashboard -------------------------------------------
@@ -112,6 +121,55 @@ export class HarvestController {
   @MessagePattern(HARVEST_PATTERNS.spawn)
   spawn(@Payload() req: SpawnHarvestRunRequest): Promise<HarvestRunView> {
     return this.runs.spawn(req);
+  }
+
+  /**
+   * Start a run from a saved preset (plan 0120). The preset is validated again,
+   * and the run stores a copy of its input and its id.
+   */
+  @MessagePattern(HARVEST_PATTERNS.spawnFromPreset)
+  spawnFromPreset(
+    @Payload() req: HarvestRunPresetIdRequest
+  ): Promise<HarvestRunView> {
+    return this.runs.spawnFromPreset(req);
+  }
+
+  // --- Run presets (plan 0120) ---------------------------------------------
+
+  @MessagePattern(HARVEST_PRESET_PATTERNS.list)
+  listPresets(
+    @Payload() req: ListHarvestRunPresetsRequest
+  ): Promise<HarvestRunPresetPage> {
+    return this.presets.list(req);
+  }
+
+  @MessagePattern(HARVEST_PRESET_PATTERNS.get)
+  getPreset(
+    @Payload() req: HarvestRunPresetIdRequest
+  ): Promise<HarvestRunPresetView> {
+    return this.presets.get(req);
+  }
+
+  @MessagePattern(HARVEST_PRESET_PATTERNS.create)
+  createPreset(
+    @Payload() req: CreateHarvestRunPresetRequest
+  ): Promise<HarvestRunPresetView> {
+    return this.presets.create(req);
+  }
+
+  @MessagePattern(HARVEST_PRESET_PATTERNS.update)
+  updatePreset(
+    @Payload() req: UpdateHarvestRunPresetRequest
+  ): Promise<HarvestRunPresetView> {
+    return this.presets.update(req);
+  }
+
+  /** Runs started from the preset keep their record and still name it. */
+  @MessagePattern(HARVEST_PRESET_PATTERNS.delete)
+  deletePreset(
+    @Payload() req: HarvestRunPresetIdRequest
+  ): Promise<{ id: string }> {
+    return this.presets.delete(req);
   }
 
   @MessagePattern(HARVEST_PATTERNS.abort)

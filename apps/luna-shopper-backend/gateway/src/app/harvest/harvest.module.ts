@@ -5,6 +5,7 @@ import {
   AdminHarvestImportsController,
   AdminHarvestPlacesController,
   AdminHarvestPostalCodesController,
+  AdminHarvestPresetsController,
   AdminHarvestRunsController,
   AdminHarvestShopsController,
   AdminHarvestSourcesController,
@@ -21,6 +22,8 @@ import {
   imports: [MessagingModule],
   controllers: [
     AdminHarvestRunsController,
+    // Run requests saved under a name, and the run started from one (plan 0120).
+    AdminHarvestPresetsController,
     // The file import, and the one queue it fills along with every walk and
     // crawl (plan 0086). The alias and item ref controllers were the same queue
     // over two other tables and are gone.

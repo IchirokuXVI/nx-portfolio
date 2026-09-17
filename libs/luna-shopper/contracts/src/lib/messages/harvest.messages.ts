@@ -74,6 +74,31 @@ export const HARVEST_PATTERNS = {
    * machine that crawled to one that cannot is the point of it.
    */
   export: 'harvest.export',
+  /**
+   * Start a run from a saved preset (plan 0120, section 5).
+   *
+   * Its own subject rather than a `presetId` on {@link spawn}: a spawn that
+   * named a preset and a scope would have to decide which one wins, and a
+   * request that carries nothing but the id cannot be asked. The run stores a
+   * copy of the preset's input, validated again at the start, and the preset's
+   * id beside it.
+   */
+  spawnFromPreset: 'harvest.spawnFromPreset',
+} as const;
+
+/**
+ * Run requests saved under a name, one chain each (plan 0120).
+ *
+ * A preset is validated exactly as a spawn is, so a preset that saves is a run
+ * that can start as long as nothing changed in between. Editing or deleting
+ * one never changes a run: every run keeps its own copy of the input.
+ */
+export const HARVEST_PRESET_PATTERNS = {
+  list: 'harvestPreset.list',
+  get: 'harvestPreset.get',
+  create: 'harvestPreset.create',
+  update: 'harvestPreset.update',
+  delete: 'harvestPreset.delete',
 } as const;
 
 export const DISCOVERED_PLACE_PATTERNS = {
@@ -530,6 +555,15 @@ export interface HarvestRunView {
    * are not counted here.
    */
   revertedPriceCount: number | null;
+  /**
+   * The preset this run was started from (plan 0120, section 7), null for a
+   * run somebody filled the form in for.
+   *
+   * No foreign key stands behind it, so a run whose preset was deleted still
+   * names it. What the run did is its own `input`, never read back from the
+   * preset.
+   */
+  presetId: string | null;
 }
 
 /**
@@ -953,6 +987,81 @@ export interface ListHarvestRunsRequest extends PageQuery, AdminCredential {
    * was.
    */
   reverted?: boolean;
+  /** The runs started from this preset (plan 0120, section 7). */
+  presetId?: string;
+}
+
+// --- Run presets (plan 0120) -----------------------------------------------
+
+/**
+ * What a preset saves: the request a spawn receives, less the credential and
+ * less `supermarketId`, which is the preset's own column (plan 0120, section 3).
+ *
+ * The file import fields are left out too. A `FILE_IMPORT` is never a preset,
+ * because it needs a document uploaded at the time.
+ *
+ * **What is stored is the validated request**, with the defaults of plan 0119
+ * resolved, so a preset that saved `details: NEW` keeps saying `NEW` if the
+ * default ever changes.
+ */
+export type HarvestRunPresetInput = Omit<
+  SpawnHarvestRunRequest,
+  | keyof AdminCredential
+  | 'supermarketId'
+  | 'sourceKind'
+  | 'document'
+  | 'validFrom'
+  | 'validUntil'
+>;
+
+/** The latest run started from a preset, for the presets list. */
+export interface HarvestRunPresetLastRun {
+  id: string;
+  status: HarvestRunStatus;
+  requestedAt: string;
+}
+
+/** One saved run request (plan 0120, section 6). */
+export interface HarvestRunPresetView {
+  id: string;
+  supermarketId: string;
+  name: string;
+  input: HarvestRunPresetInput;
+  createdAt: string;
+  updatedAt: string;
+  /** The latest run started from this preset, null when none was. */
+  lastRun: HarvestRunPresetLastRun | null;
+}
+
+/** A chain's presets, or every chain's, ordered by name. */
+export interface ListHarvestRunPresetsRequest
+  extends PageQuery, AdminCredential {
+  supermarketId?: string;
+}
+
+export interface HarvestRunPresetIdRequest extends AdminCredential {
+  presetId: string;
+}
+
+/**
+ * Save a run request under a name. Refused when the name is already used in
+ * the chain in any case, and when the input would not pass a spawn's
+ * validation.
+ */
+export interface CreateHarvestRunPresetRequest extends AdminCredential {
+  supermarketId: string;
+  name: string;
+  input: HarvestRunPresetInput;
+}
+
+/**
+ * Rename a preset, replace its input, or both. `input` is replaced whole and
+ * validated again. The chain of a preset never changes.
+ */
+export interface UpdateHarvestRunPresetRequest extends AdminCredential {
+  presetId: string;
+  name?: string;
+  input?: HarvestRunPresetInput;
 }
 
 // --- Discovered place requests ---------------------------------------------
@@ -1356,6 +1465,7 @@ export const BRAND_SPELLINGS_MAX = 200;
 // --- Pages -----------------------------------------------------------------
 
 export type HarvestRunPage = Paginated<HarvestRunView>;
+export type HarvestRunPresetPage = Paginated<HarvestRunPresetView>;
 export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
 export type SourceLocationPage = Paginated<SourceLocationView>;

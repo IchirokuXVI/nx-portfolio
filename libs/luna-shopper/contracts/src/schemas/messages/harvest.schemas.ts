@@ -17,6 +17,7 @@ import {
   BRAND_SPELLINGS_MAX,
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
+  HARVEST_PRESET_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
@@ -86,6 +87,15 @@ export const HARVEST_SCHEMA_IDS = {
   ),
 
   harvestRunPage: schemaId('harvest/HarvestRunPage'),
+  // Plan 0120: run requests saved under a name.
+  harvestRunPresetInput: schemaId('harvest/HarvestRunPresetInput'),
+  harvestRunPresetLastRun: schemaId('harvest/HarvestRunPresetLastRun'),
+  harvestRunPresetView: schemaId('harvest/HarvestRunPresetView'),
+  harvestRunPresetPage: schemaId('harvest/HarvestRunPresetPage'),
+  listPresetsRequest: schemaId('msg/harvestPreset.list/request'),
+  presetIdRequest: schemaId('msg/harvestPreset.id/request'),
+  createPresetRequest: schemaId('msg/harvestPreset.create/request'),
+  updatePresetRequest: schemaId('msg/harvestPreset.update/request'),
   discoveredPlacePage: schemaId('harvest/DiscoveredPlacePage'),
   sourceCatalogEntryPage: schemaId('harvest/SourceCatalogEntryPage'),
   sourceLocationPage: schemaId('harvest/SourceLocationPage'),
@@ -235,6 +245,10 @@ const harvestRunView = object(
     revertedAt: nullableString(),
     revertedByUserId: nullableString(),
     revertedPriceCount: integerOrNull(),
+    // Plan 0120. Not required, like the provenance fields of plan 0118: the back
+    // office types its fixtures with the generated wire types, and every run
+    // this service answers carries it anyway.
+    presetId: nullableString(),
   },
   [
     'id',
@@ -739,25 +753,53 @@ const postalCodeDiscoveryRequestPage = paginated(
 
 // --- Requests --------------------------------------------------------------
 
+/**
+ * The fields a run request and a preset share (plan 0120, section 3): every
+ * field a spawn takes, less the credential, the chain and the four fields only a
+ * file import reads.
+ */
+const runRequestProperties: Record<string, JsonSchema> = {
+  mode: ref(HARVEST_SCHEMA_IDS.harvestRunMode),
+  priceScopeId: string(),
+  // The scopes a Mercadona walk covers, one warehouse each (plan 0108,
+  // section 2). The warehouse is the scope's own `externalKey`, so the run
+  // cannot walk one warehouse and label its prices with another.
+  priceScopeIds: array(string()),
+  postalCode: string(),
+  country: string(),
+  radiusMetres: integer({ minimum: 1 }),
+  brandKeys: array(string()),
+  // Restrict a store discovery to the shops in these postal codes, matched
+  // on the shop's own code and never as a radius (plan 0106, section 4).
+  // Empty and absent are the same thing, which is every shop.
+  postalCodes: array(string()),
+  // Read product pages for the EAN instead of crawling the assortment (plan
+  // 0090, section 12.1). A switch and not a mode: the same run against the
+  // same chain, asking a second question of the same pages, and never at the
+  // same time as a price crawl.
+  detailBackfill: boolean(),
+  // The scopes that also receive what the run writes at a walked scope (plan
+  // 0118). The rules that relate them to the walk live in the harvester's
+  // spawn validation, which a saved preset goes through as well.
+  scopeCopies: array({
+    type: 'object',
+    additionalProperties: false,
+    required: ['from', 'to'],
+    properties: { from: string(), to: array(string()) },
+  }),
+  // What the run writes of what it read, and which products a Mercadona walk
+  // fetches the detail of (plan 0119). Both are CATALOG_DISCOVERY options,
+  // and the spawn stores the resolved values on the run's input.
+  writes: ref(HARVEST_SCHEMA_IDS.harvestRunWrites),
+  details: ref(HARVEST_SCHEMA_IDS.harvestDetailFetch),
+};
+
 const spawnRunRequest = object(
   HARVEST_SCHEMA_IDS.spawnRunRequest,
   {
     ...adminCredentialProperties,
-    mode: ref(HARVEST_SCHEMA_IDS.harvestRunMode),
+    ...runRequestProperties,
     supermarketId: string(),
-    priceScopeId: string(),
-    // The scopes a Mercadona walk covers, one warehouse each (plan 0108,
-    // section 2). The warehouse is the scope's own `externalKey`, so the run
-    // cannot walk one warehouse and label its prices with another.
-    priceScopeIds: array(string()),
-    postalCode: string(),
-    country: string(),
-    radiusMetres: integer({ minimum: 1 }),
-    brandKeys: array(string()),
-    // Restrict a store discovery to the shops in these postal codes, matched
-    // on the shop's own code and never as a radius (plan 0106, section 4).
-    // Empty and absent are the same thing, which is every shop.
-    postalCodes: array(string()),
     // What observed the products in a FILE_IMPORT's document, which is what its
     // rows and its prices are stamped with (plan 0086, section 6.2). Not what
     // the upload is: a re-imported Mercadona walk stamps OFFICIAL_API.
@@ -769,27 +811,88 @@ const spawnRunRequest = object(
     document: freeObject(),
     validFrom: nullableString(),
     validUntil: nullableString(),
-    // Read product pages for the EAN instead of crawling the assortment (plan
-    // 0090, section 12.1). A switch and not a mode: the same run against the
-    // same chain, asking a second question of the same pages, and never at the
-    // same time as a price crawl.
-    detailBackfill: boolean(),
-    // The scopes that also receive what the run writes at a walked scope (plan
-    // 0118). The rules that relate them to the walk live in the harvester's
-    // spawn validation, which a saved preset goes through as well.
-    scopeCopies: array({
-      type: 'object',
-      additionalProperties: false,
-      required: ['from', 'to'],
-      properties: { from: string(), to: array(string()) },
-    }),
-    // What the run writes of what it read, and which products a Mercadona walk
-    // fetches the detail of (plan 0119). Both are CATALOG_DISCOVERY options,
-    // and the spawn stores the resolved values on the run's input.
-    writes: ref(HARVEST_SCHEMA_IDS.harvestRunWrites),
-    details: ref(HARVEST_SCHEMA_IDS.harvestDetailFetch),
   },
   ['userId', 'mode']
+);
+
+/**
+ * A saved run request (plan 0120, section 3). The mode is the one required
+ * field, as on a spawn: which of the rest a mode needs is the harvester's spawn
+ * validation, which a preset goes through when it is saved and again when a run
+ * starts from it.
+ */
+const harvestRunPresetInput = object(
+  HARVEST_SCHEMA_IDS.harvestRunPresetInput,
+  runRequestProperties,
+  ['mode']
+);
+const harvestRunPresetLastRun = object(
+  HARVEST_SCHEMA_IDS.harvestRunPresetLastRun,
+  {
+    id: nonEmptyString(),
+    status: ref(HARVEST_SCHEMA_IDS.harvestRunStatus),
+    requestedAt: string({ format: 'date-time' }),
+  },
+  ['id', 'status', 'requestedAt']
+);
+const harvestRunPresetView = object(
+  HARVEST_SCHEMA_IDS.harvestRunPresetView,
+  {
+    id: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    name: nonEmptyString(),
+    input: ref(HARVEST_SCHEMA_IDS.harvestRunPresetInput),
+    createdAt: string({ format: 'date-time' }),
+    updatedAt: string({ format: 'date-time' }),
+    // The latest run started from the preset, null when none was.
+    lastRun: {
+      anyOf: [
+        ref(HARVEST_SCHEMA_IDS.harvestRunPresetLastRun),
+        { type: 'null' },
+      ],
+    },
+  },
+  ['id', 'supermarketId', 'name', 'input', 'createdAt', 'updatedAt', 'lastRun']
+);
+const harvestRunPresetPage = paginated(
+  HARVEST_SCHEMA_IDS.harvestRunPresetPage,
+  HARVEST_SCHEMA_IDS.harvestRunPresetView
+);
+const listPresetsRequest = object(
+  HARVEST_SCHEMA_IDS.listPresetsRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketId: string(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId']
+);
+const presetIdRequest = object(
+  HARVEST_SCHEMA_IDS.presetIdRequest,
+  { ...adminCredentialProperties, presetId: nonEmptyString() },
+  ['userId', 'presetId']
+);
+const createPresetRequest = object(
+  HARVEST_SCHEMA_IDS.createPresetRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketId: nonEmptyString(),
+    name: nonEmptyString({ maxLength: 80 }),
+    input: ref(HARVEST_SCHEMA_IDS.harvestRunPresetInput),
+  },
+  ['userId', 'supermarketId', 'name', 'input']
+);
+const updatePresetRequest = object(
+  HARVEST_SCHEMA_IDS.updatePresetRequest,
+  {
+    ...adminCredentialProperties,
+    presetId: nonEmptyString(),
+    name: nonEmptyString({ maxLength: 80 }),
+    input: ref(HARVEST_SCHEMA_IDS.harvestRunPresetInput),
+  },
+  ['userId', 'presetId']
 );
 const runIdRequest = object(
   HARVEST_SCHEMA_IDS.runIdRequest,
@@ -805,6 +908,8 @@ const listRunsRequest = object(
     status: ref(HARVEST_SCHEMA_IDS.harvestRunStatus),
     // Plan 0082, section 6. Absent lists both.
     reverted: boolean(),
+    // Plan 0120: the runs started from one preset.
+    presetId: string(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -1222,6 +1327,14 @@ export const harvestSchemas: JsonSchema[] = [
   supermarketSourcePage,
   postalCodeDiscoveryRequestPage,
   spawnRunRequest,
+  harvestRunPresetInput,
+  harvestRunPresetLastRun,
+  harvestRunPresetView,
+  harvestRunPresetPage,
+  listPresetsRequest,
+  presetIdRequest,
+  createPresetRequest,
+  updatePresetRequest,
   runIdRequest,
   listRunsRequest,
   exportRunRequest,
@@ -1280,6 +1393,32 @@ export const harvestMessageContracts: Record<
   [HARVEST_PATTERNS.export]: {
     request: HARVEST_SCHEMA_IDS.exportRunRequest,
     response: HARVEST_SCHEMA_IDS.harvestRunExportResult,
+  },
+  [HARVEST_PATTERNS.spawnFromPreset]: {
+    request: HARVEST_SCHEMA_IDS.presetIdRequest,
+    response: HARVEST_SCHEMA_IDS.harvestRunView,
+  },
+  [HARVEST_PRESET_PATTERNS.list]: {
+    request: HARVEST_SCHEMA_IDS.listPresetsRequest,
+    response: HARVEST_SCHEMA_IDS.harvestRunPresetPage,
+  },
+  [HARVEST_PRESET_PATTERNS.get]: {
+    request: HARVEST_SCHEMA_IDS.presetIdRequest,
+    response: HARVEST_SCHEMA_IDS.harvestRunPresetView,
+  },
+  [HARVEST_PRESET_PATTERNS.create]: {
+    request: HARVEST_SCHEMA_IDS.createPresetRequest,
+    response: HARVEST_SCHEMA_IDS.harvestRunPresetView,
+  },
+  [HARVEST_PRESET_PATTERNS.update]: {
+    request: HARVEST_SCHEMA_IDS.updatePresetRequest,
+    response: HARVEST_SCHEMA_IDS.harvestRunPresetView,
+  },
+  // The preset that is gone, by its own id, as every delete here answers. The
+  // runs started from it keep their record and still name it.
+  [HARVEST_PRESET_PATTERNS.delete]: {
+    request: HARVEST_SCHEMA_IDS.presetIdRequest,
+    response: COMMON_IDS.idResult,
   },
   [DISCOVERED_PLACE_PATTERNS.list]: {
     request: HARVEST_SCHEMA_IDS.listPlacesRequest,

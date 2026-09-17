@@ -13,6 +13,8 @@ import { HarvestDashboardService } from './dashboard.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { FileImportRunner } from './file-import.runner';
+import { HarvestRunPresetService } from './harvest-run-preset.service';
+import { HarvestRunPresetStore } from './harvest-run-preset.store';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestRunStore } from './harvest-run.store';
 import { HarvestController } from './harvest.controller';
@@ -69,6 +71,8 @@ import { SupermarketSourceService } from './supermarket-source.service';
     PlatformAdminService,
     CatalogClient,
     HarvestRunStore,
+    // Run requests saved under a name (plan 0120).
+    HarvestRunPresetStore,
     SupermarketSourceService,
     // STORE_DISCOVERY dispatches on the adapter too (plan 0089, section 9):
     // a chain that names its own shops is read from that chain, and everything
@@ -97,6 +101,7 @@ import { SupermarketSourceService } from './supermarket-source.service';
     FileImportRunner,
     RunExecutor,
     HarvestRunService,
+    HarvestRunPresetService,
     DiscoveredPlaceService,
     // The one queue over the one table, and the three decisions about a row
     // (plan 0086, section 7). `SourceAliasService` and `ItemSourceRefService`
