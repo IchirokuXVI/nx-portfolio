@@ -28,7 +28,7 @@ regenerate the OpenAPI document and the wire types.
 ### Context
 
 - A line's purchases are its live `BOUGHT` rows in `line_settlements` (`revertedAt IS
-  NULL`). `NOT_AVAILABLE` rows have quantity 0 and are not purchases.
+NULL`). `NOT_AVAILABLE` rows have quantity 0 and are not purchases.
 - One trip often writes several settlements for one line seconds apart: one per origin,
   one per sibling basket line (`0094`), one per partial settle. Read as they are, they put
   gaps of zero into any interval statistic.
@@ -165,6 +165,8 @@ interface LineSuggestionView {
 | `STAPLE_TRIPS`             | 6        |
 | `STAPLE_MIN_TRIPS`         | 4        |
 | `SUGGESTION_MAX`           | 20       |
+
+> Amended by 0125: the answer is no longer capped.
 
 ## 6. Not in this plan
 

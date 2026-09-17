@@ -16,7 +16,7 @@ import {
   periodOf,
   type Purchase,
 } from './suggestion-rules';
-import { STAPLE_TRIPS, SUGGESTION_MAX } from './suggestions.constants';
+import { STAPLE_TRIPS } from './suggestions.constants';
 import {
   SUGGESTION_CANDIDATES_SQL,
   SUGGESTION_LAST_ASKED_SQL,
@@ -60,7 +60,12 @@ export class SuggestionsService {
     private readonly claims: LineClaimService
   ) {}
 
-  /** The suggestions of one list, at most {@link SUGGESTION_MAX}. `READ`. */
+  /**
+   * Every suggestion of one list, uncapped (plan 0125). `READ`.
+   *
+   * The rules already run over every candidate, so answering all of them costs
+   * no query the capped answer did not already make.
+   */
   async list(req: ListSuggestionsRequest): Promise<LineSuggestionPage> {
     await this.listAccess.requireRead(req.listId, req.userId);
 
@@ -112,9 +117,7 @@ export class SuggestionsService {
     }
 
     ranked.sort(bySuggestionOrder);
-    return {
-      items: ranked.slice(0, SUGGESTION_MAX).map((entry) => entry.view),
-    };
+    return { items: ranked.map((entry) => entry.view) };
   }
 }
 

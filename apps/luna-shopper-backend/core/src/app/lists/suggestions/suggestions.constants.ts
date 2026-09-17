@@ -1,5 +1,3 @@
-import { LINE_SUGGESTION_MAX } from '@portfolio/luna-shopper/contracts';
-
 /**
  * The thresholds behind the lines a list suggests (plan 0123, section 5).
  *
@@ -34,11 +32,3 @@ export const STAPLE_TRIPS = 6;
 
 /** Below this many ended basket trips, no line of the list is a staple. */
 export const STAPLE_MIN_TRIPS = 4;
-
-/**
- * The most rows one answer carries. The read is not paged.
- *
- * The contract states the number too, as the schema's `maxItems`, so this names
- * that one value rather than repeating it.
- */
-export const SUGGESTION_MAX = LINE_SUGGESTION_MAX;

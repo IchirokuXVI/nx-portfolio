@@ -6,7 +6,6 @@ import {
   LINE_PATTERNS,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
-  LINE_SUGGESTION_MAX,
   LIST_PATTERNS,
 } from '../../lib/messages/list.messages';
 import {
@@ -719,14 +718,11 @@ const lineSuggestionView = object(
   ]
 );
 
-// Not `paginated`: there is no cursor, only a ceiling.
+// Not `paginated`: no cursor and no ceiling, every due line (plan 0125).
 const lineSuggestionPage = object(
   LIST_SCHEMA_IDS.lineSuggestionPage,
   {
-    items: {
-      ...array(ref(LIST_SCHEMA_IDS.lineSuggestionView)),
-      maxItems: LINE_SUGGESTION_MAX,
-    },
+    items: array(ref(LIST_SCHEMA_IDS.lineSuggestionView)),
   },
   ['items']
 );
