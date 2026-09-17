@@ -444,6 +444,7 @@ export class AdminHarvestEntriesController {
       status: query.status,
       sourceKind: query.sourceKind,
       query: query.query,
+      brandKey: query.brandKey,
       cursor: query.cursor,
       limit: query.limit,
     });

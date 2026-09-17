@@ -11,6 +11,7 @@ import {
   type CreateBrandResult,
   type ListBrandsRequest,
   type UpdateBrandRequest,
+  type UpdateBrandResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   BRAND_KEY_HOLDER_DETAIL,
@@ -24,20 +25,23 @@ import {
 import { QueryFailedError, Repository, type EntityManager } from 'typeorm';
 import { Brand, Item } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
-import { toBrandView } from './catalog.mappers';
+import { toBrandView, type BrandCounts } from './catalog.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 
 const PG_UNIQUE_VIOLATION = '23505';
 
-/** A brand row with the page's count already attached. */
+/** A brand row with the page's counts and its canonical brand's label attached. */
 interface BrandRow {
   id: string;
   key: string;
   label: string;
   privateLabelSupermarketId: string | null;
+  canonicalBrandId: string | null;
+  canonicalLabel: string | null;
   createdAt: Date;
   updatedAt: Date;
   itemCount: number;
+  linkCount: number;
 }
 
 /**
@@ -109,9 +113,8 @@ export class BrandService {
           })
         );
         const linkedItems = await this.linkUnlinkedItems(tx.manager, saved);
-        // Nothing else can point at a brand one statement old, so the claim's
-        // row count is also its item count.
-        return { ...toBrandView(saved, linkedItems), linkedItems };
+        const counts = await this.countsOf(tx.manager, saved);
+        return { ...toBrandView(saved, counts), linkedItems };
       });
     } catch (error) {
       throw await this.asKeyTaken(error, key);
@@ -124,7 +127,7 @@ export class BrandService {
    * Steps 2 to 4 of section 5.4, in one transaction: the row, then every item
    * linked to it, then the items that the new key has just made matchable.
    */
-  async update(req: UpdateBrandRequest): Promise<BrandView> {
+  async update(req: UpdateBrandRequest): Promise<UpdateBrandResult> {
     const actor = await this.admin.requireAdmin(req);
     const row = await this.load(req.brandId);
     const before = { ...row };
@@ -153,7 +156,8 @@ export class BrandService {
             await this.linkUnlinkedItems(tx.manager, saved);
           }
         }
-        return toBrandView(saved, await this.countItems(tx.manager, saved.id));
+        const counts = await this.countsOf(tx.manager, saved);
+        return { ...toBrandView(saved, counts), movedItems: 0 };
       });
     } catch (error) {
       throw await this.asKeyTaken(error, row.key);
@@ -162,7 +166,7 @@ export class BrandService {
 
   async get(req: BrandIdRequest): Promise<BrandView> {
     const row = await this.load(req.brandId);
-    return toBrandView(row, await this.countItems(this.brands.manager, row.id));
+    return toBrandView(row, await this.countsOf(this.brands.manager, row));
   }
 
   /**
@@ -197,9 +201,16 @@ export class BrandService {
       where.push(`(${clauses.join(' OR ')})`);
     }
     if (req.privateLabelSupermarketId) {
+      // The canonical brand's chain counts for its spellings too: a linked
+      // brand owns no chain of its own, so filtering on `b` alone would hide
+      // every spelling of a private label (plan 0124, section 6).
+      const chain = bind(req.privateLabelSupermarketId);
       where.push(
-        `b."privateLabelSupermarketId" = ${bind(req.privateLabelSupermarketId)}`
+        `(b."privateLabelSupermarketId" = ${chain} OR c."privateLabelSupermarketId" = ${chain})`
       );
+    }
+    if (req.canonicalBrandId) {
+      where.push(`b."canonicalBrandId" = ${bind(req.canonicalBrandId)}`);
     }
 
     const seek: string[] = [];
@@ -230,16 +241,26 @@ export class BrandService {
                b."key",
                b."label",
                b."privateLabelSupermarketId",
+               b."canonicalBrandId",
+               c."label" AS "canonicalLabel",
                b."createdAt",
                b."updatedAt",
-               COALESCE(counts."itemCount", 0)::int AS "itemCount"
+               COALESCE(counts."itemCount", 0)::int AS "itemCount",
+               COALESCE(links."linkCount", 0)::int AS "linkCount"
           FROM "brands" b
+          LEFT JOIN "brands" c ON c."id" = b."canonicalBrandId"
           LEFT JOIN (
             SELECT "brandId", count(*)::int AS "itemCount"
               FROM "items"
              WHERE "brandId" IS NOT NULL
              GROUP BY "brandId"
           ) counts ON counts."brandId" = b."id"
+          LEFT JOIN (
+            SELECT "canonicalBrandId", count(*)::int AS "linkCount"
+              FROM "brands"
+             WHERE "canonicalBrandId" IS NOT NULL
+             GROUP BY "canonicalBrandId"
+          ) links ON links."canonicalBrandId" = b."id"
          ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ) x
       ${seek.length ? `WHERE ${seek.join(' AND ')}` : ''}
@@ -253,7 +274,13 @@ export class BrandService {
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
     return {
-      items: page.map((row) => toBrandView(row, row.itemCount)),
+      items: page.map((row) =>
+        toBrandView(row, {
+          itemCount: row.itemCount,
+          canonicalLabel: row.canonicalLabel,
+          linkCount: row.linkCount,
+        })
+      ),
       nextCursor:
         hasMore && last
           ? encodeCursor({
@@ -315,12 +342,31 @@ export class BrandService {
     return result.affected ?? 0;
   }
 
-  /** How many products carry this brand. Read through the caller's manager. */
-  private async countItems(
+  /**
+   * What a brand row cannot answer about itself, read through the caller's
+   * manager.
+   *
+   * Three reads for one row, and sequentially rather than together: a query
+   * issued inside a transaction through a second connection waits for one the
+   * transaction is holding. The list pays none of this, because it answers all
+   * three for the whole page in one statement.
+   */
+  private async countsOf(
     manager: EntityManager,
-    brandId: string
-  ): Promise<number> {
-    return manager.count(Item, { where: { brandId } });
+    brand: Brand
+  ): Promise<BrandCounts> {
+    const itemCount = await manager.count(Item, {
+      where: { brandId: brand.id },
+    });
+    const linkCount = await manager.count(Brand, {
+      where: { canonicalBrandId: brand.id },
+    });
+    const canonical = brand.canonicalBrandId
+      ? await manager.findOne(Brand, {
+          where: { id: brand.canonicalBrandId },
+        })
+      : null;
+    return { itemCount, linkCount, canonicalLabel: canonical?.label ?? null };
   }
 
   /** The key a label makes, or the 400 that says the label makes none. */

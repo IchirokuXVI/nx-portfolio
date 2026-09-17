@@ -179,6 +179,7 @@ export type AvailabilityEntryDto = {
 export type CreateBrandDto = {
   label: string;
   privateLabelSupermarketId?: string | null;
+  canonicalBrandId?: string | null;
 };
 
 /**
@@ -517,6 +518,9 @@ export type ProblemDetails = {
     | 'line_merge_too_many_products'
     | 'brand_label_empty'
     | 'brand_key_taken'
+    | 'brand_link_to_self'
+    | 'brand_link_too_deep'
+    | 'brand_link_owns_no_chain'
     | 'internal';
   detail?: string;
   message: string;
@@ -599,6 +603,15 @@ export type ProfileSupermarketDto = {
  */
 export type RefreshDto = {
   refreshToken: string;
+};
+
+/**
+ * `RegisterBrandSuggestionDto` in the gateway's OpenAPI document.
+ */
+export type RegisterBrandSuggestionDto = {
+  spelling: string;
+  label: string;
+  privateLabelSupermarketId?: string | null;
 };
 
 /**
@@ -904,6 +917,7 @@ export type UpdateAdminZoneDto = {
 export type UpdateBrandDto = {
   label?: string;
   privateLabelSupermarketId?: string | null;
+  canonicalBrandId?: string | null;
 };
 
 /**
@@ -1745,6 +1759,9 @@ export type CatalogBrandView = {
   label: string;
   privateLabelSupermarketId: string | null;
   itemCount: number;
+  canonicalBrandId: string | null;
+  canonicalLabel: string | null;
+  linkCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -1794,6 +1811,9 @@ export type CatalogCreateBrandResult = {
   label: string;
   privateLabelSupermarketId: string | null;
   itemCount: number;
+  canonicalBrandId: string | null;
+  canonicalLabel: string | null;
+  linkCount: number;
   createdAt: string;
   updatedAt: string;
   linkedItems: number;
@@ -2042,6 +2062,16 @@ export type CatalogProductGroupView = {
 };
 
 /**
+ * `catalog.RegisterBrandSuggestionResult` in the gateway's OpenAPI document.
+ */
+export type CatalogRegisterBrandSuggestionResult = {
+  brand: CatalogBrandView;
+  linked: CatalogBrandView | null;
+  canonicalCreated: boolean;
+  linkedItems: number;
+};
+
+/**
  * `catalog.ResolvedScopeView` in the gateway's OpenAPI document.
  */
 export type CatalogResolvedScopeView = {
@@ -2224,6 +2254,23 @@ export type CatalogSupermarketView = {
   websiteUrl: string | null;
   externalBrandKey: string | null;
   defaultPriceScopeId: string | null;
+};
+
+/**
+ * `catalog.UpdateBrandResult` in the gateway's OpenAPI document.
+ */
+export type CatalogUpdateBrandResult = {
+  id: string;
+  key: string;
+  label: string;
+  privateLabelSupermarketId: string | null;
+  itemCount: number;
+  canonicalBrandId: string | null;
+  canonicalLabel: string | null;
+  linkCount: number;
+  createdAt: string;
+  updatedAt: string;
+  movedItems: number;
 };
 
 /**

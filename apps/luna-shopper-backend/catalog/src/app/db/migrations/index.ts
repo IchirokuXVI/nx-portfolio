@@ -14,6 +14,7 @@ import { PriceScopePriority1757200000000 } from './1757200000000-PriceScopePrior
 import { Brands1757300000000 } from './1757300000000-Brands';
 import { PriceScopeLocalAreaRename1757400000000 } from './1757400000000-PriceScopeLocalAreaRename';
 import { ScopeCopies1757500000000 } from './1757500000000-ScopeCopies';
+import { BrandLinks1757600000000 } from './1757600000000-BrandLinks';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -41,4 +42,5 @@ export const CATALOG_MIGRATIONS = [
   Brands1757300000000,
   PriceScopeLocalAreaRename1757400000000,
   ScopeCopies1757500000000,
+  BrandLinks1757600000000,
 ];

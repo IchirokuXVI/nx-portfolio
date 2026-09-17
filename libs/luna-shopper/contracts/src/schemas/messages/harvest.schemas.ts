@@ -1002,6 +1002,9 @@ const listEntriesRequest = object(
     status: ref(HARVEST_SCHEMA_IDS.sourceEntryStatus),
     sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
     query: string(),
+    // Keyed before it is matched, so a value that makes no key matches nothing
+    // rather than being refused (plan 0124, section 7).
+    brandKey: string(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),

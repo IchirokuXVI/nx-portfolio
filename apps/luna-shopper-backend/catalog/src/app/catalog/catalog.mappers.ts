@@ -225,19 +225,38 @@ export function toItemView(row: Item, bestOffer?: ItemOfferView): ItemView {
 }
 
 /**
+ * The three numbers and the label a brand row cannot answer for itself.
+ *
+ * Every one of them is a read of another table or of another brand, counted for
+ * the page in one grouped query rather than per row, which is why they are
+ * handed in (plan 0115, section 5.1, and plan 0124, section 6).
+ */
+export interface BrandCounts {
+  /** Products whose `brandId` is this brand. */
+  itemCount: number;
+  /** The canonical brand's label, or null for a brand that is not linked. */
+  canonicalLabel: string | null;
+  /** How many brands point at this one. */
+  linkCount: number;
+}
+
+/**
  * A brand on the wire (plan 0115, section 5.1).
  *
- * `itemCount` is not on the row: it is counted for the page in one grouped
- * query, so it is handed in rather than read off the entity. Passing it
- * explicitly is what stops a caller quietly answering zero because it forgot.
+ * The counts are not on the row, so they are handed in rather than read off the
+ * entity. Passing them explicitly is what stops a caller quietly answering zero
+ * because it forgot.
  */
-export function toBrandView(row: Brand, itemCount: number): BrandView {
+export function toBrandView(row: Brand, counts: BrandCounts): BrandView {
   return {
     id: row.id,
     key: row.key,
     label: row.label,
     privateLabelSupermarketId: row.privateLabelSupermarketId,
-    itemCount,
+    itemCount: counts.itemCount,
+    canonicalBrandId: row.canonicalBrandId,
+    canonicalLabel: counts.canonicalLabel,
+    linkCount: counts.linkCount,
     createdAt: toInstant(row.createdAt) as string,
     updatedAt: toInstant(row.updatedAt) as string,
   };

@@ -125,6 +125,21 @@ export const ERROR_CATALOG: Record<
     en: 'A brand with this key already exists.',
     es: 'Ya existe una marca con esta clave.',
   },
+  // The three refusals of the one level rule (plan 0124, sections 2 and 3).
+  // Each says what the registry believes rather than what the statement did, so
+  // the sentence still reads when the back office shows it on its own.
+  [ERROR_CODES.BRAND_LINK_TO_SELF]: {
+    en: 'A brand is already itself, so it cannot be a spelling of itself.',
+    es: 'Una marca ya es ella misma, así que no puede ser una grafía de sí misma.',
+  },
+  [ERROR_CODES.BRAND_LINK_TOO_DEEP]: {
+    en: 'A spelling points at one brand, and that brand points at nothing.',
+    es: 'Una grafía apunta a una marca, y esa marca no apunta a ninguna.',
+  },
+  [ERROR_CODES.BRAND_LINK_OWNS_NO_CHAIN]: {
+    en: 'A brand that is a spelling of another owns no private label chain. The chain belongs to the brand it points at.',
+    es: 'Una marca que es la grafía de otra no tiene cadena de marca blanca. La cadena pertenece a la marca a la que apunta.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

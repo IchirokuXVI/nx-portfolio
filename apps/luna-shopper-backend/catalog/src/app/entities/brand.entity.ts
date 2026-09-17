@@ -35,7 +35,27 @@ export class Brand extends BaseEntity {
    *
    * A real foreign key, because `supermarkets` lives in this same database.
    * `ON DELETE SET NULL`: a chain going away does not take the brand with it.
+   *
+   * **A linked brand owns none** (plan 0124, section 2). The chain belongs to
+   * the brand it points at, so linking clears this column and a write that sets
+   * both is refused.
    */
   @Column({ type: 'uuid', nullable: true })
   privateLabelSupermarketId!: string | null;
+
+  /**
+   * The brand this one is really a spelling of (plan 0124, section 2).
+   *
+   * `DEBORAH 48H` and `DEBORAH` are one brand, and a row holds exactly one key,
+   * so the second row stays registered and points at the first. Its own key
+   * therefore stops being a suggestion, and the products it names read the
+   * canonical brand's label.
+   *
+   * **One level, never a chain.** A link never points at a linked brand and a
+   * brand others point at is never linked itself, which `BrandService` enforces
+   * under row locks. The check constraint stops only the self link, because
+   * that is the one case a single row can decide.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  canonicalBrandId!: string | null;
 }

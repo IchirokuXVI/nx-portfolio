@@ -102,6 +102,7 @@ import {
   type SupermarketPage,
   type SupermarketView,
   type UpdateBrandRequest,
+  type UpdateBrandResult,
   type UpdateItemRequest,
   type UpdatePricePolicyRequest,
   type UpdatePriceScopeRequest,
@@ -385,7 +386,7 @@ export class CatalogController {
 
   /** Rename a brand, or move it under a chain. The key follows the label. */
   @MessagePattern(BRAND_PATTERNS.update)
-  updateBrand(@Payload() req: UpdateBrandRequest): Promise<BrandView> {
+  updateBrand(@Payload() req: UpdateBrandRequest): Promise<UpdateBrandResult> {
     return this.brands.update(req);
   }
 

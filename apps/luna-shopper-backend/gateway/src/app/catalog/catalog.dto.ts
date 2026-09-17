@@ -1280,6 +1280,17 @@ export class CreateBrandDto {
   @ValidateIf((dto: CreateBrandDto) => dto.privateLabelSupermarketId !== null)
   @IsUUID()
   privateLabelSupermarketId?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The brand this one is really a spelling of. A brand created linked owns no private label chain, so sending both is refused with `brand_link_owns_no_chain`.',
+  })
+  @IsOptional()
+  @ValidateIf((dto: CreateBrandDto) => dto.canonicalBrandId !== null)
+  @IsUUID()
+  canonicalBrandId?: string | null;
 }
 
 /**
@@ -1299,6 +1310,61 @@ export class UpdateBrandDto {
   @ApiPropertyOptional({ format: 'uuid', nullable: true })
   @IsOptional()
   @ValidateIf((dto: UpdateBrandDto) => dto.privateLabelSupermarketId !== null)
+  @IsUUID()
+  privateLabelSupermarketId?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The brand this one is really a spelling of, or null to unlink it. The products follow either way: linking moves them onto that brand, unlinking brings back the ones carrying this brand’s own key.',
+  })
+  @IsOptional()
+  @ValidateIf((dto: UpdateBrandDto) => dto.canonicalBrandId !== null)
+  @IsUUID()
+  canonicalBrandId?: string | null;
+}
+
+/**
+ * Register a suggestion under a name somebody typed (plan 0124, section 5).
+ *
+ * Two names rather than one: `spelling` is what the chains print, which is the
+ * key the queue carries, and `label` is what the person decided the brand is
+ * called. Sending both in one request is the whole reason this route exists,
+ * because a create followed by a link that fails leaves the suggestion half
+ * registered.
+ */
+export class RegisterBrandSuggestionDto {
+  @ApiProperty({
+    maxLength: BRAND_LABEL_MAX_LENGTH,
+    description:
+      'The suggestion’s own spelling, which makes the key the queued rows carry.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(BRAND_LABEL_MAX_LENGTH)
+  spelling!: string;
+
+  @ApiProperty({
+    maxLength: BRAND_LABEL_MAX_LENGTH,
+    description:
+      'The name the person typed. When it keys to the spelling this is an ordinary create; when it does not, its brand is found or created and the spelling is linked to it.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(BRAND_LABEL_MAX_LENGTH)
+  label!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The chain whose private label this is. Ignored when the typed name already has a brand, which keeps the chain that brand states.',
+  })
+  @IsOptional()
+  @ValidateIf(
+    (dto: RegisterBrandSuggestionDto) => dto.privateLabelSupermarketId !== null
+  )
   @IsUUID()
   privateLabelSupermarketId?: string | null;
 }

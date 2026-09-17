@@ -201,6 +201,19 @@ export class SourceEntryService {
         ean: req.query.trim(),
       });
     }
+    if (req.brandKey?.trim()) {
+      const key = brandKey(req.brandKey);
+      // A value that makes no key matches nothing rather than being refused, so
+      // a person typing punctuation gets an empty list and not an error. On the
+      // queued rows `ix_source_catalog_entries_queued_brand_key` serves this;
+      // on the others it filters what the chain filter leaves, which is what an
+      // admin screen asks for.
+      if (key === null) {
+        qb.andWhere('FALSE');
+      } else {
+        qb.andWhere('e."brandKey" = :brandKey', { brandKey: key });
+      }
+    }
     if (cursor) {
       qb.andWhere('(e."lastSeenAt", e.id) < (:cv, :cid)', {
         cv: cursor.value,

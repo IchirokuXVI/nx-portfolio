@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import {
   ADAPTER_KEYS,
+  BRAND_LABEL_MAX_LENGTH,
   BULK_DECISION_MAX_OPERATIONS,
   DiscoveredPlaceStatus,
   HarvestDetailFetch,
@@ -686,6 +687,16 @@ export class SourceEntryListQueryDto extends PageQueryDto {
   @IsString()
   @MaxLength(120)
   query?: string;
+
+  @ApiPropertyOptional({
+    maxLength: BRAND_LABEL_MAX_LENGTH,
+    description:
+      'Only the rows whose brand keys to this. The value is keyed before it is matched, so `El Pozo` and `elpozo` find the same rows, and a value that makes no key at all matches nothing rather than being refused.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(BRAND_LABEL_MAX_LENGTH)
+  brandKey?: string;
 }
 
 /**
