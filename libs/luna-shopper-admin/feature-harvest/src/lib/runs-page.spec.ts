@@ -681,7 +681,9 @@ describe('the run form, the scopes a walk is copied to', () => {
     page.changeCopies(CORUNA, [REGION, SHOP]);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelectorAll('lib-scope-copies')).toHaveLength(2);
+    expect(
+      fixture.nativeElement.querySelectorAll('lib-scope-copies')
+    ).toHaveLength(2);
     await page.start();
     await drain();
 
@@ -805,7 +807,9 @@ describe('the run form, the scopes a walk is copied to', () => {
     await chain(fixture, DEZA);
     const page = fixture.componentInstance;
 
-    expect(fixture.nativeElement.querySelectorAll('lib-scope-copies')).toHaveLength(1);
+    expect(
+      fixture.nativeElement.querySelectorAll('lib-scope-copies')
+    ).toHaveLength(1);
     page.changeCopies(page.singleScope, [NATIONAL]);
     expect(page.refusalOf(page.singleScope)?.key).toBe(
       'harvest.runs.start.copies.walked'

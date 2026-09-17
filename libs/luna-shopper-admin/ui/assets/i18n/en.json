@@ -322,6 +322,8 @@
       "availableHelp": "Scope wide. Whether one particular shop has it is a separate answer, on that shop’s own row.",
       "sourceKind": "Source",
       "sourceKindHelp": "Where the shown price came from. A price you add is recorded as typed in here. It is protected for seven days against a source repeating what you overrode, and a source saying something new is shown at once.",
+      "priceCopiedFromScopeId": "Copied from",
+      "priceCopiedFromScopeIdHelp": "The scope a harvest run read this price at before it copied the price here. Empty for a price read at this scope.",
       "observedAt": "Seen at",
       "observedAtHelp": "When the shown price was last observed by its source.",
       "stale": "Out of date",
@@ -550,7 +552,10 @@
       "CANDIDATE_MATCH": "A product was proposed",
       "NO_MATCH": "Nothing matched",
       "ALREADY_QUEUED": "Already waiting",
-      "EXTRACTOR": "From the extractor"
+      "EXTRACTOR": "From the extractor",
+      "COPY_TARGET_GONE": "A copy target was deleted",
+      "COPY_SOURCE_NOT_WRITTEN": "Nothing to copy",
+      "DETAIL_SKIPPED_UNKNOWN": "A skipped product was unknown"
     },
     "status": {
       "PENDING": "Pending",
@@ -720,6 +725,22 @@
       "warnings": {
         "heading": "What was dropped, and why",
         "lead": "One line per decision this run made without asking. The extractor's own lost tiles are here too, so what it lost and what the import dropped read in one place."
+      },
+      "report": {
+        "heading": "What this run wrote and fetched",
+        "writes": "Wrote",
+        "details": "Product details",
+        "detailRequested": "Details requested",
+        "detailSkipped": "Skipped as known",
+        "detailWithoutEan": "Fetched for a missing EAN",
+        "copies": {
+          "caption": "The scopes this run copied what it read to.",
+          "from": "Walked scope",
+          "to": "Copied to",
+          "prices": "Prices copied",
+          "availability": "Availability copied",
+          "more": "{{count}} more"
+        }
       },
       "queue": {
         "open": "Work through what this chain has queued",

@@ -287,6 +287,9 @@ export const PRICE_SEED: readonly Wire.CatalogAdminSupermarketItemView[] = [
     unitPriceLabel: '1 L',
     observedAt: '2026-08-20T06:12:00.000Z',
     sourceKind: 'OFFICIAL_API',
+    // Read at the other warehouse and copied here (backend plan 0118), so
+    // the list names where it was read (admin plan 0029, section 5).
+    priceCopiedFromScopeId: 'ps_mercadona_3421',
     // Nothing current prices it: the crawl stopped a fortnight ago.
     stale: true,
     validUntil: null,
@@ -393,6 +396,7 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
     validUntil: null,
     sourceRunId: 'run_2026_08_12',
     lastObservedRunId: 'run_2026_08_20',
+    copiedFromScopeId: 'ps_mercadona_3421',
     overrides: null,
     protectedUntil: null,
     details: null,

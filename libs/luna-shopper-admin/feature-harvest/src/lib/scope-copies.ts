@@ -34,7 +34,9 @@ export interface CopyMessage {
       @if (fromTitle() === '') {
         {{ 'harvest.runs.start.copies.heading' | rokuT }}
       } @else {
-        {{ 'harvest.runs.start.copies.headingFor' | rokuT: { scope: fromTitle() } }}
+        {{
+          'harvest.runs.start.copies.headingFor' | rokuT: { scope: fromTitle() }
+        }}
       }
     </span>
 
