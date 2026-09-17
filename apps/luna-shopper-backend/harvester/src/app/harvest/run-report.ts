@@ -1,6 +1,10 @@
 import type { PostalCodeSource } from '@portfolio/luna-shopper/contracts';
 import type { ScopeDeclaration } from './price-scope-resolver';
-import type { SourceObservation } from './source-ingest';
+import type {
+  PartialSourceObservation,
+  ReportedObservation,
+  SourceObservation,
+} from './source-ingest';
 
 export type { ScopeDeclaration } from './price-scope-resolver';
 
@@ -98,8 +102,14 @@ export interface RunReport {
    */
   scope(declaration: ScopeDeclaration): void;
 
-  /** One product as the source described it, with a price per scope it stated. */
-  product(observation: SourceObservation): void;
+  /**
+   * One product as the source described it, with a price per scope it stated.
+   *
+   * Or, for a product whose detail a walk skipped because it was known, what
+   * the listing said: its id and its prices, and no identity field (plan 0119,
+   * section 6).
+   */
+  product(observation: ReportedObservation): void;
 
   /** A shop the source named, for a store discovery run or for availability. */
   place(place: ObservedPlace): void;
@@ -129,6 +139,8 @@ export interface RunReport {
 export class RecordingRunReport implements RunReport {
   readonly scopes: ScopeDeclaration[] = [];
   readonly products: SourceObservation[] = [];
+  /** The products reported from the listing alone (plan 0119), apart. */
+  readonly partialProducts: PartialSourceObservation[] = [];
   readonly places: ObservedPlace[] = [];
   readonly availabilities: AvailabilityClaim[] = [];
   readonly completed: (string | null)[] = [];
@@ -137,8 +149,12 @@ export class RecordingRunReport implements RunReport {
     this.scopes.push(declaration);
   }
 
-  product(observation: SourceObservation): void {
-    this.products.push(observation);
+  product(observation: ReportedObservation): void {
+    if (observation.detailFetched === false) {
+      this.partialProducts.push(observation);
+    } else {
+      this.products.push(observation);
+    }
   }
 
   place(place: ObservedPlace): void {

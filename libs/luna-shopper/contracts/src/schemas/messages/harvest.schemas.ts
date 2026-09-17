@@ -1,8 +1,10 @@
 import {
   DiscoveredPlaceStatus,
+  HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
   PostalCodeDiscoveryStatus,
@@ -59,6 +61,8 @@ export const HARVEST_SCHEMA_IDS = {
   sourceLocationStatus: schemaId('enums/SourceLocationStatus'),
   adapterKey: schemaId('enums/AdapterKey'),
   harvestWarningCode: schemaId('enums/HarvestWarningCode'),
+  harvestRunWrites: schemaId('enums/HarvestRunWrites'),
+  harvestDetailFetch: schemaId('enums/HarvestDetailFetch'),
   adapterCapabilityTable: schemaId('harvest/AdapterCapabilityTable'),
 
   harvestRunWarning: schemaId('harvest/HarvestRunWarning'),
@@ -779,6 +783,11 @@ const spawnRunRequest = object(
       required: ['from', 'to'],
       properties: { from: string(), to: array(string()) },
     }),
+    // What the run writes of what it read, and which products a Mercadona walk
+    // fetches the detail of (plan 0119). Both are CATALOG_DISCOVERY options,
+    // and the spawn stores the resolved values on the run's input.
+    writes: ref(HARVEST_SCHEMA_IDS.harvestRunWrites),
+    details: ref(HARVEST_SCHEMA_IDS.harvestDetailFetch),
   },
   ['userId', 'mode']
 );
@@ -1145,7 +1154,7 @@ const adapterCapabilityTable: JsonSchema = {
   $id: HARVEST_SCHEMA_IDS.adapterCapabilityTable,
   type: 'object',
   description:
-    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.',
+    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.',
   const: ADAPTER_CAPABILITIES,
 };
 
@@ -1174,6 +1183,11 @@ export const harvestSchemas: JsonSchema[] = [
   enumOf(
     HARVEST_SCHEMA_IDS.harvestWarningCode,
     Object.values(HarvestWarningCode)
+  ),
+  enumOf(HARVEST_SCHEMA_IDS.harvestRunWrites, Object.values(HarvestRunWrites)),
+  enumOf(
+    HARVEST_SCHEMA_IDS.harvestDetailFetch,
+    Object.values(HarvestDetailFetch)
   ),
   enumOf(
     HARVEST_SCHEMA_IDS.postalCodeDiscoveryStatus,

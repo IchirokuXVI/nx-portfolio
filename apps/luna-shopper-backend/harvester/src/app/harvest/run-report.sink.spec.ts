@@ -1,4 +1,5 @@
 import {
+  HarvestRunWrites,
   PriceSourceKind,
   SourceEntryStatus,
   SourceLocationStatus,
@@ -82,6 +83,8 @@ function build(
     /** What the ingest said its copies wrote. */
     pricesCopied?: Record<string, number>;
     pricedScopes?: string[];
+    /** What the run writes of what it read (plan 0119). */
+    writes?: HarvestRunWrites;
   } = {}
 ) {
   const pushed: SourceObservation[][] = [];
@@ -195,6 +198,7 @@ function build(
       // D2); the trusted path has its own spec.
       autoImportPlaces: false,
       copiesOf: (scopeId) => options.copies?.[scopeId] ?? [],
+      writes: options.writes,
     },
     { ingest, scopes, places, shops, catalog, entries }
   );
@@ -367,6 +371,92 @@ describe('RunReportSink', () => {
     ).copiesOf;
     expect(copiesOf(SCOPE)).toEqual(['scope-w2']);
     expect(copiesOf('scope-w2')).toEqual([]);
+  });
+
+  describe('writes (plan 0119)', () => {
+    /** A walk that names one product, lacks another and states a shop claim. */
+    async function walk(writes: HarvestRunWrites) {
+      const built = build({
+        writes,
+        resolves: { seen: { itemId: 'item-seen', active: true } },
+        tracked: [{ externalId: 'gone', itemId: 'item-gone' }],
+        copies: { [SCOPE]: ['scope-w2'] },
+        shops: [
+          {
+            externalId: 'T1',
+            printedName: 'Centro',
+            supermarketLocationId: 'loc-1',
+            status: SourceLocationStatus.ACTIVE,
+          } as Partial<SourceLocation>,
+        ],
+      });
+      built.sink.product(observation({ externalId: 'seen' }));
+      built.sink.availability({
+        externalId: 'seen',
+        available: true,
+        shopCode: 'T1',
+      });
+      built.sink.assortmentComplete(null);
+      const written = await built.sink.drain();
+      return { ...built, written };
+    }
+
+    it('writes no availability, at the scope, its copies or a shop, for PRICES', async () => {
+      const { catalog, shopsObserved, written, pushed } = await walk(
+        HarvestRunWrites.PRICES
+      );
+
+      // The products still reach the ingest, which writes the prices.
+      expect(pushed.flat().map((each) => each.externalId)).toEqual(['seen']);
+      expect(catalog.setAvailability).not.toHaveBeenCalled();
+      expect(catalog.setLocationAvailability).not.toHaveBeenCalled();
+      expect(shopsObserved).toEqual([]);
+      expect(written.availabilityWritten).toBe(0);
+      expect(written.availabilityCopied).toEqual({});
+    });
+
+    it('writes availability at the scope, its copies and a shop, for AVAILABILITY', async () => {
+      const { catalog, written } = await walk(HarvestRunWrites.AVAILABILITY);
+
+      const scopes = (catalog.setAvailability as jest.Mock).mock.calls.map(
+        ([scopeId]) => scopeId
+      );
+      expect(scopes).toEqual([SCOPE, 'scope-w2']);
+      expect(catalog.setLocationAvailability).toHaveBeenCalledTimes(1);
+      expect(written.availabilityCopied).toEqual({ [SCOPE]: 2 });
+    });
+
+    it('hands the ingest what the run writes, which is where prices are skipped', async () => {
+      const { opened } = await walk(HarvestRunWrites.AVAILABILITY);
+
+      expect(opened[0]).toMatchObject({
+        writes: HarvestRunWrites.AVAILABILITY,
+      });
+    });
+
+    it('pushes a product reported from the listing, and counts it as named', async () => {
+      const { sink, pushed, catalog } = build({
+        resolves: { seen: { itemId: 'item-seen', active: true } },
+        tracked: [{ externalId: 'seen', itemId: 'item-seen' }],
+      });
+
+      sink.product({
+        externalId: 'seen',
+        detailFetched: false,
+        observedAt: new Date('2026-09-09T10:00:00.000Z'),
+        prices: [],
+      });
+      sink.assortmentComplete(null);
+      await sink.drain();
+
+      expect(pushed.flat()).toEqual([
+        expect.objectContaining({ externalId: 'seen', detailFetched: false }),
+      ]);
+      // A listed product is stocked whether its detail was read or not.
+      expect((catalog.setAvailability as jest.Mock).mock.calls[0][1]).toEqual([
+        { itemId: 'item-seen', available: true },
+      ]);
+    });
   });
 
   it('says nothing at all when the run did not walk a whole assortment', async () => {

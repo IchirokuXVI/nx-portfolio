@@ -24547,6 +24547,24 @@
             "items": {
               "$ref": "#/components/schemas/ScopeCopyDto"
             }
+          },
+          "writes": {
+            "type": "string",
+            "enum": [
+              "PRICES_AND_AVAILABILITY",
+              "PRICES",
+              "AVAILABILITY"
+            ],
+            "default": "PRICES_AND_AVAILABILITY",
+            "description": "What the run writes of what it read (plan 0119). CATALOG_DISCOVERY only, and never with `detailBackfill`. Products are ingested whatever it says; it decides whether the prices, the availability or both are written, for walked scopes and copies alike. `PRICES` is refused for an adapter that states no price. It saves no request: prices and availability come from the same listing walk. The resolved value is stored on the run."
+          },
+          "details": {
+            "type": "string",
+            "enum": [
+              "NEW",
+              "ALL"
+            ],
+            "description": "Which products a walk fetches the detail of (plan 0119). CATALOG_DISCOVERY only, and only for an adapter whose capability `skipsKnownDetails` is true (`mercadona-api`), where it defaults to `NEW`: the detail of a product whose row has no EAN yet, or has no row. `ALL` fetches every detail, which is what a walk of ten warehouses where every product is known costs about 5,700 requests for instead of 1,510. Stating it for any other adapter is refused, and leaving it out resolves to `ALL`. The resolved value is stored on the run."
           }
         },
         "required": [
@@ -28736,7 +28754,8 @@
           "NO_PRICE_SCOPE",
           "COPY_TARGET_GONE",
           "COPY_SOURCE_NOT_WRITTEN",
-          "SCOPE_KIND_MISMATCH"
+          "SCOPE_KIND_MISMATCH",
+          "DETAIL_SKIPPED_UNKNOWN"
         ]
       },
       "enums.ItemCategory": {
@@ -30217,13 +30236,14 @@
       },
       "harvest.AdapterCapabilityTable": {
         "type": "object",
-        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.",
+        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.",
         "const": {
           "mercadona-api": {
             "writesPrices": true,
             "scopesItsOwn": true,
             "listsItsOwnStores": true,
             "hasProductPages": false,
+            "skipsKnownDetails": true,
             "printedLocale": "es",
             "walkablePriorities": {
               "min": 200,
@@ -30235,6 +30255,7 @@
             "scopesItsOwn": false,
             "listsItsOwnStores": false,
             "hasProductPages": false,
+            "skipsKnownDetails": false,
             "printedLocale": "es",
             "walkablePriorities": null
           },
@@ -30243,6 +30264,7 @@
             "scopesItsOwn": false,
             "listsItsOwnStores": false,
             "hasProductPages": true,
+            "skipsKnownDetails": false,
             "printedLocale": "es",
             "walkablePriorities": null
           },
@@ -30251,6 +30273,7 @@
             "scopesItsOwn": true,
             "listsItsOwnStores": true,
             "hasProductPages": true,
+            "skipsKnownDetails": false,
             "printedLocale": "es",
             "walkablePriorities": null
           },
@@ -30259,6 +30282,7 @@
             "scopesItsOwn": false,
             "listsItsOwnStores": false,
             "hasProductPages": false,
+            "skipsKnownDetails": false,
             "printedLocale": null,
             "walkablePriorities": null
           },
@@ -30267,6 +30291,7 @@
             "scopesItsOwn": false,
             "listsItsOwnStores": false,
             "hasProductPages": false,
+            "skipsKnownDetails": false,
             "printedLocale": null,
             "walkablePriorities": null
           }

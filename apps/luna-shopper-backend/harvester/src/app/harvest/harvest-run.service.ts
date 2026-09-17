@@ -6,9 +6,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  HarvestRunWrites,
   PriceSourceKind,
   adapterCapabilities,
   type AdapterCapabilities,
@@ -431,6 +433,17 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
           'scope whose prices can be copied to another.'
       );
     }
+    // The same for what a run writes and which details it fetches (plan 0119,
+    // section 3): both are options of a walk, and no other mode has one.
+    if (
+      (req.writes !== undefined || req.details !== undefined) &&
+      req.mode !== HarvestRunMode.CATALOG_DISCOVERY
+    ) {
+      throw new ValidationException(
+        `A ${req.mode} run takes neither writes nor details. Both are options ` +
+          'of a CATALOG_DISCOVERY, which is the only mode that walks an assortment.'
+      );
+    }
     if (req.mode === HarvestRunMode.FILE_IMPORT) {
       return this.validateFileImport(req);
     }
@@ -515,6 +528,11 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
           'without the backfill switch.'
       );
     }
+    const { writes, details } = this.walkOptions(
+      req,
+      capabilities,
+      detailBackfill
+    );
     // The warehouses this walk covers, which are the scopes themselves (plan
     // 0108). Nothing is asked of a backfill: it reads product pages for an EAN
     // and writes no price.
@@ -545,7 +563,51 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         priceScopeIds,
         detailBackfill,
         scopeCopies,
+        // Resolved and stored (plan 0119, section 2), so the run's input says
+        // what it did even after a default changes.
+        writes,
+        details,
       },
+    };
+  }
+
+  /**
+   * What a walk writes and which details it fetches, checked against the
+   * adapter and resolved to the values the run stores (plan 0119, section 3).
+   *
+   * **A default is not a statement.** `details` is refused only when a caller
+   * names it for an adapter with no detail phase to skip; left out, it resolves
+   * to `ALL`, which is what that adapter does anyway.
+   */
+  private walkOptions(
+    req: SpawnHarvestRunRequest,
+    capabilities: AdapterCapabilities,
+    detailBackfill: boolean
+  ): { writes: HarvestRunWrites; details: HarvestDetailFetch } {
+    if (req.writes !== undefined && detailBackfill) {
+      throw new ValidationException(
+        'A backfill reads product pages for the EAN and is not a walk, so it ' +
+          'writes no prices and no availability to choose between. Start it ' +
+          'without writes.'
+      );
+    }
+    if (req.writes === HarvestRunWrites.PRICES && !capabilities.writesPrices) {
+      throw new ValidationException(
+        "This chain's source states no price, so a run that writes prices " +
+          'only would write nothing. Start it writing availability.'
+      );
+    }
+    if (req.details !== undefined && !capabilities.skipsKnownDetails) {
+      throw new ValidationException(
+        "This chain's walk has no detail phase to skip, so it always reads " +
+          'every product whole. Start it without details.'
+      );
+    }
+    return {
+      writes: req.writes ?? HarvestRunWrites.PRICES_AND_AVAILABILITY,
+      details: capabilities.skipsKnownDetails
+        ? (req.details ?? HarvestDetailFetch.NEW)
+        : HarvestDetailFetch.ALL,
     };
   }
 
