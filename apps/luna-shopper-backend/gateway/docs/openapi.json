@@ -10535,7 +10535,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10625,7 +10625,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10733,7 +10733,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10843,7 +10843,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10941,7 +10941,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11049,7 +11049,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11157,7 +11157,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11245,7 +11245,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11333,7 +11333,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11429,7 +11429,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11527,7 +11527,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11607,7 +11607,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11685,7 +11685,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11765,7 +11765,7 @@
             }
           },
           "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12415,6 +12415,16 @@
           },
           "400": {
             "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -33641,6 +33651,7 @@
             "enum": [
               "validation_failed",
               "unauthorized",
+              "not_a_participant",
               "forbidden",
               "not_found",
               "conflict",

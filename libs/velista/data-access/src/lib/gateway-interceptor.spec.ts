@@ -404,6 +404,32 @@ describe('gatewayInterceptor', () => {
       expect(storage.has(StorageKeys.session)).toBe(false);
     });
 
+    it('keeps the session when a basket says the account is not a participant', async () => {
+      // A member removed from a shared list reloads the basket. Their token is good;
+      // the basket is what refuses them. Refreshing would be refused the same way,
+      // and the second refusal used to sign them out of the whole app.
+      const held = pair(freshToken());
+      tokens.set(held);
+
+      const failure = expectFailure(
+        http.get(`${GATEWAY}/v1/generated-lists/g1/basket`)
+      );
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/generated-lists/g1/basket`)
+        .flush(
+          { code: 'not_a_participant' },
+          { status: 401, statusText: 'Unauthorized' }
+        );
+
+      const error = (await failure) as GatewayError;
+      expect(error.status).toBe(401);
+      expect(error.code).toBe('not_a_participant');
+      httpMock.expectNone(`${GATEWAY}/v1/auth/refresh`);
+      expect(tokens.tokens()).toEqual(held);
+      expect(storage.has(StorageKeys.session)).toBe(true);
+    });
+
     it('deletes the stored credentials when a token that still looks valid is refused', async () => {
       // The database behind the API was reset under a client that is still holding a
       // pair from before it. Nothing about that pair looks wrong from here: the

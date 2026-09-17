@@ -19,8 +19,9 @@ import { GatewayError } from '@portfolio/velista/data-access';
  *
  * ## What is deliberately absent
  *
- * **`unauthorized` has no row.** `BasketStore._fail` already turns a 401 into the
- * `revoked` or `needsJoin` state, which is a whole screen rather than a sentence, and
+ * **`unauthorized` and `not_a_participant` have no row.** Both are 401s, and
+ * `BasketStore._fail` already turns a 401 into the `revoked` or `needsJoin`
+ * state, which is a whole screen rather than a sentence, and
  * that stays where it is. Reaching a row here for one would mean drawing a sentence
  * over a screen that has already said something better.
  */
@@ -196,7 +197,7 @@ export function basketErrorKey(
       return 'basket.error.tooFast';
 
     default:
-      // `unauthorized` never reaches here; see the class comment. Everything else
+      // Neither 401 code reaches here; see the class comment. Everything else
       // gets the generic sentence with the correlation id beside it.
       return GENERIC;
   }

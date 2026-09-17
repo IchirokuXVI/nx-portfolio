@@ -26,8 +26,8 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
+  NotAParticipantException,
   NotFoundException,
-  UnauthorizedException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { createHash, randomBytes } from 'node:crypto';
@@ -299,7 +299,7 @@ export class GeneratedListSharingService {
       req.generatedListId
     );
     if (!participant) {
-      throw new UnauthorizedException('Not a participant of this basket');
+      throw new NotAParticipantException('Not a participant of this basket');
     }
     if (participant.kind === ParticipantKind.GUEST) {
       throw new ForbiddenException('A guest cannot leave a basket');
@@ -524,7 +524,7 @@ export class GeneratedListSharingService {
       };
     }
     if (existing.endedReason !== ParticipantEndedReason.LEFT) {
-      throw new UnauthorizedException(
+      throw new NotAParticipantException(
         'This link is no longer available to you'
       );
     }
@@ -543,7 +543,7 @@ export class GeneratedListSharingService {
         return { row, becameLive: false };
       }
       if (row.endedReason !== ParticipantEndedReason.LEFT) {
-        throw new UnauthorizedException(
+        throw new NotAParticipantException(
           'This link is no longer available to you'
         );
       }
@@ -593,7 +593,7 @@ export class GeneratedListSharingService {
   ): Promise<GeneratedListParticipantContext> {
     const participant = await this.findLiveParticipant(req);
     if (!participant) {
-      throw new UnauthorizedException('Not a participant of this basket');
+      throw new NotAParticipantException('Not a participant of this basket');
     }
 
     // Cheap and useful: presence and the share sheet both show it, and it costs

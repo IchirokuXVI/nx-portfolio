@@ -14,9 +14,9 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   GeneratedListFinishedException,
+  NotAParticipantException,
   NotFoundException,
   StaleQuantityException,
-  UnauthorizedException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, In, Repository, type EntityManager } from 'typeorm';
@@ -760,7 +760,7 @@ export class GeneratedListSplitService {
       list.id
     );
     if (!participant) {
-      throw new UnauthorizedException('Not a participant of this basket');
+      throw new NotAParticipantException('Not a participant of this basket');
     }
     return {
       list,

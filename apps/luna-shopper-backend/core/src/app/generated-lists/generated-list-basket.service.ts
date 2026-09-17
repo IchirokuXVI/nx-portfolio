@@ -16,8 +16,8 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   GeneratedListFinishedException,
+  NotAParticipantException,
   NotFoundException,
-  UnauthorizedException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import {
@@ -116,7 +116,7 @@ export class GeneratedListBasketService {
     if (!me) {
       // The guard resolved them a moment ago, so this is a revocation that
       // landed in between rather than a caller who was never here.
-      throw new UnauthorizedException('Not a participant of this basket');
+      throw new NotAParticipantException('Not a participant of this basket');
     }
 
     return toBasketView(
@@ -458,7 +458,7 @@ export class GeneratedListBasketService {
       list.id
     );
     if (!participant) {
-      throw new UnauthorizedException('Not a participant of this basket');
+      throw new NotAParticipantException('Not a participant of this basket');
     }
 
     return {

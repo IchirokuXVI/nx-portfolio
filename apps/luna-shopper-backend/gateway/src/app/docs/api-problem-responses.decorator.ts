@@ -12,6 +12,12 @@ import { componentRef, hoistProblemDetails } from './openapi-schema';
 export interface ProblemResponseOptions {
   /** The route is behind `JwtAuthGuard`, so a missing or bad token is a 401. */
   auth?: boolean;
+  /**
+   * The route is behind `ParticipantGuard`, so a credential naming no live
+   * participant of the basket is a 401 with its own code, which a client must not
+   * read as a dead account.
+   */
+  participant?: boolean;
   /** The route resolves a zone membership, so it can be a 403 or a 404. */
   membership?: boolean;
   /** The route takes a request body, so validation can reject it with a 400. */
@@ -105,6 +111,9 @@ export function ApiProblemResponses(
   }
   if (options.auth) {
     codes.push(ERROR_CODES.UNAUTHORIZED);
+  }
+  if (options.participant) {
+    codes.push(ERROR_CODES.NOT_A_PARTICIPANT);
   }
   if (options.membership) {
     codes.push(ERROR_CODES.FORBIDDEN, ERROR_CODES.NOT_FOUND);

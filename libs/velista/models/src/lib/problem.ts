@@ -15,6 +15,15 @@
 export const ERROR_CODES = [
   'validation_failed',
   'unauthorized',
+  /**
+   * The credential names no live participant of the basket addressed (backend plan
+   * 0051, section 3.3), as a 401.
+   *
+   * **Not a statement about the account.** A member removed from a shared list still
+   * holds a good token, so `gatewayInterceptor` passes this straight to the caller
+   * instead of refreshing, and `BasketStore` reads the 401 as it always has.
+   */
+  'not_a_participant',
   'forbidden',
   'not_found',
   'conflict',

@@ -499,6 +499,7 @@ export type ProblemDetails = {
   code:
     | 'validation_failed'
     | 'unauthorized'
+    | 'not_a_participant'
     | 'forbidden'
     | 'not_found'
     | 'conflict'
