@@ -35,6 +35,7 @@ import {
   type BrandView,
   type CreateBrandResult,
   type CreateItemsResult,
+  type DeleteBrandResult,
   type ItemPage,
   type ItemPricePage,
   type ItemPriceView,
@@ -45,6 +46,7 @@ import {
   type PriceScopeView,
   type ProductGroupPage,
   type ProductGroupView,
+  type RegisterBrandSuggestionResult,
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityResult,
   type SupermarketLocationItemPage,
@@ -53,7 +55,9 @@ import {
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
+  type UpdateBrandResult,
 } from '@portfolio/luna-shopper/contracts';
+import { MAX_PAGE_SIZE } from '@portfolio/luna-shopper/platform';
 import { adminCredential } from '../admin/admin-credential';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import type { CurrentAdmin } from '../admin/admin-jwt.strategy';
@@ -87,6 +91,7 @@ import {
   ListItemPricesQueryDto,
   ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
+  RegisterBrandSuggestionDto,
   SetSupermarketItemAvailabilityDto,
   SetSupermarketLocationItemAvailabilityDto,
   UpdateBrandDto,
@@ -553,12 +558,15 @@ export class AdminCatalogProductGroupsController {
  *
  * A brand used to be free text on every table, so `+Proteinas` sat as a brand on
  * 24 Mercadona products when it is a range of Hacendado, and nobody could list
- * the brands the catalog holds because there was no such list. These four routes
- * are the list, plus the one read that says how each chain spells a brand.
+ * the brands the catalog holds because there was no such list. These routes are
+ * the list, plus the one read that says how each chain spells a brand.
  *
- * **There is no delete** (plan 0115, section 9), and there is no `key` anywhere
- * in a request body: the key is made from the label, and editing the label is
- * the only thing that changes it.
+ * **The only brand that can be deleted is a spelling of another** (plan 0124).
+ * Everything else still cannot be removed, by section 9 of plan 0115, because
+ * its products have nowhere to go.
+ *
+ * There is no `key` anywhere in a request body: the key is made from the label,
+ * and editing the label is the only thing that changes it.
  */
 @ApiTags('admin-catalog')
 @ApiBearerAuth('access-token')
@@ -588,6 +596,35 @@ export class AdminCatalogBrandsController {
     });
   }
 
+  /**
+   * Register a suggestion under the name a person typed (plan 0124, section 5).
+   *
+   * **A literal path above `:id`**, so the segment cannot be read as a brand id.
+   * Nothing here posts to `:id` today, but the two are one segment apart and the
+   * next route added under this controller would decide it by declaration order
+   * rather than by anything written down.
+   *
+   * One request for one decision: registering `DEBORAH 48H` as `Deborah`
+   * creates the brand for the typed name if it is new, registers the spelling
+   * beside it, links the second to the first, and moves the products, in one
+   * transaction. Two requests would leave the suggestion half registered
+   * whenever the second failed.
+   */
+  @Post('register-suggestion')
+  @ApiContractResponse(BRAND_PATTERNS.registerSuggestion, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
+  registerSuggestion(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: RegisterBrandSuggestionDto
+  ): Promise<RegisterBrandSuggestionResult> {
+    return this.nats.send<RegisterBrandSuggestionResult>(
+      BRAND_PATTERNS.registerSuggestion,
+      { ...adminCredential(admin), ...dto }
+    );
+  }
+
   @Get()
   @ApiContractResponse(BRAND_PATTERNS.list)
   list(
@@ -598,6 +635,7 @@ export class AdminCatalogBrandsController {
       userId: admin.adminId,
       query: query.query,
       privateLabelSupermarketId: query.privateLabelSupermarketId,
+      canonicalBrandId: query.canonicalBrandId,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
@@ -611,11 +649,17 @@ export class AdminCatalogBrandsController {
    * whatever the chains printed, which only the harvester has. The brand is read
    * first so a missing id answers 404 from the service that owns the row rather
    * than an empty list from the one that does not.
+   *
+   * **The keys of the brands linked to this one go too** (plan 0124,
+   * section 6), which is what puts `DEBORAH 48H` in `DEBORAH`'s spellings table.
+   * They come from the registry itself, filtered by `canonicalBrandId`, in one
+   * page: a brand with more spellings than a page holds is not a case the
+   * registry has, and the harvester caps its own answer at 200 rows anyway.
    */
   @Get(':id/spellings')
   @ApiComposedResponse(HARVEST_SCHEMA_IDS.brandSpellingsResult, {
     description:
-      'How each chain spells this brand, from the harvester’s source rows. Composed: the brand is read from catalog first.',
+      'How each chain spells this brand, from the harvester’s source rows, including the spellings registered as brands linked to it. Composed: the brand and its links are read from catalog first.',
   })
   async spellings(
     @ActingAdmin() admin: CurrentAdmin,
@@ -625,9 +669,17 @@ export class AdminCatalogBrandsController {
       userId: admin.adminId,
       brandId: id,
     });
+    const linked = await this.nats.send<BrandPage>(BRAND_PATTERNS.list, {
+      userId: admin.adminId,
+      canonicalBrandId: brand.id,
+      limit: MAX_PAGE_SIZE,
+    });
     return this.nats.send<BrandSpellingsResult>(
       SOURCE_ENTRY_PATTERNS.brandSpellings,
-      { ...adminCredential(admin), keys: [brand.key] }
+      {
+        ...adminCredential(admin),
+        keys: [brand.key, ...linked.items.map((row) => row.key)],
+      }
     );
   }
 
@@ -649,6 +701,9 @@ export class AdminCatalogBrandsController {
    * A rename rewrites `brand` on every item linked to this brand, and links the
    * unlinked items that carry the new key. Items linked under the old key stay
    * linked: they were this brand, and a corrected spelling does not change that.
+   *
+   * `canonicalBrandId` is the other edit, and it moves products: the answer's
+   * `movedItems` is how many (plan 0124, section 4.2).
    */
   @Patch(':id')
   @ApiContractResponse(BRAND_PATTERNS.update)
@@ -657,11 +712,34 @@ export class AdminCatalogBrandsController {
     @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string,
     @Body() dto: UpdateBrandDto
-  ): Promise<BrandView> {
-    return this.nats.send<BrandView>(BRAND_PATTERNS.update, {
+  ): Promise<UpdateBrandResult> {
+    return this.nats.send<UpdateBrandResult>(BRAND_PATTERNS.update, {
       ...adminCredential(admin),
       brandId: id,
       ...dto,
+    });
+  }
+
+  /**
+   * Remove a spelling (plan 0124).
+   *
+   * **The only brand that can be deleted is one linked to another**, and every
+   * other brand answers 409 `brand_not_linked`. Deleting a spelling puts its
+   * products back where it found them, unbranded and still carrying the text
+   * the chain printed, so the key returns to the suggestions list on its own and
+   * registering it again picks the same products up. `movedItems` is how many
+   * went back.
+   */
+  @Delete(':id')
+  @ApiContractResponse(BRAND_PATTERNS.delete)
+  @ApiProblemResponses({ conflict: true })
+  remove(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<DeleteBrandResult> {
+    return this.nats.send<DeleteBrandResult>(BRAND_PATTERNS.delete, {
+      ...adminCredential(admin),
+      brandId: id,
     });
   }
 }

@@ -203,14 +203,37 @@ export const PRODUCT_GROUP_PATTERNS = {
  * run registers a brand: an unregistered brand is still accepted on an item,
  * and deciding it is really a brand is curation.
  *
- * There is no `delete`, by section 9. A brand cannot be removed, and the day
- * one can be, the foreign key sets `items.brandId` null.
+ * **The only brand that can be deleted is a spelling of another** (plan 0124).
+ * Every other brand still cannot be removed, by section 9: its products have
+ * nowhere to go, and the foreign key from `items.brandId` sets null rather than
+ * cascading.
  */
 export const BRAND_PATTERNS = {
   create: 'brand.create',
   update: 'brand.update',
   get: 'brand.get',
   list: 'brand.list',
+  /**
+   * Register a suggestion under a name somebody typed, and link it to the brand
+   * that name belongs to, in one call (plan 0124, section 5).
+   *
+   * One pattern rather than a create followed by an update, because the back
+   * office must not make two requests for one decision: a failure between them
+   * leaves the suggestion half registered, with a brand nothing points at and a
+   * key still on the suggestions list.
+   */
+  registerSuggestion: 'brand.registerSuggestion',
+  /**
+   * Remove a spelling, and only a spelling (plan 0124).
+   *
+   * **The one brand that may be deleted is one linked to another.** Deleting it
+   * puts its products back exactly where they were before it was registered,
+   * unbranded and still carrying its printed text, so its key returns to the
+   * suggestions list by itself and registering it again picks them up. Every
+   * other brand still cannot be removed, by section 9 of plan 0115: there is
+   * nowhere for its products to go.
+   */
+  delete: 'brand.delete',
   /**
    * Every registered key and nothing else, for the suggestions read (plan 0115,
    * section 7.3).
@@ -570,6 +593,11 @@ export interface ProductGroupView {
  * **The key follows the label** and is never sent by a client. Editing
  * `Hacenado` to `Hacendado` changes the key to `hacendado`, and that is the only
  * way a key ever changes.
+ *
+ * **A brand may be a spelling of another brand** (plan 0124). `DEBORAH 48H` and
+ * `DEBORAH` are one brand written two ways, and one row cannot hold two keys, so
+ * the second row stays registered and points at the first. The link is one level
+ * deep and never a chain.
  */
 export interface BrandView {
   id: string;
@@ -581,6 +609,19 @@ export interface BrandView {
   privateLabelSupermarketId: string | null;
   /** Products whose `brandId` is this brand. Counted for the page, not per row. */
   itemCount: number;
+  /**
+   * The brand this one is really a spelling of, or null when it stands for
+   * itself (plan 0124, section 2).
+   *
+   * A linked brand keeps its own row, key and label: that is the record the
+   * person asked to keep, and it is what stops its key coming back as a
+   * suggestion at the next read.
+   */
+  canonicalBrandId: string | null;
+  /** That brand's label, joined on the read. Null for a brand that is not linked. */
+  canonicalLabel: string | null;
+  /** How many brands point at this one. */
+  linkCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -595,6 +636,38 @@ export interface BrandView {
  * registered ahead of any product is the ordinary case.
  */
 export interface CreateBrandResult extends BrandView {
+  linkedItems: number;
+}
+
+/**
+ * A brand just edited, and how many products the edit moved (plan 0124,
+ * section 4.2).
+ *
+ * `movedItems` is the row count of the one statement that follows a changed
+ * link: linking moves every product of the brand onto the canonical brand,
+ * relinking moves the ones carrying its key from one canonical brand to
+ * another, and unlinking brings those back. An edit that changes no link moves
+ * nothing and reports zero, which is the ordinary case.
+ */
+export interface UpdateBrandResult extends BrandView {
+  movedItems: number;
+}
+
+/**
+ * A suggestion registered under the name a person typed (plan 0124, section 5).
+ *
+ * `brand` is the **canonical** brand, read again after the products moved, so
+ * its `itemCount` is the number the back office says out loud. `linked` is the
+ * brand created for the suggestion's own spelling, and it is null when the
+ * typed name keys to that same spelling: there is nothing to link then, because
+ * one row already holds the key.
+ */
+export interface RegisterBrandSuggestionResult {
+  brand: BrandView;
+  linked: BrandView | null;
+  /** Whether the canonical brand was created by this call rather than found. */
+  canonicalCreated: boolean;
+  /** Products the two keys picked up between them. */
   linkedItems: number;
 }
 
@@ -1434,6 +1507,14 @@ export const BRAND_LABEL_MAX_LENGTH = 120;
 export interface CreateBrandRequest extends AdminCredential {
   label: string;
   privateLabelSupermarketId?: string | null;
+  /**
+   * The brand this one is a spelling of (plan 0124, section 2).
+   *
+   * A linked brand owns no private label chain, so naming both here is refused
+   * with `brand_link_owns_no_chain`: the canonical brand's chain is the one
+   * that counts.
+   */
+  canonicalBrandId?: string | null;
 }
 
 /**
@@ -1447,11 +1528,41 @@ export interface UpdateBrandRequest extends AdminCredential {
   brandId: string;
   label?: string;
   privateLabelSupermarketId?: string | null;
+  /**
+   * Point this brand at the brand it is a spelling of, or send null to unlink
+   * it (plan 0124, sections 3 and 4.2).
+   *
+   * Either way the products follow: linking moves every product of this brand
+   * onto the canonical one, and unlinking brings back the ones carrying this
+   * brand's own key. A link is one level deep, so pointing at a brand that is
+   * itself linked, or linking a brand others point at, is refused with
+   * `brand_link_too_deep`.
+   */
+  canonicalBrandId?: string | null;
 }
 
 export interface BrandIdRequest {
   userId: string;
   brandId: string;
+}
+
+/** Remove a spelling. A brand that is nobody's spelling is refused. */
+export interface DeleteBrandRequest extends AdminCredential {
+  brandId: string;
+}
+
+/**
+ * A spelling removed, and how many products went back to unbranded
+ * (plan 0124).
+ *
+ * `id` is the convention every other admin catalog delete answers with.
+ * `movedItems` is beside it because the number is the visible effect of the
+ * delete: those products keep their printed text and lose their brand, which is
+ * the state they were in before the spelling was registered.
+ */
+export interface DeleteBrandResult {
+  id: string;
+  movedItems: number;
 }
 
 export interface ListBrandsRequest extends PageQuery {
@@ -1461,9 +1572,34 @@ export interface ListBrandsRequest extends PageQuery {
    * contains the text. A query with no key at all matches on the label only.
    */
   query?: string;
-  /** Only this chain's private labels. */
+  /**
+   * Only this chain's private labels.
+   *
+   * A linked brand matches through its canonical brand too, since the chain it
+   * belongs to is the canonical brand's (plan 0124, section 6).
+   */
   privateLabelSupermarketId?: string;
+  /** Only the brands linked to this one, which is its list of spellings. */
+  canonicalBrandId?: string;
   order?: BrandOrder;
+}
+
+/**
+ * Register a suggestion under a name somebody typed (plan 0124, section 5).
+ *
+ * `spelling` is the suggestion's own spelling, which makes the key the queue
+ * carries. `label` is the name the person typed for it. When the two key the
+ * same, this is an ordinary create; when they differ, the typed name's brand is
+ * found or created and the spelling becomes a brand linked to it.
+ */
+export interface RegisterBrandSuggestionRequest extends AdminCredential {
+  spelling: string;
+  label: string;
+  /**
+   * The chain whose private label this is. Ignored when the typed name already
+   * has a brand, which keeps the chain the existing row states.
+   */
+  privateLabelSupermarketId?: string | null;
 }
 
 /** Every registered key, for the suggestions read. Carries no page. */

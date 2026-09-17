@@ -160,6 +160,54 @@ export const ERROR_CODES = {
    * say no.
    */
   BRAND_KEY_TAKEN: 'brand_key_taken',
+  /**
+   * A brand was pointed at itself (plan 0124, section 3).
+   *
+   * Its own code rather than a plain {@link VALIDATION_FAILED}, because the
+   * sentence is particular and the fix is obvious once it is said: a brand is
+   * already itself, so there is nothing to link.
+   */
+  BRAND_LINK_TO_SELF: 'brand_link_to_self',
+  /**
+   * The link would make a chain of links, which is refused (plan 0124,
+   * section 3).
+   *
+   * Either the target is itself a spelling of some third brand, or brands
+   * already point at the one being linked. The brand that breaks the rule
+   * travels in the envelope's `details` as `brandId`, so the back office can
+   * offer to open it rather than only say no.
+   */
+  BRAND_LINK_TOO_DEEP: 'brand_link_too_deep',
+  /**
+   * A brand was given both a private label chain and a link (plan 0124,
+   * section 2).
+   *
+   * A linked brand owns no chain: the canonical brand's chain is the one that
+   * counts, so holding a second answer on the linked row would be two answers
+   * to one question.
+   */
+  BRAND_LINK_OWNS_NO_CHAIN: 'brand_link_owns_no_chain',
+  /**
+   * A brand that is a spelling of another was renamed onto a different key
+   * (plan 0124, section 4).
+   *
+   * Its key is what the products printed with it carry, and it is the only
+   * thing that can bring them back when the link is undone. Renaming a linked
+   * brand from `DEBORAH 48H` to `Deborah 72H` is therefore not a correction of
+   * one spelling but the claim that a second spelling exists, and a second
+   * spelling is a second brand. Capitals and spacing keep the key, so they are
+   * still allowed.
+   */
+  BRAND_LINK_KEEPS_KEY: 'brand_link_keeps_key',
+  /**
+   * A brand that is nobody's spelling was asked to be deleted (plan 0124).
+   *
+   * A spelling can go away, because deleting it puts its products back exactly
+   * where they were before it was registered and its key returns to the
+   * suggestions list by itself. Every other brand still cannot be removed, by
+   * section 9 of plan 0115: there is nowhere for its products to go.
+   */
+  BRAND_NOT_LINKED: 'brand_not_linked',
   INTERNAL: 'internal',
 } as const;
 
@@ -238,5 +286,19 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409 for the ordinary reason: the request was well formed and the caller is
   // allowed to make it, and what refuses it is a row that already exists.
   [ERROR_CODES.BRAND_KEY_TAKEN]: HttpStatus.CONFLICT,
+  // 400 for both of these, because what is wrong is a value in the body: a
+  // brand cannot be its own spelling, and a linked brand cannot also carry a
+  // chain (plan 0124, sections 2 and 3).
+  [ERROR_CODES.BRAND_LINK_TO_SELF]: HttpStatus.BAD_REQUEST,
+  [ERROR_CODES.BRAND_LINK_OWNS_NO_CHAIN]: HttpStatus.BAD_REQUEST,
+  // 409 rather than 400, because the request is well formed and what refuses it
+  // is a link some other row already holds.
+  [ERROR_CODES.BRAND_LINK_TOO_DEEP]: HttpStatus.CONFLICT,
+  // 409 for the same reason: the label is a perfectly good label, and what
+  // refuses it is that this row is a spelling of another brand.
+  [ERROR_CODES.BRAND_LINK_KEEPS_KEY]: HttpStatus.CONFLICT,
+  // 409 again: the request is well formed and the caller may make it, and what
+  // refuses it is that this brand is not a spelling of anything.
+  [ERROR_CODES.BRAND_NOT_LINKED]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

@@ -601,6 +601,36 @@ describe('ItemService', () => {
       );
     });
 
+    it('stores the canonical brand when the key belongs to a spelling', async () => {
+      const items = savingItems();
+      const { service } = build({
+        items,
+        brands: [
+          MAHOU,
+          {
+            id: 'b2',
+            key: 'mahou5estrellas',
+            label: 'MAHOU 5 ESTRELLAS',
+            privateLabelSupermarketId: null,
+            canonicalBrandId: MAHOU.id,
+          } as Brand,
+        ],
+      });
+
+      await service.create({ ...draft, brand: 'Mahou 5 Estrellas' });
+
+      // The id and the label are the brand it is a spelling of, and the key is
+      // still the product's own text: that key is what brings it back if the
+      // link is ever undone (plan 0124, section 4.1).
+      expect(items.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          brand: 'Mahou',
+          brandKey: 'mahou5estrellas',
+          brandId: 'b1',
+        })
+      );
+    });
+
     it('accepts an unregistered brand, keyed and unlinked', async () => {
       const items = savingItems();
       const { service } = build({ items });

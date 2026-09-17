@@ -12,6 +12,7 @@ import { ADMIN_USER_PATTERNS } from '../lib/messages/admin-users.messages';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
+  BRAND_PATTERNS,
   ITEM_PATTERNS,
   POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
@@ -85,6 +86,7 @@ describe('contract schemas', () => {
       ...Object.values(SUPERMARKET_LOCATION_ITEM_PATTERNS),
       ...Object.values(PRICE_SCOPE_PATTERNS),
       ...Object.values(PRODUCT_GROUP_PATTERNS),
+      ...Object.values(BRAND_PATTERNS),
       ...Object.values(POSTAL_CODE_PATTERNS),
       ...Object.values(HARVEST_PATTERNS),
       ...Object.values(HARVEST_PRESET_PATTERNS),

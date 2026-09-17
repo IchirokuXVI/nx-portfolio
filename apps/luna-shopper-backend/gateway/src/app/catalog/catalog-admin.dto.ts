@@ -213,11 +213,21 @@ export class AdminListBrandsQueryDto extends PageQueryDto {
 
   @ApiPropertyOptional({
     format: 'uuid',
-    description: 'Only this chain’s private labels.',
+    description:
+      'Only this chain’s private labels, including the brands linked to one of them: the chain a linked brand belongs to is its canonical brand’s.',
   })
   @IsOptional()
   @IsUUID()
   privateLabelSupermarketId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only the brands linked to this one, which is its list of other spellings.',
+  })
+  @IsOptional()
+  @IsUUID()
+  canonicalBrandId?: string;
 
   @ApiPropertyOptional({
     enum: BRAND_ORDERS,

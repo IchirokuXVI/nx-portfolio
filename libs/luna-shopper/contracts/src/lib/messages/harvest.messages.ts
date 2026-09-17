@@ -1144,6 +1144,15 @@ export interface ListSourceEntriesRequest extends PageQuery, AdminCredential {
   sourceKind?: PriceSourceKind;
   /** Free text over the name, the brand and the EAN. */
   query?: string;
+  /**
+   * Only the rows whose brand keys to this (plan 0124, section 7).
+   *
+   * The value is keyed before it is matched, so `El Pozo` and `elpozo` find the
+   * same rows. A value that makes no key at all matches nothing rather than
+   * being refused: a person typing punctuation gets an empty list, not an
+   * error.
+   */
+  brandKey?: string;
 }
 
 export interface SourceEntryIdRequest extends AdminCredential {

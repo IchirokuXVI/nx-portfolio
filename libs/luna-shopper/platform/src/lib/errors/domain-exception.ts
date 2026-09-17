@@ -281,6 +281,73 @@ export class BrandKeyTakenException extends DomainException {
 export const BRAND_KEY_HOLDER_DETAIL = 'brandId';
 
 /**
+ * A brand pointed at itself (plan 0124, section 3).
+ *
+ * Refused rather than ignored, because the two readings of a self link are a
+ * brand that is linked and a brand that is not, and the column cannot hold both.
+ */
+export class BrandLinkToSelfException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_LINK_TO_SELF;
+}
+
+/**
+ * The link would make a chain of links (plan 0124, section 3).
+ *
+ * It publishes its details for the same reason {@link BrandKeyTakenException}
+ * does: the back office's next act is to open the brand that breaks the rule,
+ * which is either the target that is itself a spelling or one of the brands
+ * already pointing at this one. That id travels under
+ * {@link BRAND_LINK_BLOCKER_DETAIL}.
+ */
+export class BrandLinkTooDeepException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_LINK_TOO_DEEP;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A brand was given both a private label chain and a link (plan 0124,
+ * section 2).
+ *
+ * The canonical brand's chain is the one that counts, so a linked row holding a
+ * chain of its own would be a second answer to which chain owns the label.
+ */
+export class BrandLinkOwnsNoChainException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_LINK_OWNS_NO_CHAIN;
+}
+
+/**
+ * A linked brand was renamed onto a different key (plan 0124, section 4).
+ *
+ * No details: the brand the client was editing is the brand it already has on
+ * screen, and there is nothing else to open. What it does next is either keep
+ * the key or register the new spelling as a brand of its own.
+ */
+export class BrandLinkKeepsKeyException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_LINK_KEEPS_KEY;
+}
+
+/**
+ * A brand that is nobody's spelling cannot be deleted (plan 0124).
+ *
+ * No details: the brand is the one the client asked about, and what it does
+ * next is either link it to the brand it spells, or leave it alone.
+ */
+export class BrandNotLinkedException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_NOT_LINKED;
+}
+
+/**
+ * The `details` key a {@link BrandLinkTooDeepException} names the brand that
+ * breaks the one level rule under.
+ *
+ * The same spelling as {@link BRAND_KEY_HOLDER_DETAIL} and a different fact: one
+ * names the brand holding a key, the other the brand holding a link. A client
+ * reads `details.brandId` either way, which is what lets one panel open
+ * whichever brand a refusal is about.
+ */
+export const BRAND_LINK_BLOCKER_DETAIL = 'brandId';
+
+/**
  * The `details` key a {@link RateLimitedException} or an
  * {@link AccountLockedException} carries its wait under.
  */

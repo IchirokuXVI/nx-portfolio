@@ -17374,7 +17374,17 @@
             "name": "privateLabelSupermarketId",
             "required": false,
             "in": "query",
-            "description": "Only this chain’s private labels.",
+            "description": "Only this chain’s private labels, including the brands linked to one of them: the chain a linked brand belongs to is its canonical brand’s.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "canonicalBrandId",
+            "required": false,
+            "in": "query",
+            "description": "Only the brands linked to this one, which is its list of other spellings.",
             "schema": {
               "format": "uuid",
               "type": "string"
@@ -17466,6 +17476,112 @@
         ]
       }
     },
+    "/v1/admin/catalog/brands/register-suggestion": {
+      "post": {
+        "operationId": "AdminCatalogBrandsController_registerSuggestion_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterBrandSuggestionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `brand.registerSuggestion` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.RegisterBrandSuggestionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/catalog/brands/{id}/spellings": {
       "get": {
         "operationId": "AdminCatalogBrandsController_spellings_v1",
@@ -17481,7 +17597,7 @@
         ],
         "responses": {
           "200": {
-            "description": "How each chain spells this brand, from the harvester’s source rows. Composed: the brand is read from catalog first.",
+            "description": "How each chain spells this brand, from the harvester’s source rows, including the spellings registered as brands linked to it. Composed: the brand and its links are read from catalog first.",
             "content": {
               "application/json": {
                 "schema": {
@@ -17663,7 +17779,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/catalog.BrandView"
+                  "$ref": "#/components/schemas/catalog.UpdateBrandResult"
                 }
               }
             }
@@ -17674,6 +17790,99 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminCatalogBrandsController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `brand.delete` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.DeleteBrandResult"
                 }
               }
             }
@@ -21464,6 +21673,16 @@
               "maxLength": 120,
               "type": "string"
             }
+          },
+          {
+            "name": "brandKey",
+            "required": false,
+            "in": "query",
+            "description": "Only the rows whose brand keys to this. The value is keyed before it is matched, so `El Pozo` and `elpozo` find the same rows, and a value that makes no key at all matches nothing rather than being refused.",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -25072,9 +25291,40 @@
             "format": "uuid",
             "nullable": true,
             "description": "The chain that owns this private label. Null, and usually absent, for an ordinary brand."
+          },
+          "canonicalBrandId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The brand this one is really a spelling of. A brand created linked owns no private label chain, so sending both is refused with `brand_link_owns_no_chain`."
           }
         },
         "required": [
+          "label"
+        ]
+      },
+      "RegisterBrandSuggestionDto": {
+        "type": "object",
+        "properties": {
+          "spelling": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "The suggestion’s own spelling, which makes the key the queued rows carry."
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "The name the person typed. When it keys to the spelling this is an ordinary create; when it does not, its brand is found or created and the spelling is linked to it."
+          },
+          "privateLabelSupermarketId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The chain whose private label this is. Ignored when the typed name already has a brand, which keeps the chain that brand states."
+          }
+        },
+        "required": [
+          "spelling",
           "label"
         ]
       },
@@ -25089,6 +25339,12 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "canonicalBrandId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The brand this one is really a spelling of, or null to unlink it. The products follow either way: linking moves them onto that brand, unlinking brings back the ones carrying this brand’s own key."
           }
         }
       },
@@ -28039,6 +28295,24 @@
             "type": "integer",
             "description": "Products whose `brandId` is this brand."
           },
+          "canonicalBrandId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The brand this one is really a spelling of, or null when it stands for itself. One level deep: a linked brand is never itself pointed at."
+          },
+          "canonicalLabel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "That brand’s label, joined on the read. Null for a brand that is not linked."
+          },
+          "linkCount": {
+            "type": "integer",
+            "description": "How many brands point at this one."
+          },
           "createdAt": {
             "type": "string",
             "minLength": 1
@@ -28054,6 +28328,9 @@
           "label",
           "privateLabelSupermarketId",
           "itemCount",
+          "canonicalBrandId",
+          "canonicalLabel",
+          "linkCount",
           "createdAt",
           "updatedAt"
         ],
@@ -28182,11 +28459,13 @@
           },
           "key": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "Made from the label with everything but letters and digits taken out. Never sent by a client: editing the label is the only thing that changes it."
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "description": "How the brand is written everywhere a person reads it."
           },
           "privateLabelSupermarketId": {
             "type": [
@@ -28195,7 +28474,26 @@
             ]
           },
           "itemCount": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Products whose `brandId` is this brand."
+          },
+          "canonicalBrandId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The brand this one is really a spelling of, or null when it stands for itself. One level deep: a linked brand is never itself pointed at."
+          },
+          "canonicalLabel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "That brand’s label, joined on the read. Null for a brand that is not linked."
+          },
+          "linkCount": {
+            "type": "integer",
+            "description": "How many brands point at this one."
           },
           "createdAt": {
             "type": "string",
@@ -28216,9 +28514,30 @@
           "label",
           "privateLabelSupermarketId",
           "itemCount",
+          "canonicalBrandId",
+          "canonicalLabel",
+          "linkCount",
           "createdAt",
           "updatedAt",
           "linkedItems"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.DeleteBrandResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "movedItems": {
+            "type": "integer",
+            "description": "Products that went back to unbranded, keeping the text this spelling was printed as."
+          }
+        },
+        "required": [
+          "id",
+          "movedItems"
         ],
         "additionalProperties": false
       },
@@ -29016,6 +29335,38 @@
         ],
         "additionalProperties": false
       },
+      "catalog.RegisterBrandSuggestionResult": {
+        "type": "object",
+        "properties": {
+          "brand": {
+            "$ref": "#/components/schemas/catalog.BrandView"
+          },
+          "linked": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.BrandView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canonicalCreated": {
+            "type": "boolean"
+          },
+          "linkedItems": {
+            "type": "integer",
+            "description": "Products the two keys picked up between them."
+          }
+        },
+        "required": [
+          "brand",
+          "linked",
+          "canonicalCreated",
+          "linkedItems"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ResolvedScopeView": {
         "type": "object",
         "properties": {
@@ -29640,6 +29991,79 @@
           "websiteUrl",
           "externalBrandKey",
           "defaultPriceScopeId"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.UpdateBrandResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Made from the label with everything but letters and digits taken out. Never sent by a client: editing the label is the only thing that changes it."
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "How the brand is written everywhere a person reads it."
+          },
+          "privateLabelSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemCount": {
+            "type": "integer",
+            "description": "Products whose `brandId` is this brand."
+          },
+          "canonicalBrandId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The brand this one is really a spelling of, or null when it stands for itself. One level deep: a linked brand is never itself pointed at."
+          },
+          "canonicalLabel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "That brand’s label, joined on the read. Null for a brand that is not linked."
+          },
+          "linkCount": {
+            "type": "integer",
+            "description": "How many brands point at this one."
+          },
+          "createdAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "updatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "movedItems": {
+            "type": "integer",
+            "description": "How many products the changed link moved. Zero for an edit that changed no link."
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "label",
+          "privateLabelSupermarketId",
+          "itemCount",
+          "canonicalBrandId",
+          "canonicalLabel",
+          "linkCount",
+          "createdAt",
+          "updatedAt",
+          "movedItems"
         ],
         "additionalProperties": false
       },
@@ -34182,6 +34606,11 @@
               "line_merge_too_many_products",
               "brand_label_empty",
               "brand_key_taken",
+              "brand_link_to_self",
+              "brand_link_too_deep",
+              "brand_link_owns_no_chain",
+              "brand_link_keeps_key",
+              "brand_not_linked",
               "internal"
             ],
             "description": "The stable machine code the client branches on."
