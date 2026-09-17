@@ -58,7 +58,7 @@ test.describe('a registered participant', () => {
 
   test.afterAll(async () => {
     await dana?.context().close();
-    await alice.dispose();
+    await alice?.dispose();
   });
 
   test('sees the zone through a shared basket, and the owner raises an aisle line for both lists', async ({

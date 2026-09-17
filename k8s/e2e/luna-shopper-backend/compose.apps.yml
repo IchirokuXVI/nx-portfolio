@@ -50,6 +50,22 @@ services:
       # worktree slot publishes is irrelevant inside this network.
       REDIS_URL: redis://redis:6379
       LOG_LEVEL: debug
+      # Raises every rate limit at once, exactly as luna-slot.sh does for tier 1.
+      #
+      # The numbers in `throttler-config.ts` are sized for one honest client on
+      # the public internet, and this stack is not that: the suites, the seed and
+      # the browser all reach the gateway from one address, so they share one
+      # bucket. Five logins a minute is spent by three specs that each sign a
+      # session in over the API and then sign in again through velista's own
+      # screens, and the sixth login is refused with a 429 that reads as a broken
+      # app. This tier states its environment by hand and inherits nothing from
+      # the `.env` luna-slot.sh writes, which is why the variable has to be named
+      # here as well.
+      #
+      # It is read from `process.env` when the controller file is imported, so
+      # compose setting it before node starts is the only timing that matters.
+      # Neither values file sets it, so the clusters keep the written numbers.
+      THROTTLE_MULTIPLIER: ${THROTTLE_MULTIPLIER:-20}
       # The front end origins this stack answers. The default is the two
       # luna-slot.sh already allows: the portfolio shell, which mounts velista as
       # a remote, and velista's own origin, which is where a confirmation link

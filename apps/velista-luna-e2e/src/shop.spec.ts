@@ -51,7 +51,7 @@ test.describe('one trip, by the owner', () => {
   });
 
   test.afterAll(async () => {
-    await alice.dispose();
+    await alice?.dispose();
   });
 
   test('shops the basket from generate to finish', async ({ page }) => {
