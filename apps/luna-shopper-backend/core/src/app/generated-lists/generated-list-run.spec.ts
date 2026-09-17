@@ -12,7 +12,9 @@ import {
   GeneratedListLineOrigin,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { BASKET_ORIGIN_LISTS_SQL } from '../lists/trips/trips.sql';
 import type { ProfileService } from '../profiles/profile.service';
+import type { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListService } from './generated-list.service';
 import {
@@ -67,6 +69,12 @@ interface Harness {
     options: Partial<GeneratedListLineOption>[];
   };
   events: { event: RealtimeEvent; userIds: readonly string[] }[];
+  /**
+   * The lists told to read their trips again (plan 0122, section 6). Kept apart
+   * from `events`, which pins who hears about the **basket**: this one is
+   * addressed to a list's room and names no person.
+   */
+  tripsChanged: (string | undefined)[];
   claims: FakeLineClaims;
   /** How many times the run asked for the owner's past trips (plan 0110). */
   orderReads: () => number;
@@ -121,6 +129,7 @@ function build(options: {
     options: [],
   };
   const events: Harness['events'] = [];
+  const tripsChanged: Harness['tripsChanged'] = [];
 
   let nextId = 0;
   const id = (prefix: string) => `${prefix}-${++nextId}`;
@@ -148,6 +157,16 @@ function build(options: {
       return Object.entries(overlaps).map(([lineId, generatedListId]) => ({
         lineId,
         generatedListId,
+      }));
+    }
+    if (sql === BASKET_ORIGIN_LISTS_SQL) {
+      // `DISTINCT`, as the real read is. What the run wrote when there was a
+      // run, and what the basket is said to be claiming when there was not.
+      const rows = written.origins.length
+        ? written.origins
+        : (options.claiming ?? []);
+      return [...new Set(rows.map((row) => row.listId))].map((listId) => ({
+        listId,
       }));
     }
     throw new Error(`unmocked query: ${sql.slice(0, 60)}`);
@@ -276,7 +295,25 @@ function build(options: {
     emitToUsers: (event: RealtimeEvent, userIds: readonly string[]) => {
       events.push({ event, userIds });
     },
+    // A deletion names the basket room beside the owner since plan 0114, so it
+    // goes through the explicit audience. Recorded by its users, as before.
+    emitTo: (
+      event: RealtimeEvent,
+      audience: { userIds?: readonly string[]; listId?: string }
+    ) => {
+      if (event === RealtimeEvent.ListTripsChanged) {
+        tripsChanged.push(audience.listId);
+        return;
+      }
+      events.push({ event, userIds: audience.userIds ?? [] });
+    },
   } as unknown as CoreEventsPublisher;
+
+  // Nobody is shared a basket in these runs (plan 0114): no members are named,
+  // and a deletion finds nobody to tell.
+  const members = {
+    liveRegistered: async () => [],
+  } as unknown as GeneratedListMembersService;
 
   const claims = fakeLineClaims({}, () => options.claiming ?? []);
 
@@ -293,10 +330,18 @@ function build(options: {
     profiles,
     claims.service,
     publisher,
-    new GeneratedListOrderService(orderRepo as never)
+    new GeneratedListOrderService(orderRepo as never),
+    members
   );
 
-  return { service, written, events, claims, orderReads: () => orderReads };
+  return {
+    service,
+    written,
+    events,
+    tripsChanged,
+    claims,
+    orderReads: () => orderReads,
+  };
 }
 
 /**
@@ -840,5 +885,83 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
     await w.service.delete({ userId: OWNER, generatedListId: 'gl-old' });
 
     expect(w.claims.calls).toEqual([]);
+  });
+});
+
+/**
+ * Plan 0122, section 6: a list's room is told to read its trips again when a
+ * basket that touches it changes. One event per list per write, never one per
+ * line (plan 0052, section 3.1).
+ */
+describe('a basket tells the lists it touches (plan 0122, section 6)', () => {
+  const existing = {
+    id: 'gl-old',
+    ownerUserId: OWNER,
+    status: GeneratedListStatus.ACTIVE,
+    name: null,
+    generatedAt: new Date('2026-03-01T00:00:00.000Z'),
+    sourceSnapshot: { profileId: null, pricingProfileId: null, sources: [] },
+  };
+  const CLAIMING = [
+    { zoneId: ZONE_A, listId: LIST_A, lineId: 'li-1' },
+    { zoneId: ZONE_A, listId: LIST_A, lineId: 'li-2' },
+    { zoneId: ZONE_B, listId: LIST_B, lineId: 'li-3' },
+  ];
+
+  it('tells each list the run drew from once, however many lines it took', async () => {
+    const w = build({
+      candidates: [
+        { id: 'li-1', listId: LIST_A, content: 'Milk', quantity: 1 },
+        { id: 'li-2', listId: LIST_A, content: 'Bread', quantity: 1 },
+        { id: 'li-3', listId: LIST_B, content: 'Eggs', quantity: 1 },
+      ],
+    });
+
+    await w.service.create({ userId: OWNER });
+
+    expect(w.tripsChanged).toEqual([LIST_A, LIST_B]);
+  });
+
+  it('tells nobody when the run composed nothing', async () => {
+    const w = build({ candidates: [] });
+
+    await w.service.create({ userId: OWNER });
+
+    expect(w.tripsChanged).toEqual([]);
+  });
+
+  it('tells them on a rename, which the claim has nothing to say about', async () => {
+    const w = build({ existing, claiming: CLAIMING });
+
+    await w.service.update({
+      userId: OWNER,
+      generatedListId: 'gl-old',
+      name: 'Saturday',
+    });
+
+    expect(w.tripsChanged).toEqual([LIST_A, LIST_B]);
+  });
+
+  it('says nothing when only the default target list moved', async () => {
+    const w = build({ existing, claiming: CLAIMING });
+
+    await w.service.update({
+      userId: OWNER,
+      generatedListId: 'gl-old',
+      defaultTargetListId: LIST_A,
+    });
+
+    expect(w.tripsChanged).toEqual([]);
+  });
+
+  it('tells them when the basket is deleted, finished or not', async () => {
+    const w = build({
+      existing: { ...existing, status: GeneratedListStatus.COMPLETED },
+      claiming: CLAIMING,
+    });
+
+    await w.service.delete({ userId: OWNER, generatedListId: 'gl-old' });
+
+    expect(w.tripsChanged).toEqual([LIST_A, LIST_B]);
   });
 });

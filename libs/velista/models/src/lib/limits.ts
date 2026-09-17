@@ -75,6 +75,15 @@ export const LINE_QUANTITY_MAX = 100000;
 export const LINE_ITEM_SET_MAX = 100;
 
 /**
+ * How many product ids one catalog lookup may name: `ITEM_LOOKUP_LIMITS.maxIds` in
+ * the contracts, copied for the reason {@link LINE_ITEM_SET_MAX} gives.
+ *
+ * A zone list of sixty lines can name more products than that, which is why
+ * `ItemNames.ensure` splits its request at this size (velista `0082`, section 3).
+ */
+export const ITEM_LOOKUP_MAX_IDS = 500;
+
+/**
  * How far the thumb travels per unit on the quantity reel (velista plan 0043,
  * section 4).
  *
@@ -334,6 +343,22 @@ export const LINES_PAGE_SIZE = 100;
  * draw ten.
  */
 export const SETTLEMENTS_PAGE_SIZE = 20;
+
+/**
+ * Trip heads per request on the zone list (velista `0088`, section 8). The gateway's
+ * default, and a screenful of folded labels.
+ */
+export const TRIPS_PAGE_SIZE = 20;
+
+/** Rows per request of one opened trip. The gateway's maximum, read to the end. */
+export const TRIP_ROWS_PAGE_SIZE = 100;
+
+/**
+ * How long the zone list waits for a burst of trip signals to go quiet before it reads
+ * the heads again (velista `0088`, section 8). A basket settling ten lines is ten
+ * events and one read.
+ */
+export const TRIPS_REFETCH_QUIET_MS = 400;
 
 /**
  * `CreateGeneratedListDto.name` and `UpdateGeneratedListDto.name`, which is

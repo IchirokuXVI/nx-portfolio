@@ -19,6 +19,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
+  ApiParam,
   ApiProduces,
   ApiResponse,
   ApiTags,
@@ -36,12 +37,20 @@ import {
   type LinePage,
   type LineSettlementPage,
   type LineSettlementResult,
+  type LineSuggestionPage,
   type LineView,
   type ListAccessView,
   type ListPage,
   type ListsHoldingItemRequest,
   type ListsHoldingItemResult,
+  type ListSuggestionsRequest,
+  type ListTripRowsRequest,
+  type ListTripsRequest,
   type ListView,
+  type TripKind,
+  type TripPage,
+  type TripRowPage,
+  type UpdateLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   PageQueryDto,
@@ -267,6 +276,90 @@ export class ListsController {
     });
   }
 
+  /**
+   * The shopping trips that touched this list, newest first (plan 0122,
+   * section 3).
+   *
+   * A trip is a basket that drew from the list, or a run of purchases somebody
+   * settled by hand. Live trips come whole on the first response and are `[]` on
+   * every response to a cursor; ended trips come a page at a time, because they
+   * grow for as long as a household shops.
+   *
+   * `READ` on the list, and the gate is core's. A reader learns the name and id
+   * of a basket owned by somebody else, which is section 5's narrow reversal of
+   * plan 0052: what the basket holds, who is on it and what it costs stay behind
+   * the participant guard on the basket's own routes.
+   */
+  @Get(':id/trips')
+  @ApiContractResponse(LIST_PATTERNS.trips)
+  listTrips(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Query() query: PageQueryDto
+  ): Promise<TripPage> {
+    const req: ListTripsRequest = {
+      userId: user.userId,
+      listId: id,
+      cursor: query.cursor,
+      limit: query.limit,
+    };
+    return this.nats.send<TripPage>(LIST_PATTERNS.trips, req);
+  }
+
+  /**
+   * What one trip did to each zone line of this list (plan 0122, section 4).
+   *
+   * Read only when somebody opens the group, so a closed trip costs one head.
+   * A row carries no name and no current quantity: the client holds every line
+   * of the list and joins on `lineId`.
+   *
+   * The kind rides the path in lower case and the contract in upper case. Core
+   * refuses a kind it does not know, and answers not found for a trip that does
+   * not exist or touches no line of this list.
+   */
+  @Get(':id/trips/:kind/:tripId/rows')
+  @ApiParam({ name: 'kind', enum: ['basket', 'loose'] })
+  @ApiContractResponse(LIST_PATTERNS.tripRows)
+  @ApiProblemResponses({ body: true })
+  listTripRows(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Param('kind') kind: string,
+    @Param('tripId') tripId: string,
+    @Query() query: PageQueryDto
+  ): Promise<TripRowPage> {
+    const req: ListTripRowsRequest = {
+      userId: user.userId,
+      listId: id,
+      kind: kind.toUpperCase() as TripKind,
+      tripId,
+      cursor: query.cursor,
+      limit: query.limit,
+    };
+    return this.nats.send<TripRowPage>(LIST_PATTERNS.tripRows, req);
+  }
+
+  /**
+   * Which lines of this list at zero are due again (plan 0123, section 5).
+   *
+   * A suggestion is an existing line offering to come back, never a new line, so
+   * a row carries the line id and the numbers behind the offer and the client
+   * joins it on the lines it already holds. Not paged and not capped: every due
+   * line, the most overdue first (plan 0125).
+   *
+   * `READ` on the list, and the gate is core's. Nothing is stored and there is no
+   * event: a client reads again on the signals it already hears.
+   */
+  @Get(':id/suggestions')
+  @ApiContractResponse(LIST_PATTERNS.suggestions)
+  listSuggestions(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string
+  ): Promise<LineSuggestionPage> {
+    const req: ListSuggestionsRequest = { userId: user.userId, listId: id };
+    return this.nats.send<LineSuggestionPage>(LIST_PATTERNS.suggestions, req);
+  }
+
   @Get(':id/lines')
   @ApiContractResponse(LINE_PATTERNS.list)
   listLines(
@@ -357,21 +450,31 @@ export class LinesController {
     private readonly transcription: CommentTranscriptionService
   ) {}
 
+  /**
+   * Edit a line (plan 0007, section 2), and merge it on a rename that collides
+   * (plan 0112).
+   *
+   * The answer is always the line as it now stands, which after a merge is the
+   * surviving line and can carry a different `id` from the path. A client that
+   * ignores `absorbedLineId` still converges, because the `line.deleted` event
+   * for the absorbed line arrives anyway.
+   */
   @Patch(':id')
   @ApiContractResponse(LINE_PATTERNS.update)
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, lineMerge: true })
   update(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
     @Body() dto: UpdateLineDto
-  ): Promise<LineView> {
-    return this.nats.send<LineView>(LINE_PATTERNS.update, {
+  ): Promise<UpdateLineResult> {
+    return this.nats.send<UpdateLineResult>(LINE_PATTERNS.update, {
       userId: user.userId,
       lineId: id,
       content: dto.content,
       quantity: dto.quantity,
       itemIds: dto.itemIds,
       adoptItemIds: dto.adoptItemIds,
+      confirmMerge: dto.confirmMerge,
     });
   }
 

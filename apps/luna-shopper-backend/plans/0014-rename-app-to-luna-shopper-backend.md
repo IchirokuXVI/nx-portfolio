@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`7a416aef4`](https://github.com/IchirokuXVI/nx-portfolio/commit/7a416aef4038d5495c6928c670f6ca4099bfe20a) on `dev`, with no pull request of its own.
+
 # 0014 Rename the app and its services to `luna-shopper-backend`
 
 **Status: implemented.** The rename landed in commit `7a416ae`; this file records

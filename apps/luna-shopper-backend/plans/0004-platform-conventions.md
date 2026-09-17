@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`e1b2af322`](https://github.com/IchirokuXVI/nx-portfolio/commit/e1b2af3226e0cbb6434c0e4014d63d93a4ab57dd) on `dev`, with no pull request of its own.
+
 # 0004 Platform conventions (cross cutting)
 
 Fourth plan. It defines the conventions every service follows before any feature controller is

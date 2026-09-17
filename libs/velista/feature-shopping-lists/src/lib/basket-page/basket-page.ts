@@ -1,4 +1,3 @@
-import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -9,7 +8,6 @@ import {
   signal,
   untracked,
   viewChild,
-  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -43,13 +41,11 @@ import {
 import {
   ChevronLeftIcon,
   ChipRow,
-  CloseIcon,
-  FilterIcon,
   FlagIcon,
   LineComposer,
+  ListTools,
   OfflineIcon,
   PersonIcon,
-  SearchIcon,
   ShareIcon,
   type ChipRowItem,
 } from '@portfolio/velista/ui';
@@ -98,7 +94,8 @@ import { BASKET_PATHS } from '../basket-paths';
  * ## No back arrow for a guest
  *
  * There is nowhere back to go: they arrived on a link and this is the whole app
- * to them. The owner gets one, to the history.
+ * to them. The owner gets one, to the history, and a registered participant gets
+ * one to the dashboard.
  *
  * ## Coming back to it
  *
@@ -116,21 +113,22 @@ import { BASKET_PATHS } from '../basket-paths';
     BasketLineRow,
     ChevronLeftIcon,
     ChipRow,
-    CloseIcon,
-    FilterIcon,
     FlagIcon,
     LineComposer,
-    NgTemplateOutlet,
+    ListTools,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,
     RouterOutlet,
-    SearchIcon,
     ShareIcon,
   ],
   templateUrl: './basket-page.html',
   styleUrl: './basket-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    // Which element scrolls, for the stylesheet's sake: see `standalone`.
+    '[class.standalone]': 'standalone',
+  },
 })
 export class BasketPage {
   private readonly _store = inject(BasketStore);
@@ -147,6 +145,20 @@ export class BasketPage {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+
+  /**
+   * Whether this is the standalone build, where the document scrolls and not `.page`.
+   *
+   * The sticky tools bar needs to know (velista `0079`, section 2). A sticky box
+   * sticks to its nearest scroll container, and `overflow-y: auto` makes `.page` one
+   * whether or not it ever overflows. Mounted in the shell `.page` has a definite
+   * height and really scrolls, so that is right. Standalone it is as tall as its lines
+   * and never scrolls, so the bar would stick to a box that does not move and leave
+   * with the lines. The stylesheet lets the document be the container instead.
+   *
+   * Read from `APP_BASE_PATH`, which the standalone build supplies as the empty string.
+   */
+  protected readonly standalone = this._basePath === '';
   /**
    * The account, for the one name the basket does not carry: the owner's own.
    *
@@ -178,6 +190,16 @@ export class BasketPage {
   protected readonly isOwner = computed(
     () => this._store.me()?.kind === 'OWNER'
   );
+
+  /**
+   * Whether the reader has an app to go back to: the owner, and a registered member of
+   * a shared basket. A guest has none, because they arrived on a link and this screen
+   * is the whole app to them.
+   */
+  protected readonly canGoBack = computed(() => {
+    const kind = this._store.me()?.kind;
+    return kind === 'OWNER' || kind === 'REGISTERED';
+  });
 
   /**
    * Whether the trip is over, which is what takes every control off this screen
@@ -374,24 +396,35 @@ export class BasketPage {
    * unnamed owner and every unnamed guest all resolved to a word beginning "Gu".
    * The reader's own account name is handed in because core keeps none for an
    * owner, so their own face is the one the basket alone cannot name.
+   *
+   * **Named from the participant row where there is one.** A presence entry carries no
+   * username, so a face built from the entry alone fell through to the role word and
+   * drew `O` or `M`, while the people sheet, built from participants, drew the
+   * username's letter for the same person.
    */
   protected readonly faces = computed(() => {
     const meId = this.meId();
     const ownName = this._session.username();
+    const participants = new Map(
+      this._store.participants().map((person) => [person.id, person])
+    );
 
     return this._store
       .present()
       .slice(0, 3)
-      .map((person) => ({
-        id: person.participantId,
-        initials: participantInitials(
-          person,
-          this._translator,
-          this._locale(),
-          { ownName: person.participantId === meId ? ownName : null }
-        ),
-        isGuest: person.kind === 'GUEST',
-      }));
+      .map((entry) => {
+        const person = participants.get(entry.participantId) ?? entry;
+        return {
+          id: entry.participantId,
+          initials: participantInitials(
+            person,
+            this._translator,
+            this._locale(),
+            { ownName: entry.participantId === meId ? ownName : null }
+          ),
+          isGuest: person.kind === 'GUEST',
+        };
+      });
   });
 
   /**
@@ -788,83 +821,15 @@ export class BasketPage {
   protected readonly highlight = this._view.folded;
 
   /**
-   * Whether the field has replaced the row, which is not the same as searching.
+   * What was typed, or the empty string from Clear and Cancel.
    *
-   * A field that is open and empty draws the whole basket, and the count under it
-   * says so. The two questions are separate because opening is a gesture and
-   * searching is a string: the field stays open through a query somebody deletes a
-   * character at a time, and Cancel is what closes it.
+   * Whether the field is open is `ListTools`' to know since velista `0082`, which
+   * moved the row, its focus handling and its Cancel into a component the zone list
+   * page draws too. Cancel still clears the query, so the row that comes back is over
+   * the whole basket.
    */
-  private readonly _searchOpen = signal(false);
-
-  protected readonly searchOpen = this._searchOpen.asReadonly();
-
-  /**
-   * Which control the keyboard should be on once the row has been redrawn.
-   *
-   * A signal and not a call, because neither control exists at the moment the
-   * gesture happens: opening the search destroys the button that was pressed, and
-   * cancelling destroys the field. The effect below waits for whichever one arrives.
-   */
-  private readonly _focusWanted = signal<'field' | 'button' | null>(null);
-
-  private readonly _searchField =
-    viewChild<ElementRef<HTMLInputElement>>('searchField');
-
-  private readonly _searchButton =
-    viewChild<ElementRef<HTMLButtonElement>>('searchButton');
-
-  /**
-   * Put the focus where the gesture said, as soon as there is something to put it
-   * on (section 6).
-   *
-   * Focus never lands on the page body, which is what a naive open and close does:
-   * the field takes it when it appears, and Cancel or Escape gives it back to the
-   * search button, so a keyboard reader is never dropped at the top of the document
-   * in the middle of a basket.
-   */
-  private readonly _focusEffect = effect(() => {
-    const wanted = this._focusWanted();
-    const field = this._searchField();
-    const button = this._searchButton();
-
-    const target =
-      wanted === 'field' ? field : wanted === 'button' ? button : null;
-    if (target === undefined || target === null) {
-      return;
-    }
-
-    untracked(() => this._focusWanted.set(null));
-    target.nativeElement.focus();
-  });
-
-  /** Replace the row with the field, and put the caret in it. */
-  protected openSearch(): void {
-    this._searchOpen.set(true);
-    this._focusWanted.set('field');
-  }
-
-  protected onSearch(event: Event): void {
-    this._view.search((event.target as HTMLInputElement).value);
-  }
-
-  /** Empty the field without closing it, which is the control inside it. */
-  protected clearSearch(): void {
-    this._view.search('');
-    this._focusWanted.set('field');
-  }
-
-  /**
-   * Cancel, the scrim of this particular control: Escape does exactly the same.
-   *
-   * It **clears the query as well as closing the field**, so the row that comes
-   * back is over the whole basket. A search left running behind a closed field is a
-   * screen missing rows for a reason nothing on it says.
-   */
-  protected closeSearch(): void {
-    this._view.search('');
-    this._searchOpen.set(false);
-    this._focusWanted.set('button');
+  protected search(query: string): void {
+    this._view.search(query);
   }
 
   // --- The filter sheet and its chips (plan 0075) ----------------------------
@@ -1131,10 +1096,15 @@ export class BasketPage {
    * The history is the **fallback**, for the arrival with nothing behind it — a
    * reload, or a link opened cold — which is exactly the destination this button
    * used to have unconditionally.
+   *
+   * A member's fallback is the dashboard instead. The history lists the reader's own
+   * baskets, and a basket somebody shared with them is not one of those.
    */
   protected back(): void {
     void this._pages.back(
-      appPath(this._locale(), this._basePath, BASKET_PATHS.list)
+      this.isOwner()
+        ? appPath(this._locale(), this._basePath, BASKET_PATHS.list)
+        : appPath(this._locale(), this._basePath, 'home')
     );
   }
 }

@@ -71,8 +71,6 @@
     @if (header(); as list) {
       <lib-list-header
         (openSettings)="openSettings()"
-        (startReorder)="startReorder()"
-        [canReorder]="loaded()?.canReorder ?? false"
         [hasMenu]="(loaded()?.abilities?.canManage ?? false) && !reordering()"
         [header]="list"
       />
@@ -110,18 +108,180 @@
         <p class="state-body">{{ 'list.empty.body' | rokuT }}</p>
       </div>
     } @else {
-      <lib-line-list
-        (act)="act($event)"
-        (dismiss)="dismissNote($event)"
-        (opened)="openLine($event)"
-        (quantityChanged)="changeQuantity($event)"
-        (reorderTo)="moveTo($event)"
-        (retry)="retry($event)"
-        [announcement]="announcement()"
-        [lines]="current.lines"
-        [markedId]="markedLine()"
-        [reordering]="reordering()"
-      />
+      <!--
+        The search and the filter (velista 0082, section 2), the basket's row with no
+        chip row: the filter button's badge says that something is on. Sticky at the
+        top of the scroll, and absent in reorder mode, where the order is the thing
+        being edited.
+      -->
+      @if (!reordering()) {
+        <lib-list-tools
+          (openFilter)="openFilter()"
+          (queryChange)="search($event)"
+          [activeCount]="activeCount()"
+          [query]="searchQuery()"
+          [shown]="shownCount()"
+          [total]="current.lines.length"
+          fieldId="list-search"
+        />
+      }
+
+      @let shown = groups();
+      @if (nothingShown()) {
+        <!--
+          Nothing left to draw (section 5). A search quotes what was typed, because
+          the words are the thing to change, and the composer below stays: the thing
+          somebody looked for is very often the next line. Otherwise the view
+          narrowed it away, and Reset puts the order and the category back.
+        -->
+        <div class="state">
+          @if (searching()) {
+            <p class="state-title">
+              {{ 'basket.search.none' | rokuT: { query: searchQuery() } }}
+            </p>
+            <p class="state-body">{{ 'basket.search.noneHint' | rokuT }}</p>
+          } @else {
+            <p class="state-title">{{ 'list.view.none' | rokuT }}</p>
+          }
+          @if (activeCount() > 0) {
+            <button (click)="resetView()" class="state-action" type="button">
+              {{ 'list.view.reset' | rokuT }}
+            </button>
+          }
+        </div>
+      } @else {
+        <!--
+          One category at a time, under one heading naming it (section 5). An h2, one
+          level below the list's name, so the view is navigable and not only visible
+          (section 10).
+        -->
+        @if (headingKey(); as key) {
+          <h2 class="category-heading">{{ key | rokuT }}</h2>
+        }
+
+        <!--
+          The groups (velista 0088). A search flattens the page: every matching line
+          once, with its reel and no heading, which is how a line that lives only in
+          old trips is found and raised again. Otherwise To buy comes first, then the
+          live trips, then the past ones, each folded until somebody opens it.
+        -->
+        @if (shown?.kind === 'groups') {
+          <lib-to-buy-heading
+            (startReorder)="startReorder()"
+            [canReorder]="canReorder() && !reordering()"
+            [reorderHeld]="reorderHeld()"
+          />
+        }
+
+        @if (dueSection(); as due) {
+          <!--
+            The lines the list suggests (velista 0089, section 2), inside To buy after
+            its wanted lines and before its lines at zero. So To buy is drawn in two
+            lists around them, and the page's one polite region stays on the first.
+            Never drawn in reorder mode, where To buy is one list again.
+          -->
+          <lib-line-list
+            (act)="act($event)"
+            (dismiss)="dismissNote($event)"
+            (opened)="openLine($event)"
+            (quantityChanged)="changeQuantity($event)"
+            (retry)="retry($event)"
+            [announcement]="announcement()"
+            [highlight]="highlight()"
+            [lines]="wantedLines()"
+            [markedId]="markedLine()"
+          />
+
+          <section aria-labelledby="due-label" class="due">
+            <!-- One level below To buy, and no fold and no count: it is part of To buy. -->
+            <h3 class="due-label" id="due-label">
+              {{ 'list.due.label' | rokuT }}
+            </h3>
+            <ul class="due-rows">
+              @for (row of due.rows; track row.lineId) {
+                <li>
+                  <lib-due-line-row
+                    (added)="addDueLine($event)"
+                    (opened)="openLine($event)"
+                    [addsOnStep]="dueAddsOnStep"
+                    [row]="row"
+                  />
+                </li>
+              }
+            </ul>
+            @if (due.hiddenCount > 0) {
+              <button (click)="showMoreDue()" class="due-more" type="button">
+                {{ 'list.due.more' | rokuT }}
+              </button>
+            }
+          </section>
+
+          @if (restLines().length > 0) {
+            <lib-line-list
+              (act)="act($event)"
+              (dismiss)="dismissNote($event)"
+              (opened)="openLine($event)"
+              (quantityChanged)="changeQuantity($event)"
+              (retry)="retry($event)"
+              [highlight]="highlight()"
+              [lines]="restLines()"
+              [markedId]="markedLine()"
+            />
+          }
+        } @else {
+          <lib-line-list
+            (act)="act($event)"
+            (dismiss)="dismissNote($event)"
+            (opened)="openLine($event)"
+            (quantityChanged)="changeQuantity($event)"
+            (reorderTo)="moveTo($event)"
+            (retry)="retry($event)"
+            [announcement]="announcement()"
+            [highlight]="highlight()"
+            [lines]="drawnLines()"
+            [markedId]="markedLine()"
+            [reordering]="reordering()"
+          />
+        }
+
+        @if (shown?.kind === 'groups' && !reordering()) {
+          <!--
+            A failed read of the trips never blocks the lines. It is said here, under
+            To buy, with a retry, the way the page reports a failed load.
+          -->
+          @if (tripsFailed()) {
+            <div class="trips-failed">
+              <p class="trips-failed-body">{{ 'list.trips.failed' | rokuT }}</p>
+              <button (click)="retryTrips()" class="state-action" type="button">
+                {{ 'list.trips.retry' | rokuT }}
+              </button>
+            </div>
+          }
+
+          @if (tripGroups().length > 0) {
+            <div class="trips">
+              @for (group of tripGroups(); track group.key) {
+                <lib-trip-group
+                  (opened)="openLine($event)"
+                  (toggled)="toggleTrip($event)"
+                  [group]="group"
+                />
+              }
+            </div>
+          }
+
+          @if (tripsHasMore()) {
+            <button
+              (click)="loadOlderTrips()"
+              [attr.aria-busy]="tripsLoadingMore() ? 'true' : null"
+              class="trips-older"
+              type="button"
+            >
+              {{ 'list.trips.older' | rokuT }}
+            </button>
+          }
+        }
+      }
     }
 
     @if (reordering()) {
@@ -171,7 +331,21 @@
                 {{ 'list.add.heard' | rokuT }}: “{{ strip.heard }}”
               </p>
             }
-            @if (strip.messageKey) {
+            <!--
+              The assistant is still working out what was said (velista 0079,
+              section 5). The spinner is decoration beside a sentence that says the
+              same thing, and it sits inside the strip's own polite region, so the
+              reply that replaces it is announced like any other.
+            -->
+            @if (strip.working) {
+              <p class="voice-reply voice-working">
+                <lib-spinner-icon
+                  aria-hidden="true"
+                  class="voice-working-glyph"
+                />
+                <span>{{ 'list.add.working' | rokuT }}</span>
+              </p>
+            } @else if (strip.messageKey) {
               <p class="voice-reply">
                 {{ strip.messageKey | rokuT: strip.messageArgs ?? {} }}
               </p>

@@ -50,10 +50,13 @@
   border-end-start-radius: var(--app-bubble-tail-radius);
 }
 
-// A message that is still out. Dimmed rather than replaced, so the sentence somebody
+// A message that is still out. Quieter rather than replaced, so the sentence somebody
 // just wrote stays legible while they wait for the answer to it.
+//
+// The muted text colour and not transparency (velista 0079, section 6). A bubble drawn
+// at partial opacity let the conversation scrolling behind it show through its surface.
 .bubble[aria-busy='true'] {
-  opacity: 0.62;
+  color: var(--app-text-muted);
 }
 
 // The caller's own bubble for a spoken turn, before the words come back (backend
@@ -68,9 +71,15 @@
 // A turn that produced no reply. It is a message like every other one; the border is
 // what marks it, because a red bubble in a column of grey ones reads as an alarm and
 // nothing alarming has happened.
+//
+// The tint is laid over the bubble's opaque surface, because the danger background is
+// translucent and on its own let what is behind the bubble show through (velista 0079,
+// section 6). A colour can only be the last layer, so the tint is a flat gradient.
 .failed {
   border: 1px solid var(--app-status-danger-border);
-  background: var(--app-status-danger-bg);
+  background:
+    linear-gradient(var(--app-status-danger-bg), var(--app-status-danger-bg)),
+    var(--app-surface-raised);
   color: var(--app-status-danger-fg);
 }
 

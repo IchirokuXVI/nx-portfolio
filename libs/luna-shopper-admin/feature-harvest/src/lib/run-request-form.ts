@@ -1,0 +1,1385 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  HARVEST_SERVICE,
+  RESOURCE_GATEWAYS,
+} from '@portfolio/luna-shopper-admin/data-access';
+import {
+  priceScopeSource,
+  type PriceScope,
+} from '@portfolio/luna-shopper-admin/feature-catalog';
+import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  CONTENT_LOCALES,
+  localizedTextValue,
+  // A value import, not a type one: the adapter capability table is a `const`
+  // in the generated file, because the gateway publishes the answers and not
+  // only the question (backend plan 0103, section 4.1).
+  Wire,
+  type HarvestRunMode,
+} from '@portfolio/luna-shopper-admin/models';
+import { ReferencePicker } from '@portfolio/luna-shopper-admin/ui';
+import { HARVEST_SEGMENT } from './harvest-paths';
+import { HarvestShell } from './harvest-shell';
+import { ScopeCopies, type CopyMessage } from './scope-copies';
+
+/**
+ * The three run modes, in the order the picker offers them.
+ *
+ * `REFRESH` is gone (backend plan 0086, section 9). It existed only because a
+ * walk threw its prices away and something had to fetch them again; a walk
+ * writes them now, so the mode had nothing left to do and the form cannot name
+ * it. `LEAFLET_IMPORT` is `FILE_IMPORT`, which is the same run under a name that
+ * does not claim a leaflet produced the file.
+ *
+ * `FILE_IMPORT` is the only one this form does not start (admin plan 0010,
+ * section 2). An import needs a document, and a document is a file, a preview
+ * and a validation failure that names the product it is about. None of that fits
+ * three text inputs, so choosing it here sends the operator to the screen that
+ * does rather than growing this one a mode's worth of fields.
+ */
+const MODES: readonly HarvestRunMode[] = [
+  'STORE_DISCOVERY',
+  'CATALOG_DISCOVERY',
+  'FILE_IMPORT',
+];
+
+/** How many scopes one read asks for. */
+const SCOPE_PAGE = 100;
+
+/**
+ * How many pages of scopes the form walks.
+ *
+ * A chain with a warehouse per catchment has a few hundred of them, and the
+ * multi select has to offer all of them or an operator cannot choose the one
+ * they came for. Bounded anyway, because an unbounded loop against a paging
+ * route is a hang rather than a slow screen.
+ */
+const MAX_SCOPE_PAGES = 5;
+
+/**
+ * The kinds the walk list reads (admin plan 0029, section 2).
+ *
+ * Every kind but `STORE`. Every shop has a scope of its own since backend plan
+ * 0116, so a chain like Mercadona holds about 1,675 of them, and five pages of a
+ * hundred would end before the warehouses did. No walk targets a shop scope: no
+ * adapter's band reaches its priority. A copy may, which is why the copy lists
+ * search the server instead of reading this page.
+ */
+const WALK_LIST_KINDS: readonly string[] = ['LOCAL_AREA', 'REGION', 'NATIONAL'];
+
+/** What a catalog discovery writes (backend plan 0119), in the order offered. */
+const WRITES = ['PRICES_AND_AVAILABILITY', 'PRICES', 'AVAILABILITY'] as const;
+type RunWrites = (typeof WRITES)[number];
+
+/** Which product details a walk fetches (backend plan 0119). */
+const DETAILS = ['NEW', 'ALL'] as const;
+type RunDetails = (typeof DETAILS)[number];
+
+/**
+ * The key of the one copy list a walk of one scope has.
+ *
+ * Not the scope's id, because the operator can change the scope under a list
+ * they already filled in, and the copies belong to the walk rather than to the
+ * id that was chosen first. The id is read when the body is built.
+ */
+const SINGLE_SCOPE = '';
+
+/**
+ * The facts this form uses, out of the table the gateway publishes. The table
+ * also carries the language a source prints in, which the form does not draw
+ * (backend plan 0111, section 7).
+ */
+interface AdapterCapabilities {
+  readonly writesPrices: boolean;
+  readonly scopesItsOwn: boolean;
+  readonly listsItsOwnStores: boolean;
+  readonly hasProductPages: boolean;
+  /**
+   * Whether a walk has a detail phase that a known product can skip, so a run
+   * takes `details` (backend plan 0119, section 3).
+   */
+  readonly skipsKnownDetails: boolean;
+  /**
+   * The scope priorities this adapter's walk may write, and null for an adapter
+   * whose walk is given no scopes (backend plan 0108, section 4).
+   *
+   * It answers both of the form's questions at once: whether to draw the
+   * warehouse multi select at all, and which of the chain's scopes it may
+   * offer. A scope outside the band is drawn **disabled** rather than hidden,
+   * so an operator looking for one can see that it exists and that this walk
+   * may not write it.
+   */
+  readonly walkablePriorities: {
+    readonly min: number;
+    readonly max: number;
+  } | null;
+}
+
+const UNKNOWN_ADAPTER: AdapterCapabilities = {
+  writesPrices: false,
+  scopesItsOwn: false,
+  listsItsOwnStores: false,
+  hasProductPages: false,
+  skipsKnownDetails: false,
+  walkablePriorities: null,
+};
+
+/**
+ * What an adapter can tell us, read from the table the gateway publishes
+ * (backend plan 0103, section 4.1).
+ *
+ * **An adapter this build does not know answers no to everything.** A back
+ * office one release behind a backend that added an adapter then draws a plain
+ * form rather than a broken one, and the spawn is still the thing that refuses a
+ * bad request.
+ *
+ * This replaced a constant naming `mercadona-api`, which was the second place
+ * the capability was stated and disagreed with the first: the spawn also
+ * required a scope for `carrefour-web`, the form never offered the picker for
+ * it, and a Carrefour walk was refused with a message about a field nobody was
+ * shown (admin plan 0025, section 1).
+ */
+export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
+  return (
+    Wire.HarvestAdapterCapabilityTable[adapterKey as Wire.EnumsAdapterKey] ??
+    UNKNOWN_ADAPTER
+  );
+}
+
+/**
+ * The run request form (admin plan 0030, section 2): the form half of the runs
+ * page, moved so the presets screen edits a preset with the same form a run is
+ * started with.
+ *
+ * It builds a `SpawnHarvestRunDto` and hands it up, and it sends nothing
+ * itself. The runs page spawns what it is handed and the presets page saves
+ * it, so the two cannot drift apart on what a request is.
+ */
+@Component({
+  selector: 'lib-run-request-form',
+  imports: [
+    FormsModule,
+    RouterLink,
+    RokuTranslatorPipe,
+    ReferencePicker,
+    ScopeCopies,
+  ],
+  template: `
+    <div class="fields">
+      <label>
+        <span>{{ 'harvest.runs.start.mode' | rokuT }}</span>
+        <select [(ngModel)]="mode" name="mode">
+          @for (option of modeOptions(); track option) {
+            <option [value]="option">
+              {{ 'harvest.mode.' + option | rokuT }}
+            </option>
+          }
+        </select>
+      </label>
+
+      <!-- An import states its chain on the upload screen, beside the
+           document that says which chain printed it (admin plan 0010). -->
+      @if (!uploading() && !chainLocked()) {
+        <div class="field">
+          <span>{{ 'harvest.runs.start.supermarketId' | rokuT }}</span>
+          <lib-reference-picker
+            (valueChange)="chooseChain($event)"
+            [controlId]="'run-chain'"
+            [lookup]="references"
+            [resource]="'supermarkets'"
+            [value]="supermarketId()"
+          />
+        </div>
+      }
+
+      <!-- A backfill is a second pass over the same product pages asking for
+           the EAN, so it is offered only where there are pages to read
+           (backend plan 0103, section 4.2). -->
+      @if (offersBackfill()) {
+        <label class="switch">
+          <input
+            [(ngModel)]="detailBackfill"
+            name="detailBackfill"
+            type="checkbox"
+          />
+          <span>{{ 'harvest.runs.start.detailBackfill' | rokuT }}</span>
+        </label>
+        <p class="attribution">
+          {{ 'harvest.runs.start.detailBackfillHelp' | rokuT }}
+        </p>
+      }
+
+      <!-- A walk that states prices needs to be told where to write them, and
+           the spawn refuses one without it. Read from the adapter's
+           capabilities rather than from its name (backend plan 0103, section
+           4.2): a chain that prints no price is not asked, and neither is one
+           that names the scope of every price it prints. -->
+      @if (needsScope()) {
+        <div class="field">
+          <span>{{ 'harvest.runs.start.priceScope' | rokuT }}</span>
+          <lib-reference-picker
+            (valueChange)="priceScopeId.set($event)"
+            [controlId]="'run-scope'"
+            [lookup]="references"
+            [resource]="'price-scopes'"
+            [scope]="scopeFilter()"
+            [value]="priceScopeId()"
+          />
+          <p class="attribution">
+            {{ 'harvest.runs.start.priceScopeHelp' | rokuT }}
+          </p>
+          <!-- The one list a walk of one scope has (admin plan 0029,
+               section 1). -->
+          <lib-scope-copies
+            (targetsChange)="changeCopies(singleScope, $event)"
+            [conflicts]="conflictsOf(singleScope)"
+            [controlId]="'run-copies'"
+            [lookup]="references"
+            [refusal]="refusalOf(singleScope)"
+            [scope]="scopeFilter()"
+            [targets]="copiesOf(singleScope)"
+          />
+          <p class="attribution">
+            {{ 'harvest.runs.start.copies.help' | rokuT }}
+          </p>
+        </div>
+      }
+
+      <!-- A walk that covers warehouses is told which ones, and a warehouse
+           is a scope's own key (backend plan 0108). A list rather than one
+           choice, because the detail phase is what the run costs and it is
+           shared across the warehouses. -->
+      @if (needsScopeList()) {
+        <div class="field">
+          <span>{{ 'harvest.runs.start.priceScopes' | rokuT }}</span>
+          @if (scopeChoices().length === 0) {
+            <p class="attribution">
+              {{ 'harvest.runs.start.priceScopesEmpty' | rokuT }}
+            </p>
+          } @else {
+            <ul class="scopes">
+              @for (choice of scopeChoices(); track choice.id) {
+                <li>
+                  <label
+                    [class.conflict]="isCopyTarget(choice.id)"
+                    [class.refused]="!choice.walkable"
+                  >
+                    <input
+                      (change)="toggleScope(choice.id, $event)"
+                      [checked]="choice.chosen"
+                      [disabled]="!choice.walkable"
+                      type="checkbox"
+                    />
+                    <span>{{ choice.title }}</span>
+                  </label>
+                </li>
+              }
+            </ul>
+          }
+          <p class="attribution">
+            {{ 'harvest.runs.start.priceScopesHelp' | rokuT }}
+          </p>
+
+          <!-- One copy list per ticked warehouse, in the order they were
+               ticked (admin plan 0029, section 3). Below the checkboxes
+               rather than inside them: that list scrolls, and a chip picker
+               opening its results inside a twelve rem scroll box is a
+               control nobody can read. -->
+          @if (priceScopeIds().length > 0 || droppedCopies().length > 0) {
+            <div class="copies">
+              @for (id of priceScopeIds(); track id) {
+                <lib-scope-copies
+                  (targetsChange)="changeCopies(id, $event)"
+                  [conflicts]="conflictsOf(id)"
+                  [controlId]="'run-copies-' + id"
+                  [fromTitle]="titleOf(id)"
+                  [lookup]="references"
+                  [refusal]="refusalOf(id)"
+                  [scope]="scopeFilter()"
+                  [targets]="copiesOf(id)"
+                />
+              }
+              @for (id of droppedCopies(); track id) {
+                <p class="dropped" role="status">
+                  {{
+                    'harvest.runs.start.copies.dropped'
+                      | rokuT: { scope: titleOf(id) }
+                  }}
+                </p>
+              }
+              <p class="attribution">
+                {{ 'harvest.runs.start.copies.help' | rokuT }}
+              </p>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- What a walk writes, and which details it fetches (backend plan
+           0119). Sent whenever shown, so the run's stored input says what
+           the operator saw rather than what a default was that day. -->
+      @if (offersWrites()) {
+        <fieldset class="choice">
+          <legend>{{ 'harvest.runs.start.writes.label' | rokuT }}</legend>
+          @for (option of writeOptions(); track option) {
+            <label class="radio">
+              <input
+                (change)="writes.set(option)"
+                [checked]="chosenWrites() === option"
+                [value]="option"
+                name="writes"
+                type="radio"
+              />
+              <span>{{ 'harvest.runs.start.writes.' + option | rokuT }}</span>
+            </label>
+          }
+        </fieldset>
+      }
+
+      @if (offersDetails()) {
+        <fieldset class="choice">
+          <legend>{{ 'harvest.runs.start.details.label' | rokuT }}</legend>
+          @for (option of detailOptions; track option) {
+            <label class="radio">
+              <input
+                (change)="details.set(option)"
+                [checked]="details() === option"
+                [value]="option"
+                name="details"
+                type="radio"
+              />
+              <span>{{ 'harvest.runs.start.details.' + option | rokuT }}</span>
+            </label>
+          }
+          <p class="attribution">
+            {{ 'harvest.runs.start.details.help' | rokuT }}
+          </p>
+        </fieldset>
+      }
+
+      <!-- A chain that publishes its own shop list names every one of them
+           in a handful of requests, so there is nothing to centre on. -->
+      @if (needsCentre()) {
+        <label>
+          <span>{{ 'harvest.runs.start.postalCode' | rokuT }}</span>
+          <input [(ngModel)]="postalCode" name="postalCode" type="text" />
+        </label>
+        <label>
+          <span>{{ 'harvest.runs.start.country' | rokuT }}</span>
+          <input [(ngModel)]="country" name="country" type="text" />
+        </label>
+      }
+
+      <!-- The other half of the same fact: a chain that names its own shops
+           needs no centre, and narrowing such a run is a filter on the code
+           each shop states rather than a radius (backend plan 0106). -->
+      @if (offersPostalCodes()) {
+        <label>
+          <span>{{ 'harvest.runs.start.postalCodes' | rokuT }}</span>
+          <textarea
+            [(ngModel)]="postalCodes"
+            name="postalCodes"
+            rows="3"
+          ></textarea>
+          <p class="attribution">
+            {{ 'harvest.runs.start.postalCodesHelp' | rokuT }}
+          </p>
+        </label>
+      }
+    </div>
+
+    <!-- A saved request can name a scope deleted since it was saved (admin
+         plan 0030, section 2). Shown by its raw id, because there is nothing
+         left to name it by, and submit waits until each one is removed. -->
+    @if (missingScopes().length > 0) {
+      <div class="missing" role="alert">
+        <p>{{ 'harvest.runs.start.missingScope' | rokuT }}</p>
+        <ul>
+          @for (id of missingScopes(); track id) {
+            <li>
+              <code>{{ id }}</code>
+              <button (click)="removeMissing(id)" type="button">
+                {{ 'harvest.runs.start.removeMissingScope' | rokuT }}
+              </button>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    <p class="attribution">{{ 'harvest.runs.start.attribution' | rokuT }}</p>
+
+    @if (uploading()) {
+      <p class="attribution">{{ 'harvest.runs.start.fileImport' | rokuT }}</p>
+      <a [routerLink]="uploadLink()" class="primary">{{
+        'harvest.runs.start.openUpload' | rokuT
+      }}</a>
+    } @else {
+      <div class="actions">
+        <button
+          (click)="submit()"
+          [disabled]="busy() || !ready()"
+          class="primary"
+          type="button"
+        >
+          {{ (busy() ? busyLabel() : submitLabel()) | rokuT }}
+        </button>
+        <!-- What the screen offers beside submit: the runs page puts
+             "Save as preset" here (admin plan 0030, section 4). -->
+        <ng-content />
+      </div>
+    }
+  `,
+  styles: `
+    :host {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-3);
+      align-items: flex-start;
+      inline-size: 100%;
+    }
+
+    .fields {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
+      inline-size: 100%;
+    }
+
+    label,
+    .field {
+      display: flex;
+      flex: 1 1 12rem;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+    }
+
+    label span,
+    .field > span {
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .attribution {
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    /* Which button this is, and nothing about what a button looks like. The
+       height, the padding and the corners come from the global base. */
+    .primary {
+      border-color: transparent;
+      background: var(--admin-accent);
+      font-weight: 600;
+      color: var(--admin-accent-ink);
+    }
+
+    /* The way to the upload, which is a link and not a button because it goes
+       to a screen rather than doing something. It still looks like the primary
+       action, because on that mode it is the only one there is.
+
+       An anchor is not a control, so the base does not reach it and the four
+       declarations it shares with one are written out here. */
+    a.primary {
+      display: inline-flex;
+      align-items: center;
+      min-block-size: 2.75rem;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border-radius: var(--admin-radius);
+      text-decoration: none;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
+      align-items: center;
+    }
+
+    .missing {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+      padding: var(--admin-space-3);
+      border: 1px solid var(--admin-danger);
+      border-radius: var(--admin-radius);
+      background: var(--admin-danger-wash);
+      inline-size: 100%;
+    }
+
+    .missing ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .missing li {
+      display: inline-flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+      padding: var(--admin-space-1) var(--admin-space-2);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+    }
+
+    .scopes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2) var(--admin-space-3);
+      /* A chain can have a warehouse per catchment, so the list scrolls rather
+         than pushing the rest of the form off the screen. */
+      max-height: 12rem;
+      margin: 0;
+      overflow-y: auto;
+      padding: 0;
+      list-style: none;
+    }
+
+    .scopes label {
+      display: flex;
+      align-items: center;
+      gap: var(--admin-space-2);
+    }
+
+    /* Shown and refused, rather than hidden: an operator looking for a scope
+       this walk may not write can see that it exists. */
+    .scopes label.refused {
+      opacity: 0.55;
+    }
+
+    /* A walked scope that is also a copy target somewhere. The message under
+       that list says which, and start stays disabled until one goes. */
+    .scopes label.conflict {
+      outline: 1px solid var(--admin-danger);
+      outline-offset: 2px;
+      border-radius: var(--admin-radius);
+    }
+
+    .copies {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+      margin-block-start: var(--admin-space-2);
+    }
+
+    .dropped {
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .choice {
+      display: flex;
+      flex: 1 1 12rem;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .choice legend {
+      margin-block-end: var(--admin-space-1);
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .choice label.radio {
+      flex: 0 0 auto;
+      flex-direction: row;
+      gap: var(--admin-space-2);
+      align-items: center;
+    }
+
+    .choice label.radio span {
+      font-size: inherit;
+      color: inherit;
+    }
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class RunRequestForm {
+  private readonly _service = inject(HARVEST_SERVICE);
+  /** The chosen chain's scopes, read for their `kind`, as the import reads them. */
+  private readonly _scopes =
+    inject(RESOURCE_GATEWAYS).for<PriceScope>(priceScopeSource());
+  private readonly _shell = inject(HarvestShell);
+
+  readonly references = inject(ResourceReferences);
+
+  readonly modes = MODES;
+
+  /**
+   * The request to start from, or null for an empty form (admin plan 0030,
+   * section 2). Its chain's adapter and scopes are read first and its fields
+   * applied after, so a preset's walked scopes appear ticked.
+   */
+  readonly value = input<Wire.SpawnHarvestRunDto | null>(null);
+  /** The translation key on the submit button. */
+  readonly submitLabel = input('harvest.runs.start.submit');
+  /** The key the button shows while {@link busy}. */
+  readonly busyLabel = input('harvest.runs.start.starting');
+  /** Whether the screen is acting on the last submit, which holds the button. */
+  readonly busy = input(false);
+  /**
+   * Whether the chain is fixed by the screen. A preset's chain never changes
+   * (backend plan 0120, section 5), so its editor draws no chain picker.
+   */
+  readonly chainLocked = input(false);
+  /**
+   * Whether a file import is offered. A preset cannot hold one, because it
+   * needs a document uploaded at the time.
+   */
+  readonly offersImport = input(true);
+
+  /** The built request, whenever the operator presses submit and it is ready. */
+  readonly submitted = output<Wire.SpawnHarvestRunDto>();
+  /** The built request, whenever it changes, for "Save as preset". */
+  readonly changed = output<Wire.SpawnHarvestRunDto>();
+
+  readonly modeOptions = computed<readonly HarvestRunMode[]>(() =>
+    this.offersImport() ? MODES : MODES.filter((mode) => mode !== 'FILE_IMPORT')
+  );
+
+  /**
+   * Scopes a given {@link value} names that no longer exist, by raw id.
+   *
+   * Filled only when a saved request is applied, because a scope chosen on
+   * this form was read from the chain a moment ago.
+   */
+  readonly missingScopes = signal<readonly string[]>([]);
+
+  /** Bumped per applied value, so a slow read for an older one is dropped. */
+  private _applying = 0;
+
+  readonly mode = signal<HarvestRunMode>('CATALOG_DISCOVERY');
+  readonly supermarketId = signal('');
+  readonly priceScopeId = signal('');
+  /** The chain's scopes, read once when a chain is chosen. */
+  readonly scopes = signal<readonly PriceScope[]>([]);
+  /**
+   * The warehouses a walk covers, by scope id (backend plan 0108, section 2).
+   *
+   * Several, because the detail phase is what an eighteen minute walk is made
+   * of and it does not depend on the warehouse, so six warehouses in one run
+   * are about 5,300 requests against 26,298 as six runs.
+   */
+  readonly priceScopeIds = signal<readonly string[]>([]);
+  readonly postalCode = signal('');
+  /**
+   * The codes a chain's own shop list is narrowed to, one per line.
+   *
+   * Free text rather than a picker, because the codes an operator wants are
+   * the ones they already have in front of them, and the run reports the ones
+   * that matched no shop rather than refusing them.
+   */
+  readonly postalCodes = signal('');
+  readonly country = signal('');
+  /** The chosen chain's adapter, once a source read has answered. `''` until. */
+  readonly adapterKey = signal('');
+  /**
+   * Read product pages for the EAN instead of walking the assortment (backend
+   * plan 0090, section 12.1).
+   *
+   * Offered only for a chain that has a product page to read, because the spawn
+   * refuses it for every other one.
+   */
+  readonly detailBackfill = signal(false);
+
+  /** The key of the one copy list a walk of one scope has, for the template. */
+  readonly singleScope = SINGLE_SCOPE;
+  readonly detailOptions = DETAILS;
+
+  /**
+   * The scopes each walked scope is copied to, by the walked scope's id, or by
+   * {@link SINGLE_SCOPE} for a walk of one scope (admin plan 0029, section 3).
+   *
+   * Targets in the order they were added, which is the order they are sent.
+   */
+  readonly copies = signal<ReadonlyMap<string, readonly string[]>>(new Map());
+  /** The last addition refused on each list, until that list changes. */
+  private readonly _copyRefusals = signal<ReadonlyMap<string, CopyMessage>>(
+    new Map()
+  );
+  /**
+   * Walked scopes that were unticked while they held copies.
+   *
+   * The copies are gone, and the form says so in the list's place until the
+   * scope is ticked again or a run is started, because a list that simply
+   * vanished with its targets reads as a list that was never filled in.
+   */
+  readonly droppedCopies = signal<readonly string[]>([]);
+
+  /** What the walk writes, as chosen. {@link chosenWrites} is what is sent. */
+  readonly writes = signal<RunWrites>('PRICES_AND_AVAILABILITY');
+  readonly details = signal<RunDetails>('NEW');
+
+  /**
+   * Whether the chosen mode is the one this form cannot start.
+   *
+   * A leaflet import needs a document, so this form offers the way to the
+   * screen that takes one rather than a start button that would be refused for
+   * a body it has no field for (admin plan 0010, section 2).
+   */
+  readonly uploading = computed(() => this.mode() === 'FILE_IMPORT');
+
+  /** The four facts about the chosen chain's adapter, or all four false. */
+  readonly capabilities = computed(() => capabilitiesOf(this.adapterKey()));
+
+  /**
+   * Whether this walk has to be told which scope to write its prices to.
+   *
+   * The adapter decides, not the mode: `CATALOG_DISCOVERY` runs against four
+   * adapters now, and they do not agree about prices. A source that states none
+   * is not asked, and neither is one that names the scope of every price it
+   * states, because a LIDL price carries its own region and a field that only
+   * catches the leftovers is not worth a picker.
+   *
+   * A backfill reads product pages for an EAN and writes no price, so it needs
+   * no scope even for a chain whose walk does.
+   */
+  readonly needsScope = computed(() => {
+    const capabilities = this.capabilities();
+    return (
+      this.mode() === 'CATALOG_DISCOVERY' &&
+      !this.detailBackfill() &&
+      capabilities.writesPrices &&
+      !capabilities.scopesItsOwn
+    );
+  });
+
+  /**
+   * Whether this walk has to be told which warehouses to cover.
+   *
+   * The band on the adapter is what says so (backend plan 0108, section 4). It
+   * is stated for an adapter whose walk covers scopes an operator selected, and
+   * null for every other one, so the form asks the same one fact the spawn does.
+   * A backfill reads product pages for an EAN and writes no price, so it covers
+   * no warehouse.
+   */
+  readonly needsScopeList = computed(() => {
+    const capabilities = this.capabilities();
+    return (
+      this.mode() === 'CATALOG_DISCOVERY' &&
+      !this.detailBackfill() &&
+      capabilities.writesPrices &&
+      capabilities.walkablePriorities !== null
+    );
+  });
+
+  /**
+   * The chain's scopes as the multi select draws them, refused ones included.
+   *
+   * A scope outside the band is **disabled and still listed**, which is the
+   * whole of the plan's instruction here: hiding it would leave an operator
+   * looking for the chain's national scope wondering whether the read failed.
+   */
+  readonly scopeChoices = computed(() => {
+    const band = this.capabilities().walkablePriorities;
+    const chosen = new Set(this.priceScopeIds());
+    return this.scopes().map((scope) => ({
+      id: scope.id,
+      title: scopeTitle(scope),
+      chosen: chosen.has(scope.id),
+      // A scope with no key of the chain's own has no warehouse to walk, and
+      // the spawn refuses it for that reason rather than for its priority.
+      walkable:
+        scope.externalKey !== null &&
+        band !== null &&
+        scope.priority >= band.min &&
+        scope.priority <= band.max,
+    }));
+  });
+
+  /**
+   * Whether this store discovery has to be told where to look.
+   *
+   * A chain that publishes its own shop list names every one of them in a
+   * handful of requests, so there is nothing to centre on and the spawn takes
+   * neither field (backend plan 0089, section 9).
+   */
+  readonly needsCentre = computed(
+    () =>
+      this.mode() === 'STORE_DISCOVERY' &&
+      !this.capabilities().listsItsOwnStores
+  );
+
+  /**
+   * Whether this store discovery can be narrowed to a few postal codes.
+   *
+   * The mirror image of {@link needsCentre}, and the same fact read the other
+   * way: a chain that names its own shops has no centre to be given and a
+   * filter to be offered instead. A radius run is already narrow.
+   */
+  readonly offersPostalCodes = computed(
+    () =>
+      this.mode() === 'STORE_DISCOVERY' && this.capabilities().listsItsOwnStores
+  );
+
+  /** Whether this chain has product pages an EAN backfill could read. */
+  readonly offersBackfill = computed(
+    () =>
+      this.mode() === 'CATALOG_DISCOVERY' && this.capabilities().hasProductPages
+  );
+
+  /**
+   * Whether this run is asked what it writes (admin plan 0029, section 4).
+   *
+   * Every catalog discovery that is a walk, for an adapter this build knows.
+   * An adapter it does not know answers no to `writesPrices`, and a group that
+   * then offered only availability would send a claim about a chain that may
+   * well price. Leaving the field out lets the spawn apply its own default.
+   */
+  readonly offersWrites = computed(
+    () =>
+      this.mode() === 'CATALOG_DISCOVERY' &&
+      !this.detailBackfill() &&
+      this.adapterKey() in Wire.HarvestAdapterCapabilityTable
+  );
+
+  /**
+   * The writes this adapter can be asked for. A source that states no price
+   * cannot write one, so availability is all there is to choose.
+   */
+  readonly writeOptions = computed<readonly RunWrites[]>(() =>
+    this.capabilities().writesPrices ? WRITES : ['AVAILABILITY']
+  );
+
+  /** The choice, or the first option where the choice is not on offer. */
+  readonly chosenWrites = computed(() => {
+    const options = this.writeOptions();
+    return options.includes(this.writes()) ? this.writes() : options[0];
+  });
+
+  /** Whether this walk has a detail phase a known product can skip. */
+  readonly offersDetails = computed(
+    () =>
+      this.mode() === 'CATALOG_DISCOVERY' &&
+      !this.detailBackfill() &&
+      this.capabilities().skipsKnownDetails
+  );
+
+  /**
+   * The keys of the copy lists on screen, in the order they are sent.
+   *
+   * A walked scope's own id where the adapter takes a list, and the one list
+   * of a single scope walk otherwise. A hidden list sends nothing.
+   */
+  readonly copyKeys = computed<readonly string[]>(() => {
+    if (this.needsScopeList()) {
+      return this.priceScopeIds();
+    }
+    return this.needsScope() ? [SINGLE_SCOPE] : [];
+  });
+
+  /** The scopes this run walks, which no list may copy to. */
+  readonly walkedIds = computed<readonly string[]>(() => {
+    if (this.needsScopeList()) {
+      return this.priceScopeIds();
+    }
+    return this.needsScope() && this.priceScopeId() !== ''
+      ? [this.priceScopeId()]
+      : [];
+  });
+
+  /**
+   * Every target that is also walked, by the list that holds it.
+   *
+   * The form refuses such a target when it is added, but ticking a warehouse
+   * that is already a target somewhere is allowed, since either one may be
+   * the mistake. Until one of them goes, this names it and start is disabled.
+   */
+  readonly copyConflicts = computed(() => {
+    const walked = new Set(this.walkedIds());
+    return this.copyKeys().flatMap((key) =>
+      this.copiesOf(key)
+        .filter((id) => walked.has(id))
+        .map((target) => ({ key, target }))
+    );
+  });
+
+  /** The chain the scope picker reads within, which it cannot read without. */
+  readonly scopeFilter = computed(() => ({
+    supermarketId: this.supermarketId().trim(),
+  }));
+
+  /**
+   * Whether the form has everything the spawn will require.
+   *
+   * Only the scope is checked here, because it is the only field whose absence
+   * is a refusal the operator can see coming: everything else the spawn wants is
+   * either optional or is the mode itself. Asked so the button is disabled
+   * rather than pressed and answered with a 400 about a field that was on
+   * screen, empty, the whole time.
+   */
+  readonly ready = computed(() => {
+    // A scope that is gone is the refusal backend plan 0120 would answer.
+    if (this.missingScopes().length > 0) {
+      return false;
+    }
+    if (this.needsScopeList() && this.priceScopeIds().length === 0) {
+      return false;
+    }
+    // A conflict on screen is a refusal the form can see coming.
+    if (this.copyConflicts().length > 0) {
+      return false;
+    }
+    return !this.needsScope() || this.priceScopeId() !== '';
+  });
+
+  /** Take a warehouse into this run, or out of it again. */
+  toggleScope(id: string, event: Event): void {
+    const on = (event.target as HTMLInputElement).checked;
+    const held = this.priceScopeIds().filter((held) => held !== id);
+    // Appended rather than sorted, so the run walks them in the order the
+    // operator ticked them and the first one ticked is the first one walked.
+    this.priceScopeIds.set(on ? [...held, id] : held);
+
+    const dropped = this.droppedCopies().filter((entry) => entry !== id);
+    if (!on && this.copiesOf(id).length > 0) {
+      dropped.push(id);
+    }
+    this.droppedCopies.set(dropped);
+    if (!on) {
+      this._setCopies(id, null);
+    }
+  }
+
+  /** The scopes one list copies to. */
+  copiesOf(key: string): readonly string[] {
+    return this.copies().get(key) ?? [];
+  }
+
+  refusalOf(key: string): CopyMessage | null {
+    return this._copyRefusals().get(key) ?? null;
+  }
+
+  /** The names of the targets on one list that are also walked. */
+  conflictsOf(key: string): readonly string[] {
+    return this.copyConflicts()
+      .filter((conflict) => conflict.key === key)
+      .map((conflict) => this.titleOf(conflict.target));
+  }
+
+  /** Whether a scope is a copy target on any list on screen. */
+  isCopyTarget(id: string): boolean {
+    return this.copyKeys().some((key) => this.copiesOf(key).includes(id));
+  }
+
+  /**
+   * A scope's name, from the walk list where it is on it, and its id where it
+   * is not. A copy target can be a shop scope, which that list never reads.
+   */
+  titleOf(id: string): string {
+    const scope = this.scopes().find((entry) => entry.id === id);
+    return scope === undefined ? id : scopeTitle(scope);
+  }
+
+  /**
+   * A list changed. An addition is checked against the two mistakes the form
+   * can see (admin plan 0029, section 3) and refused inline; the server is the
+   * authority on every other rule, and says so on start.
+   */
+  changeCopies(key: string, next: readonly string[]): void {
+    const previous = this.copiesOf(key);
+    for (const id of next.filter((entry) => !previous.includes(entry))) {
+      if (this.walkedIds().includes(id)) {
+        this._refuse(key, { key: 'harvest.runs.start.copies.walked' });
+        return;
+      }
+      const other = this.copyKeys().find(
+        (entry) => entry !== key && this.copiesOf(entry).includes(id)
+      );
+      if (other !== undefined) {
+        this._refuse(key, {
+          key: 'harvest.runs.start.copies.alreadyCopied',
+          args: { scope: this.titleOf(this._fromOf(other)) },
+        });
+        return;
+      }
+    }
+    this._setCopies(key, next);
+  }
+
+  /** The scope a list copies from. */
+  private _fromOf(key: string): string {
+    return key === SINGLE_SCOPE ? this.priceScopeId() : key;
+  }
+
+  private _refuse(key: string, message: CopyMessage): void {
+    this._copyRefusals.update((held) => new Map(held).set(key, message));
+  }
+
+  /** Replace one list, or drop it with `null`, and clear its refusal. */
+  private _setCopies(key: string, targets: readonly string[] | null): void {
+    this.copies.update((held) => {
+      const next = new Map(held);
+      if (targets === null || targets.length === 0) {
+        next.delete(key);
+      } else {
+        next.set(key, [...targets]);
+      }
+      return next;
+    });
+    this._copyRefusals.update((held) => {
+      const next = new Map(held);
+      next.delete(key);
+      return next;
+    });
+  }
+
+  /**
+   * Where a document is dropped.
+   *
+   * Absolute rather than relative, for the reason the queues give: `..` needs a
+   * route above it to pop and throws outright when there is none, and this
+   * component is rendered directly in its spec.
+   */
+  uploadLink(): readonly string[] {
+    return ['/', HARVEST_SEGMENT, 'imports', 'upload'];
+  }
+
+  /**
+   * The chain changed, so what is known about its source did too.
+   *
+   * The adapter is read rather than guessed, because it is what decides whether
+   * the scope picker is offered at all, and the scope is cleared with it: a
+   * scope of the previous chain is not a scope of this one.
+   *
+   * **The chain arrives as an argument, and that is the fix rather than a
+   * detail of it.** This was a text input carrying `[(ngModel)]` and an
+   * `(ngModelChange)` beside it, and the two listeners fire in the order the
+   * template names them: the handler ran first and read the signal the banana
+   * box had not written yet. So the form asked the source route about the
+   * previous chain, and a Mercadona walk drew no scope field until a second
+   * chain was chosen, which is when the answer for the first one arrived.
+   */
+  chooseChain(supermarketId: string): Promise<void> {
+    this.supermarketId.set(supermarketId);
+    this.missingScopes.set([]);
+    this.priceScopeId.set('');
+    // Warehouses of the previous chain are not warehouses of this one, and the
+    // list they were ticked from is about to be read again.
+    this.priceScopeIds.set([]);
+    this.scopes.set([]);
+    this.adapterKey.set('');
+    // Codes of the previous chain's shops are not codes of this one's, and the
+    // field is hidden while the adapter is unknown, so a value left here would
+    // be sent by a form that never showed it.
+    this.postalCodes.set('');
+    // A backfill of the previous chain's pages is not a backfill of this one,
+    // and the switch is hidden while the adapter is unknown, so a value left
+    // set here would be sent by a form that never showed it.
+    this.detailBackfill.set(false);
+    // Copies name scopes of the previous chain, and what a walk writes is a
+    // question about the next chain's adapter, so both start over.
+    this.copies.set(new Map());
+    this._copyRefusals.set(new Map());
+    this.droppedCopies.set([]);
+    this.writes.set('PRICES_AND_AVAILABILITY');
+    this.details.set('NEW');
+    return this._readAdapter();
+  }
+
+  /**
+   * Which adapter this chain is fetched with, from its source row.
+   *
+   * A failure leaves the adapter unknown, which hides the picker. That is the
+   * safe way round: a chain with no source row cannot be walked at all, so the
+   * spawn refuses it before the scope is ever looked at, and offering a field
+   * for a run that cannot start would be noise.
+   */
+  private async _readAdapter(): Promise<void> {
+    const supermarketId = this.supermarketId().trim();
+    if (supermarketId === '') {
+      return;
+    }
+
+    try {
+      const source = await this._service.readSource(supermarketId);
+      this.adapterKey.set(source.adapterKey);
+      this._shell.observeReachable();
+      // Preselected for the chains that will be asked for one, which is the
+      // same rule the picker itself is drawn by.
+      const capabilities = capabilitiesOf(source.adapterKey);
+      // One read, for both controls: the single picker preselects the chain's
+      // national scope from it, and the multi select is drawn from it.
+      if (
+        capabilities.writesPrices &&
+        (!capabilities.scopesItsOwn || capabilities.walkablePriorities !== null)
+      ) {
+        await this._readScopes(supermarketId);
+      }
+    } catch {
+      this.adapterKey.set('');
+    }
+  }
+
+  /**
+   * The chain's scopes, for both controls that are drawn from them.
+   *
+   * The multi select needs every one of them, so this walks the pages rather
+   * than reading the first: a chain that prices by warehouse has a few hundred,
+   * and a form that offered the first hundred would silently hide the rest.
+   *
+   * The `NATIONAL` one is preselected for the single picker, as the import
+   * screen preselects it. Most walks that take one price nationally, and a
+   * chain with several warehouse scopes should not present them as equally
+   * plausible. A chain with none leaves the picker empty and the operator
+   * chooses.
+   */
+  private async _readScopes(supermarketId: string): Promise<void> {
+    try {
+      const held: PriceScope[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < MAX_SCOPE_PAGES; page += 1) {
+        const answer = await this._scopes.list({
+          cursor,
+          filters: { supermarketId, kind: WALK_LIST_KINDS },
+          limit: SCOPE_PAGE,
+        });
+        held.push(...answer.items);
+        if (answer.nextCursor === null) {
+          break;
+        }
+        cursor = answer.nextCursor;
+      }
+      this.scopes.set(held);
+
+      const national = held.find((scope) => scope.kind === 'NATIONAL');
+      if (national !== undefined && this.priceScopeId() === '') {
+        this.priceScopeId.set(national.id);
+      }
+    } catch {
+      // The single picker can still be typed into, so a failed read costs a
+      // shortcut rather than the field. The multi select draws nothing and says
+      // so, which is the honest answer when the scopes could not be read.
+    }
+  }
+  /** The request as it would be sent now. */
+  readonly request = computed(() => this._input());
+
+  constructor() {
+    effect(() => {
+      const value = this.value();
+      untracked(() => void this._apply(value));
+    });
+    effect(() => {
+      const request = this.request();
+      untracked(() => this.changed.emit(request));
+    });
+  }
+
+  /**
+   * Hand the request to the screen, unless the form already knows it would be
+   * refused.
+   *
+   * The guard is here and not only on the disabled button, because the button is
+   * a hint and this is the rule: a Mercadona walk with no scope is a 400 the
+   * screen can see coming, and sending it anyway would put a validation failure
+   * about a field that was on screen and empty in front of the operator.
+   */
+  submit(): void {
+    if (!this.ready() || this.uploading()) {
+      return;
+    }
+    // The notice about dropped copies has been read by the time a run starts.
+    this.droppedCopies.set([]);
+    this.submitted.emit(this._input());
+  }
+
+  /** Take a scope that no longer exists out of every place the request names it. */
+  removeMissing(id: string): void {
+    this.missingScopes.update((held) => held.filter((entry) => entry !== id));
+    this.priceScopeIds.update((held) => held.filter((entry) => entry !== id));
+    if (this.priceScopeId() === id) {
+      this.priceScopeId.set('');
+    }
+    this.copies.update((held) => {
+      const next = new Map<string, readonly string[]>();
+      for (const [key, targets] of held) {
+        const kept = targets.filter((target) => target !== id);
+        if (key !== id && kept.length > 0) {
+          next.set(key, kept);
+        }
+      }
+      return next;
+    });
+  }
+
+  /**
+   * Apply a saved request: the chain first, which reads its adapter and scopes,
+   * then the fields, in that order (admin plan 0030, section 2). Applied in the
+   * other order, the chain change would clear every field it had just set.
+   */
+  private async _apply(value: Wire.SpawnHarvestRunDto | null): Promise<void> {
+    if (value === null) {
+      return;
+    }
+    const generation = ++this._applying;
+
+    this.mode.set(value.mode);
+    await this.chooseChain(value.supermarketId ?? '');
+    if (generation !== this._applying) {
+      return;
+    }
+
+    this.detailBackfill.set(value.detailBackfill === true);
+    if (value.priceScopeId !== undefined) {
+      this.priceScopeId.set(value.priceScopeId);
+    }
+    this.priceScopeIds.set([...(value.priceScopeIds ?? [])]);
+    this.postalCode.set(value.postalCode ?? '');
+    this.country.set(value.country ?? '');
+    this.postalCodes.set((value.postalCodes ?? []).join('\n'));
+    if (value.writes !== undefined) {
+      this.writes.set(value.writes);
+    }
+    if (value.details !== undefined) {
+      this.details.set(value.details);
+    }
+
+    // A walk of several scopes keys each list on its walked scope, and a walk
+    // of one keys its one list on the single scope, as the form does itself.
+    const copies = new Map<string, readonly string[]>();
+    for (const copy of value.scopeCopies ?? []) {
+      const key = this.needsScopeList() ? copy.from : SINGLE_SCOPE;
+      copies.set(key, [...copy.to]);
+    }
+    this.copies.set(copies);
+
+    const missing = await this._missing([
+      ...(value.priceScopeId === undefined ? [] : [value.priceScopeId]),
+      ...(value.priceScopeIds ?? []),
+      ...(value.scopeCopies ?? []).flatMap((copy) => copy.to),
+    ]);
+    if (generation === this._applying) {
+      this.missingScopes.set(missing);
+    }
+  }
+
+  /**
+   * The ids of those scopes that no longer exist.
+   *
+   * The walk list answers most of them without a request. A copy target can be
+   * a shop scope, which that list never reads, so the rest are resolved one by
+   * one, and a scope the reference cannot find is gone.
+   */
+  private async _missing(ids: readonly string[]): Promise<string[]> {
+    const listed = new Set(this.scopes().map((scope) => scope.id));
+    const unknown = [...new Set(ids)].filter((id) => !listed.has(id));
+    const answers = await Promise.all(
+      unknown.map(
+        async (id) =>
+          [id, await this.references.resolve('price-scopes', id)] as const
+      )
+    );
+    return answers.filter(([, found]) => found === null).map(([id]) => id);
+  }
+
+  /**
+   * The typed codes, one per line, blanks and duplicates dropped.
+   *
+   * Commas and semicolons split too, because a list of postal codes is pasted
+   * as often as it is typed and neither separator can appear inside a code.
+   */
+  private chosenCodes(): string[] {
+    return [
+      ...new Set(
+        this.postalCodes()
+          .split(/[\n,;]/)
+          .map((code) => code.trim())
+          .filter((code) => code !== '')
+      ),
+    ];
+  }
+
+  /**
+   * The spawn body, with blank fields left out entirely.
+   *
+   * An empty string is not a postal code and not a uuid, and the harvester's
+   * DTOs validate what they are given, so sending one turns "I left this blank"
+   * into a validation failure about a field the operator never filled in.
+   */
+  private _input(): Wire.SpawnHarvestRunDto {
+    const input: Wire.SpawnHarvestRunDto = { mode: this.mode() };
+    if (this.offersBackfill() && this.detailBackfill()) {
+      input.detailBackfill = true;
+    }
+    // An empty filter is every shop, which is what an absent field already
+    // means, so nothing is sent for one: the backend would read the two the
+    // same way and an empty array in the body reads as a filter that failed.
+    const postalCodes = this.offersPostalCodes() ? this.chosenCodes() : [];
+    if (postalCodes.length > 0) {
+      input.postalCodes = postalCodes;
+    }
+    // The warehouses this walk covers. Sent only where the adapter takes them,
+    // so a chain that covers none is not told it covers an empty list.
+    if (this.needsScopeList() && this.priceScopeIds().length > 0) {
+      input.priceScopeIds = [...this.priceScopeIds()];
+    }
+    // Every list on screen with a target, in the order the scopes were ticked
+    // and the targets added. A list with none sends nothing for its scope.
+    const scopeCopies = this.copyKeys()
+      .map((key) => ({ from: this._fromOf(key), to: [...this.copiesOf(key)] }))
+      .filter((copy) => copy.from !== '' && copy.to.length > 0);
+    if (scopeCopies.length > 0) {
+      input.scopeCopies = scopeCopies;
+    }
+    if (this.offersWrites()) {
+      input.writes = this.chosenWrites();
+    }
+    if (this.offersDetails()) {
+      input.details = this.details();
+    }
+    const optional = {
+      supermarketId: this.supermarketId().trim(),
+      // Sent only where it means something. `deza-web` accepts one and ignores
+      // it, so sending it there would be this screen asserting a fact about a
+      // run that has none.
+      priceScopeId: this.needsScope() ? this.priceScopeId() : '',
+      postalCode: this.needsCentre() ? this.postalCode().trim() : '',
+      country: this.needsCentre() ? this.country().trim() : '',
+    };
+
+    return Object.entries(optional).reduce<Wire.SpawnHarvestRunDto>(
+      (body, [name, value]) =>
+        value === '' ? body : { ...body, [name]: value },
+      input
+    );
+  }
+}
+
+/**
+ * What one scope is called in the list of warehouses.
+ *
+ * The **key first**, because a harvested scope usually has no label at all and
+ * the key is the number the chain publishes, which is the string an operator
+ * recognises. A scope that does carry a label shows it beside the key rather
+ * than instead of it, so two warehouses named for the same city stay apart.
+ */
+function scopeTitle(scope: PriceScope): string {
+  const label = localizedTextValue(scope.label ?? {}, CONTENT_LOCALES);
+  const key = scope.externalKey ?? scope.kind;
+  return label === '' ? key : `${key} — ${label}`;
+}

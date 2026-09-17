@@ -34,6 +34,13 @@ export type AddGeneratedListLineDto = {
 };
 
 /**
+ * `AddGeneratedListParticipantDto` in the gateway's OpenAPI document.
+ */
+export type AddGeneratedListParticipantDto = {
+  userId: string;
+};
+
+/**
  * `AddGeneratedListParticipantLineDto` in the gateway's OpenAPI document.
  */
 export type AddGeneratedListParticipantLineDto = {
@@ -167,6 +174,15 @@ export type AvailabilityEntryDto = {
 };
 
 /**
+ * `CreateBrandDto` in the gateway's OpenAPI document.
+ */
+export type CreateBrandDto = {
+  label: string;
+  privateLabelSupermarketId?: string | null;
+  canonicalBrandId?: string | null;
+};
+
+/**
  * `CreateGeneratedListDto` in the gateway's OpenAPI document.
  */
 export type CreateGeneratedListDto = {
@@ -175,6 +191,16 @@ export type CreateGeneratedListDto = {
   name?: string | null;
   defaultTargetListId?: string | null;
   idempotencyKey?: string;
+  memberUserIds?: string[];
+};
+
+/**
+ * `CreateHarvestRunPresetDto` in the gateway's OpenAPI document.
+ */
+export type CreateHarvestRunPresetDto = {
+  supermarketId: string;
+  name: string;
+  input: HarvestRunPresetInputDto;
 };
 
 /**
@@ -248,7 +274,7 @@ export type CreateListDto = {
  */
 export type CreatePriceScopeDto = {
   supermarketId: string;
-  kind: 'NATIONAL' | 'REGION' | 'POSTAL_CODE' | 'STORE';
+  kind: 'NATIONAL' | 'REGION' | 'LOCAL_AREA' | 'STORE';
   externalKey?: string | null;
   label?: LocalizedTextDto;
   priority?: number;
@@ -349,6 +375,24 @@ export type GeneratedListLineShareDto = {
 export type GeneratedListSourceDto = {
   zoneId: string;
   listId?: string | null;
+};
+
+/**
+ * `HarvestRunPresetInputDto` in the gateway's OpenAPI document.
+ */
+export type HarvestRunPresetInputDto = {
+  mode: 'STORE_DISCOVERY' | 'CATALOG_DISCOVERY' | 'FILE_IMPORT';
+  priceScopeId?: string;
+  priceScopeIds?: string[];
+  postalCode?: string;
+  country?: string;
+  radiusMetres?: number;
+  brandKeys?: string[];
+  postalCodes?: string[];
+  detailBackfill?: boolean;
+  scopeCopies?: ScopeCopyDto[];
+  writes?: 'PRICES_AND_AVAILABILITY' | 'PRICES' | 'AVAILABILITY';
+  details?: 'NEW' | 'ALL';
 };
 
 /**
@@ -456,6 +500,7 @@ export type ProblemDetails = {
   code:
     | 'validation_failed'
     | 'unauthorized'
+    | 'not_a_participant'
     | 'forbidden'
     | 'not_found'
     | 'conflict'
@@ -468,6 +513,16 @@ export type ProblemDetails = {
     | 'account_locked'
     | 'postal_code_unknown'
     | 'run_in_progress'
+    | 'line_merge_required'
+    | 'line_merge_needs_approval'
+    | 'line_merge_too_many_products'
+    | 'brand_label_empty'
+    | 'brand_key_taken'
+    | 'brand_link_to_self'
+    | 'brand_link_too_deep'
+    | 'brand_link_owns_no_chain'
+    | 'brand_link_keeps_key'
+    | 'brand_not_linked'
     | 'internal';
   detail?: string;
   message: string;
@@ -476,6 +531,9 @@ export type ProblemDetails = {
     [key: string]: string[];
   };
   retryAfterSeconds?: number;
+  details?: {
+    [key: string]: unknown;
+  };
 };
 
 /**
@@ -550,12 +608,29 @@ export type RefreshDto = {
 };
 
 /**
+ * `RegisterBrandSuggestionDto` in the gateway's OpenAPI document.
+ */
+export type RegisterBrandSuggestionDto = {
+  spelling: string;
+  label: string;
+  privateLabelSupermarketId?: string | null;
+};
+
+/**
  * `RegisterDto` in the gateway's OpenAPI document.
  */
 export type RegisterDto = {
   email: string;
   password: string;
   displayName?: string;
+};
+
+/**
+ * `RenameGeneratedListBasketLineDto` in the gateway's OpenAPI document.
+ */
+export type RenameGeneratedListBasketLineDto = {
+  content: string;
+  confirmMerge?: boolean;
 };
 
 /**
@@ -602,6 +677,14 @@ export type ResolvePostalCodeDto = {
   latitude: number;
   longitude: number;
   country?: string;
+};
+
+/**
+ * `ScopeCopyDto` in the gateway's OpenAPI document.
+ */
+export type ScopeCopyDto = {
+  from: string;
+  to: string[];
 };
 
 /**
@@ -764,6 +847,9 @@ export type SpawnHarvestRunDto = {
   brandKeys?: string[];
   postalCodes?: string[];
   detailBackfill?: boolean;
+  scopeCopies?: ScopeCopyDto[];
+  writes?: 'PRICES_AND_AVAILABILITY' | 'PRICES' | 'AVAILABILITY';
+  details?: 'NEW' | 'ALL';
 };
 
 /**
@@ -828,6 +914,15 @@ export type UpdateAdminZoneDto = {
 };
 
 /**
+ * `UpdateBrandDto` in the gateway's OpenAPI document.
+ */
+export type UpdateBrandDto = {
+  label?: string;
+  privateLabelSupermarketId?: string | null;
+  canonicalBrandId?: string | null;
+};
+
+/**
  * `UpdateGeneratedListDto` in the gateway's OpenAPI document.
  */
 export type UpdateGeneratedListDto = {
@@ -844,6 +939,15 @@ export type UpdateGeneratedListLineDto = {
   quantity?: number;
   itemId?: string | null;
   targetListId?: string | null;
+  confirmMerge?: boolean;
+};
+
+/**
+ * `UpdateHarvestRunPresetDto` in the gateway's OpenAPI document.
+ */
+export type UpdateHarvestRunPresetDto = {
+  name?: string;
+  input?: HarvestRunPresetInputDto;
 };
 
 /**
@@ -881,6 +985,7 @@ export type UpdateLineDto = {
   quantity?: number;
   itemIds?: string[];
   adoptItemIds?: string[];
+  confirmMerge?: boolean;
 };
 
 /**
@@ -905,7 +1010,7 @@ export type UpdatePricePolicyDto = {
  * `UpdatePriceScopeDto` in the gateway's OpenAPI document.
  */
 export type UpdatePriceScopeDto = {
-  kind?: 'NATIONAL' | 'REGION' | 'POSTAL_CODE' | 'STORE';
+  kind?: 'NATIONAL' | 'REGION' | 'LOCAL_AREA' | 'STORE';
   externalKey?: string | null;
   label?: LocalizedTextDto;
   priority?: number;
@@ -1629,11 +1734,38 @@ export type CatalogAdminSupermarketItemView = {
   unitPriceLabel: string | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
+  priceCopiedFromScopeId?: string | null;
   stale: boolean;
   validUntil: string | null;
   itemPriceId: string | null;
   available: boolean;
   itemName: CatalogLocalizedText | null;
+};
+
+/**
+ * `catalog.BrandPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogBrandPage = {
+  items: CatalogBrandView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.BrandView` in the gateway's OpenAPI document.
+ */
+export type CatalogBrandView = {
+  id: string;
+  key: string;
+  label: string;
+  privateLabelSupermarketId: string | null;
+  itemCount: number;
+  canonicalBrandId: string | null;
+  canonicalLabel: string | null;
+  linkCount: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 /**
@@ -1673,6 +1805,31 @@ export type CatalogCatalogSuggestion = {
 };
 
 /**
+ * `catalog.CreateBrandResult` in the gateway's OpenAPI document.
+ */
+export type CatalogCreateBrandResult = {
+  id: string;
+  key: string;
+  label: string;
+  privateLabelSupermarketId: string | null;
+  itemCount: number;
+  canonicalBrandId: string | null;
+  canonicalLabel: string | null;
+  linkCount: number;
+  createdAt: string;
+  updatedAt: string;
+  linkedItems: number;
+};
+
+/**
+ * `catalog.DeleteBrandResult` in the gateway's OpenAPI document.
+ */
+export type CatalogDeleteBrandResult = {
+  id: string;
+  movedItems: number;
+};
+
+/**
  * `catalog.ItemOfferView` in the gateway's OpenAPI document.
  */
 export type CatalogItemOfferView = {
@@ -1684,6 +1841,7 @@ export type CatalogItemOfferView = {
   unitPriceLabel: string | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
+  priceCopiedFromScopeId?: string | null;
   stale: boolean;
 };
 
@@ -1755,6 +1913,7 @@ export type CatalogItemPriceView = {
   validUntil: string | null;
   sourceRunId: string | null;
   lastObservedRunId: string | null;
+  copiedFromScopeId?: string | null;
   overrides: CatalogItemPriceOverrides | null;
   protectedUntil: string | null;
   details: CatalogItemPriceDetails | null;
@@ -1913,6 +2072,16 @@ export type CatalogProductGroupView = {
 };
 
 /**
+ * `catalog.RegisterBrandSuggestionResult` in the gateway's OpenAPI document.
+ */
+export type CatalogRegisterBrandSuggestionResult = {
+  brand: CatalogBrandView;
+  linked: CatalogBrandView | null;
+  canonicalCreated: boolean;
+  linkedItems: number;
+};
+
+/**
  * `catalog.ResolvedScopeView` in the gateway's OpenAPI document.
  */
 export type CatalogResolvedScopeView = {
@@ -2005,6 +2174,7 @@ export type CatalogSupermarketItemView = {
   unitPriceLabel: string | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
+  priceCopiedFromScopeId?: string | null;
   stale: boolean;
   validUntil: string | null;
   itemPriceId: string | null;
@@ -2097,6 +2267,23 @@ export type CatalogSupermarketView = {
 };
 
 /**
+ * `catalog.UpdateBrandResult` in the gateway's OpenAPI document.
+ */
+export type CatalogUpdateBrandResult = {
+  id: string;
+  key: string;
+  label: string;
+  privateLabelSupermarketId: string | null;
+  itemCount: number;
+  canonicalBrandId: string | null;
+  canonicalLabel: string | null;
+  linkCount: number;
+  createdAt: string;
+  updatedAt: string;
+  movedItems: number;
+};
+
+/**
  * `common.IdResult` in the gateway's OpenAPI document.
  */
 export type CommonIdResult = {
@@ -2179,6 +2366,11 @@ export type EnumsGeneratedListStatus =
 export type EnumsGenerationScope = 'ALL' | 'SELECTED';
 
 /**
+ * `enums.HarvestDetailFetch` in the gateway's OpenAPI document.
+ */
+export type EnumsHarvestDetailFetch = 'NEW' | 'ALL';
+
+/**
  * `enums.HarvestRunMode` in the gateway's OpenAPI document.
  */
 export type EnumsHarvestRunMode =
@@ -2203,6 +2395,14 @@ export type EnumsHarvestRunStatus =
 export type EnumsHarvestRunTrigger = 'MANUAL' | 'SCHEDULED' | 'SYSTEM';
 
 /**
+ * `enums.HarvestRunWrites` in the gateway's OpenAPI document.
+ */
+export type EnumsHarvestRunWrites =
+  | 'PRICES_AND_AVAILABILITY'
+  | 'PRICES'
+  | 'AVAILABILITY';
+
+/**
  * `enums.HarvestWarningCode` in the gateway's OpenAPI document.
  */
 export type EnumsHarvestWarningCode =
@@ -2213,7 +2413,11 @@ export type EnumsHarvestWarningCode =
   | 'ALREADY_QUEUED'
   | 'EXTRACTOR'
   | 'UNKNOWN_PRICE_SCOPE'
-  | 'NO_PRICE_SCOPE';
+  | 'NO_PRICE_SCOPE'
+  | 'COPY_TARGET_GONE'
+  | 'COPY_SOURCE_NOT_WRITTEN'
+  | 'SCOPE_KIND_MISMATCH'
+  | 'DETAIL_SKIPPED_UNKNOWN';
 
 /**
  * `enums.ItemCategory` in the gateway's OpenAPI document.
@@ -2245,6 +2449,11 @@ export type EnumsItemSourceMatch =
  * `enums.LineApprovalStatus` in the gateway's OpenAPI document.
  */
 export type EnumsLineApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+/**
+ * `enums.LineSuggestionReason` in the gateway's OpenAPI document.
+ */
+export type EnumsLineSuggestionReason = 'PERIOD' | 'STAPLE';
 
 /**
  * `enums.ListPermission` in the gateway's OpenAPI document.
@@ -2313,7 +2522,7 @@ export type EnumsPostalCodeSource = 'SOURCE' | 'DERIVED' | 'MANUAL';
 export type EnumsPriceScopeKind =
   | 'NATIONAL'
   | 'REGION'
-  | 'POSTAL_CODE'
+  | 'LOCAL_AREA'
   | 'STORE';
 
 /**
@@ -2350,6 +2559,20 @@ export type EnumsSourceEntryStatus =
  * `enums.SourceLocationStatus` in the gateway's OpenAPI document.
  */
 export type EnumsSourceLocationStatus = 'ACTIVE' | 'UNMAPPED' | 'IGNORED';
+
+/**
+ * `enums.TripKind` in the gateway's OpenAPI document.
+ */
+export type EnumsTripKind = 'BASKET' | 'LOOSE';
+
+/**
+ * `enums.TripRowOutcome` in the gateway's OpenAPI document.
+ */
+export type EnumsTripRowOutcome =
+  | 'BOUGHT'
+  | 'PARTLY'
+  | 'NOT_AVAILABLE'
+  | 'NOT_BOUGHT';
 
 /**
  * `enums.UnitOfMeasure` in the gateway's OpenAPI document.
@@ -2527,8 +2750,8 @@ export type GeneratedListSharingParticipantView = {
   username: string | null;
   guestNumber: number | null;
   userId: string | null;
-  joinedAt: string;
-  lastSeenAt: string;
+  joinedAt?: string;
+  lastSeenAt?: string;
   shareLinkId: string | null;
   userAgent?: string | null;
 };
@@ -2641,6 +2864,14 @@ export type GeneratedListGeneratedListLineView = {
 };
 
 /**
+ * `generated-list.GeneratedListOwnerView` in the gateway's OpenAPI document.
+ */
+export type GeneratedListGeneratedListOwnerView = {
+  userId: string;
+  name: string;
+};
+
+/**
  * `generated-list.GeneratedListPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2714,9 +2945,53 @@ export type GeneratedListGeneratedListView = {
 };
 
 /**
+ * `generated-list.SharedGeneratedListPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type GeneratedListSharedGeneratedListPage = {
+  items: GeneratedListSharedGeneratedListView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `generated-list.SharedGeneratedListView` in the gateway's OpenAPI document.
+ */
+export type GeneratedListSharedGeneratedListView = {
+  id: string;
+  name: string | null;
+  status: EnumsGeneratedListStatus;
+  generatedAt: string;
+  lineCount: number;
+  settledLineCount: number;
+  boughtLineCount: number;
+  notAvailableLineCount: number;
+  presentCount: number;
+  owner: GeneratedListGeneratedListOwnerView;
+  sharedAt: string;
+};
+
+/**
+ * `generated-list.UpdateGeneratedListLineResult` in the gateway's OpenAPI document.
+ */
+export type GeneratedListUpdateGeneratedListLineResult = {
+  id: string;
+  content: string;
+  quantity: number;
+  settledQuantity: number;
+  itemId: string | null;
+  options: string[];
+  origin: EnumsGeneratedLineOrigin;
+  targetListId: string | null;
+  position: number;
+  origins: GeneratedListGeneratedListLineOriginView[];
+  absorbedLineId?: string;
+};
+
+/**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes REGION rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.
  */
 export const HarvestAdapterCapabilityTable = {
   'mercadona-api': {
@@ -2724,10 +2999,11 @@ export const HarvestAdapterCapabilityTable = {
     scopesItsOwn: true,
     listsItsOwnStores: true,
     hasProductPages: false,
+    skipsKnownDetails: true,
     printedLocale: 'es',
     walkablePriorities: {
-      min: 300,
-      max: 300,
+      min: 200,
+      max: 200,
     },
   },
   'deza-web': {
@@ -2735,6 +3011,7 @@ export const HarvestAdapterCapabilityTable = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    skipsKnownDetails: false,
     printedLocale: 'es',
     walkablePriorities: null,
   },
@@ -2743,6 +3020,7 @@ export const HarvestAdapterCapabilityTable = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: true,
+    skipsKnownDetails: false,
     printedLocale: 'es',
     walkablePriorities: null,
   },
@@ -2751,6 +3029,7 @@ export const HarvestAdapterCapabilityTable = {
     scopesItsOwn: true,
     listsItsOwnStores: true,
     hasProductPages: true,
+    skipsKnownDetails: false,
     printedLocale: 'es',
     walkablePriorities: null,
   },
@@ -2759,6 +3038,7 @@ export const HarvestAdapterCapabilityTable = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    skipsKnownDetails: false,
     printedLocale: null,
     walkablePriorities: null,
   },
@@ -2767,6 +3047,7 @@ export const HarvestAdapterCapabilityTable = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    skipsKnownDetails: false,
     printedLocale: null,
     walkablePriorities: null,
   },
@@ -2775,10 +3056,56 @@ export const HarvestAdapterCapabilityTable = {
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes REGION rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.
  */
 export type HarvestAdapterCapabilityTable =
   typeof HarvestAdapterCapabilityTable;
+
+/**
+ * `harvest.BrandSpellingView` in the gateway's OpenAPI document.
+ */
+export type HarvestBrandSpellingView = {
+  supermarketId: string;
+  spelling: string;
+  productCount: number;
+  queuedCount: number;
+};
+
+/**
+ * `harvest.BrandSpellingsResult` in the gateway's OpenAPI document.
+ */
+export type HarvestBrandSpellingsResult = {
+  spellings: HarvestBrandSpellingView[];
+};
+
+/**
+ * `harvest.BrandSuggestionChain` in the gateway's OpenAPI document.
+ */
+export type HarvestBrandSuggestionChain = {
+  supermarketId: string;
+  productCount: number;
+};
+
+/**
+ * `harvest.BrandSuggestionPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestBrandSuggestionPage = {
+  items: HarvestBrandSuggestionView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.BrandSuggestionView` in the gateway's OpenAPI document.
+ */
+export type HarvestBrandSuggestionView = {
+  key: string;
+  spelling: string;
+  productCount: number;
+  firstSeenAt: string;
+  chains: HarvestBrandSuggestionChain[];
+};
 
 /**
  * `harvest.DiscoveredPlaceCounts` in the gateway's OpenAPI document.
@@ -2868,6 +3195,59 @@ export type HarvestHarvestRunPage = {
 };
 
 /**
+ * `harvest.HarvestRunPresetInput` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestRunPresetInput = {
+  mode: EnumsHarvestRunMode;
+  priceScopeId?: string;
+  priceScopeIds?: string[];
+  postalCode?: string;
+  country?: string;
+  radiusMetres?: number;
+  brandKeys?: string[];
+  postalCodes?: string[];
+  detailBackfill?: boolean;
+  scopeCopies?: {
+    from: string;
+    to: string[];
+  }[];
+  writes?: EnumsHarvestRunWrites;
+  details?: EnumsHarvestDetailFetch;
+};
+
+/**
+ * `harvest.HarvestRunPresetLastRun` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestRunPresetLastRun = {
+  id: string;
+  status: EnumsHarvestRunStatus;
+  requestedAt: string;
+};
+
+/**
+ * `harvest.HarvestRunPresetPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestHarvestRunPresetPage = {
+  items: HarvestHarvestRunPresetView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.HarvestRunPresetView` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestRunPresetView = {
+  id: string;
+  supermarketId: string;
+  name: string;
+  input: HarvestHarvestRunPresetInput;
+  createdAt: string;
+  updatedAt: string;
+  lastRun: HarvestHarvestRunPresetLastRun | null;
+};
+
+/**
  * `harvest.HarvestRunView` in the gateway's OpenAPI document.
  */
 export type HarvestHarvestRunView = {
@@ -2903,6 +3283,7 @@ export type HarvestHarvestRunView = {
   revertedAt: string | null;
   revertedByUserId: string | null;
   revertedPriceCount: number | null;
+  presetId?: string | null;
 };
 
 /**
@@ -3197,6 +3578,26 @@ export type ListLineSettlementView = {
 };
 
 /**
+ * `list.LineSuggestionPage` in the gateway's OpenAPI document.
+ */
+export type ListLineSuggestionPage = {
+  items: ListLineSuggestionView[];
+};
+
+/**
+ * `list.LineSuggestionView` in the gateway's OpenAPI document.
+ */
+export type ListLineSuggestionView = {
+  lineId: string;
+  reason: EnumsLineSuggestionReason;
+  periodDays: number | null;
+  daysSinceBought: number;
+  tripsWith: number | null;
+  tripsSeen: number | null;
+  quantity: number;
+};
+
+/**
  * `list.LineView` in the gateway's OpenAPI document.
  */
 export type ListLineView = {
@@ -3283,6 +3684,76 @@ export type ListListView = {
 };
 
 /**
+ * `list.TripPage` in the gateway's OpenAPI document.
+ */
+export type ListTripPage = {
+  live: ListTripView[];
+  items: ListTripView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `list.TripRowPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type ListTripRowPage = {
+  items: ListTripRowView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `list.TripRowView` in the gateway's OpenAPI document.
+ */
+export type ListTripRowView = {
+  lineId: string;
+  asked: number | null;
+  bought: number;
+  left: number | null;
+  outcome: EnumsTripRowOutcome;
+  settledByUserId: string | null;
+};
+
+/**
+ * `list.TripView` in the gateway's OpenAPI document.
+ */
+export type ListTripView = {
+  id: string;
+  kind: EnumsTripKind;
+  name: string | null;
+  live: boolean;
+  startedAt: string;
+  lineCount: number;
+  boughtLineCount: number;
+};
+
+/**
+ * `list.UpdateLineResult` in the gateway's OpenAPI document.
+ */
+export type ListUpdateLineResult = {
+  id: string;
+  listId: string;
+  content: string;
+  quantity: number;
+  itemIds: string[];
+  itemSetHash: string | null;
+  productGroupId: string | null;
+  groupItemIds: string[];
+  position: number;
+  approvalStatus: EnumsLineApprovalStatus;
+  createdByUserId: string;
+  approvedByUserId: string | null;
+  version: number;
+  boughtCount: number;
+  lastSettlementOutcome: EnumsSettlementOutcome | null;
+  claimed: boolean;
+  claimedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  absorbedLineId?: string;
+};
+
+/**
  * `merge.MergeRequestPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -3332,6 +3803,14 @@ export type MsgGeneratedListLineOriginsResponse = {
  */
 export type MsgGeneratedListParticipantRevokeResponse = {
   id: string;
+};
+
+/**
+ * `msg.generatedList.renameLine.response` in the gateway's OpenAPI document.
+ */
+export type MsgGeneratedListRenameLineResponse = {
+  line: GeneratedListSharingBasketLineView;
+  absorbedLineId?: string;
 };
 
 /**
@@ -3507,6 +3986,25 @@ export type StatsPlatformStatsResponse = {
   identity: StatsIdentityStats | null;
   core: StatsCoreStats | null;
   measuredAt: string;
+};
+
+/**
+ * `zone.ContactPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type ZoneContactPage = {
+  items: ZoneContactView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `zone.ContactView` in the gateway's OpenAPI document.
+ */
+export type ZoneContactView = {
+  userId: string;
+  zoneId: string;
+  username: string;
 };
 
 /**

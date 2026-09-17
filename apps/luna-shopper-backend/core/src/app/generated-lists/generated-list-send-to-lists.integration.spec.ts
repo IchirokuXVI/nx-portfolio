@@ -4,6 +4,7 @@ import {
   LineApprovalStatus,
   MembershipStatus,
   ParticipantKind,
+  RealtimeEvent,
   SettlementOutcome,
   ZoneRole,
   ZoneStatus,
@@ -30,6 +31,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
+import { LineMergeService } from '../lists/line-merge.service';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
@@ -68,6 +70,9 @@ describeIntegration(
     let origins: GeneratedListOriginsService;
     let settles: GeneratedListSettleService;
     let claims: FakeLineClaims;
+    // The explicit audience, which only `list.tripsChanged` uses from these two
+    // services (plan 0122, section 6).
+    const emitTo = jest.fn();
 
     const ids = {
       zone: '',
@@ -146,7 +151,8 @@ describeIntegration(
         listAccess,
         claims.service,
         { emitToUsers: jest.fn(), emit: jest.fn() } as never,
-        new CoreAuditService(dataSource)
+        new CoreAuditService(dataSource),
+        new LineMergeService()
       );
       const waiting = new WaitingSettlementService(claims.service, {
         emit: jest.fn(),
@@ -160,7 +166,9 @@ describeIntegration(
         claims.service,
         undefined as never,
         waiting,
-        { emitToUsers: jest.fn(), emit: jest.fn() } as never
+        { emitToUsers: jest.fn(), emit: jest.fn(), emitTo } as never,
+        // The rename (plan 0113), which nothing in this file reaches.
+        undefined as never
       );
 
       // The two access questions, answered as they are for an owner who holds
@@ -210,6 +218,7 @@ describeIntegration(
           emitToUsers: jest.fn(),
           emit: jest.fn(),
           emitToGeneratedList: jest.fn(),
+          emitTo,
         } as never
       );
 
@@ -299,6 +308,7 @@ describeIntegration(
         await dataSource.getRepository(ListLine).delete({ listId });
       }
       claims.announced.length = 0;
+      emitTo.mockClear();
     });
 
     it('creates a line on each list raised, with a provenance row and a claim', async () => {
@@ -338,6 +348,22 @@ describeIntegration(
       expect(
         claims.announced.every((row) => row.claimedByUserId === ids.shopper)
       ).toBe(true);
+
+      // And each list has a trip it did not have, so each room reads its trips
+      // again (plan 0122, section 6). Said once per list by the promotion that
+      // wrote the origin, and not a second time by the raise that called it.
+      expect(emitTo.mock.calls).toEqual([
+        [
+          RealtimeEvent.ListTripsChanged,
+          { listId: ids.flat },
+          { listId: ids.flat },
+        ],
+        [
+          RealtimeEvent.ListTripsChanged,
+          { listId: ids.parents },
+          { listId: ids.parents },
+        ],
+      ]);
 
       // The basket buys all of it: one typed, then three and two asked for.
       const basketLine = await dataSource

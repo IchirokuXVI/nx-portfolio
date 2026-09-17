@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`01eb5e048`](https://github.com/IchirokuXVI/nx-portfolio/commit/01eb5e04883c20487005b1444e72d2596a87fbad) on `dev`, with no pull request of its own.
+
 # 0030: four permissions on a list
 
 > Prerequisite reading: `0012` (the list page, its state union, and section 5.5 on why

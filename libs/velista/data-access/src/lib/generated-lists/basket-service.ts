@@ -11,6 +11,8 @@ import type {
   BasketOriginSettledResult,
   BasketOutstandingRequest,
   BasketParticipant,
+  BasketRenameRequest,
+  BasketRenameResult,
   BasketSession,
   BasketSettleRequest,
   BasketSettleResult,
@@ -143,6 +145,26 @@ export interface BasketServiceI {
     lineId: string,
     body: BasketSplitRequest
   ): Promise<BasketSplitResult>;
+
+  /**
+   * Rename a basket line and every zone line it came from
+   * (`PATCH .../basket/lines/:lineId`), velista `0084`, backend `0113`.
+   *
+   * One route for the owner and for a registered participant, under `basket` for
+   * the reason {@link addLine} gives. **The server decides who may**: a guest never,
+   * a line with origins only somebody who can write every list behind it, and a line
+   * with no origin only the owner. The sheet draws the field from the same rule, but
+   * a refusal here is still the answer.
+   *
+   * A name already taken, on a list or in the basket, is refused with
+   * `line_merge_required` until the same request carries `confirmMerge`. After a
+   * merge the answer's line is the survivor, which may not be the line addressed.
+   */
+  renameLine(
+    generatedListId: string,
+    lineId: string,
+    body: BasketRenameRequest
+  ): Promise<BasketRenameResult>;
 
   /**
    * Put a line in the basket (`POST .../basket/lines`), velista `0053`.
@@ -337,6 +359,25 @@ export interface BasketServiceI {
     generatedListId: string,
     participantId: string
   ): Promise<void>;
+
+  /**
+   * Add one of the owner's contacts to the basket
+   * (`POST .../participants`, backend `0114` section 4).
+   *
+   * Owner only, account authenticated. Somebody already on it by link becomes an
+   * invited member, and somebody who was removed or left is brought back.
+   */
+  addParticipant(
+    generatedListId: string,
+    userId: string
+  ): Promise<BasketParticipant>;
+
+  /**
+   * Leave a basket somebody else shared (`DELETE .../participants/mine`, backend
+   * `0114` section 6). A registered participant only: a guest and the owner are
+   * refused.
+   */
+  leaveBasket(generatedListId: string): Promise<void>;
 }
 
 /**

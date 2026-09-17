@@ -19,7 +19,8 @@ import {
   SheetNavigation,
   zoneIdOf,
 } from '@portfolio/velista/platform';
-import { ConfirmSheet } from '@portfolio/velista/ui';
+import { ConfirmSheet, SheetShell } from '@portfolio/velista/ui';
+import { LineGoneNotice, watchLineGone } from '../line-gone/line-gone';
 import { listErrorKey } from '../list-error-copy';
 
 /**
@@ -38,19 +39,29 @@ import { listErrorKey } from '../list-error-copy';
  */
 @Component({
   selector: 'lib-delete-line-sheet',
-  imports: [RokuTranslatorPipe, ConfirmSheet],
+  imports: [RokuTranslatorPipe, ConfirmSheet, SheetShell, LineGoneNotice],
   template: `
-    <lib-confirm-sheet
-      (confirm)="confirm()"
-      (dismiss)="dismiss()"
-      [body]="'list.confirm.deleteLine.body' | rokuT"
-      [busy]="submitting()"
-      [confirmLabel]="'list.confirm.deleteLine.action' | rokuT"
-      [destructive]="true"
-      [errorKey]="errorKey()"
-      [title]="'list.confirm.deleteLine.title' | rokuT: { name: lineName() }"
-      titleId="delete-line-title"
-    />
+    @if (gone.reason(); as reason) {
+      <lib-sheet-shell (dismiss)="dismiss()" labelledBy="delete-line-title">
+        <lib-line-gone-notice
+          (closed)="gone.acknowledge()"
+          [reason]="reason"
+          titleId="delete-line-title"
+        />
+      </lib-sheet-shell>
+    } @else {
+      <lib-confirm-sheet
+        (confirm)="confirm()"
+        (dismiss)="dismiss()"
+        [body]="'list.confirm.deleteLine.body' | rokuT"
+        [busy]="submitting()"
+        [confirmLabel]="'list.confirm.deleteLine.action' | rokuT"
+        [destructive]="true"
+        [errorKey]="errorKey()"
+        [title]="'list.confirm.deleteLine.title' | rokuT: { name: lineName() }"
+        titleId="delete-line-title"
+      />
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -67,6 +78,19 @@ export class DeleteLineSheet {
 
   readonly submitting = signal(false);
   readonly errorKey = signal<string | null>(null);
+
+  /**
+   * The line going away under the confirmation (velista plan 0083).
+   *
+   * Held while this sheet's own delete is out: the store marks the line as this
+   * reader's before the request, and the confirmation leaves by itself once it lands.
+   */
+  readonly gone = watchLineGone({
+    listId: this.listId,
+    lineId: this.lineId,
+    close: () => this.dismiss(),
+    paused: this.submitting,
+  });
 
   /** What the confirmation names, so the copy says the thing rather than "this item". */
   readonly lineName = computed(
@@ -92,11 +116,19 @@ export class DeleteLineSheet {
       return;
     }
 
-    // `leaveTo` rather than `dismiss`, because the line is gone and the screen
-    // underneath may have been the line's own page (section 5.3 puts this confirm on
-    // both screens). Popping would hand back a page about a line that no longer
-    // exists. The list is where a deletion leaves you from either side, and replacing
-    // the sheet's entry keeps a spent confirmation out of the back stack.
+    // `submitting` stays true: the sheet is leaving, and the watch must not close it a
+    // second time now that the line is gone.
+    if (this._route.snapshot.data['popsAfterDelete'] === true) {
+      // Over the list, this confirmation was pushed by the detail sheet (velista plan
+      // 0083, section 6). Popping lands on that sheet, which finds its line deleted by
+      // this reader and pops itself, so the list ends up current with nothing about
+      // the deleted line behind it. With nothing to pop, `dismiss` goes to the list.
+      await this._sheet.dismiss(this._listUrl());
+      return;
+    }
+
+    // Over the line page, `leaveTo` rather than `dismiss`: popping would hand back a
+    // page about a line that no longer exists, and that page does not close itself.
     await this._sheet.leaveTo(this._listUrl());
   }
 

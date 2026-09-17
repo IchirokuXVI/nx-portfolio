@@ -18,7 +18,7 @@ import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
   imports: [RokuTranslatorPipe, RouterLink],
   template: `
     @if (cell().key; as key) {
-      <span class="word">{{ key | rokuT }}</span>
+      <span class="word">{{ key | rokuT: cell().args ?? {} }}</span>
     } @else if (cell().link; as link) {
       <!-- A reference with somewhere to go (admin plan 0023, section 2.3): a
            real anchor, in its own tab stop, named by the text it shows and

@@ -195,6 +195,26 @@
     <p class="hint">{{ 'getList.sources.hint' | rokuT }}</p>
   }
 
+  <!--
+    Who else gets this basket (velista 0085, section 3). After the sources, because
+    what goes in the basket is the decision the sheet is opened for, and drawn only
+    when there is somebody to choose. Nobody is chosen by default.
+  -->
+  @if (showPeople()) {
+    <span class="label people-label" id="get-list-people">
+      {{ 'getList.people.label' | rokuT }}
+    </span>
+    <lib-people-picker
+      (toggled)="toggleMember($event)"
+      [attr.aria-labelledby]="'get-list-people'"
+      [disabled]="submitting()"
+      [groups]="contactGroups()"
+      [selected]="members()"
+      class="people"
+      role="group"
+    />
+  }
+
   @if (errorKey(); as key) {
     <p class="error" role="alert">{{ key | rokuT }}</p>
   }

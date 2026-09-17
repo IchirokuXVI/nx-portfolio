@@ -18,13 +18,14 @@ import {
   LOCATION_ITEM_SEED,
   LOCATION_SEED,
   PRICE_POLICY_SEED,
+  PRICE_SCOPE_SEED,
   PRICE_SEED,
 } from './catalog-seed';
 import { ITEMS } from './items';
 import { LOCATION_ITEMS } from './location-items';
 import { LOCATIONS } from './locations';
 import { PRICE_POLICIES } from './price-policies';
-import { PRICE_SCOPES } from './price-scopes';
+import { PRICE_SCOPES, priorityBand } from './price-scopes';
 import { PRICES } from './prices';
 import { PRODUCT_GROUPS } from './product-groups';
 import { SUPERMARKETS } from './supermarkets';
@@ -279,6 +280,118 @@ describe('the shops', () => {
     );
 
     expect(search?.param).toBe('query');
+  });
+});
+
+/**
+ * A shop's whole stack of price scopes (admin plan 0028, section 4).
+ */
+describe('the shop price scopes', () => {
+  const field = fieldOf(LOCATIONS, 'priceScopeIds');
+  const scopes = field?.kind === 'references' ? field : undefined;
+
+  it('is a references field over the price scopes, named by lookup', () => {
+    expect(field?.kind).toBe('references');
+    expect(scopes?.resource).toBe('price-scopes');
+    expect(scopes?.nameLookup).toBe(true);
+    expect(fieldOf(LOCATIONS, 'priceScopeId')).toBeUndefined();
+  });
+
+  it('limits the picker to the chain, with no single shop scope', () => {
+    expect(scopes?.scopeFrom?.({ supermarketId: 'sm_mercadona' })).toEqual({
+      supermarketId: 'sm_mercadona',
+      kind: ['LOCAL_AREA', 'REGION', 'NATIONAL'],
+    });
+  });
+
+  it('offers nothing to add before the chain is known', () => {
+    expect(scopes?.scopeFrom?.({})).toBeNull();
+    expect(scopes?.scopeFrom?.({ supermarketId: '' })).toBeNull();
+  });
+
+  it('locks the shop’s own store scope and no other', () => {
+    const shop = { id: 'loc_1', supermarketId: 'sm_mercadona' };
+
+    expect(
+      scopes?.locked?.(shop, { kind: 'STORE', externalKey: 'loc_1' })
+    ).toBe(true);
+    // Another shop's store scope, a region, and a create with no id yet.
+    expect(
+      scopes?.locked?.(shop, { kind: 'STORE', externalKey: 'loc_2' })
+    ).toBe(false);
+    expect(
+      scopes?.locked?.(shop, { kind: 'REGION', externalKey: 'loc_1' })
+    ).toBe(false);
+    expect(
+      scopes?.locked?.({}, { kind: 'STORE', externalKey: 'loc_1' })
+    ).toBe(false);
+  });
+
+  it('lists the stack by name, and filters on one scope', () => {
+    expect(LOCATIONS.list.columns).toContain('priceScopeIds');
+    expect(
+      (LOCATIONS.filters ?? []).find((entry) => entry.param === 'priceScopeId')
+        ?.kind
+    ).toBe('reference');
+  });
+
+  it('seeds every shop with its own store scope at the head of its stack', () => {
+    for (const shop of LOCATION_SEED) {
+      const own = PRICE_SCOPE_SEED.filter(
+        (scope) => scope.kind === 'STORE' && scope.externalKey === shop.id
+      );
+      expect([shop.id, own.length]).toEqual([shop.id, 1]);
+      expect(shop.priceScopeIds).toContain(own[0].id);
+      expect(shop.priceScopeId).toBe(own[0].id);
+    }
+  });
+});
+
+/** One set of four names for the tiers (admin plan 0028, section 2). */
+describe('the price scope tier names', () => {
+  it('names the four default priorities with the kinds’ own keys', () => {
+    expect(priorityBand(100)).toEqual({
+      kind: 'key',
+      key: 'catalog.priceScopeKind.STORE',
+    });
+    expect(priorityBand(200)).toEqual({
+      kind: 'key',
+      key: 'catalog.priceScopeKind.LOCAL_AREA',
+    });
+    expect(priorityBand(300)).toEqual({
+      kind: 'key',
+      key: 'catalog.priceScopeKind.REGION',
+    });
+    expect(priorityBand(1000)).toEqual({
+      kind: 'key',
+      key: 'catalog.priceScopeKind.NATIONAL',
+    });
+  });
+
+  it('says any other priority is custom, with its number', () => {
+    expect(priorityBand(250)).toEqual({
+      kind: 'key',
+      key: 'catalog.priceScopes.priorityCustom',
+      args: { priority: 250 },
+    });
+  });
+
+  it('offers LOCAL_AREA as a kind and no POSTAL_CODE', () => {
+    const values = PRICE_SCOPE_KIND_OPTIONS.map((option) => option.value);
+
+    expect(values).toContain('LOCAL_AREA');
+    expect(values).not.toContain('POSTAL_CODE');
+    for (const option of PRICE_SCOPE_KIND_OPTIONS) {
+      expect(option.label).toBe(`catalog.priceScopeKind.${option.value}`);
+    }
+  });
+
+  it('translates the priority column through its read', () => {
+    const priority = fieldOf(PRICE_SCOPES, 'priority');
+
+    expect(
+      priority?.read?.({ ...PRICE_SCOPE_SEED[0], priority: 200 })
+    ).toEqual(priorityBand(200));
   });
 });
 

@@ -172,6 +172,26 @@ describe('the basket room, off the wire', () => {
     });
   });
 
+  it('reads a line a rename took away as an id and a basket', () => {
+    // `GeneratedListLineRemovedEvent` (backend `0113`, section 6): ids only.
+    expect(
+      toRealtimeEvent('generatedList.lineRemoved', {
+        generatedListId: 'gl-1',
+        lineId: 'line-1',
+      })
+    ).toEqual({
+      type: 'generatedList.lineRemoved',
+      generatedListId: 'gl-1',
+      lineId: 'line-1',
+    });
+  });
+
+  it('drops a removal that does not say which line', () => {
+    expect(
+      toRealtimeEvent('generatedList.lineRemoved', { generatedListId: 'gl-1' })
+    ).toBeNull();
+  });
+
   it('drops one unreadable face rather than emptying a full shop', () => {
     const event = toRealtimeEvent('presence.generatedListUpdated', {
       generatedListId: 'gl-1',

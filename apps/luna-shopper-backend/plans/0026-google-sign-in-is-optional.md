@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`1df48420c`](https://github.com/IchirokuXVI/nx-portfolio/commit/1df48420c02d1fa71f98b2c9d8178e6c044f76e5) on `dev`, with no pull request of its own.
+
 # 0026 Make Google sign in genuinely optional
 
 The gateway already treats Google as optional and says so in three separate comments. The

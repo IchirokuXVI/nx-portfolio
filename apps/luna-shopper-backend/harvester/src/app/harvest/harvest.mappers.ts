@@ -1,6 +1,8 @@
 import type {
   AdapterKey,
   DiscoveredPlaceView,
+  HarvestRunPresetLastRun,
+  HarvestRunPresetView,
   HarvestRunView,
   ItemPriceDetails,
   PostalCodeDiscoveryRequestView,
@@ -12,6 +14,7 @@ import type {
 import type {
   DiscoveredPlace,
   HarvestRun,
+  HarvestRunPreset,
   PostalCodeDiscoveryRequest,
   SourceCatalogEntry,
   SourceEntryPrice,
@@ -90,6 +93,27 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
     revertedAt: iso(row.revertedAt),
     revertedByUserId: row.revertedByUserId ?? null,
     revertedPriceCount: row.revertedPriceCount ?? null,
+    // Plan 0120. The preset a run came from, which may since have been deleted.
+    presetId: row.presetId ?? null,
+  };
+}
+
+/**
+ * One saved run request (plan 0120, section 6). The latest run started from it
+ * is a query over `harvest_runs`, so the caller passes it in.
+ */
+export function toHarvestRunPresetView(
+  row: HarvestRunPreset,
+  lastRun: HarvestRunPresetLastRun | null
+): HarvestRunPresetView {
+  return {
+    id: row.id,
+    supermarketId: row.supermarketId,
+    name: row.name,
+    input: row.input,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    lastRun,
   };
 }
 

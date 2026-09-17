@@ -80,6 +80,22 @@ describe('ResourceApiGateways', () => {
     await listing;
   });
 
+  it('sends a list filter as one parameter per entry', async () => {
+    const listing = gateway().list({
+      filters: { kind: ['LOCAL_AREA', 'REGION', ''], none: [] },
+    });
+    const request = http.expectOne((candidate) => candidate.url === URL);
+
+    expect(request.request.params.getAll('kind')).toEqual([
+      'LOCAL_AREA',
+      'REGION',
+    ]);
+    expect(request.request.params.has('none')).toBe(false);
+
+    request.flush({ items: [], nextCursor: null });
+    await listing;
+  });
+
   it('sends the page size the source declared when the caller named none', async () => {
     const listing = gateways.for({ path: PATH, pageSize: 50 }).list({});
     const request = http.expectOne((candidate) => candidate.url === URL);

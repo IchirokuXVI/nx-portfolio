@@ -1,3 +1,5 @@
+> **PR:** [#85](https://github.com/IchirokuXVI/nx-portfolio/pull/85)
+
 # 0050 Generated lists, shared with guests
 
 > **This plan revises `0050`**, which designed generated lists before sharing existed.

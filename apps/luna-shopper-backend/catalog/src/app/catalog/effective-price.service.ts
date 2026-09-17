@@ -7,7 +7,11 @@ import {
   PriceScope,
   SupermarketItem,
 } from '../entities';
-import { resolveEffectivePrice, type PolicyRow } from './effective-price';
+import {
+  resolveEffectivePrice,
+  type PolicyRow,
+  type PriceRow,
+} from './effective-price';
 
 /** One materialized row's address. */
 export interface PriceKey {
@@ -47,6 +51,159 @@ export async function currentPriceRows(
     .addOrderBy('p."observedAt"', 'DESC')
     .addOrderBy('p."id"', 'DESC')
     .getMany();
+}
+
+/** The columns of a row the resolution and the materialized row read. */
+export interface CandidatePriceRow extends PriceRow {
+  itemId: string;
+  currency: string | null;
+  unitPriceLabel: string | null;
+  /** The scope a copied price was read at (plan 0118), and null for a direct one. */
+  copiedFromScopeId: string | null;
+}
+
+/** What {@link effectivePriceCandidates} hands the resolution for one item. */
+export interface PriceCandidates {
+  rows: CandidatePriceRow[];
+  /** The earliest `validFrom` still ahead among the item's enabled current rows. */
+  nextValidFrom: Date | null;
+}
+
+/**
+ * The current row per (item, scope, kind) whose kind is enabled, with the
+ * scope's priority read from the table as it is now and the item's earliest
+ * future `validFrom` computed before anything is filtered. `$1` items, `$2`
+ * scopes, `$3` now.
+ *
+ * The `DISTINCT ON` runs first and alone, which is what `ix_item_prices_current`
+ * serves, and it is also the rule of plan 0117 section 2: current is decided
+ * before eligibility, so an older row never stands in for a newer one that is
+ * not valid yet.
+ */
+const CURRENT_ENABLED = `
+  current AS (
+    SELECT DISTINCT ON (p."itemId", p."priceScopeId", p."sourceKind")
+           p."id", p."itemId", p."priceScopeId", p."sourceKind", p."price",
+           p."currency", p."unitPrice", p."unitPriceLabel", p."lastObservedAt",
+           p."validFrom", p."validUntil", p."overrides", p."protectedUntil",
+           p."copiedFromScopeId"
+      FROM "item_prices" p
+     WHERE p."itemId" = ANY($1::uuid[]) AND p."priceScopeId" = ANY($2::uuid[])
+     ORDER BY p."itemId", p."priceScopeId", p."sourceKind", p."observedAt" DESC, p."id" DESC
+  ), current_enabled AS (
+    SELECT c.*, s."priority" AS "scopePriority", pol."maxAgeDays",
+           MIN(c."validFrom") FILTER (WHERE c."validFrom" > $3::timestamptz)
+             OVER (PARTITION BY c."itemId") AS "nextValidFrom"
+      FROM current c
+      JOIN "price_policies" pol ON pol."sourceKind" = c."sourceKind" AND pol."enabled"
+      JOIN "price_scopes" s ON s."id" = c."priceScopeId"
+  )`;
+
+/**
+ * Steps 2 and 3 of plan 0117 section 2 in SQL: at most one row per (item,
+ * kind), the narrowest eligible one. `$4` is the scope being computed, which
+ * wins a tie of priority exactly as `narrowestPerKind` decides it.
+ */
+const NARROWEST_ELIGIBLE_SQL = `
+  WITH ${CURRENT_ENABLED}
+  SELECT DISTINCT ON (e."itemId", e."sourceKind") e.*
+    FROM current_enabled e
+   WHERE (e."validFrom" IS NULL OR e."validFrom" <= $3::timestamptz)
+     AND (e."validUntil" IS NULL OR e."validUntil" > $3::timestamptz)
+     AND (e."maxAgeDays" IS NULL
+          OR e."lastObservedAt" > $3::timestamptz - make_interval(days => e."maxAgeDays"))
+   ORDER BY e."itemId", e."sourceKind", e."scopePriority",
+            (e."priceScopeId" = $4::uuid) DESC, e."lastObservedAt" DESC, e."id" DESC`;
+
+/**
+ * The stale tier of plan 0117 section 3: the newest enabled current row per
+ * item, of any age, for the items the first query priced nothing for. Ties go
+ * to the narrower scope, as in the resolution.
+ */
+const NEWEST_ENABLED_SQL = `
+  WITH ${CURRENT_ENABLED}
+  SELECT DISTINCT ON (e."itemId") e.*
+    FROM current_enabled e
+   ORDER BY e."itemId", e."lastObservedAt" DESC, e."scopePriority",
+            (e."priceScopeId" = $4::uuid) DESC, e."id" DESC`;
+
+/**
+ * The rows the resolution needs for these items at this stack, and nothing
+ * else (plan 0117, section 5).
+ *
+ * One query for the narrowest eligible row per (item, kind). The items with
+ * none get a second query for their newest enabled current row, which the
+ * resolution flags stale. A chunk whose items are all priced therefore costs
+ * one query, and an expired row is never loaded only to be thrown away.
+ */
+export async function effectivePriceCandidates(
+  manager: EntityManager,
+  itemIds: readonly string[],
+  priceScopeIds: readonly string[],
+  priceScopeId: string,
+  now: Date
+): Promise<Map<string, PriceCandidates>> {
+  const byItem = new Map<string, PriceCandidates>();
+  if (itemIds.length === 0 || priceScopeIds.length === 0) {
+    return byItem;
+  }
+  const collect = (rows: RawCandidate[]) => {
+    for (const raw of rows) {
+      const held = byItem.get(raw.itemId) ?? {
+        rows: [],
+        nextValidFrom: raw.nextValidFrom,
+      };
+      held.rows.push(toCandidate(raw));
+      byItem.set(raw.itemId, held);
+    }
+  };
+
+  collect(
+    await manager.query<RawCandidate[]>(NARROWEST_ELIGIBLE_SQL, [
+      [...itemIds],
+      [...priceScopeIds],
+      now,
+      priceScopeId,
+    ])
+  );
+  const unpriced = itemIds.filter((itemId) => !byItem.has(itemId));
+  if (unpriced.length > 0) {
+    collect(
+      await manager.query<RawCandidate[]>(NEWEST_ENABLED_SQL, [
+        unpriced,
+        [...priceScopeIds],
+        now,
+        priceScopeId,
+      ])
+    );
+  }
+  return byItem;
+}
+
+/** A row as `manager.query` returns it: `numeric` as a string, the helper columns beside it. */
+interface RawCandidate extends CandidatePriceRow {
+  scopePriority: number;
+  maxAgeDays: number | null;
+  nextValidFrom: Date | null;
+}
+
+function toCandidate(raw: RawCandidate): CandidatePriceRow {
+  return {
+    id: raw.id,
+    itemId: raw.itemId,
+    priceScopeId: raw.priceScopeId,
+    sourceKind: raw.sourceKind,
+    price: raw.price,
+    currency: raw.currency,
+    unitPrice: raw.unitPrice,
+    unitPriceLabel: raw.unitPriceLabel,
+    lastObservedAt: raw.lastObservedAt,
+    validFrom: raw.validFrom,
+    validUntil: raw.validUntil,
+    overrides: raw.overrides,
+    protectedUntil: raw.protectedUntil,
+    copiedFromScopeId: raw.copiedFromScopeId,
+  };
 }
 
 /** The shops that hold a scope, as a subquery, for the two functions below. */
@@ -168,29 +325,25 @@ export async function recomputeEffectivePrices(
 
     for (let i = 0; i < itemIds.length; i += KEY_CHUNK) {
       const chunk = itemIds.slice(i, i + KEY_CHUNK);
-      const [rows, existing] = await Promise.all([
-        currentPriceRows(manager, chunk, scopeIds),
+      const [candidatesByItem, existing] = await Promise.all([
+        effectivePriceCandidates(manager, chunk, scopeIds, scope.id, now),
         manager.find(SupermarketItem, {
           where: { priceScopeId: scope.id, itemId: In(chunk) },
         }),
       ]);
-      const rowsByItem = new Map<string, ItemPrice[]>();
-      for (const row of rows) {
-        const held = rowsByItem.get(row.itemId) ?? [];
-        held.push(row);
-        rowsByItem.set(row.itemId, held);
-      }
       const existingByItem = new Map(existing.map((row) => [row.itemId, row]));
 
       const toSave: SupermarketItem[] = [];
       for (const itemId of chunk) {
-        const candidates = rowsByItem.get(itemId) ?? [];
+        const loaded = candidatesByItem.get(itemId);
+        const candidates = loaded?.rows ?? [];
         const resolved = resolveEffectivePrice({
           rows: candidates,
           priceScopeId: scope.id,
           scopePriorities,
           policies,
           now,
+          nextValidFrom: loaded?.nextValidFrom ?? null,
         });
         // The resolution answers with the structural row it was handed, which
         // is one of the entities above: find it again by id to keep the type.
@@ -235,7 +388,7 @@ export async function recomputeEffectivePrices(
 /** Write the answer onto the row. True when something moved. */
 function applyEffective(
   target: SupermarketItem,
-  row: ItemPrice | null,
+  row: CandidatePriceRow | null,
   stale: boolean,
   nextBoundaryAt: Date | null
 ): boolean {
@@ -246,6 +399,7 @@ function applyEffective(
     unitPriceLabel: row ? row.unitPriceLabel : null,
     priceObservedAt: row ? row.lastObservedAt : null,
     priceSourceKind: row ? row.sourceKind : null,
+    priceCopiedFromScopeId: row ? (row.copiedFromScopeId ?? null) : null,
     itemPriceId: row ? row.id : null,
     stale,
     validUntil: row ? row.validUntil : null,
@@ -258,6 +412,7 @@ function applyEffective(
     (target.unitPriceLabel ?? null) === next.unitPriceLabel &&
     sameInstant(target.priceObservedAt, next.priceObservedAt) &&
     (target.priceSourceKind ?? null) === next.priceSourceKind &&
+    (target.priceCopiedFromScopeId ?? null) === next.priceCopiedFromScopeId &&
     (target.itemPriceId ?? null) === next.itemPriceId &&
     (target.stale ?? false) === next.stale &&
     sameInstant(target.validUntil, next.validUntil) &&

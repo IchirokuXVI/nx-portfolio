@@ -1,3 +1,5 @@
+> **PR:** [#69](https://github.com/IchirokuXVI/nx-portfolio/pull/69)
+
 # 0041: one recorder, and a trash beside it
 
 > **Recording a comment and recording a message to the assistant become the same control.**

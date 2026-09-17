@@ -157,9 +157,13 @@ export class ResourceReferences implements ReferenceLookup {
 
     try {
       const row = await this._registry.gatewayFor(descriptor).read(id);
+      // The row rides along, because a `references` field asks its
+      // descriptor whether a target is locked, and that is a question about
+      // the target's own columns (admin plan 0028, section 4.1).
       return {
         id: idOf(descriptor, row),
         title: descriptor.title(row, this._content.order()),
+        row,
       };
     } catch {
       // A reference can outlive what it points at. That is a state the picker

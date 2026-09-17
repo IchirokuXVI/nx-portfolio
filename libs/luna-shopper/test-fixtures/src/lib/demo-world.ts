@@ -6,9 +6,11 @@
  * It is just enough to drive the primary flows end to end:
  *
  *   Users   Alice (owner, registered email), Bob (approved member, Google),
- *           Carol (pending member, registered email), Temp (temporary user).
- *   Zones   "Weekly shop", owned by Alice, with Bob approved and Carol pending;
- *           Temp is an approved member so the merge path (Temp -> Bob) is valid.
+ *           Carol (pending member, registered email), Temp (temporary user),
+ *           Dana (approved member, registered email).
+ *   Zones   "Weekly shop", owned by Alice, with Bob and Dana approved and Carol
+ *           pending; Temp is an approved member so the merge path (Temp -> Bob)
+ *           is valid.
  *           "Flat share", owned by Bob, where Carol was approved AFTER both of
  *           its lists already existed (plan 0042, section 4). That ordering is
  *           the shape the whole of plan 0042 is about and the one shape this
@@ -18,10 +20,13 @@
  *           it; "Flat supplies" (shared) and "Gift ideas" (private) under the
  *           flat, so one member can read exactly one of the two.
  *   Access  Bob holds read and write on Groceries and read alone on Hardware;
- *           the guest holds read and decide on Groceries; Carol holds the shared
- *           set on Flat supplies and no row at all on Gift ideas. Write without
- *           decide and decide without write are there deliberately (plan 0036,
- *           section 9): they are the two states a single role could not express.
+ *           the guest holds read and decide on Groceries; Dana holds the full
+ *           set on both weekly lists; Carol holds the shared set on Flat
+ *           supplies and no row at all on Gift ideas. Write without decide and
+ *           decide without write are there deliberately (plan 0036, section 9):
+ *           they are the two states a single role could not express. Dana is
+ *           the one registered participant who passes a shared basket's all or
+ *           nothing rule (velista plan 0080, section 3), which nobody else did.
  *           Neither owner has a row anywhere, because creation no longer writes
  *           one for a staff membership (plan 0042, section 1.2).
  *   Lines   Several across every approval state and both sides of the quantity
@@ -70,6 +75,8 @@ import {
   ACCESS_BOB_GROCERIES_ID,
   ACCESS_BOB_HARDWARE_ID,
   ACCESS_CAROL_FLAT_SUPPLIES_ID,
+  ACCESS_DANA_GROCERIES_ID,
+  ACCESS_DANA_HARDWARE_ID,
   ACCESS_TEMP_GROCERIES_ID,
   ALICE_CREDENTIAL_ID,
   ALICE_ID,
@@ -80,6 +87,8 @@ import {
   CAROL_ID,
   COMMENT_MILK_ALICE_ID,
   COMMENT_MILK_BOB_ID,
+  DANA_CREDENTIAL_ID,
+  DANA_ID,
   ITEM_BREAD_ID,
   ITEM_MILK_ID,
   LINE_APPLES_ID,
@@ -103,6 +112,7 @@ import {
   MEMBERSHIP_BOB_ID,
   MEMBERSHIP_CAROL_FLAT_ID,
   MEMBERSHIP_CAROL_ID,
+  MEMBERSHIP_DANA_ID,
   MEMBERSHIP_TEMP_ID,
   MERGE_TEMP_INTO_BOB_ID,
   PRICE_SCOPE_MERCADONA_VALENCIA_ID,
@@ -153,11 +163,21 @@ const auth: AuthSeed = {
       // A guest has a generated name from the moment they exist (plan 0018).
       username: 'Quiet Lantern',
     }),
+    // Appended after the four above on purpose: `demo-world.spec.ts` reads the
+    // owner of the first zone as the first user.
+    makeUser({
+      id: DANA_ID,
+      email: 'dana@example.com',
+      emailVerifiedAt: new Date('2026-01-01T09:10:00.000Z'),
+      displayName: 'Dana',
+      username: 'Calm Harbour',
+    }),
   ],
-  // Alice and Carol log in with email + password; Bob logs in with Google.
+  // Alice, Carol and Dana log in with email + password; Bob logs in with Google.
   credentials: [
     makeCredential({ id: ALICE_CREDENTIAL_ID, userId: ALICE_ID }),
     makeCredential({ id: CAROL_CREDENTIAL_ID, userId: CAROL_ID }),
+    makeCredential({ id: DANA_CREDENTIAL_ID, userId: DANA_ID }),
   ],
   oauthIdentities: [
     makeOAuthIdentity({
@@ -223,6 +243,15 @@ const core: CoreSeed = {
       zoneId: ZONE_WEEKLY_ID,
       userId: TEMP_USER_ID,
       username: 'guest',
+      role: ZoneRole.MEMBER,
+      status: MembershipStatus.APPROVED,
+      approvedByUserId: ALICE_ID,
+    }),
+    makeMembership({
+      id: MEMBERSHIP_DANA_ID,
+      zoneId: ZONE_WEEKLY_ID,
+      userId: DANA_ID,
+      username: 'dana',
       role: ZoneRole.MEMBER,
       status: MembershipStatus.APPROVED,
       approvedByUserId: ALICE_ID,
@@ -314,6 +343,31 @@ const core: CoreSeed = {
       listId: LIST_GROCERIES_ID,
       membershipId: MEMBERSHIP_TEMP_ID,
       permissions: [ListPermission.READ, ListPermission.DECIDE],
+    }),
+    // Dana's two rows: the full set on each weekly list. Neither write only nor
+    // decide only, so the two counts above stay at one each; what they buy is a
+    // registered member who can read, add and decide on every list a basket from
+    // this zone can draw on, which is what a shared basket asks of a participant
+    // (velista plan 0080, section 3).
+    makeListAccess({
+      id: ACCESS_DANA_GROCERIES_ID,
+      listId: LIST_GROCERIES_ID,
+      membershipId: MEMBERSHIP_DANA_ID,
+      permissions: [
+        ListPermission.READ,
+        ListPermission.WRITE,
+        ListPermission.DECIDE,
+      ],
+    }),
+    makeListAccess({
+      id: ACCESS_DANA_HARDWARE_ID,
+      listId: LIST_HARDWARE_ID,
+      membershipId: MEMBERSHIP_DANA_ID,
+      permissions: [
+        ListPermission.READ,
+        ListPermission.WRITE,
+        ListPermission.DECIDE,
+      ],
     }),
     // Carol's one row in the flat, and the only row in that zone. It is exactly
     // what approving her wrote: the shared set on the shared list, and nothing at

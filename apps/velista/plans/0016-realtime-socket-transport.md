@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`ca3c23523`](https://github.com/IchirokuXVI/nx-portfolio/commit/ca3c23523b9990c88629327ad20f52611c0a090d) on `dev`, with no pull request of its own.
+
 # 0016: the realtime socket transport
 
 > Prerequisite reading: `0004` sections 6 to 9 (the realtime contract, the stores, and

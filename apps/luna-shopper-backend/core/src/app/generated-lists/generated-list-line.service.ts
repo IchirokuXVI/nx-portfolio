@@ -11,6 +11,7 @@ import {
   type LineView,
   type ReorderGeneratedListLinesRequest,
   type UpdateGeneratedListLineRequest,
+  type UpdateGeneratedListLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   GeneratedListFinishedException,
@@ -26,6 +27,7 @@ import {
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
+import { announceTripsChanged } from '../lists/trips/trips.announce';
 import {
   checkContent,
   checkOptions,
@@ -33,10 +35,19 @@ import {
   checkRoom,
   nextPosition,
 } from './basket-line-limits';
+import { GeneratedListLineRenameService } from './generated-list-line-rename.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
 import { LineClaimService } from './line-claim.service';
 import { WaitingSettlementService } from './waiting-settlement.service';
+
+/** A line edit's answer, naming the basket line a rename merged away. */
+function withAbsorbed(
+  view: GeneratedListLineView,
+  absorbedLineId: string | undefined
+): UpdateGeneratedListLineResult {
+  return absorbedLineId === undefined ? view : { ...view, absorbedLineId };
+}
 
 /** Answered for a line that is not on the basket the request named. */
 const NO_SUCH_LINE = 'Generated list line not found';
@@ -115,9 +126,15 @@ export interface PromotedLine {
  *
  * ## The three things that are deliberately local
  *
- * - **Editing a `DERIVED` line.** Text and quantity change the generated copy
+ * - **Editing a `DERIVED` line's quantity.** It changes the generated copy
  *   alone. The zone line is untouched. The user asked for a shopping list, not
  *   for a way to rewrite other people's lists.
+ *
+ * Its **text** is no longer on that list (plan 0113). A basket that renamed
+ * "leche" to "milk" alone brought "leche" back on the next run, so a new text
+ * renames every zone line the basket line came from as well, through
+ * {@link GeneratedListLineRenameService}, and is refused to anybody who could
+ * not have renamed each of those lines themselves.
  * - **Deleting a `DERIVED` line.** It leaves the basket and the zone line stays
  *   wanted. That is the "I decided not to buy this today" gesture, and it must
  *   not look like "this is done", which is the same distinction plan 0047 section
@@ -144,7 +161,11 @@ export class GeneratedListLineService {
     // The seam plan 0092 section 4.3 leaves for plan 0093: a purchase made
     // before this line reached a list comes home the moment it has one.
     private readonly waiting: WaitingSettlementService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // A new text renames the zone lines too (plan 0113), and the participant
+    // route has the rule for that. Last, so no positional construction in a spec
+    // has to shift an argument to take it.
+    private readonly renames: GeneratedListLineRenameService
   ) {}
 
   /**
@@ -223,16 +244,43 @@ export class GeneratedListLineService {
    */
   async updateLine(
     req: UpdateGeneratedListLineRequest
-  ): Promise<GeneratedListLineView> {
+  ): Promise<UpdateGeneratedListLineResult> {
     const list = await this.generatedLists.load(
       req.userId,
       req.generatedListId
     );
     requireLive(list);
-    const line = await this.loadLine(list.id, req.lineId);
+    let line = await this.loadLine(list.id, req.lineId);
+    let absorbedLineId: string | undefined;
 
-    if (req.content !== undefined) {
-      line.content = checkContent(req.content);
+    if (
+      req.content !== undefined &&
+      checkContent(req.content) !== line.content
+    ) {
+      // A new name renames the zone lines this line came from too, through the
+      // participant route's rule (plan 0113, section 7), so there is one rename
+      // rule and not two. The owner acts as their own participant row.
+      const renamed = await this.renames.rename({
+        list,
+        lineId: line.id,
+        participant: await this.sharing.ensureOwnerParticipant(list),
+        content: req.content,
+        confirmMerge: req.confirmMerge === true,
+      });
+      line = renamed.line;
+      absorbedLineId = renamed.absorbedLineId;
+      if (
+        req.quantity === undefined &&
+        req.itemId === undefined &&
+        req.targetListId === undefined
+      ) {
+        // The rename has already announced itself, so the answer is all that
+        // is left to do.
+        return withAbsorbed(
+          await this.generatedLists.lineViewFor(line),
+          absorbedLineId
+        );
+      }
     }
     if (req.quantity !== undefined) {
       line.quantity = checkQuantity(req.quantity, { allowZero: true });
@@ -259,7 +307,10 @@ export class GeneratedListLineService {
     }
 
     const saved = await this.lines.save(line);
-    return this.announceLine(req.userId, list, saved);
+    return withAbsorbed(
+      await this.announceLine(req.userId, list, saved),
+      absorbedLineId
+    );
   }
 
   /**
@@ -284,6 +335,13 @@ export class GeneratedListLineService {
     await this.lines.delete({ id: line.id });
     await this.announceList(req.userId, list);
     await this.claims.announceReleased(refs);
+    // The origins went with the line, so each list they named is asked for one
+    // line less by this trip (plan 0122, section 6). The refs already say which
+    // lists those were, and they were read before the delete.
+    announceTripsChanged(
+      this.events,
+      refs.map((ref) => ref.listId)
+    );
     return { id: line.id };
   }
 
@@ -429,6 +487,11 @@ export class GeneratedListLineService {
       this.waiting.announce(
         await this.waiting.rehome(line.id, this.lines.manager)
       );
+      // The basket now draws from this list, so the list has a trip it did not
+      // have, or a trip that asks for one line more (plan 0122, section 6).
+      // Here rather than in each caller, because every origin an added line
+      // gains is written by this method.
+      announceTripsChanged(this.events, [targetListId]);
     }
 
     return {

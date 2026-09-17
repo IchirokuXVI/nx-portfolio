@@ -1,0 +1,65 @@
+{
+  "items": [
+    {
+      "id": "brand-hacendado",
+      "key": "hacendado",
+      "label": "Hacendado",
+      "privateLabelSupermarketId": "sm-mercadona",
+      "itemCount": 412,
+      "createdAt": "2026-09-16T09:00:00.000Z",
+      "updatedAt": "2026-09-16T09:00:00.000Z"
+    },
+    {
+      "id": "brand-ifa-unnia",
+      "key": "ifaunnia",
+      "label": "Ifa Unnia",
+      "privateLabelSupermarketId": "sm-el-jamon",
+      "itemCount": 63,
+      "createdAt": "2026-09-16T09:00:00.000Z",
+      "updatedAt": "2026-09-16T09:00:00.000Z"
+    },
+    {
+      "id": "brand-pascual",
+      "key": "pascual",
+      "label": "Pascual",
+      "privateLabelSupermarketId": null,
+      "itemCount": 31,
+      "createdAt": "2026-09-16T09:00:00.000Z",
+      "updatedAt": "2026-09-16T09:00:00.000Z"
+    },
+    {
+      "id": "brand-carbonell",
+      "key": "carbonell",
+      "label": "Carbonell",
+      "privateLabelSupermarketId": null,
+      "itemCount": 18,
+      "createdAt": "2026-09-16T09:00:00.000Z",
+      "updatedAt": "2026-09-16T09:00:00.000Z"
+    },
+    {
+      "id": "brand-deborah",
+      "key": "deborah",
+      "label": "Deborah",
+      "privateLabelSupermarketId": null,
+      "canonicalBrandId": null,
+      "canonicalLabel": null,
+      "linkCount": 1,
+      "itemCount": 12,
+      "createdAt": "2026-09-17T09:00:00.000Z",
+      "updatedAt": "2026-09-17T09:00:00.000Z"
+    },
+    {
+      "id": "brand-deborah-48h",
+      "key": "deborah48h",
+      "label": "DEBORAH 48H",
+      "privateLabelSupermarketId": null,
+      "canonicalBrandId": "brand-deborah",
+      "canonicalLabel": "Deborah",
+      "linkCount": 0,
+      "itemCount": 0,
+      "createdAt": "2026-09-17T09:00:00.000Z",
+      "updatedAt": "2026-09-17T09:00:00.000Z"
+    }
+  ],
+  "nextCursor": null
+}

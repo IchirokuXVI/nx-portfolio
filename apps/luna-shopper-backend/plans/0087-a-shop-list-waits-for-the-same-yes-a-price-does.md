@@ -1,3 +1,5 @@
+> **Status: not built, pending re-evaluation.** Much of the catalog, pricing and line model changed after this plan was written. It will not be built as written: a later session re-evaluates it and writes a new plan if the need remains. The state as of 2026-09-17 is in [plan 0121](./0121-plan-status-2026-09-17.md).
+
 # 0087 A shop list waits for the same yes a price does
 
 Plan `0086` settled what a run may write about a product nobody has confirmed. A fuzzy match is a

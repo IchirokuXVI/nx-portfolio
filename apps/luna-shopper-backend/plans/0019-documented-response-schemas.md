@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`2c24f7685`](https://github.com/IchirokuXVI/nx-portfolio/commit/2c24f76854efe704151630a61c013baf9ae94e64) on `dev`, with no pull request of its own.
+
 # 0019 Documented response schemas
 
 Swagger currently documents what the gateway **accepts** and nothing about what it **returns**.

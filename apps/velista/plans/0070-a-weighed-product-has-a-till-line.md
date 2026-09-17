@@ -1,3 +1,5 @@
+> **Status: not built, pending re-evaluation.** Later work changed the units, prices and lines this plan builds on. It will not be built as written: a later session re-evaluates it and writes a new plan if the need remains. The state as of 2026-09-17 is in [plan 0087](./0087-plan-status-2026-09-17.md).
+
 # 0070: a weighed product has a till line
 
 > A basket with a butcher's tray in it shows a name and nothing after it. The row for the

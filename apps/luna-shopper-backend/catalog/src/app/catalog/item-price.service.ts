@@ -16,6 +16,7 @@ import {
   decodeCursor,
   encodeCursor,
   NotFoundException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository, type EntityManager } from 'typeorm';
 import { Item, ItemPrice, PriceScope } from '../entities';
@@ -121,6 +122,10 @@ export class ItemPriceService {
   ): Promise<AddItemPriceBatchResult> {
     const actor = await this.admin.requireAdmin(req);
     const scope = await this.requireScope(req.priceScopeId);
+    const copiedFromScopeId = await this.requireCopySource(
+      scope,
+      req.copiedFromScopeId ?? null
+    );
     const now = new Date();
 
     return this.audit.write(actor, async (tx) => {
@@ -128,6 +133,7 @@ export class ItemPriceService {
         scope,
         sourceKind: req.sourceKind,
         sourceRunId: req.sourceRunId ?? null,
+        copiedFromScopeId,
         entries: req.entries,
         now,
       });
@@ -348,5 +354,37 @@ export class ItemPriceService {
       throw new NotFoundException('Price scope not found');
     }
     return scope;
+  }
+
+  /**
+   * The scope a copied batch was read at, checked (plan 0118, section 5).
+   *
+   * It must be a scope of the chain the batch writes to, because a price read
+   * at another chain's warehouse is not this chain's price, and it must not be
+   * the scope written to, because a copy of a scope onto itself records a
+   * provenance that says nothing.
+   */
+  private async requireCopySource(
+    target: PriceScope,
+    copiedFromScopeId: string | null
+  ): Promise<string | null> {
+    if (copiedFromScopeId === null) {
+      return null;
+    }
+    if (copiedFromScopeId === target.id) {
+      throw new ValidationException(
+        `A batch for the price scope ${target.id} cannot be a copy of that same scope.`
+      );
+    }
+    const source = await this.scopes.findOne({
+      where: { id: copiedFromScopeId },
+    });
+    if (!source || source.supermarketId !== target.supermarketId) {
+      throw new ValidationException(
+        `The price scope ${copiedFromScopeId} is not a scope of the chain the ` +
+          `price scope ${target.id} belongs to, so a batch cannot be copied from it.`
+      );
+    }
+    return copiedFromScopeId;
   }
 }

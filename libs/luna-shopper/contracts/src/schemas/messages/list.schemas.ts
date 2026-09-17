@@ -30,6 +30,7 @@ export const LIST_SCHEMA_IDS = {
   listAccessEntry: schemaId('list/ListAccessEntry'),
   listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
+  updateLineResult: schemaId('list/UpdateLineResult'),
   addLineResult: schemaId('list/AddLineResult'),
   addLineResultList: schemaId('list/AddLineResultList'),
   lineClaimRef: schemaId('list/LineClaimRef'),
@@ -61,6 +62,16 @@ export const LIST_SCHEMA_IDS = {
   listHoldingItemView: schemaId('list/ListHoldingItemView'),
   listsHoldingItemRequest: schemaId('msg/list.holdingItem/request'),
   listsHoldingItemResult: schemaId('msg/list.holdingItem/response'),
+  tripView: schemaId('list/TripView'),
+  tripPage: schemaId('list/TripPage'),
+  tripRowView: schemaId('list/TripRowView'),
+  tripRowPage: schemaId('list/TripRowPage'),
+  listTripsChangedEvent: schemaId('list/ListTripsChangedEvent'),
+  listTripsRequest: schemaId('msg/list.trips/request'),
+  listTripRowsRequest: schemaId('msg/list.tripRows/request'),
+  lineSuggestionView: schemaId('list/LineSuggestionView'),
+  lineSuggestionPage: schemaId('list/LineSuggestionPage'),
+  listSuggestionsRequest: schemaId('msg/list.suggestions/request'),
   reorderRequest: schemaId('msg/line.reorder/request'),
   deleteLineRequest: schemaId('msg/line.delete/request'),
   listLinesRequest: schemaId('msg/line.list/request'),
@@ -136,68 +147,80 @@ const listAccessView = object(
   ['listId', 'entries']
 );
 
+// Named on their own so the update's answer can state the same fields plus one
+// (plan 0112, section 6), rather than a second copy that drifts from this one.
+const lineViewProperties: Record<string, JsonSchema> = {
+  id: nonEmptyString(),
+  listId: nonEmptyString(),
+  content: string(),
+  quantity: integer(),
+  // The product set and its digest (plan 0048, section 1.1). Both required and
+  // both honest when empty: `[]` and `null` say "this is a free text line".
+  itemIds: array(nonEmptyString()),
+  itemSetHash: nullableString(),
+  // The subscription, and the part of the set it accounts for (plan 0070,
+  // section 9). Both required for the reason the indicators below are: an
+  // absent `groupItemIds` would make "nothing on this line came from a group"
+  // indistinguishable from "this build of the server does not say", and velista
+  // `0065` draws a different row for each.
+  productGroupId: nullableString(),
+  groupItemIds: array(nonEmptyString()),
+  position: integer(),
+  approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
+  createdByUserId: nonEmptyString(),
+  approvedByUserId: nullableString(),
+  version: integer(),
+  // The two derived indicators (plan 0047, section 5). Both required, because a
+  // line with no history answers them with 0 and null rather than by leaving
+  // them out: an absent field would make "never bought" indistinguishable from
+  // "this build of the server does not say".
+  boughtCount: integer({ minimum: 0 }),
+  lastSettlementOutcome: {
+    anyOf: [ref(ENUM_IDS.settlementOutcome), { type: 'null' }],
+  },
+  // The third indicator (plan 0052, section 4), derived on read and stored
+  // nowhere. Required for the reason the two above are: an absent field would
+  // make "nobody is buying this" indistinguishable from "this build of the
+  // server does not say", and the two draw different rows.
+  //
+  // Two fields rather than one nullable one, because a claim whose owner has
+  // since left the zone reports `true` with a null name (section 6).
+  claimed: boolean(),
+  claimedByUserId: nullableString(),
+  ...timestamps,
+};
+const lineViewRequired = [
+  'id',
+  'listId',
+  'content',
+  'quantity',
+  'itemIds',
+  'itemSetHash',
+  'productGroupId',
+  'groupItemIds',
+  'position',
+  'approvalStatus',
+  'createdByUserId',
+  'approvedByUserId',
+  'version',
+  'boughtCount',
+  'lastSettlementOutcome',
+  'claimed',
+  'claimedByUserId',
+  ...timestampKeys,
+];
 const lineView = object(
   LIST_SCHEMA_IDS.lineView,
-  {
-    id: nonEmptyString(),
-    listId: nonEmptyString(),
-    content: string(),
-    quantity: integer(),
-    // The product set and its digest (plan 0048, section 1.1). Both required and
-    // both honest when empty: `[]` and `null` say "this is a free text line".
-    itemIds: array(nonEmptyString()),
-    itemSetHash: nullableString(),
-    // The subscription, and the part of the set it accounts for (plan 0070,
-    // section 9). Both required for the reason the indicators below are: an
-    // absent `groupItemIds` would make "nothing on this line came from a group"
-    // indistinguishable from "this build of the server does not say", and velista
-    // `0065` draws a different row for each.
-    productGroupId: nullableString(),
-    groupItemIds: array(nonEmptyString()),
-    position: integer(),
-    approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
-    createdByUserId: nonEmptyString(),
-    approvedByUserId: nullableString(),
-    version: integer(),
-    // The two derived indicators (plan 0047, section 5). Both required, because a
-    // line with no history answers them with 0 and null rather than by leaving
-    // them out: an absent field would make "never bought" indistinguishable from
-    // "this build of the server does not say".
-    boughtCount: integer({ minimum: 0 }),
-    lastSettlementOutcome: {
-      anyOf: [ref(ENUM_IDS.settlementOutcome), { type: 'null' }],
-    },
-    // The third indicator (plan 0052, section 4), derived on read and stored
-    // nowhere. Required for the reason the two above are: an absent field would
-    // make "nobody is buying this" indistinguishable from "this build of the
-    // server does not say", and the two draw different rows.
-    //
-    // Two fields rather than one nullable one, because a claim whose owner has
-    // since left the zone reports `true` with a null name (section 6).
-    claimed: boolean(),
-    claimedByUserId: nullableString(),
-    ...timestamps,
-  },
-  [
-    'id',
-    'listId',
-    'content',
-    'quantity',
-    'itemIds',
-    'itemSetHash',
-    'productGroupId',
-    'groupItemIds',
-    'position',
-    'approvalStatus',
-    'createdByUserId',
-    'approvedByUserId',
-    'version',
-    'boughtCount',
-    'lastSettlementOutcome',
-    'claimed',
-    'claimedByUserId',
-    ...timestampKeys,
-  ]
+  lineViewProperties,
+  lineViewRequired
+);
+
+// What an edit answers: the surviving line, and the line a merge absorbed when
+// there was one (plan 0112, section 6). Optional, and absent when nothing merged.
+const updateLineResult = object(
+  LIST_SCHEMA_IDS.updateLineResult,
+  { ...lineViewProperties, absorbedLineId: nonEmptyString() },
+  lineViewRequired
 );
 
 // One origin line touched by one settling act (plan 0047, section 3).
@@ -498,6 +521,9 @@ const updateLineRequest = object(
       ...array(nonEmptyString()),
       maxItems: LINE_ITEM_SET_CEILING,
     },
+    // Merge onto the line that already holds the new name (plan 0112, section
+    // 2). Anything but `true` refuses such a rename and writes nothing.
+    confirmMerge: boolean(),
   },
   ['userId', 'lineId']
 );
@@ -588,6 +614,128 @@ const listsHoldingItemResult = object(
   },
   ['lists', 'hasMore']
 );
+// One trip that touched a list (plan 0122, section 3). The name and id of a
+// basket are served here on purpose, which is section 5's narrow reversal of plan
+// 0052: these reads and the list room only, behind the list's `READ` check.
+const tripView = object(
+  LIST_SCHEMA_IDS.tripView,
+  {
+    id: nonEmptyString(),
+    kind: ref(ENUM_IDS.tripKind),
+    name: nullableString(),
+    live: boolean(),
+    startedAt: string({ format: 'date-time' }),
+    lineCount: integer({ minimum: 0 }),
+    boughtLineCount: integer({ minimum: 0 }),
+  },
+  ['id', 'kind', 'name', 'live', 'startedAt', 'lineCount', 'boughtLineCount']
+);
+
+// Not `paginated`, because it has two parts: live trips whole on the first
+// response, ended trips a page at a time (section 2).
+const tripPage = object(
+  LIST_SCHEMA_IDS.tripPage,
+  {
+    live: array(ref(LIST_SCHEMA_IDS.tripView)),
+    items: array(ref(LIST_SCHEMA_IDS.tripView)),
+    nextCursor: nullableString(),
+  },
+  ['live', 'items', 'nextCursor']
+);
+
+// What one trip did to one zone line (section 4). `asked` and `left` are null
+// for a loose trip, which asked for nothing: it is a record of purchases alone.
+const tripRowView = object(
+  LIST_SCHEMA_IDS.tripRowView,
+  {
+    lineId: nonEmptyString(),
+    asked: { type: ['integer', 'null'], minimum: 0 },
+    bought: integer({ minimum: 0 }),
+    left: { type: ['integer', 'null'], minimum: 0 },
+    outcome: ref(ENUM_IDS.tripRowOutcome),
+    settledByUserId: nullableString(),
+  },
+  ['lineId', 'asked', 'bought', 'left', 'outcome', 'settledByUserId']
+);
+
+const tripRowPage = paginated(
+  LIST_SCHEMA_IDS.tripRowPage,
+  LIST_SCHEMA_IDS.tripRowView
+);
+
+// The list room's "read the trips again" (section 6). One field, so it cannot
+// leak a basket and cannot drift from the read.
+const listTripsChangedEvent = object(
+  LIST_SCHEMA_IDS.listTripsChangedEvent,
+  { listId: nonEmptyString() },
+  ['listId']
+);
+
+const listTripsRequest = object(
+  LIST_SCHEMA_IDS.listTripsRequest,
+  {
+    userId: nonEmptyString(),
+    listId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'listId']
+);
+const listTripRowsRequest = object(
+  LIST_SCHEMA_IDS.listTripRowsRequest,
+  {
+    userId: nonEmptyString(),
+    listId: nonEmptyString(),
+    kind: ref(ENUM_IDS.tripKind),
+    tripId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'listId', 'kind', 'tripId']
+);
+
+// A line at zero offering to come back (plan 0123, section 5). The period and the
+// trip counts are null for the reason that does not use them.
+const lineSuggestionView = object(
+  LIST_SCHEMA_IDS.lineSuggestionView,
+  {
+    lineId: nonEmptyString(),
+    reason: ref(ENUM_IDS.lineSuggestionReason),
+    periodDays: { type: ['integer', 'null'], minimum: 1 },
+    daysSinceBought: integer(),
+    tripsWith: { type: ['integer', 'null'], minimum: 0 },
+    tripsSeen: { type: ['integer', 'null'], minimum: 0 },
+    quantity: integer({ minimum: 1 }),
+  },
+  [
+    'lineId',
+    'reason',
+    'periodDays',
+    'daysSinceBought',
+    'tripsWith',
+    'tripsSeen',
+    'quantity',
+  ]
+);
+
+// Not `paginated`: no cursor and no ceiling, every due line (plan 0125).
+const lineSuggestionPage = object(
+  LIST_SCHEMA_IDS.lineSuggestionPage,
+  {
+    items: array(ref(LIST_SCHEMA_IDS.lineSuggestionView)),
+  },
+  ['items']
+);
+
+const listSuggestionsRequest = object(
+  LIST_SCHEMA_IDS.listSuggestionsRequest,
+  {
+    userId: nonEmptyString(),
+    listId: nonEmptyString(),
+  },
+  ['userId', 'listId']
+);
+
 const reorderRequest = object(
   LIST_SCHEMA_IDS.reorderRequest,
   {
@@ -670,6 +818,7 @@ export const listSchemas: JsonSchema[] = [
   listAccessEntry,
   listAccessView,
   lineView,
+  updateLineResult,
   addLineResult,
   addLineResultList,
   lineClaimRef,
@@ -701,6 +850,16 @@ export const listSchemas: JsonSchema[] = [
   listHoldingItemView,
   listsHoldingItemRequest,
   listsHoldingItemResult,
+  tripView,
+  tripPage,
+  tripRowView,
+  tripRowPage,
+  listTripsChangedEvent,
+  listTripsRequest,
+  listTripRowsRequest,
+  lineSuggestionView,
+  lineSuggestionPage,
+  listSuggestionsRequest,
   reorderRequest,
   deleteLineRequest,
   listLinesRequest,
@@ -743,6 +902,18 @@ export const listMessageContracts: Record<
     request: LIST_SCHEMA_IDS.listsHoldingItemRequest,
     response: LIST_SCHEMA_IDS.listsHoldingItemResult,
   },
+  [LIST_PATTERNS.trips]: {
+    request: LIST_SCHEMA_IDS.listTripsRequest,
+    response: LIST_SCHEMA_IDS.tripPage,
+  },
+  [LIST_PATTERNS.tripRows]: {
+    request: LIST_SCHEMA_IDS.listTripRowsRequest,
+    response: LIST_SCHEMA_IDS.tripRowPage,
+  },
+  [LIST_PATTERNS.suggestions]: {
+    request: LIST_SCHEMA_IDS.listSuggestionsRequest,
+    response: LIST_SCHEMA_IDS.lineSuggestionPage,
+  },
   [LINE_PATTERNS.add]: {
     request: LIST_SCHEMA_IDS.addLineRequest,
     response: LIST_SCHEMA_IDS.addLineResult,
@@ -753,7 +924,7 @@ export const listMessageContracts: Record<
   },
   [LINE_PATTERNS.update]: {
     request: LIST_SCHEMA_IDS.updateLineRequest,
-    response: LIST_SCHEMA_IDS.lineView,
+    response: LIST_SCHEMA_IDS.updateLineResult,
   },
   [LINE_PATTERNS.addQuantity]: {
     request: LIST_SCHEMA_IDS.addLineQuantityRequest,

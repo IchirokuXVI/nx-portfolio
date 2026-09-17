@@ -3,7 +3,9 @@ import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import {
   CONTENT_LOCALES,
   defineResource,
+  fieldMessage,
   localizedTextValue,
+  type FieldMessage,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { PRICE_SCOPE_KIND_OPTIONS } from './catalog-enums';
@@ -21,19 +23,24 @@ export type PriceScope = Wire.CatalogPriceScopeView;
  * that rather than refuse it. So the four defaults have words and anything
  * else says plainly that it has none, with the number, instead of rounding
  * itself into the nearest band and lying about which shops it covers.
+ *
+ * The words are the kinds' own (admin plan 0028, section 2): a band and the
+ * kind that defaults to it are one tier, and two sets of names for four tiers
+ * was one set too many. A key rather than English, so the field's `read`
+ * hands the cell something to translate.
  */
-export function priorityBand(priority: number): string {
+export function priorityBand(priority: number): FieldMessage {
   switch (priority) {
     case 100:
-      return 'This shop';
+      return fieldMessage('catalog.priceScopeKind.STORE');
     case 200:
-      return 'Postal code';
+      return fieldMessage('catalog.priceScopeKind.LOCAL_AREA');
     case 300:
-      return 'Region';
+      return fieldMessage('catalog.priceScopeKind.REGION');
     case 1000:
-      return 'Everywhere';
+      return fieldMessage('catalog.priceScopeKind.NATIONAL');
     default:
-      return `Custom (${priority})`;
+      return fieldMessage('catalog.priceScopes.priorityCustom', { priority });
   }
 }
 

@@ -1,3 +1,5 @@
+> **PR:** [#127](https://github.com/IchirokuXVI/nx-portfolio/pull/127)
+
 # 0055: changing what each list asked for
 
 > Server half: `apps/luna-shopper-backend/plans/0057`, which owns every rule this plan renders.

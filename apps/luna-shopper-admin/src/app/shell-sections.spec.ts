@@ -17,7 +17,7 @@ import { ADMIN_SECTIONS } from './sections';
  * would give the reference picker two answers to the same question.
  */
 describe('ADMIN_SECTIONS', () => {
-  it('is the five sections the plan names, in order', () => {
+  it('is the five sections the plans name, in order', () => {
     expect(ADMIN_SECTIONS.map((section) => section.key)).toEqual([
       'overview',
       'catalog',
@@ -27,15 +27,25 @@ describe('ADMIN_SECTIONS', () => {
     ]);
   });
 
-  /** Five is the number the first row holds at a glance. */
+  /**
+   * Around half a dozen is what the first row holds at a glance.
+   *
+   * Admin plan 0027 added a sixth, Brands, and it went again: one tab for two
+   * screens was a click for nothing, and the tab went unmarked on the
+   * registered list. Both brand screens are in the harvester now.
+   */
   it('holds five, which is what one row holds', () => {
     expect(ADMIN_SECTIONS).toHaveLength(5);
   });
 
-  /** Eight is the widest second row, and it fits on one line at 1280 pixels. */
-  it('gives no section more than eight screens', () => {
+  /**
+   * Ten is the widest second row. Eight fit on one line at 1280 pixels, and the
+   * harvester's ten wrap onto a second line, which the row allows. A section
+   * that needs more than ten is two sections.
+   */
+  it('gives no section more than ten screens', () => {
     for (const section of ADMIN_SECTIONS) {
-      expect(sectionScreens(section).length).toBeLessThanOrEqual(8);
+      expect(sectionScreens(section).length).toBeLessThanOrEqual(10);
     }
   });
 
@@ -96,8 +106,8 @@ describe('ADMIN_SECTIONS', () => {
   });
 
   /**
-   * The sixteen screens of the plan's table, at the paths it gives them. The
-   * whole list rather than a sample, because the point of the plan is that every
+   * Every resource, at the path its section mounts it under. The whole list
+   * rather than a sample, because the point of admin plan 0022 is that every
    * screen reachable before it is reachable after it.
    */
   it('mounts every resource where the plan says', () => {
@@ -124,6 +134,8 @@ describe('ADMIN_SECTIONS', () => {
     // own name for a generated list.
     expect(at('baskets')).toBe('shoppers/shopping-lists');
     expect(at('postal-codes')).toBe('harvest/postal-codes');
+    // Beside the suggested brands, which are keys the harvested queue carries.
+    expect(at('brands')).toBe('harvest/brands');
     // The one section that keeps the root, because it has one screen.
     expect(at('admins')).toBe('admins');
   });

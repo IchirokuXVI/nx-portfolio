@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`37c2c13a5`](https://github.com/IchirokuXVI/nx-portfolio/commit/37c2c13a55efcf55206dabcd928a097a25a5779e) on `dev`, with no pull request of its own.
+
 # 0033. Installing the app
 
 > Prerequisite reading: `0013` (the own origin move, which is what made an install

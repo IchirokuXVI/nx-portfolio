@@ -20,8 +20,9 @@ export interface StaticProject {
    */
   detailSlug?: string;
   /**
-   * Path segment for the live app link, joined as `/{locale}/{appSlug}`.
-   * Empty string means the live app is the site root itself (Portfolio).
+   * Path segment for the live app link, joined as `/{appSlug}/{locale}`: the
+   * app's own mount, with the app settling the locale below it. Empty string
+   * means the live app is the site root itself (Portfolio), linked `/{locale}`.
    * Omit if there is no live app to link to.
    */
   appSlug?: string;
@@ -34,12 +35,27 @@ export interface StaticProject {
 }
 
 export const PROJECTS: readonly StaticProject[] = [
+  // The main project: first, and the only full width featured card. Ids are
+  // labels, not an order, so the newest id leading the array is correct. The
+  // screenshot is the welcome page, a stand in until a better one exists, and
+  // like the Portfolio's image it is shown on the card only.
+  {
+    id: '5',
+    name: 'Velista',
+    tags: ['Angular', 'NestJS', 'PWA'],
+    repoLink: 'https://github.com/ichirokuxvi/nx-portfolio',
+    visual: { columnSpan: 2, featured: true },
+    detailSlug: 'velista',
+    appSlug: 'velista',
+    image: () =>
+      import('../../assets/velista_screenshot.png').then((m) => m.default),
+  },
   {
     id: '1',
     name: 'Portfolio',
     tags: ['Angular', 'Nx', 'Module Federation'],
     repoLink: 'https://github.com/ichirokuxvi/nx-portfolio',
-    visual: { columnSpan: 2, featured: true },
+    visual: { columnSpan: 1, featured: false },
     detailSlug: 'portfolio',
     appSlug: '',
     // Card-only asset (a themed module-federation topology). The detail page
@@ -52,7 +68,7 @@ export const PROJECTS: readonly StaticProject[] = [
     name: "Damocle'Sword",
     tags: ['Angular', 'VR', 'Micro-frontend'],
     repoLink: 'https://github.com/ichirokuxvi/nx-portfolio',
-    visual: { columnSpan: 2, featured: true },
+    visual: { columnSpan: 1, featured: false },
     detailSlug: 'damoclesSword',
     appSlug: 'damoclesSword',
     image: () =>

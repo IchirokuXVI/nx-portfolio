@@ -6,6 +6,7 @@ import {
   Headers,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -20,6 +21,7 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type AddGeneratedListParticipantLineRequest,
+  type AddGeneratedListParticipantRequest,
   type BasketPriceScopeView,
   type BasketScopeLocationView,
   type CatalogScopeView,
@@ -35,6 +37,7 @@ import {
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
+  type GeneratedListParticipantView,
   type GeneratedListReopenResult,
   type GeneratedListSettleResult,
   type GeneratedListShareLinkResult,
@@ -43,15 +46,19 @@ import {
   type GetGeneratedListLineOriginsRequest,
   type GetItemsRequest,
   type GetItemsResult,
+  type GetUsernamesRequest,
   type ItemPage,
   type ItemView,
   type JoinGeneratedListRequest,
+  type LeaveGeneratedListRequest,
   type ListSupermarketLocationsRequest,
   type ListSupermarketsRequest,
   type MintParticipantTokenRequest,
   type MintParticipantTokenResult,
   type ParticipantTokenResult,
   type ProductGroupOfferPage,
+  type RenameGeneratedListBasketLineRequest,
+  type RenameGeneratedListBasketLineResult,
   type ReopenGeneratedListLineRequest,
   type SetGeneratedListLineOutstandingRequest,
   type SetGeneratedListOriginQuantityRequest,
@@ -64,6 +71,7 @@ import {
   type SupermarketLocationPage,
   type SupermarketPage,
   type UserProfileView,
+  type UserUsernameView,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
@@ -82,10 +90,12 @@ import {
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
+  AddGeneratedListParticipantDto,
   AddGeneratedListParticipantLineDto,
   BasketSuggestQueryDto,
   EnsureShareLinkDto,
   JoinGeneratedListDto,
+  RenameGeneratedListBasketLineDto,
   RevokeShareLinkDto,
   SetGeneratedListLineOutstandingDto,
   SetGeneratedListOriginQuantityDto,
@@ -130,6 +140,30 @@ async function resolveUsername(
     return profile.username ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Several accounts' global usernames at once, for the messages that name people
+ * core knows only by id (plan 0114, section 9).
+ *
+ * **It fails empty**, for the reason {@link resolveUsername} fails null: a name
+ * is an improvement on a fallback the client still draws, and losing a share or
+ * a page of shared baskets because auth was briefly unreachable would not be.
+ */
+export async function resolveUsernames(
+  nats: NatsClient,
+  userIds: readonly string[]
+): Promise<UserUsernameView[]> {
+  const ids = [...new Set(userIds)];
+  if (ids.length === 0) {
+    return [];
+  }
+  try {
+    const req: GetUsernamesRequest = { userIds: ids };
+    return await nats.send<UserUsernameView[]>(AUTH_PATTERNS.getUsernames, req);
+  } catch {
+    return [];
   }
 }
 
@@ -261,6 +295,46 @@ export class GeneratedListShareController {
     );
   }
 
+  /**
+   * Add one of the caller's contacts to the basket (plan 0114, section 4).
+   *
+   * Owner only, and not found for anybody else's basket. The person must share
+   * an approved group with the owner right now, or the answer is
+   * `validation_failed`. A person already on the basket by the link becomes an
+   * added member, whom revoking the link no longer reaches, and a person who was
+   * removed or who left is brought back.
+   *
+   * Their global name is resolved here and handed to core, which uses it only
+   * when the two people share no group or several (section 9).
+   */
+  @Post(':id/participants')
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantAdd, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    body: true,
+    notFound: true,
+    conflict: true,
+  })
+  async addParticipant(
+    @AuthUser() user: CurrentUser,
+    @Param('id') id: string,
+    @Body() dto: AddGeneratedListParticipantDto
+  ): Promise<GeneratedListParticipantView> {
+    const [named] = await resolveUsernames(this.nats, [dto.userId]);
+    const req: AddGeneratedListParticipantRequest = {
+      userId: user.userId,
+      generatedListId: id,
+      memberUserId: dto.userId,
+      globalUsername: named?.username ?? null,
+    };
+    return this.nats.send<GeneratedListParticipantView>(
+      GENERATED_LIST_SHARING_PATTERNS.participantAdd,
+      req
+    );
+  }
+
   /** Revoke one participant and nobody else: the lost phone (section 3.4). */
   @Delete(':id/participants/:participantId')
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantRevoke)
@@ -327,7 +401,7 @@ export class ShareLinkController {
   @ApiComposedResponse(GENERATED_LIST_SHARING_SCHEMA_IDS.joinResult, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, notFound: true })
+  @ApiProblemResponses({ body: true, participant: true, notFound: true })
   async join(
     @Param('secret') secret: string,
     @Body() dto: JoinGeneratedListDto,
@@ -396,7 +470,7 @@ export class GeneratedListParticipantController {
    */
   @Get(':id/basket')
   @ApiComposedResponse(GENERATED_LIST_SHARING_SCHEMA_IDS.basketResult)
-  @ApiProblemResponses({ auth: true, notFound: true })
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async getBasket(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string
@@ -731,6 +805,7 @@ export class GeneratedListParticipantController {
   })
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     notFound: true,
     finishedBasket: true,
@@ -750,6 +825,53 @@ export class GeneratedListParticipantController {
     };
     return this.nats.send<GeneratedListBasketLineView>(
       GENERATED_LIST_SHARING_PATTERNS.addLine,
+      req
+    );
+  }
+
+  /**
+   * Rename a basket line, and every zone line it came from (plan 0113).
+   *
+   * Under `basket` for the reason {@link addLine} gives: `PATCH :id/lines/:lineId`
+   * is the owner's own edit on `GeneratedListController`, and a second handler
+   * there would never be reached.
+   *
+   * No `seesZoneData` check here, and none is needed: core refuses a guest, and
+   * anybody who cannot write every list the line came from, which is a stricter
+   * question than the basket read asks. The answer's line is projected for the
+   * caller as the basket read projects it.
+   *
+   * A name already taken, on one of those lists or in the basket, is refused
+   * with `line_merge_required` until the same request carries `confirmMerge`.
+   * Its details name every list, with its zone, and the basket line.
+   */
+  @Patch(':id/basket/lines/:lineId')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.renameLine)
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    body: true,
+    membership: true,
+    finishedBasket: true,
+    lineMerge: true,
+  })
+  renameLine(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('lineId') lineId: string,
+    @Body() dto: RenameGeneratedListBasketLineDto
+  ): Promise<RenameGeneratedListBasketLineResult> {
+    const req: RenameGeneratedListBasketLineRequest = {
+      generatedListId: id,
+      lineId,
+      participantId: participant.participantId,
+      content: dto.content,
+      confirmMerge: dto.confirmMerge,
+    };
+    return this.nats.send<RenameGeneratedListBasketLineResult>(
+      GENERATED_LIST_SHARING_PATTERNS.renameLine,
       req
     );
   }
@@ -785,7 +907,7 @@ export class GeneratedListParticipantController {
       'The dropdown, in the order it is to be drawn: every matching group first, then the individual products. The same body /v1/catalog/suggest answers, field for field.',
     schema: componentRef(SUGGEST_SCHEMA),
   })
-  @ApiProblemResponses({ auth: true, notFound: true })
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async suggest(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
@@ -926,6 +1048,7 @@ export class GeneratedListParticipantController {
   // 0056, section 3.2): the request is well formed and the state refuses it.
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     notFound: true,
     conflict: true,
@@ -966,6 +1089,7 @@ export class GeneratedListParticipantController {
   // malformed quantity.
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     notFound: true,
     conflict: true,
@@ -1028,6 +1152,7 @@ export class GeneratedListParticipantController {
   })
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     notFound: true,
     conflict: true,
@@ -1069,7 +1194,12 @@ export class GeneratedListParticipantController {
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.reopenLine, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ auth: true, notFound: true, conflict: true })
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    notFound: true,
+    conflict: true,
+  })
   reopen(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
@@ -1111,7 +1241,7 @@ export class GeneratedListParticipantController {
    */
   @Get(':id/lines/:lineId/origins')
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.lineOrigins)
-  @ApiProblemResponses({ auth: true, notFound: true })
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   lineOrigins(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
@@ -1151,7 +1281,12 @@ export class GeneratedListParticipantController {
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ auth: true, body: true, notFound: true })
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    body: true,
+    notFound: true,
+  })
   setOriginQuantity(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
@@ -1202,6 +1337,7 @@ export class GeneratedListParticipantController {
   })
   @ApiProblemResponses({
     auth: true,
+    participant: true,
     body: true,
     notFound: true,
     conflict: true,
@@ -1250,7 +1386,7 @@ export class GeneratedListParticipantController {
   /** Who else is on this basket, for the shop screen. */
   @Get(':id/participants/mine')
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantList)
-  @ApiProblemResponses({ auth: true, notFound: true })
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   listParticipants(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string
@@ -1260,6 +1396,44 @@ export class GeneratedListParticipantController {
     return this.nats.send<GeneratedListParticipantListResult>(
       GENERATED_LIST_SHARING_PATTERNS.participantList,
       { generatedListId: id, asParticipantId: participant.participantId }
+    );
+  }
+
+  /**
+   * Leave the basket (plan 0114, section 6).
+   *
+   * A registered participant only: a guest is `forbidden` and the owner is
+   * `validation_failed`. Somebody who left may come back through the link while
+   * they still hold it, which a removed person may not.
+   *
+   * It only works because this controller is registered before the owner's
+   * sheet. `DELETE :id/participants/:participantId` there matches `mine` as a
+   * participant id, and the first matching route is the one that runs, so the
+   * other order would send every leave to the account guard and to a core lookup
+   * for a participant called `mine`. See {@link GENERATED_LIST_SHARING_CONTROLLERS}.
+   */
+  @Delete(':id/participants/mine')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantLeave)
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    body: true,
+    membership: true,
+    notFound: true,
+  })
+  leave(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string
+  ): Promise<{ id: string }> {
+    const req: LeaveGeneratedListRequest = {
+      generatedListId: id,
+      participantId: participant.participantId,
+    };
+    return this.nats.send<{ id: string }>(
+      GENERATED_LIST_SHARING_PATTERNS.participantLeave,
+      req
     );
   }
 
@@ -1275,7 +1449,7 @@ export class GeneratedListParticipantController {
     GENERATED_LIST_SHARING_SCHEMA_IDS.participantTokenResult,
     { status: HttpStatus.CREATED }
   )
-  @ApiProblemResponses({ auth: true, notFound: true })
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async refreshToken(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string
@@ -1306,12 +1480,18 @@ export class GeneratedListParticipantController {
 }
 
 /**
- * The three controllers sharing adds, in the order their guards get stricter:
- * the owner's account authenticated sheet, the unauthenticated pair, and the
- * participant surface.
+ * The three controllers sharing adds.
+ *
+ * **The order is a routing rule.** The participant surface comes first, because
+ * its `DELETE :id/participants/mine` (plan 0114, section 6) and the owner's
+ * `DELETE :id/participants/:participantId` both match a leave: Nest registers
+ * routes in controller order and the first match runs, so the literal path has
+ * to be registered before the parameter. No other participant route matches one
+ * of the owner's, which is what makes the move safe. The owner's account
+ * authenticated sheet and the unauthenticated pair follow.
  */
 export const GENERATED_LIST_SHARING_CONTROLLERS = [
+  GeneratedListParticipantController,
   GeneratedListShareController,
   ShareLinkController,
-  GeneratedListParticipantController,
 ];

@@ -27,6 +27,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
+import { LineMergeService } from '../lists/line-merge.service';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
@@ -142,7 +143,8 @@ describeIntegration('a promotion keeps its products (real Postgres)', () => {
       listAccess,
       claims.service,
       { emitToUsers: jest.fn(), emit: jest.fn() } as never,
-      new CoreAuditService(dataSource)
+      new CoreAuditService(dataSource),
+      new LineMergeService()
     );
     lineWrites = new GeneratedListLineService(
       dataSource.getRepository(GeneratedListLine),
@@ -160,7 +162,11 @@ describeIntegration('a promotion keeps its products (real Postgres)', () => {
       new WaitingSettlementService(claims.service, {
         emit: jest.fn(),
       } as never),
-      { emitToUsers: jest.fn(), emit: jest.fn() } as never
+      // `emitTo` for the one thing a promotion says for itself: the list it
+      // reached has a trip to read again (plan 0122, section 6).
+      { emitToUsers: jest.fn(), emit: jest.fn(), emitTo: jest.fn() } as never,
+      // The rename (plan 0113), which `promote` never reaches.
+      undefined as never
     );
 
     const zone = await dataSource.getRepository(Zone).save(

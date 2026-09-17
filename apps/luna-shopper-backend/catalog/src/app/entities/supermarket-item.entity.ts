@@ -91,6 +91,14 @@ export class SupermarketItem extends BaseEntity {
   priceSourceKind!: PriceSourceKind | null;
 
   /**
+   * The effective row's `copiedFromScopeId` (plan 0118, section 5.1): the scope
+   * the chosen price was read at, when a run copied it to this one. Null for a
+   * price read here, and for no price at all.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  priceCopiedFromScopeId!: string | null;
+
+  /**
    * Whether the scope carries this product at all. Scope wide rather than per
    * store, and this is the one deliberate deviation from backlog 0001 section
    * 2.2: Mercadona's availability signal is a 404 on a warehouse scoped detail

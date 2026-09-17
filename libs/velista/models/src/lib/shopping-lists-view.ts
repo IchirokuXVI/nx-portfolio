@@ -160,6 +160,20 @@ export interface ShoppingListRowVm {
   readonly finished: boolean;
 }
 
+/**
+ * One row of the Shared lists tab (velista `0085`, section 5).
+ *
+ * Everything a row of the reader's own lists draws, plus the sentence saying who
+ * shared it and when. Both are resolved before they reach the row: the owner is a
+ * name, and the date is formatted with `Intl` in the reader's language, beside the
+ * instant it came from.
+ */
+export interface SharedListRowVm extends ShoppingListRowVm {
+  readonly ownerName: string;
+  readonly sharedAt: Date;
+  readonly sharedOn: string;
+}
+
 /** How the history listing has got on. */
 export type ShoppingListsLoad = 'idle' | 'loading' | 'loaded' | 'failed';
 

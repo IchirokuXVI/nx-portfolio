@@ -1,3 +1,4 @@
+import { Brand } from './brand.entity';
 import { CatalogAudit } from './catalog-audit.entity';
 import { ItemPriceDetailsRow } from './item-price-details.entity';
 import { ItemPrice } from './item-price.entity';
@@ -13,6 +14,7 @@ import { SupermarketLocation } from './supermarket-location.entity';
 import { Supermarket } from './supermarket.entity';
 
 export { BaseEntity } from './base.entity';
+export { Brand } from './brand.entity';
 export {
   AuditAction,
   AuditActorKind,
@@ -40,6 +42,9 @@ export const CATALOG_ENTITIES = [
   SupermarketLocationPriceScope,
   // Groups come before items: an item may point at one (plan 0048, section 1).
   ProductGroup,
+  // The registry a person fills, before items: an item may point at one
+  // (plan 0115, section 3.2).
+  Brand,
   Item,
   // Every price a source gave, and the policy that picks one (plan 0080). The
   // materialized row below them is derived from both.

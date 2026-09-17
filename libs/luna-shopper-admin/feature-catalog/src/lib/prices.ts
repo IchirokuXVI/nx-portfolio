@@ -180,6 +180,21 @@ export const PRICES = defineResource<Price>({
       editable: false,
     },
     {
+      // Where a copied price was read (admin plan 0029, section 5; backend
+      // plan 0118). A reference, so the list names it through the price
+      // scopes lookup and a scope deleted since shows its raw id.
+      kind: 'reference',
+      name: 'priceCopiedFromScopeId',
+      label: 'catalog.prices.priceCopiedFromScopeId',
+      help: 'catalog.prices.priceCopiedFromScopeIdHelp',
+      resource: 'price-scopes',
+      // The wire joins no name on, and a copy source is a handful of scopes
+      // across a page, so the list asks the lookup for each distinct one.
+      nameLookup: true,
+      nullable: true,
+      editable: false,
+    },
+    {
       kind: 'date',
       name: 'observedAt',
       label: 'catalog.prices.observedAt',
@@ -213,6 +228,7 @@ export const PRICES = defineResource<Price>({
       'price',
       'unitPrice',
       'sourceKind',
+      'priceCopiedFromScopeId',
       'observedAt',
       'stale',
       'validUntil',

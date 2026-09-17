@@ -559,3 +559,101 @@ describe('RunPage, exporting a run', () => {
     page.watch.stop();
   });
 });
+
+/** A walk's copies and detail phase (admin plan 0029, section 6). */
+describe('RunPage, what a walk wrote and fetched', () => {
+  const targets = ['t1', 't2', 't3', 't4', 't5', 't6', 't7'];
+
+  function walk(over: Partial<HarvestRun> = {}): HarvestRun {
+    return run({
+      status: 'COMPLETED',
+      finishedAt: '2026-09-03T09:30:00.000Z',
+      report: {
+        warehouses: ['4661'],
+        productsListed: 4232,
+        productsDetailed: 12,
+        productsDetailSkipped: 4180,
+        productsWithoutEan: 3,
+        writes: 'PRICES',
+        details: 'NEW',
+        copies: [
+          {
+            from: 'scope-national',
+            to: targets,
+            pricesCopied: 29624,
+            availabilityCopied: 0,
+          },
+        ],
+      },
+      ...over,
+    });
+  }
+
+  it('draws the resolved settings and the detail counts', async () => {
+    const fixture = await render(walk());
+    const page = fixture.componentInstance;
+
+    expect(page.report().details).toEqual({
+      requested: 12,
+      skipped: 4180,
+      withoutEan: 3,
+    });
+    expect(text(fixture)).toContain('harvest.runs.start.writes.PRICES');
+    expect(text(fixture)).toContain('harvest.runs.start.details.NEW');
+    expect(text(fixture)).toContain('4180');
+    expect(text(fixture)).toContain('harvest.run.report.detailWithoutEan');
+    page.watch.stop();
+  });
+
+  it('draws each copy by name, with its counts, and collapses after five targets', async () => {
+    const fixture = await render(walk());
+    const page = fixture.componentInstance;
+    await drain();
+    fixture.detectChanges();
+
+    const row: HTMLElement = fixture.nativeElement.querySelector(
+      'table.copies tbody tr'
+    );
+    // Named through the scope lookup, and the raw id where it finds nothing,
+    // which is what a scope deleted since the run is.
+    expect(row.querySelector('th')?.textContent?.trim()).toBe('NATIONAL');
+    expect(row.textContent).toContain('t1, t2, t3, t4, t5');
+    expect(row.textContent).not.toContain('t6');
+    expect(row.textContent).toContain('29624');
+    expect(page.hiddenTargets('scope-national', targets)).toBe(2);
+
+    row.querySelector<HTMLButtonElement>('button.more')!.click();
+    fixture.detectChanges();
+    expect(row.textContent).toContain('t6, t7');
+    expect(row.querySelector('button.more')).toBeNull();
+    page.watch.stop();
+  });
+
+  it('draws a copy warning on a walk, not only on an import', async () => {
+    const fixture = await render(
+      walk({
+        warnings: [
+          {
+            code: 'COPY_TARGET_GONE',
+            offerId: null,
+            page: null,
+            name: null,
+            message: 'The price scope t9 no longer exists.',
+          },
+        ],
+      })
+    );
+
+    expect(text(fixture)).toContain('harvest.warning.COPY_TARGET_GONE');
+    expect(text(fixture)).toContain('The price scope t9 no longer exists.');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws no report for a run whose report says none of it', async () => {
+    const fixture = await render(run());
+
+    expect(fixture.componentInstance.hasReport()).toBe(false);
+    expect(text(fixture)).not.toContain('harvest.run.report.heading');
+    fixture.componentInstance.watch.stop();
+  });
+});

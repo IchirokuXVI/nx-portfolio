@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`83dc209db`](https://github.com/IchirokuXVI/nx-portfolio/commit/83dc209dbd826527e4ed699260afcd4960773ad8) on `dev`, with no pull request of its own.
+
 # 0010. The group: its lists, and the people in it
 
 > Prerequisite reading: `0003` (the zone card, its counts, and what each one means),

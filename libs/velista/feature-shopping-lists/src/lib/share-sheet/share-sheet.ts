@@ -2,25 +2,37 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore } from '@portfolio/velista/data-access';
+import {
+  BasketStore,
+  ContactStore,
+  ZoneStore,
+} from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   APP_STANDALONE_ORIGIN,
+  groupContacts,
 } from '@portfolio/velista/models';
 import {
   BrowserFacade,
   generatedListIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
-import { ShareIcon, SheetShell } from '@portfolio/velista/ui';
+import {
+  PeoplePicker,
+  ShareIcon,
+  SheetShell,
+  type PeoplePickerToggle,
+} from '@portfolio/velista/ui';
 import { basketPath, basketShareUrl } from '../basket-paths';
 
 /** Which half of the sheet is showing: the link, or the question about revoking. */
@@ -69,7 +81,7 @@ type Pane = 'link' | 'revoke';
  */
 @Component({
   selector: 'lib-share-sheet',
-  imports: [RokuTranslatorPipe, ShareIcon, SheetShell],
+  imports: [RokuTranslatorPipe, PeoplePicker, ShareIcon, SheetShell],
   templateUrl: './share-sheet.html',
   styleUrl: './share-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -82,6 +94,8 @@ export class ShareSheet {
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _standaloneOrigin = inject(APP_STANDALONE_ORIGIN);
   private readonly _locale = inject(RokuLocaleStore).locale;
+  private readonly _contacts = inject(ContactStore);
+  private readonly _zones = inject(ZoneStore);
 
   /** The basket underneath, which is where closing this sheet goes. */
   private readonly _generatedListId = generatedListIdOf(this._route);
@@ -132,11 +146,138 @@ export class ShareSheet {
         );
   });
 
+  // --- People (velista `0085`, section 4) ------------------------------------
+
+  /**
+   * Whether the reader owns the basket, which is who may add and remove people.
+   *
+   * Only the owner reaches this sheet, and the section still asks, because the routes
+   * behind it refuse anybody else and a picker whose every tick fails is worse than
+   * none.
+   */
+  protected readonly isOwner = computed(
+    () => this._store.me()?.kind === 'OWNER'
+  );
+
+  /** People being added while the request is out, drawn ticked. */
+  private readonly _adding = signal<ReadonlySet<string>>(new Set());
+  /** People being removed while the request is out, drawn unticked. */
+  private readonly _removing = signal<ReadonlySet<string>>(new Set());
+
+  /** The key of the failure under the section, or null. */
+  protected readonly peopleError = signal<string | null>(null);
+
+  protected readonly contactGroups = computed(() => {
+    const names = new Map(
+      this._zones
+        .myZones()
+        .filter((zone) => zone.myStatus === 'APPROVED')
+        .map((zone) => [zone.id, zone.name])
+    );
+    return groupContacts(this._contacts.contacts(), names, this._locale());
+  });
+
+  /** The basket's live registered participants, by user id. The owner is not one. */
+  private readonly _members = computed(() => {
+    const members = new Map<string, { id: string; byLink: boolean }>();
+    for (const person of this._store.participants()) {
+      if (person.kind === 'REGISTERED' && person.userId !== null) {
+        members.set(person.userId, {
+          id: person.id,
+          byLink: person.shareLinkId !== null,
+        });
+      }
+    }
+    return members;
+  });
+
+  /**
+   * Who is ticked: everybody on the basket with an account, somebody who joined by
+   * link included, plus the adds still out and minus the removals still out.
+   *
+   * A failed save takes its person out of the pending set, so the box moves back
+   * through its binding. That is the "puts the checkbox back" of section 4.
+   */
+  protected readonly ticked = computed<ReadonlySet<string>>(() => {
+    const ticked = new Set(this._members().keys());
+    for (const id of this._adding()) {
+      ticked.add(id);
+    }
+    for (const id of this._removing()) {
+      ticked.delete(id);
+    }
+    return ticked;
+  });
+
+  protected readonly savingPeople = computed<ReadonlySet<string>>(
+    () => new Set([...this._adding(), ...this._removing()])
+  );
+
+  /**
+   * The warning under a person who came in by the link: unticking them is for good,
+   * and the link stops working for them too. Said before the untick, not after.
+   */
+  protected readonly peopleHints = computed<ReadonlyMap<string, string>>(
+    () =>
+      new Map(
+        [...this._members()]
+          .filter(([, member]) => member.byLink)
+          .map(([userId]) => [userId, 'share.people.linkJoined'])
+      )
+  );
+
   constructor() {
     // Pressing share is what gives a basket a link at all, so the sheet opening
     // is the gesture: it ensures rather than reads, and a basket that already has
     // one gets that one back.
     void this._ensure();
+    void this._zones.load();
+    void this._contacts.load();
+
+    // The joined count is the link's, and it moves whenever somebody on the basket
+    // moves: an add turns a link joiner into an invited member, and a removal takes
+    // one away. The participants follow the answers and the socket, so the count
+    // follows them. The first run is skipped, because `_ensure` already answers it.
+    let first = true;
+    effect(() => {
+      this._store.participants();
+      if (first) {
+        first = false;
+        return;
+      }
+      if (untracked(() => this.link()) !== null) {
+        void this._store.loadShareLink();
+      }
+    });
+  }
+
+  /** A tick saves at once. There is no Save button (section 4). */
+  protected async togglePerson(toggle: PeoplePickerToggle): Promise<void> {
+    this.peopleError.set(null);
+    const { userId } = toggle;
+
+    if (toggle.selected) {
+      this._adding.update((held) => new Set(held).add(userId));
+      const saved = await this._store.addParticipant(userId);
+      this._adding.update((held) => without(held, userId));
+      if (!saved) {
+        this.peopleError.set('share.people.failed');
+      }
+      return;
+    }
+
+    const member = this._members().get(userId);
+    if (member === undefined) {
+      return;
+    }
+    this._removing.update((held) => new Set(held).add(userId));
+    try {
+      await this._store.removeParticipant(member.id);
+    } catch {
+      this.peopleError.set('share.people.failed');
+    } finally {
+      this._removing.update((held) => without(held, userId));
+    }
   }
 
   private async _ensure(): Promise<void> {
@@ -215,4 +356,11 @@ export class ShareSheet {
       basketPath(this._locale(), this._basePath, this._generatedListId())
     );
   }
+}
+
+/** A copy of a set without one member. */
+function without(held: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  const next = new Set(held);
+  next.delete(id);
+  return next;
 }

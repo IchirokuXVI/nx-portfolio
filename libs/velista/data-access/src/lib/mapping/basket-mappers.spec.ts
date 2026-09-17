@@ -1,7 +1,9 @@
 import {
   toBasketLine,
   toBasketLineOrigins,
+  toBasketMergeRequired,
   toBasketOriginQuantityResult,
+  toBasketRenameResult,
   toBasketView,
 } from './basket-mappers';
 
@@ -320,5 +322,68 @@ describe('toBasketView: the product’s aisle, and what each list got', () => {
     // reel, and the `from` it then sends is refused as stale rather than applied as
     // the opposite act.
     expect(withOrigins([origin])?.settled).toBe(0);
+  });
+});
+
+/**
+ * A rename's answer and its merge question (velista `0084`, backend `0113`).
+ *
+ * The question is all or nothing: a row this build cannot read is a merge somebody
+ * would confirm without being shown it.
+ */
+describe('renaming a basket line, off the wire', () => {
+  const WEEKLY = {
+    listId: 'l1',
+    listName: 'Weekly shop',
+    zoneName: 'Flat 3B',
+    otherContent: 'Leche entera',
+    otherQuantity: 2,
+  };
+  const BASKET = {
+    otherLineId: 'line-2',
+    otherContent: 'leche entera',
+    otherQuantity: 3,
+  };
+
+  it('reads absent absorbedLineId as null', () => {
+    expect(toBasketRenameResult({ line: LINE })).toMatchObject({
+      line: { id: 'line-1' },
+      absorbedLineId: null,
+    });
+    expect(
+      toBasketRenameResult({ line: LINE, absorbedLineId: 'line-2' })
+        ?.absorbedLineId
+    ).toBe('line-2');
+  });
+
+  it('reads every list and the basket line', () => {
+    expect(toBasketMergeRequired({ lists: [WEEKLY], basket: BASKET })).toEqual({
+      lists: [
+        {
+          listId: 'l1',
+          listName: 'Weekly shop',
+          zoneName: 'Flat 3B',
+          otherQuantity: 2,
+        },
+      ],
+      basket: { otherLineId: 'line-2', otherQuantity: 3 },
+    });
+  });
+
+  it('refuses the whole question when one row cannot be read', () => {
+    expect(
+      toBasketMergeRequired({
+        lists: [WEEKLY, { listId: 'l2', otherQuantity: 1 }],
+        basket: null,
+      })
+    ).toBeNull();
+    expect(
+      toBasketMergeRequired({ lists: [WEEKLY], basket: { otherQuantity: 1 } })
+    ).toBeNull();
+  });
+
+  it('asks nothing when no place is named', () => {
+    expect(toBasketMergeRequired({ lists: [], basket: null })).toBeNull();
+    expect(toBasketMergeRequired({ otherContent: 'milk' })).toBeNull();
   });
 });

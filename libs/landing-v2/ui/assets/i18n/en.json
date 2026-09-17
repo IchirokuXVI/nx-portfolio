@@ -82,5 +82,75 @@
   "landingV2.detail.damocles.work_title": "Their work",
   "landingV2.detail.damocles.work_body": "STARLIT: ASCENSION, a VR shooter currently under development, sits alongside client R&D work such as Realistic Interactor and the VR Sickness Reducer, a graduated-exposure test built to reduce VR-induced dizziness.",
   "landingV2.detail.damocles.built_title": "How the site is built",
-  "landingV2.detail.damocles.built_body": "An Angular micro-frontend with Home, About, Services and Contact pages sharing a component system translated into English, Spanish and French, a reactive contact form, and a data-access layer for news and projects."
+  "landingV2.detail.damocles.built_body": "An Angular micro-frontend with Home, About, Services and Contact pages sharing a component system translated into English, Spanish and French, a reactive contact form, and a data-access layer for news and projects.",
+
+  "landingV2.detail.velista.status": "In production · early development",
+  "landingV2.detail.velista.domain_label": "Own domain",
+  "landingV2.detail.velista.domain_note": "Velista has its own domain. Open it there to use it as a standalone app, and install it on your phone.",
+  "landingV2.detail.velista.reveal_more": "Want to know even more?",
+  "landingV2.detail.velista.reveal_less": "Back to basics",
+  "landingV2.detail.velista.closing_note": "Thanks for reading this far. Velista is still in early development and changes almost every week, so the best way to see where it is going is to open it on velista.app or dig through the repository. If any part of it caught your interest, I am always happy to talk it through.",
+
+  "landingV2.detail.velista.sections.overview.title": "Overview",
+  "landingV2.detail.velista.sections.overview.highlight.p1": "Velista is a shared shopping list app for households and groups. It searches the supermarkets around you and tells you where each product you buy is cheapest, every single week, and an AI assistant adds what you need from a sentence or a voice note. It is in production with real users and still in early development.",
+  "landingV2.detail.velista.sections.overview.deep.p1": "Velista is a shared shopping list app. People join a group, keep their lists together and go shopping from one basket that gathers what every list asked for.",
+  "landingV2.detail.velista.sections.overview.deep.p2": "What sets it apart is prices. Velista knows the supermarkets near your postal code and a catalog of real products, so it can tell you which of your shops sells each thing on your list for less, week after week.",
+  "landingV2.detail.velista.sections.overview.deep.p3": "It is in production with real users and still in early development, so it keeps changing as I learn what those users need. It runs on its own domain and installs on a phone like a native app, and the same build is also mounted inside this portfolio.",
+
+  "landingV2.detail.velista.sections.stack.title": "Stack",
+  "landingV2.detail.velista.sections.stack.highlight.p1": "The frontend is Angular 21, standalone and zoneless, and installable as a PWA. The same build runs on its own origin and as a micro-frontend inside this site.",
+  "landingV2.detail.velista.sections.stack.highlight.p2": "The backend is seven NestJS services that talk over NATS, with four PostgreSQL databases and Redis. Everything ships as Docker images to staging and production Kubernetes clusters.",
+  "landingV2.detail.velista.sections.stack.deep.p1": "The frontend is Angular 21, standalone and zoneless, and installable as a PWA. The same app runs on its own origin and as a micro-frontend inside this site.",
+  "landingV2.detail.velista.sections.stack.deep.p2": "The backend is seven NestJS services: a gateway, a realtime service, auth, core, catalog, a harvester and an assistant. They talk over NATS, keep their data in four PostgreSQL databases through TypeORM, and share Redis. Live updates reach the browser over Socket.IO.",
+  "landingV2.detail.velista.sections.stack.deep.p3": "A separate Angular back office manages the catalog, the harvester and the people who run them. Everything ships as Docker images to staging and production Kubernetes clusters through Helm and GitHub Actions, tested with Jest and with Playwright suites that shop against a real backend.",
+
+  "landingV2.detail.velista.sections.evolution.title": "How it grew",
+  "landingV2.detail.velista.sections.evolution.deep.p1": "Velista started as a shared list for a group, built as one more app inside this portfolio.",
+  "landingV2.detail.velista.sections.evolution.deep.p2": "Live updates and presence came next, so everyone in a group sees the same list at the same moment. Then it moved to its own domain and became installable.",
+  "landingV2.detail.velista.sections.evolution.deep.p3": "After that came the assistant, and the shared basket: one trip that gathers lines from several lists, open to guests without an account.",
+  "landingV2.detail.velista.sections.evolution.deep.p4": "The latest stage is prices: a catalog of real products, the shops near a postal code, a harvester that keeps both current, and the tools that keep that catalog clean.",
+
+  "landingV2.detail.velista.sections.permissions.title": "Groups and permissions",
+  "landingV2.detail.velista.sections.permissions.highlight.p1": "A group has an owner, admins and members, and nobody sees a group until an owner or admin approves their request to join. Nobody needs an account to start either: a temporary user is created only when someone creates or joins a group, and it can become a real account later.",
+  "landingV2.detail.velista.sections.permissions.highlight.p2": "Access to a list is a set of permissions rather than a ladder: read, write, decide and manage. One person can add lines to a list while another approves them and ticks them off in the shop.",
+  "landingV2.detail.velista.sections.permissions.deep.p1": "Groups have three roles. The owner can do everything, including deleting the group and handing it over to someone else. Admins approve, reject, remove and ban members, manage lists and rename the group. Members use the lists they were given, and each person picks a separate display name in each group.",
+  "landingV2.detail.velista.sections.permissions.deep.p2": "People join with a code the admins can regenerate at any time. A request stays pending until someone approves it, and until then the person sees nothing of the group. A ban stops the same person from asking again.",
+  "landingV2.detail.velista.sections.permissions.deep.p3": "Each list grants read, write, decide and manage separately. Write adds lines and comments, decide approves lines and ticks them off, and manage administers the list. Every permission implies read, and manage implies the other two. Owners and admins hold all four on every list, worked out when access is checked instead of stored, so a role change never leaves stale grants behind.",
+  "landingV2.detail.velista.sections.permissions.deep.p4": "A shared basket reaches further out. Its link lets people shop along without joining the group or creating an account: a guest gets a session secret, stored hashed, never sees the group's data, and loses the live connection as soon as the owner revokes access. The back office has its own operators, in their own table and with their own signing key, so no app account can reach it.",
+
+  "landingV2.detail.velista.sections.catalog.title": "A catalog you can trust",
+  "landingV2.detail.velista.sections.catalog.highlight.p1": "Keeping the catalog valid, and above all its prices, is the core of the work. The same product arrives from several supermarket chains under different names and formats, in two languages, and a wrong merge shows up at the till.",
+  "landingV2.detail.velista.sections.catalog.highlight.p2": "Every price a source gives is stored side by side, and nothing overwrites it. On each read the most specific valid price wins: a single shop, then a local area, a region and finally the whole chain.",
+  "landingV2.detail.velista.sections.catalog.deep.p1": "Deciding what is one product and what is two takes written rules. Two products with the same brand and format are one product, a brand or a size never goes in a name, and a supermarket's own label never crosses to another chain.",
+  "landingV2.detail.velista.sections.catalog.deep.p2": "Every price a source gives is stored side by side, and nothing overwrites it. A price belongs to a scope: one shop, a local area, a region or a whole chain. On every read the most specific scope with a valid price wins, and an expired price falls through to the next one, so a correction from an operator and a harvested price live together without either erasing the other.",
+  "landingV2.detail.velista.sections.catalog.deep.p3": "That is what lets Velista price a basket. Your shopping profile names your postal codes, the chains you use and the shops you skip, and each line is priced at the cheapest of your shops. You can also pick a single shop, and see which lines it does not stock and which are cheaper somewhere else.",
+
+  "landingV2.detail.velista.sections.curation.title": "Curating with a model",
+  "landingV2.detail.velista.sections.curation.highlight.p1": "Records never enter the catalog on their own. I built a curator CLI in which a model reviews each waiting record against the naming and merge rules, and validators check every answer before it counts.",
+  "landingV2.detail.velista.sections.curation.highlight.p2": "The decisions are rehearsed on a throwaway copy of the backend and saved to a file. Applying that file is a separate step with no model involved, and it lands whole or not at all.",
+  "landingV2.detail.velista.sections.curation.deep.p1": "The curator is a command line tool. For each record waiting in the queue it builds a packet with the likely matches, asks a model for a decision, and gets one of three answers back: link it to an existing product, create a new one, or leave it for a person to review. Leaving it for review is always a safe answer.",
+  "landingV2.detail.velista.sections.curation.deep.p2": "Nothing the model says is trusted as it comes. Validators reject a name that carries its brand or size, a private label that crosses chains, a conflicting barcode, a format that does not match or a brand nobody registered, and the model is asked again with the reason.",
+  "landingV2.detail.velista.sections.curation.deep.p3": "A session never touches the real catalog. The CLI starts a throwaway backend on a free slot of its own, walks the queue there and writes the decisions to a file. When that file is applied, every operation states what it expects to find, all of them are validated before anything is written, and a stale or contradictory file writes nothing.",
+  "landingV2.detail.velista.sections.curation.deep.p4": "The model behind it is interchangeable. Claude is the default, run through its command line, and the same packets run on the API or on a local model through Ollama. Trimming what each call sends cut the input from about 45,000 tokens to 2,500, and sending four requests at a time made a walk about twice as fast.",
+
+  "landingV2.detail.velista.sections.harvester.title": "The harvester",
+  "landingV2.detail.velista.sections.harvester.highlight.p1": "Every supermarket publishes differently, so each source has a library of its own. One reads a JSON API, one parses pages that print no price, one reads weekly offers priced across 59 regions, and one drives a real browser because the chain refuses anything else.",
+  "landingV2.detail.velista.sections.harvester.highlight.p2": "Those libraries are framework free on purpose: no Nest, no database, and every test runs against captured fixtures with no network. Each chain has its own switch in the database, so a source is turned on or off without a deploy.",
+  "landingV2.detail.velista.sections.harvester.deep.p1": "The harvester is a service with its own database. It finds shops, walks the assortment of a chain and imports files, and it writes what it finds into the catalog over NATS. Each chain has its own switch in the database, so a source is turned on or off without a deploy.",
+  "landingV2.detail.velista.sections.harvester.deep.p2": "Each source lives in a library of its own. Mercadona answers a JSON API for categories, products and shops. DEZA renders listing pages with no price at all, so it contributes products and which shops stock them. LIDL publishes the offers of the week with a price per region, 59 of them. Carrefour refuses any client that is not a real browser, so its library drives one with Playwright. Shops for everything else come from OpenStreetMap, and postal codes from a bundled dataset.",
+  "landingV2.detail.velista.sections.harvester.deep.p3": "None of those libraries may import a framework or a database, and none of their tests touch the network. Each one has a target that captures fresh fixtures from the live source, so when a site changes, the fixtures are refreshed and the tests say exactly what broke.",
+  "landingV2.detail.velista.sections.harvester.deep.p4": "Printed leaflets are a source too. A second CLI renders the PDF pages to images, and a model reads each page into the same document a crawl produces. An offer waits until it is matched to a product, and a fuzzy match never writes a price by itself. When someone enters a postal code Velista has never seen, a run goes looking for the shops around it.",
+
+  "landingV2.detail.velista.sections.assistant.title": "The AI assistant",
+  "landingV2.detail.velista.sections.assistant.highlight.p1": "The add button on a list is a microphone. You say or type what you need, and an assistant built on Gemini adds the lines, changes them, removes them or ticks them off.",
+  "landingV2.detail.velista.sections.assistant.deep.p1": "The assistant is a service of its own, built on Gemini. You speak or type something like \"two milks and whatever we need for a tortilla\", and it adds, updates, removes or settles lines, or answers questions about your lists. Voice notes are transcribed on the server first.",
+  "landingV2.detail.velista.sections.assistant.deep.p2": "It holds no special access. It reads and writes only through the same gateway API the app uses, with the caller's own token, so it can do exactly what that person could do by tapping and nothing more.",
+
+  "landingV2.detail.velista.sections.baskets.title": "Baskets and lists",
+  "landingV2.detail.velista.sections.baskets.deep.p1": "A basket gathers lines from several lists for one trip. A line can be asked for by more than one list, split by the product actually bought, renamed into another line, and settled only when the trip finishes.",
+  "landingV2.detail.velista.sections.baskets.deep.p2": "All of it updates live for everyone shopping together, including guests without an account.",
+
+  "landingV2.detail.velista.chips.frontend": "Frontend",
+  "landingV2.detail.velista.chips.backend": "Backend",
+  "landingV2.detail.velista.chips.deployment": "Deployment"
 }

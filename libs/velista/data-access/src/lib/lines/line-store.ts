@@ -24,7 +24,33 @@ import {
   type RealtimeClientI,
 } from '../realtime/realtime-client';
 import type { RealtimeEvent } from '../realtime/realtime-events';
-import { LINE_SERVICE, type LineServiceI } from './line-service';
+import {
+  LINE_SERVICE,
+  type LineServiceI,
+  type LineUpdateResult,
+} from './line-service';
+
+/**
+ * What {@link LineStore.updateLine} answers.
+ *
+ * The line and the absorbed id on success, because a confirmed merge can answer a
+ * different line than the one edited and the caller has to follow it (velista plan
+ * 0083, section 5). The error on failure, because a merge refusal carries the facts its
+ * question is built from, and a bare `'failed'` would have thrown them away.
+ */
+/**
+ * How this client learned that a line is gone (velista plan 0083).
+ *
+ * `mine` is a delete or a merge this client made, `others` is a `line.deleted` event for
+ * a line this client did not remove itself, and `seen` is either of those after the
+ * reader has been told. A sheet about the line reads it to decide whether to close
+ * quietly or to say what happened first.
+ */
+export type LineDeletion = 'mine' | 'others' | 'seen';
+
+export type LineUpdateOutcome =
+  | ({ readonly state: 'succeeded' | 'overwritten' } & LineUpdateResult)
+  | { readonly state: 'failed'; readonly error: unknown };
 
 /** How one list's lines are loading. Per list, since two can be open in a session. */
 export type LineLoadState = 'idle' | 'loading' | 'loaded' | 'failed';
@@ -92,6 +118,11 @@ export class LineStore {
   private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _mutations = inject(Mutations);
+
+  /** Lines known to be gone, and how this client learned it. */
+  private readonly _deletions = signal<ReadonlyMap<string, LineDeletion>>(
+    new Map()
+  );
   private readonly _destroyRef = inject(DestroyRef);
 
   private readonly _byList = signal<ReadonlyMap<string, readonly Line[]>>(
@@ -238,6 +269,22 @@ export class LineStore {
 
   errorOf(listId: string): unknown {
     return this._error().get(listId) ?? null;
+  }
+
+  /**
+   * How this client learned that a line is gone, or null when it has not.
+   *
+   * Kept by the store and not by a sheet, because the sheet that cares is destroyed
+   * while the confirmation over it is open and is created again when the reader comes
+   * back to it (velista plan 0083, section 6).
+   */
+  deletionOf(lineId: string): LineDeletion | null {
+    return this._deletions().get(lineId) ?? null;
+  }
+
+  /** The reader was told the line is gone. The next sheet about it closes quietly. */
+  acknowledgeDeletion(lineId: string): void {
+    this._markDeleted(lineId, 'seen');
   }
 
   /**
@@ -469,7 +516,21 @@ export class LineStore {
     return { state: 'added', line: outcome.value };
   }
 
-  /** Change what a line says, or how many. Optimistic, per field. */
+  /**
+   * Change what a line says, or how many. Optimistic, per field.
+   *
+   * ## A merge
+   *
+   * A rename onto a taken name is refused unless `confirmMerge` is true (backend plan
+   * 0112). The refusal snaps the row back like any other failure and hands the error
+   * out, because it carries the other line the question names.
+   *
+   * A confirmed merge answers the **surviving** line, which is not always the one
+   * edited. The absorbed line leaves the store at once rather than waiting for its
+   * `line.deleted` event, which then finds nothing to remove, and the survivor takes
+   * the answer. Patching the answer onto the edited row, as an ordinary edit does,
+   * would put a second row with the survivor's id on the list.
+   */
   async updateLine(
     lineId: string,
     changes: {
@@ -477,20 +538,68 @@ export class LineStore {
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
+      confirmMerge?: boolean;
     }
-  ): Promise<'succeeded' | 'failed' | 'overwritten'> {
+  ): Promise<LineUpdateOutcome> {
     const before = this._lineById(lineId);
     if (before === null) {
-      return 'failed';
+      return { state: 'failed', error: null };
     }
 
-    return this._write(
-      lineId,
-      before,
-      claimedBy(changes),
-      (line) => applyLineChanges(line, changes),
-      () => this._lines.updateLine(lineId, changes)
+    const listId = before.listId;
+    const fields = claimedBy(changes);
+    const apply = (line: Line) => applyLineChanges(line, changes);
+    const overlay: Overlay<unknown> = {
+      key: overlayKey(lineId, fields.join('+')),
+      apply: (current) => apply(current as Line) as unknown,
+      fields,
+    };
+
+    this._patch(listId, lineId, apply);
+    this._note(lineId, { outcome: 'pending', byUserId: null });
+
+    const outcome = await this._mutations.run(
+      overlay,
+      () => this._lines.updateLine(lineId, changes),
+      // A survivor that is another line has its own version history, and comparing
+      // it with this line's would read every merge as an overwrite.
+      (result) =>
+        result.line.id === lineId ? result.line.version : before.version + 1,
+      before.version
     );
+
+    if (outcome.state === 'failed') {
+      this._patch(listId, lineId, () => before);
+      this._note(lineId, { outcome: 'failed', byUserId: null });
+      return { state: 'failed', error: outcome.error };
+    }
+
+    const { line, absorbedLineId } = outcome.value;
+
+    // A merge this client confirmed removes a line too, and the event that follows must
+    // not read as somebody else deleting it.
+    if (absorbedLineId !== null) {
+      this._markDeleted(absorbedLineId, 'mine');
+      this._removeLine(absorbedLineId);
+    }
+    if (line.id !== lineId) {
+      this._markDeleted(lineId, 'mine');
+      // The edited line was the one absorbed. `_removeLine` above already took it off
+      // when the answer said so, and this covers an answer that did not.
+      this._removeLine(lineId);
+    }
+    this._patch(listId, line.id, () => line);
+
+    if (outcome.state === 'overwritten') {
+      this._note(line.id, {
+        outcome: 'overwritten',
+        byUserId: line.approvedByUserId,
+      });
+      return { state: 'overwritten', line, absorbedLineId };
+    }
+
+    this._clearNote(lineId);
+    return { state: 'succeeded', line, absorbedLineId };
   }
 
   /**
@@ -858,6 +967,9 @@ export class LineStore {
       return { state: 'failed' };
     }
 
+    // Before the removal, so the `line.deleted` event that echoes this delete finds the
+    // line already known as this client's own and does not report it as somebody else's.
+    this._markDeleted(lineId, 'mine');
     this._removeLine(lineId);
 
     const outcome = await this._mutations.run(null, () =>
@@ -865,6 +977,11 @@ export class LineStore {
     );
 
     if (outcome.state === 'failed') {
+      this._deletions.update((current) => {
+        const next = new Map(current);
+        next.delete(lineId);
+        return next;
+      });
       this._setLines(listId, before);
       return { state: 'failed', error: outcome.error };
     }
@@ -1164,6 +1281,11 @@ export class LineStore {
       }
 
       case 'line.deleted': {
+        // Only a line this client has not already accounted for. Its own delete and
+        // its own merge are marked before the request goes out.
+        if (this.deletionOf(event.lineId) === null) {
+          this._markDeleted(event.lineId, 'others');
+        }
         this._removeLine(event.lineId);
         break;
       }
@@ -1350,6 +1472,10 @@ export class LineStore {
         lines.map((line) => (line.id === lineId ? change(line) : line))
       );
     });
+  }
+
+  private _markDeleted(lineId: string, how: LineDeletion): void {
+    this._deletions.update((current) => new Map(current).set(lineId, how));
   }
 
   private _removeLine(lineId: string): void {

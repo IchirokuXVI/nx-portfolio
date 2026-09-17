@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`356befb1f`](https://github.com/IchirokuXVI/nx-portfolio/commit/356befb1fb32d965a10731fe02d261d112e2adb6) on `dev`, with no pull request of its own.
+
 # 0038 The harvester service, and Mercadona as its first source
 
 Backlog 0001 designs the whole price sourcing machine. This plan builds the **ingest half** of it

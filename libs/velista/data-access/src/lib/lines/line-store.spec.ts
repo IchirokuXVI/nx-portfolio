@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type { Line, Page } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { GatewayError } from '../errors';
 import { Mutations } from '../mutations';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import { RealtimeMemory } from '../realtime/realtime-memory';
@@ -74,6 +75,8 @@ function service(seed: readonly Line[]) {
   };
 
   let readFailsWith: Error | null = null;
+  /** The line the next edit reports as absorbed by a merge (backend plan 0112). */
+  let absorbNext: string | null = null;
 
   const impl: LineServiceI = {
     listLines: async (): Promise<Page<Line>> => {
@@ -100,8 +103,14 @@ function service(seed: readonly Line[]) {
           version: 1,
         })
       ),
-    updateLine: async (lineId, changes) =>
-      answer(line(lineId, { ...changes, version: 2 })),
+    updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
+      const absorbedLineId = absorbNext;
+      absorbNext = null;
+      return {
+        line: await answer(line(lineId, { ...changes, version: 2 })),
+        absorbedLineId,
+      };
+    },
     addQuantity: async (lineId, delta) =>
       answer(line(lineId, { quantity: 1 + delta, version: 2 })),
     settle: async (lineId, outcome, options) => {
@@ -170,6 +179,9 @@ function service(seed: readonly Line[]) {
     },
     answerNext: (value: Line) => {
       answerWith = value;
+    },
+    absorbNext: (lineId: string) => {
+      absorbNext = lineId;
     },
     holdWrites: () => {
       held = new Promise<void>((resolve) => {
@@ -514,6 +526,108 @@ describe('LineStore', () => {
       expect(result.state).toBe('failed');
       expect(store.linesIn(LIST)[0].quantity).toBe(2);
       expect(store.writeNoteOf('a')?.outcome).toBe('failed');
+    });
+  });
+
+  describe('what the store knows about a deleted line (velista plan 0083)', () => {
+    it('marks its own delete as its own, even when the event echoes it', async () => {
+      const { store, realtime } = await build([line('a')]);
+      await store.load(LIST);
+
+      await store.deleteLine('a');
+      realtime.emit('line.deleted', { id: 'a', listId: LIST });
+
+      expect(store.deletionOf('a')).toBe('mine');
+    });
+
+    it('forgets a delete that failed', async () => {
+      const { store, lines } = await build([line('a')]);
+      await store.load(LIST);
+      lines.failNext(new Error('offline'));
+
+      await store.deleteLine('a');
+
+      expect(store.deletionOf('a')).toBeNull();
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['a']);
+    });
+
+    it('marks an event for a line it did not remove as somebody else', async () => {
+      const { store, realtime } = await build([line('a')]);
+      await store.load(LIST);
+
+      realtime.emit('line.deleted', { id: 'a', listId: LIST });
+      expect(store.deletionOf('a')).toBe('others');
+
+      store.acknowledgeDeletion('a');
+      expect(store.deletionOf('a')).toBe('seen');
+    });
+
+    it('marks both sides of its own merge as its own', async () => {
+      const { store, lines } = await build([
+        line('a', { content: 'Milk', position: 1 }),
+        line('b', { content: 'Bread', position: 2 }),
+      ]);
+      await store.load(LIST);
+      lines.answerNext(line('a', { content: 'Milk', version: 2 }));
+      lines.absorbNext('b');
+
+      await store.updateLine('b', { content: 'Milk', confirmMerge: true });
+
+      expect(store.deletionOf('b')).toBe('mine');
+      expect(store.deletionOf('a')).toBeNull();
+    });
+  });
+
+  describe('an edit that merges two lines (velista plan 0083, section 5)', () => {
+    it('removes the absorbed line at once and keeps the survivor', async () => {
+      const { store, lines, realtime } = await build([
+        line('a', { content: 'Milk', quantity: 2, position: 1 }),
+        line('b', { content: 'Bread', quantity: 3, position: 2 }),
+      ]);
+      await store.load(LIST);
+      lines.answerNext(
+        line('a', { content: 'Milk', quantity: 5, position: 1, version: 2 })
+      );
+      lines.absorbNext('b');
+
+      const outcome = await store.updateLine('b', {
+        content: 'Milk',
+        confirmMerge: true,
+      });
+
+      expect(outcome).toEqual(
+        expect.objectContaining({ state: 'succeeded', absorbedLineId: 'b' })
+      );
+      expect(store.linesIn(LIST).map((l) => [l.id, l.quantity])).toEqual([
+        ['a', 5],
+      ]);
+
+      // The event that follows finds nothing left to remove.
+      realtime.emit('line.deleted', { id: 'b', listId: LIST });
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['a']);
+    });
+
+    it('hands the refusal out and snaps the row back', async () => {
+      const { store, lines } = await build([
+        line('a', { content: 'Milk' }),
+        line('b', { content: 'Bread' }),
+      ]);
+      await store.load(LIST);
+      const refusal = new GatewayError({
+        code: 'line_merge_required',
+        status: 409,
+        correlationId: 'c',
+        details: { otherLineId: 'a', otherContent: 'Milk', otherQuantity: 1 },
+      });
+      lines.failNext(refusal);
+
+      const outcome = await store.updateLine('b', { content: 'Milk' });
+
+      expect(outcome).toEqual({ state: 'failed', error: refusal });
+      expect(store.linesIn(LIST).map((l) => l.content)).toEqual([
+        'Milk',
+        'Bread',
+      ]);
     });
   });
 

@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`e120726de`](https://github.com/IchirokuXVI/nx-portfolio/commit/e120726de5c001371a54b9ab1bfdb78cdaef949f) on `dev`, with no pull request of its own.
+
 # 0009. Credentials: signing in, registering, and keeping a guest account
 
 > Prerequisite reading: `0008` (the other two ways in, and rule E1 on routing),

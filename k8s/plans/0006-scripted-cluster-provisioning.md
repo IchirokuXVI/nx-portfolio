@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`0b90ce3cc`](https://github.com/IchirokuXVI/nx-portfolio/commit/0b90ce3cc5775a6130c611e3afbd02367949e563) on `dev`, with no pull request of its own.
+
 # 0006 Script the namespace and the Secrets
 
 Everything a cluster needs before its first `helm upgrade` exists today as prose. The

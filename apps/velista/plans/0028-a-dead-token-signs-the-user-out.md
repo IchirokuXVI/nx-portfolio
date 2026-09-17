@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`ebc545441`](https://github.com/IchirokuXVI/nx-portfolio/commit/ebc545441ed39840df584280d75b5063ed415211) on `dev`, with no pull request of its own.
+
 # 0028: a token whose account is gone signs the user out
 
 > Written after the fact, from commit `ebc5454`. The work is on `dev`; this plan records

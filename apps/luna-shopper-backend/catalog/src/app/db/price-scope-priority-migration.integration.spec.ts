@@ -98,6 +98,17 @@ describeIntegration('price scope priority migration (real Postgres)', () => {
     await dataSource.query(`DELETE FROM "price_scopes"`);
     await dataSource.query(`DELETE FROM "supermarkets"`);
 
+    await undoThroughUnderTest();
+  }
+
+  /**
+   * Undo every migration from the one under test to the end of the list.
+   *
+   * Counted from the end rather than undone once, because this is no longer
+   * the last migration in the workspace: undoing a single one here would undo
+   * whichever plan landed after it instead.
+   */
+  async function undoThroughUnderTest(): Promise<void> {
     const after = CATALOG_MIGRATIONS.findIndex(
       (migration) => migration.name === UNDER_TEST
     );
@@ -227,7 +238,7 @@ describeIntegration('price scope priority migration (real Postgres)', () => {
       [world.onStore, world.national]
     );
 
-    await dataSource.undoLastMigration();
+    await undoThroughUnderTest();
 
     const rows: LocationRow[] = await dataSource.query(
       `SELECT "id", "priceScopeId" FROM "supermarket_locations"`

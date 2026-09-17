@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`e7c2b8753`](https://github.com/IchirokuXVI/nx-portfolio/commit/e7c2b875347e6063caf6b483c3333a3f3c224223) on `dev`, with no pull request of its own.
+
 # 0029 An ownership transfer is two role changes
 
 > Depends on 0006 (zones and membership) and 0009 (realtime).

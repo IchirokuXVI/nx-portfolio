@@ -4,6 +4,7 @@ import type {
   GeneratedListRun,
   GeneratedListSummary,
   Page,
+  SharedGeneratedListSummary,
   WritableGeneratedListStatus,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
@@ -38,6 +39,12 @@ export class GeneratedListMemory implements GeneratedListServiceI {
 
   private _nextId = 1;
 
+  /** Baskets other people shared with the caller. Empty, like the history. */
+  shared: SharedGeneratedListSummary[] = [];
+
+  /** What the last create asked to share with, for specs to read back. */
+  lastMemberUserIds: readonly string[] | undefined;
+
   async listMine(cursor?: string): Promise<Page<GeneratedListSummary>> {
     // The cursor is the index, which is all a fake needs: the real one is opaque and
     // the client never reads into it, so anything the client round trips unchanged
@@ -53,7 +60,19 @@ export class GeneratedListMemory implements GeneratedListServiceI {
     };
   }
 
+  async listShared(cursor?: string): Promise<Page<SharedGeneratedListSummary>> {
+    const from = cursor === undefined ? 0 : Number.parseInt(cursor, 10);
+    const start = Number.isNaN(from) ? 0 : from;
+    const next = start + PAGE_SIZE;
+
+    return {
+      items: this.shared.slice(start, next),
+      nextCursor: next < this.shared.length ? String(next) : null,
+    };
+  }
+
   async create(request: CreateGeneratedListRequest): Promise<GeneratedListRun> {
+    this.lastMemberUserIds = request.memberUserIds;
     const key = request.idempotencyKey;
     if (key !== undefined) {
       const already = this._byKey.get(key);

@@ -5,9 +5,10 @@ A personal portfolio built as an **Angular module-federation micro-frontend syst
 - **`shell`** — host application. Owns the router and lazy-loads the remotes at runtime.
 - **`odontogram`, `damoclesSword`, `landingV2`, `velista`** — remote micro-frontends, each exposing its routes via `./Routes` (module federation). The first three render **only through the shell**: served on their own port they show a blank page. **velista is the exception**, a standalone app that is also exposed as a remote, served from its own origin (`velista.app`) and installable there as a PWA.
 - **`apps/luna-shopper-backend/*`** — velista's backend: seven NestJS services (`gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`, `assistant`) talking over NATS, with four Postgres instances and Redis.
+- **`luna-shopper-admin`**: the Luna Shopper back office. A standalone Angular app (port 4206), not a remote, so the shell never loads it. It is served from its own origin (`admin.velista.app`) and talks to the same gateway as velista, on the `/v1/admin` routes.
 - **`apps/docker/*`** — non-Angular Nx "app" projects that wrap a Dockerfile (`builder`, `local-http-server`).
 - **`tools/docker`** — custom Nx plugin (`@portfolio/docker`) providing the `build`/`push` executors behind every `build:docker` target.
-- **`libs/<scope>/*`** — libraries grouped by scope (`shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`, `luna-shopper`).
+- **`libs/<scope>/*`** — libraries grouped by scope (`shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`, `luna-shopper`, `luna-shopper-admin`).
 - **`k8s/helm`** — the Helm chart deployed by CI. It describes **one** environment; which one comes from the cluster you point it at and the values file you pass beside `values.yaml`.
 - **`k8s/bootstrap`** — the once-per-cluster install (Gateway API CRDs, Envoy Gateway, cert-manager, a ClusterIssuer) plus the host and release provisioning scripts. Deliberately outside the chart.
 
@@ -46,14 +47,15 @@ what is already running before claiming one:
 ```sh
 tools/dev/ng-slot.sh --list                     # who holds what, and what is live
 tools/dev/ng-slot.sh --up --apps shell,velista  # claim the lowest free slot and serve
+tools/dev/ng-slot.sh --up --apps luna-shopper-admin  # the back office alone, no shell
 tools/dev/ng-slot.sh --down
 
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up
 ```
 
-Both have `.ps1` twins. Slot 0 is the developer's own, on the ports `project.json`
-already names. See [`tools/dev/README.md`](./tools/dev/README.md) and
+There are no `.ps1` twins: Git Bash is the supported shell on Windows. Slot 0 is
+the developer's own, on the ports `project.json` already names. See [`tools/dev/README.md`](./tools/dev/README.md) and
 [`CLAUDE.md`](./CLAUDE.md) for the port bands and why a port override in a
 `project.json` is the wrong fix.
 
@@ -61,13 +63,14 @@ already names. See [`tools/dev/README.md`](./tools/dev/README.md) and
 
 ## Deployment / CI/CD
 
-Three GitHub Actions workflows, one per boundary:
+Four GitHub Actions workflows, one per boundary:
 
 | Workflow | Trigger | Does |
 | --- | --- | --- |
-| **`pr.yml`** | PR into `main` or `dev` | lint + unit-test the affected projects (against the PR's target branch), plus the backend integration suites. Fast pre-merge feedback. |
-| **`docker-ci.yml`** | push to `main` | unit-test affected, build + push affected staging images, e2e them (frontend **and** Luna backend), deploy staging. |
-| **`release.yml`** | GitHub Release published | test all apps, build + push all production images, deploy production. |
+| **`pr-title.yml`** | any PR opened, edited, reopened or synchronized | validates the PR title against `tools/release/rules.mjs` (see [`CONTRIBUTING.md`](./CONTRIBUTING.md)). It has no branch filter, so a stacked PR is checked too. |
+| **`pr.yml`** | PR into `main` or `dev` | `verify`: lint, unit-test and `manifest-check` the affected projects (against the PR's target branch). `verify-infra`: when a Luna Shopper project is affected, brings up a stack and runs the backend integration suites plus the `luna-shopper-backend-e2e` suite. Fast pre-merge feedback. |
+| **`docker-ci.yml`** | push to `main`, or manual dispatch | lint + unit-test affected, build + push affected staging images, e2e them (frontend, Luna backend, and velista against that backend), deploy staging. |
+| **`release.yml`** | GitHub Release published | lint + test all projects, build + push all production images, deploy production. |
 
 **Testing model.** Tests run at every stage rather than once. The PR runs unit tests
 for quick feedback before merge; the merge to `main` re-runs the unit tests on the
@@ -83,30 +86,40 @@ PRs can merge back-to-back and each resulting push to `main` is tested on its ow
 ### Staging pipeline (`docker-ci.yml`)
 
 ```
-push to main
+push to main  (or workflow_dispatch, where build_all=true ignores affected)
   │
-  ├─ Log in to GHCR (ghcr.io) + set up Docker Buildx + expose the gha buildx cache
-  ├─ Setup Node 22, install pinned Nx
-  ├─ Build the `docker/builder` image (the CI build image)
-  ├─ Resolve the "affected" base = SHA of the last successful run of this workflow
-  ├─ Build affected static-docker apps            (nx run-many -t build)
-  ├─ Test affected apps inside the builder image  (nx run-many -t test)
-  ├─ Build the bundles inside the builder image   (nx run-many -t build prune, with
-  │                                                MFE_BASE_URL / MFE_REMOTE_URLS /
-  │                                                LUNA_* set as env, not build args)
-  ├─ Build & push affected images                 (nx run-many -t build:docker,
-  │                                                DOCKER_IMAGE_TAG=staging)
-  ├─ e2e-frontend: shell + remotes                (k8s/e2e/portfolio-frontend/compose.yml)
-  ├─ e2e-luna: the backend stack                  (k8s/e2e/luna-shopper-backend/compose*.yml)
-  └─ Deploy to SSH_DEPLOY_HOST_STAGING:
+  setup         Resolve the "affected" base = SHA of the last successful run of this
+  │             workflow, then list the affected projects (nx show projects --json)
+  │
+  ├─ lint-test  nx run-many -t lint test, inside BUILD_IMAGE (a digest pinned node:24-slim)
+  │
+  └─ build      Log in to GHCR + set up Docker Buildx + expose the gha buildx cache
+     │          ├─ Build affected static-docker apps        (nx run-many -t build)
+     │          ├─ Build the bundles inside BUILD_IMAGE      (nx run-many -t build prune, with
+     │          │                                            MFE_BASE_URL / MFE_REMOTE_URLS /
+     │          │                                            LUNA_GATEWAY_URL / LUNA_REALTIME_URL /
+     │          │                                            VELISTA_APP_VERSION set as env)
+     │          ├─ Every bundle can resolve what it requires (assert-runtime-manifest.mjs over
+     │          │                                            the affected Luna service bundles)
+     │          └─ Build & push staging images              (nx run-many -t build:docker,
+     │                                                       DOCKER_IMAGE_TAG=staging,
+     │                                                       --exclude-task-dependencies)
+     │
+     ├─ e2e-frontend      shell + remotes     (k8s/e2e/portfolio-frontend/compose.yml)
+     ├─ e2e-luna          the backend images  (k8s/e2e/luna-shopper-backend/compose*.yml)
+     └─ e2e-velista-luna  velista-luna-e2e    (both stacks, the frontend images pointed
+                                               at the backend hosts)
+  │
+  deploy        after every job above, to SSH_DEPLOY_HOST_STAGING:
        rsync k8s/ → provision-release.sh --check --env staging
                   → helm upgrade --atomic --timeout 10m (values.yaml + values.staging.yaml)
                   → kubectl rollout restart + a separate rollout status loop
 ```
 
-Both e2e jobs gate the deploy: it runs only if neither failed. There is no build
-stage inside an app's Dockerfile. `nx build` runs once for the whole workspace in
-the pinned builder image, `build:docker` sets `"context": "dist"`, and the finished
+`lint-test`, `build` and the three e2e gates all gate the deploy: it runs only if
+none of them failed. A gate that skips because nothing relevant is affected does not
+block it. There is no build stage inside an app's Dockerfile. `nx build` runs once
+for the whole workspace in the pinned `BUILD_IMAGE`, `build:docker` sets `"context": "dist"`, and the finished
 bundle is copied in. That is why the shell's `MFE_BASE_URL` is an env var on the
 build container rather than a Docker build arg.
 
@@ -126,24 +139,28 @@ gh run list --branch "$branch" --workflow "$workflow" --json headSha,conclusion 
   --jq '[.[] | select(.conclusion=="success")][0].headSha'
 ```
 
-That SHA becomes `--base` (with `--head=${{ github.sha }}`) for three separate `nx show projects --affected` queries, so unrelated apps are never rebuilt:
+That SHA becomes `--base` (with `--head=${{ github.sha }}`) for the `nx show projects --affected` queries in the `setup` job, so unrelated apps are never rebuilt. With no earlier successful run, or on a manual dispatch with `build_all`, the queries drop `--affected` and list everything. The job exposes these outputs:
 
-| Set                      | Query                             | Used for                                            |
-| ------------------------ | --------------------------------- | --------------------------------------------------- |
-| `affected_docker_apps`   | apps tagged `type:static-docker`  | plain Dockerfile apps built with `nx build`         |
-| `affected_testable_apps` | projects with a `test` target     | tests run inside the builder image                  |
-| `affected_apps_tobuild`  | apps with a `build:docker` target | Angular apps built + pushed via the custom executor |
+| Output         | Derived from                                           | Used for                                                  |
+| -------------- | ------------------------------------------------------ | --------------------------------------------------------- |
+| `docker_apps`  | apps tagged `type:static-docker`                       | plain Dockerfile apps built with `nx build`               |
+| `testable`     | projects with a `test` target                          | `lint-test`, inside `BUILD_IMAGE`                         |
+| `apps_tobuild` | apps with a `build:docker` target                      | bundles built, then images built + pushed by the executor |
+| `deployments`  | `apps_tobuild`, lowercased                             | the deployments that `deploy` restarts                    |
+| `luna`         | the `luna-shopper-backend-*` entries of `apps_tobuild` | the runtime manifest check and the `e2e-luna` gate        |
+| `e2e`          | projects with an `e2e` target, except `odontogram-e2e`, `luna-shopper-backend-e2e` and `velista-luna-e2e` | the `e2e-frontend` gate |
+| `velista_luna` | `true` when `velista-luna-e2e` is affected             | the `e2e-velista-luna` gate                               |
 
 ### Images & registry
 
 - Registry: **`ghcr.io/ichirokuxvi`** (env `DOCKER_REGISTRY`). Images are named `nx-portfolio/<app>`. `DOCKER_IMAGE_TAG` overrides the target's `versionTags`, so staging pushes the mutable `staging` tag and a release pushes `<version>,latest`. Production pins the immutable version; rollback is `deploy-release.sh <older-version>`.
 - The workflow logs in with `docker/login-action` using the built-in `GITHUB_TOKEN`, so the executor is told to skip its own login via `DOCKER_SKIP_LOGIN=true`.
 - `push` only happens for targets whose `production` configuration sets `pushToRegistry: true` (see each app's `project.json`).
-- Tests run _inside_ `ghcr.io/<repo-lowercase>/builder:latest` — the builder image is rebuilt first so tests use the current toolchain.
+- Nothing compiles on the runner. Lint, unit tests and every `nx build` run inside `BUILD_IMAGE`, a digest pinned `node:24-slim` named at the top of `docker-ci.yml` and `release.yml`. CI no longer builds or uses the `docker/builder` image, which is kept only for the local full stack ([`k8s/README.md`](./k8s/README.md)).
 
 ### Deploy step (SSH → Helm)
 
-After the images are pushed and both e2e gates pass, the workflow ships the chart and
+After the images are pushed and none of the three e2e gates fails, the workflow ships the chart and
 upgrades the release on the cluster host over SSH. CI connects as `SSH_DEPLOY_USER`, an
 **unprivileged** account: the chart lands in that user's home, not `/root`, and nothing
 in the deploy path uses sudo, because k3s writes its kubeconfig world readable.
@@ -245,8 +262,8 @@ LoadBalancer services already surface on localhost there.
 
 Each `apps` / `lunaShopperBackend.services` entry carries a `hostPrefix`, composed
 under the values file's `baseDomain`. An environment file can override an entry's host
-by name in `hostOverrides`, which is what puts velista and its two backend services on
-velista's own domain:
+by name in `hostOverrides`, which is what puts velista, the back office and the two
+backend services on velista's own domain:
 
 | Entry | Production host | Path |
 | --- | --- | --- |
@@ -255,12 +272,13 @@ velista's own domain:
 | `damoclessword` | `mfe.ichirokuxvi.com` | `/damoclesSword` |
 | `landingv2` | `mfe.ichirokuxvi.com` | `/landingV2` |
 | `velista` | `velista.app` (override) | `/` |
+| `luna-shopper-admin` | `admin.velista.app` (override) | `/` |
 | `luna-shopper-backend-gateway` | `api.velista.app` (override) | |
 | `luna-shopper-backend-realtime` | `rt.velista.app` (override) | |
 
-Staging is the same five names one label down: `staging.ichirokuxvi.com`,
-`mfe.staging.`, `staging.velista.app`, `api.staging.velista.app`,
-`rt.staging.velista.app`.
+Staging is the same six names one label down: `staging.ichirokuxvi.com`,
+`mfe.staging.`, `staging.velista.app`, `admin.staging.velista.app`,
+`api.staging.velista.app`, `rt.staging.velista.app`.
 
 `ichirokuxvi.com/velista` keeps working: the shell mounts the remote at that path and
 loads it from the new origin, which is what the workflows' `MFE_REMOTE_URLS` says.
@@ -279,9 +297,12 @@ Postgres instances, NATS with JetStream, Redis) and the zero downtime deploy con
 (rolling update with a readiness gate, graceful shutdown, PodDisruptionBudgets). Only
 `gateway` and `realtime` are public; the rest are ClusterIP and reached over NATS.
 
-The **harvester is switched off in both clusters on purpose** (`harvester.enabled:
-false`), so none of its objects render. It runs locally against the compose stack. See
-the Luna Shopper section of [`CLAUDE.md`](./CLAUDE.md).
+The **harvester is deployed in both clusters** (`harvester.enabled: true` and
+`harvestEnabled: true`), and both clusters can start a run. Neither fetches a
+storefront, because whether a chain is fetched is a row per chain in the harvester's
+own database (`supermarket_sources.enabled`), and every row is off. A cluster runs
+store discovery and leaflet imports. Price crawls run locally against the compose
+stack. See the Luna Shopper section of [`CLAUDE.md`](./CLAUDE.md).
 
 ### Provisioning a cluster
 

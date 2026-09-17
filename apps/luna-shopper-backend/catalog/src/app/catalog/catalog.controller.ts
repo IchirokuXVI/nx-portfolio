@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ADMIN_DASHBOARD_PATTERNS,
   ADMIN_POSTAL_CODE_PATTERNS,
+  BRAND_PATTERNS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
   POSTAL_CODE_PATTERNS,
@@ -23,7 +24,14 @@ import {
   type AdminSupermarketItemPage,
   type ApplyProductGroupAssignmentsRequest,
   type ApplyProductGroupAssignmentsResult,
+  type BrandIdRequest,
+  type BrandKeysRequest,
+  type BrandKeysResult,
+  type BrandPage,
+  type BrandView,
   type CountLocationsByPostalCodeRequest,
+  type CreateBrandRequest,
+  type CreateBrandResult,
   type CreateItemRequest,
   type CreateItemsRequest,
   type CreateItemsResult,
@@ -31,6 +39,8 @@ import {
   type CreateProductGroupRequest,
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
+  type DeleteBrandRequest,
+  type DeleteBrandResult,
   type DeleteItemPricesByRunRequest,
   type DeleteItemPricesByRunResult,
   type FindItemByEanRequest,
@@ -46,6 +56,7 @@ import {
   type ItemPriceView,
   type ItemView,
   type ListAdminPostalCodesRequest,
+  type ListBrandsRequest,
   type ListItemPricesRequest,
   type ListNearbyPostalCodesRequest,
   type ListPricePoliciesRequest,
@@ -69,6 +80,8 @@ import {
   type ProductGroupOfferPage,
   type ProductGroupPage,
   type ProductGroupView,
+  type RegisterBrandSuggestionRequest,
+  type RegisterBrandSuggestionResult,
   type ResolvedScopesView,
   type ResolveNearestPostalCodeRequest,
   type ResolvePriceScopesRequest,
@@ -92,6 +105,8 @@ import {
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
+  type UpdateBrandRequest,
+  type UpdateBrandResult,
   type UpdateItemRequest,
   type UpdatePricePolicyRequest,
   type UpdatePriceScopeRequest,
@@ -100,6 +115,7 @@ import {
   type UpdateSupermarketRequest,
   type UpsertSupermarketLocationItemRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { BrandService } from './brand.service';
 import { CatalogDashboardService } from './dashboard.service';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
@@ -131,6 +147,7 @@ export class CatalogController {
     private readonly locationItems: SupermarketLocationItemService,
     private readonly productGroups: ProductGroupService,
     private readonly groupAssignments: ProductGroupAssignmentService,
+    private readonly brands: BrandService,
     private readonly scopeResolver: ScopeResolverService,
     private readonly postalCodes: PostalCodeService,
     private readonly itemPrices: ItemPriceService,
@@ -358,6 +375,69 @@ export class CatalogController {
     return this.productGroups.get(req);
   }
 
+  // --- Brands (plan 0115) --------------------------------------------------
+
+  /**
+   * Register a brand, and claim the products already carrying its key.
+   *
+   * A person is the only thing that creates one of these rows: no migration, no
+   * seed and no harvest run registers a brand.
+   */
+  @MessagePattern(BRAND_PATTERNS.create)
+  createBrand(@Payload() req: CreateBrandRequest): Promise<CreateBrandResult> {
+    return this.brands.create(req);
+  }
+
+  /** Rename a brand, or move it under a chain. The key follows the label. */
+  @MessagePattern(BRAND_PATTERNS.update)
+  updateBrand(@Payload() req: UpdateBrandRequest): Promise<UpdateBrandResult> {
+    return this.brands.update(req);
+  }
+
+  /**
+   * Register a suggestion under the name a person typed (plan 0124, section 5).
+   *
+   * One message rather than a create and a link, because a failure between two
+   * of them leaves the suggestion half registered.
+   */
+  @MessagePattern(BRAND_PATTERNS.registerSuggestion)
+  registerBrandSuggestion(
+    @Payload() req: RegisterBrandSuggestionRequest
+  ): Promise<RegisterBrandSuggestionResult> {
+    return this.brands.registerSuggestion(req);
+  }
+
+  /**
+   * Remove a spelling (plan 0124).
+   *
+   * The only brand a person may delete: its products go back to unbranded and
+   * its key returns to the suggestions list. Every other brand is refused.
+   */
+  @MessagePattern(BRAND_PATTERNS.delete)
+  deleteBrand(@Payload() req: DeleteBrandRequest): Promise<DeleteBrandResult> {
+    return this.brands.remove(req);
+  }
+
+  @MessagePattern(BRAND_PATTERNS.get)
+  getBrand(@Payload() req: BrandIdRequest): Promise<BrandView> {
+    return this.brands.get(req);
+  }
+
+  @MessagePattern(BRAND_PATTERNS.list)
+  listBrands(@Payload() req: ListBrandsRequest): Promise<BrandPage> {
+    return this.brands.list(req);
+  }
+
+  /**
+   * Every registered key, for the suggestions read (plan 0115, section 7.3).
+   *
+   * The whole set travels in one NATS message, and the ceiling on that is
+   * documented on {@link BRAND_PATTERNS.keys}.
+   */
+  @MessagePattern(BRAND_PATTERNS.keys)
+  brandKeys(@Payload() req: BrandKeysRequest): Promise<BrandKeysResult> {
+    return this.brands.keys(req);
+  }
   @MessagePattern(PRODUCT_GROUP_PATTERNS.list)
   listProductGroups(
     @Payload() req: ListProductGroupsRequest

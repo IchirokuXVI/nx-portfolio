@@ -100,14 +100,19 @@ async function render(options: Options = {}) {
   };
 }
 
-/** Fills both fields the way a person does, through the inputs the page renders. */
+/**
+ * Fills the form the way a person who typed it correctly does. The confirmation
+ * defaults to the password, and only the mismatch tests pass it separately.
+ */
 function fill(
   fixture: ComponentFixture<UpgradePage>,
   email: string,
-  password: string
+  password: string,
+  confirmPassword: string = password
 ): void {
   fixture.componentInstance.email.set(email);
   fixture.componentInstance.password.set(password);
+  fixture.componentInstance.confirmPassword.set(confirmPassword);
   fixture.detectChanges();
 }
 
@@ -202,6 +207,61 @@ describe('UpgradePage', () => {
     await fixture.whenStable();
 
     expect(auth.calls).toHaveLength(0);
+  });
+
+  describe('the password confirmation', () => {
+    it('asks for the password twice, with the rule stated once', async () => {
+      const { fixture } = await render();
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(host.querySelectorAll('input')).toHaveLength(3);
+      expect(host.querySelector('#upgrade-password')).not.toBeNull();
+      expect(host.querySelector('#upgrade-confirm-password')).not.toBeNull();
+      expect(host.querySelectorAll('.password-rule')).toHaveLength(1);
+    });
+
+    it('will not submit until the confirmation has something in it', async () => {
+      const { fixture } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', '');
+
+      expect(fixture.componentInstance.canSubmit()).toBe(false);
+    });
+
+    it('sends nothing when the two passwords differ', async () => {
+      const { fixture, auth, router } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password124');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(auth.calls).toEqual([]);
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+      expect(fixture.componentInstance.error()).toEqual({
+        key: 'auth.error.passwordMismatch',
+        placement: 'password',
+      });
+    });
+
+    it('puts the cursor in the confirmation, not in the password', async () => {
+      const { fixture } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password124');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(document.activeElement?.id).toBe('upgrade-confirm-password');
+    });
+
+    it('compares exactly, since a space is a character somebody may have meant', async () => {
+      const { fixture, auth } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password123 ');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(auth.calls).toEqual([]);
+    });
   });
 
   describe('when the address is refused', () => {

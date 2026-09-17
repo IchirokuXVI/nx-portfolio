@@ -13,21 +13,31 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   GENERATED_LIST_PATTERNS,
+  GENERATED_LIST_SCHEMA_IDS,
   type GeneratedListLineView,
   type GeneratedListPage,
   type GeneratedListRunResult,
   type GeneratedListView,
+  type SharedGeneratedListCorePage,
+  type SharedGeneratedListPage,
+  type UpdateGeneratedListLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
-import { ApiContractResponse, ApiProblemResponses } from '../docs';
+import {
+  ApiComposedResponse,
+  ApiContractResponse,
+  ApiProblemResponses,
+} from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { BasketPresenceService } from './basket-presence.service';
+import { resolveUsernames } from './generated-list-sharing.controller';
 import {
   AddGeneratedListLineDto,
   CreateGeneratedListDto,
   ListGeneratedListsQueryDto,
+  ListSharedGeneratedListsQueryDto,
   ReorderGeneratedListLinesDto,
   UpdateGeneratedListDto,
   UpdateGeneratedListLineDto,
@@ -64,19 +74,30 @@ export class GeneratedListController {
    * The answer carries the basket **and what the run left behind**: a line a live
    * basket is already carrying is skipped and named, because a basket missing the
    * milk somebody distinctly remembers writing is a bug report otherwise.
+   *
+   * `memberUserIds` shares it with people from the caller's groups as it is
+   * made (plan 0114, section 4), and a person who is not one of their contacts
+   * refuses the whole run.
    */
   @Post()
   @ApiContractResponse(GENERATED_LIST_PATTERNS.create, {
     status: HttpStatus.CREATED,
   })
   @ApiProblemResponses({ auth: true, body: true, notFound: true })
-  create(
+  async create(
     @AuthUser() user: CurrentUser,
     @Body() dto: CreateGeneratedListDto
   ): Promise<GeneratedListRunResult> {
+    // Core names each person from their groups, and auth names the ones the
+    // owner shares no group with, or several (plan 0114, section 9). Always
+    // written after the body, so a body cannot supply names of its own.
+    const globalUsernames = await resolveUsernames(
+      this.nats,
+      dto.memberUserIds ?? []
+    );
     return this.nats.send<GeneratedListRunResult>(
       GENERATED_LIST_PATTERNS.create,
-      { userId: user.userId, ...dto }
+      { userId: user.userId, ...dto, globalUsernames }
     );
   }
 
@@ -112,6 +133,59 @@ export class GeneratedListController {
         ...item,
         presentCount: present.get(item.id) ?? 0,
       })),
+    };
+  }
+
+  /**
+   * The baskets other people shared with the caller, newest share first (plan
+   * 0114, section 8).
+   *
+   * Every basket the caller is on as a registered participant, by the link or
+   * because the owner added them, finished ones included and archived ones not.
+   * Each row is a history row plus who shared it and when.
+   *
+   * Declared before `:id` on purpose: handlers match in declaration order, and
+   * `:id` would otherwise take `shared` for a basket id.
+   *
+   * Composed on the way out, from three places. Core answers the rows and names
+   * the owner when the two people share exactly one group, auth names every
+   * other owner globally (section 9), and presence fills the count as it does
+   * for the caller's own history. A name auth cannot give is an empty string
+   * rather than a failed page.
+   */
+  @Get('shared')
+  @ApiComposedResponse(GENERATED_LIST_SCHEMA_IDS.sharedPage)
+  @ApiProblemResponses({ auth: true, body: true })
+  async listShared(
+    @AuthUser() user: CurrentUser,
+    @Query() query: ListSharedGeneratedListsQueryDto
+  ): Promise<SharedGeneratedListPage> {
+    const page = await this.nats.send<SharedGeneratedListCorePage>(
+      GENERATED_LIST_PATTERNS.listShared,
+      { userId: user.userId, ...query }
+    );
+    const [present, named] = await Promise.all([
+      this.presence.countsFor(page.items.map((item) => item.id)),
+      resolveUsernames(
+        this.nats,
+        page.items
+          .filter((item) => item.ownerZoneUsername === null)
+          .map((item) => item.ownerUserId)
+      ),
+    ]);
+    const globalName = new Map(named.map((row) => [row.userId, row.username]));
+    return {
+      nextCursor: page.nextCursor,
+      items: page.items.map(
+        ({ ownerUserId, ownerZoneUsername, ...summary }) => ({
+          ...summary,
+          presentCount: present.get(summary.id) ?? 0,
+          owner: {
+            userId: ownerUserId,
+            name: ownerZoneUsername ?? globalName.get(ownerUserId) ?? '',
+          },
+        })
+      ),
     };
   }
 
@@ -193,9 +267,12 @@ export class GeneratedListController {
   /**
    * Edit one line: its text, its quantity, its pick, or its target list.
    *
-   * Everything but the last is local to the basket. That is the rule the whole
-   * plan turns on: a user tidying up their own shopping list at the till must not
-   * rewrite a list four other people depend on.
+   * The quantity and the pick are local to the basket. A new text renames every
+   * zone line this line came from as well (plan 0113), through the same rule the
+   * participant rename has, so the owner needs write access to each of those
+   * lists, and a name already taken is refused until the request carries
+   * `confirmMerge`. After a merge in the basket the answer is the surviving line
+   * and names the one that went away.
    */
   @Patch(':id/lines/:lineId')
   @ApiContractResponse(GENERATED_LIST_PATTERNS.updateLine)
@@ -204,14 +281,16 @@ export class GeneratedListController {
     body: true,
     membership: true,
     notFound: true,
+    finishedBasket: true,
+    lineMerge: true,
   })
   updateLine(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
     @Param('lineId') lineId: string,
     @Body() dto: UpdateGeneratedListLineDto
-  ): Promise<GeneratedListLineView> {
-    return this.nats.send<GeneratedListLineView>(
+  ): Promise<UpdateGeneratedListLineResult> {
+    return this.nats.send<UpdateGeneratedListLineResult>(
       GENERATED_LIST_PATTERNS.updateLine,
       { userId: user.userId, generatedListId: id, lineId, ...dto }
     );

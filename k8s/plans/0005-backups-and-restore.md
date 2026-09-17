@@ -1,3 +1,5 @@
+> **Status: implemented, with the restore drill still open.** Built by commit [`4106ce1c1`](https://github.com/IchirokuXVI/nx-portfolio/commit/4106ce1c184498e4405593ce9b3c79f55e51330b) on `dev`, with no pull request of its own. What is still missing as of 2026-09-17 is in [plan 0010](./0010-plan-status-2026-09-17.md).
+
 # 0005 Backups, and the restore that proves them
 
 There is no backup of anything in this cluster. No `pg_dump`, no CronJob, no volume snapshot,

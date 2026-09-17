@@ -600,3 +600,246 @@ describe('a shop stack of three tiers (plan 0105, section 4)', () => {
     expect(resolved.row?.id).toBe(store.id);
   });
 });
+
+/**
+ * The narrowest scope wins only among prices that are valid now (plan 0117).
+ *
+ * Section 1's shop: a Mercadona store scope, warehouse `4661` and a chain
+ * region, with the warehouse walked once and the region every week.
+ */
+describe('an expired price falls through (plan 0117)', () => {
+  const STORE = 'store-cordoba';
+  const WAREHOUSE = 'warehouse-4661';
+  const REGION = 'region-andalucia';
+
+  const PRIORITIES = new Map([
+    [STORE, 100],
+    [WAREHOUSE, 200],
+    [REGION, 300],
+    [NATIONAL, 1000],
+  ]);
+
+  /** Section 1's policy: an official API price lasts fourteen days. */
+  const FOURTEEN = POLICIES.map((p) =>
+    p.sourceKind === PriceSourceKind.OFFICIAL_API ? { ...p, maxAgeDays: 14 } : p
+  );
+
+  function resolveAt(
+    rows: PriceRow[],
+    now: Date,
+    extra: { nextValidFrom?: Date | null } = {}
+  ) {
+    return resolveEffectivePrice({
+      rows,
+      priceScopeId: STORE,
+      scopePriorities: PRIORITIES,
+      policies: FOURTEEN,
+      now,
+      ...extra,
+    });
+  }
+
+  it('a narrow row past maxAgeDays yields the wider eligible row of the same kind', () => {
+    // Section 1, verbatim: the warehouse walked on the 1st, the region on the
+    // 18th, and the shopper looking on the 20th.
+    const warehouse = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: WAREHOUSE,
+      price: 1.19,
+      lastObservedAt: day(1),
+    });
+    const region = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: REGION,
+      price: 1.25,
+      lastObservedAt: day(18),
+    });
+
+    const result = resolveAt([warehouse, region], day(20));
+    expect(result.row?.id).toBe(region.id);
+    expect(result.stale).toBe(false);
+    // The region's own expiry is what can change the answer next.
+    expect(result.nextBoundaryAt).toEqual(day(32));
+  });
+
+  it('a narrow row past validUntil yields the wider row', () => {
+    const storeLeaflet = row({
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      priceScopeId: STORE,
+      price: 0.99,
+      lastObservedAt: day(1),
+      validFrom: day(1),
+      validUntil: day(8),
+    });
+    const regionLeaflet = row({
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      priceScopeId: REGION,
+      price: 1.09,
+      lastObservedAt: day(8),
+      validFrom: day(8),
+      validUntil: day(15),
+    });
+
+    const result = resolveAt([storeLeaflet, regionLeaflet], day(10));
+    expect(result.row?.id).toBe(regionLeaflet.id);
+    expect(result.stale).toBe(false);
+  });
+
+  it('a narrow current row not valid yet yields the wider row, and an older valid row at the narrow scope does not come back', () => {
+    // Only the current row per (scope, kind) is ever handed over, which is
+    // section 2's step 1: last week's store leaflet is not in the set at all,
+    // because next week's is the source's latest statement there.
+    const nextWeek = row({
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      priceScopeId: STORE,
+      price: 0.89,
+      lastObservedAt: day(9),
+      validFrom: day(14),
+      validUntil: day(21),
+    });
+    const region = row({
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      priceScopeId: REGION,
+      price: 1.09,
+      lastObservedAt: day(7),
+      validFrom: day(7),
+      validUntil: day(20),
+    });
+
+    const result = resolveAt([nextWeek, region], day(10));
+    expect(result.row?.id).toBe(region.id);
+    // The store leaflet opening is the next boundary, before the region closes.
+    expect(result.nextBoundaryAt).toEqual(day(14));
+
+    const opened = resolveAt([nextWeek, region], day(14));
+    expect(opened.row?.id).toBe(nextWeek.id);
+  });
+
+  it('no eligible row anywhere yields the newest enabled current row, flagged stale', () => {
+    const warehouse = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: WAREHOUSE,
+      price: 1.19,
+      lastObservedAt: day(1),
+    });
+    const region = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: REGION,
+      price: 1.25,
+      lastObservedAt: day(4),
+    });
+    const disabled = row({
+      sourceKind: PriceSourceKind.USER_REPORTED,
+      priceScopeId: STORE,
+      price: 0.5,
+      lastObservedAt: day(29),
+    });
+
+    const result = resolveAt([warehouse, region, disabled], day(30));
+    expect(result.row?.id).toBe(region.id);
+    expect(result.stale).toBe(true);
+    expect(result.nextBoundaryAt).toBeNull();
+  });
+
+  it('the stale tier still names a future validFrom as its boundary', () => {
+    const old = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: REGION,
+      price: 1.25,
+      lastObservedAt: day(1),
+    });
+    // A caller filtering in SQL does not hand the pending row over, only the
+    // instant it opens.
+    const result = resolveAt([old], day(20), { nextValidFrom: day(22) });
+    expect(result.stale).toBe(true);
+    expect(result.nextBoundaryAt).toEqual(day(22));
+  });
+
+  it('an ADMIN row is not disputed by an expired automated row', () => {
+    const typed = adminRow(day(10), 1.29, {});
+    const expired = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: REGION,
+      price: 1.35,
+      lastObservedAt: day(1),
+    });
+
+    const result = resolveAt([typed, expired], day(16));
+    expect(result.row?.id).toBe(typed.id);
+    // The protection end, since the crawl has no expiry left to wait for.
+    expect(result.nextBoundaryAt).toEqual(typed.protectedUntil);
+  });
+
+  it('an ADMIN row is disputed by an eligible automated row', () => {
+    const typed = adminRow(day(10), 1.29, {});
+    const fresh = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: REGION,
+      price: 1.35,
+      lastObservedAt: day(12),
+    });
+
+    expect(resolveAt([typed, fresh], day(16)).row?.id).toBe(fresh.id);
+  });
+
+  it('the dispute compares against the narrowest eligible row, not an expired narrower one', () => {
+    // The owner typed over the region's 1.25. The warehouse said 1.19 long
+    // ago, and a narrower expired row must not make the snapshot look wrong.
+    const typed = adminRow(day(20), 1.29, {
+      OFFICIAL_API: { price: 1.25, unitPrice: null },
+    });
+    const warehouse = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: WAREHOUSE,
+      price: 1.19,
+      lastObservedAt: day(1),
+    });
+    const region = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: REGION,
+      price: 1.25,
+      lastObservedAt: day(19),
+    });
+
+    expect(resolveAt([typed, warehouse, region], day(21)).row?.id).toBe(
+      typed.id
+    );
+  });
+
+  it('nextBoundaryAt is the chosen row expiry, or an earlier future validFrom', () => {
+    const region = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: REGION,
+      price: 1.25,
+      lastObservedAt: day(10),
+    });
+    // A wider row expiring earlier is not chosen, and is not the boundary.
+    const national = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: NATIONAL,
+      price: 1.3,
+      lastObservedAt: day(5),
+    });
+
+    expect(resolveAt([region, national], day(11)).nextBoundaryAt).toEqual(
+      day(24)
+    );
+    expect(
+      resolveAt([region, national], day(11), { nextValidFrom: day(13) })
+        .nextBoundaryAt
+    ).toEqual(day(13));
+  });
+
+  it('a row reaches its max age at the boundary instant, not a millisecond after', () => {
+    const region = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      priceScopeId: REGION,
+      price: 1.25,
+      lastObservedAt: day(1),
+    });
+
+    const atBoundary = resolveAt([region], day(15));
+    expect(atBoundary.stale).toBe(true);
+    expect(atBoundary.nextBoundaryAt).toBeNull();
+  });
+});

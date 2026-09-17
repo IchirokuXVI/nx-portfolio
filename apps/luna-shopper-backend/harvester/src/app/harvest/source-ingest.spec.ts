@@ -1,4 +1,5 @@
 import {
+  HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
   PriceSourceKind,
@@ -12,6 +13,7 @@ import { entryKey } from './matching';
 import type { RunContext } from './run-context';
 import {
   SourceIngest,
+  type PartialSourceObservation,
   type SourceObservation,
   type SourceObservationPrice,
 } from './source-ingest';
@@ -49,6 +51,7 @@ interface PriceRow {
   details: Record<string, unknown> | null;
   observedAt: Date;
   runId: string;
+  copiedFromScopeId: string | null;
 }
 
 function build(options: {
@@ -340,7 +343,8 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
         },
       ],
       RUN,
-      PriceSourceKind.OFFICIAL_API
+      PriceSourceKind.OFFICIAL_API,
+      null
     );
   });
 
@@ -513,6 +517,56 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
       pricesWritten: 0,
     });
     expect(catalog.addPrices).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The key follows the brand on every path a row is written by (plan 0115,
+   * section 6).
+   *
+   * `brand` itself is untouched, here and everywhere in that plan: what the
+   * chain printed is the run's to state, and a decision never rewrites it (D8).
+   */
+  it('keys the brand a source printed, on a created row and on a touched one', async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          id: 'held-1',
+          externalId: entryKey('Cerveza', null),
+          name: 'Cerveza',
+          brand: 'Mahou',
+          brandKey: 'mahou',
+        },
+      ],
+    });
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [
+        observation({ name: 'Cerveza', brand: 'MAHOU' }),
+        observation({ name: 'Chorizo', brand: 'Campofrío' }),
+        // A brand of punctuation has no key, so the row carries none. LIDL's
+        // `-` and `---` arrive exactly like this.
+        observation({ name: 'Oferta', brand: '---' }),
+      ],
+    });
+
+    const byName = new Map(saved.map((row) => [row.name, row]));
+    // The spelling is rewritten because a run rewrites the source group, and
+    // the key follows it. The row is the same row.
+    expect(byName.get('Cerveza')).toMatchObject({
+      brand: 'MAHOU',
+      brandKey: 'mahou',
+    });
+    expect(byName.get('Chorizo')).toMatchObject({
+      brand: 'Campofrío',
+      brandKey: 'campofrio',
+    });
+    expect(byName.get('Oferta')).toMatchObject({
+      brand: '---',
+      brandKey: null,
+    });
   });
 
   it('collects a price for the ACTIVE rows only', async () => {
@@ -1036,5 +1090,349 @@ describe('SourceIngest, the scope a price names', () => {
       code: HarvestWarningCode.NO_PRICE_SCOPE,
       name: 'Leche',
     });
+  });
+});
+
+/**
+ * One walk written to several scopes (plan 0118, section 5).
+ *
+ * The copy happens here, where a resolved scope id becomes a write, so these
+ * cases hand the ingest a `copiesOf` and nothing else knows.
+ */
+describe('SourceIngest, a price copied to other scopes (plan 0118)', () => {
+  const W2 = '55555555-5555-4555-8555-555555555555';
+  const REGION = '66666666-6666-4666-8666-666666666666';
+
+  function bound() {
+    return build({
+      rows: [
+        {
+          externalId: '4241',
+          name: 'Leche entera',
+          status: SourceEntryStatus.ACTIVE,
+          itemId: 'item-1',
+          matchedBy: ItemSourceMatch.EAN,
+          confidence: 1,
+        },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+  }
+
+  it('writes the price at the walked scope and at each target, each copy naming where it was read', async () => {
+    const { ingest, context, priceRows, catalog, reported } = bound();
+
+    const { counters, copies } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      copiesOf: (scopeId) => (scopeId === SCOPE ? [W2, REGION] : []),
+      observations: [
+        observation({ externalId: '4241', name: 'Leche', price: PRICE }),
+      ],
+    });
+
+    expect(
+      priceRows.map((row) => [row.priceScopeId, row.copiedFromScopeId])
+    ).toEqual([
+      [SCOPE, null],
+      [W2, SCOPE],
+      [REGION, SCOPE],
+    ]);
+    // Every copied row carries the run, which is what a revert deletes by.
+    expect(priceRows.every((row) => row.runId === RUN)).toBe(true);
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(3);
+    const calls = (catalog.addPrices as jest.Mock).mock.calls;
+    expect(calls.map((call) => [call[0], call[4]])).toEqual([
+      [SCOPE, null],
+      [W2, SCOPE],
+      [REGION, SCOPE],
+    ]);
+    for (const call of calls) {
+      expect(call[1]).toEqual([
+        expect.objectContaining({ itemId: 'item-1', price: 1.19 }),
+      ]);
+      expect(call[2]).toBe(RUN);
+    }
+
+    // The walked scope's numbers keep their meaning, and the copies are apart.
+    expect(counters).toMatchObject({ pricesRecorded: 1, pricesWritten: 1 });
+    expect(copies.pricedScopes).toEqual(new Set([SCOPE]));
+    expect(copies.pricesCopied).toEqual(new Map([[SCOPE, 2]]));
+    expect(reported.filter((each) => !('processed' in each))).toEqual([
+      { updated: 1, unchanged: 0 },
+    ]);
+  });
+
+  it('copies the source row of a product nobody matched, and sends catalog nothing', async () => {
+    const { ingest, context, priceRows, catalog } = build({});
+
+    const { copies } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      copiesOf: () => [W2],
+      observations: [
+        observation({ externalId: 'k1', name: 'Nevera', price: PRICE }),
+      ],
+    });
+
+    expect(priceRows.map((row) => row.priceScopeId)).toEqual([SCOPE, W2]);
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+    expect(copies.pricesCopied.size).toBe(0);
+  });
+
+  it('never copies onto a scope the same product was priced at directly', async () => {
+    // A chain that names its own regions can state a price for a target this
+    // week. That price is the chain's own statement, and one upsert naming the
+    // same row twice would be refused.
+    const { ingest, context, priceRows } = build({});
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      scopeIdFor: (key) => (key === 'r1' ? 'scope-north' : 'scope-south'),
+      copiesOf: (scopeId) => (scopeId === 'scope-north' ? ['scope-south'] : []),
+      observations: [
+        observation({
+          externalId: 'k1',
+          name: 'Nevera',
+          prices: [
+            { ...PRICE, scopeKey: 'r1', price: 74.99 },
+            { ...PRICE, scopeKey: 'r58', price: 77.99 },
+          ],
+        }),
+      ],
+    });
+
+    expect(
+      priceRows.map((row) => [
+        row.priceScopeId,
+        row.price,
+        row.copiedFromScopeId,
+      ])
+    ).toEqual([
+      ['scope-north', 74.99, null],
+      ['scope-south', 77.99, null],
+    ]);
+  });
+
+  it('adds up the copies of every chunk a session is pushed', async () => {
+    const { ingest, context } = bound();
+    const session = await ingest.open(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      copiesOf: () => [W2],
+    });
+
+    await session.push([
+      observation({ externalId: '4241', name: 'Leche', price: PRICE }),
+    ]);
+    await session.push([
+      observation({ externalId: '4241', name: 'Leche', price: PRICE }),
+    ]);
+    const { copies } = await session.close();
+
+    expect(copies.pricesCopied).toEqual(new Map([[SCOPE, 2]]));
+  });
+});
+
+/**
+ * A product reported from the listing alone, because its detail was known
+ * (plan 0119, section 6), and a run that writes only part of what it read
+ * (section 7).
+ */
+describe('SourceIngest, a partial observation (plan 0119)', () => {
+  const EAN = '8480000135636';
+  const LAST_SEEN = new Date('2026-09-01T00:00:00.000Z');
+
+  /** The row a full read of 4241 wrote last week. */
+  const known = {
+    externalId: '4241',
+    name: 'Aceite de oliva virgen extra',
+    brand: 'Hacendado',
+    brandKey: 'hacendado',
+    ean: EAN,
+    unitSize: 1,
+    sizeFormat: 'l',
+    categoryPath: ['Aceite'],
+    url: 'https://fixtures.test/product/4241',
+    extra: { packaging: 'Garrafa' },
+    status: SourceEntryStatus.ACTIVE,
+    itemId: 'item-1',
+    matchedBy: ItemSourceMatch.EAN,
+    confidence: 1,
+    timesSeen: 3,
+    lastSeenAt: LAST_SEEN,
+    lastRunId: OTHER_RUN,
+  };
+
+  function partial(
+    over: Partial<PartialSourceObservation> = {}
+  ): PartialSourceObservation {
+    return {
+      externalId: '4241',
+      detailFetched: false,
+      observedAt: new Date('2026-09-05T10:00:00.000Z'),
+      prices: [{ scopeKey: null, ...PRICE }],
+      ...over,
+    };
+  }
+
+  it('keeps the stored identity, moves the seen fields and writes its prices', async () => {
+    const { ingest, context, saved, priceRows, catalog } = build({
+      rows: [known],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { outcomes, counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [partial()],
+    });
+
+    // The last full read's name, brand and EAN, untouched: nothing here said
+    // otherwise, and a null would have blanked them.
+    expect(saved[0]).toMatchObject({
+      name: 'Aceite de oliva virgen extra',
+      brand: 'Hacendado',
+      brandKey: 'hacendado',
+      ean: EAN,
+      unitSize: 1,
+      sizeFormat: 'l',
+      url: 'https://fixtures.test/product/4241',
+      extra: { packaging: 'Garrafa' },
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-1',
+      timesSeen: 4,
+      lastRunId: RUN,
+    });
+    expect(saved[0].lastSeenAt.getTime()).toBeGreaterThan(LAST_SEEN.getTime());
+    expect(outcomes[0]).toMatchObject({
+      rung: 1,
+      created: false,
+      itemId: 'item-1',
+    });
+
+    // Unchanged, because the chain's description of the product did not move.
+    expect(counters).toMatchObject({
+      created: 0,
+      updated: 0,
+      unchanged: 1,
+      pricesRecorded: 1,
+      pricesWritten: 1,
+    });
+    // The price row carries the stored bag, which is what the last read said.
+    expect(priceRows).toEqual([
+      expect.objectContaining({
+        entryId: 'held-1',
+        priceScopeId: SCOPE,
+        price: 1.19,
+        details: { packaging: 'Garrafa' },
+      }),
+    ]);
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips a partial observation for a product with no row, with a warning', async () => {
+    const { ingest, context, saved, priceRows, catalog, warnings } = build({
+      rows: [],
+    });
+
+    const { outcomes, counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [partial({ externalId: '9001' })],
+    });
+
+    // No row with no name and no EAN, and no price with nowhere to hang it.
+    expect(saved).toEqual([]);
+    expect(outcomes).toEqual([]);
+    expect(priceRows).toEqual([]);
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+    expect(counters).toMatchObject({ created: 0, updated: 0, unchanged: 0 });
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        code: HarvestWarningCode.DETAIL_SKIPPED_UNKNOWN,
+        offerId: '9001',
+      }),
+    ]);
+  });
+
+  it('keeps the outcomes and prices of the others in a chunk with a skipped one', async () => {
+    const { ingest, context, priceRows } = build({
+      rows: [known],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { outcomes } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [partial({ externalId: '9001' }), partial()],
+    });
+
+    // The skipped one leaves no gap that shifts the next one's price onto it.
+    expect(outcomes.map((outcome) => outcome.entry.externalId)).toEqual([
+      '4241',
+    ]);
+    expect(priceRows.map((row) => row.entryId)).toEqual(['held-1']);
+  });
+
+  it('writes no price and no source_entry_prices row when the run writes availability only', async () => {
+    const { ingest, context, saved, priceRows, catalog, warnings } = build({
+      rows: [known],
+    });
+
+    const { counters, copies } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      // No default scope either: a run that places no price has nothing to
+      // warn about.
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      writes: HarvestRunWrites.AVAILABILITY,
+      copiesOf: () => ['a-target'],
+      observations: [
+        partial(),
+        observation({ externalId: '9001', name: 'Vinagre', price: PRICE }),
+      ],
+    });
+
+    // The products are still ingested.
+    expect(saved.map((row) => row.externalId)).toEqual(['4241', '9001']);
+    expect(priceRows).toEqual([]);
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+    expect(warnings).toEqual([]);
+    expect(counters).toMatchObject({ pricesRecorded: 0, pricesWritten: 0 });
+    // ...and neither are the copies.
+    expect(copies.pricesCopied.size).toBe(0);
+    expect(copies.pricedScopes.size).toBe(0);
+  });
+
+  it('writes prices and their copies when the run writes prices only', async () => {
+    const { ingest, context, priceRows, catalog } = build({
+      rows: [known],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      writes: HarvestRunWrites.PRICES,
+      copiesOf: (scopeId) => (scopeId === SCOPE ? ['a-target'] : []),
+      observations: [partial()],
+    });
+
+    expect(priceRows.map((row) => row.priceScopeId)).toEqual([
+      SCOPE,
+      'a-target',
+    ]);
+    expect(catalog.addPrices).toHaveBeenCalledTimes(2);
   });
 });

@@ -35,5 +35,15 @@ export class ShoppingListRow {
   /** The generation date, formatted in the reader's locale by the container. */
   readonly generatedOn = input('');
 
+  /**
+   * Who shared this basket and on which day, for a row on the Shared lists tab
+   * (velista `0085`, section 5). Both already resolved: the owner is a name and the
+   * date was formatted by the container. Null on the reader's own lists.
+   */
+  readonly sharedBy = input<{
+    readonly owner: string;
+    readonly date: string;
+  } | null>(null);
+
   readonly open = output<string>();
 }

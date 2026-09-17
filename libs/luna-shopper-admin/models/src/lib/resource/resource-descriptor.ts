@@ -3,6 +3,7 @@ import type {
   EnumOption,
   FieldDescriptor,
   FieldName,
+  FilterValue,
   ResourceRow,
 } from './resource-field';
 
@@ -27,8 +28,11 @@ export interface ResourceQuery {
   readonly limit?: number;
   /** One of {@link ResourceDescriptor.sorts}, sent as `order`. */
   readonly order?: string;
-  /** Filter values by query parameter name, empty ones already dropped. */
-  readonly filters?: Readonly<Record<string, string>>;
+  /**
+   * Filter values by query parameter name, empty ones already dropped. A list
+   * is sent as one parameter per entry.
+   */
+  readonly filters?: Readonly<Record<string, FilterValue>>;
 }
 
 /**
@@ -196,6 +200,46 @@ export interface ResourceActions<T extends ResourceRow = ResourceRow> {
   named?(): readonly NamedAction<T>[];
 }
 
+/**
+ * A refusal that names a row, so the screen it refused can offer to open it.
+ *
+ * A handful of backend exceptions publish a fact in `details` because the
+ * client's next act is impossible without it: a `brand_key_taken` names the
+ * brand already holding the key, and a `brand_link_too_deep` names the brand
+ * that breaks the one level rule. Without a link, the form says what is wrong
+ * and leaves the operator to find the row it is talking about by hand.
+ *
+ * Declared per resource rather than known by the form, because which codes a
+ * resource can be refused with, and what their details mean, is the resource's
+ * own business. The form resolves this against the registry, so the link is
+ * built where a resource is mounted rather than where it is declared.
+ */
+export interface ErrorLink {
+  /** The `details` key the refusal publishes the row's id under. */
+  readonly detail: string;
+  /** The `name` of the resource that id belongs to. */
+  readonly resource: string;
+  /**
+   * A translation key for the link's own words.
+   *
+   * Absent means `resource.error.openRow`, which says the least a link can say.
+   * A resource that knows what it is pointing at should name its own key: "Open
+   * that brand" reads as an offer, and the generic sentence reads as a hedge.
+   */
+  readonly label?: string;
+}
+
+/**
+ * One of those links, resolved: where it goes, and what it says.
+ *
+ * Built by the page and handed to the form, because only the page can ask the
+ * registry where a resource is mounted and the form must not.
+ */
+export interface ErrorLinkTarget {
+  readonly commands: readonly string[];
+  readonly labelKey: string;
+}
+
 export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
   /** The stable key a reference field points at, and the translation prefix. */
   readonly name: string;
@@ -279,6 +323,14 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    * say declares none of this.
    */
   notices?(): Signal<readonly string[]>;
+  /**
+   * Refusals that name a row of another resource, by error code.
+   *
+   * The form draws the sentence for the code and a link to the row beside it
+   * (see {@link ErrorLink}). A code that is not named here draws its sentence
+   * alone, which is every code on every resource today but two.
+   */
+  readonly errorLinks?: Readonly<Record<string, ErrorLink>>;
   readonly filters?: readonly FilterDescriptor[];
   /**
    * Filter parameters this list cannot be read without.

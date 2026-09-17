@@ -1,3 +1,5 @@
+> **PR:** [#139](https://github.com/IchirokuXVI/nx-portfolio/pull/139)
+
 # 0059: finishing a trip, and sweeping the ones nobody finished
 
 > Frontend half: `apps/velista/plans/0057`, which draws every rule this plan owns.

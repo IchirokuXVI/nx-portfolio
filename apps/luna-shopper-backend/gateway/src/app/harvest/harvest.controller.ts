@@ -17,6 +17,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
+  HARVEST_PRESET_PATTERNS,
   HARVEST_SCHEMA_IDS,
   HarvestRunMode,
   POSTAL_CODE_DISCOVERY_PATTERNS,
@@ -30,6 +31,8 @@ import {
   type DiscoveredPlaceView,
   type HarvestRunExportResult,
   type HarvestRunPage,
+  type HarvestRunPresetPage,
+  type HarvestRunPresetView,
   type HarvestRunView,
   type PostalCodeDiscoveryRequestPage,
   type PostalCodeDiscoveryRequestView,
@@ -57,10 +60,12 @@ import {
   AcceptSourceEntryDto,
   AddPostalCodeDiscoveryDto,
   ApplySourceEntryDecisionsDto,
+  CreateHarvestRunPresetDto,
   CreateItemFromEntryDto,
   DiscoveredPlaceGroupQueryDto,
   DiscoveredPlaceListQueryDto,
   HarvestRunListQueryDto,
+  HarvestRunPresetListQueryDto,
   ImportDiscoveredPlaceDto,
   ImportHarvestDocumentDto,
   MapSourceLocationDto,
@@ -69,6 +74,7 @@ import {
   SourceEntryListQueryDto,
   SourceLocationListQueryDto,
   SpawnHarvestRunDto,
+  UpdateHarvestRunPresetDto,
   UpsertSupermarketSourceDto,
 } from './harvest.dto';
 
@@ -134,6 +140,7 @@ export class AdminHarvestRunsController {
       mode: query.mode,
       status: query.status,
       reverted: query.reverted,
+      presetId: query.presetId,
       cursor: query.cursor,
       limit: query.limit,
     });
@@ -437,6 +444,7 @@ export class AdminHarvestEntriesController {
       status: query.status,
       sourceKind: query.sourceKind,
       query: query.query,
+      brandKey: query.brandKey,
       cursor: query.cursor,
       limit: query.limit,
     });
@@ -723,6 +731,129 @@ export class AdminHarvestSourcesController {
     return this.nats.send(SUPERMARKET_SOURCE_PATTERNS.delete, {
       ...adminCredential(admin),
       supermarketId,
+    });
+  }
+}
+
+/**
+ * Run requests saved under a name, one chain each (plan 0120).
+ *
+ * The harvester validates a preset exactly as it validates a spawn, when it is
+ * saved and again when a run starts from it, so a preset naming a scope that was
+ * deleted since answers 400 naming the scope and the preset, and starts nothing.
+ *
+ * **Starting a run from a preset is its own route**, not a `presetId` on the
+ * spawn body: a spawn naming a preset and a scope would have to decide which one
+ * wins, and a route that takes nothing but the id cannot be asked. The run keeps
+ * a copy of the input and the preset's id, so editing or deleting a preset never
+ * changes a run.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/presets', version: '1' })
+export class AdminHarvestPresetsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /** Ordered by name, paged with the house cursor, each with its latest run. */
+  @Get()
+  @ApiContractResponse(HARVEST_PRESET_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: HarvestRunPresetListQueryDto
+  ): Promise<HarvestRunPresetPage> {
+    return this.nats.send<HarvestRunPresetPage>(HARVEST_PRESET_PATTERNS.list, {
+      ...adminCredential(admin),
+      supermarketId: query.supermarketId,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  /** Answers 409 naming the preset that already holds the name, in any case. */
+  @Post()
+  @ApiContractResponse(HARVEST_PRESET_PATTERNS.create, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
+  create(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: CreateHarvestRunPresetDto
+  ): Promise<HarvestRunPresetView> {
+    return this.nats.send<HarvestRunPresetView>(
+      HARVEST_PRESET_PATTERNS.create,
+      {
+        ...adminCredential(admin),
+        supermarketId: dto.supermarketId,
+        name: dto.name,
+        input: dto.input,
+      }
+    );
+  }
+
+  @Get(':id')
+  @ApiContractResponse(HARVEST_PRESET_PATTERNS.get)
+  get(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<HarvestRunPresetView> {
+    return this.nats.send<HarvestRunPresetView>(HARVEST_PRESET_PATTERNS.get, {
+      ...adminCredential(admin),
+      presetId: id,
+    });
+  }
+
+  /** `input` replaces the saved one whole and is validated again. */
+  @Put(':id')
+  @ApiContractResponse(HARVEST_PRESET_PATTERNS.update)
+  @ApiProblemResponses({ body: true, conflict: true })
+  update(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: UpdateHarvestRunPresetDto
+  ): Promise<HarvestRunPresetView> {
+    return this.nats.send<HarvestRunPresetView>(
+      HARVEST_PRESET_PATTERNS.update,
+      {
+        ...adminCredential(admin),
+        presetId: id,
+        name: dto.name,
+        input: dto.input,
+      }
+    );
+  }
+
+  /** Runs started from the preset keep their record and still name it. */
+  @Delete(':id')
+  @ApiContractResponse(HARVEST_PRESET_PATTERNS.delete)
+  remove(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<{ id: string }> {
+    return this.nats.send(HARVEST_PRESET_PATTERNS.delete, {
+      ...adminCredential(admin),
+      presetId: id,
+    });
+  }
+
+  /**
+   * Start a run from the preset. Answers the PENDING run, 400 when the preset no
+   * longer validates, and 409 carrying the active run's id when the chain has
+   * one in progress, as a spawn does.
+   */
+  @Post(':id/runs')
+  @ApiContractResponse(HARVEST_PATTERNS.spawnFromPreset, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true, notConfigured: true })
+  start(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string
+  ): Promise<HarvestRunView> {
+    return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.spawnFromPreset, {
+      ...adminCredential(admin),
+      presetId: id,
     });
   }
 }

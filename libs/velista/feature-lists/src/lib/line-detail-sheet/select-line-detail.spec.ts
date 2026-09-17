@@ -177,6 +177,68 @@ describe('selectLineDetail', () => {
       // Two purchases survive the filter, which is below the floor.
       expect(estimate).toBeNull();
     });
+
+    it('merges settlements of one trip, so three within an hour are one purchase', () => {
+      const HOUR = DAY / 24;
+      const within = (daysAgo: number, minutes: number) =>
+        bought(daysAgo, {
+          id: `st-${daysAgo}-${minutes}`,
+          settledAt: new Date(NOW - daysAgo * DAY - minutes * (HOUR / 60)),
+        });
+
+      // Three rows seconds apart, then two trips a week apart each. Unmerged these give
+      // gaps of 0, 0, 7 and 7, a median of 0 and "every day". Merged they are three
+      // purchases a week apart.
+      const estimate = select({
+        settlements: [
+          within(0, 0),
+          within(0, 10),
+          within(0, 40),
+          bought(7),
+          bought(14),
+        ],
+      })?.estimate;
+
+      expect(estimate).toEqual({
+        medianDays: 7,
+        fromPurchases: 3,
+        rough: true,
+      });
+    });
+
+    it('counts the floor after the fold, so a history that folds below it gives null', () => {
+      // Four rows, and two purchases once the first three are one trip.
+      const estimate = select({
+        settlements: [
+          bought(0),
+          bought(0, { id: 'st-0b', settledAt: new Date(NOW - DAY / 48) }),
+          bought(0, { id: 'st-0c', settledAt: new Date(NOW - DAY / 24) }),
+          bought(9),
+        ],
+      })?.estimate;
+
+      expect(estimate).toBeNull();
+    });
+
+    it('chains the fold on the previous settlement, as the server does', () => {
+      // A slow partial settle: rows 8 hours apart for a day. Each is within twelve hours
+      // of the one before it, so the whole run is one purchase.
+      const HOUR = DAY / 24;
+      const slow = [0, 8, 16, 24].map((hours) =>
+        bought(0, {
+          id: `st-slow-${hours}`,
+          settledAt: new Date(NOW - hours * HOUR),
+        })
+      );
+
+      const estimate = select({
+        // The run keeps its first time, a day ago, so the gaps are 7 and 7.
+        settlements: [...slow, bought(8), bought(15)],
+      })?.estimate;
+
+      expect(estimate?.fromPurchases).toBe(3);
+      expect(estimate?.medianDays).toBe(7);
+    });
   });
 
   describe('the preselected product', () => {

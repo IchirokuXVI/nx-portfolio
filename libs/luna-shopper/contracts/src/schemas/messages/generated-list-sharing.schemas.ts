@@ -99,6 +99,11 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   basketScope: schemaId('generated-list-sharing/BasketScope'),
   /** Where the control was let go, and where the client believed it started. */
   setOutstandingRequest: schemaId('msg/generatedList.setOutstanding/request'),
+  /** Renaming a basket line and the zone lines it came from (plan 0113). */
+  renameLineRequest: schemaId('msg/generatedList.renameLine/request'),
+  renameLineResult: schemaId('msg/generatedList.renameLine/response'),
+  /** What the basket's room hears when a rename merged a line away. */
+  lineRemovedEvent: schemaId('generated-list-sharing/LineRemovedEvent'),
   /** What the basket's room hears when a line is settled or its pick swapped. */
   lineMovedEvent: schemaId('generated-list-sharing/LineMovedEvent'),
   /** What it hears when a line is added, which is an append and not a replace. */
@@ -124,6 +129,12 @@ export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
   setOriginSettledResult: schemaId(
     'msg/generatedList.setOriginSettled/response'
   ),
+  /** Add one of the owner's contacts (plan 0114, section 4). */
+  addParticipantRequest: schemaId('msg/generatedList.participant.add/request'),
+  /** Leave a basket as a registered participant (plan 0114, section 6). */
+  leaveRequest: schemaId('msg/generatedList.participant.leave/request'),
+  /** What a person's own sessions hear about their access (section 10). */
+  accessEvent: schemaId('generated-list-sharing/AccessEvent'),
 } as const;
 
 const shareLinkView = object(
@@ -185,6 +196,8 @@ const participantView = object(
     // "you may not see this" against "there is nothing to see" (section 7).
     userAgent: nullableString(),
   },
+  // `joinedAt` and `lastSeenAt` are optional for the same reason, and travel with
+  // `userAgent` since plan 0114 (section 11).
   [
     'id',
     'kind',
@@ -192,8 +205,6 @@ const participantView = object(
     'username',
     'guestNumber',
     'userId',
-    'joinedAt',
-    'lastSeenAt',
     'shareLinkId',
   ]
 );
@@ -518,6 +529,19 @@ const lineAddedEvent = object(
     line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
   },
   ['generatedListId', 'line']
+);
+
+/**
+ * The basket room's removal event (plan 0113, section 6): a rename merged this
+ * line into another one. An id only, so there is nothing to redact.
+ */
+const lineRemovedEvent = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.lineRemovedEvent,
+  {
+    generatedListId: nonEmptyString(),
+    lineId: nonEmptyString(),
+  },
+  ['generatedListId', 'lineId']
 );
 
 /**
@@ -966,6 +990,38 @@ const setOutstandingRequest = object(
 );
 
 /**
+ * Renaming a basket line and the zone lines it came from (plan 0113, section
+ * 7). The content is bounded as a basket line's content is everywhere else.
+ */
+const renameLineRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.renameLineRequest,
+  {
+    generatedListId: nonEmptyString(),
+    lineId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    content: nonEmptyString({
+      maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
+    }),
+    // Anything but `true` refuses a rename that collides, and writes nothing.
+    confirmMerge: boolean(),
+  },
+  ['generatedListId', 'lineId', 'participantId', 'content']
+);
+
+/**
+ * What a rename answers: the line projected for the caller, and the basket line
+ * a merge absorbed when there was one. Absent when nothing merged in the basket.
+ */
+const renameLineResult = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.renameLineResult,
+  {
+    line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
+    absorbedLineId: nonEmptyString(),
+  },
+  ['line']
+);
+
+/**
  * What a reopen answers with (plan 0054, section 3.5).
  *
  * Smaller than {@link settleResult} rather than the same shape, because this
@@ -1045,7 +1101,34 @@ const setOriginSettledRequest = object(
   ]
 );
 
+const addParticipantRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.addParticipantRequest,
+  {
+    userId: nonEmptyString(),
+    generatedListId: nonEmptyString(),
+    memberUserId: nonEmptyString(),
+    globalUsername: nullableString(),
+  },
+  ['userId', 'generatedListId', 'memberUserId']
+);
+
+const leaveRequest = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.leaveRequest,
+  { generatedListId: nonEmptyString(), participantId: nonEmptyString() },
+  ['generatedListId', 'participantId']
+);
+
+// Ids only, because the person hearing it may be in no room that may read more.
+const accessEvent = object(
+  GENERATED_LIST_SHARING_SCHEMA_IDS.accessEvent,
+  { generatedListId: nonEmptyString() },
+  ['generatedListId']
+);
+
 export const generatedListSharingSchemas: JsonSchema[] = [
+  addParticipantRequest,
+  leaveRequest,
+  accessEvent,
   shareLinkView,
   shareLinkResult,
   participantView,
@@ -1096,6 +1179,9 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   setOriginSettledRequest,
   setOriginSettledResult,
   setOutstandingRequest,
+  renameLineRequest,
+  renameLineResult,
+  lineRemovedEvent,
 ];
 
 export const generatedListSharingMessageContracts: Record<
@@ -1134,6 +1220,15 @@ export const generatedListSharingMessageContracts: Record<
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantRequest,
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantResult,
   },
+  [GENERATED_LIST_SHARING_PATTERNS.participantAdd]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.addParticipantRequest,
+    // The owner's view of the row, device string and join time included.
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.participantView,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.participantLeave]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.leaveRequest,
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantResult,
+  },
   [GENERATED_LIST_SHARING_PATTERNS.participantResolve]: {
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.resolveParticipantRequest,
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.participantContext,
@@ -1162,6 +1257,13 @@ export const generatedListSharingMessageContracts: Record<
     // response to handle (plan 0056, section 7). A raise answers with
     // `skippedCount: 0` and no settlement refs, which is true of it.
     response: GENERATED_LIST_SHARING_SCHEMA_IDS.settleResult,
+  },
+  [GENERATED_LIST_SHARING_PATTERNS.renameLine]: {
+    request: GENERATED_LIST_SHARING_SCHEMA_IDS.renameLineRequest,
+    // The line projected for the caller, and the basket line a merge absorbed.
+    // Nothing else, because every list name the rename reached belongs in the
+    // refusal that asked for confirmation, not in the answer (plan 0113).
+    response: GENERATED_LIST_SHARING_SCHEMA_IDS.renameLineResult,
   },
   [GENERATED_LIST_SHARING_PATTERNS.splitLine]: {
     request: GENERATED_LIST_SHARING_SCHEMA_IDS.splitLineRequest,

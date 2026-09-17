@@ -79,6 +79,15 @@
     font-size: 1.15rem;
     font-weight: 700;
     color: $text;
+
+    // The featured card is the main project, so its title reads as the main
+    // title and not only as a wider card.
+    .project-card--featured & {
+      @media (min-width: $breakpoint-desktop) {
+        font-size: 1.5rem;
+        letter-spacing: -0.02em;
+      }
+    }
   }
 
   &__name {

@@ -4,14 +4,17 @@ import {
   type CanActivate,
   type ExecutionContext,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import {
   GENERATED_LIST_SHARING_PATTERNS,
   type AccessTokenClaims,
   type GeneratedListParticipantContext,
   type ResolveParticipantRequest,
 } from '@portfolio/luna-shopper/contracts';
-import { UnauthorizedException } from '@portfolio/luna-shopper/platform';
-import { JwtService } from '@nestjs/jwt';
+import {
+  NotAParticipantException,
+  UnauthorizedException,
+} from '@portfolio/luna-shopper/platform';
 import { NatsClient } from '../messaging/nats-client';
 
 /** The header a guest presents their session secret on. */
@@ -58,7 +61,7 @@ export class ParticipantGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const generatedListId = request.params?.id;
     if (!generatedListId) {
-      throw new UnauthorizedException('Not a participant of this basket');
+      throw new NotAParticipantException('Not a participant of this basket');
     }
 
     const secret = request.headers?.[PARTICIPANT_SECRET_HEADER];
@@ -70,16 +73,15 @@ export class ParticipantGuard implements CanActivate {
     } else if (authorization !== undefined) {
       req.userId = await this.userOf(authorization);
     } else {
-      throw new UnauthorizedException('Not a participant of this basket');
+      throw new NotAParticipantException('Not a participant of this basket');
     }
 
     // Core throws when the credential names no live participant, which the
     // global filter turns into the house 401 envelope.
-    const participant =
-      await this.nats.send<GeneratedListParticipantContext>(
-        GENERATED_LIST_SHARING_PATTERNS.participantResolve,
-        req
-      );
+    const participant = await this.nats.send<GeneratedListParticipantContext>(
+      GENERATED_LIST_SHARING_PATTERNS.participantResolve,
+      req
+    );
     request.participant = participant;
     return true;
   }

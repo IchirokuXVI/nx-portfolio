@@ -146,6 +146,14 @@ export function toRealtimeEvent(
       return listId === null ? null : { type: name, listId };
     }
 
+    case 'list.tripsChanged': {
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const listId = str(payload['listId']);
+      return listId === null ? null : { type: name, listId };
+    }
+
     case 'list.myAccessChanged': {
       if (!isRecord(payload)) {
         return null;
@@ -340,6 +348,19 @@ export function toRealtimeEvent(
         : { type: name, generatedListId: addedIn, line: added };
     }
 
+    case 'generatedList.lineRemoved': {
+      // Both ids are required: a removal that cannot say which line would remove
+      // nothing, and one that cannot say which basket could remove the wrong one.
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const removedFrom = str(payload['generatedListId']);
+      const removed = str(payload['lineId']);
+      return removedFrom === null || removed === null
+        ? null
+        : { type: name, generatedListId: removedFrom, lineId: removed };
+    }
+
     case 'generatedList.participantJoined':
     case 'generatedList.participantLeft': {
       // The bare participant view, with no basket id on it, and it needs none: it
@@ -354,6 +375,19 @@ export function toRealtimeEvent(
       }
       const generatedListId = str(payload['id']);
       return generatedListId === null ? null : { type: name, generatedListId };
+    }
+
+    case 'generatedList.shared':
+    case 'generatedList.unshared': {
+      // `{ generatedListId }` rather than the `{ id }` a deletion carries: the
+      // reader is in no room that may read more than the id (backend `0114`).
+      if (!isRecord(payload)) {
+        return null;
+      }
+      const accessTo = str(payload['generatedListId']);
+      return accessTo === null
+        ? null
+        : { type: name, generatedListId: accessTo };
     }
 
     case 'presence.generatedListUpdated': {

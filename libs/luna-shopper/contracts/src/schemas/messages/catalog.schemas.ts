@@ -8,6 +8,9 @@ import {
 } from '../../lib/enums/catalog.enums';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
+  BRAND_LABEL_MAX_LENGTH,
+  BRAND_ORDERS,
+  BRAND_PATTERNS,
   CATALOG_SUGGESTION_KINDS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
@@ -58,6 +61,25 @@ export const CATALOG_SCHEMA_IDS = {
   productGroupOfferView: schemaId('catalog/ProductGroupOfferView'),
   productGroupPage: schemaId('catalog/ProductGroupPage'),
   productGroupOfferPage: schemaId('catalog/ProductGroupOfferPage'),
+  // The registry a person fills (plan 0115).
+  brandView: schemaId('catalog/BrandView'),
+  brandPage: schemaId('catalog/BrandPage'),
+  createBrandResult: schemaId('catalog/CreateBrandResult'),
+  updateBrandResult: schemaId('catalog/UpdateBrandResult'),
+  registerBrandSuggestionResult: schemaId(
+    'catalog/RegisterBrandSuggestionResult'
+  ),
+  createBrandRequest: schemaId('msg/brand.create/request'),
+  updateBrandRequest: schemaId('msg/brand.update/request'),
+  registerBrandSuggestionRequest: schemaId(
+    'msg/brand.registerSuggestion/request'
+  ),
+  deleteBrandRequest: schemaId('msg/brand.delete/request'),
+  deleteBrandResult: schemaId('catalog/DeleteBrandResult'),
+  brandIdRequest: schemaId('msg/brand.get/request'),
+  listBrandsRequest: schemaId('msg/brand.list/request'),
+  brandKeysRequest: schemaId('msg/brand.keys/request'),
+  brandKeysResult: schemaId('msg/brand.keys/response'),
   catalogSuggestion: schemaId('catalog/CatalogSuggestion'),
   catalogSuggestResponse: schemaId('catalog/CatalogSuggestResponse'),
   createProductGroupRequest: schemaId('msg/productGroup.create/request'),
@@ -335,6 +357,9 @@ const itemOfferView = object(
     unitPriceLabel: nullableString(),
     observedAt: nullableString(),
     sourceKind: nullableSourceKind(),
+    // Plan 0118. Stated but not required, so a reader built before it keeps
+    // validating what it holds.
+    priceCopiedFromScopeId: nullableString(),
     stale: boolean(),
   },
   [
@@ -432,6 +457,9 @@ const supermarketItemProperties = () => ({
   unitPriceLabel: nullableString(),
   observedAt: nullableString(),
   sourceKind: nullableSourceKind(),
+  // Plan 0118. Stated but not required, so a reader built before it keeps
+  // validating what it holds.
+  priceCopiedFromScopeId: nullableString(),
   stale: boolean(),
   validUntil: nullableString(),
   itemPriceId: nullableString(),
@@ -516,6 +544,8 @@ const itemPriceView = object(
     validUntil: nullableString(),
     sourceRunId: nullableString(),
     lastObservedRunId: nullableString(),
+    // Plan 0118. Stated but not required, like the materialized one.
+    copiedFromScopeId: nullableString(),
     overrides: {
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceOverrides), { type: 'null' }],
     },
@@ -623,6 +653,122 @@ const productGroupPage = paginated(
 const productGroupOfferPage = paginated(
   CATALOG_SCHEMA_IDS.productGroupOfferPage,
   CATALOG_SCHEMA_IDS.productGroupOfferView
+);
+
+/**
+ * What every brand shaped answer carries (plan 0115, section 5.1, and plan
+ * 0124, section 6).
+ *
+ * Named once and spread, because the create and the update answers are the same
+ * row plus one count each and the wire type generator reads `properties`: an
+ * `allOf` would produce a type with none.
+ */
+const brandViewProperties = {
+  id: nonEmptyString(),
+  key: nonEmptyString({
+    description:
+      'Made from the label with everything but letters and digits taken out. Never sent by a client: editing the label is the only thing that changes it.',
+  }),
+  label: nonEmptyString({
+    description: 'How the brand is written everywhere a person reads it.',
+  }),
+  privateLabelSupermarketId: nullableString(),
+  itemCount: integer({
+    description: 'Products whose `brandId` is this brand.',
+  }),
+  canonicalBrandId: {
+    ...nullableString(),
+    description:
+      'The brand this one is really a spelling of, or null when it stands for itself. One level deep: a linked brand is never itself pointed at.',
+  },
+  canonicalLabel: {
+    ...nullableString(),
+    description:
+      'That brand’s label, joined on the read. Null for a brand that is not linked.',
+  },
+  linkCount: integer({
+    description: 'How many brands point at this one.',
+  }),
+  createdAt: nonEmptyString(),
+  updatedAt: nonEmptyString(),
+};
+
+const brandViewRequired = [
+  'id',
+  'key',
+  'label',
+  'privateLabelSupermarketId',
+  'itemCount',
+  'canonicalBrandId',
+  'canonicalLabel',
+  'linkCount',
+  'createdAt',
+  'updatedAt',
+];
+
+/** One registered brand (plan 0115, section 5.1). */
+const brandView = object(
+  CATALOG_SCHEMA_IDS.brandView,
+  brandViewProperties,
+  brandViewRequired
+);
+
+const brandPage = paginated(
+  CATALOG_SCHEMA_IDS.brandPage,
+  CATALOG_SCHEMA_IDS.brandView
+);
+
+/**
+ * The create answer: the brand, plus how many products it picked up.
+ *
+ * Spelled out rather than composed with `allOf`, because the wire type
+ * generator reads `properties` and an `allOf` would produce a type with none.
+ */
+const createBrandResult = object(
+  CATALOG_SCHEMA_IDS.createBrandResult,
+  {
+    ...brandViewProperties,
+    linkedItems: integer({
+      description:
+        'How many products already carrying this key were linked by the create. Zero when none did.',
+    }),
+  },
+  [...brandViewRequired, 'linkedItems']
+);
+
+/** The update answer: the brand, plus how many products the edit moved. */
+const updateBrandResult = object(
+  CATALOG_SCHEMA_IDS.updateBrandResult,
+  {
+    ...brandViewProperties,
+    movedItems: integer({
+      description:
+        'How many products the changed link moved. Zero for an edit that changed no link.',
+    }),
+  },
+  [...brandViewRequired, 'movedItems']
+);
+
+/**
+ * A suggestion registered under a typed name (plan 0124, section 5).
+ *
+ * `brand` is the canonical brand, read again after the products moved, and
+ * `linked` is the brand created for the suggestion's own spelling, null when the
+ * typed name keys to that same spelling.
+ */
+const registerBrandSuggestionResult = object(
+  CATALOG_SCHEMA_IDS.registerBrandSuggestionResult,
+  {
+    brand: ref(CATALOG_SCHEMA_IDS.brandView),
+    linked: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.brandView), { type: 'null' }],
+    },
+    canonicalCreated: boolean(),
+    linkedItems: integer({
+      description: 'Products the two keys picked up between them.',
+    }),
+  },
+  ['brand', 'linked', 'canonicalCreated', 'linkedItems']
 );
 
 // --- Requests --------------------------------------------------------------
@@ -1009,6 +1155,90 @@ const listProductGroupsRequest = object(
   ['userId']
 );
 
+// --- Brands (plan 0115, section 5) ------------------------------------------
+
+const createBrandRequest = object(
+  CATALOG_SCHEMA_IDS.createBrandRequest,
+  {
+    ...adminCredentialProperties,
+    label: nonEmptyString({ maxLength: BRAND_LABEL_MAX_LENGTH }),
+    privateLabelSupermarketId: nullableString(),
+    canonicalBrandId: nullableString(),
+  },
+  ['userId', 'label']
+);
+const updateBrandRequest = object(
+  CATALOG_SCHEMA_IDS.updateBrandRequest,
+  {
+    ...adminCredentialProperties,
+    brandId: nonEmptyString(),
+    label: nonEmptyString({ maxLength: BRAND_LABEL_MAX_LENGTH }),
+    privateLabelSupermarketId: nullableString(),
+    // Null unlinks. Absent leaves the link alone, which is why the two cannot
+    // be the same value here.
+    canonicalBrandId: nullableString(),
+  },
+  ['userId', 'brandId']
+);
+const registerBrandSuggestionRequest = object(
+  CATALOG_SCHEMA_IDS.registerBrandSuggestionRequest,
+  {
+    ...adminCredentialProperties,
+    spelling: nonEmptyString({ maxLength: BRAND_LABEL_MAX_LENGTH }),
+    label: nonEmptyString({ maxLength: BRAND_LABEL_MAX_LENGTH }),
+    privateLabelSupermarketId: nullableString(),
+  },
+  ['userId', 'spelling', 'label']
+);
+const deleteBrandRequest = object(
+  CATALOG_SCHEMA_IDS.deleteBrandRequest,
+  { ...adminCredentialProperties, brandId: nonEmptyString() },
+  ['userId', 'brandId']
+);
+// The `id` every other admin catalog delete answers with, plus the number of
+// products the removal put back to unbranded.
+const deleteBrandResult = object(
+  CATALOG_SCHEMA_IDS.deleteBrandResult,
+  {
+    id: nonEmptyString(),
+    movedItems: integer({
+      description:
+        'Products that went back to unbranded, keeping the text this spelling was printed as.',
+    }),
+  },
+  ['id', 'movedItems']
+);
+// A read, so no admin token: the gate on the route is the guard, as every other
+// admin catalog read here is.
+const brandIdRequest = object(
+  CATALOG_SCHEMA_IDS.brandIdRequest,
+  { userId: nonEmptyString(), brandId: nonEmptyString() },
+  ['userId', 'brandId']
+);
+const listBrandsRequest = object(
+  CATALOG_SCHEMA_IDS.listBrandsRequest,
+  {
+    userId: nonEmptyString(),
+    query: string(),
+    privateLabelSupermarketId: string(),
+    canonicalBrandId: string(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: { type: 'string', enum: [...BRAND_ORDERS] },
+  },
+  ['userId']
+);
+const brandKeysRequest = object(
+  CATALOG_SCHEMA_IDS.brandKeysRequest,
+  { userId: nonEmptyString() },
+  ['userId']
+);
+const brandKeysResult = object(
+  CATALOG_SCHEMA_IDS.brandKeysResult,
+  { keys: array(nonEmptyString()) },
+  ['keys']
+);
+
 // The values one price row carries (plan 0080, section 9). No `overrides` and
 // no `protectedUntil`: an ADMIN add computes its snapshot server side, and a
 // caller supplying one is refused by `additionalProperties: false`.
@@ -1052,6 +1282,8 @@ const addItemPriceBatchRequest = object(
     priceScopeId: nonEmptyString(),
     sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
     sourceRunId: nullableString(),
+    // The scope a copied batch was read at (plan 0118, section 5).
+    copiedFromScopeId: nullableString(),
     entries: array(ref(CATALOG_SCHEMA_IDS.itemPriceBatchEntry)),
   },
   ['userId', 'priceScopeId', 'sourceKind', 'entries']
@@ -1228,6 +1460,7 @@ const listPriceScopesRequest = object(
   {
     userId: nonEmptyString(),
     supermarketId: string(),
+    kinds: array(ref(CATALOG_SCHEMA_IDS.priceScopeKind)),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -1665,6 +1898,20 @@ export const catalogSchemas: JsonSchema[] = [
   itemPage,
   productGroupPage,
   productGroupOfferPage,
+  brandView,
+  brandPage,
+  createBrandResult,
+  updateBrandResult,
+  registerBrandSuggestionResult,
+  createBrandRequest,
+  updateBrandRequest,
+  registerBrandSuggestionRequest,
+  deleteBrandRequest,
+  deleteBrandResult,
+  brandIdRequest,
+  listBrandsRequest,
+  brandKeysRequest,
+  brandKeysResult,
   supermarketItemPage,
   adminSupermarketItemPage,
   supermarketLocationItemPage,
@@ -1837,6 +2084,34 @@ export const catalogMessageContracts: Record<
   [ITEM_PATTERNS.createMany]: {
     request: CATALOG_SCHEMA_IDS.createItemsRequest,
     response: CATALOG_SCHEMA_IDS.createItemsResult,
+  },
+  [BRAND_PATTERNS.create]: {
+    request: CATALOG_SCHEMA_IDS.createBrandRequest,
+    response: CATALOG_SCHEMA_IDS.createBrandResult,
+  },
+  [BRAND_PATTERNS.update]: {
+    request: CATALOG_SCHEMA_IDS.updateBrandRequest,
+    response: CATALOG_SCHEMA_IDS.updateBrandResult,
+  },
+  [BRAND_PATTERNS.registerSuggestion]: {
+    request: CATALOG_SCHEMA_IDS.registerBrandSuggestionRequest,
+    response: CATALOG_SCHEMA_IDS.registerBrandSuggestionResult,
+  },
+  [BRAND_PATTERNS.delete]: {
+    request: CATALOG_SCHEMA_IDS.deleteBrandRequest,
+    response: CATALOG_SCHEMA_IDS.deleteBrandResult,
+  },
+  [BRAND_PATTERNS.get]: {
+    request: CATALOG_SCHEMA_IDS.brandIdRequest,
+    response: CATALOG_SCHEMA_IDS.brandView,
+  },
+  [BRAND_PATTERNS.list]: {
+    request: CATALOG_SCHEMA_IDS.listBrandsRequest,
+    response: CATALOG_SCHEMA_IDS.brandPage,
+  },
+  [BRAND_PATTERNS.keys]: {
+    request: CATALOG_SCHEMA_IDS.brandKeysRequest,
+    response: CATALOG_SCHEMA_IDS.brandKeysResult,
   },
   [PRODUCT_GROUP_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createProductGroupRequest,

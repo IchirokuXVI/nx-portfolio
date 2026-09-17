@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GENERATED_LIST_LIMITS,
+  GENERATED_LIST_SHARING_LIMITS,
   GeneratedLineOrigin,
   GeneratedListStatus,
   isLiveGeneratedList,
@@ -19,6 +20,9 @@ import {
   type GeneratedListSourceSnapshot,
   type GeneratedListView,
   type ListGeneratedListsRequest,
+  type ListSharedGeneratedListsRequest,
+  type SharedGeneratedListCorePage,
+  type SharedGeneratedListCoreView,
   type UpdateGeneratedListRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -31,10 +35,21 @@ import {
   GeneratedListLine,
   GeneratedListLineOption,
   GeneratedListLineOrigin,
+  GeneratedListParticipant,
   LineSettlement,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import {
+  announceTripsChanged,
+  tripListsOfBasket,
+  tripListsOfOwner,
+} from '../lists/trips/trips.announce';
 import { ProfileService } from '../profiles/profile.service';
+import { GeneratedListMembersService } from './generated-list-members.service';
+import {
+  SHARED_BASKETS_SQL,
+  type SharedBasketRow,
+} from './generated-list-members.sql';
 import { GeneratedListOrderService } from './generated-list-order.service';
 import {
   NO_GENERATED_LINE_COUNTS,
@@ -135,8 +150,21 @@ export class GeneratedListService {
     // The order a shopper walks (plan 0110), asked once per run and never
     // afterwards. A service of its own because it is a read of the owner's past
     // trips rather than anything about the lists this run drew from.
-    private readonly order: GeneratedListOrderService
+    private readonly order: GeneratedListOrderService,
+    // The people a basket is shared with on purpose (plan 0114): checked and
+    // written by the run, read back by the shared listing, and told of a
+    // deletion.
+    private readonly members: GeneratedListMembersService
   ) {}
+
+  /**
+   * The query function `trips.announce` reads a basket's origin lists through:
+   * the repository's own, as every other raw read in this service goes.
+   */
+  private readonly tripQuery = (
+    sql: string,
+    parameters: unknown[]
+  ): Promise<unknown> => this.lists.query(sql, parameters);
 
   // --- The run ---------------------------------------------------------------
 
@@ -162,6 +190,11 @@ export class GeneratedListService {
         return { list: await this.viewFor(existing), skipped: [] };
       }
     }
+
+    // Checked before anything is composed (plan 0114, section 4): a basket
+    // shared with somebody the owner may not share it with is refused whole,
+    // rather than created and then shared with fewer people than asked.
+    const members = await this.checkMembers(req);
 
     const resolved = await this.resolveSources(req);
     const listIds = resolved.sources.map((source) => source.listId);
@@ -204,13 +237,18 @@ export class GeneratedListService {
     // positions below are the index in **this** array, not the order the source
     // lists happened to be read in.
     const walked = await this.order.order(req.userId, composed);
-    const saved = await this.write(req, snapshot, walked);
+    const invited: GeneratedListParticipant[] = [];
+    const saved = await this.write(req, snapshot, walked, members, invited);
     const view = await this.viewFor(saved);
     this.events.emitToUsers(
       RealtimeEvent.GeneratedListCreated,
       [req.userId],
       view
     );
+    // After the write commits, so nobody is told of a basket that was not made.
+    for (const participant of invited) {
+      this.members.announceLive(saved.id, participant);
+    }
     // The one zone event a generated list emits (plan 0052, section 3.1), and
     // the declared exception to plan 0050 section 8 rather than a contradiction
     // to be discovered later. Every origin the run took is now claimed, in one
@@ -221,6 +259,14 @@ export class GeneratedListService {
     // shared with three guests is still one person's trip from the household's
     // point of view.
     this.claims.announce(true, req.userId, await this.claims.refsOf(saved.id));
+    // And each list it drew from has a new trip (plan 0122, section 6). Asked of
+    // the origins that were written rather than of the sources that were named:
+    // a source every line of which another basket already carries contributed
+    // nothing, and its list has no new trip to read.
+    announceTripsChanged(
+      this.events,
+      await tripListsOfBasket(this.tripQuery, saved.id)
+    );
     return { list: view, skipped };
   }
 
@@ -286,6 +332,48 @@ export class GeneratedListService {
       pricingProfileId: profile.profileId,
       sources,
     };
+  }
+
+  /**
+   * The people this run shares its basket with, checked and named (plan 0114,
+   * sections 4 and 9).
+   *
+   * Unique, at most one fewer than the participant limit so the owner keeps a
+   * place, and every one a contact of the owner's now. The gateway's DTO refuses
+   * the first two already, and they are checked again here because a request
+   * that slips past it still meets this.
+   */
+  private async checkMembers(
+    req: CreateGeneratedListRequest
+  ): Promise<InvitedMember[]> {
+    const ids = req.memberUserIds ?? [];
+    if (ids.length === 0) {
+      return [];
+    }
+    if (new Set(ids).size !== ids.length) {
+      throw new ValidationException('a person can be named only once', {
+        messageArgs: { field: 'memberUserIds' },
+      });
+    }
+    const most = GENERATED_LIST_SHARING_LIMITS.maxParticipants - 1;
+    if (ids.length > most) {
+      throw new ValidationException(
+        `a basket can be shared with at most ${most} people`,
+        { messageArgs: { field: 'memberUserIds' } }
+      );
+    }
+    const common = await this.members.requireContacts(
+      req.userId,
+      ids,
+      'memberUserIds'
+    );
+    return ids.map((userId) => ({
+      userId,
+      username: this.members.nameFor(
+        common.get(userId),
+        this.members.globalUsernameOf(req.globalUsernames, userId)
+      ),
+    }));
   }
 
   private checkSources(sources: GeneratedListSourceInput[]): void {
@@ -453,13 +541,19 @@ export class GeneratedListService {
   }
 
   /**
-   * Write the basket, its lines, their provenance rows and their options in one
-   * transaction, so a basket never exists without the lines it was composed of.
+   * Write the basket, its lines, their provenance rows, their options and the
+   * people it is shared with in one transaction, so a basket never exists
+   * without the lines it was composed of, or shared with fewer people than asked.
+   *
+   * The rows written for those people are pushed onto `invited`, for the caller
+   * to announce once this has committed.
    */
   private async write(
     req: CreateGeneratedListRequest,
     sourceSnapshot: GeneratedListSourceSnapshot,
-    composed: ComposedLine[]
+    composed: ComposedLine[],
+    members: InvitedMember[],
+    invited: GeneratedListParticipant[]
   ): Promise<GeneratedList> {
     try {
       return await this.dataSource.transaction(async (manager) => {
@@ -509,9 +603,21 @@ export class GeneratedListService {
             );
           }
         }
+
+        for (const member of members) {
+          const { participant } = await this.members.invite(manager, {
+            generatedListId: list.id,
+            userId: member.userId,
+            invitedByUserId: req.userId,
+            username: member.username,
+          });
+          invited.push(participant);
+        }
         return list;
       });
     } catch (error) {
+      // Nothing above committed, so nobody was added either.
+      invited.length = 0;
       // Two taps raced and the other one won. Its basket is the right answer to
       // both, which is what the key was for.
       if (isUniqueViolation(error) && req.idempotencyKey) {
@@ -582,6 +688,76 @@ export class GeneratedListService {
   }
 
   /**
+   * The baskets other people shared with the caller, newest share first (plan
+   * 0114, section 8).
+   *
+   * A listing of its own rather than a flag on {@link listMine}, because the two
+   * read different rows: that one reads baskets by owner, this one reads the
+   * caller's participant rows, and they order by different dates. Each row is
+   * the history row, plus who shared it and when.
+   *
+   * The owner is named here only halfway. Core knows which groups the two people
+   * share and the owner's name in them, and no global usernames, so a row whose
+   * owner shares exactly one group with the caller is named here and every other
+   * row reaches the gateway with a null, for auth to name (section 9).
+   */
+  async listShared(
+    req: ListSharedGeneratedListsRequest
+  ): Promise<SharedGeneratedListCorePage> {
+    const limit = clampPageSize(req.limit);
+    const cursor = decodeSharedCursor(req.cursor);
+    const rows = await this.lists.query<SharedBasketRow[]>(SHARED_BASKETS_SQL, [
+      req.userId,
+      cursor,
+      limit + 1,
+    ]);
+    const page = rows.slice(0, limit);
+    if (page.length === 0) {
+      return { items: [], nextCursor: null };
+    }
+
+    const ids = page.map((row) => row.generatedListId);
+    const baskets = new Map(
+      (await this.lists.find({ where: { id: In(ids) } })).map((row) => [
+        row.id,
+        row,
+      ])
+    );
+    const counts = await this.countsFor(ids);
+    const owners = await this.members.commonGroups(
+      req.userId,
+      [...baskets.values()].map((row) => row.ownerUserId)
+    );
+
+    const items: SharedGeneratedListCoreView[] = [];
+    for (const row of page) {
+      const basket = baskets.get(row.generatedListId);
+      if (!basket) {
+        // Deleted between the two reads. The next page is unaffected, because
+        // the cursor below names a row of this page rather than of the answer.
+        continue;
+      }
+      const common = owners.get(basket.ownerUserId);
+      items.push({
+        ...toGeneratedListSummaryView(
+          basket,
+          counts.get(basket.id) ?? NO_GENERATED_LINE_COUNTS
+        ),
+        ownerUserId: basket.ownerUserId,
+        ownerZoneUsername: common?.groupCount === 1 ? common.username : null,
+        sharedAt: new Date(row.sharedAt).toISOString(),
+      });
+    }
+    return {
+      items,
+      nextCursor:
+        rows.length > limit
+          ? encodeSharedCursor(page[page.length - 1].generatedListId)
+          : null,
+    };
+  }
+
+  /**
    * The numbers a history row shows, for a whole page, in one query (plan 0053,
    * section 2).
    *
@@ -618,6 +794,7 @@ export class GeneratedListService {
   async update(req: UpdateGeneratedListRequest): Promise<GeneratedListView> {
     const list = await this.load(req.userId, req.generatedListId);
     const wasLive = isLiveGeneratedList(list.status);
+    const before = { name: list.name, status: list.status };
     if (req.name !== undefined) {
       list.name = checkName(req.name);
     }
@@ -652,6 +829,17 @@ export class GeneratedListService {
         await this.claims.refsOf(saved.id)
       );
     }
+
+    // A trip's head is the basket's name and whether it is live, so either one
+    // moving is a reason to read the trips again (plan 0122, section 6). The
+    // sweep finishes a basket through this method, so it is covered here too.
+    // A change of the default target list is neither, and says nothing.
+    if (saved.name !== before.name || saved.status !== before.status) {
+      announceTripsChanged(
+        this.events,
+        await tripListsOfBasket(this.tripQuery, saved.id)
+      );
+    }
     return view;
   }
 
@@ -671,11 +859,30 @@ export class GeneratedListService {
     const refs = isLiveGeneratedList(list.status)
       ? await this.claims.refsOf(list.id)
       : [];
+    // Before the delete too, for the same reason: the participant rows go with
+    // the basket (plan 0114, section 10).
+    const shared = await this.members.liveRegistered(list.id);
+    // And before the delete once more (plan 0122, section 6): which lists lose a
+    // basket trip is written in the origins, and they cascade away with it.
+    const tripLists = await tripListsOfBasket(this.tripQuery, list.id);
     await this.lists.delete({ id: list.id });
-    this.events.emitToUsers(RealtimeEvent.GeneratedListDeleted, [req.userId], {
-      id: list.id,
-    });
+    // The owner's own sessions, as before, and since plan 0114 the basket's room
+    // as well: a deleted basket used to tell nobody on it, and the room is the
+    // one address that reaches a guest. It is also the basket realtime sweeps
+    // both basket rooms by.
+    this.events.emitTo(
+      RealtimeEvent.GeneratedListDeleted,
+      { userIds: [req.userId], generatedListId: list.id },
+      { id: list.id }
+    );
+    for (const participant of shared) {
+      if (participant.userId) {
+        this.members.announceUnshared(list.id, participant.userId);
+      }
+    }
     await this.claims.announceReleased(refs);
+    // The basket trip is gone, and whatever it bought now reads as loose trips.
+    announceTripsChanged(this.events, tripLists);
     return { id: list.id };
   }
 
@@ -689,7 +896,11 @@ export class GeneratedListService {
    * purchase.
    */
   async deleteForUser(userId: string): Promise<number> {
+    // Before the delete, as `delete` reads them (plan 0122, section 6): every
+    // list one of these baskets drew from loses a basket trip.
+    const tripLists = await tripListsOfOwner(this.tripQuery, userId);
     const result = await this.lists.delete({ ownerUserId: userId });
+    announceTripsChanged(this.events, tripLists);
     return result.affected ?? 0;
   }
 
@@ -924,6 +1135,12 @@ const NO_SETTLED_ORIGINS: ReadonlyMap<string, number> = new Map<
   number
 >();
 
+/** One person a run shares its basket with, and the name their row carries. */
+interface InvitedMember {
+  userId: string;
+  username: string | null;
+}
+
 /** A basket line as the run composed it, before it is written. */
 interface ComposedLine {
   content: string;
@@ -1025,6 +1242,51 @@ function decodeCursor(
   } catch {
     // A cursor is an opaque token the server minted. One that does not decode
     // was not minted here, so it is refused rather than guessed at.
+  }
+  throw new ValidationException('invalid cursor', {
+    messageArgs: { field: 'cursor' },
+  });
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The shared listing's cursor: the basket of the last row on the page, and
+ * nothing else (plan 0114, section 8).
+ *
+ * Unlike {@link encodeCursor} it carries no timestamp, for the reason
+ * `SHARED_BASKETS_SQL` gives: Postgres reads the row's own key back at full
+ * precision, where a millisecond `Date` would repeat the boundary row.
+ */
+function encodeSharedCursor(generatedListId: string): string {
+  return Buffer.from(JSON.stringify({ id: generatedListId })).toString(
+    'base64url'
+  );
+}
+
+/**
+ * The basket a shared listing cursor names, or null for the first page.
+ *
+ * Refused unless it names a uuid, because the id reaches Postgres as a `uuid`
+ * parameter and anything else would fail there as a server error.
+ */
+function decodeSharedCursor(cursor: string | undefined): string | null {
+  if (!cursor) {
+    return null;
+  }
+  try {
+    const parsed: unknown = JSON.parse(
+      Buffer.from(cursor, 'base64url').toString('utf8')
+    );
+    const id =
+      typeof parsed === 'object' && parsed !== null
+        ? (parsed as { id?: unknown }).id
+        : undefined;
+    if (typeof id === 'string' && UUID.test(id)) {
+      return id;
+    }
+  } catch {
+    // Not a cursor this server minted, refused below.
   }
   throw new ValidationException('invalid cursor', {
     messageArgs: { field: 'cursor' },

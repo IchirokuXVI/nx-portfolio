@@ -51,6 +51,8 @@ interface Harness {
     view: GeneratedListView;
   }[];
   claims: FakeLineClaims;
+  /** The lists told to read their trips again (plan 0122), one entry an event. */
+  tripsChanged: (string | undefined)[];
   logger: { log: jest.Mock; error: jest.Mock };
 }
 
@@ -82,6 +84,7 @@ function build(options: {
   );
   const vanished = new Set(options.vanished ?? []);
   const events: Harness['events'] = [];
+  const tripsChanged: Harness['tripsChanged'] = [];
 
   // A repository that honours the query the sweep sends, so "never touches
   // ARCHIVED" and "respects the batch cap" are facts about the rows that came
@@ -122,6 +125,14 @@ function build(options: {
       rows[index] = row;
       return row;
     },
+    // The one raw read a finish makes: the lists the basket draws from, which
+    // are the lists of whatever it is said to claim, each of them once.
+    query: async (_sql: string, [basketId]: [string]) =>
+      [
+        ...new Set(
+          (options.claiming?.[basketId] ?? []).map((ref) => ref.listId)
+        ),
+      ].map((listId) => ({ listId })),
   };
 
   const lines = {
@@ -139,6 +150,11 @@ function build(options: {
     ) => {
       events.push({ event, userIds, view });
     },
+    emitTo: (event: RealtimeEvent, audience: { listId?: string }) => {
+      if (event === RealtimeEvent.ListTripsChanged) {
+        tripsChanged.push(audience.listId);
+      }
+    },
   } as unknown as CoreEventsPublisher;
 
   const claims = fakeLineClaims({}, (id) => options.claiming?.[id] ?? []);
@@ -153,6 +169,7 @@ function build(options: {
     {} as unknown as ProfileService,
     claims.service,
     publisher,
+    {} as never,
     {} as never
   );
 
@@ -177,7 +194,7 @@ function build(options: {
     configService as never
   );
 
-  return { service, rows, events, claims, logger };
+  return { service, rows, events, claims, tripsChanged, logger };
 }
 
 const statusOf = (harness: Harness, id: string) =>
@@ -277,6 +294,10 @@ describe('GeneratedListSweepService.sweep', () => {
       { claimed: false, claimedByUserId: null, lineIds: ['zl-3'] },
       { claimed: false, claimedByUserId: null, lineIds: ['zl-1', 'zl-2'] },
     ]);
+    // And each list a swept basket drew from reads its trips again (plan 0122,
+    // section 6): the trip has just stopped being live. It costs the sweep
+    // nothing of its own, because it finishes a basket through `update`.
+    expect(harness.tripsChanged).toEqual(['l-flat', 'l-flat', 'l-parents']);
   });
 
   it('never touches ARCHIVED, and has nothing to add to COMPLETED', async () => {
@@ -303,6 +324,7 @@ describe('GeneratedListSweepService.sweep', () => {
     expect(statusOf(harness, 'gl-done')).toBe(GeneratedListStatus.COMPLETED);
     expect(harness.events).toEqual([]);
     expect(harness.claims.calls).toEqual([]);
+    expect(harness.tripsChanged).toEqual([]);
     expect(harness.logger.log).not.toHaveBeenCalled();
   });
 

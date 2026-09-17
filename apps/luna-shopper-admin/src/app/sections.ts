@@ -1,4 +1,9 @@
 import {
+  BRANDS,
+  BRANDS_LINKS,
+  brandsRoutes,
+} from '@portfolio/luna-shopper-admin/feature-brands';
+import {
   CatalogDashboard,
   ITEMS,
   LOCATION_ITEMS,
@@ -50,8 +55,14 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * and `SHELL_LINKS` said which hand written screens existed, and nothing said
  * which of them belonged together, so the navigation was twenty three links in
  * one wrapping row with "Price policies" beside "Baskets" beside "Chain
- * sources". Five is the number the first row holds at a glance, and eight is the
- * widest second row.
+ * sources". Around half a dozen is what the first row holds at a glance, and
+ * eight is the widest second row.
+ *
+ * Admin plan 0027 added a sixth, Brands, for two screens, and it is gone again:
+ * a tab for two screens was a click between the operator and both of them, and
+ * the tab went unmarked on the registered list because it pointed at the other
+ * one. Both brand screens are in the harvester, whose queues they are worked
+ * beside.
  *
  * The list stays the app's, for the reason `ResourceRegistry` already gives: it
  * is the app that decides which screens exist. It is what the route table is
@@ -59,7 +70,7 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * reachable without a link, linked without a route, or mounted without being
  * registered.
  *
- * ## Why these five, and why these names
+ * ## Why these, and why these names
  *
  * `Core` and `Auth` are the names of two backend deployments. They are the right
  * names in `values.staging.yaml` and in a NATS subject, and they are the wrong
@@ -79,10 +90,10 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * ## Order
  *
  * The sections run in the order an operator meets them: the overview, then the
- * catalog, which is the half that gets edited; then the people and what they
- * share, which is read far more often than it is touched; then the harvester,
- * which produces most of the catalog; then the admin table, which is opened to
- * answer one question and never to change anything.
+ * catalog, which is the half that gets edited; then the people
+ * and what they share, which is read far more often than it is touched; then the
+ * harvester, which produces most of the catalog; then the admin table, which is
+ * opened to answer one question and never to change anything.
  *
  * Inside the catalog the order follows what an operator is holding in their head
  * rather than the alphabet. A chain, then the shops it has and the scopes it
@@ -136,9 +147,15 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     label: 'shell.sections.harvest',
     segment: HARVEST_SEGMENT,
     home: HarvestDashboard,
-    resources: [POSTAL_CODES],
-    screens: harvestRoutes(),
-    links: HARVEST_LINKS,
+    // The brands are here rather than in the catalog, although a registered
+    // brand is catalog data. The suggestions are keys the harvested queue
+    // carries, a person registers them while working that queue, and the
+    // catalog's row is already full. `BRANDS` comes before `POSTAL_CODES` and
+    // `BRANDS_LINKS` after `HARVEST_LINKS`, so the two brand screens sit side
+    // by side: hand written links are drawn first, then resources.
+    resources: [BRANDS, POSTAL_CODES],
+    screens: [...harvestRoutes(), ...brandsRoutes()],
+    links: [...HARVEST_LINKS, ...BRANDS_LINKS],
   },
   {
     // **A section with one screen has no segment**, so the admins list stays at

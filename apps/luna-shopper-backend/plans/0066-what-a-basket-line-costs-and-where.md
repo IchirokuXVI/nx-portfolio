@@ -1,3 +1,5 @@
+> **PR:** [#153](https://github.com/IchirokuXVI/nx-portfolio/pull/153)
+
 # 0066 What a basket line costs, and where
 
 > Client half: `apps/velista/plans/0062`, which draws every number this plan answers.

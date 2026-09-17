@@ -20,21 +20,6 @@
 
   @if (hasMenu()) {
     <div class="header-actions">
-      <!--
-        Reorder is a **mode**, entered from here, and it is offered only once every
-        page of lines has arrived: `line.reorder` renumbers exactly the lines it names,
-        so reordering a half read list collides two lines onto one position (rule L4).
-      -->
-      @if (canReorder()) {
-        <button
-          (click)="startReorder.emit()"
-          class="header-action"
-          type="button"
-        >
-          {{ 'list.reorder.enter' | rokuT }}
-        </button>
-      }
-
       <button (click)="openSettings.emit()" class="header-action" type="button">
         {{ 'list.settings.title' | rokuT }}
       </button>

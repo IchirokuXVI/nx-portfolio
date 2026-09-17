@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`fe48d0708`](https://github.com/IchirokuXVI/nx-portfolio/commit/fe48d0708688ff024de581e13708a946bc7132c1) on `dev`, with no pull request of its own.
+
 # 0034: The app updates itself
 
 ## 1. What is wrong today

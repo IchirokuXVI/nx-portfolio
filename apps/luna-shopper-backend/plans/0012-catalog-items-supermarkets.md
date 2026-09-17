@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`78030ae52`](https://github.com/IchirokuXVI/nx-portfolio/commit/78030ae52aaf9fd01b3121029a8e471b37d2fd9d) on `dev`, with no pull request of its own.
+
 # 0012 Catalog: items and supermarkets
 
 The **last** plan, built after everything else is done. It introduces the product catalog: the

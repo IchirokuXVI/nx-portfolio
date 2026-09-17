@@ -1,8 +1,11 @@
 import type {
   CommentTranscription,
   LineApprovalStatus,
+  LineSuggestionReason,
   ListPermission,
   SettlementOutcome,
+  TripKind,
+  TripRowOutcome,
 } from '../enums/list.enums';
 import type { PageQuery, Paginated } from '../pagination';
 
@@ -27,6 +30,18 @@ export const LIST_PATTERNS = {
    * question is asked, not what it is about.
    */
   holdingItem: 'list.holdingItem',
+  /**
+   * The shopping trips that touched a list, newest first (plan 0122, section 3).
+   * Live trips ride on the first response, ended ones come a page at a time.
+   */
+  trips: 'list.trips',
+  /** What one trip did to each zone line of the list (plan 0122, section 4). */
+  tripRows: 'list.tripRows',
+  /**
+   * Which lines of a list at zero are due again (plan 0123, section 5). Not
+   * paged, and not capped: every due line (plan 0125).
+   */
+  suggestions: 'list.suggestions',
 } as const;
 
 export const LINE_PATTERNS = {
@@ -683,6 +698,49 @@ export interface UpdateLineRequest {
    * ever settle a product onto the person holding the line.
    */
   adoptItemIds?: string[];
+  /**
+   * Merge this line with the line the new name already belongs to (plan 0112,
+   * section 2).
+   *
+   * A rename onto a name another line of the list holds is refused with
+   * `line_merge_required` unless this is `true`, and the refusal writes nothing.
+   * The same request sent again with it merges the two lines into the earlier
+   * one. It changes nothing on a rename to a free name, or on an edit that does
+   * not rename.
+   */
+  confirmMerge?: boolean;
+}
+
+/**
+ * What a line edit answers (plan 0112, section 6): the line as it now stands.
+ *
+ * After a merge that is the **surviving** line, whose `id` can differ from the
+ * line the request addressed, and {@link absorbedLineId} names the line that went
+ * away. The field is absent when no merge happened.
+ */
+export interface UpdateLineResult extends LineView {
+  absorbedLineId?: string;
+}
+
+/**
+ * The `details` a `line_merge_required` refusal carries (plan 0112, section 2):
+ * the line the new name already belongs to, as it stood when the rename was
+ * refused.
+ */
+export interface LineMergeRequiredDetails {
+  otherLineId: string;
+  otherContent: string;
+  otherQuantity: number;
+}
+
+/**
+ * The `details` a `line_merge_too_many_products` refusal carries (velista plan
+ * 0083): the bound the merge passed, and how many products the two lines hold
+ * together.
+ */
+export interface LineMergeTooManyProductsDetails {
+  max: number;
+  offered: number;
 }
 
 /**
@@ -1024,6 +1082,136 @@ export const VOICE_COMMENT_MAX_BYTES = 2 * 1024 * 1024;
 /** Normalises a content type for the allowlist check: lowercase, no parameters. */
 export function baseContentType(value: string): string {
   return (value.split(';')[0] ?? '').trim().toLowerCase();
+}
+
+/**
+ * One shopping trip that touched a list (plan 0122, section 3).
+ *
+ * A trip says its name, its date and what it did to **this** list. It never says
+ * what else the basket holds, who takes part, where it shops or what anything
+ * costs (section 5). Naming a basket to a reader of the list is the one thing
+ * plan 0052 refused and this plan allows, and it is allowed here and on the list
+ * room only.
+ */
+export interface TripView {
+  /** The basket id, or the id of the session's earliest settlement. */
+  id: string;
+  kind: TripKind;
+  /** `BASKET` only. Null is "shown as its date". */
+  name: string | null;
+  /** Whether the basket still claims its lines. Always false for `LOOSE`. */
+  live: boolean;
+  /** `generatedAt`, or the earliest `settledAt` of the session. */
+  startedAt: string;
+  /** Zone lines of this list the trip touched, and that still exist. */
+  lineCount: number;
+  /** Of those, the ones whose row says `BOUGHT`. */
+  boughtLineCount: number;
+}
+
+/**
+ * A page of trips (plan 0122, section 3).
+ *
+ * Not the house page, because it has two parts. Live trips are bounded by the
+ * claim window and a client needs all of them, so they ride whole on the first
+ * response and are `[]` on every response to a cursor. Ended trips grow without
+ * bound and are paged.
+ */
+export interface TripPage {
+  live: TripView[];
+  items: TripView[];
+  nextCursor: string | null;
+}
+
+/**
+ * What one trip did to one zone line (plan 0122, section 4).
+ *
+ * It carries no name and no current quantity: a client holds every line of the
+ * list and joins on `lineId`. The numbers are derived from origins and
+ * settlements on every read, and they freeze by themselves when the basket ends.
+ */
+export interface TripRowView {
+  lineId: string;
+  /** `BASKET`: what this trip's origins asked of the line. `LOOSE`: null. */
+  asked: number | null;
+  /** Units in this trip's standing `BOUGHT` settlements of the line. */
+  bought: number;
+  /** `BASKET`: `max(0, asked - bought)`. `LOOSE`: null. */
+  left: number | null;
+  outcome: TripRowOutcome;
+  /** `LOOSE` only: the latest buyer, or null if they have left the zone. */
+  settledByUserId: string | null;
+}
+
+export type TripRowPage = Paginated<TripRowView>;
+
+/** The trips of one list. `READ`. */
+export interface ListTripsRequest {
+  userId: string;
+  listId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/** The rows of one trip of one list. `READ`. */
+export interface ListTripRowsRequest {
+  userId: string;
+  listId: string;
+  kind: TripKind;
+  tripId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * The payload of {@link RealtimeEvent.ListTripsChanged}, on the `list:{listId}`
+ * room (plan 0122, section 6).
+ *
+ * It says "read the trips again" and nothing else, so it cannot leak a basket
+ * and cannot drift from the read.
+ */
+export interface ListTripsChangedEvent {
+  listId: string;
+}
+
+/**
+ * A line at zero offering to come back (plan 0123, section 5).
+ *
+ * Never a new line: it names an existing line of the list, which the client
+ * already holds and joins on `lineId`. Nothing is stored, so a suggestion nobody
+ * takes stays until the line is wanted again.
+ */
+export interface LineSuggestionView {
+  lineId: string;
+  /** `PERIOD` wins when both rules hold. */
+  reason: LineSuggestionReason;
+  /** `PERIOD` only: the median days between purchases. */
+  periodDays: number | null;
+  /** Whole days since the line was last bought, for both reasons. */
+  daysSinceBought: number;
+  /** `STAPLE` only: of the recent ended basket trips, how many asked for it. */
+  tripsWith: number | null;
+  /** `STAPLE` only: how many recent ended basket trips were looked at. */
+  tripsSeen: number | null;
+  /** What to add: what the newest ended basket asked, else the last purchase. */
+  quantity: number;
+}
+
+/**
+ * The suggestions of one list, in the order a client shows them.
+ *
+ * Not the house page: there is no cursor and no ceiling. The read answers every
+ * due line (plan 0125), and the client decides how many of them to draw. The
+ * answer is bounded by the lines of the list, which the client already holds.
+ */
+export interface LineSuggestionPage {
+  items: LineSuggestionView[];
+}
+
+/** The suggestions of one list. `READ`. */
+export interface ListSuggestionsRequest {
+  userId: string;
+  listId: string;
 }
 
 export type ListPage = Paginated<ListView>;

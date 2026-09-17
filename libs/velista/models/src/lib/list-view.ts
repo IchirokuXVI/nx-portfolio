@@ -26,32 +26,24 @@ import type {
 export type LineWriteState = 'none' | 'pending' | 'failed' | 'overwritten';
 
 /**
- * Everything a row can be asked to do, other than change its quantity.
+ * What the detail sheet offers a reader for one line, beside the settle actions
+ * (velista plan 0083).
  *
- * Changing the quantity is deliberately not in here. It is the gesture the whole
- * screen is built around now, so it is the row's own control rather than an entry
- * in a menu (velista plan 0043, section 4).
+ * `edit` is the name and amount fields, `comments` the conversation, `delete` taking
+ * the line off the list. It was the row's overflow menu until 0083 deleted the menu,
+ * and it is still decided per row from the caller's permissions and the line's
+ * approval, because the same caller gets different answers on two lines of one list.
  *
- * **`markNotAvailable` and `markPending` are gone**, and their absence is section
- * 1.1 rather than an omission. Saying the shop did not have something is a thing
- * you say afterwards, deliberately, from the detail sheet, not something a thumb
- * flicks past in an aisle; and there is no pending trip state left to put a line
- * back to.
- *
- * The two move actions are the grip's **keyboard** equivalent and are not drawn in
- * the overflow. They exist as actions rather than as an internal detail of a drag
- * because the container owns the order and a component that reordered its own
- * siblings would be deciding something it cannot see (section 7).
+ * Changing the quantity from the row is not in here. It is the gesture the whole
+ * screen is built around, so it is the row's own control (velista plan 0043, section
+ * 4). Nor are `markNotAvailable` and `markPending`: saying the shop did not have
+ * something is the detail sheet's settle action, and there is no pending trip state.
  */
-export type LineAction =
-  | 'edit'
-  | 'comments'
-  | 'delete'
-  | 'moveUp'
-  | 'moveDown';
+export type LineAction = 'edit' | 'comments' | 'delete';
 
 /**
- * The two modes of the one edit sheet (plan 0030, section 4; plan 0066, section 2).
+ * The two modes of editing a line in the detail sheet (plan 0030, section 4; plan 0066,
+ * section 2; velista plan 0083).
  *
  * `full` makes every field live: `WRITE` on a line that is `PENDING` or `REJECTED`,
  * `MANAGE` on any line at all, or `DECIDE` on an `APPROVED` one. `content` shows the
@@ -184,42 +176,9 @@ export interface LineRowVm {
    */
   readonly adjustable: boolean;
   /**
-   * The overflow's contents, decided by the container from the caller's own facts.
-   *
-   * An **empty list means no overflow button**, not a disabled one, exactly as
-   * `MemberRowVm.actions` does it: a disabled control says "you could do this,
-   * later" about something that will never be permitted.
-   *
-   * A read-only caller's rows keep exactly `['comments']`. Commenting follows
-   * `WRITE` or `DECIDE`, so a reader may not say anything; what they may still do
-   * is **read** the conversation, and section 3.1 asks for exactly that. The
-   * overflow is the only way into that sheet, so an empty list here would take
-   * away the reading along with the writing.
-   */
-  readonly actions: readonly LineAction[];
-  /**
-   * Which fields the edit sheet may make live on this row, or null when it may not
-   * be opened at all.
-   *
-   * The mode is a function of the caller's permissions **and** the line's approval
-   * together (plan 0030, section 4), so it cannot be a fact about the person: a
-   * `MANAGE` holder gets the full sheet on every row, while a caller holding only
-   * `DECIDE` gets no edit on a pending row and the quantity field on an approved
-   * one. Deriving it per row is what keeps those two answers from being written
-   * down separately.
-   *
-   * Nullable, and that null is the **same decision** as `actions` not containing
-   * `edit`. The container derives both from one expression, so they cannot
-   * disagree; two fields exist because they are read by two different components
-   * and neither should have to search a menu array to find out what a sheet is
-   * for. The invariant to preserve when either is changed: `editScope` is non-null
-   * exactly when `actions` includes `edit`.
-   */
-  readonly editScope: LineEditScope | null;
-  /**
    * Whether to draw the two decision buttons on this row.
    *
-   * Inline rather than in the overflow, because deciding is the whole reason
+   * Inline rather than in the detail sheet, because deciding is the whole reason
    * somebody is looking at a pending line and burying it one tap deeper would make
    * the queue tedious. True for `canDecide`, and only on a line actually waiting.
    */
@@ -236,7 +195,7 @@ export interface LineRowVm {
    * Who is editing this line right now, or null. Never the reader themselves.
    *
    * Advisory and nothing more (plan 0022, section 3): the row stays tappable, the
-   * edit sheet still opens over it, and a simultaneous edit resolves exactly as
+   * detail sheet still opens over it, and a simultaneous edit resolves exactly as
    * `0012` says it does. Null when nobody is editing and null when the editor's
    * name could not be resolved, because an id is not a person to the one reading
    * the row.
@@ -381,7 +340,7 @@ export type ListPageState =
        * A list fact rather than an ability, so it sits beside `abilities` and not inside
        * it. The page needs it in two places that both sit above a row: the optimistic
        * add, which has to construct its placeholder with the approval the server is
-       * about to give it (plan 0030, section 5), and the edit sheet's warning, which is
+       * about to give it (plan 0030, section 5), and the detail sheet's warning, which is
        * absent on an auto-approving list because the split it warns about does not
        * happen there (section 4.1).
        */

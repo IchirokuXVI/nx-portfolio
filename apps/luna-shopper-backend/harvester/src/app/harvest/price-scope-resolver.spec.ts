@@ -1,5 +1,7 @@
 import {
+  HarvestWarningCode,
   PriceScopeKind,
+  type HarvestRunWarning,
   type PriceScopeView,
 } from '@portfolio/luna-shopper/contracts';
 import type { CatalogClient } from './catalog-client.service';
@@ -27,6 +29,7 @@ function build(
   // given. What is asserted here is that the resolver asks for the chain's
   // scopes once, however many keys a run declares.
   const listAllPriceScopes = jest.fn(async () => pages);
+  const warnings: HarvestRunWarning[] = [];
   const catalog = {
     listAllPriceScopes,
     createPriceScope: jest.fn(
@@ -51,10 +54,15 @@ function build(
   } as unknown as CatalogClient;
 
   return {
-    resolver: new PriceScopeResolver(catalog).forRun(CHAIN, adapterKey),
+    resolver: new PriceScopeResolver(catalog).forRun(
+      CHAIN,
+      adapterKey,
+      (warning) => warnings.push(warning)
+    ),
     catalog,
     created,
     listAllPriceScopes,
+    warnings,
   };
 }
 
@@ -173,5 +181,88 @@ describe('RunScopeResolver', () => {
 
     expect(resolver.wasCreated('21')).toBe(false);
     expect(resolver.wasCreated('26')).toBe(true);
+  });
+
+  it('uses a key held under another kind, and warns about the disagreement', async () => {
+    // Plan 0116, section 6: a warehouse declared as LOCAL_AREA that catalog
+    // still holds as REGION. Stopping would lose the walk and creating a second
+    // scope would split the warehouse's prices, so the held row is used and
+    // the operator is told.
+    const { resolver, created, warnings } = build(
+      [
+        {
+          id: 'scope-held',
+          supermarketId: CHAIN,
+          kind: PriceScopeKind.REGION,
+          externalKey: '4661',
+          label: null,
+        } as PriceScopeView,
+      ],
+      'mercadona-api'
+    );
+    const warehouse = {
+      key: '4661',
+      kind: PriceScopeKind.LOCAL_AREA,
+      name: null,
+    };
+
+    expect(await resolver.declare(warehouse)).toBe('scope-held');
+    expect(await resolver.declare(warehouse)).toBe('scope-held');
+
+    expect(created).toEqual([]);
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        code: HarvestWarningCode.SCOPE_KIND_MISMATCH,
+        offerId: null,
+        page: null,
+      }),
+    ]);
+    expect(warnings[0].message).toContain('4661');
+    expect(warnings[0].message).toContain('LOCAL_AREA');
+    expect(warnings[0].message).toContain('REGION');
+  });
+
+  it('prefers the scope of the declared kind when a key is held under two', async () => {
+    const { resolver, warnings } = build([
+      {
+        id: 'scope-region',
+        supermarketId: CHAIN,
+        kind: PriceScopeKind.REGION,
+        externalKey: '21',
+        label: null,
+      } as PriceScopeView,
+      {
+        id: 'scope-local',
+        supermarketId: CHAIN,
+        kind: PriceScopeKind.LOCAL_AREA,
+        externalKey: '21',
+        label: null,
+      } as PriceScopeView,
+    ]);
+
+    expect(
+      await resolver.declare({
+        key: '21',
+        kind: PriceScopeKind.LOCAL_AREA,
+        name: null,
+      })
+    ).toBe('scope-local');
+    expect(warnings).toEqual([]);
+  });
+
+  it('warns about nothing when the kinds agree', async () => {
+    const { resolver, warnings } = build([
+      {
+        id: 'scope-held',
+        supermarketId: CHAIN,
+        kind: PriceScopeKind.REGION,
+        externalKey: '21',
+        label: null,
+      } as PriceScopeView,
+    ]);
+
+    await resolver.declare(region('21'));
+
+    expect(warnings).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ import {
   CONTENT_LOCALES,
   defineResource,
   localizedTextValue,
+  type ResourceRow,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { POSTAL_CODE_SOURCE_OPTIONS } from './catalog-enums';
@@ -11,6 +12,37 @@ import { locationSource } from './catalog-sources';
 
 /** One shop of one chain, as the gateway describes it. */
 export type Location = Wire.CatalogSupermarketLocationView;
+
+/**
+ * The kinds a shop's picker offers: every kind but `STORE` (admin plan 0028,
+ * section 4.2).
+ */
+export const SHOP_PICKABLE_SCOPE_KINDS: readonly string[] = [
+  'LOCAL_AREA',
+  'REGION',
+  'NATIONAL',
+];
+
+/**
+ * Whether a price scope is this shop's own single shop scope, which the form
+ * keeps (admin plan 0028, section 4.1).
+ *
+ * Catalog keys a shop's `STORE` scope on the shop's id (backend plan 0116), so
+ * a list of ids cannot answer it: the scope's own kind and key can, which is
+ * why the field asks with the scope's row. A shop that has no id yet is a
+ * create, and holds nothing to keep.
+ */
+export function isOwnStoreScope(
+  shop: Partial<Location>,
+  scope: ResourceRow
+): boolean {
+  return (
+    typeof shop.id === 'string' &&
+    shop.id !== '' &&
+    scope['kind'] === 'STORE' &&
+    scope['externalKey'] === shop.id
+  );
+}
 
 /**
  * The shops (plan 0005, section 3).
@@ -39,6 +71,14 @@ export type Location = Wire.CatalogSupermarketLocationView;
  *   whose nearest centroid was beyond the bound keeps both null, because a
  *   wrong postcode is worse than none. It matches no value of the filter, since
  *   it has no source, and that is the honest answer rather than a gap.
+ *
+ * ## The price scopes
+ *
+ * A shop sells at a stack of scopes, and the most specific one with a valid
+ * price for a product answers (backend plan 0105). It always holds a `STORE`
+ * scope of its own beside the others (backend plan 0116), which the form keeps
+ * and never offers to remove, and which catalog adds by itself to a new shop
+ * (admin plan 0028, section 4).
  *
  * **Editing the postal code does not move the price scope.** That is stated on
  * the entity, it is stated on the gateway route, and it is a real trap: an
@@ -83,15 +123,27 @@ export const LOCATIONS = defineResource<Location>({
       editable: 'create',
     },
     {
-      kind: 'reference',
-      name: 'priceScopeId',
-      label: 'catalog.locations.priceScopeId',
-      help: 'catalog.locations.priceScopeIdHelp',
+      kind: 'references',
+      name: 'priceScopeIds',
+      label: 'catalog.locations.priceScopeIds',
+      help: 'catalog.locations.priceScopeIdsHelp',
       resource: 'price-scopes',
-      // Left out of a create it is not a missing value: catalog gives the shop
-      // a `STORE` scope of its own, which is exactly how it behaved before
-      // scopes existed.
-      nullable: true,
+      // A chain holds a handful of scopes a shop is ever put in, so one cached
+      // resolve per id names the chips and the column.
+      nameLookup: true,
+      // The shop's own chain, and every kind but `STORE`: its own store scope
+      // is already in the stack, and another shop's is never a sensible choice
+      // (backend plan 0116, section 7, which refuses one anyway). Nothing is
+      // offered until the chain is known, since a scope of another chain would
+      // be refused too.
+      scopeFrom: (row) =>
+        typeof row.supermarketId === 'string' && row.supermarketId !== ''
+          ? {
+              supermarketId: row.supermarketId,
+              kind: SHOP_PICKABLE_SCOPE_KINDS,
+            }
+          : null,
+      locked: (row, scope) => isOwnStoreScope(row, scope),
     },
     {
       kind: 'localized-text',
@@ -181,7 +233,7 @@ export const LOCATIONS = defineResource<Location>({
       'city',
       'postalCode',
       'postalCodeSource',
-      'priceScopeId',
+      'priceScopeIds',
     ],
     // The card is titled with the address, so what goes under it is the town and
     // the two columns this screen exists for: the postal code and whether

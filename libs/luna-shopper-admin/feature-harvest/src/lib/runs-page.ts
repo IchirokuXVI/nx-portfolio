@@ -4,137 +4,51 @@ import {
   computed,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
-  RESOURCE_GATEWAYS,
   toGatewayError,
   type GatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
-  priceScopeSource,
-  type PriceScope,
-} from '@portfolio/luna-shopper-admin/feature-catalog';
-import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
-import {
-  CONTENT_LOCALES,
   failureBlockReason,
-  localizedTextValue,
   spawnBlockReason,
-  // A value import, not a type one: the adapter capability table is a `const`
-  // in the generated file, because the gateway publishes the answers and not
-  // only the question (backend plan 0103, section 4.1).
-  Wire,
   type HarvestRun,
-  type HarvestRunMode,
+  type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   HarvestNotice,
-  ReferencePicker,
   RunRowView,
   SwitchPanel,
   type RunRow,
 } from '@portfolio/luna-shopper-admin/ui';
+import { ChainNames } from './chain-names';
 import { formatInstant } from './format-instant';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
+import { RunRequestForm } from './run-request-form';
 
 /** What the reverted filter can be asked for. `any` sends no filter at all. */
 const REVERTED_OPTIONS = ['any', 'reverted', 'standing'] as const;
 type RevertedFilter = (typeof REVERTED_OPTIONS)[number];
 
 /**
- * The three run modes, in the order the picker offers them.
+ * How many pages of presets the screen reads for names and the filter.
  *
- * `REFRESH` is gone (backend plan 0086, section 9). It existed only because a
- * walk threw its prices away and something had to fetch them again; a walk
- * writes them now, so the mode had nothing left to do and the form cannot name
- * it. `LEAFLET_IMPORT` is `FILE_IMPORT`, which is the same run under a name that
- * does not claim a leaflet produced the file.
- *
- * `FILE_IMPORT` is the only one this form does not start (admin plan 0010,
- * section 2). An import needs a document, and a document is a file, a preview
- * and a validation failure that names the product it is about. None of that fits
- * three text inputs, so choosing it here sends the operator to the screen that
- * does rather than growing this one a mode's worth of fields.
+ * A preset is a run somebody saves by hand, so there are a few per chain. The
+ * bound is there because an unbounded loop against a paging route is a hang.
  */
-const MODES: readonly HarvestRunMode[] = [
-  'STORE_DISCOVERY',
-  'CATALOG_DISCOVERY',
-  'FILE_IMPORT',
-];
+const MAX_PRESET_PAGES = 5;
 
-/** How many scopes one read asks for. */
-const SCOPE_PAGE = 100;
-
-/**
- * How many pages of scopes the form walks.
- *
- * A chain with a warehouse per catchment has a few hundred of them, and the
- * multi select has to offer all of them or an operator cannot choose the one
- * they came for. Bounded anyway, because an unbounded loop against a paging
- * route is a hang rather than a slow screen.
- */
-const MAX_SCOPE_PAGES = 5;
-
-/**
- * The facts this form uses, out of the table the gateway publishes. The table
- * also carries the language a source prints in, which the form does not draw
- * (backend plan 0111, section 7).
- */
-interface AdapterCapabilities {
-  readonly writesPrices: boolean;
-  readonly scopesItsOwn: boolean;
-  readonly listsItsOwnStores: boolean;
-  readonly hasProductPages: boolean;
-  /**
-   * The scope priorities this adapter's walk may write, and null for an adapter
-   * whose walk is given no scopes (backend plan 0108, section 4).
-   *
-   * It answers both of the form's questions at once: whether to draw the
-   * warehouse multi select at all, and which of the chain's scopes it may
-   * offer. A scope outside the band is drawn **disabled** rather than hidden,
-   * so an operator looking for one can see that it exists and that this walk
-   * may not write it.
-   */
-  readonly walkablePriorities: {
-    readonly min: number;
-    readonly max: number;
-  } | null;
-}
-
-const UNKNOWN_ADAPTER: AdapterCapabilities = {
-  writesPrices: false,
-  scopesItsOwn: false,
-  listsItsOwnStores: false,
-  hasProductPages: false,
-  walkablePriorities: null,
-};
-
-/**
- * What an adapter can tell us, read from the table the gateway publishes
- * (backend plan 0103, section 4.1).
- *
- * **An adapter this build does not know answers no to everything.** A back
- * office one release behind a backend that added an adapter then draws a plain
- * form rather than a broken one, and the spawn is still the thing that refuses a
- * bad request.
- *
- * This replaced a constant naming `mercadona-api`, which was the second place
- * the capability was stated and disagreed with the first: the spawn also
- * required a scope for `carrefour-web`, the form never offered the picker for
- * it, and a Carrefour walk was refused with a message about a field nobody was
- * shown (admin plan 0025, section 1).
- */
-export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
-  return (
-    Wire.HarvestAdapterCapabilityTable[adapterKey as Wire.EnumsAdapterKey] ??
-    UNKNOWN_ADAPTER
-  );
-}
+/** What the runs list says about the preset a run came from. */
+type RunPreset =
+  | { readonly kind: 'named'; readonly name: string }
+  | { readonly kind: 'deleted' }
+  | null;
 
 /**
  * The runs screen: what has run, what is running, and how to start one.
@@ -143,6 +57,10 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
  * create form behind it. Starting one is a small set of choices with a mode at
  * the top, and reading one is a screen of its own that polls, so the row here
  * links out to that rather than to an edit form there is no such thing as.
+ *
+ * The choices are {@link RunRequestForm} since admin plan 0030, which the
+ * presets screen edits a preset with. This page spawns what the form hands it,
+ * draws the refusal, and saves the same request as a preset.
  *
  * The switches sit above the list rather than on a settings screen
  * somewhere, because the question they answer is "why did my run do nothing",
@@ -161,7 +79,7 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
     RouterLink,
     RokuTranslatorPipe,
     HarvestNotice,
-    ReferencePicker,
+    RunRequestForm,
     RunRowView,
     SwitchPanel,
   ],
@@ -175,159 +93,20 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
     <section class="start">
       <h2>{{ 'harvest.runs.start.heading' | rokuT }}</h2>
 
-      <div class="fields">
-        <label>
-          <span>{{ 'harvest.runs.start.mode' | rokuT }}</span>
-          <select [(ngModel)]="mode" name="mode">
-            @for (option of modes; track option) {
-              <option [value]="option">
-                {{ 'harvest.mode.' + option | rokuT }}
-              </option>
-            }
-          </select>
-        </label>
-
-        <!-- An import states its chain on the upload screen, beside the
-             document that says which chain printed it (admin plan 0010). -->
-        @if (!uploading()) {
-          <div class="field">
-            <span>{{ 'harvest.runs.start.supermarketId' | rokuT }}</span>
-            <lib-reference-picker
-              (valueChange)="chooseChain($event)"
-              [controlId]="'run-chain'"
-              [lookup]="references"
-              [resource]="'supermarkets'"
-              [value]="supermarketId()"
-            />
-          </div>
-        }
-
-        <!-- A backfill is a second pass over the same product pages asking for
-             the EAN, so it is offered only where there are pages to read
-             (backend plan 0103, section 4.2). -->
-        @if (offersBackfill()) {
-          <label class="switch">
-            <input
-              [(ngModel)]="detailBackfill"
-              name="detailBackfill"
-              type="checkbox"
-            />
-            <span>{{ 'harvest.runs.start.detailBackfill' | rokuT }}</span>
-          </label>
-          <p class="attribution">
-            {{ 'harvest.runs.start.detailBackfillHelp' | rokuT }}
-          </p>
-        }
-
-        <!-- A walk that states prices needs to be told where to write them, and
-             the spawn refuses one without it. Read from the adapter's
-             capabilities rather than from its name (backend plan 0103, section
-             4.2): a chain that prints no price is not asked, and neither is one
-             that names the scope of every price it prints. -->
-        @if (needsScope()) {
-          <div class="field">
-            <span>{{ 'harvest.runs.start.priceScope' | rokuT }}</span>
-            <lib-reference-picker
-              (valueChange)="priceScopeId.set($event)"
-              [controlId]="'run-scope'"
-              [lookup]="references"
-              [resource]="'price-scopes'"
-              [scope]="scopeFilter()"
-              [value]="priceScopeId()"
-            />
-            <p class="attribution">
-              {{ 'harvest.runs.start.priceScopeHelp' | rokuT }}
-            </p>
-          </div>
-        }
-
-        <!-- A walk that covers warehouses is told which ones, and a warehouse
-             is a scope's own key (backend plan 0108). A list rather than one
-             choice, because the detail phase is what the run costs and it is
-             shared across the warehouses. -->
-        @if (needsScopeList()) {
-          <div class="field">
-            <span>{{ 'harvest.runs.start.priceScopes' | rokuT }}</span>
-            @if (scopeChoices().length === 0) {
-              <p class="attribution">
-                {{ 'harvest.runs.start.priceScopesEmpty' | rokuT }}
-              </p>
-            } @else {
-              <ul class="scopes">
-                @for (choice of scopeChoices(); track choice.id) {
-                  <li>
-                    <label [class.refused]="!choice.walkable">
-                      <input
-                        (change)="toggleScope(choice.id, $event)"
-                        [checked]="choice.chosen"
-                        [disabled]="!choice.walkable"
-                        type="checkbox"
-                      />
-                      <span>{{ choice.title }}</span>
-                    </label>
-                  </li>
-                }
-              </ul>
-            }
-            <p class="attribution">
-              {{ 'harvest.runs.start.priceScopesHelp' | rokuT }}
-            </p>
-          </div>
-        }
-
-        <!-- A chain that publishes its own shop list names every one of them
-             in a handful of requests, so there is nothing to centre on. -->
-        @if (needsCentre()) {
-          <label>
-            <span>{{ 'harvest.runs.start.postalCode' | rokuT }}</span>
-            <input [(ngModel)]="postalCode" name="postalCode" type="text" />
-          </label>
-          <label>
-            <span>{{ 'harvest.runs.start.country' | rokuT }}</span>
-            <input [(ngModel)]="country" name="country" type="text" />
-          </label>
-        }
-
-        <!-- The other half of the same fact: a chain that names its own shops
-             needs no centre, and narrowing such a run is a filter on the code
-             each shop states rather than a radius (backend plan 0106). -->
-        @if (offersPostalCodes()) {
-          <label>
-            <span>{{ 'harvest.runs.start.postalCodes' | rokuT }}</span>
-            <textarea
-              [(ngModel)]="postalCodes"
-              name="postalCodes"
-              rows="3"
-            ></textarea>
-            <p class="attribution">
-              {{ 'harvest.runs.start.postalCodesHelp' | rokuT }}
-            </p>
-          </label>
-        }
-      </div>
-
-      <p class="attribution">{{ 'harvest.runs.start.attribution' | rokuT }}</p>
-
-      @if (uploading()) {
-        <p class="attribution">{{ 'harvest.runs.start.fileImport' | rokuT }}</p>
-        <a [routerLink]="uploadLink()" class="primary">{{
-          'harvest.runs.start.openUpload' | rokuT
-        }}</a>
-      } @else {
+      <lib-run-request-form
+        (changed)="draft.set($event)"
+        (submitted)="start($event)"
+        [busy]="starting()"
+      >
         <button
-          (click)="start()"
-          [disabled]="starting() || !ready()"
-          class="primary"
+          (click)="openSave()"
+          [disabled]="!canSave()"
+          class="secondary"
           type="button"
         >
-          {{
-            (starting()
-              ? 'harvest.runs.start.starting'
-              : 'harvest.runs.start.submit'
-            ) | rokuT
-          }}
+          {{ 'harvest.presets.saveAs.action' | rokuT }}
         </button>
-      }
+      </lib-run-request-form>
 
       @if (blockedKey(); as key) {
         <div class="failure" role="alert">
@@ -344,7 +123,73 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
           }
         </div>
       }
+
+      @if (savedPreset(); as saved) {
+        <p class="notice" role="status">
+          {{ 'harvest.presets.saveAs.saved' | rokuT: { name: saved.name } }}
+          <a [queryParams]="saved.query" [routerLink]="presetsLink">
+            {{ 'harvest.presets.saveAs.open' | rokuT }}
+          </a>
+        </p>
+      }
     </section>
+
+    <!-- Save as preset (admin plan 0030, section 4). A small dialog, because
+         the only new fact is the name: the request is the form as it is. -->
+    @if (saveOpen()) {
+      <div
+        (keydown.escape)="closeSave()"
+        aria-labelledby="save-preset-heading"
+        aria-modal="true"
+        class="dialog"
+        role="dialog"
+      >
+        <div class="panel">
+          <h2 id="save-preset-heading">
+            {{ 'harvest.presets.saveAs.heading' | rokuT }}
+          </h2>
+          <label>
+            <span>{{ 'harvest.presets.name' | rokuT }}</span>
+            <input
+              (ngModelChange)="onSaveNameChange($event)"
+              [ngModel]="saveName()"
+              maxlength="80"
+              name="presetName"
+              type="text"
+            />
+          </label>
+          @if (saveNameTaken()) {
+            <p class="field-error" role="alert">
+              {{ 'harvest.presets.nameTaken' | rokuT }}
+            </p>
+          }
+          @if (saveFailure() !== null) {
+            <div class="failure" role="alert">
+              <p>{{ 'harvest.presets.saveFailed' | rokuT }}</p>
+              @if (saveFailure() !== '') {
+                <p>{{ saveFailure() }}</p>
+              }
+            </div>
+          }
+          <div class="controls">
+            <button
+              (click)="saveAsPreset()"
+              [disabled]="saving() || saveName().trim() === ''"
+              class="primary"
+              type="button"
+            >
+              {{
+                (saving() ? 'harvest.presets.saving' : 'harvest.presets.save')
+                  | rokuT
+              }}
+            </button>
+            <button (click)="closeSave()" [disabled]="saving()" type="button">
+              {{ 'resource.action.cancel' | rokuT }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
 
     <section class="filters">
       <label>
@@ -365,6 +210,26 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
           }
         </select>
       </label>
+
+      <!-- By preset (admin plan 0030, section 5). Every chain's presets, each
+           named with its chain, because the list above is every chain's runs. -->
+      <label>
+        <span>{{ 'harvest.runs.filter.preset' | rokuT }}</span>
+        <select
+          (ngModelChange)="onPresetChange($event)"
+          [ngModel]="presetFilter()"
+          name="preset"
+        >
+          <option value="">
+            {{ 'harvest.runs.filter.presetAny' | rokuT }}
+          </option>
+          @for (preset of presets(); track preset.id) {
+            <option [value]="preset.id">
+              {{ preset.name }} ({{ names.nameOf(preset.supermarketId) }})
+            </option>
+          }
+        </select>
+      </label>
     </section>
 
     @if (failed()) {
@@ -376,11 +241,23 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
     } @else {
       <ul class="runs">
         @for (row of rows(); track row.id) {
-          <li>
+          <li
+            [attr.aria-current]="row.id === highlighted() ? 'true' : null"
+            [class.highlighted]="row.id === highlighted()"
+          >
             <!-- Relative, because the run screen is a child of this one. The
                  dashboard draws the same row with an absolute link, which is
                  why the link is the row component's input. -->
             <lib-run-row [link]="[row.id]" [row]="row" />
+            @if (presetOf(row.id); as preset) {
+              <p class="preset">
+                @if (preset.kind === 'named') {
+                  {{ 'harvest.runs.row.preset' | rokuT: { name: preset.name } }}
+                } @else {
+                  {{ 'harvest.runs.row.deletedPreset' | rokuT }}
+                }
+              </p>
+            }
           </li>
         }
       </ul>
@@ -415,28 +292,14 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
       background: var(--admin-surface-raised);
     }
 
-    .fields {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      inline-size: 100%;
-    }
-
-    label,
-    .field {
+    label {
       display: flex;
       flex: 1 1 12rem;
       flex-direction: column;
       gap: var(--admin-space-1);
     }
 
-    label span,
-    .field > span {
-      font-size: 0.8125rem;
-      color: var(--admin-ink-muted);
-    }
-
-    .attribution {
+    label span {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
     }
@@ -445,28 +308,11 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
       cursor: pointer;
     }
 
-    /* Which button this is, and nothing about what a button looks like. The
-       height, the padding and the corners come from the global base. */
     .primary {
       border-color: transparent;
       background: var(--admin-accent);
       font-weight: 600;
       color: var(--admin-accent-ink);
-    }
-
-    /* The way to the upload, which is a link and not a button because it goes
-       to a screen rather than doing something. It still looks like the primary
-       action, because on that mode it is the only one there is.
-
-       An anchor is not a control, so the base does not reach it and the four
-       declarations it shares with one are written out here. */
-    a.primary {
-      display: inline-flex;
-      align-items: center;
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
-      border-radius: var(--admin-radius);
-      text-decoration: none;
     }
 
     .failure {
@@ -485,6 +331,18 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
       font-size: 0.8125rem;
     }
 
+    .notice {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      font-size: 0.875rem;
+    }
+
+    .field-error {
+      font-size: 0.8125rem;
+      color: var(--admin-danger-on-wash);
+    }
+
     .state {
       padding: var(--admin-space-6);
       border: 1px dashed var(--admin-border);
@@ -499,83 +357,73 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
       list-style: none;
     }
 
+    .runs li {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+    }
+
+    /* The run a preset was just started as, on arriving from the presets
+       screen. An outline rather than a fill, so the status chip keeps its
+       colour. */
+    .runs li.highlighted lib-run-row {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
+      border-radius: var(--admin-radius);
+    }
+
+    .preset {
+      padding-inline-start: var(--admin-space-3);
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
     .filters {
       display: flex;
       flex-wrap: wrap;
       gap: var(--admin-space-3);
     }
 
-    .scopes {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-2) var(--admin-space-3);
-      /* A chain can have a warehouse per catchment, so the list scrolls rather
-         than pushing the rest of the form off the screen. */
-      max-height: 12rem;
-      margin: 0;
-      overflow-y: auto;
-      padding: 0;
-      list-style: none;
-    }
-
-    .scopes label {
+    /* The save dialog, drawn as the confirm dialog is: an opaque cover and
+       one raised panel. */
+    .dialog {
+      position: fixed;
+      z-index: 90;
       display: flex;
       align-items: center;
-      gap: var(--admin-space-2);
+      justify-content: center;
+      inset: 0;
+      padding: var(--admin-space-4);
+      background: var(--admin-surface);
     }
 
-    /* Shown and refused, rather than hidden: an operator looking for a scope
-       this walk may not write can see that it exists. */
-    .scopes label.refused {
-      opacity: 0.55;
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-3);
+      inline-size: 100%;
+      max-inline-size: 26rem;
+      padding: var(--admin-space-6);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RunsPage {
   private readonly _service = inject(HARVEST_SERVICE);
-  /** The chosen chain's scopes, read for their `kind`, as the import reads them. */
-  private readonly _scopes =
-    inject(RESOURCE_GATEWAYS).for<PriceScope>(priceScopeSource());
 
   readonly shell = inject(HarvestShell);
-  readonly references = inject(ResourceReferences);
+  readonly names = inject(ChainNames);
 
-  readonly modes = MODES;
-
-  readonly mode = signal<HarvestRunMode>('CATALOG_DISCOVERY');
-  readonly supermarketId = signal('');
-  readonly priceScopeId = signal('');
-  /** The chain's scopes, read once when a chain is chosen. */
-  readonly scopes = signal<readonly PriceScope[]>([]);
-  /**
-   * The warehouses a walk covers, by scope id (backend plan 0108, section 2).
-   *
-   * Several, because the detail phase is what an eighteen minute walk is made
-   * of and it does not depend on the warehouse, so six warehouses in one run
-   * are about 5,300 requests against 26,298 as six runs.
-   */
-  readonly priceScopeIds = signal<readonly string[]>([]);
-  readonly postalCode = signal('');
-  /**
-   * The codes a chain's own shop list is narrowed to, one per line.
-   *
-   * Free text rather than a picker, because the codes an operator wants are
-   * the ones they already have in front of them, and the run reports the ones
-   * that matched no shop rather than refusing them.
-   */
-  readonly postalCodes = signal('');
-  readonly country = signal('');
-  /** The chosen chain's adapter, once a source read has answered. `''` until. */
-  readonly adapterKey = signal('');
-  /**
-   * Read product pages for the EAN instead of walking the assortment (backend
-   * plan 0090, section 12.1).
-   *
-   * Offered only for a chain that has a product page to read, because the spawn
-   * refuses it for every other one.
-   */
-  readonly detailBackfill = signal(false);
+  readonly form = viewChild(RunRequestForm);
 
   /**
    * The reverted filter (backend plan 0082, section 6), as three choices rather
@@ -587,6 +435,8 @@ export class RunsPage {
    */
   readonly revertedOptions = REVERTED_OPTIONS;
   readonly reverted = signal<RevertedFilter>('any');
+  /** The preset filter. `''` sends none. */
+  readonly presetFilter = signal('');
 
   readonly starting = signal(false);
   readonly loading = signal(true);
@@ -594,268 +444,59 @@ export class RunsPage {
   readonly error = signal<GatewayError | null>(null);
   private readonly _spawnError = signal<GatewayError | null>(null);
 
+  /**
+   * Every chain's presets, for the names on the rows and the filter. Null
+   * until read, and left null when the read fails, so a run is never called a
+   * deleted preset on the strength of a list that never arrived.
+   */
+  private readonly _presets = signal<
+    readonly Wire.HarvestHarvestRunPresetView[] | null
+  >(null);
+  readonly presets = computed(() => this._presets() ?? []);
+  /** Whether every page was read, which a "Deleted preset" claim needs. */
+  private readonly _presetsComplete = signal(false);
+
+  /** The run to highlight, as the presets screen names it after a start. */
+  readonly highlighted = signal(
+    inject(ActivatedRoute).snapshot.queryParamMap.get('run') ?? ''
+  );
+
+  /** The form's request as it stands, for "Save as preset". */
+  readonly draft = signal<Wire.SpawnHarvestRunDto | null>(null);
+  readonly saveOpen = signal(false);
+  readonly saveName = signal('');
+  readonly saving = signal(false);
+  readonly saveNameTaken = signal(false);
+  /** The server's sentence about a failed save, `''` when it sent none. */
+  readonly saveFailure = signal<string | null>(null);
+  readonly savedPreset = signal<{
+    readonly name: string;
+    readonly query: Readonly<Record<string, string>>;
+  } | null>(null);
+
+  readonly presetsLink = ['/', HARVEST_SEGMENT, 'presets'];
+
   readonly failed = computed(
     () => this.error() !== null && this.runs().length === 0
   );
 
   /**
-   * Whether the chosen mode is the one this form cannot start.
+   * Whether the form can be saved as a preset (admin plan 0030, section 4).
    *
-   * A leaflet import needs a document, so this form offers the way to the
-   * screen that takes one rather than a start button that would be refused for
-   * a body it has no field for (admin plan 0010, section 2).
+   * Only when it could start, because the server validates a preset exactly as
+   * a spawn, and only with a chain, because every preset belongs to one.
    */
-  readonly uploading = computed(() => this.mode() === 'FILE_IMPORT');
-
-  /** The four facts about the chosen chain's adapter, or all four false. */
-  readonly capabilities = computed(() => capabilitiesOf(this.adapterKey()));
-
-  /**
-   * Whether this walk has to be told which scope to write its prices to.
-   *
-   * The adapter decides, not the mode: `CATALOG_DISCOVERY` runs against four
-   * adapters now, and they do not agree about prices. A source that states none
-   * is not asked, and neither is one that names the scope of every price it
-   * states, because a LIDL price carries its own region and a field that only
-   * catches the leftovers is not worth a picker.
-   *
-   * A backfill reads product pages for an EAN and writes no price, so it needs
-   * no scope even for a chain whose walk does.
-   */
-  readonly needsScope = computed(() => {
-    const capabilities = this.capabilities();
+  readonly canSave = computed(() => {
+    const form = this.form();
+    const draft = this.draft();
     return (
-      this.mode() === 'CATALOG_DISCOVERY' &&
-      !this.detailBackfill() &&
-      capabilities.writesPrices &&
-      !capabilities.scopesItsOwn
+      form !== undefined &&
+      form.ready() &&
+      !form.uploading() &&
+      draft !== null &&
+      (draft.supermarketId ?? '') !== ''
     );
   });
-
-  /**
-   * Whether this walk has to be told which warehouses to cover.
-   *
-   * The band on the adapter is what says so (backend plan 0108, section 4). It
-   * is stated for an adapter whose walk covers scopes an operator selected, and
-   * null for every other one, so the form asks the same one fact the spawn does.
-   * A backfill reads product pages for an EAN and writes no price, so it covers
-   * no warehouse.
-   */
-  readonly needsScopeList = computed(() => {
-    const capabilities = this.capabilities();
-    return (
-      this.mode() === 'CATALOG_DISCOVERY' &&
-      !this.detailBackfill() &&
-      capabilities.writesPrices &&
-      capabilities.walkablePriorities !== null
-    );
-  });
-
-  /**
-   * The chain's scopes as the multi select draws them, refused ones included.
-   *
-   * A scope outside the band is **disabled and still listed**, which is the
-   * whole of the plan's instruction here: hiding it would leave an operator
-   * looking for the chain's national scope wondering whether the read failed.
-   */
-  readonly scopeChoices = computed(() => {
-    const band = this.capabilities().walkablePriorities;
-    const chosen = new Set(this.priceScopeIds());
-    return this.scopes().map((scope) => ({
-      id: scope.id,
-      title: scopeTitle(scope),
-      chosen: chosen.has(scope.id),
-      // A scope with no key of the chain's own has no warehouse to walk, and
-      // the spawn refuses it for that reason rather than for its priority.
-      walkable:
-        scope.externalKey !== null &&
-        band !== null &&
-        scope.priority >= band.min &&
-        scope.priority <= band.max,
-    }));
-  });
-
-  /**
-   * Whether this store discovery has to be told where to look.
-   *
-   * A chain that publishes its own shop list names every one of them in a
-   * handful of requests, so there is nothing to centre on and the spawn takes
-   * neither field (backend plan 0089, section 9).
-   */
-  readonly needsCentre = computed(
-    () =>
-      this.mode() === 'STORE_DISCOVERY' &&
-      !this.capabilities().listsItsOwnStores
-  );
-
-  /**
-   * Whether this store discovery can be narrowed to a few postal codes.
-   *
-   * The mirror image of {@link needsCentre}, and the same fact read the other
-   * way: a chain that names its own shops has no centre to be given and a
-   * filter to be offered instead. A radius run is already narrow.
-   */
-  readonly offersPostalCodes = computed(
-    () =>
-      this.mode() === 'STORE_DISCOVERY' && this.capabilities().listsItsOwnStores
-  );
-
-  /** Whether this chain has product pages an EAN backfill could read. */
-  readonly offersBackfill = computed(
-    () =>
-      this.mode() === 'CATALOG_DISCOVERY' && this.capabilities().hasProductPages
-  );
-
-  /** The chain the scope picker reads within, which it cannot read without. */
-  readonly scopeFilter = computed(() => ({
-    supermarketId: this.supermarketId().trim(),
-  }));
-
-  /**
-   * Whether the form has everything the spawn will require.
-   *
-   * Only the scope is checked here, because it is the only field whose absence
-   * is a refusal the operator can see coming: everything else the spawn wants is
-   * either optional or is the mode itself. Asked so the button is disabled
-   * rather than pressed and answered with a 400 about a field that was on
-   * screen, empty, the whole time.
-   */
-  readonly ready = computed(() => {
-    if (this.needsScopeList() && this.priceScopeIds().length === 0) {
-      return false;
-    }
-    return !this.needsScope() || this.priceScopeId() !== '';
-  });
-
-  /** Take a warehouse into this run, or out of it again. */
-  toggleScope(id: string, event: Event): void {
-    const on = (event.target as HTMLInputElement).checked;
-    const held = this.priceScopeIds().filter((held) => held !== id);
-    // Appended rather than sorted, so the run walks them in the order the
-    // operator ticked them and the first one ticked is the first one walked.
-    this.priceScopeIds.set(on ? [...held, id] : held);
-  }
-
-  /**
-   * Where a document is dropped.
-   *
-   * Absolute rather than relative, for the reason the queues give: `..` needs a
-   * route above it to pop and throws outright when there is none, and this
-   * component is rendered directly in its spec.
-   */
-  uploadLink(): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'imports', 'upload'];
-  }
-
-  /**
-   * The chain changed, so what is known about its source did too.
-   *
-   * The adapter is read rather than guessed, because it is what decides whether
-   * the scope picker is offered at all, and the scope is cleared with it: a
-   * scope of the previous chain is not a scope of this one.
-   *
-   * **The chain arrives as an argument, and that is the fix rather than a
-   * detail of it.** This was a text input carrying `[(ngModel)]` and an
-   * `(ngModelChange)` beside it, and the two listeners fire in the order the
-   * template names them: the handler ran first and read the signal the banana
-   * box had not written yet. So the form asked the source route about the
-   * previous chain, and a Mercadona walk drew no scope field until a second
-   * chain was chosen, which is when the answer for the first one arrived.
-   */
-  chooseChain(supermarketId: string): void {
-    this.supermarketId.set(supermarketId);
-    this.priceScopeId.set('');
-    // Warehouses of the previous chain are not warehouses of this one, and the
-    // list they were ticked from is about to be read again.
-    this.priceScopeIds.set([]);
-    this.scopes.set([]);
-    this.adapterKey.set('');
-    // Codes of the previous chain's shops are not codes of this one's, and the
-    // field is hidden while the adapter is unknown, so a value left here would
-    // be sent by a form that never showed it.
-    this.postalCodes.set('');
-    // A backfill of the previous chain's pages is not a backfill of this one,
-    // and the switch is hidden while the adapter is unknown, so a value left
-    // set here would be sent by a form that never showed it.
-    this.detailBackfill.set(false);
-    void this._readAdapter();
-  }
-
-  /**
-   * Which adapter this chain is fetched with, from its source row.
-   *
-   * A failure leaves the adapter unknown, which hides the picker. That is the
-   * safe way round: a chain with no source row cannot be walked at all, so the
-   * spawn refuses it before the scope is ever looked at, and offering a field
-   * for a run that cannot start would be noise.
-   */
-  private async _readAdapter(): Promise<void> {
-    const supermarketId = this.supermarketId().trim();
-    if (supermarketId === '') {
-      return;
-    }
-
-    try {
-      const source = await this._service.readSource(supermarketId);
-      this.adapterKey.set(source.adapterKey);
-      this.shell.observeReachable();
-      // Preselected for the chains that will be asked for one, which is the
-      // same rule the picker itself is drawn by.
-      const capabilities = capabilitiesOf(source.adapterKey);
-      // One read, for both controls: the single picker preselects the chain's
-      // national scope from it, and the multi select is drawn from it.
-      if (
-        capabilities.writesPrices &&
-        (!capabilities.scopesItsOwn || capabilities.walkablePriorities !== null)
-      ) {
-        await this._readScopes(supermarketId);
-      }
-    } catch {
-      this.adapterKey.set('');
-    }
-  }
-
-  /**
-   * The chain's scopes, for both controls that are drawn from them.
-   *
-   * The multi select needs every one of them, so this walks the pages rather
-   * than reading the first: a chain that prices by warehouse has a few hundred,
-   * and a form that offered the first hundred would silently hide the rest.
-   *
-   * The `NATIONAL` one is preselected for the single picker, as the import
-   * screen preselects it. Most walks that take one price nationally, and a
-   * chain with several warehouse scopes should not present them as equally
-   * plausible. A chain with none leaves the picker empty and the operator
-   * chooses.
-   */
-  private async _readScopes(supermarketId: string): Promise<void> {
-    try {
-      const held: PriceScope[] = [];
-      let cursor: string | undefined;
-      for (let page = 0; page < MAX_SCOPE_PAGES; page += 1) {
-        const answer = await this._scopes.list({
-          cursor,
-          filters: { supermarketId },
-          limit: SCOPE_PAGE,
-        });
-        held.push(...answer.items);
-        if (answer.nextCursor === null) {
-          break;
-        }
-        cursor = answer.nextCursor;
-      }
-      this.scopes.set(held);
-
-      const national = held.find((scope) => scope.kind === 'NATIONAL');
-      if (national !== undefined && this.priceScopeId() === '') {
-        this.priceScopeId.set(national.id);
-      }
-    } catch {
-      // The single picker can still be typed into, so a failed read costs a
-      // shortcut rather than the field. The multi select draws nothing and says
-      // so, which is the honest answer when the scopes could not be read.
-    }
-  }
 
   readonly rows = computed<readonly RunRow[]>(() =>
     this.runs().map((run) => ({
@@ -933,6 +574,7 @@ export class RunsPage {
 
   constructor() {
     void this.load();
+    void this._readPresets();
   }
 
   /**
@@ -946,15 +588,43 @@ export class RunsPage {
     void this.load();
   }
 
+  onPresetChange(presetId: string): void {
+    this.presetFilter.set(presetId);
+    void this.load();
+  }
+
+  /**
+   * The preset a run came from, as its row says it.
+   *
+   * Null for a run started by hand, and null too while the presets have not
+   * been read: "Deleted preset" is a claim, and a list that failed to arrive
+   * is not evidence for it.
+   */
+  presetOf(runId: string): RunPreset {
+    const run = this.runs().find((entry) => entry.id === runId);
+    const presetId = run?.presetId ?? null;
+    const presets = this._presets();
+    if (presetId === null || presets === null) {
+      return null;
+    }
+    const preset = presets.find((entry) => entry.id === presetId);
+    if (preset !== undefined) {
+      return { kind: 'named', name: preset.name };
+    }
+    return this._presetsComplete() ? { kind: 'deleted' } : null;
+  }
+
   async load(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
 
     try {
       const filter = this.reverted();
+      const presetId = this.presetFilter();
       const page = await this._service.listRuns({
         limit: 20,
         ...(filter === 'any' ? {} : { reverted: filter === 'reverted' }),
+        ...(presetId === '' ? {} : { presetId }),
       });
       this.runs.set(page.items);
       this.shell.observeReachable();
@@ -969,24 +639,13 @@ export class RunsPage {
     }
   }
 
-  /**
-   * Start it, unless the form already knows the spawn would refuse.
-   *
-   * The guard is here and not only on the disabled button, because the button is
-   * a hint and this is the rule: a Mercadona walk with no scope is a 400 the
-   * screen can see coming, and sending it anyway would put a validation failure
-   * about a field that was on screen and empty in front of the operator.
-   */
-  async start(): Promise<void> {
-    if (!this.ready()) {
-      return;
-    }
-
+  /** Spawn what the form handed up. The form has already checked it is ready. */
+  async start(input: Wire.SpawnHarvestRunDto): Promise<void> {
     this.starting.set(true);
     this._spawnError.set(null);
 
     try {
-      await this._service.spawnRun(this._input());
+      await this._service.spawnRun(input);
       this.shell.observeSpawnRefusal(null);
       await this.load();
     } catch (error) {
@@ -998,77 +657,101 @@ export class RunsPage {
     }
   }
 
-  /**
-   * The typed codes, one per line, blanks and duplicates dropped.
-   *
-   * Commas and semicolons split too, because a list of postal codes is pasted
-   * as often as it is typed and neither separator can appear inside a code.
-   */
-  private chosenCodes(): string[] {
-    return [
-      ...new Set(
-        this.postalCodes()
-          .split(/[\n,;]/)
-          .map((code) => code.trim())
-          .filter((code) => code !== '')
-      ),
-    ];
+  openSave(): void {
+    if (!this.canSave()) {
+      return;
+    }
+    this.saveName.set('');
+    this.saveNameTaken.set(false);
+    this.saveFailure.set(null);
+    this.savedPreset.set(null);
+    this.saveOpen.set(true);
+  }
+
+  closeSave(): void {
+    if (!this.saving()) {
+      this.saveOpen.set(false);
+    }
+  }
+
+  /** A new name is a new question, so the last answer about the old one goes. */
+  onSaveNameChange(name: string): void {
+    this.saveName.set(name);
+    this.saveNameTaken.set(false);
   }
 
   /**
-   * The spawn body, with blank fields left out entirely.
+   * Save the form as it is under the typed name.
    *
-   * An empty string is not a postal code and not a uuid, and the harvester's
-   * DTOs validate what they are given, so sending one turns "I left this blank"
-   * into a validation failure about a field the operator never filled in.
+   * The chain comes out of the request, because a preset holds it as a column
+   * and its `input` has no field for it (backend plan 0120, section 3).
    */
-  private _input(): Wire.SpawnHarvestRunDto {
-    const input: Wire.SpawnHarvestRunDto = { mode: this.mode() };
-    if (this.offersBackfill() && this.detailBackfill()) {
-      input.detailBackfill = true;
+  async saveAsPreset(): Promise<void> {
+    const draft = this.form()?.request() ?? this.draft();
+    const name = this.saveName().trim();
+    if (draft === null || name === '' || !this.canSave()) {
+      return;
     }
-    // An empty filter is every shop, which is what an absent field already
-    // means, so nothing is sent for one: the backend would read the two the
-    // same way and an empty array in the body reads as a filter that failed.
-    const postalCodes = this.offersPostalCodes() ? this.chosenCodes() : [];
-    if (postalCodes.length > 0) {
-      input.postalCodes = postalCodes;
-    }
-    // The warehouses this walk covers. Sent only where the adapter takes them,
-    // so a chain that covers none is not told it covers an empty list.
-    if (this.needsScopeList() && this.priceScopeIds().length > 0) {
-      input.priceScopeIds = [...this.priceScopeIds()];
-    }
-    const optional = {
-      supermarketId: this.supermarketId().trim(),
-      // Sent only where it means something. `deza-web` accepts one and ignores
-      // it, so sending it there would be this screen asserting a fact about a
-      // run that has none.
-      priceScopeId: this.needsScope() ? this.priceScopeId() : '',
-      postalCode: this.needsCentre() ? this.postalCode().trim() : '',
-      country: this.needsCentre() ? this.country().trim() : '',
-    };
+    const { supermarketId, ...input } = draft;
 
-    return Object.entries(optional).reduce<Wire.SpawnHarvestRunDto>(
-      (body, [name, value]) =>
-        value === '' ? body : { ...body, [name]: value },
-      input
-    );
+    this.saving.set(true);
+    this.saveNameTaken.set(false);
+    this.saveFailure.set(null);
+    try {
+      const preset = await this._service.createPreset(
+        supermarketId ?? '',
+        name,
+        input
+      );
+      this._presets.update((held) => [...(held ?? []), preset]);
+      this.savedPreset.set({
+        name: preset.name,
+        query: { chain: preset.supermarketId, preset: preset.id },
+      });
+      this.saveOpen.set(false);
+    } catch (error) {
+      const failure = toGatewayError(error);
+      if (failure.status === 409) {
+        this.saveNameTaken.set(true);
+      } else {
+        const fields = Object.values(failure.fieldErrors).flat();
+        this.saveFailure.set(
+          fields.length > 0 ? fields.join(' ') : failure.detail
+        );
+      }
+    } finally {
+      this.saving.set(false);
+    }
   }
-}
 
-/**
- * What one scope is called in the list of warehouses.
- *
- * The **key first**, because a harvested scope usually has no label at all and
- * the key is the number the chain publishes, which is the string an operator
- * recognises. A scope that does carry a label shows it beside the key rather
- * than instead of it, so two warehouses named for the same city stay apart.
- */
-function scopeTitle(scope: PriceScope): string {
-  const label = localizedTextValue(scope.label ?? {}, CONTENT_LOCALES);
-  const key = scope.externalKey ?? scope.kind;
-  return label === '' ? key : `${key} — ${label}`;
+  /**
+   * Every chain's presets, for the names on the rows and the filter.
+   *
+   * One read for the screen rather than one per chain, since the route answers
+   * every chain's when asked for none, and cached: a preset's name does not
+   * change between polls of the list.
+   */
+  private async _readPresets(): Promise<void> {
+    try {
+      const held: Wire.HarvestHarvestRunPresetView[] = [];
+      let cursor: string | undefined;
+      let complete = false;
+      for (let page = 0; page < MAX_PRESET_PAGES && !complete; page += 1) {
+        const answer = await this._service.listPresets(undefined, cursor);
+        held.push(...answer.items);
+        complete = answer.nextCursor === null;
+        cursor = answer.nextCursor ?? undefined;
+      }
+      this._presets.set(held);
+      this._presetsComplete.set(complete);
+      void this.names.resolve([
+        ...new Set(held.map((preset) => preset.supermarketId)),
+      ]);
+    } catch {
+      // The rows name no preset and the filter offers none, which is the
+      // honest answer when the presets could not be read.
+    }
+  }
 }
 
 function reasonKey(reason: string | null): string | null {

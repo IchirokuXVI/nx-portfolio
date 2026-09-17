@@ -1,4 +1,5 @@
 import { DiscoveredPlace } from './discovered-place.entity';
+import { HarvestRunPreset } from './harvest-run-preset.entity';
 import { HarvestRun } from './harvest-run.entity';
 import { PostalCodeDiscoveryRequest } from './postal-code-discovery-request.entity';
 import { SourceCatalogEntry } from './source-catalog-entry.entity';
@@ -8,6 +9,7 @@ import { SupermarketSource } from './supermarket-source.entity';
 
 export { BaseEntity } from './base.entity';
 export { DiscoveredPlace } from './discovered-place.entity';
+export { HarvestRunPreset } from './harvest-run-preset.entity';
 export { HarvestRun } from './harvest-run.entity';
 export { PostalCodeDiscoveryRequest } from './postal-code-discovery-request.entity';
 export { SourceCatalogEntry } from './source-catalog-entry.entity';
@@ -19,6 +21,8 @@ export { SupermarketSource } from './supermarket-source.entity';
 export const HARVESTER_ENTITIES = [
   SupermarketSource,
   HarvestRun,
+  // A run request saved under a name (plan 0120).
+  HarvestRunPreset,
   // One product a source described, however the source said it, and what became
   // of it (plan 0086, D1). `ItemSourceRef` and `SourceAlias` folded into this.
   SourceCatalogEntry,

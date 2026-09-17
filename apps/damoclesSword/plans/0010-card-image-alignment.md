@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`542e0b877`](https://github.com/IchirokuXVI/nx-portfolio/commit/542e0b8777fc5534119f018f2dfdd1cfce4ad740) on `dev`, with no pull request of its own.
+
 # Plan 0010 — Align card images regardless of title height
 
 **Point:** R2 (your finding #2). Affects Services "WHAT DO WE DO?" → OUR APPROACH and About → OUR VALUES.

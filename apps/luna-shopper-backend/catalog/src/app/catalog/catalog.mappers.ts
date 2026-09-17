@@ -1,5 +1,6 @@
 import {
   CONTENT_LOCALES,
+  type BrandView,
   type ContentLocale,
   type ItemOfferView,
   type ItemPriceView,
@@ -18,6 +19,7 @@ import {
   type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
 import type {
+  Brand,
   Item,
   ItemPrice,
   PricePolicy,
@@ -222,6 +224,44 @@ export function toItemView(row: Item, bestOffer?: ItemOfferView): ItemView {
   return bestOffer ? { ...view, bestOffer } : view;
 }
 
+/**
+ * The three numbers and the label a brand row cannot answer for itself.
+ *
+ * Every one of them is a read of another table or of another brand, counted for
+ * the page in one grouped query rather than per row, which is why they are
+ * handed in (plan 0115, section 5.1, and plan 0124, section 6).
+ */
+export interface BrandCounts {
+  /** Products whose `brandId` is this brand. */
+  itemCount: number;
+  /** The canonical brand's label, or null for a brand that is not linked. */
+  canonicalLabel: string | null;
+  /** How many brands point at this one. */
+  linkCount: number;
+}
+
+/**
+ * A brand on the wire (plan 0115, section 5.1).
+ *
+ * The counts are not on the row, so they are handed in rather than read off the
+ * entity. Passing them explicitly is what stops a caller quietly answering zero
+ * because it forgot.
+ */
+export function toBrandView(row: Brand, counts: BrandCounts): BrandView {
+  return {
+    id: row.id,
+    key: row.key,
+    label: row.label,
+    privateLabelSupermarketId: row.privateLabelSupermarketId,
+    itemCount: counts.itemCount,
+    canonicalBrandId: row.canonicalBrandId,
+    canonicalLabel: counts.canonicalLabel,
+    linkCount: counts.linkCount,
+    createdAt: toInstant(row.createdAt) as string,
+    updatedAt: toInstant(row.updatedAt) as string,
+  };
+}
+
 /** A timestamp on the wire, or null. Raw rows hand back strings, entities hand back dates. */
 function toInstant(value: Date | string | null | undefined): string | null {
   if (value === null || value === undefined) {
@@ -240,6 +280,7 @@ export function toItemOfferView(row: SupermarketItem): ItemOfferView {
     unitPriceLabel: row.unitPriceLabel,
     observedAt: toInstant(row.priceObservedAt),
     sourceKind: row.priceSourceKind ?? null,
+    priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,
     stale: row.stale ?? false,
   };
 }
@@ -257,6 +298,7 @@ export function toSupermarketItemView(
     unitPriceLabel: row.unitPriceLabel,
     observedAt: toInstant(row.priceObservedAt),
     sourceKind: row.priceSourceKind ?? null,
+    priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,
     stale: row.stale ?? false,
     validUntil: toInstant(row.validUntil),
     itemPriceId: row.itemPriceId ?? null,
@@ -280,6 +322,7 @@ export function toItemPriceView(row: ItemPrice): ItemPriceView {
     validUntil: toInstant(row.validUntil),
     sourceRunId: row.sourceRunId ?? null,
     lastObservedRunId: row.lastObservedRunId ?? null,
+    copiedFromScopeId: row.copiedFromScopeId ?? null,
     overrides: row.overrides ?? null,
     protectedUntil: toInstant(row.protectedUntil),
     // Loaded only by the history read (plan 0081, section 6.4). An unloaded

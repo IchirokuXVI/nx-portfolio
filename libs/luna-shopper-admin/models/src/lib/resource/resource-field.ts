@@ -182,11 +182,14 @@ export interface ReferenceField<T extends ResourceRow> extends FieldBase<T> {
    * The row property that carries the target's name, for a read that joins it
    * on (admin plan 0023, section 3).
    *
-   * The property holds a localized text, and the cell renders it exactly as a
-   * `localized-text` field would: through the content locales, with the missing
-   * locale markers, falling back to the id when the text is empty or the
-   * property is null. Display only, like {@link FieldBase.read}: the form still
-   * writes `name`.
+   * The property holds either a localized text or a plain string. A localized
+   * text renders exactly as a `localized-text` field would: through the content
+   * locales, with the missing locale markers. A plain string renders verbatim,
+   * which is what a label that is not localized is: a brand carries one
+   * `canonicalLabel`, because a brand is spelled the same in both content
+   * languages. Either way the cell falls back to the id when the name is empty
+   * or the property is null. Display only, like {@link FieldBase.read}: the form
+   * still writes `name`.
    *
    * Mutually exclusive with {@link nameLookup}. A field that declares neither
    * keeps its id, and that is the guard against the request storm plan 0004
@@ -202,6 +205,65 @@ export interface ReferenceField<T extends ResourceRow> extends FieldBase<T> {
    * the answer is {@link nameFrom} and a backend join, never the lookup.
    */
   readonly nameLookup?: true;
+}
+
+/**
+ * One value a list filter sends: a single query parameter, or one parameter
+ * per entry when the route reads it as repeatable (admin plan 0028, section
+ * 4.2). The price scopes list takes `kind` that way.
+ */
+export type FilterValue = string | readonly string[];
+
+/**
+ * Values a picker's own screen fixes, by query parameter name.
+ *
+ * Not everything a picker offers can be listed from nothing. A chain's shops
+ * are read at `/supermarkets/{id}/locations`, so a picker over them answers an
+ * empty page until the chain is named, and the chain is a fact about the screen
+ * rather than something the operator types (admin plan 0011, section 4).
+ */
+export type ReferenceScope = Readonly<Record<string, FilterValue>>;
+
+/**
+ * Several uuids pointing at rows of one other resource (admin plan 0028,
+ * section 3).
+ *
+ * The draft holds the ids as a list and an edit sends the list whole. The kind
+ * knows a resource and some ids and nothing about what they mean: a shop's
+ * price scopes are the first of these, and what is special about one of them
+ * is said by the shop's descriptor through {@link locked}.
+ */
+export interface ReferencesField<T extends ResourceRow> extends FieldBase<T> {
+  readonly kind: 'references';
+  /** The `name` of the resource every id points at. */
+  readonly resource: string;
+  /**
+   * Resolve each id's name through the reference lookup, as
+   * {@link ReferenceField.nameLookup} does, and for the same small targets.
+   */
+  readonly nameLookup?: true;
+  /**
+   * What the picker is limited to, read from the row as the form holds it.
+   *
+   * `null` when the form does not know enough yet to search at all, such as a
+   * new shop whose chain is not chosen. The control then offers nothing to add
+   * rather than every row of every chain.
+   *
+   * A method rather than a property holding a function, for the reason
+   * {@link FieldBase.read} is one.
+   */
+  scopeFrom?(row: Partial<T>): ReferenceScope | null;
+  /**
+   * Whether the form keeps this target and never offers to remove it.
+   *
+   * It is asked per target, with the target's own row, because a list of ids
+   * says nothing about what each one is. The plan sketched it over the ids
+   * alone; a shop's own store scope is only recognisable by its kind and key.
+   * The control asks it once the lookup has answered for that id, and until
+   * then offers no removal for it at all, so a slow lookup cannot let a locked
+   * target be removed.
+   */
+  locked?(row: Partial<T>, target: ResourceRow): boolean;
 }
 
 /** A `jsonb` column with one string per locale. */
@@ -260,6 +322,7 @@ export type FieldDescriptor<T extends ResourceRow = ResourceRow> =
   | BooleanField<T>
   | EnumField<T>
   | ReferenceField<T>
+  | ReferencesField<T>
   | LocalizedTextField<T>
   | DateField<T>
   | JsonField<T>;

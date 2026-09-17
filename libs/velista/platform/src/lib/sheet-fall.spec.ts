@@ -108,6 +108,33 @@ describe('sheetFallGuard', () => {
     expect(allowed).toBe(true);
   });
 
+  it('does not fall when the next URL is the same sheet route with other parameters', async () => {
+    // The router keeps the component for that navigation, so a fall would leave the
+    // kept sheet down with its scrim over the page (velista plan 0083).
+    const sheet = stubSheet();
+    TestBed.inject(OpenSheet).register(sheet);
+    const config = { path: 'sheet/lines/:lineId/detail' };
+    const leaf = { routeConfig: config, firstChild: null };
+    const next = {
+      root: {
+        routeConfig: null,
+        firstChild: { routeConfig: {}, firstChild: leaf },
+      },
+    };
+
+    const allowed = await TestBed.runInInjectionContext(() =>
+      sheetFallGuard(
+        {},
+        { routeConfig: config } as unknown as ActivatedRouteSnapshot,
+        {} as RouterStateSnapshot,
+        next as unknown as RouterStateSnapshot
+      )
+    );
+
+    expect(allowed).toBe(true);
+    expect(sheet.asks).toBe(0);
+  });
+
   it('allows a navigation off a route with no sheet on it', async () => {
     await expect(runGuard()).resolves.toBe(true);
   });

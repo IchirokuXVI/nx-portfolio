@@ -1,4 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import type {
   CatalogSuggestion,
@@ -14,6 +15,7 @@ import {
   type SilenceHandlers,
 } from '@portfolio/velista/platform';
 import { LineComposer } from './line-composer';
+import { SuggestionList } from './suggestion-list';
 
 /**
  * Plan 0038: the add button records when there is nothing typed.
@@ -189,6 +191,65 @@ describe('LineComposer, one slot and the empty field decides', () => {
       expect(detector.handlers).toBeNull();
       expect(host(fixture).querySelector('.stop')).toBeNull();
       expect(host(fixture).querySelector('input.field')).not.toBeNull();
+    });
+  });
+
+  /**
+   * Velista `0079`, section 7. The button already waited while a submit was out; Enter
+   * and a tapped suggestion did not, so a line could land beside the one the assistant
+   * was still adding.
+   */
+  describe('while a submit is out', () => {
+    const OAT: CatalogSuggestion = {
+      kind: 'item',
+      item: {
+        id: 'item-oat',
+        name: { es: 'Bebida de avena', en: 'Oat drink' },
+        brand: 'Oatly',
+        size: null,
+        unit: 'UNIT',
+        productGroupId: null,
+        offer: null,
+      },
+    };
+
+    it('sends nothing on Enter or on a suggestion, and keeps the field editable', async () => {
+      const { fixture } = await render();
+      const added: unknown[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      fixture.componentRef.setInput('busy', true);
+      fixture.componentRef.setInput('suggestions', [OAT]);
+      type(fixture, 'oat');
+
+      host(fixture)
+        .querySelector('form.composer')
+        ?.dispatchEvent(new Event('submit'));
+      fixture.debugElement
+        .query(By.directive(SuggestionList))
+        .componentInstance.chose.emit(OAT);
+      fixture.detectChanges();
+
+      expect(added).toEqual([]);
+      const field =
+        host(fixture).querySelector<HTMLInputElement>('input.field');
+      expect(field?.disabled).toBe(false);
+      expect(field?.value).toBe('oat');
+    });
+
+    it('sends again once the submit is over', async () => {
+      const { fixture } = await render();
+      const added: unknown[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      fixture.componentRef.setInput('busy', true);
+      type(fixture, 'oat');
+
+      fixture.componentRef.setInput('busy', false);
+      fixture.detectChanges();
+      host(fixture)
+        .querySelector('form.composer')
+        ?.dispatchEvent(new Event('submit'));
+
+      expect(added).toEqual([{ content: 'oat', quantity: 1 }]);
     });
   });
 

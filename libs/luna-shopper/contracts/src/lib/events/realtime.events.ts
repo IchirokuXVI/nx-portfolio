@@ -60,6 +60,16 @@ export enum RealtimeEvent {
    * granted access was never in the room to receive it.
    */
   ListMyAccessChanged = 'list.myAccessChanged',
+  /**
+   * A basket that touches this list changed (plan 0122, section 6), on the
+   * `list:{listId}` room and nowhere else.
+   *
+   * The payload is {@link ListTripsChangedEvent}, the list id alone. It says
+   * "read the trips again", so it cannot leak a basket and cannot drift from the
+   * read. Purchases need no such event: `line.settled` and `line.claimChanged`
+   * already reach a client on the list page.
+   */
+  ListTripsChanged = 'list.tripsChanged',
   LineAdded = 'line.added',
   LineUpdated = 'line.updated',
   /**
@@ -184,6 +194,22 @@ export enum RealtimeEvent {
    * write to a guest.
    */
   GeneratedListLineAdded = 'generatedList.lineAdded',
+  /**
+   * A line left a basket because a rename merged it into another line of the
+   * same basket (plan 0113, section 6), on the basket's own room and to the
+   * owner's own sessions.
+   *
+   * Its own name rather than a whole `generatedList.updated`, because the basket
+   * room holds guests and a basket view names zone data. The payload is the
+   * basket and the id of the line that went away, and nothing else.
+   */
+  GeneratedListLineRemoved = 'generatedList.lineRemoved',
+  /**
+   * A basket was deleted. Addressed to the owner's own sessions **and** to the
+   * basket's room since plan 0114 (section 10), so every participant hears it
+   * rather than nobody, and realtime has a basket on the envelope to sweep both
+   * basket rooms by. The payload is `{ id }`.
+   */
   GeneratedListDeleted = 'generatedList.deleted',
 
   /**
@@ -203,12 +229,32 @@ export enum RealtimeEvent {
    * Somebody joined or left a shared basket (plan 0051, section 3), on the
    * basket's own room.
    *
-   * `participantLeft` is a **revocation**, not a disconnection: who is connected
-   * right now is presence, and these two are about who is allowed to be. A guest
-   * closing their browser emits neither.
+   * `participantLeft` is a **loss of access**, not a disconnection: a removal, a
+   * revoked link, or since plan 0114 somebody leaving. Who is connected right now
+   * is presence, and these two are about who is allowed to be. A guest closing
+   * their browser emits neither. Since plan 0114 `participantLeft` also asks
+   * realtime to sweep both basket rooms, so the socket goes at once.
    */
   GeneratedListParticipantJoined = 'generatedList.participantJoined',
   GeneratedListParticipantLeft = 'generatedList.participantLeft',
+
+  /**
+   * A basket is now shared with this person (plan 0114, section 10), addressed
+   * to their own sessions and to nothing else.
+   *
+   * Sent when a registered person's row becomes live: the owner adding them, or
+   * the link letting them in or back. The payload is
+   * {@link GeneratedListAccessEvent}, ids only, because the person is in no room
+   * that may read more, and the shared baskets read is where the rest comes from.
+   */
+  GeneratedListShared = 'generatedList.shared',
+  /**
+   * The mirror of {@link GeneratedListShared}: this person is no longer on the
+   * basket, because the owner removed them, the link they came by was revoked
+   * with its people, they left, or the basket was deleted. Ids only, to their
+   * own sessions.
+   */
+  GeneratedListUnshared = 'generatedList.unshared',
 
   /**
    * A zone line is, or is no longer, in somebody's active basket (plan 0051,
@@ -255,6 +301,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.ListDeleted,
   RealtimeEvent.ListAccessChanged,
   RealtimeEvent.ListMyAccessChanged,
+  RealtimeEvent.ListTripsChanged,
   RealtimeEvent.LineAdded,
   RealtimeEvent.LineUpdated,
   RealtimeEvent.LineSettled,
@@ -271,10 +318,13 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.GeneratedListUpdated,
   RealtimeEvent.GeneratedListLineUpdated,
   RealtimeEvent.GeneratedListLineAdded,
+  RealtimeEvent.GeneratedListLineRemoved,
   RealtimeEvent.GeneratedListDeleted,
   RealtimeEvent.GeneratedListLineSettled,
   RealtimeEvent.GeneratedListParticipantJoined,
   RealtimeEvent.GeneratedListParticipantLeft,
+  RealtimeEvent.GeneratedListShared,
+  RealtimeEvent.GeneratedListUnshared,
   RealtimeEvent.LineClaimChanged,
 ] as const;
 

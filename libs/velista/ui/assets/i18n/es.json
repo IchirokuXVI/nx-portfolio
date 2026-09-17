@@ -419,6 +419,7 @@
       "discard": "Descartar esta grabación",
       "listening": "Escuchando",
       "heard": "He oído",
+      "working": "Procesando lo que has dicho…",
       "micRefused": "Velista no puede oírte. El micrófono está desactivado para esta aplicación, así que actívalo en el navegador, o escríbelo",
       "micMissing": "Este dispositivo no tiene micrófono, así que escríbelo",
       "notHeard": "No te he entendido",
@@ -456,15 +457,11 @@
       "approve": "Añadirlo",
       "reject": "Esto no",
       "restore": "Devolverlo a la lista",
-      "edit": "Cambiar esto",
       "editing": "Editando",
       "comments": "Comentarios",
-      "delete": "Quitar de la lista",
-      "menuFor": "Más opciones para {{name}}",
       "overwritten": "{{name}} cambió esto mientras lo editabas",
       "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
       "failed": "No se ha guardado. Toca para reintentar",
-      "move": "Mover",
       "movedTo": "Movido a la posición {{position}} de {{total}}",
       "quantityFor": "Cuántos de {{name}}",
       "quantityChanged": "{{name}}, ahora {{quantity}}"
@@ -477,11 +474,23 @@
       "started": "Poniéndolas en orden. No se puede marcar nada",
       "ended": "Has terminado de ponerlas en orden",
       "moveUp": "Subir {{name}}",
-      "moveDown": "Bajar {{name}}"
+      "moveDown": "Bajar {{name}}",
+      "unavailable": "Para reordenar, usa el orden de la lista, todas las líneas y ninguna búsqueda."
+    },
+    "view": {
+      "order": {
+        "legend": "Orden",
+        "list": "Orden de la lista",
+        "alpha": "De la A a la Z"
+      },
+      "view": "Ver",
+      "all": "Todas las líneas",
+      "oneCategory": "Una categoría",
+      "noCategory": "Sin categoría",
+      "reset": "Restablecer",
+      "none": "Ninguna línea coincide."
     },
     "edit": {
-      "title": "Cambiar esta línea",
-      "content": "Qué es",
       "save": "Guardar",
       "unapproves": "Al guardar, la línea volverá a estar pendiente de aprobación."
     },
@@ -562,15 +571,18 @@
       }
     },
     "gone": {
-      "deleted": "Esa lista se ha eliminado",
-      "unshared": "Esa lista ya no está compartida contigo"
+      "byOthers": "Otra persona borró esta línea",
+      "unavailable": "Esta línea se borró y ya no está disponible",
+      "close": "Cerrar"
     },
     "error": {
       "notAvailable": "Esta lista no está disponible para ti. Puede que se haya eliminado o que ya no esté compartida contigo",
       "readOnly": "Puedes ver esta lista, no cambiarla",
       "roleChanged": "Tu papel en este grupo ha cambiado",
       "tooFast": "Ve un poco más despacio e inténtalo de nuevo",
-      "failed": "No ha funcionado. Inténtalo de nuevo en un momento"
+      "failed": "No ha funcionado. Inténtalo de nuevo en un momento",
+      "mergeNeedsApproval": "Ese nombre es de una línea aprobada, y esta línea aún no lo está.",
+      "mergeTooManyProducts": "Juntas tienen más de {{max}} productos."
     },
     "detail": {
       "title": "Sobre esta línea",
@@ -592,13 +604,18 @@
       "rateRough": "cada pocas semanas",
       "bought": "Lo he comprado",
       "notAvailable": "No lo tenían",
-      "everything": "Todo sobre esta línea",
+      "everything": "Ver más detalles",
       "howMany": "¿Cuántos has cogido?",
       "howManyNote": "Viene con todo lo que falta. Si compras menos, el resto sigue haciendo falta",
       "whichOne": "¿Cuál has cogido?",
       "record": "Guárdalo",
       "cancel": "Cancelar",
-      "failed": "No se ha guardado. Inténtalo otra vez"
+      "failed": "No se ha guardado. Inténtalo otra vez",
+      "name": "Nombre",
+      "askedFor": "Pedido",
+      "saved": "Guardado",
+      "commentsLabel": "Comentarios, {{count}}",
+      "delete": "Borrar línea"
     },
     "page": {
       "where": "en {{list}}, de {{zone}}",
@@ -643,6 +660,48 @@
     },
     "buying": {
       "notMine": "Cualquiera puede añadir a esta lista. Comprar es de quien hace la compra"
+    },
+    "merge": {
+      "taken": "«{{other}}» ya está en esta lista y pide {{otherQuantity}}.",
+      "question": "¿Juntarlas en una línea que pida {{total}}?",
+      "keeps": "Los comentarios y lo comprado se van con ella.",
+      "confirm": "Juntar",
+      "keepEditing": "Seguir editando"
+    },
+    "trips": {
+      "toBuy": "Por comprar",
+      "loose": "Compras sueltas",
+      "labelNamed": "{{name}} · {{date}}",
+      "bought": "{{bought}} de {{total}} comprados",
+      "lines": "{{count}} líneas",
+      "liveBy": "{{name}} está comprando",
+      "live": "Alguien está comprando",
+      "older": "Ver compras anteriores",
+      "olderFailed": "No se han cargado las compras más antiguas.",
+      "arrived": "Se muestran {{count}} compras anteriores",
+      "failed": "No se han cargado las compras anteriores.",
+      "retry": "Reintentar",
+      "row": {
+        "boughtOf": "{{bought}} de {{asked}} comprados",
+        "bought": "{{bought}} comprados",
+        "left": "quedan {{count}}",
+        "partly": "Comprado en parte",
+        "notAvailable": "No había en la tienda",
+        "notBought": "Estaba en la lista y nadie lo compró",
+        "boughtBy": "Comprado · {{name}}",
+        "nowAsks": "La lista pide ahora {{count}}"
+      }
+    },
+    "due": {
+      "label": "Sueles comprar esto por ahora",
+      "period": "Cada {{days}} días · última compra {{when}}",
+      "periodOne": "Cada día · última compra {{when}}",
+      "staple": "En {{with}} de tus últimas {{seen}} listas",
+      "add": "Añadir {{count}}",
+      "addLabel": "Añadir {{count}} de {{name}} a la lista",
+      "quantityLabel": "Cuántos de {{name}}",
+      "more": "Ver más sugerencias",
+      "added": "{{name}} añadido a la lista"
     }
   },
   "account": {
@@ -1143,7 +1202,7 @@
       "listAsks": "en su lista pide {{count}}",
       "listNow": "ahora su lista pide {{count}}",
       "pending": "esperando a que la lista lo acepte",
-      "noAccess": "ya no puedes cambiar esta lista",
+      "noAccess": "Ya no puedes cambiar esta lista",
       "claimed": "alguien ya está comprando esto para esa lista",
       "rejected": "esa lista ha dicho que no a esta línea",
       "cannotTake": "esta línea no se puede añadir a esa lista",
@@ -1177,7 +1236,13 @@
       "viaOwner": "hizo esta lista",
       "remove": "Quitar de esta lista",
       "close": "Cerrar",
-      "joinedUnknown": "No consta"
+      "joinedUnknown": "No consta",
+      "leave": "Salir de esta lista",
+      "leaveQuestion": "¿Salir de «{{name}}»? Puedes volver con el enlace si lo tienes.",
+      "leaveConfirm": "Salir",
+      "stay": "Quedarme",
+      "leaveFailed": "No se pudo completar. Inténtalo de nuevo.",
+      "viaInvite": "lo añadió quien hizo esta lista"
     },
     "share": {
       "open": "Compartir esta lista",
@@ -1256,7 +1321,22 @@
       "close": "Cerrar",
       "reverted": "Deshecho"
     },
+    "rename": {
+      "label": "Nombre",
+      "save": "Guardar",
+      "saved": "Guardado",
+      "mergeTitle": "Ya hay una línea llamada «{{name}}» aquí",
+      "mergeExplain": "Al juntarlas, cada una queda en una línea y se suman las cantidades.",
+      "mergeAsks": "pide {{quantity}}",
+      "mergeToGet": "{{quantity}} por coger",
+      "mergeBasketRow": "Esta cesta",
+      "merge": "Juntar",
+      "keepEditing": "Seguir editando"
+    },
     "error": {
+      "mergeNeedsApproval": "En {{list}}, ese nombre es de una línea aprobada, y esta aún no lo está.",
+      "mergeTooManyProducts": "En {{list}}, juntas tienen más de {{max}} productos.",
+      "renameForbidden": "Ya no puedes cambiar el nombre de esta línea.",
       "alreadyFinished": "Alguien ya ha terminado esta línea",
       "accessChanged": "Tu acceso a una de las listas de esta línea ha cambiado",
       "ownerOnly": "Esto solo lo puede hacer quien hizo la lista",
@@ -1316,7 +1396,10 @@
     "submit": "Generar",
     "submitting": "Generando",
     "cancel": "Cancelar",
-    "error": "No se pudo completar. Inténtalo de nuevo"
+    "error": "No se pudo completar. Inténtalo de nuevo",
+    "people": {
+      "label": "Compartir con"
+    }
   },
   "history": {
     "title": "Tus listas de la compra",
@@ -1344,6 +1427,22 @@
     "announce": {
       "loaded_one": "{{count}} lista de la compra cargada",
       "loaded_other": "{{count}} listas de la compra cargadas"
+    },
+    "tabs": {
+      "mine": "Mis listas",
+      "shared": "Listas compartidas"
+    },
+    "shared": {
+      "byOn": "Compartida por {{owner}} el {{date}}",
+      "empty": "Todavía nadie ha compartido una lista contigo."
+    }
+  },
+  "share": {
+    "people": {
+      "title": "Personas",
+      "none": "Aún no hay nadie más en tus grupos.",
+      "linkJoined": "Entró con el enlace. Si lo quitas, el enlace deja de servirle.",
+      "failed": "No se ha guardado. Inténtalo de nuevo."
     }
   }
 }

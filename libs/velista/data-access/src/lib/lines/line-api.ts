@@ -25,9 +25,9 @@ import {
   toLineSettlement,
   toPage,
 } from '../mapping/mappers';
-import { isRecord, mapArray } from '../mapping/primitives';
+import { isRecord, mapArray, str } from '../mapping/primitives';
 import { required } from '../mapping/required';
-import type { LineServiceI } from './line-service';
+import type { LineServiceI, LineUpdateResult } from './line-service';
 
 /**
  * Lines, over HTTP. The default behind `LINE_SERVICE`.
@@ -111,8 +111,9 @@ export class LineApi implements LineServiceI {
       quantity?: number;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
+      confirmMerge?: boolean;
     }
-  ): Promise<Line> {
+  ): Promise<LineUpdateResult> {
     const request: UpdateLineRequest = {};
     if (changes.content !== undefined) {
       (request as { content?: string }).content = changes.content;
@@ -133,6 +134,11 @@ export class LineApi implements LineServiceI {
       (request as { adoptItemIds?: readonly string[] }).adoptItemIds =
         changes.adoptItemIds;
     }
+    // Only ever `true` on the wire. A rename that has not been confirmed says nothing,
+    // so the server refuses the collision and names the other line (plan 0112).
+    if (changes.confirmMerge === true) {
+      (request as { confirmMerge?: boolean }).confirmMerge = true;
+    }
 
     const body = await firstValueFrom(
       this._http.patch<unknown>(this._line(lineId), request, {
@@ -140,7 +146,12 @@ export class LineApi implements LineServiceI {
       })
     );
 
-    return required(toLine(body), 'lines.update');
+    // The answer is a line view with one optional field beside it, so the line maps
+    // as any other and the extra id is read on its own, from `unknown` (rule D4).
+    return {
+      line: required(toLine(body), 'lines.update'),
+      absorbedLineId: isRecord(body) ? str(body['absorbedLineId']) : null,
+    };
   }
 
   async addQuantity(lineId: string, delta: number): Promise<Line> {

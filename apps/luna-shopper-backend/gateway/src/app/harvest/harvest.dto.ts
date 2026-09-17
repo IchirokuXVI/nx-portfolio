@@ -1,10 +1,13 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import {
   ADAPTER_KEYS,
+  BRAND_LABEL_MAX_LENGTH,
   BULK_DECISION_MAX_OPERATIONS,
   DiscoveredPlaceStatus,
+  HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunWrites,
   ItemCategory,
   PostalCodeDiscoveryStatus,
   PriceSourceKind,
@@ -147,6 +150,57 @@ export class SpawnHarvestRunDto {
   @IsOptional()
   @IsBoolean()
   detailBackfill?: boolean;
+
+  @ApiPropertyOptional({
+    type: () => [ScopeCopyDto],
+    description:
+      'Scopes that also receive what the run writes at a walked scope (plan 0118). CATALOG_DISCOVERY only, and never with `detailBackfill`. A copy fetches nothing, so a target is any tier and needs no key of the chain’s own. `from` is a scope the run writes: one of `priceScopeIds` for `mercadona-api`, `priceScopeId` for an adapter given one scope, and any keyed scope of the chain for `lidl-api`. Each `from` appears once, every target once in the whole run, and no target is walked by the run. Every copied price records the scope it was read at.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ScopeCopyDto)
+  scopeCopies?: ScopeCopyDto[];
+
+  @ApiPropertyOptional({
+    enum: HarvestRunWrites,
+    default: HarvestRunWrites.PRICES_AND_AVAILABILITY,
+    description:
+      'What the run writes of what it read (plan 0119). CATALOG_DISCOVERY only, and never with `detailBackfill`. Products are ingested whatever it says; it decides whether the prices, the availability or both are written, for walked scopes and copies alike. `PRICES` is refused for an adapter that states no price. It saves no request: prices and availability come from the same listing walk. The resolved value is stored on the run.',
+  })
+  @IsOptional()
+  @IsEnum(HarvestRunWrites)
+  writes?: HarvestRunWrites;
+
+  @ApiPropertyOptional({
+    enum: HarvestDetailFetch,
+    description:
+      'Which products a walk fetches the detail of (plan 0119). CATALOG_DISCOVERY only, and only for an adapter whose capability `skipsKnownDetails` is true (`mercadona-api`), where it defaults to `NEW`: the detail of a product whose row has no EAN yet, or has no row. `ALL` fetches every detail, which is what a walk of ten warehouses where every product is known costs about 5,700 requests for instead of 1,510. Stating it for any other adapter is refused, and leaving it out resolves to `ALL`. The resolved value is stored on the run.',
+  })
+  @IsOptional()
+  @IsEnum(HarvestDetailFetch)
+  details?: HarvestDetailFetch;
+}
+
+/** One walked scope and the scopes its prices and availability are copied to (plan 0118). */
+export class ScopeCopyDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'A scope the run writes, by id.',
+  })
+  @IsUUID()
+  from!: string;
+
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    description:
+      'The scopes that receive a copy of what the run wrote at `from`. At least one.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID(undefined, { each: true })
+  to!: string[];
 }
 
 /**
@@ -529,6 +583,15 @@ export class HarvestRunListQueryDto extends PageQueryDto {
   @IsOptional()
   @IsBoolean()
   reverted?: boolean;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The runs started from this preset (plan 0120). A deleted preset still filters its runs, which keep its id.',
+  })
+  @IsOptional()
+  @IsUUID()
+  presetId?: string;
 }
 
 export class DiscoveredPlaceListQueryDto extends PageQueryDto {
@@ -624,6 +687,16 @@ export class SourceEntryListQueryDto extends PageQueryDto {
   @IsString()
   @MaxLength(120)
   query?: string;
+
+  @ApiPropertyOptional({
+    maxLength: BRAND_LABEL_MAX_LENGTH,
+    description:
+      'Only the rows whose brand keys to this. The value is keyed before it is matched, so `El Pozo` and `elpozo` find the same rows, and a value that makes no key at all matches nothing rather than being refused.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(BRAND_LABEL_MAX_LENGTH)
+  brandKey?: string;
 }
 
 /**
@@ -711,4 +784,79 @@ export class AddPostalCodeDiscoveryDto {
   })
   @IsBoolean()
   discoverNow!: boolean;
+}
+
+/**
+ * What a preset saves (plan 0120, section 3): the body a run is started with,
+ * less `supermarketId`, which is the preset's own field.
+ *
+ * Derived from {@link SpawnHarvestRunDto} rather than restated, so a field a run
+ * gains is a field a preset takes. The harvester validates it exactly as it
+ * validates a spawn, when the preset is saved and again when a run starts from it.
+ */
+export class HarvestRunPresetInputDto extends OmitType(SpawnHarvestRunDto, [
+  'supermarketId',
+] as const) {}
+
+/** Save a run request under a name (plan 0120, section 5). */
+export class CreateHarvestRunPresetDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The chain the preset belongs to. It never changes: a request that fits one chain’s scopes names nothing of another’s.',
+  })
+  @IsUUID()
+  supermarketId!: string;
+
+  @ApiProperty({
+    maxLength: 80,
+    description:
+      'Unique within the chain regardless of case. A duplicate answers 409 naming the preset that holds the name.',
+  })
+  @IsString()
+  @MaxLength(80)
+  name!: string;
+
+  @ApiProperty({
+    type: () => HarvestRunPresetInputDto,
+    description:
+      'The run request, validated as a spawn is. What is stored is the request with the defaults resolved, so a preset that saved `details: NEW` keeps saying it if the default changes. `FILE_IMPORT` is refused, because it needs a document uploaded at the time, and so is a store discovery around a postal code, which belongs to no chain.',
+  })
+  @IsObject()
+  @ValidateNested()
+  @Type(() => HarvestRunPresetInputDto)
+  input!: HarvestRunPresetInputDto;
+}
+
+/** Rename a preset, replace its input, or both (plan 0120, section 5). */
+export class UpdateHarvestRunPresetDto {
+  @ApiPropertyOptional({
+    maxLength: 80,
+    description: 'Unique within the chain regardless of case.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  name?: string;
+
+  @ApiPropertyOptional({
+    type: () => HarvestRunPresetInputDto,
+    description:
+      'Replaces the saved input whole, and is validated again. Runs already started from the preset keep the input they were started with.',
+  })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => HarvestRunPresetInputDto)
+  input?: HarvestRunPresetInputDto;
+}
+
+export class HarvestRunPresetListQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'One chain’s presets. Absent lists every chain’s.',
+  })
+  @IsOptional()
+  @IsUUID()
+  supermarketId?: string;
 }

@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   MembershipStatus,
+  type ContactPage,
+  type ContactsRequest,
   type ListMembersRequest,
   type MemberOrder,
   type MembershipPage,
@@ -14,6 +16,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository, type SelectQueryBuilder } from 'typeorm';
 import { ZoneMembership } from '../entities';
+import { CONTACTS_SQL, type ContactRow } from './contacts.sql';
 import { ZoneAuthzService } from './zone-authz.service';
 import { managesZone, toMembershipView } from './zone.mappers';
 
@@ -35,6 +38,9 @@ interface MemberCursor {
 }
 
 /** The sort key of the row a cursor names, read back at full precision. */
+/** A uuid, which is what both halves of a contacts cursor must be. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function boundary(columns: string): string {
   return `(SELECT ${columns} FROM "zone_memberships" b WHERE b.id = :cid)`;
 }
@@ -54,6 +60,60 @@ export class MemberListingService {
     private readonly memberships: Repository<ZoneMembership>,
     private readonly authz: ZoneAuthzService
   ) {}
+
+  /**
+   * One page of the caller's contacts (plan 0114, section 2): every approved
+   * membership in every group where the caller is approved, one row per
+   * membership, the caller left out.
+   *
+   * Paged because nothing bounds it: no group caps its members and nobody is
+   * capped in how many groups they join, so a page is a fixed number of rows
+   * however large one group is. **Ordered by group** so that each group's members
+   * are contiguous across pages, and the client names the groups with the names
+   * it already holds. See `CONTACTS_SQL`.
+   *
+   * It needs no authorization beyond the caller's id: the query reaches only the
+   * groups the caller is approved in, which is the standing every member listing
+   * already asks for. A cursor that names no membership starts from the first
+   * page, as every cursor this platform decodes does.
+   */
+  async contacts(req: ContactsRequest): Promise<ContactPage> {
+    const limit = clampPageSize(req.limit);
+    const cursor = decodeCursor<{ zoneId?: unknown; id?: unknown }>(
+      req.cursor
+    );
+    // Both halves or neither: a cursor with one of them is not one this service
+    // wrote, and it starts from the first page like any other it cannot read.
+    const after =
+      typeof cursor?.zoneId === 'string' &&
+      UUID.test(cursor.zoneId) &&
+      typeof cursor.id === 'string' &&
+      UUID.test(cursor.id)
+        ? { zoneId: cursor.zoneId, id: cursor.id }
+        : null;
+
+    const rows = await this.memberships.query<ContactRow[]>(CONTACTS_SQL, [
+      req.userId,
+      after?.zoneId ?? null,
+      after?.id ?? null,
+      limit + 1,
+    ]);
+    const page = rows.slice(0, limit);
+    return {
+      items: page.map((row) => ({
+        userId: row.userId,
+        zoneId: row.zoneId,
+        username: row.username,
+      })),
+      nextCursor:
+        rows.length > limit
+          ? encodeCursor({
+              zoneId: page[page.length - 1].zoneId,
+              id: page[page.length - 1].membershipId,
+            })
+          : null,
+    };
+  }
 
   async list(req: ListMembersRequest): Promise<MembershipPage> {
     const viewer = await this.authz.requireApproved(req.zoneId, req.userId);

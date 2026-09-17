@@ -25,6 +25,10 @@ import {
   COMMENT_SERVICE,
   CommentApi,
   ConnectionRecovery,
+  CONTACT_SERVICE,
+  ContactApi,
+  DUE_LINE_SERVICE,
+  DueLineApi,
   gatewayInterceptor,
   GENERATED_LIST_SERVICE,
   GeneratedListApi,
@@ -42,6 +46,8 @@ import {
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileApi,
   StartupProbe,
+  TRIP_SERVICE,
+  TripApi,
   VELISTA_DATA_ACCESS_PROVIDERS,
   ZONE_SERVICE,
   ZoneApi,
@@ -191,6 +197,10 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // nothing new about either: both reach this injector's `HttpClient`.
   provideService(LINE_SERVICE, LineApi),
   provideService(COMMENT_SERVICE, CommentApi),
+  // The trips of a zone list (velista `0088`). The same reason again.
+  provideService(TRIP_SERVICE, TripApi),
+  // The lines a zone list suggests (velista `0089`). The same reason again.
+  provideService(DUE_LINE_SERVICE, DueLineApi),
 
   // The account screen (plan 0015). A seventh time, and still nothing new: `AccountApi`
   // reaches this injector's `HttpClient`, so the token's default resolving at the root
@@ -235,6 +245,9 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // of this one.
   provideService(GENERATED_LIST_SERVICE, GeneratedListApi),
   provideService(BASKET_SERVICE, BasketApi),
+  // The people the reader shares a group with (velista `0085`), for the picker that
+  // shares a basket with them.
+  provideService(CONTACT_SERVICE, ContactApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches

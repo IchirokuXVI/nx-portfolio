@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`d33647330`](https://github.com/IchirokuXVI/nx-portfolio/commit/d3364733055f75c4ef1736b926f1efe19f85b7f0) on `dev`, with no pull request of its own.
+
 # 0029: the list header says who is on the list, and opens
 
 > Written after the fact, from commit `d336473`. The work is on `dev`; this plan records

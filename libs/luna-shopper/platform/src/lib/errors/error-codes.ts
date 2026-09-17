@@ -12,6 +12,17 @@ import { HttpStatus } from '@nestjs/common';
 export const ERROR_CODES = {
   VALIDATION_FAILED: 'validation_failed',
   UNAUTHORIZED: 'unauthorized',
+  /**
+   * The credential names no live participant of this basket: removed, left,
+   * revoked with the link, or never joined (plan 0051, section 3.3).
+   *
+   * A 401 like {@link UNAUTHORIZED}, because to the basket surface the credential
+   * is refused, but its own code because it says nothing about the account. A
+   * signed in member removed from a basket still holds a perfectly good token,
+   * and a client that read this as `unauthorized` refreshed that token, was
+   * refused again, and signed the person out of the whole app.
+   */
+  NOT_A_PARTICIPANT: 'not_a_participant',
   FORBIDDEN: 'forbidden',
   NOT_FOUND: 'not_found',
   CONFLICT: 'conflict',
@@ -106,6 +117,97 @@ export const ERROR_CODES = {
    * attempt count of an attempt still in progress.
    */
   RUN_IN_PROGRESS: 'run_in_progress',
+  /**
+   * The new name belongs to another line of the same list, and the request did
+   * not say to merge the two (plan 0112, section 2).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the client's
+   * reaction is particular: ask the person, then send the same request again
+   * with `confirmMerge`. The envelope's `details` name the other line, so the
+   * question can say which line it is and how many it holds.
+   */
+  LINE_MERGE_REQUIRED: 'line_merge_required',
+  /**
+   * A pending or rejected line was renamed onto an approved one by somebody who
+   * cannot approve lines (plan 0112, section 2).
+   *
+   * Refused rather than merged, because the merge would leave one approved line
+   * holding a request nobody with the right to approve it agreed to.
+   */
+  LINE_MERGE_NEEDS_APPROVAL: 'line_merge_needs_approval',
+  /**
+   * The two lines together would hold more products than one line may (plan
+   * 0112, section 2). The bound travels in `messageArgs.max`.
+   */
+  LINE_MERGE_TOO_MANY_PRODUCTS: 'line_merge_too_many_products',
+  /**
+   * The brand label has no letters and no digits, so it makes no key (plan
+   * 0115, section 5.3).
+   *
+   * Its own code rather than a plain {@link VALIDATION_FAILED}, because the
+   * sentence the back office shows is particular and short: "The label needs at
+   * least one letter or digit." `-` and `---` are the real cases, and they
+   * arrive from a suggestion row the operator pressed Register on.
+   */
+  BRAND_LABEL_EMPTY: 'brand_label_empty',
+  /**
+   * Another brand already holds the key this label makes (plan 0115,
+   * section 5.3).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the client's
+   * reaction is to link to the brand that holds it: the holder's id travels in
+   * the envelope's `details`, so the panel can offer to open it rather than only
+   * say no.
+   */
+  BRAND_KEY_TAKEN: 'brand_key_taken',
+  /**
+   * A brand was pointed at itself (plan 0124, section 3).
+   *
+   * Its own code rather than a plain {@link VALIDATION_FAILED}, because the
+   * sentence is particular and the fix is obvious once it is said: a brand is
+   * already itself, so there is nothing to link.
+   */
+  BRAND_LINK_TO_SELF: 'brand_link_to_self',
+  /**
+   * The link would make a chain of links, which is refused (plan 0124,
+   * section 3).
+   *
+   * Either the target is itself a spelling of some third brand, or brands
+   * already point at the one being linked. The brand that breaks the rule
+   * travels in the envelope's `details` as `brandId`, so the back office can
+   * offer to open it rather than only say no.
+   */
+  BRAND_LINK_TOO_DEEP: 'brand_link_too_deep',
+  /**
+   * A brand was given both a private label chain and a link (plan 0124,
+   * section 2).
+   *
+   * A linked brand owns no chain: the canonical brand's chain is the one that
+   * counts, so holding a second answer on the linked row would be two answers
+   * to one question.
+   */
+  BRAND_LINK_OWNS_NO_CHAIN: 'brand_link_owns_no_chain',
+  /**
+   * A brand that is a spelling of another was renamed onto a different key
+   * (plan 0124, section 4).
+   *
+   * Its key is what the products printed with it carry, and it is the only
+   * thing that can bring them back when the link is undone. Renaming a linked
+   * brand from `DEBORAH 48H` to `Deborah 72H` is therefore not a correction of
+   * one spelling but the claim that a second spelling exists, and a second
+   * spelling is a second brand. Capitals and spacing keep the key, so they are
+   * still allowed.
+   */
+  BRAND_LINK_KEEPS_KEY: 'brand_link_keeps_key',
+  /**
+   * A brand that is nobody's spelling was asked to be deleted (plan 0124).
+   *
+   * A spelling can go away, because deleting it puts its products back exactly
+   * where they were before it was registered and its key returns to the
+   * suggestions list by itself. Every other brand still cannot be removed, by
+   * section 9 of plan 0115: there is nowhere for its products to go.
+   */
+  BRAND_NOT_LINKED: 'brand_not_linked',
   INTERNAL: 'internal',
 } as const;
 
@@ -133,6 +235,9 @@ const UPGRADE_REQUIRED = 426 as HttpStatus;
 export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.VALIDATION_FAILED]: HttpStatus.BAD_REQUEST,
   [ERROR_CODES.UNAUTHORIZED]: HttpStatus.UNAUTHORIZED,
+  // 401 and not 403, so a client that has read "refused" from a 401 since plan
+  // 0051 keeps reading it. The code is what tells it the account is not at fault.
+  [ERROR_CODES.NOT_A_PARTICIPANT]: HttpStatus.UNAUTHORIZED,
   [ERROR_CODES.FORBIDDEN]: HttpStatus.FORBIDDEN,
   [ERROR_CODES.NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ERROR_CODES.CONFLICT]: HttpStatus.CONFLICT,
@@ -169,5 +274,31 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409 for the ordinary reason: the request was well formed and the caller is
   // allowed to make it, and what refuses it is the state of the row.
   [ERROR_CODES.RUN_IN_PROGRESS]: HttpStatus.CONFLICT,
+  // All three 409 for the ordinary reason, and told apart by code because the
+  // client does three different things with them: ask, explain, or explain with
+  // a number (plan 0112, section 7).
+  [ERROR_CODES.LINE_MERGE_REQUIRED]: HttpStatus.CONFLICT,
+  [ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL]: HttpStatus.CONFLICT,
+  [ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS]: HttpStatus.CONFLICT,
+  // 400, because what is wrong is a value in the body: a label of punctuation
+  // makes no key, so there is nothing to register (plan 0115, section 5.3).
+  [ERROR_CODES.BRAND_LABEL_EMPTY]: HttpStatus.BAD_REQUEST,
+  // 409 for the ordinary reason: the request was well formed and the caller is
+  // allowed to make it, and what refuses it is a row that already exists.
+  [ERROR_CODES.BRAND_KEY_TAKEN]: HttpStatus.CONFLICT,
+  // 400 for both of these, because what is wrong is a value in the body: a
+  // brand cannot be its own spelling, and a linked brand cannot also carry a
+  // chain (plan 0124, sections 2 and 3).
+  [ERROR_CODES.BRAND_LINK_TO_SELF]: HttpStatus.BAD_REQUEST,
+  [ERROR_CODES.BRAND_LINK_OWNS_NO_CHAIN]: HttpStatus.BAD_REQUEST,
+  // 409 rather than 400, because the request is well formed and what refuses it
+  // is a link some other row already holds.
+  [ERROR_CODES.BRAND_LINK_TOO_DEEP]: HttpStatus.CONFLICT,
+  // 409 for the same reason: the label is a perfectly good label, and what
+  // refuses it is that this row is a spelling of another brand.
+  [ERROR_CODES.BRAND_LINK_KEEPS_KEY]: HttpStatus.CONFLICT,
+  // 409 again: the request is well formed and the caller may make it, and what
+  // refuses it is that this brand is not a spelling of anything.
+  [ERROR_CODES.BRAND_NOT_LINKED]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

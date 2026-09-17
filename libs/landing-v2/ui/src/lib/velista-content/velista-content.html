@@ -1,0 +1,94 @@
+<!-- No heroImage, as on the Portfolio page: the screenshot is card art, and a
+     16:7 crop of a narrow phone layout cuts off its header. -->
+<lib-landing-v2-detail-page-shell
+  [appLink]="project().appLink"
+  [repoLink]="project().repoLink"
+  [tagline]="project().tagline"
+  [title]="project().name"
+>
+  <div class="velista-chips" header-aside>
+    @for (group of chipGroups; track group.headingKey) {
+      <lib-landing-v2-tech-chip-group
+        [chips]="group.chips"
+        [heading]="group.headingKey | rokuT"
+      />
+    }
+  </div>
+
+  <div body>
+    <aside
+      [attr.aria-label]="key + '.domain_label' | rokuT"
+      class="velista-domain"
+    >
+      <span class="velista-domain__status">
+        <span aria-hidden="true" class="velista-domain__dot"></span>
+        {{ key + '.status' | rokuT }}
+      </span>
+      <p class="velista-domain__note">{{ key + '.domain_note' | rokuT }}</p>
+      <a
+        [href]="origin"
+        class="velista-domain__link"
+        rel="noopener"
+        target="_blank"
+      >
+        velista.app
+        <lib-arrow-icon aria-hidden="true" class="velista-domain__link-icon" />
+      </a>
+    </aside>
+
+    <!-- The toggle button lives outside .velista-swap so it is never clipped
+         or scaled by the collapse/grow animation. -->
+    @if (deepDive()) {
+      <div class="velista-reveal velista-reveal--top">
+        <ng-container [ngTemplateOutlet]="revealButton" />
+      </div>
+    }
+
+    <div [class.velista-swap--collapsed]="collapsed()" class="velista-swap">
+      <div class="velista-swap__inner">
+        <div class="velista-sections" id="velista-sections">
+          @for (section of visibleSections(); track section.id) {
+            <lib-landing-v2-detail-section
+              [heading]="headingKey(section) | rokuT"
+              [paragraphKeys]="paragraphKeys(section)"
+              [sectionId]="section.id"
+            />
+          }
+        </div>
+
+        @if (deepDive()) {
+          <p class="velista-closing">{{ key + '.closing_note' | rokuT }}</p>
+        }
+      </div>
+    </div>
+
+    @if (!deepDive()) {
+      <div class="velista-reveal velista-reveal--bottom">
+        <ng-container [ngTemplateOutlet]="revealButton" />
+      </div>
+    }
+  </div>
+
+  <nav class="velista-side" side>
+    <lib-landing-v2-detail-toc [items]="tocItems()" />
+  </nav>
+</lib-landing-v2-detail-page-shell>
+
+<ng-template #revealButton>
+  <button
+    (click)="toggleDeepDive()"
+    [attr.aria-expanded]="deepDive()"
+    aria-controls="velista-sections"
+    class="velista-reveal__button"
+    type="button"
+  >
+    <span>
+      {{ (deepDive() ? key + '.reveal_less' : key + '.reveal_more') | rokuT }}
+    </span>
+    <span
+      [class.velista-reveal__caret--up]="deepDive()"
+      aria-hidden="true"
+      class="velista-reveal__caret"
+    ></span>
+  </button>
+</ng-template>

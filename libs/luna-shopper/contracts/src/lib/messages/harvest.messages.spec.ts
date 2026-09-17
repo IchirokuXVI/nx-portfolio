@@ -26,6 +26,7 @@ describe('adapterCapabilities', () => {
       scopesItsOwn: false,
       listsItsOwnStores: false,
       hasProductPages: false,
+      skipsKnownDetails: false,
       printedLocale: null,
       walkablePriorities: null,
     });
@@ -66,15 +67,15 @@ describe('adapterCapabilities', () => {
     expect(ADAPTER_CAPABILITIES['manual'].printedLocale).toBeNull();
   });
 
-  it('lets a Mercadona walk write REGION scopes and nothing else', () => {
+  it('lets a Mercadona walk write LOCAL_AREA scopes and nothing else', () => {
     // The switch an operator asked for, and it lives on the adapter rather than
     // in the runner (plan 0108, D5). A NATIONAL row for this chain is an
     // operator's summary and a STORE row is a hand entered price, and a crawl of
     // one warehouse may claim neither.
     const band = ADAPTER_CAPABILITIES['mercadona-api'].walkablePriorities;
     expect(band).toEqual({
-      min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
-      max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
+      min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
+      max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
     });
     expect(band?.min).toBeGreaterThan(
       DEFAULT_SCOPE_PRIORITY[PriceScopeKind.STORE]

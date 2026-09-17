@@ -19,6 +19,7 @@ import {
   type AddLinesRequest,
   type DeleteLineRequest,
   type LineClaim,
+  type LineMergeRequiredDetails,
   type LineOrder,
   type LinePage,
   type LineSettlementSummary,
@@ -27,12 +28,16 @@ import {
   type ReorderLinesRequest,
   type SetLineApprovalRequest,
   type UpdateLineRequest,
+  type UpdateLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
   decodeCursor,
   encodeCursor,
   ForbiddenException,
+  LineMergeNeedsApprovalException,
+  LineMergeRequiredException,
+  LineMergeTooManyProductsException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -62,6 +67,12 @@ import {
   toLineItemSet,
   type LineItemSet,
 } from './line-item-set';
+import {
+  assertMergeFits,
+  isEarlierLine,
+  LineMergeService,
+  mergedItemIds,
+} from './line-merge.service';
 import { ListAccessService } from './list-access.service';
 import { toLineView } from './list.mappers';
 import { readLineSettlementSummaries } from './settlement.sql';
@@ -83,7 +94,7 @@ interface LineCursor {
  * 0037 had a reduction write two rows. Plan 0047 retired that (see
  * {@link update}), so an edit is one row and one event again.
  */
-interface WrittenLine {
+export interface WrittenLine {
   view: LineView;
   line: ListLine;
   items: LineItemSet;
@@ -91,6 +102,51 @@ interface WrittenLine {
   settlements: LineSettlementSummary;
   /** And the third indicator, for the same reason (plan 0052, section 4). */
   claim: LineClaim;
+}
+
+/**
+ * One step of a basket rename on one list, in the order it is written (plan
+ * 0113, section 5).
+ *
+ * A `merge` names both lines and which one survives, because the plan decides
+ * that before anything is written and the write must not decide it again.
+ */
+export type ListRenameStep =
+  | { kind: 'rename'; lineId: string }
+  | {
+      kind: 'merge';
+      renamedId: string;
+      survivorId: string;
+      absorbedId: string;
+    };
+
+/** What renaming some lines of one list will do, decided before any write. */
+export interface ListRenamePlan {
+  /** The list, locked by the caller's transaction. */
+  list: ShoppingList;
+  content: string;
+  permissions: ReadonlySet<ListPermission>;
+  steps: ListRenameStep[];
+  /** The first line the new name collided with, or null when nothing merges. */
+  collision: { otherContent: string; otherQuantity: number } | null;
+}
+
+/** What a written plan left, for the announcements after the commit. */
+export interface ListRenameOutcome {
+  list: ShoppingList;
+  /** The lines the merges deleted, in the order they went. */
+  absorbedLineIds: string[];
+  /** Every line the rename wrote that still stands, as a read answers it. */
+  written: WrittenLine[];
+}
+
+/** A line as the fold of a basket rename sees it (plan 0113, section 4). */
+interface FoldLine {
+  id: string;
+  position: number;
+  content: string;
+  quantity: number;
+  approvalStatus: LineApprovalStatus;
 }
 
 /** Canonical UUID shape, for validating the cross-service catalog `itemId`. */
@@ -123,6 +179,12 @@ interface LineEdit {
   quantity?: number;
   itemIds?: string[];
   adoptItemIds?: string[];
+  /**
+   * Whether a rename that collides may merge (plan 0112, section 2). Only a
+   * member's edit can say so: the operator path names no such field, so an
+   * operator's colliding rename is refused rather than merged or duplicated.
+   */
+  confirmMerge?: boolean;
 }
 
 /**
@@ -138,10 +200,13 @@ interface LineEdit {
 interface LineWriter {
   /** Save the row on its own, for an edit that touches no join rows. */
   save(line: ListLine): Promise<ListLine>;
-  /** Run the whole edit in one transaction, for one that rewrites the set. */
-  transaction(
-    work: (manager: EntityManager, record: RecordLine) => Promise<WrittenLine>
-  ): Promise<WrittenLine>;
+  /**
+   * Run the whole edit in one transaction, for one that rewrites the set or
+   * renames the line (plan 0112), whose answer can be more than one line.
+   */
+  transaction<T>(
+    work: (manager: EntityManager, record: RecordLine) => Promise<T>
+  ): Promise<T>;
 }
 
 /** What a write inside a transaction leaves in the trail, or nothing. */
@@ -176,7 +241,10 @@ export class LineService {
     private readonly events: CoreEventsPublisher,
     // `@Global()`, so the operator writes below reach the trail without any
     // caller having to hand it one (plan 0077, section 8).
-    private readonly audit: CoreAuditService
+    private readonly audit: CoreAuditService,
+    // Two lines becoming one, on a rename that collides (plan 0112). Last, so
+    // no positional construction in a spec has to shift an argument to take it.
+    private readonly merges: LineMergeService
   ) {}
 
   /**
@@ -1131,8 +1199,16 @@ export class LineService {
    * again. What a shopper found is a `line_settlements` row now, written by
    * `SettlementService.settle`, which is the record plan 0037 was reaching for
    * and could not have without a table to put it in.
+   *
+   * ## A rename onto a name the list holds merges (plan 0112)
+   *
+   * Plan 0091 made an add land on the line already holding its name, and a
+   * rename is the other way a second line of one name could appear. So a rename
+   * that collides is refused with `line_merge_required` until the caller
+   * confirms, and then the two lines become one. {@link applyRename} is that
+   * path, and the answer then names the line that went away.
    */
-  async update(req: UpdateLineRequest): Promise<LineView> {
+  async update(req: UpdateLineRequest): Promise<UpdateLineResult> {
     const line = await this.listAccess.getLine(req.lineId);
     const { list, permissions } = await this.listAccess.resolve(
       line.listId,
@@ -1169,6 +1245,11 @@ export class LineService {
    *
    * The line is checked against the list it was addressed under, so an id from
    * another list is a 404 rather than an edit of somebody else's row.
+   *
+   * A rename onto a name the list already holds is refused with
+   * `line_merge_required` and never merged here (plan 0112): the operator route
+   * carries no confirmation, and writing the duplicate instead would break the
+   * rule a household's own rename now keeps.
    */
   async updateAsOperator(
     listId: string,
@@ -1193,8 +1274,25 @@ export class LineService {
     req: LineEdit,
     permissions: ReadonlySet<ListPermission>,
     writer: LineWriter
-  ): Promise<LineView> {
+  ): Promise<UpdateLineResult> {
     this.authorizeEdit(req, line, permissions);
+
+    // A new name, as the fold reads it, is a question about the rest of the list
+    // and takes the list lock to answer it (plan 0112). A change of case, accents
+    // or spacing alone is not, and stays on the path below.
+    if (
+      req.content !== undefined &&
+      normalizeContent(req.content) !== normalizeContent(line.content)
+    ) {
+      return this.applyRename(
+        line.id,
+        req.content,
+        list,
+        req,
+        permissions,
+        writer
+      );
+    }
 
     if (req.content !== undefined) {
       line.content = req.content;
@@ -1266,6 +1364,547 @@ export class LineService {
         )
       )
     );
+  }
+
+  /**
+   * An edit that gives a line another name (plan 0112, sections 2 and 3).
+   *
+   * ## Under the list lock, and decided again once it is held
+   *
+   * The collision is a fact about the whole list, so the edit takes the lock an
+   * add takes (plan 0091, section 3.2) and reads the line and the list again
+   * under it. Two renames onto one name then run one after the other: the first
+   * merges or takes the name, and the second finds the line the first left and
+   * merges into that. Without the lock both read a list without the name, and
+   * the list ends with two lines of it.
+   *
+   * ## Nothing is written until every refusal has been asked
+   *
+   * Section 2's checks run in the plan's order, the permission check first, then
+   * approval, then the product bound, then the confirmation. A request refused
+   * at any of them has written nothing, so a client that asks the person and
+   * sends the request again with `confirmMerge` meets the list exactly as it
+   * was.
+   *
+   * ## The edit lands before the merge
+   *
+   * The request's quantity and products apply to the renamed line first, so the
+   * merge sums the quantity the person just chose and unions the products they
+   * just picked. Its approval is left as it stood, because section 3 decides the
+   * merged approval from both lines before the edit, and a reversion here would
+   * take the approval off a line the merge is about to count as approved.
+   */
+  private async applyRename(
+    lineId: string,
+    content: string,
+    list: ShoppingList,
+    req: LineEdit,
+    permissions: ReadonlySet<ListPermission>,
+    writer: LineWriter
+  ): Promise<UpdateLineResult> {
+    const adopt = req.adoptItemIds ?? [];
+    const touchesSet = req.itemIds !== undefined || adopt.length > 0;
+    const quantity =
+      req.quantity === undefined
+        ? undefined
+        : this.validateQuantity(req.quantity);
+    const key = normalizeContent(content);
+
+    const outcome = await writer.transaction(
+      async (
+        manager,
+        record
+      ): Promise<{ written: WrittenLine; absorbedLineId?: string }> => {
+        const locked = await this.lockList(manager, list.id);
+        const line = await manager.getRepository(ListLine).findOne({
+          where: { id: lineId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!line) {
+          throw new NotFoundException('Line not found');
+        }
+        // Asked again of the row as it stands under the lock, since its approval
+        // may have moved since the check outside.
+        this.authorizeEdit(req, line, permissions);
+        const nextItemIds =
+          req.itemIds === undefined
+            ? undefined
+            : this.validateItemIds(
+                req.itemIds,
+                Math.max(
+                  LINE_ITEM_SET_MAX,
+                  await manager
+                    .getRepository(ListLineItem)
+                    .count({ where: { lineId: line.id } })
+                )
+              );
+
+        // A concurrent rename can have given this line the name already, and then
+        // there is nothing to collide with. Asked of the fresh row, because
+        // `findMergeTarget` would otherwise offer an earlier duplicate the list
+        // already held for a rename that changes nothing.
+        const target =
+          normalizeContent(line.content) === key
+            ? undefined
+            : (await this.findMergeTarget(manager, list.id, [content])).get(
+                key
+              );
+
+        if (target === undefined) {
+          line.content = content;
+          if (quantity !== undefined) {
+            line.quantity = quantity;
+          }
+          if (nextItemIds !== undefined) {
+            line.itemSetHash = itemSetHash(nextItemIds);
+          }
+          this.reopenAfterEdit(line, locked, permissions);
+          line.version += 1;
+          return {
+            written: await this.writeEdit(
+              manager,
+              line,
+              touchesSet ? { next: nextItemIds, adopt } : undefined,
+              record
+            ),
+          };
+        }
+
+        // Section 2, step 2. Statuses as they stand before the edit.
+        if (this.mergeNeedsApproval(line, target, locked, permissions)) {
+          throw new LineMergeNeedsApprovalException(
+            'That name belongs to an approved line, and only somebody who can approve lines can merge a pending line into it'
+          );
+        }
+
+        // Step 3, against the set the renamed line will hold after the edit.
+        const lineItemIds =
+          nextItemIds ?? (await this.itemSetOf(line.id, manager)).itemIds;
+        const targetItemIds = (await this.itemSetOf(target.id, manager))
+          .itemIds;
+        assertMergeFits(
+          lineItemIds.length,
+          targetItemIds.length,
+          mergedItemIds(lineItemIds, targetItemIds).length
+        );
+
+        // Step 4. The details are what the client needs to ask the question.
+        if (req.confirmMerge !== true) {
+          const details: LineMergeRequiredDetails = {
+            otherLineId: target.id,
+            otherContent: target.content,
+            otherQuantity: target.quantity,
+          };
+          throw new LineMergeRequiredException(
+            `another line of this list is already called "${target.content}"`,
+            {
+              details: { ...details },
+              messageArgs: { content: target.content },
+            }
+          );
+        }
+
+        if (touchesSet) {
+          await this.rewriteItemSet(manager, line, lineItemIds, new Set(adopt));
+        }
+        line.content = content;
+        if (quantity !== undefined) {
+          line.quantity = quantity;
+        }
+        const [survivor, absorbed] = isEarlierLine(line, target)
+          ? [line, target]
+          : [target, line];
+        await this.merges.merge(manager, survivor, absorbed);
+
+        // Read again rather than answering from the object the merge saved: the
+        // products, the settlements and the claim all moved underneath it.
+        return {
+          written: await this.readWritten(manager, survivor.id),
+          absorbedLineId: absorbed.id,
+        };
+      }
+    );
+
+    if (outcome.absorbedLineId === undefined) {
+      return this.announce(list, outcome.written);
+    }
+    // Section 5: the absorbed line goes first, so a client that applies events
+    // in order never draws two lines of one name, then the survivor as it now
+    // stands. No basket room hears anything.
+    this.events.emit(
+      RealtimeEvent.LineDeleted,
+      list.zoneId,
+      { id: outcome.absorbedLineId, listId: list.id },
+      list.id
+    );
+    return {
+      ...this.announce(list, outcome.written),
+      absorbedLineId: outcome.absorbedLineId,
+    };
+  }
+
+  /**
+   * A line as a read of it would answer, through the caller's manager.
+   *
+   * For a write that moved rows the line object does not describe, which is what
+   * a merge does to the survivor's products, settlements and claim.
+   */
+  private async readWritten(
+    manager: EntityManager,
+    lineId: string
+  ): Promise<WrittenLine> {
+    const line = await manager
+      .getRepository(ListLine)
+      .findOne({ where: { id: lineId } });
+    if (!line) {
+      throw new NotFoundException('Line not found');
+    }
+    const items = await this.itemSetOf(lineId, manager);
+    const settlements = await this.settlementsOf(lineId, manager);
+    const claim = await this.claims.claimOf(lineId, manager);
+    return {
+      view: toLineView(line, items, settlements, claim),
+      line,
+      items,
+      settlements,
+      claim,
+    };
+  }
+
+  /**
+   * Whether a merge is refused because it would fold a line nobody approved
+   * into an approved one (plan 0112, section 2, step 2).
+   *
+   * Statuses as they stand before the edit. One method for both renames, the
+   * zone line's own and a basket's (plan 0113), so the two cannot disagree.
+   */
+  private mergeNeedsApproval(
+    renamed: Pick<ListLine, 'approvalStatus'>,
+    other: Pick<ListLine, 'approvalStatus'>,
+    list: ShoppingList,
+    permissions: ReadonlySet<ListPermission>
+  ): boolean {
+    return (
+      renamed.approvalStatus !== LineApprovalStatus.APPROVED &&
+      other.approvalStatus === LineApprovalStatus.APPROVED &&
+      !permissions.has(ListPermission.DECIDE) &&
+      !permissions.has(ListPermission.MANAGE) &&
+      !list.autoApproveLines
+    );
+  }
+
+  // --- A basket rename (plan 0113) --------------------------------------------
+
+  /**
+   * Lock these lists for a basket rename, in ascending id order.
+   *
+   * One order for every caller, so two renames that reach the same two lists
+   * wait for each other rather than deadlock.
+   */
+  async lockListsForRename(
+    manager: EntityManager,
+    listIds: readonly string[]
+  ): Promise<Map<string, ShoppingList>> {
+    const locked = new Map<string, ShoppingList>();
+    for (const listId of [...new Set(listIds)].sort()) {
+      locked.set(listId, await this.lockList(manager, listId));
+    }
+    return locked;
+  }
+
+  /**
+   * What renaming some lines of one list would do, decided before anything is
+   * written (plan 0113, sections 3 and 4).
+   *
+   * ## Several lines of one list
+   *
+   * A basket line can come from more than one line of the same list, because
+   * plan 0091 migrated no duplicates. So the lines are folded in the order a run
+   * of single renames would take them, earliest first, and each one that
+   * collides merges into the earliest line holding the name at that moment. That
+   * is the rule {@link applyRename} applies to one line, asked of every line
+   * without writing between them.
+   *
+   * ## Every refusal first
+   *
+   * The permission check, the approval refusal and the product bound are all
+   * asked here, with the list's name in `messageArgs.listName`, so a refused
+   * rename has written nothing on any list. The confirmation is the caller's,
+   * because one confirmation covers every list and the basket.
+   *
+   * A line id that no longer exists is skipped: an origin carries no foreign key
+   * (plan 0050, section 1), and a zone line deleted underneath a basket has no
+   * name to change. The list must already be locked by the caller.
+   */
+  async planListRename(
+    manager: EntityManager,
+    list: ShoppingList,
+    lineIds: readonly string[],
+    content: string,
+    permissions: ReadonlySet<ListPermission>
+  ): Promise<ListRenamePlan> {
+    const key = normalizeContent(content);
+    const repo = manager.getRepository(ListLine);
+    const rows = await repo.find({
+      where: { listId: list.id },
+      select: { id: true, content: true, approvalStatus: true, position: true },
+      order: { position: 'ASC', id: 'ASC' },
+    });
+    const wanted = new Set(lineIds);
+    // The earliest line holding the name that this rename does not rename. A
+    // later one can never be a target, because a merge keeps the earlier line.
+    const holder = rows.find(
+      (row) =>
+        !wanted.has(row.id) &&
+        row.approvalStatus !== LineApprovalStatus.REJECTED &&
+        normalizeContent(row.content) === key
+    );
+    const ids = rows
+      .filter((row) => wanted.has(row.id) || row.id === holder?.id)
+      .map((row) => row.id);
+    // Whole and locked, in id order, since these are the rows every step below
+    // decides from.
+    const locked =
+      ids.length === 0
+        ? []
+        : await repo.find({
+            where: { id: In(ids) },
+            order: { id: 'ASC' },
+            lock: { mode: 'pessimistic_write' },
+          });
+    const renamed = locked
+      .filter((line) => wanted.has(line.id))
+      .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1));
+    for (const line of renamed) {
+      this.authorizeEdit({ content }, line, permissions);
+    }
+
+    const fold = (line: ListLine): FoldLine => ({
+      id: line.id,
+      position: line.position,
+      content: line.content,
+      quantity: line.quantity,
+      approvalStatus: line.approvalStatus,
+    });
+    // The approval a rename that merges nothing leaves, asked of a copy.
+    const reopened = (line: ListLine): LineApprovalStatus => {
+      const copy = { ...line } as ListLine;
+      this.reopenAfterEdit(copy, list, permissions);
+      return copy.approvalStatus;
+    };
+    const itemSets = new Map<string, string[]>();
+    const itemsOf = async (lineId: string): Promise<string[]> => {
+      const known = itemSets.get(lineId);
+      if (known) {
+        return known;
+      }
+      const read = (await this.itemSetOf(lineId, manager)).itemIds;
+      itemSets.set(lineId, read);
+      return read;
+    };
+
+    // Every line that holds the name at the moment a step is asked, as a single
+    // rename would find it.
+    const pool: FoldLine[] = [];
+    const held = locked.find((line) => line.id === holder?.id);
+    if (held) {
+      pool.push(fold(held));
+    }
+    for (const line of renamed) {
+      if (
+        line.approvalStatus !== LineApprovalStatus.REJECTED &&
+        normalizeContent(line.content) === key
+      ) {
+        pool.push(fold(line));
+      }
+    }
+
+    const steps: ListRenameStep[] = [];
+    let collision: ListRenamePlan['collision'] = null;
+    for (const line of renamed) {
+      if (normalizeContent(line.content) === key) {
+        // Its own name as the fold reads it, so it collides with nothing (plan
+        // 0112, section 2) and only its spelling changes.
+        if (line.content === content) {
+          continue;
+        }
+        steps.push({ kind: 'rename', lineId: line.id });
+        const status = reopened(line);
+        const entry = pool.find((candidate) => candidate.id === line.id);
+        if (entry) {
+          entry.content = content;
+          entry.approvalStatus = status;
+        } else {
+          // A rejected line reopens on the edit, and then it holds the name.
+          pool.push({ ...fold(line), content, approvalStatus: status });
+        }
+        continue;
+      }
+
+      const target = pool.reduce<FoldLine | undefined>(
+        (earliest, candidate) =>
+          !earliest || isEarlierLine(candidate, earliest)
+            ? candidate
+            : earliest,
+        undefined
+      );
+      if (!target) {
+        steps.push({ kind: 'rename', lineId: line.id });
+        pool.push({ ...fold(line), content, approvalStatus: reopened(line) });
+        continue;
+      }
+
+      if (this.mergeNeedsApproval(line, target, list, permissions)) {
+        throw new LineMergeNeedsApprovalException(
+          `In ${list.name}, that name belongs to an approved line, and only somebody who can approve lines can merge a pending line into it`,
+          { messageArgs: { listName: list.name } }
+        );
+      }
+      const lineItems = await itemsOf(line.id);
+      const targetItems = await itemsOf(target.id);
+      const union = mergedItemIds(targetItems, lineItems);
+      this.assertMergeFitsIn(
+        list,
+        targetItems.length,
+        lineItems.length,
+        union.length
+      );
+
+      collision ??= {
+        otherContent: target.content,
+        otherQuantity: target.quantity,
+      };
+      const renamedEntry: FoldLine = { ...fold(line), content };
+      const [survivor, absorbed] = isEarlierLine(renamedEntry, target)
+        ? [renamedEntry, target]
+        : [target, renamedEntry];
+      steps.push({
+        kind: 'merge',
+        renamedId: line.id,
+        survivorId: survivor.id,
+        absorbedId: absorbed.id,
+      });
+      pool.splice(pool.indexOf(target), 1);
+      pool.push({
+        ...survivor,
+        quantity: Math.min(
+          survivor.quantity + absorbed.quantity,
+          LINE_QUANTITY_MAX
+        ),
+        // Approved if either line was before the edit (plan 0112, section 3).
+        approvalStatus:
+          line.approvalStatus === LineApprovalStatus.APPROVED ||
+          target.approvalStatus === LineApprovalStatus.APPROVED
+            ? LineApprovalStatus.APPROVED
+            : LineApprovalStatus.PENDING,
+      });
+      itemSets.set(survivor.id, union);
+    }
+    return { list, content, permissions, steps, collision };
+  }
+
+  /** The product bound of a merge, refused with the list's name. */
+  private assertMergeFitsIn(
+    list: ShoppingList,
+    survivorCount: number,
+    absorbedCount: number,
+    unionCount: number
+  ): void {
+    try {
+      assertMergeFits(survivorCount, absorbedCount, unionCount);
+    } catch (error) {
+      if (error instanceof LineMergeTooManyProductsException) {
+        throw new LineMergeTooManyProductsException(
+          `In ${list.name}, ${error.message}`,
+          {
+            details: error.details,
+            messageArgs: { ...error.messageArgs, listName: list.name },
+          }
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Write a plan {@link planListRename} made, in its order, through the caller's
+   * manager (plan 0113, section 5, step 1).
+   *
+   * A `rename` is the edit {@link applyRename} writes for a free name, with the
+   * reversion {@link reopenAfterEdit} decides. A `merge` hands both lines to
+   * {@link LineMergeService.merge}, which is plan 0112's merge unchanged. Every
+   * row is read again before its step, because an earlier step can have written
+   * it, and every line still standing is read again at the end.
+   */
+  async writeListRename(
+    manager: EntityManager,
+    plan: ListRenamePlan
+  ): Promise<ListRenameOutcome> {
+    const repo = manager.getRepository(ListLine);
+    const load = async (lineId: string): Promise<ListLine> => {
+      const line = await repo.findOne({ where: { id: lineId } });
+      if (!line) {
+        throw new NotFoundException('Line not found');
+      }
+      return line;
+    };
+    const standing: string[] = [];
+    const absorbedLineIds: string[] = [];
+    const stands = (lineId: string) => {
+      if (!standing.includes(lineId)) {
+        standing.push(lineId);
+      }
+    };
+
+    for (const step of plan.steps) {
+      if (step.kind === 'rename') {
+        const line = await load(step.lineId);
+        line.content = plan.content;
+        this.reopenAfterEdit(line, plan.list, plan.permissions);
+        line.version += 1;
+        await repo.save(line);
+        stands(line.id);
+        continue;
+      }
+      const survivor = await load(step.survivorId);
+      const absorbed = await load(step.absorbedId);
+      // The renamed line carries the new spelling into the merge, which keeps it
+      // only when the renamed line is the survivor (plan 0112, section 3).
+      (survivor.id === step.renamedId ? survivor : absorbed).content =
+        plan.content;
+      await this.merges.merge(manager, survivor, absorbed);
+      absorbedLineIds.push(absorbed.id);
+      const gone = standing.indexOf(absorbed.id);
+      if (gone >= 0) {
+        standing.splice(gone, 1);
+      }
+      stands(survivor.id);
+    }
+
+    const written: WrittenLine[] = [];
+    for (const lineId of standing) {
+      written.push(await this.readWritten(manager, lineId));
+    }
+    return { list: plan.list, absorbedLineIds, written };
+  }
+
+  /**
+   * What the list room hears after a basket rename commits (plan 0113, section
+   * 6): plan 0112's events, each absorbed line first, then every line as it now
+   * stands.
+   */
+  announceListRename(outcome: ListRenameOutcome): void {
+    for (const lineId of outcome.absorbedLineIds) {
+      this.events.emit(
+        RealtimeEvent.LineDeleted,
+        outcome.list.zoneId,
+        { id: lineId, listId: outcome.list.id },
+        outcome.list.id
+      );
+    }
+    for (const written of outcome.written) {
+      this.announce(outcome.list, written);
+    }
   }
 
   /**

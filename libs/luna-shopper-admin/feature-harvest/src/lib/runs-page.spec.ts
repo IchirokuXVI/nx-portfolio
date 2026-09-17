@@ -1,5 +1,6 @@
 import { provideLocationMocks } from '@angular/common/testing';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -8,6 +9,7 @@ import {
   GatewayError,
   HARVEST_SERVICE,
   HarvestMemory,
+  MERCADONA_WEEKLY_PRESET,
   RESOURCE_GATEWAYS,
   ServerReachability,
   type HarvestServiceI,
@@ -17,16 +19,16 @@ import {
   applyControlBase,
   controlBaseProperties,
 } from './control-base.testing';
+import { RunRequestForm } from './run-request-form';
 import { RunsPage } from './runs-page';
 
 /**
- * The start form (admin plan 0014, section 3).
+ * The runs page around the run request form: what it does with the request
+ * the form hands up (admin plan 0030).
  *
- * Two things changed and both are refusals made visible. `REFRESH` cannot be
- * named, because backend plan `0086` deleted the mode: a walk writes its prices
- * now, so nothing was left for a refresh to do. And a Mercadona walk cannot be
- * started without a price scope, because the spawn refuses one, so the field
- * appears exactly where it is required rather than everywhere or nowhere.
+ * The form's own cases are in `run-request-form.spec.ts`. What is here is the
+ * page's half: the refusal a spawn came back with, the filters over the list,
+ * saving the form as a preset, and the preset a run came from.
  */
 
 const MERCADONA = '11111111-1111-4111-8111-111111111111';
@@ -52,17 +54,17 @@ const SCOPES = [
   },
   {
     id: CORDOBA,
-    kind: 'REGION',
+    kind: 'LOCAL_AREA',
     externalKey: '4661',
     label: null,
-    priority: 300,
+    priority: 200,
   },
   {
     id: CORUNA,
-    kind: 'REGION',
+    kind: 'LOCAL_AREA',
     externalKey: '4804',
     label: { en: 'A Coruna' },
-    priority: 300,
+    priority: 200,
   },
 ];
 
@@ -75,9 +77,6 @@ const CHAINS = [
 /** A checkbox change, as the template hands one to `toggleScope`. */
 const ticked = (checked: boolean) =>
   ({ target: { checked } }) as unknown as Event;
-
-/** Long enough for the picker's own 250 ms to settle. */
-const SEARCH_SETTLE_MS = 320;
 
 const drain = async () => {
   for (let i = 0; i < 10; i++) {
@@ -93,23 +92,44 @@ const drain = async () => {
  * has two, and adding four more chains to it would be seeding a directory to
  * test a form.
  */
+/** What a spec changes about the harvester behind the page. */
+interface RenderOptions {
+  /** The presets read answers none, so every preset a run names is gone. */
+  readonly presetsGone?: boolean;
+}
+
 function spawnRecorder(
   refusal?: unknown,
-  adapters: Readonly<Record<string, string>> = {}
+  adapters: Readonly<Record<string, string>> = {},
+  options: RenderOptions = {}
 ): {
   service: HarvestServiceI;
   spawned: unknown[];
   listed: unknown[];
+  saved: unknown[];
 } {
   const memory = new HarvestMemory();
   const spawned: unknown[] = [];
   const listed: unknown[] = [];
+  const saved: unknown[] = [];
 
   const service = {
     ...({} as HarvestServiceI),
     listRuns: (query: never) => {
       listed.push(query);
       return memory.listRuns(query);
+    },
+    listPresets: async (supermarketId?: string, cursor?: string) =>
+      options.presetsGone
+        ? { items: [], nextCursor: null }
+        : memory.listPresets(supermarketId, cursor),
+    createPreset: async (
+      supermarketId: string,
+      name: string,
+      input: unknown
+    ) => {
+      saved.push({ supermarketId, name, input });
+      return memory.createPreset(supermarketId, name, input as never);
     },
     readSource: async (id: string) => {
       const source = await memory.readSource(id);
@@ -127,14 +147,20 @@ function spawnRecorder(
     },
   } as unknown as HarvestServiceI;
 
-  return { service, spawned, listed };
+  return { service, spawned, listed, saved };
 }
 
 async function render(
   refusal?: unknown,
-  adapters: Readonly<Record<string, string>> = {}
+  adapters: Readonly<Record<string, string>> = {},
+  options: RenderOptions = {}
 ) {
-  const { service, spawned, listed } = spawnRecorder(refusal, adapters);
+  const { service, spawned, listed, saved } = spawnRecorder(
+    refusal,
+    adapters,
+    options
+  );
+  const scopeReads: unknown[] = [];
 
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -150,7 +176,10 @@ async function render(
         provide: RESOURCE_GATEWAYS,
         useValue: {
           for: () => ({
-            list: async () => ({ items: SCOPES, nextCursor: null }),
+            list: async (query: unknown) => {
+              scopeReads.push(query);
+              return { items: SCOPES, nextCursor: null };
+            },
           }),
         },
       },
@@ -183,446 +212,30 @@ async function render(
   await drain();
   fixture.detectChanges();
 
-  return { fixture: fixture as ComponentFixture<RunsPage>, spawned, listed };
+  return {
+    fixture: fixture as ComponentFixture<RunsPage>,
+    spawned,
+    listed,
+    saved,
+    scopeReads,
+  };
+}
+
+/** The run request form inside the page. */
+function formOf(fixture: ComponentFixture<RunsPage>): RunRequestForm {
+  return fixture.debugElement.query(By.directive(RunRequestForm))
+    .componentInstance as RunRequestForm;
 }
 
 /** The form, pointed at one chain and given time to read its source row. */
 async function chain(fixture: ComponentFixture<RunsPage>, id: string) {
-  fixture.componentInstance.chooseChain(id);
-  await drain();
-  fixture.detectChanges();
-}
-
-/**
- * The chain, chosen the way an operator chooses it: type, wait, click the name.
- *
- * Through the DOM rather than through the component, because the defect this
- * covers was in the binding and not in the method it called.
- */
-async function chooseChainByName(
-  fixture: ComponentFixture<RunsPage>,
-  title: string
-) {
-  const picker: HTMLElement = fixture.nativeElement.querySelector(
-    'lib-reference-picker'
-  );
-  const input: HTMLInputElement = picker.querySelector('input')!;
-  input.value = title;
-  input.dispatchEvent(new Event('input'));
-
-  await new Promise((resolve) => setTimeout(resolve, SEARCH_SETTLE_MS));
-  await drain();
-  fixture.detectChanges();
-
-  const option = Array.from(
-    picker.querySelectorAll<HTMLButtonElement>('ul button')
-  ).find((button) => button.textContent?.trim() === title);
-  option!.click();
-
+  formOf(fixture).chooseChain(id);
   await drain();
   fixture.detectChanges();
 }
 
 const text = (fixture: ComponentFixture<RunsPage>): string =>
   fixture.nativeElement.textContent;
-
-describe('the run form, the modes it offers', () => {
-  it('offers three, and cannot name a refresh or a leaflet import', async () => {
-    const { fixture } = await render();
-
-    expect(fixture.componentInstance.modes).toEqual([
-      'STORE_DISCOVERY',
-      'CATALOG_DISCOVERY',
-      'FILE_IMPORT',
-    ]);
-    expect(text(fixture)).not.toContain('harvest.mode.REFRESH');
-    expect(text(fixture)).not.toContain('harvest.mode.LEAFLET_IMPORT');
-  });
-
-  /**
-   * An import needs a document, and a document is a file, a preview and a
-   * validation failure that names the product it is about. None of that fits
-   * three text inputs, so the form offers the way to the screen that does.
-   */
-  it('sends a file import to the upload screen rather than starting it', async () => {
-    const { fixture } = await render();
-
-    fixture.componentInstance.mode.set('FILE_IMPORT');
-    fixture.detectChanges();
-
-    expect(fixture.componentInstance.uploading()).toBe(true);
-    expect(fixture.componentInstance.uploadLink()).toEqual([
-      '/',
-      'harvest',
-      'imports',
-      'upload',
-    ]);
-  });
-});
-
-describe('the run form, the price scope a walk writes to', () => {
-  /**
-   * A Mercadona walk covers the warehouses it is given, and a warehouse is a
-   * scope's own key (backend plan 0108). So the chain that used to ask for one
-   * scope asks for a list, and the single picker is drawn for the adapter that
-   * still takes one.
-   */
-  it('asks for warehouses, not for one scope, for a chain that prices by warehouse', async () => {
-    const { fixture } = await render();
-    await chain(fixture, MERCADONA);
-    const page = fixture.componentInstance;
-
-    expect(page.adapterKey()).toBe('mercadona-api');
-    expect(page.needsScope()).toBe(false);
-    expect(page.needsScopeList()).toBe(true);
-    expect(text(fixture)).toContain('harvest.runs.start.priceScopes');
-  });
-
-  it('offers every scope and refuses the ones this walk may not write', async () => {
-    const { fixture } = await render();
-    await chain(fixture, MERCADONA);
-
-    // Shown and disabled rather than hidden, so an operator looking for the
-    // chain's national scope can see that it exists and that a crawl of one
-    // warehouse may not claim it.
-    expect(fixture.componentInstance.scopeChoices()).toEqual([
-      expect.objectContaining({ id: NATIONAL, walkable: false }),
-      expect.objectContaining({ id: CORDOBA, walkable: true, title: '4661' }),
-      expect.objectContaining({
-        id: CORUNA,
-        walkable: true,
-        // The key first: a harvested scope usually has no label, and the key is
-        // the number the chain publishes.
-        title: '4804 — A Coruna',
-      }),
-    ]);
-  });
-
-  it('will not start a walk that covers no warehouse', async () => {
-    const { fixture, spawned } = await render();
-    await chain(fixture, MERCADONA);
-    const page = fixture.componentInstance;
-
-    expect(page.priceScopeIds()).toEqual([]);
-    expect(page.ready()).toBe(false);
-    await page.start();
-    await drain();
-
-    expect(spawned).toEqual([]);
-  });
-
-  it('sends every warehouse ticked, in the order they were ticked', async () => {
-    const { fixture, spawned } = await render();
-    await chain(fixture, MERCADONA);
-    const page = fixture.componentInstance;
-
-    page.toggleScope(CORUNA, ticked(true));
-    page.toggleScope(CORDOBA, ticked(true));
-    fixture.detectChanges();
-
-    expect(page.ready()).toBe(true);
-    await page.start();
-    await drain();
-
-    expect(spawned[0]).toEqual({
-      mode: 'CATALOG_DISCOVERY',
-      supermarketId: MERCADONA,
-      priceScopeIds: [CORUNA, CORDOBA],
-    });
-  });
-
-  it('takes a warehouse back out again', async () => {
-    const { fixture } = await render();
-    await chain(fixture, MERCADONA);
-    const page = fixture.componentInstance;
-
-    page.toggleScope(CORDOBA, ticked(true));
-    page.toggleScope(CORDOBA, ticked(false));
-
-    expect(page.priceScopeIds()).toEqual([]);
-    expect(page.ready()).toBe(false);
-  });
-
-  /** Most walks that take one scope price nationally, so it is preselected. */
-  it('preselects the chain national scope for a walk that takes one', async () => {
-    const { fixture } = await render(undefined, { [DEZA]: 'carrefour-web' });
-    await chain(fixture, DEZA);
-
-    expect(fixture.componentInstance.priceScopeId()).toBe(NATIONAL);
-    expect(fixture.componentInstance.ready()).toBe(true);
-  });
-
-  it('will not start the walk with the scope emptied', async () => {
-    const { fixture, spawned } = await render(undefined, {
-      [DEZA]: 'carrefour-web',
-    });
-    await chain(fixture, DEZA);
-    const page = fixture.componentInstance;
-
-    page.priceScopeId.set('');
-    fixture.detectChanges();
-
-    expect(page.ready()).toBe(false);
-    await page.start();
-    await drain();
-
-    expect(spawned).toEqual([]);
-  });
-
-  it('sends the scope with the walk', async () => {
-    const { fixture, spawned } = await render(undefined, {
-      [DEZA]: 'carrefour-web',
-    });
-    await chain(fixture, DEZA);
-
-    await fixture.componentInstance.start();
-    await drain();
-
-    expect(spawned[0]).toEqual({
-      mode: 'CATALOG_DISCOVERY',
-      supermarketId: DEZA,
-      priceScopeId: NATIONAL,
-    });
-  });
-
-  /**
-   * DEZA's site prints no price, so its walk writes none and the spawn accepts
-   * a scope and ignores it. A field that does nothing is a lie in a form.
-   */
-  it('asks for no scope for a chain whose site prints none', async () => {
-    const { fixture, spawned } = await render();
-    await chain(fixture, DEZA);
-    const page = fixture.componentInstance;
-
-    expect(page.adapterKey()).toBe('deza-web');
-    expect(page.needsScope()).toBe(false);
-    expect(text(fixture)).not.toContain('harvest.runs.start.priceScope');
-    expect(page.ready()).toBe(true);
-
-    await page.start();
-    await drain();
-
-    expect(spawned[0]).toEqual({
-      mode: 'CATALOG_DISCOVERY',
-      supermarketId: DEZA,
-    });
-  });
-
-  /**
-   * The defect of admin plan 0025, section 1, as a test.
-   *
-   * The spawn required a scope for `carrefour-web` as well as for
-   * `mercadona-api`, and this form named only the second. So a Carrefour walk
-   * drew no picker, sent an empty scope, and was refused with a message about a
-   * field the operator was never shown. Both sides read one table now.
-   */
-  it('asks for a scope for a chain behind a browser that prices', async () => {
-    const { fixture, spawned } = await render(undefined, {
-      [DEZA]: 'carrefour-web',
-    });
-    await chain(fixture, DEZA);
-    const page = fixture.componentInstance;
-
-    expect(page.needsScope()).toBe(true);
-    expect(text(fixture)).toContain('harvest.runs.start.priceScope');
-
-    await page.start();
-    await drain();
-
-    expect(spawned[0]).toEqual({
-      mode: 'CATALOG_DISCOVERY',
-      supermarketId: DEZA,
-      priceScopeId: NATIONAL,
-    });
-  });
-
-  /**
-   * The opposite half of the same table. LIDL publishes a price for each of its
-   * 59 regions and every price names the region it is for, so the run needs no
-   * default and a picker would offer a field that catches nothing.
-   */
-  it('asks for no scope for a chain that names the scope of every price', async () => {
-    const { fixture } = await render(undefined, { [DEZA]: 'lidl-api' });
-    await chain(fixture, DEZA);
-    const page = fixture.componentInstance;
-
-    expect(page.capabilities().writesPrices).toBe(true);
-    expect(page.needsScope()).toBe(false);
-    expect(text(fixture)).not.toContain('harvest.runs.start.priceScope');
-    expect(page.ready()).toBe(true);
-  });
-
-  /**
-   * A back office one release behind a backend that added an adapter draws a
-   * plain form rather than a broken one, and the spawn is still the thing that
-   * refuses a bad request.
-   */
-  it('draws a plain form for an adapter it has never heard of', async () => {
-    const { fixture } = await render(undefined, { [DEZA]: 'aldi-web' });
-    await chain(fixture, DEZA);
-    const page = fixture.componentInstance;
-
-    expect(page.needsScope()).toBe(false);
-    expect(page.offersBackfill()).toBe(false);
-    expect(page.needsScopeList()).toBe(false);
-    expect(page.capabilities()).toEqual({
-      writesPrices: false,
-      scopesItsOwn: false,
-      listsItsOwnStores: false,
-      hasProductPages: false,
-      // Null and not a band: an adapter this build has never heard of is given
-      // no scopes to write, like every other answer here.
-      walkablePriorities: null,
-    });
-  });
-
-  /**
-   * A store discovery finds shops and writes no price at all, so the field has
-   * nothing to be about whatever the chain's adapter is.
-   */
-  it('asks for no scope on a store discovery', async () => {
-    const { fixture } = await render();
-    await chain(fixture, MERCADONA);
-    const page = fixture.componentInstance;
-
-    page.mode.set('STORE_DISCOVERY');
-    fixture.detectChanges();
-
-    expect(page.needsScope()).toBe(false);
-  });
-
-  /**
-   * The other two rules that used to name an adapter and now read the table
-   * (admin plan 0025, section 2).
-   */
-  it('asks where to look for shops, unless the chain names its own', async () => {
-    // Mercadona names its own shops since backend plan 0106, so the chain that
-    // still needs a centre here is the one whose site publishes an assortment
-    // and no store list.
-    const { fixture } = await render(undefined, { [DEZA]: 'deza-web' });
-    await chain(fixture, DEZA);
-    const page = fixture.componentInstance;
-
-    page.mode.set('STORE_DISCOVERY');
-    fixture.detectChanges();
-    expect(page.needsCentre()).toBe(true);
-    expect(page.offersPostalCodes()).toBe(false);
-    expect(text(fixture)).toContain('harvest.runs.start.postalCode');
-
-    await chain(fixture, MERCADONA);
-    fixture.detectChanges();
-    expect(page.needsCentre()).toBe(false);
-    expect(text(fixture)).not.toContain('harvest.runs.start.country');
-  });
-
-  /**
-   * The other half of the same fact (backend plan 0106, section 4): a chain
-   * that names its own shops takes no centre and a filter instead, matched
-   * against each shop's own code rather than as a radius.
-   */
-  it('offers the postal code filter only where the chain names its shops', async () => {
-    const { fixture, spawned } = await render(undefined, {
-      [DEZA]: 'deza-web',
-    });
-    await chain(fixture, MERCADONA);
-    const page = fixture.componentInstance;
-
-    page.mode.set('STORE_DISCOVERY');
-    fixture.detectChanges();
-    expect(page.offersPostalCodes()).toBe(true);
-    expect(text(fixture)).toContain('harvest.runs.start.postalCodes');
-
-    page.postalCodes.set(['15006', '  ', ' 14013 ,15006'].join('\n'));
-    await page.start();
-
-    // Blanks and duplicates are dropped, and a comma separates as a newline
-    // does, because a list of codes is pasted as often as it is typed.
-    expect(spawned[0]).toMatchObject({
-      mode: 'STORE_DISCOVERY',
-      postalCodes: ['15006', '14013'],
-    });
-
-    await chain(fixture, DEZA);
-    fixture.detectChanges();
-    expect(page.offersPostalCodes()).toBe(false);
-  });
-
-  it('sends no filter at all when none was typed', async () => {
-    // An empty filter is every shop, which is what an absent field already
-    // means, so an empty array in the body would say nothing new.
-    const { fixture, spawned } = await render();
-    await chain(fixture, MERCADONA);
-    const page = fixture.componentInstance;
-
-    page.mode.set('STORE_DISCOVERY');
-    fixture.detectChanges();
-    await page.start();
-
-    expect(spawned[0]).not.toHaveProperty('postalCodes');
-  });
-
-  it('offers the EAN backfill only where there are product pages to read', async () => {
-    const { fixture, spawned } = await render(undefined, {
-      [DEZA]: 'carrefour-web',
-    });
-    await chain(fixture, MERCADONA);
-    const page = fixture.componentInstance;
-
-    expect(page.offersBackfill()).toBe(false);
-    expect(text(fixture)).not.toContain('harvest.runs.start.detailBackfill');
-
-    await chain(fixture, DEZA);
-    expect(page.offersBackfill()).toBe(true);
-    expect(text(fixture)).toContain('harvest.runs.start.detailBackfill');
-
-    // A backfill reads pages for the EAN and writes no price, so the scope the
-    // same chain's walk would be asked for is not asked for here.
-    page.detailBackfill.set(true);
-    fixture.detectChanges();
-    expect(page.needsScope()).toBe(false);
-
-    await page.start();
-    await drain();
-
-    expect(spawned[0]).toEqual({
-      mode: 'CATALOG_DISCOVERY',
-      supermarketId: DEZA,
-      detailBackfill: true,
-    });
-  });
-
-  /** A scope of the previous chain is not a scope of this one. */
-  it('drops the scope when the chain changes', async () => {
-    const { fixture } = await render();
-    await chain(fixture, MERCADONA);
-
-    fixture.componentInstance.chooseChain(DEZA);
-
-    expect(fixture.componentInstance.priceScopeId()).toBe('');
-  });
-
-  /**
-   * The defect this screen was reported with: choosing Mercadona drew no scope
-   * field, and choosing a second chain afterwards drew it.
-   *
-   * The chain was a text input with `[(ngModel)]` and an `(ngModelChange)`
-   * beside it. Both listeners answer the same output and they fire in the order
-   * the template names them, so the handler read the signal one write behind and
-   * asked the source route about the previous chain. Driven through the DOM,
-   * because a spec that called the handler itself passed throughout.
-   */
-  it('asks about the chain just chosen and not the one before it', async () => {
-    const { fixture } = await render();
-
-    await chooseChainByName(fixture, 'Mercadona');
-    const page = fixture.componentInstance;
-
-    expect(page.supermarketId()).toBe(MERCADONA);
-    expect(page.adapterKey()).toBe('mercadona-api');
-    expect(page.needsScopeList()).toBe(true);
-    expect(text(fixture)).toContain('harvest.runs.start.priceScopes');
-  });
-});
 
 /**
  * What the server said, on the screen that asked (the reported defect).
@@ -650,7 +263,7 @@ describe('the run form, a refusal the server explained', () => {
     );
     await chain(fixture, DEZA);
 
-    await fixture.componentInstance.start();
+    formOf(fixture).submit();
     await drain();
     fixture.detectChanges();
 
@@ -673,7 +286,7 @@ describe('the run form, a refusal the server explained', () => {
     );
     await chain(fixture, DEZA);
 
-    await fixture.componentInstance.start();
+    formOf(fixture).submit();
     await drain();
     fixture.detectChanges();
 
@@ -683,12 +296,40 @@ describe('the run form, a refusal the server explained', () => {
     expect(text(fixture)).not.toContain('Bad Request');
   });
 
+  /**
+   * The server is the authority on every copy rule the form does not check
+   * (admin plan 0029, constraints), and its refusal names the scope.
+   */
+  it('draws a copy refusal that names a scope', async () => {
+    const { fixture } = await render(
+      refusal({
+        code: 'validation_failed',
+        status: 400,
+        detail:
+          'The price scope scope-store-9 does not belong to this chain, so it ' +
+          'cannot receive a copy of its prices.',
+      })
+    );
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+    const form = formOf(fixture);
+    form.toggleScope(CORUNA, ticked(true));
+    form.changeCopies(CORUNA, ['scope-store-9']);
+
+    form.submit();
+    await drain();
+    fixture.detectChanges();
+
+    expect(text(fixture)).toContain('The price scope scope-store-9');
+    expect(page.blockedKey()).toBe('harvest.runs.start.refused');
+  });
+
   /** A failure that really did arrive with nothing in it still says so. */
   it('says the server explained nothing only when it did not', async () => {
     const { fixture } = await render(refusal({ code: '', status: 500 }));
     await chain(fixture, DEZA);
 
-    await fixture.componentInstance.start();
+    formOf(fixture).submit();
     await drain();
     fixture.detectChanges();
 
@@ -775,5 +416,110 @@ describe('the runs screen, and its controls', () => {
     );
     expect(controlBaseProperties()).toContain('padding');
     expect(controlBaseProperties()).toContain('border-radius');
+  });
+});
+
+/** Save as preset (admin plan 0030, section 4). */
+describe('the runs page, saving the form as a preset', () => {
+  it('is disabled until the form could start', async () => {
+    const { fixture } = await render();
+    await chain(fixture, MERCADONA);
+
+    expect(fixture.componentInstance.canSave()).toBe(false);
+
+    formOf(fixture).toggleScope(CORDOBA, ticked(true));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.canSave()).toBe(true);
+  });
+
+  it('sends the form request, without its chain, and the name', async () => {
+    const { fixture, saved } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+    formOf(fixture).toggleScope(CORDOBA, ticked(true));
+    fixture.detectChanges();
+
+    page.openSave();
+    page.onSaveNameChange('Cordoba only');
+    await page.saveAsPreset();
+    fixture.detectChanges();
+
+    expect(saved).toEqual([
+      {
+        supermarketId: MERCADONA,
+        name: 'Cordoba only',
+        input: {
+          mode: 'CATALOG_DISCOVERY',
+          priceScopeIds: [CORDOBA],
+          writes: 'PRICES_AND_AVAILABILITY',
+          details: 'NEW',
+        },
+      },
+    ]);
+    expect(page.saveOpen()).toBe(false);
+    expect(page.savedPreset()?.name).toBe('Cordoba only');
+    expect(text(fixture)).toContain('harvest.presets.saveAs.open');
+  });
+
+  it('shows a duplicate name under the field and keeps the dialog open', async () => {
+    const { fixture } = await render();
+    await chain(fixture, MERCADONA);
+    const page = fixture.componentInstance;
+    formOf(fixture).toggleScope(CORDOBA, ticked(true));
+    fixture.detectChanges();
+
+    page.openSave();
+    page.onSaveNameChange('weekly WAREHOUSES');
+    await page.saveAsPreset();
+    fixture.detectChanges();
+
+    expect(page.saveOpen()).toBe(true);
+    expect(page.saveNameTaken()).toBe(true);
+    expect(text(fixture)).toContain('harvest.presets.nameTaken');
+  });
+});
+
+/** The preset a run came from, and the filter by it (section 5). */
+describe('the runs list, and the preset a run came from', () => {
+  it('names the preset a run was started from', async () => {
+    const { fixture } = await render();
+    await drain();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.presetOf('run-catalog-completed')).toEqual(
+      { kind: 'named', name: 'Weekly warehouses' }
+    );
+    expect(text(fixture)).toContain('harvest.runs.row.preset');
+    expect(fixture.componentInstance.presetOf('run-store-aborted')).toBeNull();
+  });
+
+  it('says a preset that no longer exists is deleted', async () => {
+    // The run still names the seeded preset, which the chain no longer holds.
+    const { fixture } = await render(undefined, {}, { presetsGone: true });
+    await drain();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.presetOf('run-catalog-completed')).toEqual(
+      { kind: 'deleted' }
+    );
+    expect(text(fixture)).toContain('harvest.runs.row.deletedPreset');
+  });
+
+  it('filters by preset', async () => {
+    const { fixture, listed } = await render();
+    await drain();
+    fixture.detectChanges();
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+      'select[name="preset"]'
+    );
+
+    select.value = MERCADONA_WEEKLY_PRESET;
+    select.dispatchEvent(new Event('change'));
+    await drain();
+
+    expect(listed.at(-1)).toEqual({
+      limit: 20,
+      presetId: MERCADONA_WEEKLY_PRESET,
+    });
   });
 });

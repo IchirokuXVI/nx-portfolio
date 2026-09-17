@@ -16,6 +16,8 @@ import {
   type BasketParticipant,
   type BasketPriceScope,
   type BasketProduct,
+  type BasketRenameRequest,
+  type BasketRenameResult,
   type BasketSession,
   type BasketSettleRequest,
   type BasketSettleResult,
@@ -1326,6 +1328,79 @@ export class BasketMemory implements BasketServiceI {
   }
 
   /**
+   * Rename a line (velista `0084`, backend `0113`).
+   *
+   * The server's three refusals of who may, and its basket merge. The zone half is
+   * not modelled: this fake holds no household's lines, so it can never report a
+   * list where the name is taken, and `details.lists` is always empty here.
+   */
+  async renameLine(
+    _generatedListId: string,
+    lineId: string,
+    body: BasketRenameRequest
+  ): Promise<BasketRenameResult> {
+    const line = this._require(lineId);
+    const hasOrigins = (line.origins ?? []).length > 0;
+    const allowed =
+      this.me.kind === 'OWNER' ||
+      (this.me.kind === 'REGISTERED' && this.seesZoneData && hasOrigins);
+    if (!allowed) {
+      throw new GatewayError({
+        code: 'forbidden',
+        status: 403,
+        correlationId: 'memory',
+        detail: 'You cannot rename this line',
+      });
+    }
+    this._requireLive();
+
+    const content = body.content.trim();
+    if (content === '' || content === line.content) {
+      return { line: this._project(line), absorbedLineId: null };
+    }
+
+    const taken = this._lines.find(
+      (row) =>
+        row.id !== line.id &&
+        normalizeContent(row.content) === normalizeContent(content)
+    );
+    if (!taken) {
+      line.content = content;
+      return { line: this._project(line), absorbedLineId: null };
+    }
+
+    if (body.confirmMerge !== true) {
+      throw new GatewayError({
+        code: 'line_merge_required',
+        status: 409,
+        correlationId: 'memory',
+        detail: 'That name is already taken',
+        details: {
+          lists: [],
+          basket: {
+            otherLineId: taken.id,
+            otherContent: taken.content,
+            otherQuantity: taken.quantity,
+          },
+        },
+      });
+    }
+
+    // The earliest line survives and keeps its own spelling.
+    const [survivor, absorbed] =
+      taken.position < line.position ? [taken, line] : [line, taken];
+    survivor.quantity += absorbed.quantity;
+    survivor.settled += absorbed.settled;
+    survivor.pickId ??= absorbed.pickId;
+    survivor.origins = [
+      ...(survivor.origins ?? []),
+      ...(absorbed.origins ?? []),
+    ];
+    this._lines = this._lines.filter((row) => row.id !== absorbed.id);
+    return { line: this._project(survivor), absorbedLineId: absorbed.id };
+  }
+
+  /**
    * Zeroes out, and the two refusals the pane must never be able to send.
    *
    * The line's own product is refused rather than ignored, because it is the
@@ -1658,6 +1733,54 @@ export class BasketMemory implements BasketServiceI {
   ): Promise<void> {
     this._participants = this._participants.filter(
       (person) => person.id !== participantId
+    );
+  }
+
+  /**
+   * Add a contact, as the owner. Somebody already on the basket is answered as they
+   * are, which is what the server does for a live invited member.
+   */
+  async addParticipant(
+    _generatedListId: string,
+    userId: string
+  ): Promise<BasketParticipant> {
+    const held = this._participants.find((person) => person.userId === userId);
+    if (held !== undefined) {
+      const invited = { ...held, shareLinkId: null };
+      this._participants = this._participants.map((person) =>
+        person.id === held.id ? invited : person
+      );
+      return invited;
+    }
+
+    const added: BasketParticipant = {
+      id: `p-${userId}`,
+      kind: 'REGISTERED',
+      displayName: null,
+      username: userId,
+      guestNumber: null,
+      userId,
+      joinedAt: new Date(),
+      lastSeenAt: null,
+      shareLinkId: null,
+    };
+    this._participants = [...this._participants, added];
+    return added;
+  }
+
+  /** Leave, as the reader. A guest and the owner are refused, as the server refuses them. */
+  async leaveBasket(): Promise<void> {
+    if (this.me.kind !== 'REGISTERED') {
+      throw new GatewayError({
+        code: this.me.kind === 'GUEST' ? 'forbidden' : 'validation_failed',
+        status: this.me.kind === 'GUEST' ? 403 : 422,
+        correlationId: 'memory',
+        detail: 'only a registered participant may leave',
+      });
+    }
+    const me = this.me.id;
+    this._participants = this._participants.filter(
+      (person) => person.id !== me
     );
   }
 

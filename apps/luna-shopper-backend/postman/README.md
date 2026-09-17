@@ -3,7 +3,7 @@
 A smoke and contract suite for the backend running locally. It is meant to answer one
 question quickly: **is the stack actually working?**
 
-- `luna-shopper.postman_collection.json` — 71 requests across 11 folders
+- `luna-shopper.postman_collection.json`: 78 requests across 12 folders
 - `slot-0.postman_environment.json` — points at slot 0 (`gateway :3000`, `Mailpit :8025`)
 
 ## Running it
@@ -20,7 +20,7 @@ npx newman run apps/luna-shopper-backend/postman/luna-shopper.postman_collection
 
 Run the folders **in order**. The suite builds one identity and one zone per run and
 threads them through lists, lines and the catalog, so folder 05 depends on what folder
-04 captured. Folder 09 deletes everything it made, which is what lets you run it
+04 captured. Folder 10 deletes everything it made, which is what lets you run it
 repeatedly against the same database.
 
 For a different slot, change `baseUrl` and `mailpitUrl` in the environment. With no
@@ -40,7 +40,8 @@ environment selected at all the collection falls back to slot 0.
 | 06b · Catalog (admin only) | Operator login, then write CRUD and the price join under `/v1/admin/catalog`. Skipped unless `catalogAdmin` is set |
 | 07 · Account | Global username change, and that `GLOBAL_ONLY` really is scoped |
 | 08 · Contract & errors | 401/404/400 paths return RFC7807 problem documents, not 500s |
-| 09 · Cleanup | Deletes everything the run created |
+| 09 · Assistant | The typed and spoken assistant routes. With no `GEMINI_API_KEY` they answer `501`, and the tests accept that as a pass |
+| 10 · Cleanup | Deletes everything the run created |
 
 Two assertions run against **every** request in the collection:
 
@@ -91,7 +92,7 @@ gained a second guard.
 
 - **`GET /v1/catalog/items/not-a-uuid` returns 500.** A well-formed but unknown id correctly
   returns 404, so the id is reaching the service unvalidated and blowing up there. The test
-  `a malformed id is a client error, not a 500` in folder 06 fails on purpose until this is
+  `a malformed id does not 500` in folder 06 fails on purpose until this is
   fixed; it is a real defect, not a suite bug.
 - **Auth dying is invisible from the outside.** The gateway stays up and answers, so the app
   looks alive while every `/v1/auth/*` call returns a generic 500. Folder 00 is what turns

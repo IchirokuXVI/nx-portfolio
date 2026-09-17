@@ -8,6 +8,8 @@ import type {
   AcceptSourceEntryInput,
   CreateItemFromSourceEntryInput,
   EntryQuery,
+  HarvestRunPresetInput,
+  HarvestRunPresetPatch,
   HarvestServiceI,
   ImportHarvestDocumentInput,
   PageQuery,
@@ -75,6 +77,52 @@ export class HarvestApi implements HarvestServiceI {
    */
   revertRun(id: string): Promise<Wire.HarvestHarvestRunView> {
     return this._send('post', `${ROOT}/runs/${segment(id)}/revert`, {
+      body: {},
+    });
+  }
+
+  /** Run requests saved under a name (backend plan 0120, section 5). */
+  listPresets(
+    supermarketId?: string,
+    cursor?: string
+  ): Promise<Wire.HarvestHarvestRunPresetPage> {
+    return this._send('get', `${ROOT}/presets`, {
+      params: toParams({ supermarketId, cursor }),
+    });
+  }
+
+  readPreset(id: string): Promise<Wire.HarvestHarvestRunPresetView> {
+    return this._send('get', `${ROOT}/presets/${segment(id)}`);
+  }
+
+  createPreset(
+    supermarketId: string,
+    name: string,
+    input: HarvestRunPresetInput
+  ): Promise<Wire.HarvestHarvestRunPresetView> {
+    const body: Wire.CreateHarvestRunPresetDto = { supermarketId, name, input };
+    return this._send('post', `${ROOT}/presets`, { body });
+  }
+
+  updatePreset(
+    id: string,
+    patch: HarvestRunPresetPatch
+  ): Promise<Wire.HarvestHarvestRunPresetView> {
+    return this._send('put', `${ROOT}/presets/${segment(id)}`, {
+      body: patch,
+    });
+  }
+
+  async deletePreset(id: string): Promise<void> {
+    await this._send<unknown>('delete', `${ROOT}/presets/${segment(id)}`);
+  }
+
+  /**
+   * A run from a preset. Its own route with nothing in the body, so there is
+   * no request in which a preset and a typed field could disagree.
+   */
+  startPreset(id: string): Promise<Wire.HarvestHarvestRunView> {
+    return this._send('post', `${ROOT}/presets/${segment(id)}/runs`, {
       body: {},
     });
   }

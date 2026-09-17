@@ -5,11 +5,19 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 import type { EntityManager } from 'typeorm';
-import { ItemPrice, ItemPriceDetailsRow, PriceScope } from '../entities';
+import {
+  ItemPrice,
+  ItemPriceDetailsRow,
+  PricePolicy,
+  PriceScope,
+} from '../entities';
 import {
   ADMIN_PROTECTION_DAYS,
   AUTOMATED_KINDS,
+  narrowestEligiblePerKind,
   toNumber,
+  type PolicyRow,
+  type PriceRow,
 } from './effective-price';
 import {
   currentPriceRows,
@@ -21,6 +29,12 @@ export interface ItemPriceWrite {
   sourceKind: PriceSourceKind;
   /** The run writing, or null for a person and for the reference seed. */
   sourceRunId: string | null;
+  /**
+   * The scope every entry was read at, when the run is copying it to
+   * {@link scope} (plan 0118, section 5). Absent and null both mean the prices
+   * were read at this scope.
+   */
+  copiedFromScopeId?: string | null;
   entries: readonly ItemPriceBatchEntry[];
   now: Date;
 }
@@ -77,6 +91,12 @@ export async function writeItemPrices(
   const inherited = await lessSpecificScopesOf(manager, write.scope);
   const scopeIds = [write.scope.id, ...inherited.map((row) => row.id)];
   const current = await currentPriceRows(manager, itemIds, scopeIds);
+  const scopePriorities = new Map<string, number>([
+    [write.scope.id, write.scope.priority],
+    ...inherited.map((row): [string, number] => [row.id, row.priority]),
+  ]);
+  /** Read once, and only by an ADMIN write, which is the one that snapshots. */
+  let policies: PolicyRow[] | undefined;
 
   /** The current row of this kind at this scope, per item. */
   const currentByItem = new Map<string, ItemPrice>();
@@ -94,6 +114,7 @@ export async function writeItemPrices(
     }
   }
 
+  const copiedFromScopeId = write.copiedFromScopeId ?? null;
   const toInsert: ItemPrice[] = [];
   const toConfirm: ItemPrice[] = [];
   /** The detail row each insert carries, by the price row it belongs to. */
@@ -104,7 +125,15 @@ export async function writeItemPrices(
   for (const entry of write.entries) {
     const values = normalize(entry, write.now);
     const held = currentByItem.get(entry.itemId);
-    if (held && sameValues(held, values)) {
+    // A copy is its own statement (plan 0118, section 5.2): the same number read
+    // at another scope does not confirm a row read here, or the other way
+    // round, because the provenance would then stay wrong for as long as the
+    // price does not change.
+    if (
+      held &&
+      sameValues(held, values) &&
+      (held.copiedFromScopeId ?? null) === copiedFromScopeId
+    ) {
       if (values.observedAt.getTime() > held.lastObservedAt.getTime()) {
         held.lastObservedAt = values.observedAt;
         held.lastObservedRunId = write.sourceRunId;
@@ -126,14 +155,18 @@ export async function writeItemPrices(
       validUntil: values.validUntil,
       sourceRunId: write.sourceRunId,
       lastObservedRunId: write.sourceRunId,
+      copiedFromScopeId,
       overrides: null,
       protectedUntil: null,
     });
     if (write.sourceKind === PriceSourceKind.ADMIN) {
-      row.overrides = snapshotOf(
-        candidatesByItem.get(entry.itemId) ?? [],
-        write.scope.id
-      );
+      policies ??= await manager.find(PricePolicy);
+      row.overrides = snapshotOf(candidatesByItem.get(entry.itemId) ?? [], {
+        priceScopeId: write.scope.id,
+        scopePriorities,
+        policies,
+        now: write.now,
+      });
       row.protectedUntil = new Date(
         values.observedAt.getTime() + ADMIN_PROTECTION_DAYS * DAY_MS
       );
@@ -246,29 +279,33 @@ function sameInstant(a: Date | null, b: Date | null): boolean {
 }
 
 /**
- * Section 4.2: one entry per automated kind with a current row for this key.
- * The narrower scope wins where both have one, exactly as the read decides it.
+ * Section 4.2: one entry per automated kind, taken from the narrowest
+ * **eligible** row of that kind across the stack (plan 0117, section 4).
+ *
+ * The same set the resolution disputes an `ADMIN` row with, from the same
+ * function, so what a correction records is exactly what a later read compares
+ * it to. The stack is ranked by scope priority, never by the order the rows
+ * came back in.
  */
-function snapshotOf(
-  candidates: readonly ItemPrice[],
-  priceScopeId: string
+export function snapshotOf(
+  candidates: readonly PriceRow[],
+  stack: {
+    priceScopeId: string;
+    scopePriorities: ReadonlyMap<string, number>;
+    policies: readonly PolicyRow[];
+    now: Date;
+  }
 ): ItemPriceOverrides {
   const overrides: ItemPriceOverrides = {};
-  const chosen = new Map<PriceSourceKind, ItemPrice>();
-  for (const row of candidates) {
-    if (!AUTOMATED_KINDS.includes(row.sourceKind)) {
-      continue;
-    }
-    const held = chosen.get(row.sourceKind);
-    if (
-      !held ||
-      (held.priceScopeId !== priceScopeId && row.priceScopeId === priceScopeId)
-    ) {
-      chosen.set(row.sourceKind, row);
-    }
-  }
-  for (const [kind, row] of chosen) {
-    overrides[kind] = {
+  const chosen = narrowestEligiblePerKind(
+    candidates.filter((row) => AUTOMATED_KINDS.includes(row.sourceKind)),
+    stack.priceScopeId,
+    stack.policies,
+    stack.now,
+    stack.scopePriorities
+  );
+  for (const row of chosen) {
+    overrides[row.sourceKind] = {
       price: toNumber(row.price),
       unitPrice: toNumber(row.unitPrice),
     };

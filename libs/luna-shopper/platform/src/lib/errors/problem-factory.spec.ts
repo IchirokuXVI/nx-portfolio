@@ -51,4 +51,31 @@ describe('buildProblemDetails', () => {
     // Absent rather than null: a client checks the key, not its value.
     expect('retryAfterSeconds' in notFound).toBe(false);
   });
+
+  it('carries details when they are given, and omits the key otherwise', () => {
+    // Plan 0112, section 2: a rename that collides names the other line, and the
+    // client needs it to ask the question.
+    const required = buildProblemDetails({
+      code: ERROR_CODES.LINE_MERGE_REQUIRED,
+      correlationId: 'c',
+      messageArgs: { content: 'Milk' },
+      details: { otherLineId: 'l2', otherContent: 'Milk', otherQuantity: 2 },
+    });
+
+    expect(required.status).toBe(409);
+    expect(required.message).toBe(
+      'This list already has a line called "Milk". Confirm to merge the two lines into one.'
+    );
+    expect(required.details).toEqual({
+      otherLineId: 'l2',
+      otherContent: 'Milk',
+      otherQuantity: 2,
+    });
+
+    const notFound = buildProblemDetails({
+      code: ERROR_CODES.NOT_FOUND,
+      correlationId: 'c',
+    });
+    expect('details' in notFound).toBe(false);
+  });
 });

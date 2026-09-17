@@ -235,6 +235,44 @@ describe('gatewayInterceptor', () => {
       expect(error.code).toBe('not_configured');
     });
 
+    it('carries a merge refusal and its details, and drops details that are not a record', async () => {
+      // Backend plan 0112, section 2: the refusal names the other line, and velista
+      // plan 0083 asks the question from it.
+      const failure = expectFailure(http.get(`${GATEWAY}/v1/lines/l1`));
+      httpMock.expectOne(`${GATEWAY}/v1/lines/l1`).flush(
+        {
+          code: 'line_merge_required',
+          correlationId: 'server-id',
+          details: {
+            otherLineId: 'l2',
+            otherContent: 'Milk',
+            otherQuantity: 2,
+          },
+        },
+        { status: 409, statusText: 'Conflict' }
+      );
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).toBe('line_merge_required');
+      expect(error.details).toEqual({
+        otherLineId: 'l2',
+        otherContent: 'Milk',
+        otherQuantity: 2,
+      });
+
+      const malformed = expectFailure(http.get(`${GATEWAY}/v1/lines/l3`));
+      httpMock
+        .expectOne(`${GATEWAY}/v1/lines/l3`)
+        .flush(
+          { code: 'line_merge_too_many_products', details: [100] },
+          { status: 409, statusText: 'Conflict' }
+        );
+
+      const other = (await malformed) as GatewayError;
+      expect(other.code).toBe('line_merge_too_many_products');
+      expect(other.details).toBeUndefined();
+    });
+
     it('derives not_configured from a bare 501 as well', async () => {
       // A proxy's own 501, or a body this build could not read.
       const failure = expectFailure(http.get(`${GATEWAY}/v1/assistant`));
@@ -364,6 +402,32 @@ describe('gatewayInterceptor', () => {
       // stale credential, it is a rejected identity. Keeping it would send it again.
       expect(tokens.tokens()).toBeNull();
       expect(storage.has(StorageKeys.session)).toBe(false);
+    });
+
+    it('keeps the session when a basket says the account is not a participant', async () => {
+      // A member removed from a shared list reloads the basket. Their token is good;
+      // the basket is what refuses them. Refreshing would be refused the same way,
+      // and the second refusal used to sign them out of the whole app.
+      const held = pair(freshToken());
+      tokens.set(held);
+
+      const failure = expectFailure(
+        http.get(`${GATEWAY}/v1/generated-lists/g1/basket`)
+      );
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/generated-lists/g1/basket`)
+        .flush(
+          { code: 'not_a_participant' },
+          { status: 401, statusText: 'Unauthorized' }
+        );
+
+      const error = (await failure) as GatewayError;
+      expect(error.status).toBe(401);
+      expect(error.code).toBe('not_a_participant');
+      httpMock.expectNone(`${GATEWAY}/v1/auth/refresh`);
+      expect(tokens.tokens()).toEqual(held);
+      expect(storage.has(StorageKeys.session)).toBe(true);
     });
 
     it('deletes the stored credentials when a token that still looks valid is refused', async () => {

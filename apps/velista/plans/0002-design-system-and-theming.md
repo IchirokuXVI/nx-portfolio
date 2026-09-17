@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`6be9da289`](https://github.com/IchirokuXVI/nx-portfolio/commit/6be9da28936f0c82b95e0aa1db409a19b6074f12) on `dev`, with no pull request of its own.
+
 # 0002 Design system and theming
 
 > Prerequisite reading: `0001`, in particular rule **N1** (the product name is provisional

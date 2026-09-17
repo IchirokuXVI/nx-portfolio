@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`9a602472d`](https://github.com/IchirokuXVI/nx-portfolio/commit/9a602472d24a8564080802f01a1a14d3a57d28c5) on `dev`, with no pull request of its own.
+
 # 0020 Optional auth must reject a stale token
 
 `OptionalJwtAuthGuard` treats an expired access token exactly as it treats no token at all. On

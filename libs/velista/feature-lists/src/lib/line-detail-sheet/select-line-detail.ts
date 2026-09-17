@@ -2,6 +2,7 @@ import {
   ESTIMATE_MIN_PURCHASES,
   ESTIMATE_ROUGH_TO,
   inLocale,
+  PURCHASE_MERGE_MS,
   toSettlementRow,
   type CatalogItem,
   type ConsumptionEstimateVm,
@@ -203,22 +204,26 @@ function preselectedFrom(
  *
  * The **median** interval and never the mean, because one stock up trip distorts a mean
  * permanently and moves a median by one position.
+ *
+ * **Purchases are merged first** (velista `0089`, section 4). One trip writes several
+ * settlements for one line seconds apart, one per origin and one per partial settle, and
+ * read as they are they put gaps of zero into the median. So they are folded as backend
+ * `0123` section 3 step 1 folds them, and the floor, the count and the rough range all
+ * count merged purchases. Without the fold the sheet said "every 3 days" of a line the
+ * list calls "every 7 days".
  */
 export function estimateFrom(
   purchases: readonly LineSettlement[]
 ): ConsumptionEstimateVm | null {
-  if (purchases.length < ESTIMATE_MIN_PURCHASES) {
+  const times = mergedPurchaseTimes(purchases);
+  if (times.length < ESTIMATE_MIN_PURCHASES) {
     return null;
   }
 
-  // Newest first on the way in, so the gaps come out positive without a sort.
+  // Oldest first after the fold, so the gaps come out positive without a second sort.
   const gaps: number[] = [];
-  for (let i = 0; i < purchases.length - 1; i += 1) {
-    const days =
-      (purchases[i].settledAt.getTime() -
-        purchases[i + 1].settledAt.getTime()) /
-      86_400_000;
-    gaps.push(days);
+  for (let i = 1; i < times.length; i += 1) {
+    gaps.push((times[i] - times[i - 1]) / 86_400_000);
   }
 
   gaps.sort((a, b) => a - b);
@@ -230,10 +235,34 @@ export function estimateFrom(
 
   return {
     medianDays: Math.max(1, Math.round(median)),
-    fromPurchases: purchases.length,
+    fromPurchases: times.length,
     // Three to six say "every few weeks"; seven and up give the days (velista plan
     // 0047, section 5). Decided here rather than in each template, so the sheet and the
     // page cannot hedge differently about the same history.
-    rough: purchases.length <= ESTIMATE_ROUGH_TO,
+    rough: times.length <= ESTIMATE_ROUGH_TO,
   };
+}
+
+/**
+ * One time per merged purchase, oldest first.
+ *
+ * Sorted, then every purchase closer than {@link PURCHASE_MERGE_MS} to **the one before
+ * it** joins that one, which keeps the first time of the run. The one before it and not
+ * the first of the run, so a slow partial settle that writes a row every few hours stays
+ * one purchase, exactly as `mergePurchases` in core decides it.
+ */
+function mergedPurchaseTimes(purchases: readonly LineSettlement[]): number[] {
+  const sorted = purchases
+    .map((purchase) => purchase.settledAt.getTime())
+    .sort((a, b) => a - b);
+
+  const merged: number[] = [];
+  let previous: number | null = null;
+  for (const at of sorted) {
+    if (previous === null || at - previous >= PURCHASE_MERGE_MS) {
+      merged.push(at);
+    }
+    previous = at;
+  }
+  return merged;
 }

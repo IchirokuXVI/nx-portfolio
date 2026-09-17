@@ -1,3 +1,5 @@
+> **PR:** [#162](https://github.com/IchirokuXVI/nx-portfolio/pull/162)
+
 # 0058: the device says where you shop
 
 > Server halves: `apps/luna-shopper-backend/plans/0060` (the centroid table and the lookup this

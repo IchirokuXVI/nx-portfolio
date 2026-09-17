@@ -208,7 +208,10 @@ function build(status: GeneratedListStatus): Harness {
     claims.service,
     sharing,
     waiting,
-    publisher
+    publisher,
+    // The rename (plan 0113). No test here renames, because a finished basket
+    // is refused before the line service reaches it.
+    {} as never
   );
   const settle = new GeneratedListSettleService(
     dataSource,
@@ -510,6 +513,7 @@ describe('what a finished basket still does (section 3.4)', () => {
       {} as unknown as ProfileService,
       fakeLineClaims().service,
       {} as unknown as CoreEventsPublisher,
+      {} as never,
       {} as never
     );
 
@@ -538,9 +542,14 @@ describe('finishing and unfinishing (section 2)', () => {
       view: GeneratedListView;
     }[] = [];
     const claims = fakeLineClaims({}, () => CLAIMING);
+    // The lists told to read their trips again (plan 0122, section 6).
+    const tripsChanged: (string | undefined)[] = [];
     const service = new GeneratedListService(
       {} as DataSource,
       {
+        // The one raw read an update makes: which lists the basket draws from.
+        // Two origins in one list, so the answer has to come back once.
+        query: async () => [{ listId: LIST }],
         // The owner's `where`, honoured: anybody else gets not found.
         findOne: async ({
           where,
@@ -569,10 +578,16 @@ describe('finishing and unfinishing (section 2)', () => {
         ) => {
           events.push({ event, userIds, view });
         },
+        emitTo: (event: RealtimeEvent, audience: { listId?: string }) => {
+          if (event === RealtimeEvent.ListTripsChanged) {
+            tripsChanged.push(audience.listId);
+          }
+        },
       } as unknown as CoreEventsPublisher,
+      {} as never,
       {} as never
     );
-    return { service, saved, events, claims };
+    return { service, saved, events, claims, tripsChanged };
   }
 
   it('unfinishes through the same PATCH, and the claims come back with it', async () => {
@@ -601,6 +616,9 @@ describe('finishing and unfinishing (section 2)', () => {
         lineIds: [ZONE_LINE, 'zl-2'],
       },
     ]);
+    // And the list it draws from reads its trips again (plan 0122, section 6):
+    // a trip's head says whether it is live, and that has just changed.
+    expect(w.tripsChanged).toEqual([LIST]);
   });
 
   it('answers not found to a participant who is not the owner, and moves nothing', async () => {
@@ -617,5 +635,6 @@ describe('finishing and unfinishing (section 2)', () => {
     expect(w.saved).toEqual([]);
     expect(w.events).toEqual([]);
     expect(w.claims.calls).toEqual([]);
+    expect(w.tripsChanged).toEqual([]);
   });
 });

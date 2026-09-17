@@ -42,11 +42,7 @@ export class ListHeader {
   /** Whether to offer the overflow at all. False when the caller may do nothing to it. */
   readonly hasMenu = input(false);
 
-  /** Whether reordering is available right now (rule L4). */
-  readonly canReorder = input(false);
-
   readonly openSettings = output<void>();
-  readonly startReorder = output<void>();
 
   /**
    * The bar's fill, as a percentage.

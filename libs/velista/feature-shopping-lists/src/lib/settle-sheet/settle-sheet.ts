@@ -1,10 +1,16 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DOCUMENT,
   effect,
   inject,
+  Injector,
   signal,
+  untracked,
+  viewChild,
+  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -14,14 +20,17 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BasketStore,
+  GatewayError,
   LINE_SERVICE,
   SessionStore,
+  toBasketMergeRequired,
   type LineServiceI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   formatDay,
   inLocale,
+  LINE_CONTENT_MAX_LENGTH,
   outstanding,
   toSettlementRow,
   type BasketLine,
@@ -34,16 +43,23 @@ import {
 import {
   formatMoney,
   generatedListIdOf,
+  lineIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
-import { QuantityReel, SheetShell } from '@portfolio/velista/ui';
 import {
+  CheckIcon,
+  QuantityReel,
+  SheetShell,
+  SpinnerIcon,
+} from '@portfolio/velista/ui';
+import {
+  basketErrorArgs,
   basketErrorKey,
   correlationIdOf,
   type BasketOperation,
 } from '../basket-error-copy';
 import { participantName, touchedCaption } from '../basket-labels';
-import { basketPath } from '../basket-paths';
+import { basketPath, settleSheetPath } from '../basket-paths';
 import { LineListsSummary } from '../line-lists-summary/line-lists-summary';
 
 /**
@@ -84,7 +100,27 @@ function placeOf(
  * make the precise ones two taps and a navigation away from the number they were
  * about to type.
  */
-type Pane = 'settle' | 'quantity' | 'product' | 'history';
+type Pane = 'settle' | 'quantity' | 'product' | 'history' | 'merge';
+
+/**
+ * One row of the merge question (velista `0084`, section 4): a place the name is
+ * taken, and what the other line there holds. The words around the number are the
+ * template's, so a row carries the key and the number rather than a sentence.
+ */
+interface MergeRow {
+  readonly key: string;
+  /** The list, or null for the basket row, whose label is a translation key. */
+  readonly listName: string | null;
+  readonly zoneName: string;
+  readonly amountKey: 'basket.rename.mergeAsks' | 'basket.rename.mergeToGet';
+  readonly quantity: number;
+}
+
+/** The merge question: the name that was typed, and every place it is taken. */
+interface MergeQuestion {
+  readonly name: string;
+  readonly rows: readonly MergeRow[];
+}
 
 /** How the settlement history's read has got on. Four states, not two booleans. */
 type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
@@ -157,7 +193,14 @@ type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
  */
 @Component({
   selector: 'lib-settle-sheet',
-  imports: [LineListsSummary, QuantityReel, RokuTranslatorPipe, SheetShell],
+  imports: [
+    CheckIcon,
+    LineListsSummary,
+    QuantityReel,
+    RokuTranslatorPipe,
+    SheetShell,
+    SpinnerIcon,
+  ],
   templateUrl: './settle-sheet.html',
   styleUrl: './settle-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -187,9 +230,21 @@ export class SettleSheet {
   /** The basket underneath, which is where closing this sheet goes. */
   private readonly _generatedListId = generatedListIdOf(this._route);
 
-  private readonly _lineId = this._route.snapshot.paramMap.get('lineId') ?? '';
+  /**
+   * The line, as a signal and not a snapshot (velista `0084`).
+   *
+   * A merge can leave this sheet's line behind, and the sheet then follows the
+   * survivor with `leaveTo` onto its own route with another `lineId`. The router
+   * reuses this component for that URL, so a snapshot read once would keep
+   * describing the line that is gone.
+   */
+  private readonly _lineIdParam = lineIdOf(this._route);
+  private get _lineId(): string {
+    return this._lineIdParam();
+  }
+  private readonly _injector = inject(Injector);
   private readonly _pane = signal<Pane>('settle');
-  private readonly _busy = signal(false);
+  private readonly _settling = signal(false);
   /**
    * Which act failed, or null if none has (plan 0052, section 7.2).
    *
@@ -211,7 +266,11 @@ export class SettleSheet {
   );
 
   protected readonly pane = this._pane.asReadonly();
-  protected readonly busy = this._busy.asReadonly();
+  /**
+   * Whether a write from this sheet is out, a settle or a rename. While one is, the
+   * settle controls are disabled and the sheet cannot be dismissed.
+   */
+  protected readonly busy = computed(() => this._settling() || this.saving());
   protected readonly result = this._result.asReadonly();
 
   /**
@@ -265,8 +324,13 @@ export class SettleSheet {
       // Only once the basket has actually been read. Before that every line is
       // absent, and dismissing then would close the sheet somebody deep linked
       // to before it ever drew.
+      // Nor while a rename is out or following its survivor (velista `0084`). A
+      // merge that absorbs this line takes it out of the store before the answer
+      // reaches this sheet, and the sheet then leaves for the survivor itself.
       if (
         this._left ||
+        this.saving() ||
+        this._following() ||
         this._store.state() !== 'ready' ||
         this.line() !== null
       ) {
@@ -613,6 +677,282 @@ export class SettleSheet {
   /** The sheet's accessible title, which is the line's own words. */
   protected readonly title = computed(() => this.line()?.content ?? '');
 
+  // --- Renaming the line (velista `0084`) ------------------------------------
+
+  /**
+   * Whether to draw the name field in place of the title (section 2).
+   *
+   * The owner, on any line. A registered participant who sees zone data, on a line
+   * with origins: backend `0113` lets them rename exactly the lines whose every list
+   * they can write, and `seesZoneData` is that answer for every list of the run. A
+   * guest never. Nobody once the trip is finished, like every other control here.
+   *
+   * This only decides whether the field is drawn. The server asks again on the save,
+   * and its refusal is what the sheet then shows.
+   */
+  protected readonly canRename = computed(() => {
+    const line = this.line();
+    const me = this._store.me();
+    if (line === null || me === null || this.basketFinished()) {
+      return false;
+    }
+    if (me.kind === 'OWNER') {
+      return true;
+    }
+    return (
+      me.kind === 'REGISTERED' &&
+      this._store.seesZoneData() &&
+      (line.origins ?? []).length > 0
+    );
+  });
+
+  /** The longest name the server takes, on the field. */
+  protected readonly maxLength = LINE_CONTENT_MAX_LENGTH;
+
+  /** What the name field holds. */
+  protected readonly name = signal('');
+
+  /** Whether a rename is out. The field is read only and the settle controls wait. */
+  protected readonly saving = signal(false);
+
+  /** Whether the last save landed and nothing has been typed since (section 3). */
+  protected readonly saved = signal(false);
+
+  /** The refusal under Save, or null. A merge question is a pane instead. */
+  protected readonly renameErrorKey = signal<string | null>(null);
+  protected readonly renameErrorArgs = signal<
+    Readonly<Record<string, unknown>>
+  >({});
+  /** The support reference, beside the generic sentence only. */
+  protected readonly renameReference = signal<string | null>(null);
+
+  /** The merge question while it is being asked (section 4). */
+  protected readonly merge = signal<MergeQuestion | null>(null);
+
+  /**
+   * Whether the sheet is following a merge's survivor to its own URL. The sheet's
+   * own line is already gone from the store by then, and it must not close.
+   */
+  private readonly _following = signal(false);
+
+  /**
+   * The name the field was last filled with from the line, so a change from
+   * somebody else redraws a field the reader has not touched and leaves one they
+   * have.
+   */
+  private _shown: string | null = null;
+
+  private readonly _document = inject(DOCUMENT);
+
+  private readonly _saveButton =
+    viewChild<ElementRef<HTMLButtonElement>>('saveButton');
+  private readonly _mergeTitle =
+    viewChild<ElementRef<HTMLElement>>('mergeTitle');
+  private readonly _titleHeading =
+    viewChild<ElementRef<HTMLElement>>('titleHeading');
+
+  /** Whether the trimmed name differs from the line and is not blank (section 3). */
+  protected readonly canSave = computed(() => {
+    const line = this.line();
+    const typed = this.name().trim();
+    return (
+      this.canRename() &&
+      line !== null &&
+      typed !== '' &&
+      typed !== line.content &&
+      !this.busy()
+    );
+  });
+
+  /**
+   * Fills the field from the line, and follows the line while the reader has not
+   * typed. Not while a save is out: the store applies the answer before the sheet
+   * reads it, and the sheet fills the field from that answer itself.
+   */
+  private readonly _seedName = effect(() => {
+    const content = this.line()?.content;
+    if (content === undefined || this.saving()) {
+      return;
+    }
+    untracked(() => {
+      const typed = this.name();
+      if (this._shown === null || typed === this._shown || typed === content) {
+        this.name.set(content);
+        this._shown = content;
+      }
+    });
+  });
+
+  protected onNameInput(event: Event): void {
+    this.name.set((event.target as HTMLInputElement).value);
+    this.saved.set(false);
+  }
+
+  /** Save, from the button or Enter in the field. */
+  protected async save(): Promise<void> {
+    if (!this.canSave()) {
+      return;
+    }
+    await this._rename(false);
+  }
+
+  /** Merge, from the question: the same rename with `confirmMerge`. */
+  protected async confirmMerge(): Promise<void> {
+    if (this.busy() || this.merge() === null) {
+      return;
+    }
+    await this._rename(true);
+  }
+
+  /** Back to the settle pane, with the typed name still in the field. */
+  protected keepEditing(): void {
+    this.merge.set(null);
+    this._pane.set('settle');
+    afterNextRender(() => this._saveButton()?.nativeElement.focus(), {
+      injector: this._injector,
+    });
+  }
+
+  private async _rename(confirmMerge: boolean): Promise<void> {
+    const lineId = this._lineId;
+    const content = (this.merge()?.name ?? this.name()).trim();
+
+    this.saving.set(true);
+    this._failedOp.set(null);
+    this.renameErrorKey.set(null);
+    this.renameErrorArgs.set({});
+    this.renameReference.set(null);
+
+    const result = await this._store.renameLine(
+      lineId,
+      confirmMerge ? { content, confirmMerge: true } : { content }
+    );
+
+    if (result !== null && result.line.id !== lineId) {
+      // Before `saving` drops, so the dismissal effect never sees this line gone
+      // and unheld.
+      this._following.set(true);
+    }
+    this.saving.set(false);
+
+    if (result === null) {
+      this._refused(this._store.error(), content);
+      return;
+    }
+
+    this.merge.set(null);
+    this._pane.set('settle');
+    this.saved.set(true);
+    // From the answer: a merge keeps the survivor's own spelling.
+    this.name.set(result.line.content);
+    this._shown = result.line.content;
+
+    if (result.line.id !== lineId) {
+      // This line was absorbed. The reader stays on the line that remains.
+      await this._sheet.leaveTo(
+        settleSheetPath(
+          this._locale(),
+          this._basePath,
+          this._generatedListId(),
+          result.line.id
+        )
+      );
+      this._following.set(false);
+    }
+
+    if (confirmMerge) {
+      // The pane holding the focused button is gone. Focus stays in the dialog.
+      afterNextRender(() => this._titleHeading()?.nativeElement.focus(), {
+        injector: this._injector,
+      });
+    } else {
+      this._keepFocusInside();
+    }
+  }
+
+  /**
+   * Put focus back in the dialog when the save took it away.
+   *
+   * Save is disabled while the write is out and again once the name matches the
+   * line, and a disabled button drops focus to the page body, where Escape no longer
+   * reaches the sheet. Found in the browser check: the sheet would not close. The
+   * title and not the field, because focusing a field opens the phone's keyboard.
+   */
+  private _keepFocusInside(): void {
+    afterNextRender(
+      () => {
+        const active = this._document.activeElement;
+        if (active === null || active === this._document.body) {
+          this._titleHeading()?.nativeElement.focus();
+        }
+      },
+      { injector: this._injector }
+    );
+  }
+
+  /** A refused rename: the merge question, or a sentence under Save. */
+  private _refused(error: unknown, name: string): void {
+    const question = this._mergeQuestionOf(error, name);
+    if (question !== null) {
+      this.merge.set(question);
+      this._pane.set('merge');
+      afterNextRender(() => this._mergeTitle()?.nativeElement.focus(), {
+        injector: this._injector,
+      });
+      return;
+    }
+
+    this.merge.set(null);
+    this._pane.set('settle');
+    const key = basketErrorKey(error, 'basket.rename');
+    this.renameErrorKey.set(key);
+    this.renameErrorArgs.set(basketErrorArgs(error));
+    this.renameReference.set(
+      key === 'basket.error.failed' ? correlationIdOf(error) : null
+    );
+    this._keepFocusInside();
+  }
+
+  /**
+   * One row per list the name is taken on, and one for the basket (section 4).
+   *
+   * The basket row says how many of the other line are still to get, read from the
+   * line this basket holds. The refusal states that line's whole quantity, which is
+   * the fallback for a line this reader has not been sent yet.
+   */
+  private _mergeQuestionOf(error: unknown, name: string): MergeQuestion | null {
+    if (
+      !(error instanceof GatewayError) ||
+      error.code !== 'line_merge_required'
+    ) {
+      return null;
+    }
+    const required = toBasketMergeRequired(error.details);
+    if (required === null) {
+      return null;
+    }
+
+    const rows: MergeRow[] = required.lists.map((list) => ({
+      key: `list:${list.listId}`,
+      listName: list.listName,
+      zoneName: list.zoneName,
+      amountKey: 'basket.rename.mergeAsks',
+      quantity: list.otherQuantity,
+    }));
+    if (required.basket !== null) {
+      const { otherLineId, otherQuantity } = required.basket;
+      const held = this._store.lines().find((row) => row.id === otherLineId);
+      rows.push({
+        key: 'basket',
+        listName: null,
+        zoneName: '',
+        amountKey: 'basket.rename.mergeToGet',
+        quantity: held === undefined ? otherQuantity : outstanding(held),
+      });
+    }
+    return { name, rows };
+  }
+
   /**
    * Whether to draw the list summary under the product (velista `0073`, section 3.3).
    *
@@ -639,7 +979,7 @@ export class SettleSheet {
   );
 
   /** The basket line the summary is about, for its required input. */
-  protected readonly lineId = this._lineId;
+  protected readonly lineId = this._lineIdParam;
 
   /**
    * The whole outstanding amount, in one tap. The common case.
@@ -718,13 +1058,13 @@ export class SettleSheet {
       return;
     }
 
-    this._busy.set(true);
+    this._settling.set(true);
     this._failedOp.set(null);
     const result = await this._store.splitLine(this._lineId, {
       from: this._from(),
       shares,
     });
-    this._busy.set(false);
+    this._settling.set(false);
 
     if (result === null) {
       this._failedOp.set('basket.split');
@@ -1033,10 +1373,10 @@ export class SettleSheet {
   private async _send(
     body: Parameters<BasketStore['settle']>[1]
   ): Promise<void> {
-    this._busy.set(true);
+    this._settling.set(true);
     this._failedOp.set(null);
     const result = await this._store.settle(this._lineId, body);
-    this._busy.set(false);
+    this._settling.set(false);
 
     if (result === null) {
       // Named rather than flagged, so the sentence can be the one the failure

@@ -37,6 +37,9 @@ function build(
     items as Repository<Item>,
     {} as Repository<ProductGroup>,
     prices,
+    // Plan 0115. Neither read here writes a brand, so the registry is never
+    // consulted; the constructor still needs it.
+    {} as Repository<Brand>,
     {} as ProductGroupService,
     { requireAdmin: jest.fn() } as unknown as PlatformAdminService,
     // Plan 0075. Both reads here, so no transaction is ever opened.

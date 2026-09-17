@@ -1,7 +1,11 @@
 import { localizedTextValue, missingLocales } from './localized-text';
 import { formatMoney } from './money';
 import { idOf, type ResourceDescriptor } from './resource-descriptor';
-import type { FieldDescriptor, ResourceRow } from './resource-field';
+import type {
+  FieldDescriptor,
+  FieldMessage,
+  ResourceRow,
+} from './resource-field';
 
 /**
  * A row, formatted into the strings a list draws.
@@ -24,6 +28,13 @@ export interface ResourceCell {
    * untranslated string in the app.
    */
   readonly key?: string;
+  /**
+   * What to interpolate into {@link key}, for a word that carries a number.
+   *
+   * A priority nobody named reads "Custom (250)" (admin plan 0028, section 2),
+   * and the number is data while the sentence around it is a translation.
+   */
+  readonly args?: Readonly<Record<string, string | number>>;
   /** Where a `url` field points, so the list can draw a link. */
   readonly href?: string;
   /**
@@ -52,6 +63,18 @@ export interface ResourceCell {
    * A name without a link is still an answer; a link to a 404 is not.
    */
   readonly link?: readonly string[];
+  /**
+   * What a `references` cell points at, in the order the row holds them (admin
+   * plan 0028, section 3).
+   *
+   * The text starts as the ids joined by commas, and the list page replaces
+   * each with its name once the lookup answers, the way it overlays a single
+   * reference. No link: a cell of several names is not one place to go.
+   */
+  readonly references?: {
+    readonly resource: string;
+    readonly ids: readonly string[];
+  };
 }
 
 /** A row, ready to render. */
@@ -97,6 +120,14 @@ export function toCell<T extends ResourceRow>(
   // comes from is obeyed. It is display only and never editable, so nothing the
   // form writes can disagree with what this shows.
   const value = field.read === undefined ? row[field.name] : field.read(row);
+
+  // A value that is a word with arguments, which only `read` can produce: the
+  // property itself is data, and a pure function cannot translate it.
+  if (isKeyedMessage(value)) {
+    return value.args === undefined
+      ? { text: '', key: value.key }
+      : { text: '', key: value.key, args: value.args };
+  }
 
   if (field.kind === 'boolean') {
     // Before the null check: a boolean that is missing is not the same claim as
@@ -160,15 +191,41 @@ export function toCell<T extends ResourceRow>(
       const reference = { resource: field.resource, id };
       if (field.nameFrom !== undefined) {
         const name = row[field.nameFrom];
-        const text = localizedTextValue(name, options.contentLocales);
-        if (text !== '') {
-          const missing = missingLocales(name, options.contentLocales);
-          return missing.length === 0
-            ? { text, reference }
-            : { text, missing, reference };
+        // A plain string as well as a localized text, because a joined label is
+        // not always localized: a brand carries one `canonicalLabel`, since a
+        // brand is spelled the same in both content languages. A string
+        // normalizes to `{}` through the localized reading below, so without
+        // this branch such a cell would fall back to the raw uuid.
+        if (typeof name === 'string') {
+          if (name !== '') {
+            return { text: name, reference };
+          }
+        } else {
+          const text = localizedTextValue(name, options.contentLocales);
+          if (text !== '') {
+            const missing = missingLocales(name, options.contentLocales);
+            return missing.length === 0
+              ? { text, reference }
+              : { text, missing, reference };
+          }
         }
       }
       return { text: id, reference };
+    }
+
+    case 'references': {
+      const ids = Array.isArray(value)
+        ? value.filter(
+            (id): id is string => typeof id === 'string' && id !== ''
+          )
+        : [];
+      if (ids.length === 0) {
+        return EMPTY;
+      }
+      return {
+        text: ids.join(', '),
+        references: { resource: field.resource, ids },
+      };
     }
 
     // Printed rather than described. There is nothing this app knows about the
@@ -179,6 +236,18 @@ export function toCell<T extends ResourceRow>(
       return text === undefined || text === '{}' ? EMPTY : { text };
     }
   }
+}
+
+/** Whether a value is a {@link FieldMessage} naming a translation key. */
+function isKeyedMessage(
+  value: unknown
+): value is Extract<FieldMessage, { kind: 'key' }> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { kind?: unknown }).kind === 'key' &&
+    typeof (value as { key?: unknown }).key === 'string'
+  );
 }
 
 /** A timestamp as words, with `Intl` and never with `DatePipe`. */

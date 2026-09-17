@@ -111,7 +111,12 @@ export interface HarvestDocumentHints {
  */
 export interface HarvestDocumentScope {
   key: string;
-  kind: 'NATIONAL' | 'REGION' | 'POSTAL_CODE' | 'STORE';
+  /**
+   * `POSTAL_CODE` is the name `LOCAL_AREA` had before plan 0116 (section 2.1).
+   * A reader accepts it and declares a `LOCAL_AREA` scope, and a writer never
+   * produces it.
+   */
+  kind: 'NATIONAL' | 'REGION' | 'LOCAL_AREA' | 'POSTAL_CODE' | 'STORE';
   name?: string | null;
 }
 

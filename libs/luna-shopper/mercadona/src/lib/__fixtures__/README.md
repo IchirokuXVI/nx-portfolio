@@ -32,7 +32,12 @@ The two store finder documents are the exception: they **were** captured, from
 the live documents on 2026-09-11, and every number the tests assert about them
 was counted from that capture.
 
-`npx nx run luna-shopper/mercadona:capture-fixtures` replaces them with real
-captures. Run it before trusting a value that section 2 does not name, and commit
-the diff. The opt in live test (`LUNA_LIVE_SOURCE_TEST=1`) is the other half: it
+`npx nx run luna-shopper/mercadona:capture-fixtures` replaces six of these files
+with real captures: `product-detail-es.json`, `product-detail-en.json`,
+`categories-tree.json`, `category-expanded.json`, `stores.js` and
+`stores-total.js`. Run it before trusting a value that section 2 does not name,
+and commit the diff. It does not write the five edge case fixtures
+(`product-reference-format-100ml.json`, `product-capsules-per-unit.json`,
+`product-inconsistent-bulk-price.json`, `product-no-ean.json` and
+`product-size-format-m.json`). Those are kept by hand. The opt in live test (`LUNA_LIVE_SOURCE_TEST=1`) is the other half: it
 asserts the field names still exist, so a stale fixture says so.

@@ -487,3 +487,81 @@ describe('validateDraft over an edit', () => {
     });
   });
 });
+
+/**
+ * A field holding several references (admin plan 0028, section 3): a shop's
+ * price scopes, whose order the form does not own.
+ */
+describe('a references field', () => {
+  interface Shop {
+    id: string;
+    priceScopeIds: string[];
+  }
+
+  const shops: ResourceDescriptor<Shop> = {
+    name: 'shops',
+    segment: 'shops',
+    labels: { one: 'shops.one', many: 'shops.many' },
+    title: (shop) => shop.id,
+    fields: [
+      { kind: 'text', name: 'id', label: 'shops.id', editable: false },
+      {
+        kind: 'references',
+        name: 'priceScopeIds',
+        label: 'shops.scopes',
+        resource: 'price-scopes',
+      },
+    ],
+    list: { columns: ['id'], compact: ['id'] },
+    gateway: () => {
+      throw new Error('not used');
+    },
+  };
+
+  const shop: Shop = { id: 's1', priceScopeIds: ['store', 'region'] };
+
+  it('opens with the ids as a list, and a create with an empty one', () => {
+    expect(draftFor(shops, shop, 'edit')).toEqual({
+      priceScopeIds: ['store', 'region'],
+    });
+    expect(draftFor(shops, null, 'create')).toEqual({ priceScopeIds: [] });
+  });
+
+  it('is not a change when the same ids come back in another order', () => {
+    const original = draftFor(shops, shop, 'edit');
+    const draft = { priceScopeIds: ['region', 'store'] };
+
+    expect(changedFields(draft, original)).toEqual([]);
+    expect(isDirty(draft, original)).toBe(false);
+    expect(toInput(shops, draft, 'edit', original)).toEqual({});
+  });
+
+  it('sends a changed list whole', () => {
+    const original = draftFor(shops, shop, 'edit');
+    const draft = { priceScopeIds: ['store', 'local'] };
+
+    expect(changedFields(draft, original)).toEqual(['priceScopeIds']);
+    expect(toInput(shops, draft, 'edit', original)).toEqual({
+      priceScopeIds: ['store', 'local'],
+    });
+  });
+
+  it('counts a removed id as a change, not an addition of the same size', () => {
+    const original = draftFor(shops, shop, 'edit');
+
+    expect(
+      changedFields({ priceScopeIds: ['store', 'store'] }, original)
+    ).toEqual(['priceScopeIds']);
+  });
+
+  it('sends an emptied list on an edit, and leaves an empty create out', () => {
+    const original = draftFor(shops, shop, 'edit');
+
+    expect(toInput(shops, { priceScopeIds: [] }, 'edit', original)).toEqual({
+      priceScopeIds: [],
+    });
+
+    const empty = draftFor(shops, null, 'create');
+    expect(toInput(shops, empty, 'create', empty)).toEqual({});
+  });
+});

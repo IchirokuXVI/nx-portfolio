@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`86e8da0a9`](https://github.com/IchirokuXVI/nx-portfolio/commit/86e8da0a991fdc05fa35e7293703ec134788f332) on `dev`, with no pull request of its own.
+
 # 0010 Testing strategy and service contracts
 
 Defines how the backend is tested. Although numbered here, these conventions apply **from the

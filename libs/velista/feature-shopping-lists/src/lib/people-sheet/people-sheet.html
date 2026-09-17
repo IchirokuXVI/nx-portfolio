@@ -3,24 +3,56 @@
   [dismissible]="!busy()"
   labelledBy="people-title"
 >
-  @if (openPerson(); as person) {
+  @if (askingLeave()) {
+    <!--
+      Leaving, asked first (velista 0085, section 7). The question is the pane's
+      title and takes focus when the pane opens, so a screen reader reads what is
+      being asked before anything else.
+    -->
+    <h2
+      #leaveQuestion
+      class="title leave-question"
+      id="people-title"
+      tabindex="-1"
+    >
+      {{ 'basket.people.leaveQuestion' | rokuT: { name: basketName() } }}
+    </h2>
+
+    @if (leaveError(); as key) {
+      <p class="leave-error" role="alert">{{ key | rokuT }}</p>
+    }
+
+    <button
+      (click)="leave()"
+      [disabled]="busy()"
+      class="destructive"
+      type="button"
+    >
+      {{ 'basket.people.leaveConfirm' | rokuT }}
+    </button>
+
+    <button (click)="stay()" [disabled]="busy()" class="quiet" type="button">
+      {{ 'basket.people.stay' | rokuT }}
+    </button>
+  } @else if (openPerson(); as person) {
     <!--
       One participant, on tap. Reached only for somebody whose device the server
       actually sent, which is a reader who passes the all or nothing rule: guests
       never see this pane about each other.
     -->
-    <h2 class="title" id="people-title">
-      {{
-        person.displayName ||
-          ('basket.people.guestNumbered' | rokuT: { count: person.guestNumber })
-      }}
-    </h2>
+    <h2 class="title" id="people-title">{{ openLabel() }}</h2>
 
+    <!--
+      How they came to be on it. Somebody the owner added has no link, which is why
+      that case needs its own words rather than borrowing the owner's (velista 0085).
+    -->
     <p class="how">
-      @if (person.shareLinkId) {
+      @if (person.kind === 'OWNER') {
+        {{ 'basket.people.viaOwner' | rokuT }}
+      } @else if (person.shareLinkId) {
         {{ 'basket.people.viaLink' | rokuT }}
       } @else {
-        {{ 'basket.people.viaOwner' | rokuT }}
+        {{ 'basket.people.viaInvite' | rokuT }}
       }
     </p>
 
@@ -32,9 +64,22 @@
         phrase for what is missing cannot say both with one string.
       -->
       <dd>{{ joinedAt() || ('basket.people.joinedUnknown' | rokuT) }}</dd>
-      <dt>{{ 'basket.people.device' | rokuT }}</dt>
-      <dd>{{ person.device || ('basket.people.deviceUnknown' | rokuT) }}</dd>
+      <!--
+        Only for a reader the server sent devices to. A member opening their own row
+        to leave was sent none, and "Not recorded" would be a claim about their phone.
+      -->
+      @if (person.device !== undefined) {
+        <dt>{{ 'basket.people.device' | rokuT }}</dt>
+        <dd>{{ person.device || ('basket.people.deviceUnknown' | rokuT) }}</dd>
+      }
     </dl>
+
+    <!-- Only on the reader's own row, and only for a registered member (0085). -->
+    @if (offersLeave()) {
+      <button (click)="askLeave()" class="destructive" type="button">
+        {{ 'basket.people.leave' | rokuT }}
+      </button>
+    }
 
     <!--
       Removing one participant touches nobody else, and their next request is

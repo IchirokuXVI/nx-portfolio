@@ -1,3 +1,5 @@
+> **PR:** [#150](https://github.com/IchirokuXVI/nx-portfolio/pull/150)
+
 # 0068 The shops in your postal codes
 
 `apps/velista/plans/0059` puts a list of actual shops in front of somebody. It names its server

@@ -1,5 +1,8 @@
 import { inject, Injectable, signal } from '@angular/core';
-import type { CatalogItem } from '@portfolio/velista/models';
+import {
+  ITEM_LOOKUP_MAX_IDS,
+  type CatalogItem,
+} from '@portfolio/velista/models';
 import { CATALOG_SERVICE, type CatalogServiceI } from './catalog-service';
 
 /**
@@ -107,6 +110,20 @@ export class ItemNames {
       this._asked.add(itemId);
     }
 
+    // At most {@link ITEM_LOOKUP_MAX_IDS} per request, which is the gateway's cap. One
+    // screen asks for one line's set and never comes near it; the zone list page asks
+    // for every line's products at once (velista `0082`, section 3), and a household
+    // list of sixty lines can pass it. Each chunk answers or fails on its own.
+    const chunks: string[][] = [];
+    for (let at = 0; at < missing.length; at += ITEM_LOOKUP_MAX_IDS) {
+      chunks.push(missing.slice(at, at + ITEM_LOOKUP_MAX_IDS));
+    }
+
+    await Promise.all(chunks.map((chunk) => this._lookUp(chunk)));
+  }
+
+  /** One request's worth of ids, absorbed or marked failed. */
+  private async _lookUp(missing: readonly string[]): Promise<void> {
     const found = await this._catalog.itemsByIds(missing);
 
     if (found === null) {

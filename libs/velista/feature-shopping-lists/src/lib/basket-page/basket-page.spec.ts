@@ -26,6 +26,7 @@ import type {
   ErrorCode,
 } from '@portfolio/velista/models';
 import {
+  PageNavigation,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   StorageKeys,
@@ -531,6 +532,27 @@ describe('the basket header, live', () => {
       expect(new Set(drawn).size).toBe(2);
     });
 
+    it('draws the letter the people sheet draws, not the role word', async () => {
+      // A presence entry carries no username, so the face fell through to "Owner"
+      // for a member reading and "Member" for the owner, while the sheet, built
+      // from participants, drew the username's letter for the same person.
+      const reader = participant({
+        ...guest('p-me', 1),
+        kind: 'REGISTERED',
+        guestNumber: null,
+        userId: 'u-2',
+      });
+      const { fixture } = await render({
+        me: reader,
+        present: [owner()],
+        participants: [{ ...participant(owner()), username: 'zoe' }, reader],
+      });
+
+      expect(faces(fixture).map((face) => face.textContent?.trim())).toEqual([
+        'Z',
+      ]);
+    });
+
     it('marks a guest as a guest, and the owner not', async () => {
       const { fixture } = await render({
         present: [owner(), guest('p-1', 1)],
@@ -564,6 +586,49 @@ describe('the basket header, live', () => {
 
       expect(faces(fixture)).toHaveLength(4);
       expect(query(fixture, '.face.is-overflow')).not.toBeNull();
+    });
+  });
+
+  describe('the way back', () => {
+    const registered = (): BasketParticipant =>
+      participant({
+        ...guest('p-me', 1),
+        kind: 'REGISTERED',
+        guestNumber: null,
+        userId: 'u-2',
+      });
+
+    async function pressBack(
+      me: BasketParticipant
+    ): Promise<jest.SpyInstance | null> {
+      const { fixture } = await render({ me });
+      const back = query(fixture, 'button.back');
+      if (back === null) {
+        return null;
+      }
+      const spy = jest
+        .spyOn(TestBed.inject(PageNavigation), 'back')
+        .mockResolvedValue(undefined);
+      back.click();
+      return spy;
+    }
+
+    it('takes the owner back, falling back to the history', async () => {
+      const spy = await pressBack(participant(owner()));
+
+      expect(spy).not.toBeNull();
+      expect(spy?.mock.calls[0]?.[0]).toMatch(/shopping-lists$/);
+    });
+
+    it('takes a registered participant back, falling back to the dashboard', async () => {
+      const spy = await pressBack(registered());
+
+      expect(spy).not.toBeNull();
+      expect(spy?.mock.calls[0]?.[0]).toMatch(/home$/);
+    });
+
+    it('offers a guest no way back', async () => {
+      expect(await pressBack(participant(guest('p-9', 1)))).toBeNull();
     });
   });
 
@@ -1267,6 +1332,34 @@ describe('searching the basket', () => {
       expect(row?.querySelector('.progress')).not.toBeNull();
       expect(row?.querySelector('.tool')).not.toBeNull();
     });
+
+    it('keeps the row and the chips in one bar, closed and while searching', async () => {
+      // Velista `0079`, section 2: one sticky bar, so both stay on screen down a long
+      // basket. The lines are not in it; they scroll under it.
+      const { fixture } = await render({ lines: threeLines });
+      TestBed.inject(BasketViewStore).setOrder('alpha');
+      fixture.detectChanges();
+
+      expect(query(fixture, '.tools-bar .tools')).not.toBeNull();
+      expect(query(fixture, '.tools-bar lib-chip-row')).not.toBeNull();
+
+      openSearch(fixture);
+
+      expect(query(fixture, '.tools-bar .search')).not.toBeNull();
+      expect(query(fixture, '.tools-bar lib-chip-row')).not.toBeNull();
+      expect(query(fixture, '.tools-bar lib-basket-line-row')).toBeNull();
+    });
+
+    it('marks the standalone build, where the document is what scrolls', async () => {
+      // This harness supplies the standalone base path. The class is what lets the
+      // stylesheet stop `.page` being the bar's scroll container there, which jsdom
+      // cannot lay out, so the class is the half a spec can see.
+      const { fixture } = await render({ lines: threeLines });
+
+      expect(
+        (fixture.nativeElement as HTMLElement).classList.contains('standalone')
+      ).toBe(true);
+    });
   });
 
   describe('opening and closing it', () => {
@@ -1400,6 +1493,28 @@ describe('searching the basket', () => {
       expect(query(fixture, '.search-count')).toBeNull();
       openSearch(fixture);
       expect(query(fixture, '.search-count')).not.toBeNull();
+    });
+
+    it('is heard and not seen, beside a field named by a label nobody sees', async () => {
+      // Velista `0079`, section 3: the open search keeps the closed row's height, so
+      // neither sentence is drawn, and both are still there for a screen reader.
+      const { fixture } = await render({ lines: threeLines });
+      openSearch(fixture);
+      search(fixture, 'milk');
+
+      expect(query(fixture, '.search-count')?.classList).toContain(
+        'visually-hidden'
+      );
+
+      const input = searchField(fixture);
+      const label = query(fixture, `label[for="${input?.id}"]`);
+      expect(label?.textContent?.trim()).toBe('basket.search.label');
+      expect(label?.classList).toContain('visually-hidden');
+
+      const drawn = Array.from(
+        query(fixture, '.tools-bar')?.querySelectorAll('label, p') ?? []
+      ).filter((element) => !element.classList.contains('visually-hidden'));
+      expect(drawn).toEqual([]);
     });
   });
 

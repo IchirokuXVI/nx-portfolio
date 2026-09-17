@@ -7,29 +7,30 @@ import {
   inject,
   input,
   output,
-  signal,
   viewChild,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   QUANTITY_REEL_CLICK_SHIELD_MS,
-  type LineAction,
   type LineRowVm,
 } from '@portfolio/velista/models';
-import {
-  CheckIcon,
-  CommentIcon,
-  EllipsisIcon,
-  GripIcon,
-  XCircleIcon,
-} from '../icons/icons';
+import { CheckIcon, CommentIcon, GripIcon, XCircleIcon } from '../icons/icons';
 import { QuantityReel } from './quantity-reel';
 
 /**
- * What the row emits: everything in {@link LineAction}, plus the three approval
- * decisions, which are drawn inline rather than in the overflow.
+ * What the row emits: the three approval decisions drawn under it, and the grip's two
+ * keyboard moves.
+ *
+ * Edit, comments and delete were here until velista plan 0083, carried by an overflow
+ * menu. The detail sheet a tap opens is where a line is changed now, so the row has
+ * nothing of its own to say about them.
  */
-export type LineRowAction = LineAction | 'approve' | 'reject' | 'restore';
+export type LineRowAction =
+  | 'approve'
+  | 'reject'
+  | 'restore'
+  | 'moveUp'
+  | 'moveDown';
 
 /**
  * One line on the list. The row this whole screen is for.
@@ -48,11 +49,12 @@ export type LineRowAction = LineAction | 'approve' | 'reject' | 'restore';
  * `DECIDE`. A reader gets a row that opens and a number that does not move, which is
  * honest in both directions.
  *
- * ## Three targets, and no more
+ * ## Two targets, and no more
  *
- * The row, the reel, and the overflow. A row with an edit button, a comment button and
- * a delete button on it is a row nobody can tap correctly while walking, and that was
- * true when there were two.
+ * The row and the reel. A row with an edit button, a comment button and a delete
+ * button on it is a row nobody can tap correctly while walking. The overflow menu that
+ * held those three went in velista plan 0083: the detail sheet a tap opens edits the
+ * line, and reaches its comments and its delete.
  *
  * The reel takes the row's full height rather than the width of its digits (section 7),
  * which is why it stops the pointer and the click from reaching the row underneath: a
@@ -86,8 +88,8 @@ export type LineRowAction = LineAction | 'approve' | 'reject' | 'restore';
  * both halves are needed. The state has to be read at the press because focus leaves
  * the reel between the press and the click, which closes it, so by click time there is
  * nothing left to notice. Capture is what lets one listener cover the whole line: the
- * overflow trigger, the decision buttons and the inline notices are all under a tap
- * that was really about the reel, and each of them stops its own propagation.
+ * decision buttons and the inline notices are all under a tap that was really about
+ * the reel, and each of them stops its own propagation.
  *
  * ## In reorder mode it stops being a button
  *
@@ -102,7 +104,6 @@ export type LineRowAction = LineAction | 'approve' | 'reject' | 'restore';
     RokuTranslatorPipe,
     CheckIcon,
     CommentIcon,
-    EllipsisIcon,
     GripIcon,
     QuantityReel,
     XCircleIcon,
@@ -111,12 +112,6 @@ export type LineRowAction = LineAction | 'approve' | 'reject' | 'restore';
   styleUrl: './line-row.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    '(keydown.escape)': 'closeMenu()',
-    '(document:click)': 'closeOnOutsideClick($event.target)',
-    // The open menu has to paint over the rows below it, and a parent stylesheet cannot
-    // reach inside this component to arrange that. `MemberRow` solves it the same way
-    // and for the same reason.
-    '[class.menu-open]': 'menuOpen()',
     '[class.reordering]': 'reordering()',
   },
 })
@@ -130,6 +125,33 @@ export class LineRow {
   readonly canMoveUp = input(true);
   readonly canMoveDown = input(true);
 
+  /**
+   * Where a search matched inside the line's own name, or null (velista `0082`,
+   * section 6).
+   *
+   * A range and not the query, so the row stays ignorant of how the search folds. Null
+   * for no search and for a line that matched on a product or a category, where there
+   * is nothing in the name to point at.
+   */
+  readonly match = input<{
+    readonly start: number;
+    readonly end: number;
+  } | null>(null);
+
+  /** The name split around the match, or null to draw it whole. */
+  protected readonly highlighted = computed(() => {
+    const range = this.match();
+    const content = this.line().content;
+    if (range === null || range.end > content.length) {
+      return null;
+    }
+    return {
+      before: content.slice(0, range.start),
+      match: content.slice(range.start, range.end),
+      after: content.slice(range.end),
+    };
+  });
+
   /** A tap on the row, which opens the detail sheet. */
   readonly opened = output<string>();
 
@@ -141,7 +163,7 @@ export class LineRow {
    */
   readonly quantityChanged = output<{ lineId: string; delta: number }>();
 
-  /** Anything from the overflow, the decision buttons, or the grip. */
+  /** Anything from the decision buttons or the grip. */
   readonly act = output<{ action: LineRowAction; lineId: string }>();
 
   /** A pointer went down on the grip. The list takes the drag from here. */
@@ -153,11 +175,7 @@ export class LineRow {
   /** The overwritten notice was dismissed. */
   readonly dismiss = output<string>();
 
-  readonly menuOpen = signal(false);
-
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly _trigger =
-    viewChild<ElementRef<HTMLButtonElement>>('trigger');
   private readonly _reel = viewChild(QuantityReel);
   private readonly _reelEl = viewChild('reel', { read: ElementRef });
 
@@ -218,11 +236,6 @@ export class LineRow {
     this._swallowClick = false;
     event.stopPropagation();
     event.preventDefault();
-
-    // The swallowed click never reaches the document, so the listener that would have
-    // dismissed an open overflow menu never runs. Dismissing it here keeps a tap that
-    // was ignored from also leaving a menu stuck open behind it.
-    this.menuOpen.set(false);
   }
 
   private _withinReel(target: EventTarget | null): boolean {
@@ -301,69 +314,12 @@ export class LineRow {
     this.onRowClick();
   }
 
-  toggleMenu(): void {
-    this.menuOpen.update((open) => !open);
-  }
-
-  closeMenu(): void {
-    if (!this.menuOpen()) {
-      return;
-    }
-
-    this.menuOpen.set(false);
-    this._trigger()?.nativeElement.focus();
-  }
-
-  /**
-   * A click elsewhere closes the menu and leaves focus where it landed.
-   *
-   * Separate from `closeMenu`, which hands focus back to the trigger. `MemberRow` makes
-   * the same distinction for the same reason: pulling focus back to a row somebody has
-   * finished with makes the page feel like it is arguing.
-   */
-  protected closeOnOutsideClick(target: EventTarget | null): void {
-    if (!this.menuOpen()) {
-      return;
-    }
-
-    const host = this._host.nativeElement;
-    if (target === null || !host.contains(target as Node)) {
-      this.menuOpen.set(false);
-    }
-  }
-
-  choose(action: LineRowAction): void {
-    this.closeMenu();
+  /** One of the decisions drawn under the row. */
+  choose(action: 'approve' | 'reject' | 'restore'): void {
     this.act.emit({ action, lineId: this.line().id });
   }
 
-  /**
-   * The label each overflow entry reads.
-   *
-   * Keyed per case rather than assembled, so each one says what it does in its own
-   * words: "Take off the list" is a sentence somebody can act on, where a shared
-   * "Delete" beside an icon is a guess about what will be deleted.
-   */
-  labelKey(action: LineAction): string {
-    switch (action) {
-      case 'edit':
-        return 'list.line.edit';
-      case 'comments':
-        return 'list.line.comments';
-      case 'delete':
-        return 'list.line.delete';
-      case 'moveUp':
-      case 'moveDown':
-        return 'list.line.move';
-    }
-  }
-
-  /** Whether an entry is styled as destructive. Styling only; the text says it too. */
-  isDestructive(action: LineAction): boolean {
-    return action === 'delete';
-  }
-
-  /** The grip's keyboard equivalent. Emitted straight through, menu untouched. */
+  /** The grip's keyboard equivalent. Emitted straight through. */
   move(action: 'moveUp' | 'moveDown'): void {
     this.act.emit({ action, lineId: this.line().id });
   }

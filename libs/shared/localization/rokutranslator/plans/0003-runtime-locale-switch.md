@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`f788a76d3`](https://github.com/IchirokuXVI/nx-portfolio/commit/f788a76d3632ea817f838a0d5b96243cb6ee9f4c) on `dev`, with no pull request of its own.
+
 # 0003: Runtime locale switch (no reload, reactive translations, locale-aware data refetch)
 
 > Reverses one locked decision from [[0002-locale-routing-refactor]]: "Keep the full

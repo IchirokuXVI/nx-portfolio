@@ -1,0 +1,584 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  MINIMAL_ARGS,
+  ROOT_ALTERNATION_KEYWORDS,
+  TOOL_SHAPE_HINT,
+  claudeChildEnv,
+  makeClaudeEngine,
+  readClaudeEnvelope,
+  toolInputSchema,
+} from './claude-cli.mjs';
+import { emptyUsage } from './usage.mjs';
+
+/** A writable that keeps what was written, so a test can read the notice. */
+function sink() {
+  const written = [];
+  return { written, write: (text) => written.push(text) };
+}
+
+/**
+ * The envelope shape, read off one live `claude -p --output-format json` call
+ * rather than assumed. Only the fields this library reads are kept.
+ */
+const ENVELOPE = JSON.stringify({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  result: '{"decision":"REVIEW","confidence":0.4}',
+  usage: {
+    input_tokens: 2,
+    output_tokens: 9,
+    cache_read_input_tokens: 15497,
+    cache_creation_input_tokens: 31888,
+  },
+});
+
+test('the claude engine carries the rules and the shape as flags, not as prose', async () => {
+  const seen = [];
+  const engine = makeClaudeEngine({
+    spawn: async (command, args, options) => {
+      seen.push({ args, options });
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    model: 'claude-sonnet-5',
+    scratchDir: '/tmp/scratch',
+  });
+
+  const schema = { type: 'object', required: ['decision'] };
+  await engine.ask('the packet', { system: 'THE RULES', schema });
+
+  // `--system-prompt` replaces Claude Code's own; `--append-system-prompt`
+  // would keep both, which is the whole overhead this engine removes.
+  const at = seen[0].args.indexOf('--system-prompt');
+  assert.ok(at > 0);
+  assert.ok(seen[0].args[at + 1].startsWith('THE RULES'));
+  assert.ok(!seen[0].args.includes('--append-system-prompt'));
+
+  const schemaAt = seen[0].args.indexOf('--json-schema');
+  assert.ok(schemaAt > 0);
+  assert.deepEqual(JSON.parse(seen[0].args[schemaAt + 1]), schema);
+
+  // The packet is the whole of stdin: the rules reach the model once.
+  assert.equal(seen[0].options.input, 'the packet');
+});
+
+// ---------------------------------------------------------------------------
+// The root alternation a tool schema may not carry
+// ---------------------------------------------------------------------------
+
+/** A decider's schema, in the shape `curation-suggestions` builds one. */
+const ALTERNATED = {
+  type: 'object',
+  properties: {
+    decision: { type: 'string', enum: ['LINK', 'CREATE', 'REVIEW'] },
+    item: { type: ['object', 'null'], required: ['nameEs'] },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+  },
+  required: ['decision', 'confidence'],
+  anyOf: [
+    {
+      type: 'object',
+      properties: { decision: { const: 'CREATE' } },
+      required: ['decision', 'item'],
+    },
+    {
+      type: 'object',
+      properties: { decision: { const: 'REVIEW' } },
+      required: ['decision'],
+    },
+  ],
+};
+
+test('the argv carries no root alternation, and the rest of the schema is untouched', async () => {
+  const seen = [];
+  const engine = makeClaudeEngine({
+    spawn: async (command, args) => {
+      seen.push(args);
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+  });
+
+  await engine.ask('the packet', { system: 'THE RULES', schema: ALTERNATED });
+
+  const sent = JSON.parse(seen[0][seen[0].indexOf('--json-schema') + 1]);
+  // `input_schema does not support oneOf, allOf, or anyOf at the top level`
+  // is a 400, and the CLI reports it as an api_error with an empty stderr.
+  for (const keyword of ROOT_ALTERNATION_KEYWORDS) {
+    assert.ok(!(keyword in sent), keyword);
+  }
+  // Everything else arrives as it was written. The loose root describes every
+  // answer on its own, which is what makes dropping the alternation safe.
+  const { anyOf, ...rest } = ALTERNATED;
+  assert.ok(anyOf);
+  assert.deepEqual(sent, rest);
+});
+
+test('toolInputSchema touches only the root, and only when it has to', () => {
+  // A schema with no root alternation is passed through byte for byte, and is
+  // the same object rather than a copy of one.
+  const plain = { type: 'object', properties: { a: { type: 'string' } } };
+  assert.equal(toolInputSchema(plain), plain);
+  assert.deepEqual(JSON.parse(JSON.stringify(plain)), plain);
+
+  // A nested alternation is what the API refuses only at the top level, so it
+  // survives.
+  const nested = {
+    type: 'object',
+    properties: { a: { anyOf: [{ type: 'string' }, { type: 'null' }] } },
+  };
+  assert.equal(toolInputSchema(nested), nested);
+
+  // Every keyword the API names, together and one at a time.
+  const all = { type: 'object', anyOf: [], oneOf: [], allOf: [], keep: 1 };
+  assert.deepEqual(toolInputSchema(all), { type: 'object', keep: 1 });
+  for (const keyword of ROOT_ALTERNATION_KEYWORDS) {
+    const one = { type: 'object', [keyword]: [{ type: 'object' }] };
+    assert.deepEqual(toolInputSchema(one), { type: 'object' });
+  }
+
+  // The caller's object is never mutated: the engine builds a copy, so a
+  // schema shared with the ollama engine keeps its alternatives.
+  const shared = { ...ALTERNATED };
+  toolInputSchema(shared);
+  assert.ok(Array.isArray(shared.anyOf));
+
+  // Nothing to do, and nothing that throws.
+  assert.equal(toolInputSchema(null), null);
+  assert.equal(toolInputSchema(undefined), undefined);
+});
+
+test('a schema brings the tool shape hint with it, and nothing else does', async () => {
+  const seen = [];
+  const spawn = async (command, args) => {
+    seen.push(args);
+    return { code: 0, stdout: ENVELOPE, stderr: '' };
+  };
+  const engine = makeClaudeEngine({
+    spawn,
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+  });
+
+  await engine.ask('the packet', {
+    system: 'THE RULES',
+    schema: { type: 'object' },
+  });
+  await engine.ask('the packet', { system: 'THE RULES' });
+
+  const systemOf = (args) => args[args.indexOf('--system-prompt') + 1];
+
+  // `--json-schema` is a synthetic `StructuredOutput` tool, and a call whose
+  // arguments do not fit the schema costs a second request carrying the whole
+  // prompt again. The hint is what stops that, so it travels with the schema.
+  assert.equal(systemOf(seen[0]), `THE RULES\n${TOOL_SHAPE_HINT}`);
+  assert.match(systemOf(seen[0]), /StructuredOutput/);
+
+  // Without a schema there is no such tool, so naming one would only mislead.
+  assert.equal(systemOf(seen[1]), 'THE RULES');
+});
+
+test('the claude engine omits both flags when it is given neither', async () => {
+  const seen = [];
+  const engine = makeClaudeEngine({
+    spawn: async (command, args) => {
+      seen.push(args);
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+  });
+
+  await engine.ask('the packet');
+
+  assert.ok(!seen[0].includes('--system-prompt'));
+  assert.ok(!seen[0].includes('--json-schema'));
+});
+
+test('MINIMAL_ARGS empties the call and never reaches for --bare', () => {
+  // `--bare` skips CLAUDE.md too, and also refuses OAuth and demands
+  // ANTHROPIC_API_KEY, which is the billing this engine exists to avoid.
+  assert.ok(!MINIMAL_ARGS.includes('--bare'));
+  // An empty string is how the CLI is told to load no tools at all.
+  assert.equal(MINIMAL_ARGS[MINIMAL_ARGS.indexOf('--tools') + 1], '');
+  for (const flag of [
+    '--disable-slash-commands',
+    '--strict-mcp-config',
+    '--no-session-persistence',
+    // A SessionStart hook fires on every call and a plugin that injects text is
+    // billed once a row. One installed here cost 1,980 input tokens a call.
+    '--safe-mode',
+  ]) {
+    assert.ok(MINIMAL_ARGS.includes(flag), flag);
+  }
+});
+
+test('the claude child environment has no API key in it', () => {
+  const { env, hadKey } = claudeChildEnv({
+    PATH: '/usr/bin',
+    ANTHROPIC_API_KEY: 'sk-ant-secret',
+  });
+  assert.equal(hadKey, true);
+  assert.equal(env.PATH, '/usr/bin');
+  assert.ok(!('ANTHROPIC_API_KEY' in env));
+});
+
+test('the child environment turns the prompt cache off', () => {
+  // `claude -p` breakpoints after the packet and takes no flag to move it, so
+  // with a different packet every row the prefix never matches: measured, four
+  // consecutive rows each wrote ~3,478 tokens and read zero. A write is $4 per
+  // MTok against $2 for input, so an entry nothing reads costs double.
+  const { env } = claudeChildEnv({ PATH: '/usr/bin' });
+  assert.equal(env.DISABLE_PROMPT_CACHING, '1');
+});
+
+test('the cache stays off even when the operator set it on', () => {
+  const { env } = claudeChildEnv({ DISABLE_PROMPT_CACHING: '0' });
+  assert.equal(env.DISABLE_PROMPT_CACHING, '1');
+});
+
+test('an empty API key is not a key', () => {
+  assert.equal(claudeChildEnv({ ANTHROPIC_API_KEY: '' }).hadKey, false);
+  assert.equal(claudeChildEnv({}).hadKey, false);
+});
+
+test('the claude engine strips the key from the child it spawns and says so once', async () => {
+  const seen = [];
+  const stderr = sink();
+  const usage = emptyUsage();
+  const engine = makeClaudeEngine({
+    spawn: async (command, args, options) => {
+      seen.push({ command, args, options });
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-ant-secret' },
+    model: 'claude-sonnet-5',
+    stderr,
+    usage,
+    scratchDir: '/tmp/scratch',
+  });
+
+  const first = await engine.ask('packet');
+  const second = await engine.ask('packet');
+
+  assert.equal(first.text, '{"decision":"REVIEW","confidence":0.4}');
+  assert.equal(second.text, first.text);
+  assert.equal(seen[0].command, 'claude');
+  assert.deepEqual(seen[0].args, [
+    '-p',
+    '--output-format',
+    'json',
+    '--model',
+    'claude-sonnet-5',
+    '--effort',
+    'medium',
+    ...MINIMAL_ARGS,
+  ]);
+  assert.equal(seen[0].options.input, 'packet');
+  // The spawn runs where there is no CLAUDE.md to load.
+  assert.equal(seen[0].options.cwd, '/tmp/scratch');
+  assert.ok(!('ANTHROPIC_API_KEY' in seen[0].options.env));
+  assert.equal(seen[0].options.timeoutMs, 120000);
+
+  // One notice for the whole run, not one per row.
+  assert.equal(stderr.written.length, 1);
+  assert.match(
+    stderr.written[0],
+    /ANTHROPIC_API_KEY is set and is being ignored/
+  );
+
+  assert.equal(usage.calls, 2);
+  assert.equal(usage.inputTokens, 4);
+  assert.equal(usage.cacheReadInputTokens, 15497 * 2);
+});
+
+test('the claude engine sends the effort it was made with', async () => {
+  const seen = [];
+  const engine = makeClaudeEngine({
+    spawn: async (command, args) => {
+      seen.push(args);
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    effort: 'high',
+    stderr: sink(),
+    scratchDir: '/tmp/scratch',
+  });
+
+  await engine.ask('packet');
+
+  assert.equal(engine.effort, 'high');
+  assert.deepEqual(seen[0].slice(0, 7), [
+    '-p',
+    '--output-format',
+    'json',
+    '--model',
+    'claude-sonnet-5',
+    '--effort',
+    'high',
+  ]);
+});
+
+test('the claude engine says nothing when there was no key to ignore', async () => {
+  const stderr = sink();
+  const engine = makeClaudeEngine({
+    spawn: async () => ({ code: 0, stdout: ENVELOPE, stderr: '' }),
+    env: { PATH: '/usr/bin' },
+    stderr,
+    scratchDir: '/tmp/scratch',
+  });
+  await engine.ask('anything');
+  assert.deepEqual(stderr.written, []);
+});
+
+test('the claude engine retries a failed call and gives up with the reason', async () => {
+  let calls = 0;
+  const engine = makeClaudeEngine({
+    spawn: async () => {
+      calls += 1;
+      return { code: 1, stdout: '', stderr: 'the CLI is not logged in' };
+    },
+    env: {},
+    stderr: sink(),
+    sleep: async () => undefined,
+    retryDelays: [1, 1],
+    scratchDir: '/tmp/scratch',
+  });
+  await assert.rejects(() => engine.ask('x'), /not logged in/);
+  assert.equal(calls, 3);
+});
+
+test('the claude engine recovers on a later attempt', async () => {
+  const answers = [
+    { code: 1, stdout: '', stderr: 'transient' },
+    { code: 0, stdout: ENVELOPE, stderr: '' },
+  ];
+  const engine = makeClaudeEngine({
+    spawn: async () => answers.shift(),
+    env: {},
+    stderr: sink(),
+    sleep: async () => undefined,
+    retryDelays: [1],
+    scratchDir: '/tmp/scratch',
+  });
+  assert.match((await engine.ask('x')).text, /REVIEW/);
+});
+
+test('the claude engine gives up in the words every engine gives up in', async () => {
+  const engine = makeClaudeEngine({
+    spawn: async () => ({ code: 0, stdout: 'not json', stderr: '' }),
+    env: {},
+    stderr: sink(),
+    sleep: async () => undefined,
+    retryDelays: [1],
+    scratchDir: '/tmp/scratch',
+  });
+  await assert.rejects(
+    () => engine.ask('x'),
+    /The claude engine gave up: the CLI answered something that is not JSON/
+  );
+});
+
+test('readClaudeEnvelope reads the result field and refuses the rest', () => {
+  assert.equal(
+    readClaudeEnvelope(ENVELOPE).text,
+    '{"decision":"REVIEW","confidence":0.4}'
+  );
+  assert.match(readClaudeEnvelope('').error, /answered nothing/);
+  assert.match(readClaudeEnvelope('not json').error, /not JSON/);
+  assert.match(
+    readClaudeEnvelope(JSON.stringify({ is_error: true, result: 'over quota' }))
+      .error,
+    /over quota/
+  );
+  assert.match(
+    readClaudeEnvelope(JSON.stringify({ type: 'result' })).error,
+    /no result text/
+  );
+});
+
+test('a stopped run makes no further attempt at the model', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const engine = makeClaudeEngine({
+    spawn: async () => {
+      calls += 1;
+      // The keystroke reaches the whole terminal, so this child dies of it and
+      // reports a plain non-zero exit.
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      return { code: 130, stdout: '', stderr: '' };
+    },
+    env: {},
+    scratchDir: '/tmp/scratch',
+    sleep: async () => undefined,
+    retryDelays: [1, 1, 1],
+    signal: controller.signal,
+  });
+
+  await assert.rejects(() => engine.ask('x'), /stopped with Ctrl\+C/);
+  assert.equal(calls, 1);
+});
+
+test('a spawn that throws once is retried, and a stop during one is not', async () => {
+  const answers = [
+    () => {
+      throw new Error('claude did not answer within 120000ms');
+    },
+    () => ({ code: 0, stdout: ENVELOPE, stderr: '' }),
+  ];
+  const engine = makeClaudeEngine({
+    spawn: async () => answers.shift()(),
+    env: {},
+    stderr: sink(),
+    sleep: async () => undefined,
+    retryDelays: [1],
+    scratchDir: '/tmp/scratch',
+  });
+  assert.match((await engine.ask('x')).text, /REVIEW/);
+
+  const controller = new AbortController();
+  const stopped = makeClaudeEngine({
+    spawn: async () => {
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      throw new Error('the run was stopped');
+    },
+    env: {},
+    stderr: sink(),
+    sleep: async () => undefined,
+    retryDelays: [1, 1],
+    scratchDir: '/tmp/scratch',
+    signal: controller.signal,
+  });
+  await assert.rejects(() => stopped.ask('x'), /stopped with Ctrl\+C/);
+});
+
+test('the claude engine holds one request in flight and says so', async () => {
+  const seen = [];
+  const engine = makeClaudeEngine({
+    spawn: async (command, args, options) => {
+      seen.push({ args, input: options.input });
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+    stderr: sink(),
+  });
+
+  // One is the honest answer for an adapter with no reason to do more, and a
+  // caller reads it rather than asking which adapter it is holding. The round
+  // is one for the same reason: a round wider than the pool only pays where the
+  // pool refills itself while the caller is busy.
+  assert.equal(engine.batchSize, 1);
+  assert.equal(engine.roundSize, 1);
+
+  const options = { system: 'THE RULES', schema: { type: 'object' } };
+  const answers = await engine.askMany(['first', 'second'], options);
+
+  assert.deepEqual(
+    answers.map((entry) => entry.text),
+    [
+      '{"decision":"REVIEW","confidence":0.4}',
+      '{"decision":"REVIEW","confidence":0.4}',
+    ]
+  );
+  // One spawn per prompt, in input order.
+  assert.deepEqual(
+    seen.map((call) => call.input),
+    ['first', 'second']
+  );
+
+  // And nothing about one call changed: a batched call sends exactly the flags
+  // a single one sends.
+  const single = [];
+  const alone = makeClaudeEngine({
+    spawn: async (command, args, spawnOptions) => {
+      single.push({ args, input: spawnOptions.input });
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+    stderr: sink(),
+  });
+  await alone.ask('first', options);
+  assert.deepEqual(seen[0].args, single[0].args);
+});
+
+test('one claude prompt that gave up is an entry, and the others answer', async () => {
+  const engine = makeClaudeEngine({
+    spawn: async (command, args, options) => {
+      if (options.input === 'second') {
+        return { code: 1, stdout: '', stderr: 'it went wrong' };
+      }
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+    stderr: sink(),
+    sleep: async () => undefined,
+    retryDelays: [1, 1],
+  });
+
+  const answers = await engine.askMany(['first', 'second', 'third']);
+
+  assert.equal(typeof answers[0].text, 'string');
+  assert.match(String(answers[1].error), /The claude engine gave up: exit 1/);
+  assert.equal(typeof answers[2].text, 'string');
+});
+
+test('askEach settles one prompt at a time, in the order it asked them', async () => {
+  const started = [];
+  let inFlight = 0;
+  let peak = 0;
+  const engine = makeClaudeEngine({
+    spawn: async (command, args, options) => {
+      started.push(options.input);
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return { code: 0, stdout: ENVELOPE, stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+    stderr: sink(),
+  });
+
+  const answers = engine.askEach(['first', 'second', 'third']);
+  assert.equal(answers.length, 3);
+
+  // The first promise settles before the last prompt has been sent, which is
+  // what reading them one at a time buys even here.
+  assert.equal(typeof (await answers[0]).text, 'string');
+  assert.ok(!started.includes('third'));
+
+  await Promise.all(answers);
+  assert.deepEqual(started, ['first', 'second', 'third']);
+  // And never two at once. An adapter that holds one request in flight does not
+  // become a pool because the caller asked for its answers one at a time.
+  assert.equal(peak, 1);
+});
+
+test('a stop reaches every claude prompt behind the one it landed on', async () => {
+  const controller = new AbortController();
+  const engine = makeClaudeEngine({
+    spawn: async () => {
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      return { code: 1, stdout: '', stderr: '' };
+    },
+    env: { PATH: '/usr/bin' },
+    scratchDir: '/tmp/scratch',
+    stderr: sink(),
+    sleep: async () => undefined,
+    retryDelays: [1, 1],
+    signal: controller.signal,
+  });
+
+  const answers = engine.askEach(['first', 'second']);
+  await assert.rejects(() => answers[0], /stopped with Ctrl\+C/);
+  // The chain each promise waits on is the one that rejected, so a stop is one
+  // answer about the run rather than one entry per prompt.
+  await assert.rejects(() => answers[1], /stopped with Ctrl\+C/);
+});

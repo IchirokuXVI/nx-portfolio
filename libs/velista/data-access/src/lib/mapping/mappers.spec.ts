@@ -8,6 +8,7 @@ import {
   toGeneratedListSummary,
   toLine,
   toListAccessEntries,
+  toListIdResult,
   toListPermissions,
   toMembership,
   toMyZone,
@@ -664,6 +665,20 @@ describe('toListAccessEntries', () => {
   });
 });
 
+describe('toListIdResult', () => {
+  // What `PUT /v1/lists/:id/access` answers. Reading it as a list summary threw after
+  // a save that had landed, and the share sheet drew an error over it.
+  it('reads the list id the access route answers', () => {
+    expect(toListIdResult({ listId: 'l1' })).toBe('l1');
+  });
+
+  it('answers null for anything else', () => {
+    for (const raw of [undefined, null, 'l1', {}, { id: 'l1' }]) {
+      expect(toListIdResult(raw)).toBeNull();
+    }
+  });
+});
+
 describe('toZonePresence', () => {
   it('drops malformed people rather than the whole payload', () => {
     const presence = toZonePresence({
@@ -1012,6 +1027,8 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       size: 0.5,
       unit: 'LITER',
       productGroupId: 'group-milk',
+      // Absent on this fixture, so it falls back (velista `0082`).
+      category: 'OTHER',
       offer: null,
     });
   });
@@ -1050,6 +1067,31 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       kind: 'item',
       item: expect.objectContaining({ size: 0.5, unit: 'LITER' }),
     });
+  });
+});
+
+/**
+ * Velista `0082`, section 3: the zone list page shows one category at a time, so the
+ * catalog's category is read rather than dropped, by the basket mapper's rule.
+ */
+describe('toCatalogItem: the category', () => {
+  const item = {
+    id: 'item-milk-1l',
+    name: { es: 'Leche entera', en: 'Whole milk' },
+    category: 'DAIRY',
+  };
+
+  it('reads the category off the wire', () => {
+    expect(toCatalogItem(item)?.category).toBe('DAIRY');
+  });
+
+  it('reads a category it has never heard of, or none, as OTHER', () => {
+    expect(toCatalogItem({ ...item, category: 'BABY_FOOD' })?.category).toBe(
+      'OTHER'
+    );
+    expect(toCatalogItem({ ...item, category: undefined })?.category).toBe(
+      'OTHER'
+    );
   });
 });
 

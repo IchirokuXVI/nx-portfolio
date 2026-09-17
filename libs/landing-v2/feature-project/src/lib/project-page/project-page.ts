@@ -20,6 +20,7 @@ import {
   LandingV2UiModule,
   OdontogramContent,
   PortfolioContent,
+  VelistaContent,
 } from '@portfolio/landing-v2/ui';
 import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import { combineLatest, map, switchMap } from 'rxjs';
@@ -40,6 +41,7 @@ import { combineLatest, map, switchMap } from 'rxjs';
 const CONTENT_BY_SLUG: Record<string, Type<unknown>> = {
   portfolio: PortfolioContent,
   damoclesSword: DamoclesContent,
+  velista: VelistaContent,
   odontogram: OdontogramContent,
 };
 

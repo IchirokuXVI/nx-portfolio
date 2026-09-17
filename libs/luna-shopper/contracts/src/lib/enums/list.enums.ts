@@ -124,3 +124,44 @@ export enum CommentTranscription {
    */
   UNAVAILABLE = 'UNAVAILABLE',
 }
+
+/**
+ * What kind of shopping trip touched a zone list (plan 0122, section 3).
+ *
+ * `BASKET` is a generated list that drew from the list. `LOOSE` is a run of
+ * purchases that belong to no basket, grouped by elapsed time and never by a
+ * calendar day.
+ */
+export enum TripKind {
+  BASKET = 'BASKET',
+  LOOSE = 'LOOSE',
+}
+
+/**
+ * What one trip did to one zone line (plan 0122, section 4).
+ *
+ * Four values where a settlement has two, because a trip can also leave a line
+ * half done or untouched, and neither of those is a settlement anybody wrote.
+ */
+export enum TripRowOutcome {
+  /** Something was bought and the trip left nothing of what it asked for. */
+  BOUGHT = 'BOUGHT',
+  /** Something was bought and something is left. */
+  PARTLY = 'PARTLY',
+  /** The trip's latest word on the line is that the shop had none. */
+  NOT_AVAILABLE = 'NOT_AVAILABLE',
+  /** The trip asked for the line and bought none of it. */
+  NOT_BOUGHT = 'NOT_BOUGHT',
+}
+
+/**
+ * Why a line at zero is offered back to its list (plan 0123, section 5).
+ *
+ * `PERIOD` wins when both hold, because it carries the more useful number.
+ */
+export enum LineSuggestionReason {
+  /** The household buys it about every so many days, and that time has come. */
+  PERIOD = 'PERIOD',
+  /** It was in every basket, or every other basket, of the list's recent trips. */
+  STAPLE = 'STAPLE',
+}

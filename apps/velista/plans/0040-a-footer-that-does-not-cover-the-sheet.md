@@ -1,3 +1,5 @@
+> **PR:** [#70](https://github.com/IchirokuXVI/nx-portfolio/pull/70)
+
 # 0040: a footer that does not cover the sheet
 
 > **A sheet's buttons belong under its content, not on top of it.** The settings sheet's

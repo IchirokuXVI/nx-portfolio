@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   GENERATED_LIST_SHARING_PATTERNS,
   type AddGeneratedListParticipantLineRequest,
+  type AddGeneratedListParticipantRequest,
   type EnsureShareLinkRequest,
   type GeneratedListBasketLineView,
   type GeneratedListBasketScope,
@@ -12,6 +13,7 @@ import {
   type GeneratedListLinkPreview,
   type GeneratedListParticipantContext,
   type GeneratedListParticipantListResult,
+  type GeneratedListParticipantView,
   type GeneratedListReopenResult,
   type GeneratedListSettleResult,
   type GeneratedListShareLinkResult,
@@ -20,8 +22,11 @@ import {
   type GetGeneratedListBasketRequest,
   type GetGeneratedListLineOriginsRequest,
   type JoinGeneratedListRequest,
+  type LeaveGeneratedListRequest,
   type ListParticipantsRequest,
   type PreviewShareLinkRequest,
+  type RenameGeneratedListBasketLineRequest,
+  type RenameGeneratedListBasketLineResult,
   type ReopenGeneratedListLineRequest,
   type ResolveParticipantRequest,
   type RevokeParticipantRequest,
@@ -36,6 +41,7 @@ import {
   type SplitGeneratedListLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import { GeneratedListBasketService } from './generated-list-basket.service';
+import { GeneratedListLineRenameService } from './generated-list-line-rename.service';
 import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
@@ -65,8 +71,20 @@ export class GeneratedListSharingController {
     private readonly basket: GeneratedListBasketService,
     private readonly origins: GeneratedListOriginsService,
     private readonly originSettled: GeneratedListOriginSettledService,
-    private readonly split: GeneratedListSplitService
+    private readonly split: GeneratedListSplitService,
+    private readonly renames: GeneratedListLineRenameService
   ) {}
+
+  /**
+   * Rename a basket line and every zone line it came from (plan 0113). Refused
+   * to a guest, and to anybody who cannot write every one of those lists.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.renameLine)
+  renameLine(
+    @Payload() req: RenameGeneratedListBasketLineRequest
+  ): Promise<RenameGeneratedListBasketLineResult> {
+    return this.renames.renameAsParticipant(req);
+  }
 
   @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.linkEnsure)
   ensureLink(
@@ -117,6 +135,23 @@ export class GeneratedListSharingController {
     @Payload() req: RevokeParticipantRequest
   ): Promise<{ id: string }> {
     return this.sharing.revokeParticipant(req);
+  }
+
+  /** Add one of the owner's contacts to the basket (plan 0114, section 4). */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.participantAdd)
+  addParticipant(
+    @Payload() req: AddGeneratedListParticipantRequest
+  ): Promise<GeneratedListParticipantView> {
+    return this.sharing.addParticipant(req);
+  }
+
+  /**
+   * Leave a basket, as the participant the gateway's guard resolved (plan 0114,
+   * section 6). Refused to a guest and to the owner.
+   */
+  @MessagePattern(GENERATED_LIST_SHARING_PATTERNS.participantLeave)
+  leave(@Payload() req: LeaveGeneratedListRequest): Promise<{ id: string }> {
+    return this.sharing.leave(req);
   }
 
   /**

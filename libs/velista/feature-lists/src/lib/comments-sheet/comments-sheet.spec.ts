@@ -21,6 +21,7 @@ import {
 import type {
   Comment,
   CommentTranscription,
+  Line,
   ListPermission,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
@@ -37,6 +38,26 @@ import { CommentsSheet } from './comments-sheet';
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
 const LIST_ID = '3c9a1d02-5f47-4b8e-9a1c-7d2e6b4f0a35';
 const LINE_ID = 'ln-1';
+
+/** The line the sheet is about. A list loaded in full without it reads as deleted. */
+function line(): Line {
+  return {
+    id: LINE_ID,
+    listId: LIST_ID,
+    content: 'Milk',
+    quantity: 2,
+    itemIds: [],
+    productGroupId: null,
+    groupItemIds: [],
+    position: 1,
+    approvalStatus: 'APPROVED',
+    boughtCount: 0,
+    lastSettlementOutcome: null,
+    createdByUserId: 'user-toni',
+    approvedByUserId: 'user-toni',
+    version: 1,
+  };
+}
 
 function comment(id: string, body: string, minutesAgo: number): Comment {
   return {
@@ -151,7 +172,7 @@ async function render(
 
   TestBed.resetTestingModule();
 
-  const lines = fakeLineStore();
+  const lines = fakeLineStore({ lines: [line()] });
   const voiceSends: { blob: Blob; durationSeconds: number }[] = [];
 
   const comments: CommentServiceI = {
@@ -636,6 +657,33 @@ describe('CommentsSheet', () => {
         fixture.debugElement.queryAll(By.css('lib-audio-player'))
       ).toHaveLength(3);
       expect(fetched).toEqual([]);
+    });
+  });
+  describe('when the line is gone (velista plan 0083)', () => {
+    it('says another user deleted it, and closes when told', async () => {
+      const { fixture, lines } = await render(NEWEST_FIRST, ['READ', 'WRITE']);
+      // No history behind the sheet in a spec, so the close goes to the list.
+      const router = TestBed.inject(Router) as unknown as {
+        navigateByUrl: jest.Mock;
+      };
+
+      lines.deleteByOthers(LINE_ID);
+      fixture.detectChanges();
+
+      const text = fixture.nativeElement.textContent ?? '';
+      expect(text).toContain('list.gone.byOthers');
+      expect(
+        fixture.debugElement.query(By.directive(CommentComposer))
+      ).toBeNull();
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+
+      ([...fixture.nativeElement.querySelectorAll('button')] as HTMLElement[])
+        .find((button) => button.textContent?.includes('list.gone.close'))
+        ?.click();
+      await fixture.whenStable();
+
+      expect(lines.deletionOf(LINE_ID)).toBe('seen');
+      expect(router.navigateByUrl).toHaveBeenCalledTimes(1);
     });
   });
 });

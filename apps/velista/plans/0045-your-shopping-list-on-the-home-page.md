@@ -1,3 +1,5 @@
+> **PR:** [#86](https://github.com/IchirokuXVI/nx-portfolio/pull/86)
+
 # 0045 Your shopping list: the card, the sheet, and the history
 
 > **This is a page plan** and follows the template in `0001` section 9.

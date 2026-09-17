@@ -15,6 +15,7 @@ import { IdempotencyModule } from '../events/idempotency.module';
 import { LineClaimModule } from '../generated-lists/line-claim.module';
 import { ZonesModule } from '../zones/zones.module';
 import { CommentService } from './comment.service';
+import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 import { ListController } from './list.controller';
@@ -23,6 +24,10 @@ import { ProductGroupSyncController } from './product-group-sync.controller';
 import { ProductGroupSyncService } from './product-group-sync.service';
 import { SettlementService } from './settlement.service';
 import { SharedListGrantModule } from './shared-list-grant.module';
+import { SuggestionsController } from './suggestions/suggestions.controller';
+import { SuggestionsService } from './suggestions/suggestions.service';
+import { TripsController } from './trips/trips.controller';
+import { TripsService } from './trips/trips.service';
 
 /**
  * Shopping lists, lines and comments (plan 0007): the second domain slice of
@@ -53,12 +58,24 @@ import { SharedListGrantModule } from './shared-list-grant.module';
     // 0070, section 5.1).
     IdempotencyModule,
   ],
-  controllers: [ListController, ProductGroupSyncController],
+  controllers: [
+    ListController,
+    ProductGroupSyncController,
+    TripsController,
+    SuggestionsController,
+  ],
   providers: [
     ListService,
     LineService,
+    // Two lines becoming one on a rename (plan 0112). A provider of its own
+    // because a basket rename merges list lines too (plan 0113).
+    LineMergeService,
     CommentService,
     SettlementService,
+    // The shopping trips that touched a list, derived on read (plan 0122).
+    TripsService,
+    // The lines at zero a list offers back, derived on read (plan 0123).
+    SuggestionsService,
     ListAccessService,
     // Catalog's group membership, reconciled into subscribed lines (plan 0070).
     ProductGroupSyncService,

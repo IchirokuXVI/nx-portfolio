@@ -266,17 +266,44 @@ describe('SourceEntryService', () => {
         NATIONAL,
         [expect.objectContaining({ itemId: 'item-1', price: 1.19 })],
         'run-monday',
-        PriceSourceKind.OFFICIAL_API
+        PriceSourceKind.OFFICIAL_API,
+        null
       );
       expect(addPrices).toHaveBeenNthCalledWith(
         2,
         CORDOBA,
         [expect.objectContaining({ price: 1.09 })],
         'run-tuesday',
-        PriceSourceKind.OFFICIAL_API
+        PriceSourceKind.OFFICIAL_API,
+        null
       );
       expect(result.pricesWritten).toBe(2);
       expect(result.createdItem).toBeNull();
+    });
+
+    it('keeps a copied price’s provenance when it is accepted later (plan 0118)', async () => {
+      const { service, addPrices } = build({
+        row: entry({
+          prices: [
+            price({
+              id: 'p-cordoba',
+              priceScopeId: CORDOBA,
+              price: 1.09,
+              copiedFromScopeId: NATIONAL,
+            }),
+          ],
+        }),
+      });
+
+      await service.accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-1' });
+
+      expect(addPrices).toHaveBeenCalledWith(
+        CORDOBA,
+        [expect.objectContaining({ price: 1.09 })],
+        'run-monday',
+        PriceSourceKind.OFFICIAL_API,
+        NATIONAL
+      );
     });
 
     it('writes nothing for a window that has closed', async () => {
@@ -536,6 +563,66 @@ describe('SourceEntryService', () => {
       expect(view.candidateEntryId).toBeNull();
       expect(view.decidedAt).not.toBeNull();
       expect(saved[0].name).toBe('Leche semidesnatada Hacendado');
+    });
+  });
+
+  describe('list, filtered by brand key', () => {
+    /**
+     * A query builder that records its `andWhere` clauses and answers nothing.
+     *
+     * The filter under test is one clause and one parameter, so the clauses are
+     * the whole assertion: a fake that returned rows would only be asserting
+     * that the fake returned them.
+     */
+    function recordingBuilder() {
+      const clauses: { sql: string; params?: Record<string, unknown> }[] = [];
+      const qb = {
+        leftJoinAndSelect: () => qb,
+        orderBy: () => qb,
+        addOrderBy: () => qb,
+        take: () => qb,
+        andWhere: (sql: string, params?: Record<string, unknown>) => {
+          clauses.push({ sql, params });
+          return qb;
+        },
+        getMany: async () => [],
+      };
+      return { qb, clauses };
+    }
+
+    it('keys the value before matching, so El Pozo finds elpozo', async () => {
+      const { service, entries } = build();
+      const { qb, clauses } = recordingBuilder();
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      await service.list({ userId: ADMIN, brandKey: 'El Pozo' });
+
+      const clause = clauses.find((c) => c.sql.includes('e."brandKey"'));
+      expect(clause?.params).toEqual({ brandKey: 'elpozo' });
+    });
+
+    it('matches nothing for a value that makes no key', async () => {
+      const { service, entries } = build();
+      const { qb, clauses } = recordingBuilder();
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const page = await service.list({ userId: ADMIN, brandKey: '---' });
+
+      // An empty list rather than a refusal: a person typing punctuation gets
+      // no rows, which is the truthful answer, and not an error.
+      expect(clauses.some((c) => c.sql === 'FALSE')).toBe(true);
+      expect(page.items).toEqual([]);
+    });
+
+    it('leaves the queue alone when no brand key is asked for', async () => {
+      const { service, entries } = build();
+      const { qb, clauses } = recordingBuilder();
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      await service.list({ userId: ADMIN });
+
+      expect(clauses.some((c) => c.sql.includes('e."brandKey"'))).toBe(false);
+      expect(clauses.some((c) => c.sql === 'FALSE')).toBe(false);
     });
   });
 

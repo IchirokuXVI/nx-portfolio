@@ -44,14 +44,15 @@ is `feat` or `fix`, and both may name the same plan number.
 ### Scope
 
 The scope names an area of the workspace, not an Nx project: `velista` covers
-the app and every `libs/velista/*` library, `luna` covers the whole backend, and
-a service name covers one service. The list is in `tools/release/rules.mjs` and
-that file is the authority:
+the app and every `libs/velista/*` library, `luna` covers the whole backend,
+a service name covers one service, and `admin` covers the back office
+(`luna-shopper-admin`). The list is in `tools/release/rules.mjs` and that file
+is the authority:
 
 `shell`, `odontogram`, `damoclesSword`, `landingV2`, `velista`, `luna`,
 `luna-shopper`, `gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`,
-`assistant`, `contracts`, `shared`, `i18n`, `k8s`, `helm`, `docker`, `ci`,
-`tools`, `e2e`, `deps`, `release`.
+`assistant`, `contracts`, `admin`, `luna-shopper-admin`, `shared`, `i18n`,
+`k8s`, `helm`, `docker`, `ci`, `tools`, `e2e`, `deps`, `release`.
 
 The scope is optional, and a change that genuinely spans areas may carry several
 separated by commas: `docs(luna,velista): ...`. Adding a new area to the
@@ -107,8 +108,9 @@ them, and groups the conforming titles by section. It runs on plain Node with no
 install step, so a release can be cut from a bare checkout.
 
 ```sh
-# Everything since the last tag, ready to paste into a draft release
-node tools/release/release-notes.mjs
+# Everything since the last tag, before the tag exists. --version names the
+# release, and the changelog link ends at that tag.
+node tools/release/release-notes.mjs --version v0.3.2 --out notes.md
 
 # One release exactly, written to a file
 node tools/release/release-notes.mjs --from v0.3.1 --to v0.3.2 --out notes.md
@@ -116,6 +118,15 @@ gh release create v0.3.2 --title v0.3.2 --notes-file notes.md
 
 # Which titles in a range would need renaming (exit 1 if any)
 node tools/release/release-notes.mjs --audit --from v0.3.1
+
+# The notes, but exit 1 if any title in the range breaks the rules
+node tools/release/release-notes.mjs --strict --from v0.3.1 --to v0.3.2
+
+# From commit subjects instead of pull requests, with no `gh` login needed
+node tools/release/release-notes.mjs --commits --from v0.3.1
+
+# Machine readable output, titled with a version other than --to
+node tools/release/release-notes.mjs --json --version v0.3.2 --from v0.3.1
 
 # Validate one title, which is what CI does with the pull request's own
 node tools/release/release-notes.mjs --check "feat(velista): a card for the list"
@@ -135,6 +146,10 @@ Three things it does on purpose:
   commit hash rather than by number, and the count at the foot of the notes says
   how much of it there was. The notes are meant to be a complete account of a
   range rather than a best effort one.
+- **The changelog link never ends at `HEAD`.** It ends at `--version`. With no
+  version, it ends at a `--to` other than `HEAD`. With neither, the script
+  leaves the link out and says so on stderr. A link to `HEAD` keeps growing after the release,
+  so it shows later work as part of the release.
 
 Its tests run without Nx, and cover the rules themselves:
 

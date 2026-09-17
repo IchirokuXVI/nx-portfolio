@@ -1,0 +1,23 @@
+{
+  "name": "velista-luna-e2e",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/velista-luna-e2e/src",
+  "implicitDependencies": [
+    "velista",
+    "luna-shopper-backend-gateway",
+    "luna-shopper-backend-core",
+    "luna-shopper-backend-auth",
+    "luna-shopper-backend-catalog",
+    "luna-shopper-backend-realtime"
+  ],
+  "// implicitDependencies": "The suite drives velista's screens against the five services a basket touches (velista plan 0080, section 2). A change to any of them marks this project affected, which is what makes the browser gate in docker-ci.yml run.",
+  "// e2e": "Playwright, against a velista origin and a gateway that are ALREADY running: a dev slot locally (tools/dev/ng-slot.sh, luna-slot.sh), or the two compose stacks in CI. playwright.config.ts has no webServer and dependsOn is [], as on velista-e2e, so nothing here starts a serve of its own.",
+  "targets": {
+    "e2e": {
+      "// ": "Uncached, for the reason luna-shopper-backend-e2e gives: the result depends on a live stack and on VELISTA_BASE_URL / E2E_GATEWAY_URL, none of which Nx hashes. A replayed cache entry would be a pass that sent no request.",
+      "cache": false,
+      "dependsOn": []
+    }
+  }
+}

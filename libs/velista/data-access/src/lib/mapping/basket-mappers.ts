@@ -13,6 +13,9 @@ import {
   type BasketLineOrigins,
   type BasketLinkPreview,
   type BasketListRef,
+  type BasketMergeRequired,
+  type BasketMergeRequiredBasket,
+  type BasketMergeRequiredList,
   type BasketOriginCandidate,
   type BasketOriginQuantityResult,
   type BasketOriginSettledResult,
@@ -20,6 +23,7 @@ import {
   type BasketPresenceEntry,
   type BasketPriceScope,
   type BasketProduct,
+  type BasketRenameResult,
   type BasketSession,
   type BasketSettleResult,
   type BasketSettleSkip,
@@ -33,6 +37,7 @@ import {
   date,
   isRecord,
   mapArray,
+  nullableNum,
   nullableStr,
   numOr,
   oneOf,
@@ -446,6 +451,89 @@ export function toBasketSplitResult(raw: unknown): BasketSplitResult | null {
         merged: mapArray(raw['merged'], toBasketLine),
         removed: mapArray(raw['removed'], str),
       };
+}
+
+/**
+ * A rename's answer (velista `0084`, backend `0113`, section 7).
+ *
+ * `absorbedLineId` is absent on the wire when no basket line merged, and null here,
+ * so a caller asks one question rather than two.
+ */
+export function toBasketRenameResult(raw: unknown): BasketRenameResult | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const line = toBasketLine(raw['line']);
+  return line === null
+    ? null
+    : { line, absorbedLineId: str(raw['absorbedLineId']) };
+}
+
+/**
+ * Every place a rename's name is taken, from a `line_merge_required` refusal's
+ * `details` (backend `0113`, section 4). Null when the details cannot be read.
+ *
+ * **All or nothing, unlike `mapArray`.** A row dropped here is a merge the reader
+ * would confirm without being shown it, so one unreadable row refuses the whole
+ * question, and the sheet says the save failed instead of asking half of it.
+ */
+export function toBasketMergeRequired(
+  details: unknown
+): BasketMergeRequired | null {
+  if (!isRecord(details) || !Array.isArray(details['lists'])) {
+    return null;
+  }
+
+  const lists: BasketMergeRequiredList[] = [];
+  for (const raw of details['lists']) {
+    const row = toMergeRequiredList(raw);
+    if (row === null) {
+      return null;
+    }
+    lists.push(row);
+  }
+
+  let basket: BasketMergeRequiredBasket | null = null;
+  if (details['basket'] !== null && details['basket'] !== undefined) {
+    basket = toMergeRequiredBasket(details['basket']);
+    if (basket === null) {
+      return null;
+    }
+  }
+
+  // A refusal that names no place at all asks nothing, so it is not a question.
+  return lists.length === 0 && basket === null ? null : { lists, basket };
+}
+
+function toMergeRequiredList(raw: unknown): BasketMergeRequiredList | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const listId = str(raw['listId']);
+  const listName = str(raw['listName']);
+  const otherQuantity = nullableNum(raw['otherQuantity']);
+  return listId === null || listName === null || otherQuantity === null
+    ? null
+    : {
+        listId,
+        listName,
+        // The zone is the second line of a row, so a missing one costs a line of
+        // text rather than the whole question.
+        zoneName: strOr(raw['zoneName'], ''),
+        otherQuantity,
+      };
+}
+
+function toMergeRequiredBasket(raw: unknown): BasketMergeRequiredBasket | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const otherLineId = str(raw['otherLineId']);
+  const otherQuantity = nullableNum(raw['otherQuantity']);
+  return otherLineId === null || otherQuantity === null
+    ? null
+    : { otherLineId, otherQuantity };
 }
 
 /**

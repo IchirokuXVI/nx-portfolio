@@ -355,7 +355,18 @@ function toParams(
     // route reads the chain from `/supermarkets/{id}/locations` and its DTO
     // does not declare `supermarketId`, and the validation pipe refuses a
     // property no DTO declares, so sending both would answer 400.
-    if (value !== '' && !consumed.has(name)) {
+    if (consumed.has(name)) {
+      continue;
+    }
+    // A list is one parameter per entry, which is how a repeatable query
+    // parameter reads (admin plan 0028, section 4.2).
+    if (typeof value !== 'string') {
+      for (const entry of value) {
+        if (entry !== '') {
+          params = params.append(name, entry);
+        }
+      }
+    } else if (value !== '') {
       params = params.set(name, value);
     }
   }

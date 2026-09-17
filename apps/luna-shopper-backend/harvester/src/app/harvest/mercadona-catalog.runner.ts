@@ -1,9 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestDetailFetch,
+  PriceScopeKind,
+} from '@portfolio/luna-shopper/contracts';
 import {
   MercadonaClient,
   type MercadonaListProduct,
+  type MercadonaProduct,
 } from '@portfolio/luna-shopper/mercadona';
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
@@ -23,9 +27,11 @@ import type { RunReport } from './run-report';
  * 1. Walk the category tree once per warehouse: **151 requests each**. This is
  *    where the prices come from, and where that warehouse's assortment comes
  *    from.
- * 2. Fetch detail once per product **ever seen across the warehouses**, to
- *    capture `ean` and `brand`: about **4,232 requests** whether the run covers
- *    one warehouse or two hundred.
+ * 2. Fetch detail once per product **ever seen across the warehouses** that the
+ *    harvester does not know yet, to capture `ean` and `brand`: about **4,232
+ *    requests** on a chain's first walk, whether it covers one warehouse or two
+ *    hundred, and only the new products after it (plan 0119). A known product
+ *    is reported from the listing.
  * 3. Report each product once, carrying one price per warehouse that listed it.
  * 4. Say, per warehouse, that its walk was whole, so the orchestrator can work
  *    out what that warehouse does not carry.
@@ -87,9 +93,9 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     for (const scope of scopes) {
       report.scope({
         key: scope.externalKey,
-        // A warehouse is not a postal code and not a shop: it is the group of
-        // shops the chain prices together and keys itself.
-        kind: PriceScopeKind.REGION,
+        // A warehouse is a local area (plan 0116, section 3): a small group of
+        // shops the chain prices together and keys itself, below a chain region.
+        kind: PriceScopeKind.LOCAL_AREA,
         name: null,
       });
     }
@@ -160,22 +166,57 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     }));
     await context.setTotalPlanned(products.length);
 
-    // --- Phase 2: detail once per product, over the union ------------------
+    // --- Phase 2: detail once per new product, over the union --------------
     // EAN and brand exist only on the detail endpoint (section 2.5), and
     // **neither depends on the warehouse**, which is the whole reason a run of
     // six warehouses is about 5,300 requests rather than 26,298.
+    //
+    // **Nor do they change from one week to the next** (plan 0119, section 5),
+    // so a product the harvester already holds an EAN for is not fetched again
+    // unless the run asks for `ALL`. The set is what the executor loaded before
+    // the walk: this runner still holds no repository.
+    const details = input.details ?? HarvestDetailFetch.ALL;
+    const known =
+      details === HarvestDetailFetch.NEW
+        ? (input.knownExternalIds ?? NONE)
+        : NONE;
+    const withoutEan =
+      details === HarvestDetailFetch.NEW
+        ? (input.externalIdsWithoutEan ?? NONE)
+        : NONE;
+    const skipped = products.filter((product) => known.has(product.externalId));
+    const fetched = products.filter(
+      (product) => !known.has(product.externalId)
+    );
     await context.setStage(
       'DETAIL',
-      `Fetching detail for ${products.length} product(s)`
+      `Fetching detail for ${fetched.length} product(s), ` +
+        `${skipped.length} already known`
     );
     const observedAt = new Date();
     let observed = 0;
+    let detailRequests = 0;
+
+    // A known product is reported from the listing: its id and one price per
+    // warehouse that listed it, and no identity field, so the stored name, brand
+    // and EAN stay what the last full read wrote (plan 0119, section 6). It
+    // costs no request, so it is reported before the pool rather than in it.
+    for (const product of skipped) {
+      observed += 1;
+      report.product({
+        externalId: product.externalId,
+        detailFetched: false,
+        observedAt,
+        prices: pricesOf(product.externalId, CURRENCY, scopes, assortments),
+      });
+    }
 
     await runWorkerPool({
-      items: products,
+      items: fetched,
       workers: source.workers,
       signal: context.signal,
       handle: async (product) => {
+        detailRequests += 1;
         const detail = await product.client.fetchProduct(
           product.externalId,
           ['es'],
@@ -289,11 +330,34 @@ export class MercadonaCatalogRunner implements CatalogRunner {
       productsListed: sum(
         [...assortments.values()].map((listed) => listed.size)
       ),
-      /** The size of the union, which is what the detail phase costs. */
-      productsDetailed: products.length,
+      /**
+       * The detail requests made, which is what the detail phase cost. The size
+       * of the union before plan 0119, and the new products of it since.
+       */
+      productsDetailed: detailRequests,
+      /** Known products reported from the listing, with no request. */
+      productsDetailSkipped: skipped.length,
+      /**
+       * Products fetched again because their row has no EAN (plan 0119, section
+       * 4). A product that genuinely has none is fetched every run, and this is
+       * where a large number of them shows.
+       */
+      productsWithoutEan: fetched.filter((product) =>
+        withoutEan.has(product.externalId)
+      ).length,
     });
   }
 }
+
+/** An empty id set, for a walk that knows nothing or fetches everything. */
+const NONE: ReadonlySet<string> = new Set();
+
+/**
+ * The currency a price read from the listing is stated in. The listing does not
+ * say, and the detail's is this constant, so a known product's prices match
+ * what its detail would have stated.
+ */
+const CURRENCY: MercadonaProduct['currency'] = 'EUR';
 
 /** One product to fetch detail for, and the warehouse to fetch it from. */
 interface Detailable {

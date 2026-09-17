@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`12630e056`](https://github.com/IchirokuXVI/nx-portfolio/commit/12630e0568c68bb21fe165c43ed901a7461d4bec) on `dev`, with no pull request of its own.
+
 # 0021 Confirming an email: the wait in the body, resending, and upgrade's missing send
 
 Three related gaps in email confirmation, plus the platform change all three need.

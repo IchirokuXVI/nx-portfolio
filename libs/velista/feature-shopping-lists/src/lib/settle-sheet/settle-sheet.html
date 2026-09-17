@@ -3,7 +3,22 @@
   [dismissible]="!busy()"
   labelledBy="settle-title"
 >
-  <h2 class="title" id="settle-title">{{ title() }}</h2>
+  <!--
+    The dialog is labelled by the saved name. Where the name field stands in its
+    place (velista 0084, section 3) the title is heard and not seen, so the label
+    does not change with every key somebody types.
+  -->
+  <h2
+    [class.visually-hidden]="
+      canRename() && (pane() === 'settle' || pane() === 'merge')
+    "
+    #titleHeading
+    class="title"
+    id="settle-title"
+    tabindex="-1"
+  >
+    {{ title() }}
+  </h2>
 
   @switch (pane()) {
     <!--
@@ -12,6 +27,73 @@
       asked which household a tin of tomatoes belongs to.
     -->
     @case ('settle') {
+      <!--
+        The name, for a reader the server lets rename this line (section 2). Save
+        sits straight under the field, and the outstanding count below already
+        begins the next block, so there is no rule between them. Everything under
+        it is where it always was.
+      -->
+      @if (canRename()) {
+        <div class="rename">
+          <label class="rename-label" for="settle-name">
+            {{ 'basket.rename.label' | rokuT }}
+          </label>
+          <input
+            (input)="onNameInput($event)"
+            (keydown.enter)="save()"
+            [attr.maxlength]="maxLength"
+            [readOnly]="saving()"
+            [value]="name()"
+            autocomplete="off"
+            class="rename-field"
+            id="settle-name"
+            type="text"
+          />
+
+          <!--
+            The quiet accent, as the line detail sheet draws its Save (velista
+            0083): the solid amber stays on "Got all". After a save the button says
+            so, and is the polite live region, so it is announced once.
+          -->
+          <button
+            (click)="save()"
+            [attr.aria-busy]="saving()"
+            [class.saved]="saved()"
+            [disabled]="!canSave()"
+            #saveButton
+            aria-live="polite"
+            class="save"
+            type="button"
+          >
+            @if (saving()) {
+              <lib-spinner-icon class="save-glyph" />
+            } @else if (saved()) {
+              <lib-check-icon
+                aria-hidden="true"
+                class="save-glyph saved-glyph"
+              />
+            }
+            <span>{{
+              (saved() ? 'basket.rename.saved' : 'basket.rename.save') | rokuT
+            }}</span>
+          </button>
+
+          @if (renameErrorKey(); as key) {
+            <p class="failed" role="alert">
+              {{ key | rokuT: renameErrorArgs() }}
+              @if (renameReference(); as reference) {
+                <span class="reference">
+                  {{
+                    'basket.error.reference'
+                      | rokuT: { correlationId: reference }
+                  }}
+                </span>
+              }
+            </p>
+          }
+        </div>
+      }
+
       <!--
         What is left, or what happened. A finished line is still tappable on purpose
         (plan 0043, section 3.2), so this sheet opens on one, and "0 outstanding" is
@@ -71,7 +153,7 @@
       @if (canSeeLists()) {
         <lib-line-lists-summary
           [finished]="basketFinished()"
-          [lineId]="lineId"
+          [lineId]="lineId()"
         />
       }
 
@@ -367,6 +449,61 @@
       one line by construction, across however many households it was composed from, so
       no row names a list: the pane is about the line and not about where it came from.
     -->
+    @case ('merge') {
+      <!--
+        The merge question (velista 0084, section 4): a heading naming the typed
+        name, what merging does, and one row per place the name is taken. Rows and
+        not sentences: a rename can collide on three lists and in the basket at once,
+        and a column is read at a glance in an aisle.
+      -->
+      @if (merge(); as question) {
+        <h3 #mergeTitle class="merge-title" tabindex="-1">
+          {{ 'basket.rename.mergeTitle' | rokuT: { name: question.name } }}
+        </h3>
+        <p class="merge-explain">{{ 'basket.rename.mergeExplain' | rokuT }}</p>
+
+        <ul class="merge-rows">
+          @for (row of question.rows; track row.key) {
+            <li class="merge-row">
+              <span class="merge-place">
+                <span class="merge-name">
+                  {{ row.listName ?? ('basket.rename.mergeBasketRow' | rokuT) }}
+                </span>
+                @if (row.zoneName) {
+                  <span class="merge-zone">{{ row.zoneName }}</span>
+                }
+              </span>
+              <span class="merge-amount">
+                {{ row.amountKey | rokuT: { quantity: row.quantity } }}
+              </span>
+            </li>
+          }
+        </ul>
+
+        <!-- The solid button here: in this pane, merging is the one thing to do. -->
+        <button
+          (click)="confirmMerge()"
+          [attr.aria-busy]="saving()"
+          [disabled]="busy()"
+          class="primary merge-confirm"
+          type="button"
+        >
+          @if (saving()) {
+            <lib-spinner-icon class="save-glyph" />
+          }
+          <span>{{ 'basket.rename.merge' | rokuT }}</span>
+        </button>
+        <button
+          (click)="keepEditing()"
+          [disabled]="busy()"
+          class="quiet"
+          type="button"
+        >
+          {{ 'basket.rename.keepEditing' | rokuT }}
+        </button>
+      }
+    }
+
     @case ('history') {
       <p class="pane-title">{{ 'basket.history.title' | rokuT }}</p>
 

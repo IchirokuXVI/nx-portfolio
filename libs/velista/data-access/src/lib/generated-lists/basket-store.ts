@@ -19,6 +19,8 @@ import {
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketProduct,
+  type BasketRenameRequest,
+  type BasketRenameResult,
   type BasketSettleRequest,
   type BasketSettleResult,
   type BasketShareLink,
@@ -29,6 +31,10 @@ import {
   type LineApprovalStatus,
 } from '@portfolio/velista/models';
 import { GatewayError, hasResponse } from '../errors';
+import {
+  REALTIME_CLIENT,
+  type RealtimeClientI,
+} from '../realtime/realtime-client';
 import { BASKET_SERVICE, type BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';
 import { BasketSocket } from './basket-socket';
@@ -132,6 +138,13 @@ export class BasketStore {
   private readonly _service = inject<BasketServiceI>(BASKET_SERVICE);
   private readonly _sessions = inject(BasketSessionStore);
   private readonly _socket = inject(BasketSocket);
+  /**
+   * The account socket, for the one basket event that cannot reach the basket's own
+   * room: `generatedList.unshared` (velista `0085`, section 6). It is addressed to the
+   * reader's user room, because once access has ended the basket room has already let
+   * this socket go.
+   */
+  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
 
   private readonly _basket = signal<BasketView | null>(null);
   private readonly _state = signal<BasketLoad>('loading');
@@ -154,8 +167,40 @@ export class BasketStore {
   /** Which basket this store is about, once it has been told. */
   private _id: string | null = null;
 
+  /**
+   * Whether the reader is leaving this basket on purpose (velista `0085`, section 7).
+   *
+   * Their own `unshared` arrives while the people sheet is navigating away, and the
+   * revoked notice drawn under it for that moment would tell somebody who just pressed
+   * Leave that they were thrown out.
+   */
+  private _leaving = false;
+
   /** The pending coalesced refresh, or null. See {@link _scheduleRefresh}. */
   private _refreshAt: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * How many times this store has changed the basket by any path other than a
+   * read applying its answer, which is what tells {@link refresh} its answer is old.
+   *
+   * The failure it exists to prevent, in the order it happened. Somebody joins, the
+   * burst of events that arrival makes is coalesced into one re-read a second and a
+   * half later, and while that read is out the person holding the phone adds a line
+   * in the aisle. The add answers first and its row is drawn. The read answers
+   * second, from before the add, and it replaced the whole basket, so the row the
+   * shopper had just watched appear vanished with nothing on screen to say why.
+   *
+   * A read that starts after the last local change cannot be old, so comparing this
+   * number across the request is enough, and a read that finds it moved goes back
+   * and asks again rather than applying what it has.
+   */
+  private _generation = 0;
+
+  /** The read {@link refresh} has out, or null. See {@link _read}. */
+  private _reading: Promise<void> | null = null;
+
+  /** Whether somebody asked to refresh while {@link _reading} was already out. */
+  private _queued = false;
 
   constructor() {
     // By hand, not `takeUntilDestroyed`: `@angular/core/rxjs-interop` is a secondary
@@ -192,6 +237,15 @@ export class BasketStore {
           this.append(event.line);
           return;
 
+        case 'generatedList.lineRemoved':
+          // A rename merged this line into another one (backend `0113`, section 6).
+          // The survivor arrives beside it as `lineUpdated`, and the server sends
+          // this first, so the basket never draws two lines of one name.
+          if (event.generatedListId === this._id) {
+            this.drop(event.lineId);
+          }
+          return;
+
         case 'generatedList.participantJoined':
         case 'generatedList.participantLeft':
           // The participant list is redacted per reader and carries a device for some
@@ -219,8 +273,26 @@ export class BasketStore {
       }
     });
 
+    // Losing access to the basket on screen: removed, the link revoked with its
+    // people, having left from another device, or the basket deleted. The screen
+    // already has a treatment for exactly this, which a failed renewal reaches too,
+    // so the event lands on the same state rather than on a second notice.
+    const access = this._realtime.events.subscribe((event) => {
+      if (
+        event.type === 'generatedList.unshared' &&
+        !this._leaving &&
+        this._id !== null &&
+        event.generatedListId === this._id
+      ) {
+        this._cancelRefresh();
+        this._sessions.forget(this._id);
+        this._state.set('revoked');
+      }
+    });
+
     inject(DestroyRef).onDestroy(() => {
       subscription.unsubscribe();
+      access.unsubscribe();
       this._cancelRefresh();
     });
   }
@@ -283,10 +355,24 @@ export class BasketStore {
    *
    * Empty when the socket is down rather than frozen at its last known value: a stale
    * face row is a claim about the present tense that nothing is checking.
+   *
+   * **One entry per participant.** The server keeps presence per socket, so somebody
+   * with the basket open in two tabs arrives twice, and the face row counted tabs
+   * while the people sheet counted people. The first entry for a participant wins.
    */
-  readonly present = computed<readonly BasketPresenceEntry[]>(() =>
-    this._socket.connected() ? this._present() : []
-  );
+  readonly present = computed<readonly BasketPresenceEntry[]>(() => {
+    if (!this._socket.connected()) {
+      return [];
+    }
+    const seen = new Set<string>();
+    return this._present().filter((entry) => {
+      if (seen.has(entry.participantId)) {
+        return false;
+      }
+      seen.add(entry.participantId);
+      return true;
+    });
+  });
 
   /** The lines, in the order the basket holds them. */
   readonly lines = computed<readonly BasketLine[]>(
@@ -483,7 +569,15 @@ export class BasketStore {
     this._socket.close();
     this._cancelRefresh();
     this._id = null;
+    this._leaving = false;
     this._basket.set(null);
+    // A read that is still out was asked for the basket being let go, so it is
+    // disowned here: the next `open` starts one of its own rather than waiting on
+    // an answer nothing will apply, and the bump makes that answer stale even in
+    // the one case the id check cannot see, which is the same basket opened again.
+    this._reading = null;
+    this._queued = false;
+    this._changed();
     this._link.set(null);
     this._present.set([]);
     this._busyLines.set(new Set());
@@ -505,6 +599,15 @@ export class BasketStore {
    * Called after this store's own writes, and by the page when the app comes back
    * from the background (`0035`), which is the moment a shopper's screen is most
    * likely to be behind somebody else's.
+   *
+   * **Two calls at once collapse into one read, with at most one queued behind it.**
+   * A caller that arrives while a read is out is not served by that read, because it
+   * left before they asked: several writes await this method precisely so the answer
+   * reflects what they just did (velista `0057`, section 6). So they join the read
+   * already running and it goes round once more for them.
+   *
+   * The promise resolves when an answer that was not out of date has been applied, or
+   * when the read failed. See {@link _generation} for what out of date means here.
    */
   async refresh(): Promise<void> {
     const id = this._id;
@@ -512,14 +615,81 @@ export class BasketStore {
       return;
     }
 
-    try {
-      const basket = await this._service.getBasket(id);
+    const reading = this._reading;
+    if (reading !== null) {
+      this._queued = true;
+      await reading;
+      return;
+    }
+
+    // Recorded here and cleared in the chained `finally`, which settles this
+    // promise only after it has run. So nobody can resume from an await to find a
+    // read still recorded that has in fact finished, and queue behind it forever.
+    // The identity check is what lets {@link leave} disown a read: a newer one is
+    // already recorded by the time an abandoned one gets here.
+    const started = this._read(id).finally(() => {
+      if (this._reading === started) {
+        this._reading = null;
+      }
+    });
+    this._reading = started;
+    await started;
+  }
+
+  /**
+   * Ask for the basket until an answer is worth applying, then apply it.
+   *
+   * The loop ends when the writes stop, because a read that starts after the last
+   * local change cannot be out of date. There is deliberately **no cap** that gives
+   * up and applies an old answer anyway: applying one is the defect this exists to
+   * remove, and a screen a moment behind is better than a row that disappears.
+   *
+   * A failure ends it, keeping {@link _fail}'s treatment, and so does the screen
+   * letting this basket go while the read was out.
+   */
+  private async _read(id: string): Promise<void> {
+    for (;;) {
+      const generation = this._generation;
+      this._queued = false;
+
+      let basket: BasketView;
+      try {
+        basket = await this._service.getBasket(id);
+      } catch (error) {
+        this._fail(id, error);
+        return;
+      }
+
+      if (this._id !== id) {
+        // `leave` happened while this was out, so there is no screen to draw on
+        // and the next visit reads for itself.
+        return;
+      }
+
+      if (this._generation !== generation) {
+        continue;
+      }
+
       this._basket.set(basket);
       this._state.set('ready');
       this._error.set(null);
-    } catch (error) {
-      this._fail(id, error);
+
+      if (!this._queued) {
+        return;
+      }
     }
+  }
+
+  /**
+   * Note that the basket changed by a path other than a read applying its answer.
+   *
+   * Called from the shared paths rather than from each call site, which is what
+   * makes it hard to forget: every fold of a write's answer and every socket event
+   * goes through {@link append}, {@link apply} or {@link drop}. See
+   * {@link _generation}.
+   */
+  private _changed(): void {
+    this._generation += 1;
   }
 
   /**
@@ -624,6 +794,34 @@ export class BasketStore {
       );
       this._lastAdded.set(null);
 
+      return result;
+    });
+  }
+
+  /**
+   * Rename a line, and the zone lines it came from (velista `0084`, backend `0113`).
+   *
+   * **From the answer and never optimistically**, for {@link addLine}'s reason, and
+   * for one of its own: a rename can merge, and a row renamed in place that the
+   * server then folds into another would draw two rows of one name for a moment.
+   *
+   * The absorbed line leaves first, then the survivor is merged by id. The survivor
+   * is a line this basket already holds, whichever of the two it is, so `apply`
+   * reaches it.
+   *
+   * Null on failure, and the store's {@link error} holds the refusal: a
+   * `line_merge_required` there is the question the sheet asks next.
+   */
+  async renameLine(
+    lineId: string,
+    body: BasketRenameRequest
+  ): Promise<BasketRenameResult | null> {
+    return this._write(lineId, async (id) => {
+      const result = await this._service.renameLine(id, lineId, body);
+      if (result.absorbedLineId !== null) {
+        this.drop(result.absorbedLineId);
+      }
+      this.apply(result.line);
       return result;
     });
   }
@@ -767,6 +965,7 @@ export class BasketStore {
         ? [...held.lines, line]
         : [...held.lines.slice(0, at), line, ...held.lines.slice(at)];
     this._basket.set({ ...held, lines });
+    this._changed();
     return true;
   }
 
@@ -783,11 +982,15 @@ export class BasketStore {
    * already have refetched without it.
    */
   drop(lineId: string): void {
-    this._basket.update((basket) =>
-      basket === null
-        ? basket
-        : { ...basket, lines: basket.lines.filter((row) => row.id !== lineId) }
-    );
+    const held = this._basket();
+    if (held === null) {
+      return;
+    }
+    this._basket.set({
+      ...held,
+      lines: held.lines.filter((row) => row.id !== lineId),
+    });
+    this._changed();
   }
 
   /**
@@ -804,19 +1007,19 @@ export class BasketStore {
    * disappearing when somebody else settles something.
    */
   apply(line: BasketLine): void {
-    this._basket.update((basket) => {
-      if (basket === null) {
-        return basket;
-      }
-      return {
-        ...basket,
-        lines: basket.lines.map((held) =>
-          held.id === line.id
-            ? { ...held, ...line, origins: line.origins ?? held.origins }
-            : held
-        ),
-      };
+    const basket = this._basket();
+    if (basket === null) {
+      return;
+    }
+    this._basket.set({
+      ...basket,
+      lines: basket.lines.map((held) =>
+        held.id === line.id
+          ? { ...held, ...line, origins: line.origins ?? held.origins }
+          : held
+      ),
     });
+    this._changed();
   }
 
   /**
@@ -1039,6 +1242,52 @@ export class BasketStore {
     }
     await this._service.revokeParticipant(id, participantId);
     await this.refresh();
+  }
+
+  /**
+   * Add one of the owner's contacts (velista `0085`, section 4).
+   *
+   * **False rather than a throw**, because the caller is a checkbox that has to be put
+   * back by hand when the write does not land, not a sheet that stays open on an
+   * error. The participant list is read again on success, so the ticks and the joined
+   * count follow the answer rather than a guess.
+   */
+  async addParticipant(userId: string): Promise<boolean> {
+    const id = this._id;
+    if (id === null) {
+      return false;
+    }
+    try {
+      await this._service.addParticipant(id, userId);
+    } catch {
+      return false;
+    }
+    await this.refresh();
+    return true;
+  }
+
+  /**
+   * Leave this basket, as a registered participant who does not own it (velista
+   * `0085`, section 7).
+   *
+   * The stored session goes with it, so nothing on this device still presents a
+   * credential for a basket the reader walked away from. False on failure, for the
+   * people sheet to stay where it is.
+   */
+  async leaveBasket(): Promise<boolean> {
+    const id = this._id;
+    if (id === null) {
+      return false;
+    }
+    this._leaving = true;
+    try {
+      await this._service.leaveBasket(id);
+    } catch {
+      this._leaving = false;
+      return false;
+    }
+    this._sessions.forget(id);
+    return true;
   }
 
   // --- Internals -------------------------------------------------------------

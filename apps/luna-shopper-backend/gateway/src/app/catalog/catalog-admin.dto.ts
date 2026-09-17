@@ -1,13 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  BRAND_ORDERS,
   ItemCategory,
   PostalCodeSource,
   PriceSourceKind,
+  type BrandOrder,
 } from '@portfolio/luna-shopper/contracts';
+import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -180,4 +184,74 @@ export class AdminListLocationItemsQueryDto extends CatalogListQueryDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
   supermarketLocationId!: string;
+}
+
+/**
+ * The registry, read as a list (plan 0115, section 5.2).
+ *
+ * `order` is its own two values rather than `CatalogListQueryDto`'s, because a
+ * brand has no localized name to order by and `itemCount` is not a column any
+ * other list has. It extends {@link PageQueryDto} directly for the reason
+ * {@link SearchOrderQueryDto} is a sibling rather than a subclass:
+ * class-validator collects the decorators of the whole prototype chain, so a
+ * subclass restating `order` would be validated against both lists.
+ *
+ * Every parameter is on this class and none is a `@Query('name')` argument
+ * beside it, which is the rule the price scope lists were written against and
+ * broke: the pipe validates the whole query object against the declared class,
+ * so a parameter the class does not carry is a 400 however the handler reads it.
+ */
+export class AdminListBrandsQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    description:
+      'Matches when the text’s own brand key is contained in the brand’s key, or when the label contains the text. A query with no letters or digits matches on the label only.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  query?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only this chain’s private labels, including the brands linked to one of them: the chain a linked brand belongs to is its canonical brand’s.',
+  })
+  @IsOptional()
+  @IsUUID()
+  privateLabelSupermarketId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only the brands linked to this one, which is its list of other spellings.',
+  })
+  @IsOptional()
+  @IsUUID()
+  canonicalBrandId?: string;
+
+  @ApiPropertyOptional({
+    enum: BRAND_ORDERS,
+    description:
+      '`label` ascending by default, `itemCount` descending. Both break ties on the id, so either is safe to page the whole registry with.',
+  })
+  @IsOptional()
+  @IsIn([...BRAND_ORDERS])
+  order?: BrandOrder;
+}
+
+/**
+ * The unregistered keys queued rows carry (plan 0115, section 7.3).
+ *
+ * No order: the read has exactly one, most products first, and offering a
+ * parameter with one value would suggest there is a choice.
+ */
+export class AdminListBrandSuggestionsQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    description:
+      'Keyed before matching, so `el pozo` finds `elpozo`. A query with no letters or digits answers every suggestion.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  query?: string;
 }

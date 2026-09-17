@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`5b9422578`](https://github.com/IchirokuXVI/nx-portfolio/commit/5b9422578ac2de1f9dcfcfc45869a19132637f1a) on `dev`, with no pull request of its own.
+
 # 0005. Injector scope, and one place to declare test providers
 
 > Prerequisite reading: `0004` section 9 (the DI token inventory), `0001` section 5

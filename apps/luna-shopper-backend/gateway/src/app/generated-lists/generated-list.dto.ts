@@ -1,11 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   GENERATED_LIST_LIMITS,
+  GENERATED_LIST_SHARING_LIMITS,
   GeneratedListStatus,
 } from '@portfolio/luna-shopper/contracts';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -100,6 +102,21 @@ export class CreateGeneratedListDto {
   @MinLength(1)
   @MaxLength(200)
   idempotencyKey?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: GENERATED_LIST_SHARING_LIMITS.maxParticipants - 1,
+    uniqueItems: true,
+    description:
+      'People to share the basket with as it is created, chosen from GET /v1/contacts. Each must share an approved group with the caller at this moment, or the whole request is refused with validation_failed naming the ids that are not.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(GENERATED_LIST_SHARING_LIMITS.maxParticipants - 1)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  memberUserIds?: string[];
 }
 
 export class UpdateGeneratedListDto {
@@ -209,6 +226,14 @@ export class UpdateGeneratedListLineDto {
   @IsOptional()
   @IsUUID()
   targetListId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'A new content renames every zone line this line came from as well (plan 0113). Merge where the new name is already taken, on one of those lists or in the basket. Without it such a rename is refused with `line_merge_required`, and nothing is written.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  confirmMerge?: boolean;
 }
 
 export class ReorderGeneratedListLinesDto {
@@ -248,4 +273,22 @@ export class ListGeneratedListsQueryDto {
   @Type(() => Boolean)
   @IsBoolean()
   includeArchived?: boolean;
+}
+
+/** The query half of the shared baskets listing (plan 0114, section 8). */
+export class ListSharedGeneratedListsQueryDto {
+  @ApiPropertyOptional({
+    description: 'The `nextCursor` of the previous page. Opaque.',
+  })
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }

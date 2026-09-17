@@ -16,7 +16,9 @@ import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListBasketService } from './generated-list-basket.service';
+import { GeneratedListLineRenameService } from './generated-list-line-rename.service';
 import { GeneratedListLineService } from './generated-list-line.service';
+import { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
@@ -83,6 +85,10 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     GeneratedListOrderService,
     GeneratedListLineService,
     GeneratedListSharingService,
+    // The people an owner shares a basket with on purpose (plan 0114). The run
+    // and the share sheet both add people, so the contact check, the name rule
+    // and the row table live here rather than in either of them.
+    GeneratedListMembersService,
     GeneratedListSettleService,
     // The reverse of the settle (plan 0054, section 3), and a provider of its
     // own for the same reason: it is the other operation here that reaches a
@@ -111,6 +117,11 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     // says how much of it this basket bought for them, and the two move in
     // opposite directions on the same row of the same sheet.
     GeneratedListOriginSettledService,
+    // Renaming a basket line and every zone line it came from (plan 0113). A
+    // provider of its own, because it is the one write here that renames zone
+    // lines, merges them through plan 0112's merge, and merges two basket lines,
+    // all in one transaction. The owner's line edit calls it too.
+    GeneratedListLineRenameService,
     // The purchases waiting for a list to arrive (plan 0092 section 4.3, filled
     // by plan 0093). It does nothing yet, and it is provided rather than left
     // out so the two origin inserts already call the one method.

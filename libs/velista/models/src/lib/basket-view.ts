@@ -876,6 +876,62 @@ export interface BasketSplitResult {
 }
 
 /**
+ * A new name for a basket line (velista `0084`, backend `0113`).
+ *
+ * The server renames the zone lines the basket line came from in the same write,
+ * so this is the one basket write that changes what a household's own list says.
+ */
+export interface BasketRenameRequest {
+  content: string;
+  /**
+   * Whether a name already taken may merge. Absent or false asks first: the server
+   * refuses with `line_merge_required` and writes nothing.
+   */
+  confirmMerge?: boolean;
+}
+
+/**
+ * What a rename did.
+ *
+ * {@link line} is the surviving line, and its id differs from the line the request
+ * named when that line was the one absorbed: the earliest line survives a merge.
+ */
+export interface BasketRenameResult {
+  line: BasketLine;
+  /** The basket line a merge took away, or null when no basket line merged. */
+  absorbedLineId: string | null;
+}
+
+/**
+ * Every place a rename's new name is already taken, from a `line_merge_required`
+ * refusal (backend `0113`, section 4).
+ *
+ * One confirmation covers all of them, so the sheet draws one row per place rather
+ * than one question per place.
+ */
+export interface BasketMergeRequired {
+  readonly lists: readonly BasketMergeRequiredList[];
+  /** The basket's own line with that name, or null when only lists collide. */
+  readonly basket: BasketMergeRequiredBasket | null;
+}
+
+/** One list whose own line already carries the new name. */
+export interface BasketMergeRequiredList {
+  readonly listId: string;
+  readonly listName: string;
+  readonly zoneName: string;
+  /** What that other line asks for. */
+  readonly otherQuantity: number;
+}
+
+/** The basket line that already carries the new name. */
+export interface BasketMergeRequiredBasket {
+  readonly otherLineId: string;
+  /** The other line's whole quantity, as the refusal states it. */
+  readonly otherQuantity: number;
+}
+
+/**
  * One product of a split, and how many units go to it.
  *
  * Only for products **other than** the line's own: the line keeps the balance,

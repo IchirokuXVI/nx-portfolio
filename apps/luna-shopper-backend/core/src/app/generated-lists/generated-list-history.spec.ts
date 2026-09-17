@@ -81,6 +81,7 @@ function build(options: {
     {} as unknown as ProfileService,
     fakeLineClaims({}).service,
     { emitToUsers: () => undefined } as unknown as CoreEventsPublisher,
+    {} as never,
     {} as never
   );
 

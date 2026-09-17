@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`968f6f809`](https://github.com/IchirokuXVI/nx-portfolio/commit/968f6f809eb3945001e210b15bb343cfe32a792c) on `dev`, with no pull request of its own.
+
 # 0001: Localization refactor (RokuTranslator namespace scoping + per-app locales)
 
 > Detailed implementation plan produced from the earlier investigation brief.

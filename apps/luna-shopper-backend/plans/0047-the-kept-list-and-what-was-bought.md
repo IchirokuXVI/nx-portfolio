@@ -1,3 +1,5 @@
+> **PR:** [#85](https://github.com/IchirokuXVI/nx-portfolio/pull/85)
+
 # 0047 The kept list, and what was actually bought
 
 A zone list stops being a to do list and becomes a **record of what a household keeps**. Nobody

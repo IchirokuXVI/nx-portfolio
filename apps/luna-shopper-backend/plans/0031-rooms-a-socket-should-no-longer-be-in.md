@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`3ea2c06f7`](https://github.com/IchirokuXVI/nx-portfolio/commit/3ea2c06f78a0a5e0cc8914d7a566936f4a948f74) on `dev`, with no pull request of its own.
+
 # 0031 Rooms a socket should no longer be in
 
 > Depends on 0009 (realtime) and 0028 (the Redis cache, presence and the backplane).

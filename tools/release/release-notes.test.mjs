@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  compareEnd,
   isRollup,
   label,
   pullRequestNumber,
@@ -265,6 +266,33 @@ describe('render', () => {
     assert.match(notes, /compare\/v0\.1\.0\.\.\.v0\.2\.0/);
   });
 
+  it('ends the link at the version when the range ends at HEAD', () => {
+    const beforeTagging = render({
+      entries,
+      rollups: 0,
+      from: 'v0.1.0',
+      to: 'HEAD',
+      version: 'v0.2.0',
+      all: false,
+      repo: 'o/r',
+    });
+    assert.match(beforeTagging, /compare\/v0\.1\.0\.\.\.v0\.2\.0/);
+    assert.doesNotMatch(beforeTagging, /\.\.\.HEAD/);
+  });
+
+  it('never links to HEAD, which moves on after the release', () => {
+    const untagged = render({
+      entries,
+      rollups: 0,
+      from: 'v0.1.0',
+      to: 'HEAD',
+      version: null,
+      all: false,
+      repo: 'o/r',
+    });
+    assert.doesNotMatch(untagged, /Full changelog/);
+  });
+
   it('links a pull request and leaves a loose commit as a hash', () => {
     assert.equal(
       label(
@@ -272,5 +300,13 @@ describe('render', () => {
       ),
       '- **shell**: the host mounts the remote at its own path ([#9](https://example.test/#9))'
     );
+  });
+});
+
+describe('compareEnd', () => {
+  it('prefers the version, then a ref other than HEAD, then nothing', () => {
+    assert.equal(compareEnd({ to: 'HEAD', version: 'v1.0.0' }), 'v1.0.0');
+    assert.equal(compareEnd({ to: 'v0.9.0', version: null }), 'v0.9.0');
+    assert.equal(compareEnd({ to: 'HEAD', version: null }), null);
   });
 });

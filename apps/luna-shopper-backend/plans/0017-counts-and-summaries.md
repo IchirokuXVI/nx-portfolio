@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`840f1b747`](https://github.com/IchirokuXVI/nx-portfolio/commit/840f1b74770a9dc48a274ee54bbe978d568f1685) on `dev`, with no pull request of its own.
+
 # 0017 Zone summaries, counts and the member read surface
 
 The frontend cannot render its approved home screen against this API. Every summary number the

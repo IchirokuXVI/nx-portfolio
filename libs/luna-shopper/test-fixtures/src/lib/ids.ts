@@ -21,10 +21,22 @@ export const BOB_ID = 'b0b00000-0000-4000-a000-000000000002';
 export const CAROL_ID = 'ca401000-0000-4000-a000-000000000003';
 /** Temp: a temporary (throwaway) user, used for the upgrade and merge paths. */
 export const TEMP_USER_ID = '7e290000-0000-4000-a000-000000000004';
+/**
+ * Dana: an approved member with the full set on both weekly lists, a registered
+ * email + password user (velista plan 0080, section 3).
+ *
+ * She exists because no seeded user could pass the all or nothing rule on a
+ * shared basket: Bob signs in with Google only, Carol is still pending, and the
+ * guest is a temporary account. A browser suite that follows a registered
+ * participant through a shared basket needs someone who can sign in with a
+ * password and reach every zone detail, and that is Dana.
+ */
+export const DANA_ID = 'da4a0000-0000-4000-a000-000000000005';
 
 // --- Auth: credentials + identities ------------------------------------------
 export const ALICE_CREDENTIAL_ID = 'a11ce000-0000-4000-b000-000000000001';
 export const CAROL_CREDENTIAL_ID = 'ca401000-0000-4000-b000-000000000003';
+export const DANA_CREDENTIAL_ID = 'da4a0000-0000-4000-b000-000000000005';
 export const BOB_OAUTH_ID = 'b0b00000-0000-4000-c000-000000000002';
 
 /** The plaintext password the seeder hashes with argon2 for the email users. */
@@ -40,6 +52,7 @@ export const MEMBERSHIP_ALICE_ID = 'de3b0000-0000-4000-a000-000000000001';
 export const MEMBERSHIP_BOB_ID = 'de3b0000-0000-4000-a000-000000000002';
 export const MEMBERSHIP_CAROL_ID = 'de3b0000-0000-4000-a000-000000000003';
 export const MEMBERSHIP_TEMP_ID = 'de3b0000-0000-4000-a000-000000000004';
+export const MEMBERSHIP_DANA_ID = 'de3b0000-0000-4000-a000-000000000005';
 
 /**
  * The second zone (plan 0042, section 4): a group whose member was approved
@@ -72,6 +85,9 @@ export const ACCESS_TEMP_GROCERIES_ID = 'acce0000-0000-4000-a000-000000000005';
 /** What the approval grant wrote for Carol: read, add, and tick off. */
 export const ACCESS_CAROL_FLAT_SUPPLIES_ID =
   'acce0000-0000-4000-b000-000000000001';
+/** Dana's two rows: the full set on each weekly list, so she passes all or nothing. */
+export const ACCESS_DANA_GROCERIES_ID = 'acce0000-0000-4000-a000-000000000006';
+export const ACCESS_DANA_HARDWARE_ID = 'acce0000-0000-4000-a000-000000000007';
 
 // --- Core: lines + comments --------------------------------------------------
 export const LINE_MILK_ID = '11e00000-0000-4000-a000-000000000001';

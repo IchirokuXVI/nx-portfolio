@@ -7,6 +7,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   ContentLocaleStore,
   DeploymentStore,
+  ResourceMemoryGateways,
   ServerReachability,
   SessionStorage,
   SessionStore,
@@ -16,7 +17,15 @@ import {
   provideResources,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ReferencePicker } from '@portfolio/luna-shopper-admin/ui';
+import type {
+  ResourceGateway,
+  ResourceInput,
+  ResourceRow,
+} from '@portfolio/luna-shopper-admin/models';
+import {
+  ReferencePicker,
+  ReferencesControl,
+} from '@portfolio/luna-shopper-admin/ui';
 import { ITEMS } from './items';
 import { LOCATION_ITEMS } from './location-items';
 import { LOCATIONS } from './locations';
@@ -207,6 +216,22 @@ describe('the effective price list', () => {
     expect(headers).toContain('catalog.prices.observedAt');
     expect(headers).toContain('catalog.prices.stale');
   });
+
+  /**
+   * Admin plan 0029, section 5: a price a run copied names the scope it was
+   * read at, through the price scopes lookup rather than as its id.
+   */
+  it('names the scope a copied price was read at', async () => {
+    const fixture = await boot('/prices');
+    await settle(fixture);
+    await settle(fixture);
+
+    const headers = [...fixture.nativeElement.querySelectorAll('thead th')].map(
+      (cell) => (cell as HTMLElement).textContent?.trim()
+    );
+    expect(headers).toContain('catalog.prices.priceCopiedFromScopeId');
+    expect(rowsText(fixture)).toContain('REGION 3421');
+  });
 });
 
 describe('a price and its history', () => {
@@ -250,6 +275,26 @@ describe('a price and its history', () => {
     await settle(fixture);
 
     expect(fixture.nativeElement.querySelectorAll('.rows li')).toHaveLength(1);
+  });
+
+  /** Admin plan 0029, section 5, on the detail: the row and the history. */
+  it('names where a copied price was read, and says nothing for one that was not', async () => {
+    const copied = await boot('/prices/it_milk_1l~ps_mercadona_4661');
+    await settle(copied);
+    await settle(copied);
+
+    expect(copied.nativeElement.querySelector('dd.copied')?.textContent).toBe(
+      'REGION 3421'
+    );
+    expect(
+      copied.nativeElement.querySelector('.rows li .copied')?.textContent
+    ).toContain('REGION 3421');
+
+    const read = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
+    await settle(read);
+    await settle(read);
+
+    expect(text(read)).not.toContain('catalog.prices.priceCopiedFromScopeId');
   });
 
   it('offers to add a price, which is the form and not an edit', async () => {
@@ -382,6 +427,69 @@ describe('the shops list', () => {
 
     expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(1);
     expect(rowsText(fixture)).toContain('14005');
+  });
+});
+
+/**
+ * A shop's stack of price scopes, edited whole (admin plan 0028, section 7).
+ */
+describe('the shop price scopes', () => {
+  /** What the shop gateway was asked to write, by the form's submit. */
+  function recordUpdates(): ResourceInput[] {
+    const sent: ResourceInput[] = [];
+    const original = ResourceMemoryGateways.prototype.for;
+    jest
+      .spyOn(ResourceMemoryGateways.prototype, 'for')
+      .mockImplementation(function <T extends ResourceRow>(
+        this: ResourceMemoryGateways,
+        source: Parameters<ResourceMemoryGateways['for']>[0]
+      ): ResourceGateway<T> {
+        const gateway = original.call(this, source) as ResourceGateway<T>;
+        if (source.path.endsWith('/locations')) {
+          const update = gateway.update.bind(gateway);
+          gateway.update = (id, input) => {
+            sent.push(input);
+            return update(id, input);
+          };
+        }
+        return gateway;
+      });
+    return sent;
+  }
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('lists each shop’s scopes by name', async () => {
+    const fixture = await boot('/locations');
+    await chooseFilter(fixture, 'supermarketId', 'sm_mercadona');
+    await settle(fixture);
+
+    const body = rowsText(fixture);
+    expect(body).toContain('Córdoba warehouse');
+    expect(body).not.toContain('ps_mercadona_4661');
+  });
+
+  it('keeps the store scope when a region is removed, and sends the stack whole', async () => {
+    const sent = recordUpdates();
+    const fixture = await boot('/locations/loc_cordoba_centro');
+    await settle(fixture);
+
+    const control = fixture.debugElement.query(By.directive(ReferencesControl));
+    const chips = [
+      ...control.nativeElement.querySelectorAll('li.chip'),
+    ] as HTMLElement[];
+    expect(chips).toHaveLength(2);
+
+    // The shop's own store scope is locked; the warehouse is not.
+    const [store, region] = chips;
+    expect(store.querySelector('button')).toBeNull();
+    region.querySelector('button')?.click();
+    await settle(fixture);
+
+    buttonSaying(fixture, 'resource.action.save')?.click();
+    await settle(fixture);
+
+    expect(sent).toEqual([{ priceScopeIds: ['ps_store_loc_cordoba_centro'] }]);
   });
 });
 

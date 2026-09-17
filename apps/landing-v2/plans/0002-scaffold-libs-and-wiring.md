@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`ca65b53d5`](https://github.com/IchirokuXVI/nx-portfolio/commit/ca65b53d5e2b04d534372c8c6ad76a8880be38d6) on `dev`, with no pull request of its own.
+
 # 0001 — Scaffold `landing-v2` libraries, wire the shell, empty remote entry
 
 > Repo-relative paths. Aliases only across lib boundaries. Commit locally only.

@@ -25,6 +25,10 @@ export const ERROR_CATALOG: Record<
     en: 'You need to sign in to do that.',
     es: 'Necesitas iniciar sesión para hacer eso.',
   },
+  [ERROR_CODES.NOT_A_PARTICIPANT]: {
+    en: 'You are no longer part of this shopping list.',
+    es: 'Ya no formas parte de esta lista de la compra.',
+  },
   [ERROR_CODES.FORBIDDEN]: {
     en: 'You do not have permission to do that.',
     es: 'No tienes permiso para hacer eso.',
@@ -95,6 +99,54 @@ export const ERROR_CATALOG: Record<
   [ERROR_CODES.RUN_IN_PROGRESS]: {
     en: 'This postal code is being discovered right now. Wait for that run to finish.',
     es: 'Este código postal se está descubriendo ahora mismo. Espera a que termine esa ejecución.',
+  },
+  // A rename onto a name the list already holds (plan 0112, section 7). The first
+  // names the other line, because the person is being asked a question about it.
+  [ERROR_CODES.LINE_MERGE_REQUIRED]: {
+    en: 'This list already has a line called "{content}". Confirm to merge the two lines into one.',
+    es: 'Esta lista ya tiene una línea llamada "{content}". Confirma para unir las dos líneas en una.',
+  },
+  [ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL]: {
+    en: 'That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.',
+    es: 'Ese nombre pertenece a una línea aprobada. Solo quien puede aprobar líneas puede unir una línea pendiente con ella.',
+  },
+  [ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS]: {
+    en: 'Together these two lines would hold more than {max} products, so they cannot be merged.',
+    es: 'Juntas, estas dos líneas tendrían más de {max} productos, así que no se pueden unir.',
+  },
+  // The brand registry's two refusals (plan 0115, section 5.3). Both name what
+  // to do rather than what failed: type a real word, or open the brand that
+  // already holds the key.
+  [ERROR_CODES.BRAND_LABEL_EMPTY]: {
+    en: 'The label needs at least one letter or digit.',
+    es: 'La etiqueta necesita al menos una letra o un dígito.',
+  },
+  [ERROR_CODES.BRAND_KEY_TAKEN]: {
+    en: 'A brand with this key already exists.',
+    es: 'Ya existe una marca con esta clave.',
+  },
+  // The three refusals of the one level rule (plan 0124, sections 2 and 3).
+  // Each says what the registry believes rather than what the statement did, so
+  // the sentence still reads when the back office shows it on its own.
+  [ERROR_CODES.BRAND_LINK_TO_SELF]: {
+    en: 'A brand is already itself, so it cannot be a spelling of itself.',
+    es: 'Una marca ya es ella misma, así que no puede ser una grafía de sí misma.',
+  },
+  [ERROR_CODES.BRAND_LINK_TOO_DEEP]: {
+    en: 'A spelling points at one brand, and that brand points at nothing.',
+    es: 'Una grafía apunta a una marca, y esa marca no apunta a ninguna.',
+  },
+  [ERROR_CODES.BRAND_LINK_OWNS_NO_CHAIN]: {
+    en: 'A brand that is a spelling of another owns no private label chain. The chain belongs to the brand it points at.',
+    es: 'Una marca que es la grafía de otra no tiene cadena de marca blanca. La cadena pertenece a la marca a la que apunta.',
+  },
+  [ERROR_CODES.BRAND_NOT_LINKED]: {
+    en: 'Only a spelling linked to another brand can be deleted.',
+    es: 'Solo se puede borrar una grafía enlazada a otra marca.',
+  },
+  [ERROR_CODES.BRAND_LINK_KEEPS_KEY]: {
+    en: 'A spelling of another brand keeps its key. Register the other spelling as its own brand.',
+    es: 'La grafía de otra marca conserva su clave. Registra la otra grafía como una marca propia.',
   },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',

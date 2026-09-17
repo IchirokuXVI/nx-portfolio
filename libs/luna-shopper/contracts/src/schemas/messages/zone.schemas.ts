@@ -39,6 +39,10 @@ export const ZONE_SCHEMA_IDS = {
   countsMineRequest: schemaId('msg/zone.countsMine/request'),
   listMembersRequest: schemaId('msg/membership.list/request'),
   setMembershipUsernameRequest: schemaId('msg/membership.setUsername/request'),
+  // Who the caller shares an approved group with (plan 0114, section 2).
+  contactsRequest: schemaId('msg/zone.contacts/request'),
+  contactView: schemaId('zone/ContactView'),
+  contactPage: schemaId('zone/ContactPage'),
 } as const;
 
 /**
@@ -286,7 +290,33 @@ const setMembershipUsernameRequest = object(
   ['userId', 'zoneId', 'membershipId', 'username']
 );
 
+const contactsRequest = object(
+  ZONE_SCHEMA_IDS.contactsRequest,
+  {
+    userId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId']
+);
+
+// One membership per row, so a person in two of the caller's groups is two rows,
+// each under that group's name for them (plan 0114, section 2).
+const contactView = object(
+  ZONE_SCHEMA_IDS.contactView,
+  { userId: nonEmptyString(), zoneId: nonEmptyString(), username: string() },
+  ['userId', 'zoneId', 'username']
+);
+
+const contactPage = paginated(
+  ZONE_SCHEMA_IDS.contactPage,
+  ZONE_SCHEMA_IDS.contactView
+);
+
 export const zoneSchemas: JsonSchema[] = [
+  contactsRequest,
+  contactView,
+  contactPage,
   zoneView,
   zoneByCodeView,
   membershipView,
@@ -384,5 +414,9 @@ export const zoneMessageContracts: Record<
   [MEMBERSHIP_PATTERNS.setUsername]: {
     request: ZONE_SCHEMA_IDS.setMembershipUsernameRequest,
     response: ZONE_SCHEMA_IDS.membershipView,
+  },
+  [ZONE_PATTERNS.contacts]: {
+    request: ZONE_SCHEMA_IDS.contactsRequest,
+    response: ZONE_SCHEMA_IDS.contactPage,
   },
 };

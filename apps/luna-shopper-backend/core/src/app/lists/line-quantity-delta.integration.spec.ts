@@ -24,6 +24,7 @@ import {
 } from '../entities';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 
@@ -85,7 +86,8 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
       listAccess,
       fakeLineClaims().service,
       { emit: jest.fn() } as never,
-      new CoreAuditService(dataSource)
+      new CoreAuditService(dataSource),
+      new LineMergeService()
     );
 
     const zone = await dataSource.getRepository(Zone).save(

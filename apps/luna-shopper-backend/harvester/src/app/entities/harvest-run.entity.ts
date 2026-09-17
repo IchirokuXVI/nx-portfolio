@@ -206,4 +206,16 @@ export class HarvestRun extends BaseEntity {
    */
   @Column({ type: 'integer', nullable: true })
   revertedPriceCount!: number | null;
+
+  /**
+   * The preset this run was started from (plan 0120, section 7), null for a
+   * run somebody filled the form in for.
+   *
+   * **No foreign key.** Deleting a preset leaves its runs as they were, and a
+   * run still names a preset that is gone. What the run did is its own `input`,
+   * a copy taken when it started, and is never read back from the preset.
+   */
+  @Index('ix_harvest_runs_preset')
+  @Column({ type: 'uuid', nullable: true })
+  presetId!: string | null;
 }

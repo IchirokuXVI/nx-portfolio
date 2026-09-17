@@ -419,6 +419,7 @@
       "discard": "Throw this recording away",
       "listening": "Listening",
       "heard": "I heard",
+      "working": "Working out what you said…",
       "micRefused": "Velista cannot hear you. The microphone is switched off for this app, so turn it back on in your browser, or type it instead",
       "micMissing": "There is no microphone on this device, so type it instead",
       "notHeard": "I did not catch that",
@@ -456,15 +457,11 @@
       "approve": "Add it",
       "reject": "Not this",
       "restore": "Put it back",
-      "edit": "Change this",
       "editing": "Editing",
       "comments": "Comments",
-      "delete": "Take off the list",
-      "menuFor": "More for {{name}}",
       "overwritten": "{{name}} changed this while you were editing",
       "overwrittenBySomeone": "Somebody else changed this while you were editing",
       "failed": "That did not save. Tap to try again",
-      "move": "Move",
       "movedTo": "Moved to position {{position}} of {{total}}",
       "quantityFor": "How many {{name}}",
       "quantityChanged": "{{name}}, now {{quantity}}"
@@ -477,11 +474,23 @@
       "started": "Putting them in order. Ticking off is off",
       "ended": "Finished putting them in order",
       "moveUp": "Move {{name}} up",
-      "moveDown": "Move {{name}} down"
+      "moveDown": "Move {{name}} down",
+      "unavailable": "To reorder, use the list order, all lines and no search."
+    },
+    "view": {
+      "order": {
+        "legend": "Order",
+        "list": "List order",
+        "alpha": "A to Z"
+      },
+      "view": "View",
+      "all": "All lines",
+      "oneCategory": "One category",
+      "noCategory": "No category",
+      "reset": "Reset",
+      "none": "No lines match."
     },
     "edit": {
-      "title": "Change this line",
-      "content": "What is it",
       "save": "Save",
       "unapproves": "Saving this will put the line back to awaiting approval."
     },
@@ -562,15 +571,18 @@
       }
     },
     "gone": {
-      "deleted": "That list was deleted",
-      "unshared": "That list is no longer shared with you"
+      "byOthers": "This line was deleted by another user",
+      "unavailable": "This line was deleted and is no longer available",
+      "close": "Close"
     },
     "error": {
       "notAvailable": "This list is not available to you. It may have been deleted, or it may no longer be shared with you",
       "readOnly": "You can read this list, not change it",
       "roleChanged": "Your role in this group changed",
       "tooFast": "Slow down for a moment and try again",
-      "failed": "That did not work. Try again in a moment"
+      "failed": "That did not work. Try again in a moment",
+      "mergeNeedsApproval": "That name belongs to an approved line, and this line is not approved yet.",
+      "mergeTooManyProducts": "Together they have more than {{max}} products."
     },
     "detail": {
       "title": "About this line",
@@ -592,13 +604,18 @@
       "rateRough": "every few weeks",
       "bought": "I bought this",
       "notAvailable": "They did not have it",
-      "everything": "Everything about this line",
+      "everything": "See more details",
       "howMany": "How many did you get?",
       "howManyNote": "Prefilled with the whole outstanding quantity. Buying fewer leaves the rest wanted",
       "whichOne": "Which one did you get?",
       "record": "Record it",
       "cancel": "Cancel",
-      "failed": "That did not save. Try again"
+      "failed": "That did not save. Try again",
+      "name": "Name",
+      "askedFor": "Asked for",
+      "saved": "Saved",
+      "commentsLabel": "Comments, {{count}}",
+      "delete": "Delete line"
     },
     "page": {
       "where": "on {{list}}, in {{zone}}",
@@ -643,6 +660,48 @@
     },
     "buying": {
       "notMine": "Anybody can add to this list. Buying is for whoever does the shopping"
+    },
+    "merge": {
+      "taken": "“{{other}}” is already on this list, asking for {{otherQuantity}}.",
+      "question": "Merge them into one line asking for {{total}}?",
+      "keeps": "Comments and what was bought move with it.",
+      "confirm": "Merge",
+      "keepEditing": "Keep editing"
+    },
+    "trips": {
+      "toBuy": "To buy",
+      "loose": "Loose buys",
+      "labelNamed": "{{name}} · {{date}}",
+      "bought": "{{bought}} of {{total}} bought",
+      "lines": "{{count}} lines",
+      "liveBy": "{{name}} is buying now",
+      "live": "Somebody is buying now",
+      "older": "Show older trips",
+      "olderFailed": "The older trips did not load.",
+      "arrived": "{{count}} older trips shown",
+      "failed": "The past trips did not load.",
+      "retry": "Try again",
+      "row": {
+        "boughtOf": "bought {{bought}} of {{asked}}",
+        "bought": "bought {{bought}}",
+        "left": "{{count}} left",
+        "partly": "Bought some",
+        "notAvailable": "Not in the shop",
+        "notBought": "Was on the list, nobody bought it",
+        "boughtBy": "Bought · {{name}}",
+        "nowAsks": "The list now asks for {{count}}"
+      }
+    },
+    "due": {
+      "label": "You usually buy these about now",
+      "period": "Every {{days}} days · last bought {{when}}",
+      "periodOne": "Every day · last bought {{when}}",
+      "staple": "In {{with}} of your last {{seen}} shopping lists",
+      "add": "Add {{count}}",
+      "addLabel": "Add {{count}} of {{name}} to the list",
+      "quantityLabel": "How many of {{name}}",
+      "more": "Show more suggestions",
+      "added": "{{name}} added to the list"
     }
   },
   "account": {
@@ -1143,7 +1202,7 @@
       "listAsks": "asks for {{count}} on its list",
       "listNow": "its list now asks for {{count}}",
       "pending": "waiting for the list to agree",
-      "noAccess": "you can no longer change this list",
+      "noAccess": "You can no longer change this list",
       "claimed": "somebody is already buying this for that list",
       "rejected": "that list said no to this line",
       "cannotTake": "this line cannot be added to that list",
@@ -1177,7 +1236,13 @@
       "viaOwner": "made this list",
       "remove": "Remove from this list",
       "close": "Close",
-      "joinedUnknown": "Not known"
+      "joinedUnknown": "Not known",
+      "leave": "Leave this list",
+      "leaveQuestion": "Leave “{{name}}”? You can come back with the link if you have it.",
+      "leaveConfirm": "Leave",
+      "stay": "Stay",
+      "leaveFailed": "That did not go through. Try again.",
+      "viaInvite": "added by whoever made this list"
     },
     "share": {
       "open": "Share this list",
@@ -1256,7 +1321,22 @@
       "close": "Close",
       "reverted": "Taken back"
     },
+    "rename": {
+      "label": "Name",
+      "save": "Save",
+      "saved": "Saved",
+      "mergeTitle": "These already have a line called \"{{name}}\"",
+      "mergeExplain": "Merging makes each of them one line, with the amounts added together.",
+      "mergeAsks": "asks for {{quantity}}",
+      "mergeToGet": "{{quantity}} to get",
+      "mergeBasketRow": "This basket",
+      "merge": "Merge",
+      "keepEditing": "Keep editing"
+    },
     "error": {
+      "mergeNeedsApproval": "In {{list}}, that name belongs to an approved line, and this one is not approved yet.",
+      "mergeTooManyProducts": "In {{list}}, together they have more than {{max}} products.",
+      "renameForbidden": "You can no longer change this line's name.",
       "alreadyFinished": "Somebody already finished this line",
       "accessChanged": "Your access to one of the lists behind this line has changed",
       "ownerOnly": "Only whoever made this list can do that",
@@ -1316,7 +1396,10 @@
     "submit": "Generate",
     "submitting": "Generating",
     "cancel": "Cancel",
-    "error": "That did not go through. Try again"
+    "error": "That did not go through. Try again",
+    "people": {
+      "label": "Share with"
+    }
   },
   "history": {
     "title": "Your shopping lists",
@@ -1344,6 +1427,22 @@
     "announce": {
       "loaded_one": "{{count}} shopping list loaded",
       "loaded_other": "{{count}} shopping lists loaded"
+    },
+    "tabs": {
+      "mine": "My lists",
+      "shared": "Shared lists"
+    },
+    "shared": {
+      "byOn": "Shared by {{owner}} on {{date}}",
+      "empty": "Nobody shared a list with you yet."
+    }
+  },
+  "share": {
+    "people": {
+      "title": "People",
+      "none": "Nobody else is in your groups yet.",
+      "linkJoined": "Joined with the link. Removing them also stops the link working for them.",
+      "failed": "That did not save. Try again."
     }
   }
 }

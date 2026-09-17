@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`29dd406f0`](https://github.com/IchirokuXVI/nx-portfolio/commit/29dd406f0901d8af1c6d8053bc6b59313c653ac4) on `dev`, with no pull request of its own.
+
 # 0031: the back button never reopens a sheet
 
 > Back belongs on the previous **page**. From a group to the dashboard, from the

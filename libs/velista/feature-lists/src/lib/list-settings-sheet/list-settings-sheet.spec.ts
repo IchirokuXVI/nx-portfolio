@@ -121,7 +121,7 @@ async function render(options: Options = {}): Promise<{
       entries: readonly ListAccessEntry[]
     ) => {
       saved.push(entries);
-      return list();
+      return LIST_ID;
     },
     deleteList: async () => LIST_ID,
   } as unknown as ListServiceI;
@@ -184,6 +184,15 @@ describe('ListSettingsSheet', () => {
 
     expect(fixture.componentInstance.shareAvailable).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('list.settings.share');
+  });
+
+  it('opens with focus on the sheet and not on a field, so no keyboard rises (plan 0081)', async () => {
+    const { fixture } = await render();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('input')).not.toBeNull();
+    expect(document.activeElement).toBe(host.querySelector('.panel'));
+    expect(document.activeElement?.tagName).not.toBe('INPUT');
   });
 
   describe('who is fixed and what is locked (section 6.3)', () => {

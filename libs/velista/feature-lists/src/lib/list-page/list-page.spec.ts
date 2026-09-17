@@ -11,6 +11,9 @@ import {
   AssistantMemory,
   CATALOG_SERVICE,
   CatalogMemory,
+  DUE_LINE_SERVICE,
+  DueLineStore,
+  fakeItemNames,
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
@@ -18,6 +21,8 @@ import {
   fakeShoppingProfileStore,
   fakeZoneStore,
   GatewayError,
+  ListViewStore,
+  provideFakeItemNames,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
@@ -27,18 +32,29 @@ import {
   provideFakeZoneStore,
   REALTIME_CLIENT,
   RealtimeMemory,
+  TRIP_SERVICE,
+  TripStore,
+  type AssistantServiceI,
+  type DueLineServiceI,
+  type FakeItemNames,
   type FakeLineStore,
   type FakeListStore,
   type FakePresenceOptions,
   type FakeShoppingProfileStore,
+  type TripServiceI,
 } from '@portfolio/velista/data-access';
 import type {
+  CatalogItem,
+  DueLine,
   Line,
   LineRowVm,
   ListPermission,
   Membership,
   MyZone,
   ShoppingListSummary,
+  Trip,
+  TripPage,
+  TripRow,
   ZoneRole,
 } from '@portfolio/velista/models';
 import {
@@ -47,7 +63,15 @@ import {
   provideVelistaTesting,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { LineList, ListHeader } from '@portfolio/velista/ui';
+import {
+  DueLineRow,
+  LineComposer,
+  LineList,
+  ListHeader,
+  ListTools,
+  ToBuyHeading,
+  TripGroup,
+} from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { ListPage } from './list-page';
 
@@ -117,6 +141,7 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
     listId: LIST_ID,
     content: 'Sourdough loaf',
     quantity: 1,
+    itemIds: [],
     itemId: null,
     position: 1,
     approvalStatus: 'APPROVED',
@@ -160,6 +185,14 @@ interface Options {
   readonly members?: readonly Membership[];
   /** `?line=`, which a link in an assistant reply carries (plan 0032, section 8). */
   readonly line?: string;
+  /** The products the catalog can name, for the category view (velista `0082`). */
+  readonly items?: readonly CatalogItem[];
+  /** The first page of trips, or a failure (velista `0088`). None by default. */
+  readonly trips?: TripPage | 'fail';
+  /** Each trip's rows, by trip id. */
+  readonly tripRows?: Readonly<Record<string, readonly TripRow[]>>;
+  /** What the list suggests, or a failure (velista `0089`). Nothing by default. */
+  readonly due?: readonly DueLine[] | 'fail';
 }
 
 async function render(options: Options = {}): Promise<{
@@ -171,6 +204,11 @@ async function render(options: Options = {}): Promise<{
   router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
   tone: { play: jest.Mock };
   profiles: FakeShoppingProfileStore;
+  itemNames: FakeItemNames;
+  view: ListViewStore;
+  trips: TripStore;
+  tripCalls: { heads: number; rows: string[] };
+  dueCalls: { reads: number };
 }> {
   TestBed.resetTestingModule();
 
@@ -192,8 +230,33 @@ async function render(options: Options = {}): Promise<{
     complete: options.complete ?? true,
   });
   const realtime = new RealtimeMemory();
+  const itemNames = fakeItemNames({ items: options.items ?? [] });
   const profiles = fakeShoppingProfileStore();
   const storage = options.storage ?? new Map<string, string>();
+  const tripCalls = { heads: 0, rows: [] as string[] };
+  const tripService: TripServiceI = {
+    listTrips: async () => {
+      tripCalls.heads += 1;
+      if (options.trips === 'fail') {
+        throw new Error('offline');
+      }
+      return options.trips ?? { live: [], items: [], nextCursor: null };
+    },
+    listTripRows: async (_listId, _kind, tripId) => {
+      tripCalls.rows.push(tripId);
+      return { items: options.tripRows?.[tripId] ?? [], nextCursor: null };
+    },
+  };
+  const dueCalls = { reads: 0 };
+  const dueService: DueLineServiceI = {
+    listDueLines: async () => {
+      dueCalls.reads += 1;
+      if (options.due === 'fail') {
+        throw new Error('offline');
+      }
+      return options.due ?? [];
+    },
+  };
   const router = {
     navigate: jest.fn().mockResolvedValue(true),
     navigateByUrl: jest.fn().mockResolvedValue(true),
@@ -207,6 +270,16 @@ async function render(options: Options = {}): Promise<{
       provideFakeZoneStore(zones),
       provideFakeListStore(lists),
       provideFakeLineStore(lines),
+      // What the route provides beside the page (velista `0082`), real, over the
+      // fakes above, so a spec asserts what the page draws of a real view.
+      ListViewStore,
+      // Beside it on the route (velista `0088`), real, over a service the spec answers.
+      TripStore,
+      { provide: TRIP_SERVICE, useValue: tripService },
+      // The page provides `DueLineStore` itself (velista `0089`); the service is the
+      // app's, answered here by the spec.
+      { provide: DUE_LINE_SERVICE, useValue: dueService },
+      provideFakeItemNames(itemNames),
       provideFakeMemberNames(
         fakeMemberNames(
           { 'user-toni': 'Toni', ...options.names },
@@ -245,7 +318,21 @@ async function render(options: Options = {}): Promise<{
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, lines, lists, realtime, storage, router, tone, profiles };
+  return {
+    fixture,
+    lines,
+    lists,
+    realtime,
+    storage,
+    router,
+    tone,
+    profiles,
+    itemNames,
+    view: TestBed.inject(ListViewStore),
+    trips: TestBed.inject(TripStore),
+    tripCalls,
+    dueCalls,
+  };
 }
 
 /**
@@ -392,6 +479,87 @@ describe('ListPage', () => {
       fixture.detectChanges();
 
       expect(query(fixture, '.voice-strip')?.classList).not.toContain('failed');
+    });
+  });
+
+  /**
+   * Velista `0079`, sections 5 and 7: a recording takes seconds to work out, and the
+   * screen says so and holds the composer for all of them.
+   */
+  describe('while the assistant works out a recording', () => {
+    type Reply = Awaited<ReturnType<AssistantServiceI['askAboutList']>>;
+
+    const RECORDING = {
+      blob: new Blob(['audio'], { type: 'audio/webm' }),
+      mimeType: 'audio/webm',
+      durationSeconds: 3,
+    };
+
+    /** Hold the assistant's answer until the test hands it over. */
+    function holdTheAnswer(): (reply: Reply) => void {
+      let answer: (reply: Reply) => void = () => undefined;
+      jest
+        .spyOn(TestBed.inject(ASSISTANT_SERVICE), 'askAboutList')
+        .mockReturnValue(
+          new Promise<Reply>((resolve) => {
+            answer = resolve;
+          })
+        );
+      return (reply) => answer(reply);
+    }
+
+    const HEARD = { heard: 'add olives', text: 'Added olives.' } as Reply;
+
+    it('says it is working until the reply lands, then shows the reply', async () => {
+      const { fixture } = await render();
+      const answer = holdTheAnswer();
+
+      const sent = fixture.componentInstance.addAloud(RECORDING);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.voiceStrip()).toMatchObject({
+        messageKey: 'list.add.working',
+        failed: false,
+        working: true,
+      });
+      const working = query(fixture, '.voice-strip .voice-working');
+      expect(working?.textContent).toContain('list.add.working');
+      expect(working?.querySelector('lib-spinner-icon')).not.toBeNull();
+      // Inside the strip's own polite region, so the reply replacing it is announced.
+      expect(query(fixture, '.voice-strip')?.getAttribute('aria-live')).toBe(
+        'polite'
+      );
+
+      answer(HEARD);
+      await sent;
+      fixture.detectChanges();
+
+      expect(query(fixture, '.voice-working')).toBeNull();
+      expect(query(fixture, '.voice-reply')?.textContent).toContain(
+        'Added olives.'
+      );
+    });
+
+    it('stays busy when a typed add lands while a recording is still out', async () => {
+      const { fixture } = await render();
+      const page = fixture.componentInstance;
+      const answer = holdTheAnswer();
+
+      const spoken = page.addAloud(RECORDING);
+      await page.add({ content: 'Olives', quantity: 1 });
+      fixture.detectChanges();
+
+      expect(page.composerBusy()).toBe(true);
+      expect(
+        fixture.debugElement
+          .query(By.directive(LineComposer))
+          .componentInstance.busy()
+      ).toBe(true);
+
+      answer(HEARD);
+      await spoken;
+
+      expect(page.composerBusy()).toBe(false);
     });
   });
 
@@ -653,7 +821,6 @@ describe('ListPage', () => {
         // 5.1). It followed `DECIDE` while the tap was the tick.
         interactive: true,
         adjustable: false,
-        actions: ['comments'],
         decidable: false,
       });
       // Everything on the list is still there to be read, which is the whole of READ.
@@ -731,21 +898,15 @@ describe('ListPage', () => {
     it('opens each one as a route relative to this page', async () => {
       const { fixture, router } = await render();
 
-      await fixture.componentInstance.act({ action: 'edit', lineId: 'ln-1' });
-      await fixture.componentInstance.act({
-        action: 'comments',
-        lineId: 'ln-1',
-      });
-      await fixture.componentInstance.act({ action: 'delete', lineId: 'ln-1' });
+      fixture.componentInstance.openLine('ln-1');
       fixture.componentInstance.openSettings();
 
       const paths = router.navigate.mock.calls.map((call) => call[0]);
-      // Every one under the `sheet` marker, which `_openSheet` adds so the five
-      // callers cannot each be the one that forgets it.
+      // Every one under the `sheet` marker, which `_openSheet` adds so the callers
+      // cannot each be the one that forgets it. Edit, comments and delete are not
+      // here: they open from the detail sheet since velista plan 0083.
       expect(paths).toEqual([
-        ['sheet', 'lines', 'ln-1', 'edit'],
-        ['sheet', 'lines', 'ln-1', 'comments'],
-        ['sheet', 'lines', 'ln-1', 'confirm', 'delete'],
+        ['sheet', 'lines', 'ln-1', 'detail'],
         ['sheet', 'settings'],
       ]);
     });
@@ -988,3 +1149,705 @@ function rows(fixture: ComponentFixture<ListPage>) {
     .query(By.directive(LineList))
     .componentInstance.lines() as readonly LineRowVm[];
 }
+
+/**
+ * Velista `0082`: the zone list can be searched, put in A to Z order, and narrowed to
+ * one category at a time.
+ */
+describe('ListPage: searching and viewing one category', () => {
+  function product(id: string, category: CatalogItem['category']): CatalogItem {
+    return {
+      id,
+      name: { es: id, en: id },
+      brand: null,
+      size: null,
+      unit: 'UNIT',
+      productGroupId: null,
+      category,
+      offer: null,
+    };
+  }
+
+  const ITEMS = [product('milk', 'DAIRY'), product('carrot', 'PRODUCE')];
+
+  const LINES = [
+    line('ln-milk', { content: 'Leche', position: 1, itemIds: ['milk'] }),
+    line('ln-carrot', {
+      content: 'Zanahorias',
+      position: 2,
+      itemIds: ['carrot'],
+    }),
+    line('ln-bags', { content: 'Bolsas', position: 3 }),
+  ];
+
+  function tools(fixture: ComponentFixture<ListPage>) {
+    const found = fixture.debugElement.query(By.directive(ListTools));
+    return found === null ? null : (found.componentInstance as ListTools);
+  }
+
+  function toBuyHeading(fixture: ComponentFixture<ListPage>) {
+    return fixture.debugElement.query(By.directive(ToBuyHeading))
+      .componentInstance as ToBuyHeading;
+  }
+
+  it('draws the tools row above the lines, with no chip row, and not in reorder mode', async () => {
+    const { fixture } = await render({ lines: LINES, items: ITEMS });
+
+    expect(tools(fixture)).not.toBeNull();
+    expect(query(fixture, 'lib-chip-row')).toBeNull();
+
+    fixture.componentInstance.startReorder();
+    fixture.detectChanges();
+
+    expect(tools(fixture)).toBeNull();
+  });
+
+  it('asks for the products of the loaded lines, and for new ones as lines arrive', async () => {
+    const { fixture, lines, itemNames } = await render({
+      lines: LINES,
+      items: ITEMS,
+    });
+
+    expect(itemNames.asked.flat()).toEqual(
+      expect.arrayContaining(['milk', 'carrot'])
+    );
+
+    // A line arriving, which is the same signal a socket event writes.
+    await lines.addLine(LIST_ID, 'Pan', 1, ME, {}, ['bread']);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(itemNames.asked[itemNames.asked.length - 1]).toContain('bread');
+  });
+
+  it('counts A to Z and a picked category on the filter badge', async () => {
+    const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+
+    view.setOrder('alpha');
+    fixture.detectChanges();
+    expect(tools(fixture)?.activeCount()).toBe(1);
+
+    view.setView('category');
+    fixture.detectChanges();
+    expect(tools(fixture)?.activeCount()).toBe(1);
+
+    view.pickCategory('DAIRY');
+    fixture.detectChanges();
+    expect(tools(fixture)?.activeCount()).toBe(2);
+  });
+
+  it('draws only the picked category, under an h2 naming it', async () => {
+    const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+
+    view.pickCategory('PRODUCE');
+    fixture.detectChanges();
+
+    expect(rows(fixture).map((row) => row.id)).toEqual(['ln-carrot']);
+    const heading = query(fixture, 'h2.category-heading');
+    expect(heading?.textContent?.trim()).toBe('basket.category.PRODUCE');
+  });
+
+  it('puts a line with no products under No category', async () => {
+    const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+
+    view.pickCategory('NONE');
+    fixture.detectChanges();
+
+    expect(rows(fixture).map((row) => row.id)).toEqual(['ln-bags']);
+    expect(query(fixture, 'h2.category-heading')?.textContent?.trim()).toBe(
+      'list.view.noCategory'
+    );
+  });
+
+  it('orders A to Z and hands the search down for the mark', async () => {
+    const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+
+    view.setOrder('alpha');
+    view.search('LECHE');
+    fixture.detectChanges();
+
+    expect(rows(fixture).map((row) => row.id)).toEqual(['ln-milk']);
+    expect(
+      fixture.debugElement
+        .query(By.directive(LineList))
+        .componentInstance.highlight()
+    ).toBe('leche');
+  });
+
+  it('says so and offers Reset when the view leaves nothing to draw', async () => {
+    const { fixture, view } = await render({
+      lines: [LINES[0]],
+      items: ITEMS,
+    });
+
+    view.pickCategory('PRODUCE');
+    fixture.detectChanges();
+
+    expect(query(fixture, 'lib-line-list')).toBeNull();
+    expect(query(fixture, '.state-title')?.textContent?.trim()).toBe(
+      'list.view.none'
+    );
+
+    (query(fixture, '.state-action') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(rows(fixture).map((row) => row.id)).toEqual(['ln-milk']);
+  });
+
+  describe('reorder waits for the list order (section 7)', () => {
+    it('holds the action under A to Z, a picked category, and a search', async () => {
+      const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+      expect(toBuyHeading(fixture).reorderHeld()).toBe(false);
+
+      view.setOrder('alpha');
+      fixture.detectChanges();
+      expect(toBuyHeading(fixture).reorderHeld()).toBe(true);
+      view.setOrder('list');
+
+      view.pickCategory('DAIRY');
+      fixture.detectChanges();
+      expect(toBuyHeading(fixture).reorderHeld()).toBe(true);
+      view.reset();
+
+      // A search flattens the page, so there is no To buy heading to hold at all
+      // (velista `0088`, section 6). The hold itself still stands.
+      view.search('leche');
+      fixture.detectChanges();
+      expect(fixture.componentInstance.reorderHeld()).toBe(true);
+      expect(query(fixture, 'lib-to-buy-heading')).toBeNull();
+
+      view.search('');
+      fixture.detectChanges();
+      expect(toBuyHeading(fixture).reorderHeld()).toBe(false);
+    });
+
+    it('moves nothing when the held action is pressed, and says why', async () => {
+      const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+      view.setOrder('alpha');
+      fixture.detectChanges();
+
+      const button = Array.from(
+        fixture.nativeElement.querySelectorAll('lib-to-buy-heading .action')
+      ).find((element) =>
+        (element as HTMLElement).textContent?.includes('list.reorder.enter')
+      ) as HTMLButtonElement;
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+
+      button.click();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.reordering()).toBe(false);
+      expect(query(fixture, '.held-message')?.textContent).toContain(
+        'list.reorder.unavailable'
+      );
+    });
+  });
+
+  it('opens the filter sheet under the sheet marker', async () => {
+    const { fixture, router } = await render({ lines: LINES, items: ITEMS });
+
+    fixture.componentInstance.openFilter();
+
+    expect(router.navigate).toHaveBeenCalledWith(
+      ['sheet', 'filter'],
+      expect.anything()
+    );
+  });
+
+  it('gives the view store back when the page is left', async () => {
+    const { fixture, view } = await render({ lines: LINES, items: ITEMS });
+    view.search('leche');
+    view.pickCategory('DAIRY');
+
+    fixture.destroy();
+
+    expect(view.query()).toBe('');
+    expect(view.picked()).toBeNull();
+  });
+});
+
+/** Velista `0088`: the zone list grouped by trip. */
+describe('ListPage: the zone list grouped by trip', () => {
+  function trip(id: string, overrides: Partial<Trip> = {}): Trip {
+    return {
+      id,
+      kind: 'BASKET',
+      name: null,
+      live: false,
+      startedAt: new Date('2026-09-12T10:00:00.000Z'),
+      lineCount: 1,
+      boughtLineCount: 1,
+      ...overrides,
+    };
+  }
+
+  function tripRow(lineId: string, overrides: Partial<TripRow> = {}): TripRow {
+    return {
+      lineId,
+      asked: 1,
+      bought: 0,
+      left: 1,
+      outcome: 'NOT_BOUGHT',
+      settledByUserId: null,
+      ...overrides,
+    };
+  }
+
+  async function settle(fixture: ComponentFixture<ListPage>): Promise<void> {
+    for (let turn = 0; turn < 3; turn += 1) {
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+  }
+
+  function groups(fixture: ComponentFixture<ListPage>) {
+    return fixture.debugElement
+      .queryAll(By.directive(TripGroup))
+      .map((found) => (found.componentInstance as TripGroup).group());
+  }
+
+  const LIVE = trip('b-live', { live: true, name: 'Thursday shop' });
+  const PAST = trip('b-past', { name: 'Weekend shop' });
+
+  const LINES = [
+    line('bread', { content: 'Bread', position: 1, quantity: 2 }),
+    line('rice', {
+      content: 'Rice',
+      position: 2,
+      quantity: 1,
+      claimed: true,
+      claimedByUserId: 'user-toni',
+    }),
+    line('milk', {
+      content: 'Milk',
+      position: 3,
+      quantity: 0,
+      boughtCount: 4,
+    }),
+    line('saffron', {
+      content: 'Saffron',
+      position: 4,
+      quantity: 0,
+      boughtCount: 0,
+    }),
+    line('eggs', { content: 'Eggs', position: 5, quantity: 3 }),
+  ];
+
+  async function grouped() {
+    const rendered = await render({
+      lines: LINES,
+      trips: { live: [LIVE], items: [PAST], nextCursor: null },
+      tripRows: {
+        'b-live': [tripRow('rice')],
+        'b-past': [tripRow('milk', { outcome: 'BOUGHT', bought: 2, left: 0 })],
+      },
+    });
+    await settle(rendered.fixture);
+    return rendered;
+  }
+
+  it('costs one heads read and one rows read on arrival, the newest live trip open', async () => {
+    const { fixture, tripCalls } = await grouped();
+
+    expect(tripCalls.heads).toBe(1);
+    expect(tripCalls.rows).toEqual(['b-live']);
+    expect(groups(fixture).map((group) => [group.key, group.open])).toEqual([
+      ['BASKET:b-live', true],
+      ['BASKET:b-past', false],
+    ]);
+  });
+
+  it('draws To buy first, a claimed line in its live trip, and a zero line never bought last', async () => {
+    const { fixture } = await grouped();
+
+    expect(rows(fixture).map((row) => row.id)).toEqual([
+      'bread',
+      'eggs',
+      'saffron',
+    ]);
+    const [live] = groups(fixture);
+    expect(live.rows?.map((row) => [row.lineId, row.mark])).toEqual([
+      ['rice', 'claimed'],
+    ]);
+    expect(live.liveBy).toBe('Toni');
+  });
+
+  it("asks for a past trip's rows when it opens, and not again on a second opening", async () => {
+    const { fixture, tripCalls } = await grouped();
+
+    fixture.componentInstance.toggleTrip('BASKET:b-past');
+    await settle(fixture);
+    fixture.componentInstance.toggleTrip('BASKET:b-past');
+    fixture.componentInstance.toggleTrip('BASKET:b-past');
+    await settle(fixture);
+
+    expect(tripCalls.rows).toEqual(['b-live', 'b-past']);
+    expect(groups(fixture)[1].rows?.map((row) => row.lineId)).toEqual(['milk']);
+  });
+
+  it('opens the line when a trip row is tapped', async () => {
+    const { fixture, router } = await grouped();
+
+    fixture.debugElement
+      .query(By.directive(TripGroup))
+      .triggerEventHandler('opened', 'rice');
+
+    expect(router.navigate).toHaveBeenCalledWith(
+      ['sheet', 'lines', 'rice', 'detail'],
+      expect.anything()
+    );
+  });
+
+  it('flattens the page while searching, and puts the groups back as they were (test 10)', async () => {
+    const { fixture, view } = await grouped();
+    fixture.componentInstance.toggleTrip('BASKET:b-past');
+    await settle(fixture);
+
+    view.search('milk');
+    fixture.detectChanges();
+
+    expect(groups(fixture)).toEqual([]);
+    expect(query(fixture, 'lib-to-buy-heading')).toBeNull();
+    // A line at zero that lives only in an old trip is found, with its reel.
+    expect(rows(fixture).map((row) => row.id)).toEqual(['milk']);
+
+    view.search('');
+    fixture.detectChanges();
+
+    expect(groups(fixture).map((group) => group.open)).toEqual([true, true]);
+  });
+
+  it('shows To buy alone in reorder mode, and keeps every unseen line in its slot (test 12)', async () => {
+    const { fixture, lines } = await grouped();
+
+    fixture.componentInstance.startReorder();
+    fixture.detectChanges();
+
+    expect(groups(fixture)).toEqual([]);
+    expect(rows(fixture).map((row) => row.id)).toEqual(['bread', 'eggs']);
+
+    await fixture.componentInstance.moveTo({ lineId: 'eggs', to: 0 });
+
+    expect(lines.calls).toContainEqual({
+      kind: 'reorder',
+      orderedLineIds: ['eggs', 'rice', 'milk', 'saffron', 'bread'],
+    });
+  });
+
+  it('keeps the lines usable when the trips fail, and offers a retry (test 13)', async () => {
+    const { fixture, tripCalls } = await render({
+      lines: LINES,
+      trips: 'fail',
+    });
+    await settle(fixture);
+
+    expect(rows(fixture).length).toBeGreaterThan(0);
+    expect(query(fixture, '.trips-failed')?.textContent).toContain(
+      'list.trips.failed'
+    );
+
+    (
+      query(fixture, '.trips-failed .state-action') as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+
+    expect(tripCalls.heads).toBe(2);
+  });
+
+  it('draws nothing under To buy when the list has no history', async () => {
+    const { fixture } = await render({ lines: LINES });
+    await settle(fixture);
+
+    expect(query(fixture, 'lib-to-buy-heading')).not.toBeNull();
+    expect(groups(fixture)).toEqual([]);
+    expect(query(fixture, '.trips-older')).toBeNull();
+  });
+
+  it('gives the trips back when the page is left', async () => {
+    const { fixture, trips } = await grouped();
+
+    fixture.destroy();
+
+    expect(trips.state()).toBe('idle');
+    expect(trips.live()).toEqual([]);
+  });
+});
+
+describe('ListPage: the lines the list suggests (velista 0089)', () => {
+  async function settle(fixture: ComponentFixture<ListPage>): Promise<void> {
+    for (let turn = 0; turn < 3; turn += 1) {
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+  }
+
+  function due(lineId: string, overrides: Partial<DueLine> = {}): DueLine {
+    return {
+      lineId,
+      reason: 'PERIOD',
+      periodDays: 7,
+      daysSinceBought: 5,
+      tripsWith: null,
+      tripsSeen: null,
+      quantity: 2,
+      ...overrides,
+    };
+  }
+
+  const bought = { quantity: 0, boughtCount: 4 };
+
+  const LINES = [
+    line('bread', { content: 'Bread', position: 1, quantity: 2 }),
+    line('eggs', { content: 'Eggs', position: 2, ...bought }),
+    line('coffee', { content: 'Coffee', position: 3, ...bought }),
+    line('saffron', {
+      content: 'Saffron',
+      position: 4,
+      quantity: 0,
+      boughtCount: 0,
+    }),
+    line('yogurt', { content: 'Yogurt', position: 5, ...bought }),
+    line('butter', { content: 'Butter', position: 6, ...bought }),
+    line('rice', { content: 'Rice', position: 7, ...bought }),
+  ];
+
+  const DUE = [
+    due('coffee'),
+    due('eggs', { quantity: 1 }),
+    due('yogurt'),
+    due('butter'),
+    due('rice'),
+  ];
+
+  async function suggested(options: Options = {}) {
+    const rendered = await render({ lines: LINES, due: DUE, ...options });
+    await settle(rendered.fixture);
+    return rendered;
+  }
+
+  function dueRows(fixture: ComponentFixture<ListPage>) {
+    return fixture.debugElement
+      .queryAll(By.directive(DueLineRow))
+      .map((found) => (found.componentInstance as DueLineRow).row());
+  }
+
+  function lists(fixture: ComponentFixture<ListPage>) {
+    return fixture.debugElement
+      .queryAll(By.directive(LineList))
+      .map((found) =>
+        (found.componentInstance as LineList).lines().map((row) => row.id)
+      );
+  }
+
+  function addButton(fixture: ComponentFixture<ListPage>, lineId: string) {
+    const found = query(fixture, `[data-due-line-id="${lineId}"] .add`);
+    if (found === null) {
+      throw new Error(`no add button for ${lineId}`);
+    }
+    return found as HTMLButtonElement;
+  }
+
+  function plus(fixture: ComponentFixture<ListPage>, lineId: string) {
+    return fixture.nativeElement.querySelectorAll(
+      `[data-due-line-id="${lineId}"] lib-quantity-stepper .step`
+    )[1] as HTMLButtonElement;
+  }
+
+  it('reads the due lines once the lines are in, and draws three between the wanted lines and the zero lines', async () => {
+    const { fixture, dueCalls } = await suggested();
+
+    expect(dueCalls.reads).toBe(1);
+    expect(query(fixture, '.due-label')?.tagName).toBe('H3');
+    expect(dueRows(fixture).map((row) => row.lineId)).toEqual([
+      'coffee',
+      'eggs',
+      'yogurt',
+    ]);
+    expect(lists(fixture)).toEqual([['bread'], ['saffron']]);
+
+    const section = query(fixture, 'section.due') as HTMLElement;
+    const [wanted, rest] = Array.from(
+      fixture.nativeElement.querySelectorAll('lib-line-list')
+    ) as HTMLElement[];
+    expect(
+      wanted.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      section.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('shows every due line after "Show more suggestions", and focuses the first new one', async () => {
+    const { fixture } = await suggested();
+    const more = query(fixture, '.due-more') as HTMLButtonElement;
+    expect(more.textContent).toContain('list.due.more');
+
+    more.click();
+    await settle(fixture);
+
+    expect(dueRows(fixture).map((row) => row.lineId)).toEqual([
+      'coffee',
+      'eggs',
+      'yogurt',
+      'butter',
+      'rice',
+    ]);
+    expect(query(fixture, '.due-more')).toBeNull();
+    expect(document.activeElement).toBe(addButton(fixture, 'butter'));
+  });
+
+  it('has no "Show more suggestions" at three or fewer', async () => {
+    const { fixture } = await suggested({ due: DUE.slice(0, 3) });
+
+    expect(dueRows(fixture)).toHaveLength(3);
+    expect(query(fixture, '.due-more')).toBeNull();
+  });
+
+  it('gives a reader and a writer who may not decide no section (test 2)', async () => {
+    for (const permissions of [READ_ONLY, WRITER]) {
+      const { fixture } = await suggested({ permissions });
+
+      expect(query(fixture, 'section.due')).toBeNull();
+      expect(dueRows(fixture)).toEqual([]);
+    }
+
+    const { fixture } = await suggested({ permissions: DECIDER });
+    expect(dueRows(fixture)).toHaveLength(3);
+  });
+
+  it('draws no section in reorder mode, during a search, or when nothing is due (test 4)', async () => {
+    const { fixture, view } = await suggested();
+
+    fixture.componentInstance.startReorder();
+    fixture.detectChanges();
+    expect(query(fixture, 'section.due')).toBeNull();
+    fixture.componentInstance.endReorder();
+    fixture.detectChanges();
+    expect(query(fixture, 'section.due')).not.toBeNull();
+
+    view.search('coffee');
+    fixture.detectChanges();
+    expect(query(fixture, 'section.due')).toBeNull();
+
+    const empty = await suggested({ due: [] });
+    expect(query(empty.fixture, 'section.due')).toBeNull();
+    expect(lists(empty.fixture)).toHaveLength(1);
+  });
+
+  it('says nothing when the read fails, and the lines still draw (section 3)', async () => {
+    const { fixture } = await suggested({ due: 'fail' });
+
+    expect(query(fixture, 'section.due')).toBeNull();
+    expect(rows(fixture).map((row) => row.id)).toEqual(['bread', 'saffron']);
+  });
+
+  it('adds the suggested amount through the reel write, and the row goes at once (test 6)', async () => {
+    const { fixture, lines } = await suggested();
+
+    addButton(fixture, 'eggs').click();
+    await settle(fixture);
+
+    expect(lines.calls).toContainEqual({
+      kind: 'quantity',
+      lineId: 'eggs',
+      delta: 1,
+    });
+    expect(dueRows(fixture).map((row) => row.lineId)).toEqual([
+      'coffee',
+      'yogurt',
+      'butter',
+    ]);
+    // Now a wanted line, at its list position.
+    expect(lists(fixture)[0]).toEqual(['bread', 'eggs']);
+    expect(fixture.componentInstance.announcement()).toBe('list.due.added');
+    expect(document.activeElement).toBe(addButton(fixture, 'yogurt'));
+  });
+
+  it('adds the amount chosen on the stepper', async () => {
+    const { fixture, lines } = await suggested();
+
+    plus(fixture, 'coffee').click();
+    plus(fixture, 'coffee').click();
+    fixture.detectChanges();
+    addButton(fixture, 'coffee').click();
+    await settle(fixture);
+
+    expect(lines.calls).toContainEqual({
+      kind: 'quantity',
+      lineId: 'coffee',
+      delta: 4,
+    });
+  });
+
+  it('does not add by itself when the amount changes, while the switch is off', async () => {
+    const { fixture, lines } = await suggested();
+
+    jest.useFakeTimers();
+    try {
+      plus(fixture, 'coffee').click();
+      fixture.detectChanges();
+      jest.advanceTimersByTime(10_000);
+    } finally {
+      jest.useRealTimers();
+    }
+
+    expect(fixture.componentInstance.dueAddsOnStep).toBe(false);
+    expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual([]);
+  });
+
+  it('brings the row back when the write fails (test 6)', async () => {
+    const { fixture, lines } = await suggested();
+    lines.setWriteOutcome('failed');
+
+    addButton(fixture, 'eggs').click();
+    await settle(fixture);
+
+    expect(lines.calls).toContainEqual({
+      kind: 'quantity',
+      lineId: 'eggs',
+      delta: 1,
+    });
+    expect(dueRows(fixture).map((row) => row.lineId)).toContain('eggs');
+    expect(fixture.componentInstance.announcement()).not.toBe('list.due.added');
+  });
+
+  it('opens the line when a due row name is tapped', async () => {
+    const { fixture, router } = await suggested();
+
+    (
+      query(fixture, '[data-due-line-id="coffee"] .body') as HTMLButtonElement
+    ).click();
+
+    expect(router.navigate).toHaveBeenCalledWith(
+      ['sheet', 'lines', 'coffee', 'detail'],
+      expect.anything()
+    );
+  });
+
+  it('reads again on the shared signal, once per burst (test 8)', async () => {
+    const { fixture, realtime, dueCalls } = await suggested();
+
+    jest.useFakeTimers();
+    try {
+      realtime.emit('list.tripsChanged', { listId: LIST_ID });
+      realtime.emit('list.tripsChanged', { listId: LIST_ID });
+      jest.advanceTimersByTime(1000);
+    } finally {
+      jest.useRealTimers();
+    }
+    await settle(fixture);
+
+    expect(dueCalls.reads).toBe(2);
+  });
+
+  it('gives the due lines back when the page is left', async () => {
+    const { fixture } = await suggested();
+    const store = fixture.debugElement.injector.get(DueLineStore);
+    expect(store.lines()).toHaveLength(5);
+
+    fixture.destroy();
+
+    expect(store.lines()).toEqual([]);
+    expect(store.listId()).toBeNull();
+  });
+});

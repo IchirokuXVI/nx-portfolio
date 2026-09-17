@@ -1,3 +1,5 @@
+> **PR:** [#138](https://github.com/IchirokuXVI/nx-portfolio/pull/138)
+
 # 0061: two controls that are the wrong size
 
 > Client only, styles only. No template restructuring beyond one element moving into a shared

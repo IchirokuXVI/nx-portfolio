@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`93fe99b4b`](https://github.com/IchirokuXVI/nx-portfolio/commit/93fe99b4b261f0fe19b4fd6d8e46e7b5ebc5b3b2) on `dev`, with no pull request of its own.
+
 # 0039 The assistant service, and the three things it can do
 
 > **A test, and scoped like one.** This builds the smallest assistant worth putting in

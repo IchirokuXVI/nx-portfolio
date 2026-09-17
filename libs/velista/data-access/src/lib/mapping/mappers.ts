@@ -14,6 +14,8 @@ import {
   POSTAL_CODE_SOURCES,
   PRICE_SOURCE_KIND_FALLBACK,
   PRICE_SOURCE_KINDS,
+  PRODUCT_CATEGORIES,
+  PRODUCT_CATEGORY_FALLBACK,
   SETTLEMENT_OUTCOME_FALLBACK,
   SETTLEMENT_OUTCOMES,
   UNIT_OF_MEASURE_FALLBACK,
@@ -35,6 +37,7 @@ import {
   type Comment,
   type CommentRecording,
   type CommentTranscription,
+  type Contact,
   type GeneratedListRun,
   type GeneratedListSkippedLine,
   type GeneratedListSummary,
@@ -58,6 +61,7 @@ import {
   type ProfilePostalCode,
   type ResolvedPostalCode,
   type SessionTokens,
+  type SharedGeneratedListSummary,
   type ShoppingList,
   type ShoppingListSummary,
   type ShoppingProfile,
@@ -556,6 +560,13 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
     size: nullableNum(raw['unitSize']),
     unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
     productGroupId: nullableStr(raw['productGroupId']),
+    // Read since velista `0082`, so the zone list page can show one category at a
+    // time. The rule the basket mapper already uses for the same wire field.
+    category: oneOf(
+      raw['category'],
+      PRODUCT_CATEGORIES,
+      PRODUCT_CATEGORY_FALLBACK
+    ),
     offer: toProductOffer(raw['bestOffer']),
   };
 }
@@ -828,6 +839,11 @@ export function toPage<T>(
 /** From the `{ id }` acknowledgement several delete endpoints return. */
 export function toDeletedId(raw: unknown): string | null {
   return isRecord(raw) ? str(raw['id']) : null;
+}
+
+/** From `ListIdResult`, which is all `PUT /v1/lists/:id/access` answers. */
+export function toListIdResult(raw: unknown): string | null {
+  return isRecord(raw) ? str(raw['listId']) : null;
 }
 
 /**
@@ -1224,6 +1240,57 @@ export function toGeneratedListSummary(
     notAvailableLineCount: numOr(raw['notAvailableLineCount'], 0),
     presentCount: numOr(raw['presentCount'], 0),
   };
+}
+
+/**
+ * From `SharedGeneratedListView` (backend `0114`, section 8): a summary plus who
+ * shared it and when.
+ *
+ * The owner and the date are required. A row with no owner could not say whose basket
+ * it is, which is the one thing the Shared lists tab adds to a row.
+ */
+export function toSharedGeneratedListSummary(
+  raw: unknown
+): SharedGeneratedListSummary | null {
+  const summary = toGeneratedListSummary(raw);
+  if (summary === null || !isRecord(raw)) {
+    return null;
+  }
+
+  const owner = raw['owner'];
+  const sharedAt = date(raw['sharedAt']);
+  if (!isRecord(owner) || sharedAt === null) {
+    return null;
+  }
+
+  const userId = str(owner['userId']);
+  if (userId === null) {
+    return null;
+  }
+
+  return {
+    ...summary,
+    owner: { userId, name: strOr(owner['name'], '') },
+    sharedAt,
+  };
+}
+
+/**
+ * From `ContactView` (backend `0114`, section 2): one membership in a group the reader
+ * shares. All three fields are required, because a person with no group has no section
+ * to be drawn in and a person with no id cannot be chosen.
+ */
+export function toContact(raw: unknown): Contact | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const userId = str(raw['userId']);
+  const zoneId = str(raw['zoneId']);
+  const username = str(raw['username']);
+  return userId === null || zoneId === null || username === null
+    ? null
+    : { userId, zoneId, username };
 }
 
 /** From `GeneratedListSkippedLineView`. */

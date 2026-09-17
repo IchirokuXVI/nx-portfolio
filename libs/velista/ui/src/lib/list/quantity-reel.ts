@@ -17,9 +17,8 @@ import {
   QUANTITY_REEL_IDLE_MS,
   QUANTITY_REEL_PAGE_STEP,
   QUANTITY_REEL_PX_PER_UNIT,
-  QUANTITY_REEL_TAP_MAX_MS,
-  QUANTITY_REEL_TAP_SLOP_PX,
 } from '@portfolio/velista/models';
+import { classifyReelGesture } from './quantity-reel-gesture';
 
 /**
  * How many of something, as a number you drag.
@@ -57,6 +56,15 @@ import {
  * ends where it started changes nothing. The number is read off the element that was
  * pressed at the moment it was pressed, not at the moment it was released, because
  * by then the tape may have moved under the finger.
+ *
+ * ## A press is not yet a gesture
+ *
+ * The reel sits in a row of a list that scrolls, so a thumb that lands on it and goes
+ * up or down is scrolling the list (velista `0079`, section 8). The press is only
+ * noted. The overlay opens, and the pointer is claimed, once the press has become a
+ * sideways drag or a tap, and a vertical move or a `pointercancel` drops it with
+ * nothing drawn and nothing sent. {@link classifyReelGesture} decides which, and the
+ * host's `touch-action: pan-y` hands vertical panning to the browser.
  *
  * ## Which way it goes, and why the keys disagree
  *
@@ -236,15 +244,23 @@ export class QuantityReel {
   /** The value the current run of adjustments started from, for the delta at the end. */
   private _startedFrom = 0;
 
-  /** Where the finger went down, and what the number was then. */
+  /** Where the finger went down, and what the number was when the overlay opened. */
   private _originX = 0;
+  private _originY = 0;
   private _originValue = 0;
   private _pointerId: number | null = null;
 
   /** When the press began, and the number it landed on, for telling a tap from a drag. */
   private _pressedAt = 0;
   private _pressedValue: number | null = null;
-  private _wandered = false;
+
+  /**
+   * Whether a press is down and not yet a tap, a drag or a scroll.
+   *
+   * Nothing is drawn in that stretch, which is the point of it: a thumb setting off to
+   * scroll the list must not open anything on the way (velista `0079`, section 8).
+   */
+  private _deciding = false;
 
   private _idleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -292,7 +308,7 @@ export class QuantityReel {
     effect(() => {
       this.value();
       untracked(() => {
-        if (!this.dragging() && this._idleTimer === null) {
+        if (!this.dragging() && !this._deciding && this._idleTimer === null) {
           this._pending.set(null);
         }
       });
@@ -330,58 +346,46 @@ export class QuantityReel {
       return;
     }
 
-    // A press on the pill mid button run opens the overlay over it, from wherever the
-    // presses had got to. The run itself continues: `_startedFrom` already holds where
-    // it began, so the commit at the end is still one delta for the whole adjustment.
-    this._stepping.set(false);
-
-    // Whatever is on screen, which is the snapped number when a second drag starts
-    // inside the idle window rather than the value the list still holds.
-    const from = this.shown();
-    if (this._pending() === null) {
-      this._startedFrom = from;
-    }
-
-    this._clearTimer();
-    this._originX = event.clientX;
-    this._originValue = from;
+    // Only noted (velista `0079`, section 8). Nothing opens and nothing is captured
+    // until the press has become a drag or a tap, because a thumb that lands here on
+    // its way up or down the list is scrolling it.
     this._pointerId = event.pointerId;
+    this._originX = event.clientX;
+    this._originY = event.clientY;
     this._pressedAt = Date.now();
     // Read now rather than on release: the tape moves under the finger, so the number
     // that was pressed and the number that ends up in that spot are two different
     // things, and the one somebody aimed at is this one.
     this._pressedValue = this._numberUnder(event.target);
-    this._wandered = false;
-    this.dragging.set(true);
-    this._pending.set(from);
+    this._deciding = true;
 
-    // The row is inside a scroller and the list itself answers a drag on the grip, so
-    // the gesture has to be claimed explicitly or a horizontal drag becomes a scroll
-    // the moment the finger wanders vertically.
-    //
-    // Captured on the **host** rather than on whatever was pressed, because a drag can
-    // now begin on a number inside the overlay and that element is redrawn as the
-    // number changes. The host outlives the gesture; the span under the finger does
-    // not have to.
-    this._host.nativeElement.setPointerCapture?.(event.pointerId);
+    // An overlay already up waits for this press rather than closing under it. The
+    // beat starts again once the press is over, whatever it turned out to be.
+    if (this._pending() !== null) {
+      this._clearTimer();
+    }
   }
 
   onPointerMove(event: PointerEvent): void {
-    if (!this.dragging() || event.pointerId !== this._pointerId) {
+    if (event.pointerId !== this._pointerId) {
       return;
     }
 
-    // Leftwards is more. The tape holds ascending numbers left to right and the
-    // window over it does not move, so pulling the tape left brings the higher ones
-    // into the middle, which is what the overlay is a picture of.
-    const travelled = this._originX - event.clientX;
-    const moved = Math.round(travelled / QUANTITY_REEL_PX_PER_UNIT);
-
-    if (Math.abs(travelled) > QUANTITY_REEL_TAP_SLOP_PX) {
-      this._wandered = true;
+    if (this._deciding) {
+      const gesture = this._classify(event, false);
+      if (gesture === 'scroll') {
+        this._abandon();
+        return;
+      }
+      if (gesture !== 'drag') {
+        return;
+      }
+      this._startDrag();
     }
 
-    this._pending.set(this._clamp(this._originValue + moved));
+    if (this.dragging()) {
+      this._follow(event.clientX);
+    }
   }
 
   onPointerUp(event: PointerEvent): void {
@@ -389,16 +393,27 @@ export class QuantityReel {
       return;
     }
 
-    // A tap on a number, which is the other half of the gesture: it goes there rather
-    // than making somebody drag the whole unit for it. A press that wandered was a
-    // drag and has already said what it wants; one that lingered was a hold, which is
-    // how a drag begins and not a request for the number it happened to rest on.
-    if (
-      this._pressedValue !== null &&
-      !this._wandered &&
-      Date.now() - this._pressedAt <= QUANTITY_REEL_TAP_MAX_MS
-    ) {
-      this._pending.set(this._clamp(this._pressedValue));
+    if (this._deciding) {
+      const gesture = this._classify(event, true);
+
+      if (gesture === 'tap') {
+        // A tap opens the overlay as it always has, and a tap on one of its numbers
+        // goes there rather than making somebody drag the whole unit for it.
+        const pressed = this._pressedValue;
+        this._claim();
+        if (pressed !== null) {
+          this._pending.set(this._clamp(pressed));
+        }
+      } else if (gesture === 'drag') {
+        // A flick that reached the slop with no move event in between. Rare, and it
+        // is still a drag, so it lands where the finger lifted.
+        this._startDrag();
+        this._follow(event.clientX);
+      } else {
+        // A scroll, or a hold that never moved: neither asked for anything.
+        this._abandon();
+        return;
+      }
     }
 
     this._pressedValue = null;
@@ -412,11 +427,97 @@ export class QuantityReel {
   }
 
   onPointerCancel(event: PointerEvent): void {
-    // A cancel is the system taking the gesture away, not the person abandoning it, so
-    // what was reached still stands and still commits after the usual beat. It is not
-    // a tap, though: nobody lifted their finger, so there is no press to complete.
+    if (event.pointerId !== this._pointerId) {
+      return;
+    }
+
+    // Before the press became anything, a cancel is almost always the browser taking
+    // it for a scroll, which is exactly the gesture this control must stay out of.
+    if (this._deciding) {
+      this._abandon();
+      return;
+    }
+
+    // A drag already under way is different. A cancel is the system taking the
+    // gesture away, not the person abandoning it, so what was reached still stands and
+    // still commits after the usual beat.
     this._pressedValue = null;
     this.onPointerUp(event);
+  }
+
+  private _classify(event: PointerEvent, ended: boolean) {
+    return classifyReelGesture({
+      dx: event.clientX - this._originX,
+      dy: event.clientY - this._originY,
+      elapsedMs: Date.now() - this._pressedAt,
+      ended,
+    });
+  }
+
+  /**
+   * The press became a gesture: open the overlay and claim the pointer.
+   *
+   * A press on the pill mid button run opens the overlay over it, from wherever the
+   * presses had got to. The run itself continues: `_startedFrom` already holds where
+   * it began, so the commit at the end is still one delta for the whole adjustment.
+   */
+  private _claim(): void {
+    this._deciding = false;
+    this._stepping.set(false);
+
+    // Whatever is on screen, which is the snapped number when a second drag starts
+    // inside the idle window rather than the value the list still holds.
+    const from = this.shown();
+    if (this._pending() === null) {
+      this._startedFrom = from;
+    }
+
+    this._clearTimer();
+    this._originValue = from;
+    this._pending.set(from);
+
+    // Captured only now, because a capture at the press would hold the pointer for a
+    // scroll as well. Once it is a drag the row is inside a scroller and the list
+    // answers a drag on the grip, so the gesture has to be claimed explicitly.
+    //
+    // Captured on the **host** rather than on whatever was pressed, because a drag can
+    // begin on a number inside the overlay and that element is redrawn as the number
+    // changes. The host outlives the gesture; the span under the finger does not.
+    if (this._pointerId !== null) {
+      this._host.nativeElement.setPointerCapture?.(this._pointerId);
+    }
+  }
+
+  /** A sideways move past the slop, which is never also a tap. */
+  private _startDrag(): void {
+    this._claim();
+    this._pressedValue = null;
+    this.dragging.set(true);
+  }
+
+  private _follow(clientX: number): void {
+    // Leftwards is more. The tape holds ascending numbers left to right and the
+    // window over it does not move, so pulling the tape left brings the higher ones
+    // into the middle, which is what the overlay is a picture of.
+    const travelled = this._originX - clientX;
+    const moved = Math.round(travelled / QUANTITY_REEL_PX_PER_UNIT);
+    this._pending.set(this._clamp(this._originValue + moved));
+  }
+
+  /**
+   * Drop a press that did not become a drag or a tap: nothing opens, nothing changes,
+   * nothing is sent.
+   *
+   * An overlay that was already up before the press stays up and starts its beat
+   * again, so a scroll that set off from it closes it the ordinary way.
+   */
+  private _abandon(): void {
+    this._deciding = false;
+    this._pointerId = null;
+    this._pressedValue = null;
+    if (this._pending() !== null) {
+      this._restartIdle();
+    }
   }
 
   /**
@@ -522,6 +623,7 @@ export class QuantityReel {
     this._clearTimer();
     this._pointerId = null;
     this._pressedValue = null;
+    this._deciding = false;
     this._flush();
   }
 

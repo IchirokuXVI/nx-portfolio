@@ -11,6 +11,8 @@ import type {
   BasketOriginSettledResult,
   BasketOutstandingRequest,
   BasketParticipant,
+  BasketRenameRequest,
+  BasketRenameResult,
   BasketSession,
   BasketSettleRequest,
   BasketSettleResult,
@@ -30,6 +32,7 @@ import {
   toBasketOriginQuantityResult,
   toBasketOriginSettledResult,
   toBasketParticipant,
+  toBasketRenameResult,
   toBasketSession,
   toBasketSettleResult,
   toBasketShareLink,
@@ -71,13 +74,15 @@ export const PARTICIPANT_SECRET_HEADER = 'x-participant-secret';
  * caller never chooses, because a caller that could choose would eventually
  * choose wrongly and send a guest's secret on somebody else's basket.
  *
- * ## Why two of these routes skip auth entirely
+ * ## Why the preview skips auth entirely
  *
- * The preview and the join are the unauthenticated pair (backend `0051`,
- * section 4). They go out with `anonymous()` so a **stale** account token cannot
- * turn a stranger opening a link into a 401: an expired session belongs to the
- * person who left this browser signed in, and it must not stand between a
- * flatmate and the shopping list they were sent.
+ * The preview is the one route here that goes out with `anonymous()`, so a
+ * **stale** account token cannot turn a stranger opening a link into a 401: an
+ * expired session belongs to the person who left this browser signed in, and it
+ * must not stand between a flatmate and the shopping list they were sent.
+ *
+ * The join reaches the same guard from the other side and does **not** skip auth,
+ * because what it answers depends on who is asking. See {@link join}.
  */
 @Injectable()
 export class BasketApi implements BasketServiceI {
@@ -85,7 +90,7 @@ export class BasketApi implements BasketServiceI {
   private readonly _urls = inject(ApiUrl);
   private readonly _sessions = inject(BasketSessionStore);
 
-  // --- The unauthenticated pair ---------------------------------------------
+  // --- What a link reaches ---------------------------------------------------
 
   async previewLink(secret: string): Promise<BasketLinkPreview> {
     const body = await firstValueFrom(
@@ -100,6 +105,27 @@ export class BasketApi implements BasketServiceI {
     return toBasketLinkPreview(body);
   }
 
+  /**
+   * Take the link up, as whoever is holding this browser.
+   *
+   * **`operation` and not `anonymous`, and that is the whole substance of the
+   * call.** The route runs under the gateway's optional JWT guard: a request with
+   * no bearer mints a guest, and a bearer the guard resolves attaches that account
+   * as a `REGISTERED` participant, which is what plan `0044` section 3 promises
+   * somebody who is already signed in. `anonymous` suppresses the bearer, so a
+   * member opening their own household's link landed on it as Guest 3.
+   *
+   * A visitor with no account still sends nothing, because the interceptor attaches
+   * a token only when the token store holds a session, and still joins as a guest.
+   * A signed in person whose token has gone stale gets the interceptor's ordinary
+   * refresh, and the ordinary one retry after a 401. That is right rather than
+   * unfortunate: the gateway refuses a present but bad token on purpose, so that an
+   * expired session cannot quietly become a second identity on somebody's basket.
+   *
+   * So this is not the sibling of {@link previewLink}, and it must not be "fixed"
+   * back to `anonymous` for the reason login and register use it. Those two have no
+   * token to send; this one answers differently depending on whether there is one.
+   */
   async join(secret: string, displayName?: string): Promise<BasketSession> {
     const body = await firstValueFrom(
       this._http.post<unknown>(
@@ -109,7 +135,7 @@ export class BasketApi implements BasketServiceI {
         displayName === undefined || displayName.trim() === ''
           ? {}
           : { displayName: displayName.trim() },
-        { context: anonymous('basket.join') }
+        { context: operation('basket.join') }
       )
     );
 
@@ -311,6 +337,36 @@ export class BasketApi implements BasketServiceI {
   }
 
   /**
+   * Rename a basket line, and the zone lines it came from (velista `0084`).
+   *
+   * `confirmMerge` is **omitted unless true**, so the first request always asks: a
+   * body that carried `false` would mean the same thing today and would be one
+   * refactor away from carrying `true` by accident.
+   */
+  async renameLine(
+    generatedListId: string,
+    lineId: string,
+    body: BasketRenameRequest
+  ): Promise<BasketRenameResult> {
+    const request: Record<string, unknown> = { content: body.content };
+    if (body.confirmMerge === true) {
+      request['confirmMerge'] = true;
+    }
+
+    const answer = await firstValueFrom(
+      this._http.patch<unknown>(
+        `${this._basket(generatedListId)}/basket/lines/${encodeURIComponent(
+          lineId
+        )}`,
+        request,
+        this._participantOptions(generatedListId, 'basket.renameLine')
+      )
+    );
+
+    return required(toBasketRenameResult(answer), 'basket.renameLine');
+  }
+
+  /**
    * Put a line in the basket, as whichever kind of participant is holding it.
    *
    * `basket/lines` and not `lines`: the second is the **owner's** add on the account
@@ -483,6 +539,30 @@ export class BasketApi implements BasketServiceI {
           participantId
         )}`,
         { context: operation('basket.participant.revoke') }
+      )
+    );
+  }
+
+  async addParticipant(
+    generatedListId: string,
+    userId: string
+  ): Promise<BasketParticipant> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._basket(generatedListId)}/participants`,
+        { userId },
+        { context: operation('basket.participant.add') }
+      )
+    );
+
+    return required(toBasketParticipant(body), 'basket.participant.add');
+  }
+
+  async leaveBasket(generatedListId: string): Promise<void> {
+    await firstValueFrom(
+      this._http.delete<unknown>(
+        `${this._basket(generatedListId)}/participants/mine`,
+        this._participantOptions(generatedListId, 'basket.participant.leave')
       )
     );
   }

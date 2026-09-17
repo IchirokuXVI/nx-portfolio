@@ -1,3 +1,5 @@
+> **Status: partly built, pending re-evaluation.** Some of the specs this plan names exist and some do not, and much of the basket changed after it was written. It will not be built as written: a later session re-evaluates it and writes a new plan if work remains. The state as of 2026-09-17 is in [plan 0087](./0087-plan-status-2026-09-17.md).
+
 # 0064: what 0050 still owes
 
 > `0050` is the plan that exists so that coverage work does not get cut, and it was cut. It has

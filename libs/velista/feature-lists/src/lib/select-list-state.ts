@@ -278,10 +278,6 @@ function toRow(
     // a number that does not move, with one caption at the top of the page saying who
     // does the buying rather than each row refusing in turn (section 7).
     adjustable: abilities.canDecide && !input.reordering,
-    actions: actionsFor(line, abilities, input.reordering),
-    // Both from the same expression as the `edit` entry above, so the invariant
-    // `LineRowVm.editScope` states cannot be broken from one side.
-    editScope: input.reordering ? null : editScopeFor(line, abilities),
     decidable: abilities.canDecide && awaiting && !input.reordering,
     restorable: abilities.canDecide && rejected && !input.reordering,
     // Nobody is shown as editing while the list is being reordered: the sheet cannot be
@@ -374,7 +370,7 @@ function captionKeyFor(awaiting: boolean, rejected: boolean): string | null {
 }
 
 /**
- * Which fields the edit sheet may make live on this row, or null for no edit at all.
+ * Which fields the detail sheet may make live on this line, or null for no edit at all.
  *
  * A function of the caller's permissions **and** the line's approval together, which is
  * the point of deriving it per row (plan 0030, section 4): the same caller gets a
@@ -385,9 +381,9 @@ function captionKeyFor(awaiting: boolean, rejected: boolean): string | null {
  *
  * - `MANAGE` may edit any field of any line, because a governed thing needs somebody who
  *   can fix a line that was approved with a typo in it;
- * - **`WRITE` is what opens this sheet at all**, on every row. `DECIDE` is a separate
+ * - **`WRITE` is what makes the fields live at all**, on every row. `DECIDE` is a separate
  *   permission rather than a larger one, so a caller holding it alone edits no content
- *   anywhere and gets no sheet on any row. They are not left without a control: the
+ *   anywhere and gets no fields on any row. They are not left without a control: the
  *   quantity reel is `LineRowVm.adjustable`, which asks `canDecide` on its own, and
  *   approving and rejecting are theirs too;
  * - `WRITE` alone on an `APPROVED` line yields its content and not its number, because
@@ -399,8 +395,8 @@ function captionKeyFor(awaiting: boolean, rejected: boolean): string | null {
  * person who typed "Mile" and could not fix it: a list that auto approves, or an author
  * who holds `DECIDE`, approves the line before its author has read it back.
  *
- * Exported for the edit sheet, which is a routed child and has to reach the same answer
- * about the same row without the page handing it down.
+ * Exported for the detail sheet, which is a routed child and has to reach the same
+ * answer about the same row without the page handing it down.
  */
 export function editScopeFor(
   line: Line,
@@ -422,35 +418,24 @@ export function editScopeFor(
 }
 
 /**
- * What the overflow holds for this row.
+ * What the detail sheet offers this reader for this line (velista plan 0083).
  *
- * Empty means no overflow button at all, not a disabled one, exactly as
- * `MemberRowVm.actions` decided it: a disabled control says "you could do this, later"
- * about something that will never be permitted.
+ * It was the row's overflow menu, and 0083 deleted the menu. The answer did not
+ * change, only the place it is drawn: the sheet draws the name and amount fields for
+ * `edit`, a Delete line button for `delete`, and Comments for everybody.
  *
  * **A read-only caller still gets `['comments']`**, and that is a deliberate reading of
- * plan 0030. Its section 3.1 says the sheet "opens for everybody with `READ` and draws
- * its composer only for `canComment`, with the read-only note in its place", and the
- * overflow is the only way into that sheet, so removing the entry would take away the
- * reading of a conversation the same passage says a reader keeps. Acceptance item 1's
- * "no overflow on any row" cannot hold at the same time as that sentence, and the
- * reasoned passage wins over the checklist line.
+ * plan 0030. Its section 3.1 says the comments sheet "opens for everybody with `READ`
+ * and draws its composer only for `canComment`, with the read-only note in its place",
+ * so a reader keeps the reading of a conversation even though they may not add to it.
  *
- * **`markNotAvailable` and `markPending` are gone**, and that is velista plan 0043
- * section 1.1 rather than an omission. Saying the shop did not have something is a
- * thing you say afterwards, deliberately, from the detail sheet, and there is no
- * pending trip state left to put a line back to. The row has no marking control of any
- * kind, which is the distinction the whole plan draws.
+ * Exported for the detail sheet, which reaches the same answer about the same line
+ * without the page handing it down.
  */
-function actionsFor(
+export function actionsFor(
   line: Line,
-  abilities: ListAbilitiesVm,
-  reordering: boolean
+  abilities: ListAbilitiesVm
 ): readonly LineAction[] {
-  if (reordering) {
-    return [];
-  }
-
   const actions: LineAction[] = [];
 
   if (editScopeFor(line, abilities) !== null) {

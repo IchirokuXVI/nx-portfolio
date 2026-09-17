@@ -10,6 +10,8 @@ import {
   BasketSocket,
   BasketStore,
   BasketViewStore,
+  ListViewStore,
+  TripStore,
 } from '@portfolio/velista/data-access';
 import {
   RENDERS_WHILE_CONNECTING,
@@ -74,8 +76,8 @@ import {
  * A sheet is addressed `<the covered page's URL>/sheet/<what it is about>`, and this
  * is where the marker is put on, for the reason the guard is put on here: the rule is
  * worth nothing if one route can be written without it. So the table below declares
- * what a sheet is **about**, `lines/:lineId/edit`, and the path that reaches it is
- * `sheet/lines/:lineId/edit`. `SHEET_SEGMENT` carries the argument for the rule, and
+ * what a sheet is **about**, `lines/:lineId/comments`, and the path that reaches it is
+ * `sheet/lines/:lineId/comments`. `SHEET_SEGMENT` carries the argument for the rule, and
  * `sheetSegments` is the other half of it, used by everything that opens one.
  *
  * The prefix is what stops a sheet and a page competing for one URL. Before it, the
@@ -228,16 +230,15 @@ function listSheetRoutes(): Route[] {
       // No guard, like the others here: whether this caller may record a purchase is
       // decided inside it from the same abilities the page uses, and opening it to read
       // a history is something anybody holding `READ` may do.
+      //
+      // It is also where a line is edited, and where its comments and its delete are
+      // opened from, since velista plan 0083 deleted the row's menu and the edit sheet
+      // at `lines/:lineId/edit`.
       path: 'lines/:lineId/detail',
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then(
           (m) => m.LineDetailSheet
         ),
-    }),
-    sheet({
-      path: 'lines/:lineId/edit',
-      loadComponent: () =>
-        import('@portfolio/velista/feature-lists').then((m) => m.EditLineSheet),
     }),
     sheet({
       // Approved member, readers included: `comment.add` requires only
@@ -248,6 +249,10 @@ function listSheetRoutes(): Route[] {
     }),
     sheet({
       path: 'lines/:lineId/confirm/delete',
+      // Opened by the detail sheet, which it pops back to after the delete; that sheet
+      // then closes itself (velista plan 0083, section 6). The line page's copy of this
+      // route has no such sheet under it, and leaves for the list instead.
+      data: { popsAfterDelete: true },
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then(
           (m) => m.DeleteLineSheet
@@ -261,6 +266,16 @@ function listSheetRoutes(): Route[] {
       loadComponent: () =>
         import('@portfolio/velista/feature-lists').then(
           (m) => m.ListSettingsSheet
+        ),
+    }),
+    sheet({
+      // The order and the category view (velista `0082`, section 4). It sets
+      // `ListViewStore`, which the list route provides, and every change applies at
+      // once, as the basket's filter sheet does.
+      path: 'filter',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-lists').then(
+          (m) => m.ListFilterSheet
         ),
     }),
   ];
@@ -474,6 +489,12 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-lists').then(
                 (m) => m.ListPage
               ),
+            // What the page is showing of the list (velista `0082`). Here and not on
+            // the component, for `BasketViewStore`'s reason: the filter sheet that
+            // sets it is a child route. `ListPage` resets it from its own teardown,
+            // because a route's injector is never destroyed. `TripStore` beside it
+            // (velista `0088`), for the same visit and the same teardown.
+            providers: [ListViewStore, TripStore],
             children: [...listSheetRoutes()],
           },
           {

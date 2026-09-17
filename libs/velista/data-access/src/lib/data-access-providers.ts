@@ -12,10 +12,13 @@ import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
 import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
+import { ContactMemory } from './contacts/contact-memory';
+import { ContactStore } from './contacts/contact-store';
 import { BasketSessionStore } from './generated-lists/basket-session-store';
 import { BasketStore } from './generated-lists/basket-store';
 import { GeneratedListMemory } from './generated-lists/generated-list-memory';
 import { GeneratedListStore } from './generated-lists/generated-list-store';
+import { SharedListStore } from './generated-lists/shared-list-store';
 import { LineMemory } from './lines/line-memory';
 import { LineStore } from './lines/line-store';
 import { ListMemory } from './lists/list-memory';
@@ -183,6 +186,9 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ShopMemory,
   GeneratedListMemory,
   GeneratedListStore,
+  SharedListStore,
+  ContactMemory,
+  ContactStore,
   BasketSessionStore,
   BasketStore,
   StartupProbe,

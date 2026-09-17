@@ -66,6 +66,10 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
   participantList: 'generatedList.participant.list',
   /** Revoke exactly one participant: the lost phone (section 3.4). */
   participantRevoke: 'generatedList.participant.revoke',
+  /** Add one of the owner's contacts to the basket (plan 0114, section 4). */
+  participantAdd: 'generatedList.participant.add',
+  /** A registered participant leaves the basket (plan 0114, section 6). */
+  participantLeave: 'generatedList.participant.leave',
   /**
    * Turn a presented credential into a participant, for the gateway's guard.
    *
@@ -222,6 +226,19 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * same tin end up disagreeing about who bought it.
    */
   setOutstanding: 'generatedList.setOutstanding',
+  /**
+   * Rename a basket line, and every zone line it came from, in one transaction
+   * (plan 0113).
+   *
+   * A participant route, because the person fixing "leche" in the aisle is not
+   * always the owner. It is refused to a guest, and to anybody who cannot write
+   * every list the line came from, since the rename writes all of them. A line
+   * with no origin writes no list, and only the owner renames it.
+   *
+   * A name that is already taken, on one of those lists or in the basket, merges
+   * only after the caller confirms, and one confirmation covers every merge.
+   */
+  renameLine: 'generatedList.renameLine',
 } as const;
 
 /**
@@ -316,7 +333,7 @@ export interface GeneratedListParticipantView {
    *
    * Served to every reader of the basket, guests included, and that is a
    * deliberate disclosure: the people on one basket are shopping together and
-   * already see each other's faces, join times and typed names. What stays
+   * already see each other's faces and typed names. What stays
    * private is everything on the other side of the all or nothing rule, and a
    * username is not zone data.
    *
@@ -329,9 +346,21 @@ export interface GeneratedListParticipantView {
   guestNumber: number | null;
   /** Set for `OWNER` and `REGISTERED`, null for a `GUEST`. */
   userId: string | null;
-  joinedAt: string;
-  lastSeenAt: string;
-  /** Null for the owner, who arrived by owning the basket rather than by a link. */
+  /**
+   * When they joined and when they were last seen, present **only** for a reader
+   * who passes section 5.2, beside {@link userAgent} (plan 0114, section 11).
+   *
+   * Absent rather than null for everybody else, guests included: when somebody
+   * arrived is part of inspecting them, as the device string is. Both were served
+   * to every reader until plan 0114, against the mapper's own comment.
+   */
+  joinedAt?: string;
+  lastSeenAt?: string;
+  /**
+   * The link this person came by. Null for the owner, who arrived by owning the
+   * basket, and for a person the owner added from their groups (plan 0114,
+   * section 3), who arrived with no link and so is not reached by revoking one.
+   */
   shareLinkId: string | null;
   /**
    * The device string, present **only** for a reader who passes section 5.2.
@@ -600,6 +629,42 @@ export interface ParticipantTokenResult {
  */
 export interface RevokeParticipantRequest extends GeneratedListShareRequest {
   participantId: string;
+}
+
+/**
+ * Add one of the owner's contacts to the basket (plan 0114, section 4).
+ *
+ * Owner only, like every request on {@link GeneratedListShareRequest}, and the
+ * person must share an approved group with the owner at this moment. What
+ * happens to a row they already have is section 4's table.
+ */
+export interface AddGeneratedListParticipantRequest extends GeneratedListShareRequest {
+  /** The person to add. Never the owner. */
+  memberUserId: string;
+  /**
+   * That person's global username, resolved by the gateway from auth (section
+   * 9). Core owns no usernames, so it is told this one, and uses it only when the
+   * two people share no approved group or more than one.
+   */
+  globalUsername?: string | null;
+}
+
+/**
+ * Leave a basket (plan 0114, section 6), as the participant the gateway's guard
+ * resolved. A registered participant only: a guest is refused, and so is the
+ * owner, whose standing comes from owning the basket.
+ */
+export interface LeaveGeneratedListRequest {
+  generatedListId: string;
+  participantId: string;
+}
+
+/**
+ * What a person's own sessions hear when a basket is shared with them, or stops
+ * being (plan 0114, section 10): the basket's id and nothing else.
+ */
+export interface GeneratedListAccessEvent {
+  generatedListId: string;
 }
 
 /** Everybody on a basket, for the share sheet and for presence. */
@@ -910,6 +975,89 @@ export interface GeneratedListReopenResult {
 export interface GeneratedListLineMovedEvent {
   generatedListId: string;
   line: GeneratedListBasketLineView;
+}
+
+/**
+ * What the basket's own room hears when a rename merged one of its lines into
+ * another (plan 0113, section 6).
+ *
+ * An id and nothing else, so it names no zone data and needs no redaction. The
+ * surviving line arrives beside it as a {@link GeneratedListLineMovedEvent}.
+ */
+export interface GeneratedListLineRemovedEvent {
+  generatedListId: string;
+  /** The basket line that went away. */
+  lineId: string;
+}
+
+// --- Renaming a basket line ------------------------------------------------
+
+/**
+ * Rename a basket line and every zone line it came from (plan 0113).
+ *
+ * ## Who may
+ *
+ * - **A guest never**, because a guest holds no access to any list.
+ * - **A line with origins**: anybody with an account who holds `WRITE` on every
+ *   list the line came from, the owner included. Writing some of them and not
+ *   all is refused whole, and nothing is renamed.
+ * - **A line with no origin** writes no list, and only the owner renames it.
+ */
+export interface RenameGeneratedListBasketLineRequest {
+  generatedListId: string;
+  /** The basket line, not the zone line. */
+  lineId: string;
+  /** The actor, resolved from their credential by the gateway's guard. */
+  participantId: string;
+  /** The new name, trimmed and bounded as a basket line's content is. */
+  content: string;
+  /**
+   * Whether the collisions may merge. Anything but `true` refuses a rename that
+   * collides with `line_merge_required`, and the refusal writes nothing.
+   */
+  confirmMerge?: boolean;
+}
+
+/**
+ * What a rename answers, projected for the participant who made it (plan 0113,
+ * section 7).
+ *
+ * After a basket merge, {@link line} is the surviving line, whose `id` can differ
+ * from the line the request addressed, and {@link absorbedLineId} names the line
+ * that went away. The field is absent when no basket line merged.
+ */
+export interface RenameGeneratedListBasketLineResult {
+  line: GeneratedListBasketLineView;
+  absorbedLineId?: string;
+}
+
+/** One list where the new name is taken (plan 0113, section 4). */
+export interface BasketLineMergeRequiredListDetails {
+  listId: string;
+  listName: string;
+  zoneName: string;
+  /** The line of that list that already carries the name. */
+  otherContent: string;
+  otherQuantity: number;
+}
+
+/** The basket line that already carries the name (plan 0113, section 4). */
+export interface BasketLineMergeRequiredBasketDetails {
+  otherLineId: string;
+  otherContent: string;
+  otherQuantity: number;
+}
+
+/**
+ * The `details` a `line_merge_required` refusal of a basket rename carries
+ * (plan 0113, section 4).
+ *
+ * Every name here belongs to a list the caller can write, because the rename is
+ * refused before this point to anybody who cannot write every one of them.
+ */
+export interface BasketLineMergeRequiredDetails {
+  lists: BasketLineMergeRequiredListDetails[];
+  basket: BasketLineMergeRequiredBasketDetails | null;
 }
 
 // --- The basket, as a participant reads it ---------------------------------

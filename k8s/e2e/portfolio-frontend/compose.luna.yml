@@ -1,0 +1,47 @@
+# Overlay for the browser gate (velista plan 0080): the two backend hosts the
+# staging velista image has compiled in, answered by the Luna Shopper tier 2
+# stack running on the same machine.
+#
+# The staging velista bundle talks to https://api.staging.velista.app and
+# https://rt.staging.velista.app, and there is no runtime configuration to point
+# it anywhere else (apps/velista/webpack.prod.config.ts). So instead of moving
+# the app, this file moves the hosts: the proxy gains a certificate and a server
+# block for each, and forwards them to the gateway and realtime images that
+# `stack.sh e2e-up` publishes on the host's :3000 and :3001. `host.docker.internal`
+# is what makes a container reach the host, and `host-gateway` is what makes that
+# name resolve on Linux, where Docker does not define it by default.
+#
+# Always on top of compose.yml, never alone:
+#
+#   docker compose -f k8s/e2e/portfolio-frontend/compose.yml \
+#                  -f k8s/e2e/portfolio-frontend/compose.luna.yml up -d --pull always
+#
+# The base file stays the single definition of the frontend stack; this one adds
+# the backend hosts and nothing else, so `e2e-frontend` (which has no backend)
+# keeps running the base file unchanged.
+services:
+  # Compose replaces `command` wholesale, so the whole list is stated here again
+  # with the two new names. nginx refuses to start without a certificate for
+  # every `ssl` server block, and the fragment below adds two.
+  certs:
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        apk add --no-cache openssl >/dev/null
+        for domain in staging.ichirokuxvi.com mfe.staging.ichirokuxvi.com staging.velista.app api.staging.velista.app rt.staging.velista.app; do
+          if [ ! -f "/certs/$$domain.crt" ]; then
+            openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+              -keyout "/certs/$$domain.key" -out "/certs/$$domain.crt" \
+              -subj "/CN=$$domain"
+          fi
+        done
+
+  reverse-proxy:
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      # nginx.conf includes /etc/nginx/luna/*.conf, which matches nothing until
+      # this overlay mounts the fragment there.
+      - ./nginx.luna.conf:/etc/nginx/luna/nginx.luna.conf:ro

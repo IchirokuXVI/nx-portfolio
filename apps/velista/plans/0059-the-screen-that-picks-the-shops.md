@@ -1,3 +1,5 @@
+> **PR:** [#155](https://github.com/IchirokuXVI/nx-portfolio/pull/155)
+
 # 0059: the screen that picks the shops
 
 > Server halves: `apps/luna-shopper-backend/plans/0064` (a profile excludes a location, not only a

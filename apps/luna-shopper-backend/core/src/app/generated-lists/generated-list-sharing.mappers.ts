@@ -68,9 +68,16 @@ export function toParticipantView(
     username: participant.username,
     guestNumber: participant.guestNumber,
     userId: participant.userId,
-    joinedAt: participant.joinedAt.toISOString(),
-    lastSeenAt: participant.lastSeenAt.toISOString(),
     shareLinkId: participant.shareLinkId,
-    ...(withDevice ? { userAgent: participant.userAgent } : {}),
+    // Join time and last seen travel with the device string, as the comment above
+    // always said they did (plan 0114, section 11): when somebody arrived is part
+    // of inspecting them, and guests do not get to inspect each other.
+    ...(withDevice
+      ? {
+          joinedAt: participant.joinedAt.toISOString(),
+          lastSeenAt: participant.lastSeenAt.toISOString(),
+          userAgent: participant.userAgent,
+        }
+      : {}),
   };
 }

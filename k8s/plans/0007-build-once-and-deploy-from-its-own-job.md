@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`c6bf1dc8a`](https://github.com/IchirokuXVI/nx-portfolio/commit/c6bf1dc8abfea520b7b58e70ab8565fc350bf82d) on `dev`, with no pull request of its own.
+
 # 0007 Build once, in a pinned environment, and deploy from its own job
 
 Staging takes about 24 minutes and production about 20. Almost none of it is work the pipeline

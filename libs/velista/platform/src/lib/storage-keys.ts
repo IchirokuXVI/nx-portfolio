@@ -52,6 +52,14 @@ export const StorageKeys = {
    */
   basketView: `basket-view:${APP_KEY}`,
   /**
+   * How the shopper likes a zone list drawn: its order (velista `0082`, section 8).
+   *
+   * One record for the device, following `basketView`. The category view has a
+   * lifetime of one visit and is never written, and the search is never stored. See
+   * `LIST_VIEW_LIFETIME_MS` in `data-access`.
+   */
+  listView: `list-view:${APP_KEY}`,
+  /**
    * That this document already spent its one reload on a build the server refuses
    * (plan 0072 D4).
    *

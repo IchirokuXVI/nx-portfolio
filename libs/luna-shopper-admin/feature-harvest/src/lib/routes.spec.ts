@@ -1,6 +1,7 @@
 import { EntriesQueuePage } from './entries-queue-page';
 import { ImportUploadPage } from './import-upload-page';
 import { PlacesQueuePage } from './places-queue-page';
+import { PresetsPage } from './presets-page';
 import { HARVEST_LINKS, HARVEST_SEGMENT, harvestRoutes } from './routes';
 import { RunPage } from './run-page';
 import { RunsPage } from './runs-page';
@@ -27,6 +28,7 @@ describe('harvestRoutes', () => {
     expect(routes.map((route) => route.component)).toStrictEqual([
       RunsPage,
       RunPage,
+      PresetsPage,
       PlacesQueuePage,
       EntriesQueuePage,
       ImportUploadPage,
@@ -100,6 +102,17 @@ describe('harvestRoutes', () => {
     const paths = pathsOf();
 
     expect(paths.indexOf('runs')).toBeLessThan(paths.indexOf('runs/:id'));
+  });
+
+  /** Saved run requests have a screen of their own (admin plan 0030). */
+  it('has a presets screen, linked right after the runs', () => {
+    expect(routes.find((route) => route.path === 'presets')?.component).toBe(
+      PresetsPage
+    );
+    expect(HARVEST_LINKS.map((link) => link.label).slice(0, 2)).toEqual([
+      'harvest.nav.runs',
+      'harvest.nav.presets',
+    ]);
   });
 
   it('carries no locale segment, like the rest of this app', () => {

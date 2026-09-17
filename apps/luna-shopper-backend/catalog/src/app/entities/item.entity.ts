@@ -58,4 +58,29 @@ export class Item extends BaseEntity {
    */
   @Column({ type: 'uuid', nullable: true })
   productGroupId!: string | null;
+
+  /**
+   * `brandKey(brand)`, kept beside the text so every spelling of one brand can
+   * be found at once (plan 0115, section 3.2).
+   *
+   * Derived and never sent: `ItemService` computes it inside the one write step
+   * `create`, `createMany` and `update` share. Null exactly when `brand` is
+   * null, or when the text has no letters or digits at all.
+   */
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  brandKey!: string | null;
+
+  /**
+   * The registered {@link Brand} this product carries, or null (plan 0115).
+   *
+   * When it is set, `brand` holds that brand's label **byte for byte**. That
+   * copy is deliberate: the search trigger, the trigram index and the ranking
+   * all read `items.brand`, so keeping the label there means none of them
+   * changes and a rename rewrites one column rather than a query plan.
+   *
+   * Null is ordinary. A brand nobody has registered is still accepted, and its
+   * key sits in `brandKey` waiting for somebody to register it.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  brandId!: string | null;
 }

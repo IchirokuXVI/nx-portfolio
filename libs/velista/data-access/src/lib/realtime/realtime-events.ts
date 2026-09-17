@@ -126,6 +126,13 @@ export type RealtimeEvent =
     }
   | { readonly type: 'list.deleted'; readonly listId: string }
   | { readonly type: 'list.accessChanged'; readonly listId: string }
+  /**
+   * Read this list's trips again (backend `0122`, section 6), on the list room.
+   *
+   * It says nothing else, so it cannot leak and cannot drift from the read. A basket was
+   * created, renamed, ended or deleted, or gained or lost an origin in this list.
+   */
+  | { readonly type: 'list.tripsChanged'; readonly listId: string }
   | {
       /**
        * The **caller's own** effective permissions on one list changed, on the user
@@ -325,6 +332,19 @@ export type RealtimeEvent =
     }
   | {
       /**
+       * A rename merged a basket line into another, and this one went away (backend
+       * `0113`, section 6).
+       *
+       * An id and nothing else, so it names no zone data. The surviving line arrives
+       * beside it as `generatedList.lineUpdated`. It reaches the basket's room and the
+       * owner's own sessions.
+       */
+      readonly type: 'generatedList.lineRemoved';
+      readonly generatedListId: string;
+      readonly lineId: string;
+    }
+  | {
+      /**
        * Somebody joined a shared basket, or was removed from it (backend `0051`,
        * section 3), on the basket's own room.
        *
@@ -365,6 +385,19 @@ export type RealtimeEvent =
       readonly type: 'generatedList.deleted';
       readonly generatedListId: string;
     }
+  | {
+      /**
+       * A basket somebody else owns was shared with the reader, or stopped being
+       * (backend `0114`, section 10).
+       *
+       * Addressed to the reader's own sessions, so it arrives on the account socket,
+       * and it carries the basket id and nothing else. `unshared` covers every way
+       * access ends: removed, the link revoked with its people, leaving, and the
+       * basket being deleted.
+       */
+      readonly type: 'generatedList.shared' | 'generatedList.unshared';
+      readonly generatedListId: string;
+    }
   | { readonly type: 'presence.zoneUpdated'; readonly presence: ZonePresence }
   | { readonly type: 'presence.listUpdated'; readonly presence: ListPresence };
 
@@ -388,6 +421,7 @@ export const REALTIME_EVENT_NAMES = [
   'list.updated',
   'list.deleted',
   'list.accessChanged',
+  'list.tripsChanged',
   'list.myAccessChanged',
   'line.added',
   'line.updated',
@@ -406,9 +440,12 @@ export const REALTIME_EVENT_NAMES = [
   'generatedList.lineSettled',
   'generatedList.lineUpdated',
   'generatedList.lineAdded',
+  'generatedList.lineRemoved',
   'generatedList.participantJoined',
   'generatedList.participantLeft',
   'generatedList.deleted',
+  'generatedList.shared',
+  'generatedList.unshared',
   'presence.zoneUpdated',
   'presence.listUpdated',
   'presence.generatedListUpdated',

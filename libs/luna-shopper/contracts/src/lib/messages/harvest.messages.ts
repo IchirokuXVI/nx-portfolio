@@ -9,9 +9,11 @@ import {
 } from '../enums/catalog.enums';
 import type {
   DiscoveredPlaceStatus,
+  HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
   PostalCodeDiscoveryStatus,
@@ -72,6 +74,31 @@ export const HARVEST_PATTERNS = {
    * machine that crawled to one that cannot is the point of it.
    */
   export: 'harvest.export',
+  /**
+   * Start a run from a saved preset (plan 0120, section 5).
+   *
+   * Its own subject rather than a `presetId` on {@link spawn}: a spawn that
+   * named a preset and a scope would have to decide which one wins, and a
+   * request that carries nothing but the id cannot be asked. The run stores a
+   * copy of the preset's input, validated again at the start, and the preset's
+   * id beside it.
+   */
+  spawnFromPreset: 'harvest.spawnFromPreset',
+} as const;
+
+/**
+ * Run requests saved under a name, one chain each (plan 0120).
+ *
+ * A preset is validated exactly as a spawn is, so a preset that saves is a run
+ * that can start as long as nothing changed in between. Editing or deleting
+ * one never changes a run: every run keeps its own copy of the input.
+ */
+export const HARVEST_PRESET_PATTERNS = {
+  list: 'harvestPreset.list',
+  get: 'harvestPreset.get',
+  create: 'harvestPreset.create',
+  update: 'harvestPreset.update',
+  delete: 'harvestPreset.delete',
 } as const;
 
 export const DISCOVERED_PLACE_PATTERNS = {
@@ -127,6 +154,28 @@ export const SOURCE_ENTRY_PATTERNS = {
    * reject hides a row from the queue that nobody will look at again.
    */
   applyDecisions: 'sourceEntry.applyDecisions',
+  /**
+   * The brand keys queued rows carry that no registered brand holds (plan 0115,
+   * section 7).
+   *
+   * **A suggestion is a key, not a spelling.** Queued is `CANDIDATE` or
+   * `UNRESOLVED`: the products still waiting for a person. An `ACTIVE` row is
+   * already a product and a `REJECTED` row is one the owner said is not
+   * tracked, so neither counts. A product carried by two chains is two source
+   * rows and counts twice, which is the number the queue shows.
+   *
+   * The registry lives in catalog, so the caller sends the registered keys in
+   * with the request: the harvester holds no copy of them.
+   */
+  brandSuggestions: 'sourceEntry.brandSuggestions',
+  /**
+   * How each chain spells one registered brand (plan 0115, section 8).
+   *
+   * Every source row carrying the key **except `REJECTED`**, grouped by chain
+   * and by the verbatim spelling. Not paged: one brand has a handful of
+   * spellings, and the answer is capped rather than cut into pages.
+   */
+  brandSpellings: 'sourceEntry.brandSpellings',
 } as const;
 
 /**
@@ -220,6 +269,16 @@ export interface AdapterCapabilities {
   /** The source has a product page, so an EAN backfill has something to read. */
   hasProductPages: boolean;
   /**
+   * A walk of this source has a detail phase that a known product can skip
+   * (plan 0119, section 3), so a run takes `details`.
+   *
+   * True for `mercadona-api` alone: its listing carries no EAN and no brand, so
+   * a walk fetched one detail per product. LIDL reads a product whole in one
+   * request, and Carrefour reads its product pages in a backfill of its own, so
+   * neither has a detail phase to skip.
+   */
+  skipsKnownDetails: boolean;
+  /**
    * The language this source's own text is written in, or null when nothing is
    * known (plan 0111, section 7).
    *
@@ -271,13 +330,14 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: true,
     listsItsOwnStores: true,
     hasProductPages: false,
+    skipsKnownDetails: true,
     printedLocale: 'es',
-    // The REGION band alone: a warehouse is what this chain prices by, and a
-    // crawl of one warehouse may claim neither the chain's NATIONAL summary nor
-    // a STORE row somebody typed.
+    // The LOCAL_AREA band alone (plan 0116, section 3): a warehouse is what this
+    // chain prices by, and a crawl of one warehouse may claim neither the chain's
+    // NATIONAL summary nor a STORE row somebody typed.
     walkablePriorities: {
-      min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
-      max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.REGION],
+      min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
+      max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
     },
   },
   // The site prints no price at all, so a scope would be a required field that
@@ -287,6 +347,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    skipsKnownDetails: false,
     printedLocale: 'es',
     // A walk that writes no price writes no scope, so there is no band to state.
     walkablePriorities: null,
@@ -296,6 +357,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: true,
+    skipsKnownDetails: false,
     printedLocale: 'es',
     // One default scope, chosen at the spawn, and no list. Nothing is selected,
     // so there is nothing for a band to refuse.
@@ -308,6 +370,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: true,
     listsItsOwnStores: true,
     hasProductPages: true,
+    skipsKnownDetails: false,
     printedLocale: 'es',
     // It reads every region the week's offers name and creates what is missing,
     // so a run selects no scope and the band has nothing to say about it.
@@ -320,6 +383,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    skipsKnownDetails: false,
     printedLocale: null,
     walkablePriorities: null,
   },
@@ -330,6 +394,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    skipsKnownDetails: false,
     printedLocale: null,
     walkablePriorities: null,
   },
@@ -358,6 +423,7 @@ export function adapterCapabilities(
       scopesItsOwn: false,
       listsItsOwnStores: false,
       hasProductPages: false,
+      skipsKnownDetails: false,
       printedLocale: null,
       walkablePriorities: null,
     }
@@ -489,6 +555,15 @@ export interface HarvestRunView {
    * are not counted here.
    */
   revertedPriceCount: number | null;
+  /**
+   * The preset this run was started from (plan 0120, section 7), null for a
+   * run somebody filled the form in for.
+   *
+   * No foreign key stands behind it, so a run whose preset was deleted still
+   * names it. What the run did is its own `input`, never read back from the
+   * preset.
+   */
+  presetId: string | null;
 }
 
 /**
@@ -823,6 +898,49 @@ export interface SpawnHarvestRunRequest extends AdminCredential {
    * fetched again.
    */
   detailBackfill?: boolean;
+  /**
+   * The scopes that also receive what this run writes at a walked scope (plan
+   * 0118).
+   *
+   * A copy fetches nothing: 52 Mercadona warehouses fall into 10 price
+   * signatures, so one walk per group written to every member of it costs a
+   * tenth of the requests. Every copied row records the scope it was read at.
+   * `CATALOG_DISCOVERY` only, and never with {@link detailBackfill}.
+   */
+  scopeCopies?: ScopeCopy[];
+  /**
+   * What the run writes of what it read (plan 0119, section 7). Default
+   * `PRICES_AND_AVAILABILITY`.
+   *
+   * `CATALOG_DISCOVERY` only, and never with {@link detailBackfill}. `PRICES` is
+   * refused for an adapter that states no price. The resolved value is stored
+   * on the run's input, so a run says what it did after a default changes.
+   */
+  writes?: HarvestRunWrites;
+  /**
+   * Which products a Mercadona walk fetches the detail of (plan 0119, section
+   * 5). Default `NEW`, for an adapter whose capability `skipsKnownDetails` is
+   * true, and `ALL` for every other one.
+   *
+   * `CATALOG_DISCOVERY` only. Stating it for an adapter that has no detail
+   * phase to skip is refused; leaving it out is not, and resolves to `ALL`.
+   */
+  details?: HarvestDetailFetch;
+}
+
+/**
+ * One walked scope and the scopes its prices and availability are copied to
+ * (plan 0118, section 2).
+ *
+ * A target is any tier and needs no `externalKey`, because nothing is fetched
+ * for it. It receives a copy from one `from` at most, and it is never walked in
+ * the same run, so a copy never lands on top of a walk.
+ */
+export interface ScopeCopy {
+  /** A scope the run writes, by id. */
+  from: string;
+  /** The scopes that receive a copy of what the run wrote at `from`. */
+  to: string[];
 }
 
 /**
@@ -869,6 +987,81 @@ export interface ListHarvestRunsRequest extends PageQuery, AdminCredential {
    * was.
    */
   reverted?: boolean;
+  /** The runs started from this preset (plan 0120, section 7). */
+  presetId?: string;
+}
+
+// --- Run presets (plan 0120) -----------------------------------------------
+
+/**
+ * What a preset saves: the request a spawn receives, less the credential and
+ * less `supermarketId`, which is the preset's own column (plan 0120, section 3).
+ *
+ * The file import fields are left out too. A `FILE_IMPORT` is never a preset,
+ * because it needs a document uploaded at the time.
+ *
+ * **What is stored is the validated request**, with the defaults of plan 0119
+ * resolved, so a preset that saved `details: NEW` keeps saying `NEW` if the
+ * default ever changes.
+ */
+export type HarvestRunPresetInput = Omit<
+  SpawnHarvestRunRequest,
+  | keyof AdminCredential
+  | 'supermarketId'
+  | 'sourceKind'
+  | 'document'
+  | 'validFrom'
+  | 'validUntil'
+>;
+
+/** The latest run started from a preset, for the presets list. */
+export interface HarvestRunPresetLastRun {
+  id: string;
+  status: HarvestRunStatus;
+  requestedAt: string;
+}
+
+/** One saved run request (plan 0120, section 6). */
+export interface HarvestRunPresetView {
+  id: string;
+  supermarketId: string;
+  name: string;
+  input: HarvestRunPresetInput;
+  createdAt: string;
+  updatedAt: string;
+  /** The latest run started from this preset, null when none was. */
+  lastRun: HarvestRunPresetLastRun | null;
+}
+
+/** A chain's presets, or every chain's, ordered by name. */
+export interface ListHarvestRunPresetsRequest
+  extends PageQuery, AdminCredential {
+  supermarketId?: string;
+}
+
+export interface HarvestRunPresetIdRequest extends AdminCredential {
+  presetId: string;
+}
+
+/**
+ * Save a run request under a name. Refused when the name is already used in
+ * the chain in any case, and when the input would not pass a spawn's
+ * validation.
+ */
+export interface CreateHarvestRunPresetRequest extends AdminCredential {
+  supermarketId: string;
+  name: string;
+  input: HarvestRunPresetInput;
+}
+
+/**
+ * Rename a preset, replace its input, or both. `input` is replaced whole and
+ * validated again. The chain of a preset never changes.
+ */
+export interface UpdateHarvestRunPresetRequest extends AdminCredential {
+  presetId: string;
+  name?: string;
+  input?: HarvestRunPresetInput;
 }
 
 // --- Discovered place requests ---------------------------------------------
@@ -951,6 +1144,15 @@ export interface ListSourceEntriesRequest extends PageQuery, AdminCredential {
   sourceKind?: PriceSourceKind;
   /** Free text over the name, the brand and the EAN. */
   query?: string;
+  /**
+   * Only the rows whose brand keys to this (plan 0124, section 7).
+   *
+   * The value is keyed before it is matched, so `El Pozo` and `elpozo` find the
+   * same rows. A value that makes no key at all matches nothing rather than
+   * being refused: a person typing punctuation gets an empty list, not an
+   * error.
+   */
+  brandKey?: string;
 }
 
 export interface SourceEntryIdRequest extends AdminCredential {
@@ -1192,9 +1394,87 @@ export interface SetSupermarketSourceEnabledRequest extends AdminCredential {
 export interface ListSupermarketSourcesRequest
   extends PageQuery, AdminCredential {}
 
+// --- Brand suggestions and spellings (plan 0115, sections 7 and 8) ----------
+
+/**
+ * Ask for the keys queued rows carry that nothing in the registry holds.
+ *
+ * `registeredKeys` is the whole registry, sent in the message. The harvester
+ * keeps no copy of it, because a copy is a second answer to "what is
+ * registered" that can disagree with the first. The ceiling on that is
+ * documented on `BRAND_PATTERNS.keys`.
+ */
+export interface ListBrandSuggestionsRequest
+  extends PageQuery, AdminCredential {
+  registeredKeys: string[];
+  /** Keyed with `brandKey` before matching. A query with no key matches every row. */
+  query?: string;
+}
+
+/** One chain's share of a suggestion. */
+export interface BrandSuggestionChain {
+  supermarketId: string;
+  productCount: number;
+}
+
+/**
+ * One unregistered brand key, as the queue sees it (plan 0115, section 7.2).
+ *
+ * The cursor is a keyset over `(productCount, key)`, and counts move as the
+ * queue is worked, so a row can appear on two pages. The back office dedupes by
+ * key.
+ */
+export interface BrandSuggestionView {
+  key: string;
+  /** The most common verbatim spelling: the label the back office proposes. */
+  spelling: string;
+  productCount: number;
+  firstSeenAt: string;
+  /** Every chain whose queued rows carry the key, most products first. */
+  chains: BrandSuggestionChain[];
+}
+
+export type BrandSuggestionPage = Paginated<BrandSuggestionView>;
+
+/** Ask how each chain spells the named keys. One key in practice. */
+export interface BrandSpellingsRequest extends AdminCredential {
+  keys: string[];
+}
+
+/**
+ * How one chain spells one brand, and how many products it is on (plan 0115,
+ * section 8).
+ *
+ * A spelling differing from the label only by case or accents is still its own
+ * row: seeing `MAHOU` beside `Mahou` is the point of the read.
+ */
+export interface BrandSpellingView {
+  supermarketId: string;
+  /** The brand as the chain printed it, verbatim. */
+  spelling: string;
+  productCount: number;
+  /** Of those, the ones still `CANDIDATE` or `UNRESOLVED`. */
+  queuedCount: number;
+}
+
+/**
+ * The full list, ordered by chain then by count descending, never paged.
+ *
+ * Capped at {@link BRAND_SPELLINGS_MAX}: one brand has a handful of spellings,
+ * and a chain that has printed more than that has a data problem rather than a
+ * paging problem.
+ */
+export interface BrandSpellingsResult {
+  spellings: BrandSpellingView[];
+}
+
+/** The most spelling rows one brand's read answers with. */
+export const BRAND_SPELLINGS_MAX = 200;
+
 // --- Pages -----------------------------------------------------------------
 
 export type HarvestRunPage = Paginated<HarvestRunView>;
+export type HarvestRunPresetPage = Paginated<HarvestRunPresetView>;
 export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
 export type SourceLocationPage = Paginated<SourceLocationView>;

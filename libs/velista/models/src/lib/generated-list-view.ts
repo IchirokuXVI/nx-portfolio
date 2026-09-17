@@ -72,6 +72,22 @@ export interface GeneratedListSummary {
 }
 
 /**
+ * A basket somebody else owns and shared with the reader (backend `0114`, section 8).
+ *
+ * The summary a row already draws, plus who shared it and when. `sharedAt` is the
+ * moment the reader was added, or the moment they joined by link when nobody added
+ * them, and it is what the shared listing is ordered by.
+ */
+export interface SharedGeneratedListSummary extends GeneratedListSummary {
+  readonly owner: {
+    readonly userId: string;
+    /** Their name in the one group both people share, or their account name. */
+    readonly name: string;
+  };
+  readonly sharedAt: Date;
+}
+
+/**
  * What one run left behind, and why (backend `0050` section 3).
  *
  * A line already carried by another `ACTIVE` basket is skipped rather than duplicated,
@@ -118,4 +134,11 @@ export interface CreateGeneratedListRequest {
   readonly profileId?: string;
   readonly sources?: readonly GeneratedListSource[];
   readonly idempotencyKey?: string;
+  /**
+   * People to share the basket with as it is made (velista `0085`, section 3).
+   *
+   * User ids from the reader's contacts. Omitted when nobody is chosen, which is the
+   * default, so a basket nobody shares sends exactly the body it always did.
+   */
+  readonly memberUserIds?: readonly string[];
 }

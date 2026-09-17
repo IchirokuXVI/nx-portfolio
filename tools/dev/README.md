@@ -26,6 +26,10 @@ the defaults so the numbers stay readable: 4200 becomes 42000, 4205 becomes 4200
 | damoclesSword             | 4203           | 42003  | 42103  | 42203  | …   | 42803  |
 | landingV2                 | 4204           | 42004  | 42104  | 42204  | …   | 42804  |
 | velista                   | 4205           | 42005  | 42105  | 42205  | …   | 42805  |
+| luna-shopper-admin        | 4206           | 42006  | 42106  | 42206  | …   | 42806  |
+
+`luna-shopper-admin` is the back office. It is not a remote and the shell does not
+load it, so `--up --apps luna-shopper-admin` serves it alone, on its own origin.
 
 ### Why the high band
 
@@ -125,7 +129,8 @@ that apart from a forgotten one.
 
 ## Running an e2e suite against a slot
 
-Every front end e2e suite reads **`E2E_BASE_URL`**, an origin. Set it and the suite
+Every front end e2e suite reads **`E2E_BASE_URL`**, an origin, except
+`velista-luna-e2e`, which reads its own `VELISTA_BASE_URL`. Set it and the suite
 drives that server and starts none of its own; leave it unset and the suite falls
 back to slot 0, which on any other slot is the developer's server rather than
 yours. `--e2e-env` derives it from this worktree's slot, so the port is never
@@ -137,10 +142,12 @@ npx nx e2e velista-e2e
 npx nx e2e damoclesSword-e2e
 ```
 
-**One origin covers all four suites.** Each one drives its app _through the shell_
-(the shell owns the outlet, so a remote on its own port renders blank), and each
-config appends the route it needs: `/damoclesSword/en`, `/en` for landingV2, and
-for shell-e2e and velista-e2e the paths the specs carry themselves. So the shell's
+**One origin covers all five suites** (shell-e2e, odontogram-e2e,
+damoclesSword-e2e, landing-v2-e2e and velista-e2e). Each one drives its app
+_through the shell_ (the shell owns the outlet, so a remote on its own port renders
+blank), and each config appends the route it needs: `/damoclesSword/en`, `/en` for
+landingV2, and for shell-e2e, odontogram-e2e and velista-e2e the paths the specs
+carry themselves. So the shell's
 origin is the whole answer, and `--e2e-env` prints only that.
 
 velista is the one app that can also be driven standalone on its own origin, since
@@ -182,7 +189,7 @@ velista and reaches the browser on its own. Nothing needs stopping, and no build
 has to be paid for twice.
 
 Because the apps are independent processes here, a change to one remote rebuilds
-**only that remote**; the other four are untouched and the shell picks the new
+**only that remote**; the other five are untouched and the shell picks the new
 remote up on the next page load. (Measured: editing a `libs/velista` template
 recompiled velista while the shell's compile count stayed where it was.)
 
@@ -214,7 +221,7 @@ so it never quietly starts an app you left out of `--up`.
 | `project.json`, a webpack config, `module-federation.config.ts` | `--restart`              |
 | adding a whole new remote                                       | `--down` then `--up`     |
 
-## Which backend velista talks to
+## Which backend velista and luna-shopper-admin talk to
 
 **The front end slot number and the backend slot number are independent.** Front
 end slot 5 may talk to backend slot 1, or 2, or 8, and **several front end slots
@@ -284,9 +291,10 @@ All git ignored, all per worktree:
 | `tools/dev/.env.ng-slot` | the slot descriptor, read back by `--up`, `--down`, and every other worktree's `--list`; also `E2E_BASE_URL` and the two `*_URL` forms `--e2e-env` prints |
 | `apps/shell/.env`        | `MFE_REMOTE_URLS` for this slot                                                                                                                           |
 | `apps/velista/.env`      | `LUNA_GATEWAY_URL` / `LUNA_REALTIME_URL` for the backend slot                                                                                             |
+| `apps/luna-shopper-admin/.env` | `LUNA_GATEWAY_URL` for the same backend slot                                                                                                        |
 | `tools/dev/.run/`        | one log and one pid per served app                                                                                                                        |
 
-The two app level files are picked up on their own: **Nx loads
+The three app level files are picked up on their own: **Nx loads
 `{projectRoot}/.env` into the environment of that project's tasks**, which is the
 same mechanism the Luna services already rely on. Nothing has to be exported by
 the caller, and nothing leaks into another project's build.
@@ -301,11 +309,11 @@ see. So the descriptor carries `E2E_BASE_URL` and `--e2e-env` prints it as an
 export: one value, crossing into the caller's environment where it is visible,
 rather than a fifth generated file that changes behaviour invisibly.
 
-### velista is the one app that needed a change
+### velista and luna-shopper-admin read the backend from the environment
 
-It is the only front end that talks to a backend, and its development environment
-named `localhost:3000` / `localhost:3001` as literals, so no worktree could point
-anywhere else even when it needed to.
+They are the two front ends that talk to a backend. velista's development
+environment used to name `localhost:3000` / `localhost:3001` as literals, so no
+worktree could point anywhere else even when it needed to.
 
 `apps/velista/webpack.config.ts` now carries the same `DefinePlugin` that
 `webpack.prod.config.ts` has always had, with the two default ports as its
@@ -315,6 +323,11 @@ single stack behaviour that came before.
 `velista-env-substitution.spec.ts` asserts the two files agree, in both
 configurations, so a variable added to one and forgotten in the other is a red
 test rather than an app that throws in the browser.
+
+`apps/luna-shopper-admin/webpack.config.ts` does the same for the one variable the
+back office reads, `LUNA_GATEWAY_URL`, with `http://localhost:3000` as its default.
+It has no `LUNA_REALTIME_URL`, because the back office polls rather than holding a
+socket.
 
 ## How `--list` knows
 

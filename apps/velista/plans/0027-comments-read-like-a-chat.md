@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`f56bf3628`](https://github.com/IchirokuXVI/nx-portfolio/commit/f56bf3628eb54429b5049b44295046c5276f9bf8) on `dev`, with no pull request of its own.
+
 # 0027: comments read like a chat, and the composer stays put
 
 > Written after the fact, from commit `f56bf36`. The work is on `dev`; this plan records

@@ -1,0 +1,54 @@
+:host {
+  display: block;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-height: var(--app-touch-target);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+.action {
+  min-height: var(--app-touch-target);
+  padding: 0 var(--app-space-3);
+  background: none;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The held action (velista 0082, section 7): still the accent, dimmed, still pressable.
+.action.held {
+  opacity: 0.5;
+}
+
+// Takes no room while it is empty.
+.held-message {
+  margin: 0 0 var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+
+  &:empty {
+    margin: 0;
+  }
+}

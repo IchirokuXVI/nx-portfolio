@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`cddb2cb53`](https://github.com/IchirokuXVI/nx-portfolio/commit/cddb2cb53b052db02f4aef665cf599f0f9cb31f0) on `dev`, with no pull request of its own.
+
 # 0024: who can see a new list
 
 > Prerequisite reading: `0008` rule E1 (a single decision is a sheet, not a screen) and

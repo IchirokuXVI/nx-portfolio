@@ -32,6 +32,12 @@ export const ZONE_PATTERNS = {
   getByCode: 'zone.getByCode',
   /** How many zones the caller owns, joined and is waiting on (plan 0017, section 3.5). */
   countsMine: 'zone.countsMine',
+  /**
+   * The people the caller shares an approved group with, one membership per row
+   * and a page at a time (plan 0114, section 2), for choosing who a basket is
+   * shared with.
+   */
+  contacts: 'zone.contacts',
 } as const;
 
 export const MEMBERSHIP_PATTERNS = {
@@ -268,3 +274,33 @@ export type MyZoneOrder = (typeof MY_ZONE_ORDERS)[number];
 /** Fields a caller may order the member listing by (plan 0017, section 5). */
 export const MEMBER_ORDERS = ['joined', 'name', 'role'] as const;
 export type MemberOrder = (typeof MEMBER_ORDERS)[number];
+
+/** One page of the caller's contacts (plan 0114, section 2). */
+export interface ContactsRequest {
+  userId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * One membership of somebody the caller shares an approved group with (plan
+ * 0114, section 2).
+ *
+ * **A membership, not a person.** Somebody in two of the caller's groups is two
+ * rows, one per group, each under the name that group knows them by, because
+ * that is the name the caller knows them by there.
+ *
+ * Paged by membership, because nothing caps the members of a group or the groups
+ * one person joins, so a page is a fixed number of rows however large one group
+ * is. **Ordered by group**, so every member of one group arrives before any
+ * member of the next and a client can draw each page as it lands. The rows carry
+ * no group name: a client names each `zoneId` with the group names it already
+ * holds.
+ */
+export interface ContactView {
+  userId: string;
+  zoneId: string;
+  username: string;
+}
+
+export type ContactPage = Paginated<ContactView>;

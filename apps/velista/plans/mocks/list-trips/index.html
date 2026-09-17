@@ -1,0 +1,325 @@
+<title>Zone List Trips</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+:root{
+  --ground:#eef0f7; --surface-ground:#f7f8fc; --raised:#fff; --sunken:#eef0f7;
+  --text:#11141f; --text-2:#525a78; --muted:#616a8a;
+  --border:#dde1ed; --border-strong:#6f7899; --ring:rgb(37 99 235);
+  --action:rgb(255 180 84); --action-fg:rgb(10 12 20); --action-quiet-fg:#8a5a12;
+  --action-quiet-bg:rgb(255 180 84 / 14%); --action-quiet-border:rgb(232 154 53 / 40%);
+  --ok:#047857; --ok-bg:rgb(5 150 105 / 10%); --ok-border:rgb(5 150 105 / 26%);
+  --bad:#be123c; --bad-bg:rgb(225 29 72 / 10%);
+  --info:#1d4ed8; --info-bg:rgb(37 99 235 / 10%); --info-border:rgb(37 99 235 / 26%);
+  --attn:#6d28d9; --attn-bg:rgb(124 58 237 / 9%); --attn-border:rgb(124 58 237 / 26%);
+  --elev:0 1px 2px rgb(17 20 31 / 4%),0 2px 6px rgb(17 20 31 / 5%);
+  --phone-shadow:0 2px 4px rgb(17 20 31 / 5%),0 18px 40px rgb(17 20 31 / 12%);
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --display:"Marcellus",Georgia,"Times New Roman",serif;
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#11141f; --surface-ground:rgb(10 12 20); --raised:#161a28; --sunken:#11141f;
+    --text:#f7f8fc; --text-2:#c2c8db; --muted:#98a0bb;
+    --border:rgb(255 255 255 / 9%); --border-strong:rgb(255 255 255 / 35%); --ring:rgb(96 165 250);
+    --action-quiet-fg:rgb(255 180 84); --action-quiet-bg:rgb(255 180 84 / 10%); --action-quiet-border:rgb(255 180 84 / 26%);
+    --ok:rgb(52 211 153); --ok-bg:rgb(52 211 153 / 10%); --ok-border:rgb(52 211 153 / 26%);
+    --bad:rgb(251 113 133); --bad-bg:rgb(251 113 133 / 10%);
+    --info:rgb(96 165 250); --info-bg:rgb(96 165 250 / 10%); --info-border:rgb(96 165 250 / 26%);
+    --attn:rgb(167 139 250); --attn-bg:rgb(167 139 250 / 10%); --attn-border:rgb(167 139 250 / 26%);
+    --elev:inset 0 1px 0 0 rgb(255 255 255 / 4%);
+    --phone-shadow:0 18px 44px rgb(0 0 0 / 55%);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#11141f; --surface-ground:rgb(10 12 20); --raised:#161a28; --sunken:#11141f;
+  --text:#f7f8fc; --text-2:#c2c8db; --muted:#98a0bb;
+  --border:rgb(255 255 255 / 9%); --border-strong:rgb(255 255 255 / 35%); --ring:rgb(96 165 250);
+  --action-quiet-fg:rgb(255 180 84); --action-quiet-bg:rgb(255 180 84 / 10%); --action-quiet-border:rgb(255 180 84 / 26%);
+  --ok:rgb(52 211 153); --ok-bg:rgb(52 211 153 / 10%); --ok-border:rgb(52 211 153 / 26%);
+  --bad:rgb(251 113 133); --bad-bg:rgb(251 113 133 / 10%);
+  --info:rgb(96 165 250); --info-bg:rgb(96 165 250 / 10%); --info-border:rgb(96 165 250 / 26%);
+  --attn:rgb(167 139 250); --attn-bg:rgb(167 139 250 / 10%); --attn-border:rgb(167 139 250 / 26%);
+  --elev:inset 0 1px 0 0 rgb(255 255 255 / 4%);
+  --phone-shadow:0 18px 44px rgb(0 0 0 / 55%);
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--text);font:16px/1.5 var(--sans);padding-inline:16px;padding-block:32px 64px}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.wrap{max-width:1080px;margin-inline:auto;display:flex;flex-direction:column;gap:32px}
+.intro h1{font:400 clamp(28px,6vw,40px)/1.15 var(--display);margin:0 0 8px;text-wrap:balance}
+.intro p{margin:0;max-width:64ch;color:var(--text-2)}
+.stage{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:40px;align-items:start}
+.phone-col{display:flex;flex-direction:column;gap:12px;position:sticky;top:16px}
+@media (max-width:860px){.stage{grid-template-columns:minmax(0,1fr)}.phone-col{position:static}}
+.switch{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--sunken);border:1px solid var(--border)}
+.switch button{flex:1;border:0;background:transparent;border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text-2)}
+.switch button[aria-pressed="true"]{background:var(--raised);color:var(--text);box-shadow:var(--elev);font-weight:600}
+.phone{background:var(--surface-ground);border:1px solid var(--border);border-radius:28px;box-shadow:var(--phone-shadow);overflow:hidden;display:flex;flex-direction:column;max-height:820px}
+.scroll{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+.bar{display:flex;align-items:center;gap:8px}
+.round{width:44px;height:44px;border-radius:999px;border:1px solid var(--border);background:var(--raised);display:grid;place-items:center;flex:none}
+.round svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.bar .title{flex:1;min-width:0}
+.bar h2{margin:0;font-size:20px;line-height:1.2}
+.bar small{color:var(--muted);font-size:12px}
+.progress{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--text-2)}
+.track{height:6px;border-radius:999px;background:var(--sunken);border:1px solid var(--border);overflow:hidden}
+.track i{display:block;height:100%;width:70%;background:var(--ok);border-radius:999px}
+.group{display:flex;flex-direction:column;gap:8px}
+.ghead{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:4px 4px 4px 0;border:0;background:transparent;text-align:left}
+.ghead .caret{width:20px;height:20px;flex:none;color:var(--muted);transition:transform 320ms var(--ease)}
+.ghead[aria-expanded="true"] .caret{transform:rotate(90deg)}
+.ghead .gname{font-size:14px;font-weight:650;color:var(--text-2);flex:1;min-width:0}
+.ghead .gname b{color:var(--text);font-weight:650}
+.ghead .gmeta{font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.ghead.static{cursor:default}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--info);background:var(--info-bg);border:1px solid var(--info-border);border-radius:999px;padding:2px 8px}
+.dot{width:6px;height:6px;border-radius:999px;background:currentColor;animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.fold{display:grid;grid-template-rows:0fr;transition:grid-template-rows 320ms var(--ease)}
+.fold.open{grid-template-rows:1fr}
+.fold>.inner{overflow:hidden;min-height:0}
+@media (prefers-reduced-motion:reduce){.fold,.ghead .caret{transition:none}.dot{animation:none}}
+.rows{list-style:none;margin:0;padding:0 0 4px;display:flex;flex-direction:column;gap:4px}
+.row{display:flex;align-items:center;gap:8px;min-height:56px;padding:6px 8px 6px 12px;background:var(--raised);border:1px solid var(--border);border-radius:12px;box-shadow:var(--elev)}
+.row .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.row .name{font-size:16px;overflow-wrap:anywhere}
+.row .ind{font-size:12px;display:flex;flex-wrap:wrap;gap:4px 10px;color:var(--muted)}
+.ind .ok{color:var(--ok)} .ind .bad{color:var(--bad)} .ind .info{color:var(--info)}
+.row.quiet{background:transparent;box-shadow:none}
+.row.quiet .name{color:var(--text-2)}
+.reel{display:flex;align-items:center;flex:none;border:1px solid var(--border);border-radius:14px;background:var(--sunken);height:40px}
+.reel button{width:32px;height:38px;border:0;background:transparent;color:var(--text-2);font-size:18px;border-radius:12px}
+.reel output{min-width:28px;text-align:center;font-weight:650;font-variant-numeric:tabular-nums}
+.tally{flex:none;min-width:64px;text-align:right;display:flex;flex-direction:column;line-height:1.2}
+.tally .n{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums}
+.tally .n.zero{color:var(--muted)}
+.tally .s{font-size:11px;color:var(--muted)}
+.chip{border:1px solid var(--action-quiet-border);background:var(--action-quiet-bg);color:var(--action-quiet-fg);border-radius:999px;font-size:12px;padding:3px 10px;align-self:flex-start;margin-top:2px}
+.sub{font-size:12px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--attn);margin:8px 0 0 2px}
+.row.sug{border-style:dashed;border-color:var(--attn-border);background:var(--attn-bg);box-shadow:none;flex-wrap:wrap}
+.sug .acts{display:flex;gap:6px;flex:none;margin-left:auto}
+.btn{height:36px;padding:0 12px;border-radius:10px;border:1px solid var(--border);background:var(--raised);font-size:13px;font-weight:600}
+.btn.add{background:var(--action);border-color:transparent;color:var(--action-fg)}
+.btn.ghost{background:transparent;color:var(--text-2)}
+.quiet-link{border:0;background:transparent;color:var(--action-quiet-fg);font-size:13px;font-weight:600;padding:6px 4px}
+.quiet-link.center{align-self:center}
+.dock{border-top:1px solid var(--border);padding:12px 16px;background:var(--surface-ground)}
+.dock div{height:48px;border-radius:12px;border:1px solid var(--border);background:var(--raised);display:flex;align-items:center;padding:0 14px;color:var(--muted)}
+.tag{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--attn);border:1px solid var(--attn-border);border-radius:6px;padding:1px 5px;margin-left:6px;vertical-align:middle}
+.notes{display:flex;flex-direction:column;gap:32px;min-width:0}
+.notes h2{font:400 24px/1.2 var(--display);margin:0 0 12px}
+.notes ol,.notes ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:12px;max-width:66ch}
+.notes li{color:var(--text-2)}
+.notes li strong{color:var(--text)}
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;max-width:66ch}
+.legend div{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--raised);font-size:14px;color:var(--text-2)}
+.legend b{display:block;color:var(--text)}
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <h1>The zone list, grouped by shopping trip</h1>
+    <p>A working mock of the zone list for velista plans 0088 and 0089. Tap a group label to open it, add a suggestion, and switch between a list with a live basket and a list without one. All names and numbers are examples. Today is Thursday 17 September.</p>
+  </header>
+
+  <div class="stage">
+    <div class="phone-col">
+      <div class="switch" role="group" aria-label="Mock state">
+        <button id="st-live" aria-pressed="true">A basket is live</button>
+        <button id="st-none" aria-pressed="false">No basket is live</button>
+      </div>
+
+      <div class="phone">
+        <div class="scroll">
+          <div class="bar">
+            <button class="round" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <div class="title"><h2>Weekly food</h2><small>in Home</small></div>
+            <button class="round" aria-label="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></button>
+            <button class="round" aria-label="Filter"><svg viewBox="0 0 24 24"><path d="M4 7h16M7 12h10M10 17h4"/></svg></button>
+          </div>
+          <div class="progress"><span id="sentence">9 of 25 pending</span><div class="track"><i></i></div></div>
+
+          <section class="group" aria-labelledby="g-pending">
+            <div class="ghead static">
+              <span class="gname" id="g-pending"><b>To buy</b></span>
+              <button class="quiet-link">Put them in order</button>
+            </div>
+            <ul class="rows" id="pending-rows">
+              <li class="row"><div class="body"><span class="name">Bread</span><span class="ind"><span>Bought 14 times</span></span></div><div class="reel"><button aria-label="One less">−</button><output>1</output><button aria-label="One more">+</button></div></li>
+              <li class="row"><div class="body"><span class="name">Tomatoes</span><span class="ind"><span class="bad">Not in the shop last time</span></span></div><div class="reel"><button aria-label="One less">−</button><output>6</output><button aria-label="One more">+</button></div></li>
+              <li class="row"><div class="body"><span class="name">Dish soap</span><span class="ind"><span>Added today</span></span></div><div class="reel"><button aria-label="One less">−</button><output>1</output><button aria-label="One more">+</button></div></li>
+            </ul>
+            <p class="sub">You usually buy these about now</p>
+            <ul class="rows" id="sug-rows">
+              <li class="row sug" data-name="Eggs" data-q="1"><div class="body"><span class="name">Eggs</span><span class="ind"><span>Every 7 days · last bought 5 days ago</span></span></div><div class="acts"><button class="btn add" data-add>Add 1</button></div></li>
+              <li class="row sug" data-name="Coffee" data-q="2"><div class="body"><span class="name">Coffee</span><span class="ind"><span>Every 14 days · last bought 12 days ago</span></span></div><div class="acts"><button class="btn add" data-add>Add 2</button></div></li>
+              <li class="row sug" data-name="Yogurt" data-q="4"><div class="body"><span class="name">Yogurt</span><span class="ind"><span>In 5 of your last 6 shopping lists</span></span></div><div class="acts"><button class="btn add" data-add>Add 4</button></div></li>
+            </ul>
+            <ul class="rows" id="zero-rows">
+              <li class="row"><div class="body"><span class="name">Saffron</span><span class="ind"><span>Never bought</span></span></div><div class="reel"><button aria-label="One less">−</button><output>0</output><button aria-label="One more">+</button></div></li>
+              <li class="row"><div class="body"><span class="name">Birthday candles</span><span class="ind"><span>Never bought</span></span></div><div class="reel"><button aria-label="One less">−</button><output>0</output><button aria-label="One more">+</button></div></li>
+            </ul>
+          </section>
+
+          <section class="group" id="live-group">
+            <button class="ghead" aria-expanded="true" aria-controls="f-live">
+              <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+              <span class="gname"><b>Thursday shop</b> <span class="live"><span class="dot"></span>Marta is buying now</span></span>
+              <span class="gmeta">1 of 5 bought</span>
+            </button>
+            <div class="fold open" id="f-live"><div class="inner"><ul class="rows">
+              <li class="row"><div class="body"><span class="name">Milk</span><span class="ind"><span class="ok">✓ Bought</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 6</span></div></li>
+              <li class="row"><div class="body"><span class="name">Bananas</span><span class="ind"><span class="info">• Marta is buying this</span></span></div><div class="tally"><span class="n">3</span><span class="s">bought 3 of 6</span></div></li>
+              <li class="row"><div class="body"><span class="name">Salmon</span><span class="ind"><span class="bad">✗ Not in the shop</span></span></div><div class="tally"><span class="n">2</span><span class="s">bought 0 of 2</span></div></li>
+              <li class="row"><div class="body"><span class="name">Rice</span><span class="ind"><span class="info">• Marta is buying this</span></span></div><div class="tally"><span class="n">1</span><span class="s">bought 0 of 1</span></div></li>
+              <li class="row"><div class="body"><span class="name">Pasta</span><span class="ind"><span class="info">• Marta is buying this</span></span></div><div class="tally"><span class="n">2</span><span class="s">bought 0 of 2</span></div></li>
+            </ul></div></div>
+          </section>
+
+          <section class="group" id="live-group-2">
+            <button class="ghead" aria-expanded="false" aria-controls="f-live2">
+              <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+              <span class="gname"><b>Market stall</b> <span class="live"><span class="dot"></span>Dani is buying now</span></span>
+              <span class="gmeta">0 of 2 bought</span>
+            </button>
+            <div class="fold" id="f-live2"><div class="inner"><ul class="rows">
+              <li class="row"><div class="body"><span class="name">Peppers</span><span class="ind"><span class="info">• Dani is buying this</span></span></div><div class="tally"><span class="n">4</span><span class="s">bought 0 of 4</span></div></li>
+              <li class="row"><div class="body"><span class="name">Onions</span><span class="ind"><span class="info">• Dani is buying this</span><span>The list now asks for 3</span></span></div><div class="tally"><span class="n">2</span><span class="s">bought 0 of 2</span></div></li>
+            </ul></div></div>
+          </section>
+
+          <section class="group">
+            <button class="ghead" aria-expanded="false" aria-controls="f-1">
+              <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+              <span class="gname"><b>Weekend shop</b> · Sat 12 Sep</span><span class="gmeta">3 of 5 bought</span>
+            </button>
+            <div class="fold" id="f-1"><div class="inner"><ul class="rows">
+              <li class="row quiet"><div class="body"><span class="name">Milk</span><span class="ind"><span class="ok">✓ Bought</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 6</span></div></li>
+              <li class="row quiet"><div class="body"><span class="name">Eggs</span><span class="ind"><span class="ok">✓ Bought</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 1</span></div></li>
+              <li class="row quiet"><div class="body"><span class="name">Yogurt</span><span class="ind"><span class="ok">✓ Bought</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 4</span></div></li>
+              <li class="row quiet"><div class="body"><span class="name">Bread</span><span class="ind"><span class="ok">✓ Bought some</span></span></div><div class="tally"><span class="n">1</span><span class="s">bought 1 of 2</span></div></li>
+              <li class="row quiet"><div class="body"><span class="name">Tomatoes</span><span class="ind"><span class="bad">✗ Not in the shop</span></span></div><div class="tally"><span class="n">6</span><span class="s">bought 0 of 6</span></div></li>
+            </ul></div></div>
+          </section>
+
+          <section class="group">
+            <button class="ghead" aria-expanded="false" aria-controls="f-2">
+              <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+              <span class="gname"><b>Loose buys</b> · Tue 8 Sep</span><span class="gmeta">2 lines</span>
+            </button>
+            <div class="fold" id="f-2"><div class="inner"><ul class="rows">
+              <li class="row quiet"><div class="body"><span class="name">Bread</span><span class="ind"><span class="ok">✓ Bought · Dani</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 1</span></div></li>
+              <li class="row quiet"><div class="body"><span class="name">Milk</span><span class="ind"><span class="ok">✓ Bought · Dani</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 2</span></div></li>
+            </ul></div></div>
+          </section>
+
+          <section class="group">
+            <button class="ghead" aria-expanded="false" aria-controls="f-3">
+              <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+              <span class="gname"><b>Sat 5 Sep</b></span><span class="gmeta">4 of 4 bought</span>
+            </button>
+            <div class="fold" id="f-3"><div class="inner"><ul class="rows">
+              <li class="row quiet"><div class="body"><span class="name">Milk</span><span class="ind"><span class="ok">✓ Bought</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 6</span></div></li>
+              <li class="row quiet"><div class="body"><span class="name">Coffee</span><span class="ind"><span class="ok">✓ Bought</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 2</span></div></li>
+              <li class="row quiet"><div class="body"><span class="name">Eggs</span><span class="ind"><span class="ok">✓ Bought</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 1</span></div></li>
+              <li class="row quiet"><div class="body"><span class="name">Yogurt</span><span class="ind"><span class="ok">✓ Bought</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 4</span></div></li>
+            </ul></div></div>
+          </section>
+
+          <section class="group">
+            <button class="ghead" aria-expanded="false" aria-controls="f-4">
+              <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+              <span class="gname"><b>Big monthly</b> · Sat 29 Aug</span><span class="gmeta">1 not bought</span>
+            </button>
+            <div class="fold" id="f-4"><div class="inner"><ul class="rows">
+              <li class="row quiet"><div class="body"><span class="name">Olive oil</span><span class="ind"><span>Was on the list, nobody bought it</span></span></div><div class="tally"><span class="n">1</span><span class="s">bought 0 of 1</span></div></li>
+              <li class="row quiet"><div class="body"><span class="name">Milk</span><span class="ind"><span class="ok">✓ Bought</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 12</span></div></li>
+              <li class="row quiet"><div class="body"><span class="name">Rice</span><span class="ind"><span class="ok">✓ Bought</span></span></div><div class="tally"><span class="n zero">0</span><span class="s">bought 2</span></div></li>
+            </ul></div></div>
+          </section>
+          <button class="quiet-link center">Show older trips</button>
+        </div>
+        <div class="dock"><div>Add something</div></div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <section>
+        <h2>How to read a row</h2>
+        <div class="legend">
+          <div><b>To buy</b>The live quantity on the reel. This is the only group where the number can change and where lines can be put in order.</div>
+          <div><b>Live basket and old trips</b>The large number is what that trip left unbought. The small text is what it bought, out of what it asked for.</div>
+          <div><b>Suggested</b>An existing line at zero whose rhythm says it is due. Add raises its quantity to the usual amount.</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>The rules this mock follows</h2>
+        <ol>
+          <li><strong>Groups are trips.</strong> A trip is a basket that drew from this list, or a run of purchases settled by hand. The first kind shows its name and date. The second shows "Loose buys" and a date.</li>
+          <li><strong>To buy comes first and never folds.</strong> It holds every wanted line that no live basket holds. Lines at zero that were never bought sit last in it.</li>
+          <li><strong>Live baskets come next.</strong> The newest starts open. Any other starts closed.</li>
+          <li><strong>Old rows are frozen and read only.</strong> The number is what that trip left. The live quantity changes in To buy alone.</li>
+          <li><strong>A suggestion is a line at zero that is due.</strong> Add puts it back at its usual amount. Nothing dismisses it in the first version.</li>
+          <li><strong>Lines are put in order inside To buy only.</strong> Every other line keeps its place.</li>
+          <li><strong>Search flattens the page.</strong> It shows every matching line once, with its reel, so a line that lives only in old trips can be found and raised again.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>What loads, and when</h2>
+        <ul>
+          <li><strong>The lines load in full, as today.</strong> Search, the counts and reorder all need the whole list, and a list stops growing once a household has written what it buys.</li>
+          <li><strong>The trips load a page at a time.</strong> They grow every week for ever. The page reads the newest twenty labels, and "Show older trips" reads the next twenty.</li>
+          <li><strong>The rows of a trip load when it opens.</strong> A closed group costs one label. Placeholder rows hold the height, so the fold opens once and does not jump.</li>
+          <li><strong>Live baskets are never paged.</strong> They always arrive with the first read.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Left for later</h2>
+        <ul>
+          <li>A line added during a trip cannot be sent to the live basket yet.</li>
+          <li>A quantity raised on the list does not reach the live basket. The row says "The list now asks for 3" until the basket follows the list.</li>
+          <li>A suggestion cannot be dismissed.</li>
+          <li>A line at zero that was never bought has no better home than the end of To buy.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('button.ghead').forEach(function(h){
+    var f=document.getElementById(h.getAttribute('aria-controls'));
+    if(!f)return;
+    function sync(){var o=h.getAttribute('aria-expanded')==='true';f.classList.toggle('open',o);f.querySelector('.inner').inert=!o;}
+    sync();
+    h.addEventListener('click',function(){h.setAttribute('aria-expanded',h.getAttribute('aria-expanded')==='true'?'false':'true');sync();});
+  });
+  var pending=document.getElementById('pending-rows'),sug=document.getElementById('sug-rows'),sub=document.querySelector('.sub'),sentence=document.getElementById('sentence'),n=9;
+  function count(d){n+=d;sentence.textContent=n+' of 25 pending';}
+  function tidy(){if(!sug.children.length){sub.hidden=true;sug.hidden=true;}}
+  sug.addEventListener('click',function(e){
+    var row=e.target.closest('.sug');if(!row)return;
+    if(e.target.matches('[data-add]')){
+      var li=document.createElement('li');li.className='row';
+      li.innerHTML='<div class="body"><span class="name"></span><span class="ind"><span>Added from a suggestion</span></span></div><div class="reel"><button aria-label="One less">−</button><output></output><button aria-label="One more">+</button></div>';
+      li.querySelector('.name').textContent=row.dataset.name;li.querySelector('output').textContent=row.dataset.q;
+      pending.appendChild(li);row.remove();count(1);tidy();
+    }
+  });
+  function reel(e){
+    var b=e.target.closest('.reel button');
+    if(b){var o=b.parentNode.querySelector('output'),v=+o.textContent+(b.textContent==='+'?1:-1);o.textContent=Math.max(0,v);}
+  }
+  pending.addEventListener('click',reel);document.getElementById('zero-rows').addEventListener('click',reel);
+  var live=document.getElementById('live-group'),a=document.getElementById('st-live'),b=document.getElementById('st-none');
+  function state(on){a.setAttribute('aria-pressed',on);b.setAttribute('aria-pressed',!on);live.hidden=!on;document.getElementById('live-group-2').hidden=!on;}
+  a.addEventListener('click',function(){state(true);});b.addEventListener('click',function(){state(false);});
+})();
+</script>

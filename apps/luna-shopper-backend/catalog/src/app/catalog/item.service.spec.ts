@@ -14,7 +14,12 @@ import {
 import { QueryFailedError, type Repository } from 'typeorm';
 // `Item` is a value here, not just a type: the audit double keys on the entity
 // class the service hands it.
-import { Item, type ProductGroup, type SupermarketItem } from '../entities';
+import {
+  Item,
+  type Brand,
+  type ProductGroup,
+  type SupermarketItem,
+} from '../entities';
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { fakeAudit } from './catalog-audit.testing';
 import { ItemService } from './item.service';
@@ -57,8 +62,18 @@ function makeQb(rows: Item[]) {
 function build(overrides: {
   items?: Partial<Repository<Item>>;
   prices?: Partial<Repository<SupermarketItem>>;
+  /** The registry the brand write step looks a key up in (plan 0115). */
+  brands?: Brand[];
 }) {
   const admin = makeAdmin();
+  // The lookup answers the whole registry rather than narrowing it the way the
+  // real one does. That is safe here because the service indexes what it gets
+  // by key and then reads the one key it computed, so an extra row is never
+  // reachable. What the specs below assert about it is the call count.
+  const registry = overrides.brands ?? [];
+  const brands = {
+    find: jest.fn(async () => registry),
+  } as unknown as jest.Mocked<Repository<Brand>>;
   const groups = {
     load: jest.fn(async (id: string) => ({ id }) as ProductGroup),
   } as unknown as jest.Mocked<ProductGroupService>;
@@ -78,12 +93,13 @@ function build(overrides: {
     overrides.items as Repository<Item>,
     {} as Repository<ProductGroup>,
     (overrides.prices ?? {}) as Repository<SupermarketItem>,
+    brands,
     groups,
     admin,
     audit.service,
     events
   );
-  return { service, admin, groups, events, audit };
+  return { service, admin, groups, events, audit, brands };
 }
 
 describe('ItemService', () => {
@@ -521,6 +537,147 @@ describe('ItemService', () => {
           defaultUnit: UnitOfMeasure.LITER,
         })
       ).rejects.toThrow('the database went away');
+    });
+  });
+
+  /**
+   * The one write step every product write shares (plan 0115, section 4).
+   *
+   * Four cases, and the fourth is the one that is easy to get wrong: an
+   * unregistered brand is **accepted**, not refused, because a person creating a
+   * product by hand in the back office has to be able to and refusing it is the
+   * curator's decision.
+   */
+  describe('the brand a written product carries', () => {
+    const MAHOU = {
+      id: 'b1',
+      key: 'mahou',
+      label: 'Mahou',
+      privateLabelSupermarketId: null,
+    } as Brand;
+
+    const savingItems = () =>
+      ({
+        create: jest.fn((x) => x),
+        save: jest.fn(async (x) => ({ id: 'i1', ...x })),
+        findOne: jest.fn(async () => ({
+          id: 'i1',
+          name: { es: 'Cerveza' },
+          brand: 'MAHOU',
+          brandKey: 'mahou',
+          brandId: null,
+        })),
+      }) as unknown as Repository<Item>;
+
+    const draft = {
+      userId: ADMIN,
+      name: { es: 'Cerveza' },
+      category: ItemCategory.OTHER,
+      defaultUnit: UnitOfMeasure.UNIT,
+    };
+
+    it('has no brand at all when the text has no letters or digits', async () => {
+      const { service } = build({ items: savingItems() });
+
+      const created = await service.create({ ...draft, brand: '---' });
+
+      // LIDL's `-` and `---` reach here, and need no case of their own.
+      expect(created.brand).toBeNull();
+    });
+
+    it('stores the registered label, whatever spelling was sent', async () => {
+      const items = savingItems();
+      const { service } = build({ items, brands: [MAHOU] });
+
+      const created = await service.create({ ...draft, brand: 'MAHOU' });
+
+      expect(created.brand).toBe('Mahou');
+      expect(items.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          brand: 'Mahou',
+          brandKey: 'mahou',
+          brandId: 'b1',
+        })
+      );
+    });
+
+    it('stores the canonical brand when the key belongs to a spelling', async () => {
+      const items = savingItems();
+      const { service } = build({
+        items,
+        brands: [
+          MAHOU,
+          {
+            id: 'b2',
+            key: 'mahou5estrellas',
+            label: 'MAHOU 5 ESTRELLAS',
+            privateLabelSupermarketId: null,
+            canonicalBrandId: MAHOU.id,
+          } as Brand,
+        ],
+      });
+
+      await service.create({ ...draft, brand: 'Mahou 5 Estrellas' });
+
+      // The id and the label are the brand it is a spelling of, and the key is
+      // still the product's own text: that key is what brings it back if the
+      // link is ever undone (plan 0124, section 4.1).
+      expect(items.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          brand: 'Mahou',
+          brandKey: 'mahou5estrellas',
+          brandId: 'b1',
+        })
+      );
+    });
+
+    it('accepts an unregistered brand, keyed and unlinked', async () => {
+      const items = savingItems();
+      const { service } = build({ items });
+
+      await service.create({ ...draft, brand: '  El Pozo ' });
+
+      expect(items.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          brand: 'El Pozo',
+          brandKey: 'elpozo',
+          brandId: null,
+        })
+      );
+    });
+
+    it('clears all three columns when an edit removes the brand', async () => {
+      const items = savingItems();
+      const { service } = build({ items, brands: [MAHOU] });
+
+      await service.update({ userId: ADMIN, itemId: 'i1', brand: null });
+
+      expect(items.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          brand: null,
+          brandKey: null,
+          brandId: null,
+        })
+      );
+    });
+
+    it('resolves every distinct key of a batch in one query', async () => {
+      const items = savingItems();
+      const { service, brands } = build({ items, brands: [MAHOU] });
+
+      await service.createMany({
+        userId: ADMIN,
+        items: [
+          { ...draft, brand: 'MAHOU' },
+          { ...draft, brand: 'Mahou' },
+          { ...draft, brand: 'El Pozo' },
+          { ...draft, brand: null },
+        ].map(({ userId: _userId, ...input }) => input as CreateItemInput),
+      });
+
+      // One lookup for the whole file, not one per product: a thousand row
+      // decisions file would otherwise be a thousand round trips.
+      expect(brands.find).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -27,8 +27,8 @@ describe('LandingV2Wrapper', () => {
     expect(component).toBeTruthy();
   });
 
-  it('loads all 4 projects and every info fact for the resolved locale', () => {
-    expect(component.projects).toHaveLength(4);
+  it('loads all 5 projects and every info fact for the resolved locale', () => {
+    expect(component.projects).toHaveLength(5);
     expect(component.facts).toHaveLength(4);
   });
 });

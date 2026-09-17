@@ -172,6 +172,33 @@ describe('toGatewayError', () => {
     expect(error.correlationId).toBe('');
   });
 
+  /**
+   * The facts a refusal published, which only a class that opts in puts on the
+   * wire (backend plan 0112, section 2). A `brand_key_taken` names the brand
+   * already holding the key, so the panel that was refused can offer to open it.
+   */
+  it('keeps the details a refusal published, as strings where they are', () => {
+    const error = toGatewayError(
+      refusal(409, {
+        ...envelope('brand_key_taken'),
+        details: { brandId: 'br_mahou', linked: 3 },
+      })
+    );
+
+    expect(error.detailString('brandId')).toBe('br_mahou');
+    // A detail that is not a string is a detail this reader has no use for.
+    expect(error.detailString('linked')).toBeNull();
+    expect(error.detailString('missing')).toBeNull();
+  });
+
+  /** A body with no details at all reads as none rather than as a throw. */
+  it('has no details when the envelope carried none', () => {
+    expect(toGatewayError(refusal(500, '<html>')).details).toEqual({});
+    expect(
+      toGatewayError(refusal(409, envelope('conflict'))).detailString('brandId')
+    ).toBeNull();
+  });
+
   /** For a log line, never for a screen. Every operator facing string is a key. */
   it('carries a message for a log, naming the code and the correlation id', () => {
     const error = toGatewayError(refusal(401, envelope('unauthorized')));

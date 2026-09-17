@@ -116,6 +116,7 @@ describeIntegration('a run history row (real Postgres)', () => {
       {} as never,
       fakeLineClaims({}).service,
       { emitToUsers: jest.fn() } as never,
+      {} as never,
       {} as never
     );
 

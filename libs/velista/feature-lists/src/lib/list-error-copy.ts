@@ -78,6 +78,18 @@ export function listErrorKey(
       // a write is the belt on top of the braces. On a reorder it is silent.
       return operation === 'lines.reorder' ? null : GENERIC;
 
+    case 'line_merge_needs_approval':
+      // A pending line renamed onto an approved one, by somebody who cannot approve
+      // (backend plan 0112). The sentence says why rather than that it failed.
+      return 'list.error.mergeNeedsApproval';
+
+    case 'line_merge_too_many_products':
+      // The bound travels in `details.max`, which the sheet interpolates. Without it the
+      // sentence would print a placeholder, so it falls back to the generic one.
+      return typeof error.details?.['max'] === 'number'
+        ? 'list.error.mergeTooManyProducts'
+        : GENERIC;
+
     case 'rate_limited':
       // A run of quick adds hitting a bucket. The composer keeps its text, which is the
       // composer's business; this is only the sentence.

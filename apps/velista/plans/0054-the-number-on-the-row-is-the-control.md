@@ -1,3 +1,5 @@
+> **PR:** [#129](https://github.com/IchirokuXVI/nx-portfolio/pull/129)
+
 # 0054: the number on the row is the control
 
 > Server half: `apps/luna-shopper-backend/plans/0056`, which owns the rule and its arithmetic.

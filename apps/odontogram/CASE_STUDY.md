@@ -3,6 +3,15 @@
 > Answers (`A:`) are written by Daniel. `> Note (Claude):` blocks flag things the
 > code shows that an answer may have missed.
 
+> **Out of date in places, as of 2026-09-17.** The answers below are left as written. What
+> the code does now:
+>
+> - **Data access:** `libs/odontogram/data-access/src/lib/data-access-providers.ts` binds
+>   `provideService(ODONTOGRAM_SERVICE, OdontogramMemory)`. No provider binds `OdontogramApi`,
+>   so the app still runs in memory.
+> - **Data access:** the repo now has a NestJS backend for velista
+>   (`apps/luna-shopper-backend`). Odontogram still has none.
+
 ## The project
 
 **Q: What is the odontogram and why did you build it (real dental use case / who's it for)?**

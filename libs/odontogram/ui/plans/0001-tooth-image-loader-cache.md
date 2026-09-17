@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`5b84a3255`](https://github.com/IchirokuXVI/nx-portfolio/commit/5b84a325561ee8030e092592d33ba8d709df86e6) on `dev`, with no pull request of its own.
+
 # ToothImageLoader — populate the image cache
 
 > Fixes the `FIXME` in
