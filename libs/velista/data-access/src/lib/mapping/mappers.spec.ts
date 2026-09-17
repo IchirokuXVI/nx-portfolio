@@ -8,6 +8,7 @@ import {
   toGeneratedListSummary,
   toLine,
   toListAccessEntries,
+  toListIdResult,
   toListPermissions,
   toMembership,
   toMyZone,
@@ -660,6 +661,20 @@ describe('toListAccessEntries', () => {
   it('answers an empty list for anything unreadable', () => {
     for (const raw of [undefined, null, 0, 'entries', {}, { entries: 3 }]) {
       expect(toListAccessEntries(raw)).toEqual([]);
+    }
+  });
+});
+
+describe('toListIdResult', () => {
+  // What `PUT /v1/lists/:id/access` answers. Reading it as a list summary threw after
+  // a save that had landed, and the share sheet drew an error over it.
+  it('reads the list id the access route answers', () => {
+    expect(toListIdResult({ listId: 'l1' })).toBe('l1');
+  });
+
+  it('answers null for anything else', () => {
+    for (const raw of [undefined, null, 'l1', {}, { id: 'l1' }]) {
+      expect(toListIdResult(raw)).toBeNull();
     }
   });
 });

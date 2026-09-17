@@ -841,6 +841,11 @@ export function toDeletedId(raw: unknown): string | null {
   return isRecord(raw) ? str(raw['id']) : null;
 }
 
+/** From `ListIdResult`, which is all `PUT /v1/lists/:id/access` answers. */
+export function toListIdResult(raw: unknown): string | null {
+  return isRecord(raw) ? str(raw['listId']) : null;
+}
+
 /**
  * From `ListAccessView` (`GET /v1/lists/:id/access`), which lands with backend plan
  * 0036 section 6 gated on `MANAGE`.

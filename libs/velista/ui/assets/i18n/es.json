@@ -1167,7 +1167,7 @@
       "listAsks": "en su lista pide {{count}}",
       "listNow": "ahora su lista pide {{count}}",
       "pending": "esperando a que la lista lo acepte",
-      "noAccess": "ya no puedes cambiar esta lista",
+      "noAccess": "Ya no puedes cambiar esta lista",
       "claimed": "alguien ya está comprando esto para esa lista",
       "rejected": "esa lista ha dicho que no a esta línea",
       "cannotTake": "esta línea no se puede añadir a esa lista",

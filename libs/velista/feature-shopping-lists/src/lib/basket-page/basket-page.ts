@@ -94,7 +94,8 @@ import { BASKET_PATHS } from '../basket-paths';
  * ## No back arrow for a guest
  *
  * There is nowhere back to go: they arrived on a link and this is the whole app
- * to them. The owner gets one, to the history.
+ * to them. The owner gets one, to the history, and a registered participant gets
+ * one to the dashboard.
  *
  * ## Coming back to it
  *
@@ -189,6 +190,16 @@ export class BasketPage {
   protected readonly isOwner = computed(
     () => this._store.me()?.kind === 'OWNER'
   );
+
+  /**
+   * Whether the reader has an app to go back to: the owner, and a registered member of
+   * a shared basket. A guest has none, because they arrived on a link and this screen
+   * is the whole app to them.
+   */
+  protected readonly canGoBack = computed(() => {
+    const kind = this._store.me()?.kind;
+    return kind === 'OWNER' || kind === 'REGISTERED';
+  });
 
   /**
    * Whether the trip is over, which is what takes every control off this screen
@@ -385,24 +396,35 @@ export class BasketPage {
    * unnamed owner and every unnamed guest all resolved to a word beginning "Gu".
    * The reader's own account name is handed in because core keeps none for an
    * owner, so their own face is the one the basket alone cannot name.
+   *
+   * **Named from the participant row where there is one.** A presence entry carries no
+   * username, so a face built from the entry alone fell through to the role word and
+   * drew `O` or `M`, while the people sheet, built from participants, drew the
+   * username's letter for the same person.
    */
   protected readonly faces = computed(() => {
     const meId = this.meId();
     const ownName = this._session.username();
+    const participants = new Map(
+      this._store.participants().map((person) => [person.id, person])
+    );
 
     return this._store
       .present()
       .slice(0, 3)
-      .map((person) => ({
-        id: person.participantId,
-        initials: participantInitials(
-          person,
-          this._translator,
-          this._locale(),
-          { ownName: person.participantId === meId ? ownName : null }
-        ),
-        isGuest: person.kind === 'GUEST',
-      }));
+      .map((entry) => {
+        const person = participants.get(entry.participantId) ?? entry;
+        return {
+          id: entry.participantId,
+          initials: participantInitials(
+            person,
+            this._translator,
+            this._locale(),
+            { ownName: entry.participantId === meId ? ownName : null }
+          ),
+          isGuest: person.kind === 'GUEST',
+        };
+      });
   });
 
   /**
@@ -1074,10 +1096,15 @@ export class BasketPage {
    * The history is the **fallback**, for the arrival with nothing behind it — a
    * reload, or a link opened cold — which is exactly the destination this button
    * used to have unconditionally.
+   *
+   * A member's fallback is the dashboard instead. The history lists the reader's own
+   * baskets, and a basket somebody shared with them is not one of those.
    */
   protected back(): void {
     void this._pages.back(
-      appPath(this._locale(), this._basePath, BASKET_PATHS.list)
+      this.isOwner()
+        ? appPath(this._locale(), this._basePath, BASKET_PATHS.list)
+        : appPath(this._locale(), this._basePath, 'home')
     );
   }
 }

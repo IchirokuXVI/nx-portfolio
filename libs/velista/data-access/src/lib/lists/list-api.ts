@@ -14,6 +14,7 @@ import { operation } from '../auth/http-context';
 import {
   toDeletedId,
   toListAccessEntries,
+  toListIdResult,
   toPage,
   toShoppingListSummary,
 } from '../mapping/mappers';
@@ -119,7 +120,7 @@ export class ListApi implements ListServiceI {
   async setListAccess(
     listId: string,
     entries: readonly ListAccessEntry[]
-  ): Promise<ShoppingListSummary> {
+  ): Promise<string> {
     // Rebuilt field by field rather than passed through, because a mapped model is
     // never sent back (rule D4, and the note at the top of `requests.ts`). The array is
     // copied for the same reason the fields are: what goes on the wire is this
@@ -137,7 +138,10 @@ export class ListApi implements ListServiceI {
       })
     );
 
-    return required(toShoppingListSummary(body), 'lists.setAccess');
+    // The route answers `{ listId }` and nothing more. Reading it as a list summary
+    // threw after every save that had landed, and the sheet drew an error over a
+    // change the server had already made.
+    return toListIdResult(body) ?? listId;
   }
 
   /**

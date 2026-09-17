@@ -26,6 +26,7 @@ import type {
   ErrorCode,
 } from '@portfolio/velista/models';
 import {
+  PageNavigation,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   StorageKeys,
@@ -531,6 +532,27 @@ describe('the basket header, live', () => {
       expect(new Set(drawn).size).toBe(2);
     });
 
+    it('draws the letter the people sheet draws, not the role word', async () => {
+      // A presence entry carries no username, so the face fell through to "Owner"
+      // for a member reading and "Member" for the owner, while the sheet, built
+      // from participants, drew the username's letter for the same person.
+      const reader = participant({
+        ...guest('p-me', 1),
+        kind: 'REGISTERED',
+        guestNumber: null,
+        userId: 'u-2',
+      });
+      const { fixture } = await render({
+        me: reader,
+        present: [owner()],
+        participants: [{ ...participant(owner()), username: 'zoe' }, reader],
+      });
+
+      expect(faces(fixture).map((face) => face.textContent?.trim())).toEqual([
+        'Z',
+      ]);
+    });
+
     it('marks a guest as a guest, and the owner not', async () => {
       const { fixture } = await render({
         present: [owner(), guest('p-1', 1)],
@@ -564,6 +586,49 @@ describe('the basket header, live', () => {
 
       expect(faces(fixture)).toHaveLength(4);
       expect(query(fixture, '.face.is-overflow')).not.toBeNull();
+    });
+  });
+
+  describe('the way back', () => {
+    const registered = (): BasketParticipant =>
+      participant({
+        ...guest('p-me', 1),
+        kind: 'REGISTERED',
+        guestNumber: null,
+        userId: 'u-2',
+      });
+
+    async function pressBack(
+      me: BasketParticipant
+    ): Promise<jest.SpyInstance | null> {
+      const { fixture } = await render({ me });
+      const back = query(fixture, 'button.back');
+      if (back === null) {
+        return null;
+      }
+      const spy = jest
+        .spyOn(TestBed.inject(PageNavigation), 'back')
+        .mockResolvedValue(undefined);
+      back.click();
+      return spy;
+    }
+
+    it('takes the owner back, falling back to the history', async () => {
+      const spy = await pressBack(participant(owner()));
+
+      expect(spy).not.toBeNull();
+      expect(spy?.mock.calls[0]?.[0]).toMatch(/shopping-lists$/);
+    });
+
+    it('takes a registered participant back, falling back to the dashboard', async () => {
+      const spy = await pressBack(registered());
+
+      expect(spy).not.toBeNull();
+      expect(spy?.mock.calls[0]?.[0]).toMatch(/home$/);
+    });
+
+    it('offers a guest no way back', async () => {
+      expect(await pressBack(participant(guest('p-9', 1)))).toBeNull();
     });
   });
 

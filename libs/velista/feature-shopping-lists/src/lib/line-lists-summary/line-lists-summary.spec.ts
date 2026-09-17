@@ -339,6 +339,12 @@ describe('LineListsSummary: what one list got', () => {
 
     expect(reels(fixture)).toHaveLength(0);
     expect(text(fixture)).toContain('basket.units.noAccess');
+    // Coloured as a refusal, because it answers a write that just did nothing.
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.row-reason.lost-access'
+      )
+    ).not.toBeNull();
     expect(text(fixture)).toContain('4');
     expect(text(fixture)).toContain('1');
   });

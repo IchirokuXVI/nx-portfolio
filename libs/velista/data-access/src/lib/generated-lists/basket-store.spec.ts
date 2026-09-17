@@ -1287,6 +1287,31 @@ describe('BasketStore', () => {
       socket.connected.set(false);
       expect(store.present()).toEqual([]);
     });
+
+    it('counts a participant with two tabs open once', async () => {
+      const { store, socket } = build();
+      await store.open('basket-saturday');
+      socket.connected.set(true);
+
+      // The server keeps presence per socket, so every tab is its own entry.
+      const tab = {
+        participantId: 'p-1',
+        kind: 'REGISTERED' as const,
+        displayName: null,
+        guestNumber: null,
+        userId: 'u-1',
+      };
+      socket.events.next({
+        type: 'presence.generatedListUpdated',
+        generatedListId: 'basket-saturday',
+        present: [tab, { ...tab }, { ...tab, participantId: 'p-2' }],
+      });
+
+      expect(store.present().map((entry) => entry.participantId)).toEqual([
+        'p-1',
+        'p-2',
+      ]);
+    });
   });
 
   /**

@@ -260,7 +260,7 @@ export class ListMemory implements ListServiceI {
   async setListAccess(
     listId: string,
     entries: readonly ListAccessEntry[]
-  ): Promise<ShoppingListSummary> {
+  ): Promise<string> {
     const zoneId = this._zoneOf(listId);
     if (zoneId === null) {
       throw memoryFailure('not_found', 404);
@@ -318,7 +318,7 @@ export class ListMemory implements ListServiceI {
     }
 
     this._access.set(listId, [...next.values()]);
-    return this._patch(listId, (list) => list);
+    return listId;
   }
 
   /**
