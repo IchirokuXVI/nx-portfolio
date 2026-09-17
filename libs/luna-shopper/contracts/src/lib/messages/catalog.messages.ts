@@ -203,8 +203,10 @@ export const PRODUCT_GROUP_PATTERNS = {
  * run registers a brand: an unregistered brand is still accepted on an item,
  * and deciding it is really a brand is curation.
  *
- * There is no `delete`, by section 9. A brand cannot be removed, and the day
- * one can be, the foreign key sets `items.brandId` null.
+ * **The only brand that can be deleted is a spelling of another** (plan 0124).
+ * Every other brand still cannot be removed, by section 9: its products have
+ * nowhere to go, and the foreign key from `items.brandId` sets null rather than
+ * cascading.
  */
 export const BRAND_PATTERNS = {
   create: 'brand.create',
@@ -221,6 +223,17 @@ export const BRAND_PATTERNS = {
    * key still on the suggestions list.
    */
   registerSuggestion: 'brand.registerSuggestion',
+  /**
+   * Remove a spelling, and only a spelling (plan 0124).
+   *
+   * **The one brand that may be deleted is one linked to another.** Deleting it
+   * puts its products back exactly where they were before it was registered,
+   * unbranded and still carrying its printed text, so its key returns to the
+   * suggestions list by itself and registering it again picks them up. Every
+   * other brand still cannot be removed, by section 9 of plan 0115: there is
+   * nowhere for its products to go.
+   */
+  delete: 'brand.delete',
   /**
    * Every registered key and nothing else, for the suggestions read (plan 0115,
    * section 7.3).
@@ -1531,6 +1544,25 @@ export interface UpdateBrandRequest extends AdminCredential {
 export interface BrandIdRequest {
   userId: string;
   brandId: string;
+}
+
+/** Remove a spelling. A brand that is nobody's spelling is refused. */
+export interface DeleteBrandRequest extends AdminCredential {
+  brandId: string;
+}
+
+/**
+ * A spelling removed, and how many products went back to unbranded
+ * (plan 0124).
+ *
+ * `id` is the convention every other admin catalog delete answers with.
+ * `movedItems` is beside it because the number is the visible effect of the
+ * delete: those products keep their printed text and lose their brand, which is
+ * the state they were in before the spelling was registered.
+ */
+export interface DeleteBrandResult {
+  id: string;
+  movedItems: number;
 }
 
 export interface ListBrandsRequest extends PageQuery {

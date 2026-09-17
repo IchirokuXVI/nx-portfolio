@@ -316,6 +316,27 @@ export class BrandLinkOwnsNoChainException extends DomainException {
 }
 
 /**
+ * A linked brand was renamed onto a different key (plan 0124, section 4).
+ *
+ * No details: the brand the client was editing is the brand it already has on
+ * screen, and there is nothing else to open. What it does next is either keep
+ * the key or register the new spelling as a brand of its own.
+ */
+export class BrandLinkKeepsKeyException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_LINK_KEEPS_KEY;
+}
+
+/**
+ * A brand that is nobody's spelling cannot be deleted (plan 0124).
+ *
+ * No details: the brand is the one the client asked about, and what it does
+ * next is either link it to the brand it spells, or leave it alone.
+ */
+export class BrandNotLinkedException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_NOT_LINKED;
+}
+
+/**
  * The `details` key a {@link BrandLinkTooDeepException} names the brand that
  * breaks the one level rule under.
  *

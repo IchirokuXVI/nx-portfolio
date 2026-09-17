@@ -8,9 +8,11 @@ import {
   BRAND_LINK_BLOCKER_DETAIL,
   BrandKeyTakenException,
   BrandLabelEmptyException,
+  BrandLinkKeepsKeyException,
   BrandLinkOwnsNoChainException,
   BrandLinkTooDeepException,
   BrandLinkToSelfException,
+  BrandNotLinkedException,
   createValidationPipe,
   GlobalExceptionFilter,
 } from '@portfolio/luna-shopper/platform';
@@ -503,6 +505,69 @@ describe('the brand routes, over HTTP', () => {
       expect(await res.json()).toMatchObject({
         code: 'brand_link_owns_no_chain',
       });
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('answers 409 brand_link_keeps_key for a rename that changes a spelling’s key', async () => {
+    const { nest, origin } = await boot({
+      [BRAND_PATTERNS.update]: () => {
+        throw new BrandLinkKeepsKeyException('A spelling keeps its key.');
+      },
+    });
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/brands/${SPELLING.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ label: 'Mahou 7 Estrellas' }),
+        }
+      );
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ code: 'brand_link_keeps_key' });
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('deletes a spelling and says how many products went back', async () => {
+    const { nest, sent, origin } = await boot({
+      [BRAND_PATTERNS.delete]: { id: SPELLING.id, movedItems: 4 },
+    });
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/brands/${SPELLING.id}`,
+        { method: 'DELETE' }
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ id: SPELLING.id, movedItems: 4 });
+      expect(sent[0].subject).toBe(BRAND_PATTERNS.delete);
+      expect(sent[0].payload).toMatchObject({
+        brandId: SPELLING.id,
+        adminToken: 'operator-token',
+      });
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('answers 409 brand_not_linked for a brand that is nobody’s spelling', async () => {
+    const { nest, origin } = await boot({
+      [BRAND_PATTERNS.delete]: () => {
+        throw new BrandNotLinkedException('Only a spelling can be deleted.');
+      },
+    });
+    try {
+      const res = await fetch(`${origin}/v1/admin/catalog/brands/${BRAND.id}`, {
+        method: 'DELETE',
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ code: 'brand_not_linked' });
     } finally {
       await nest.close();
     }
