@@ -9,9 +9,11 @@ import {
 } from '../enums/catalog.enums';
 import type {
   DiscoveredPlaceStatus,
+  HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunTrigger,
+  HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
   PostalCodeDiscoveryStatus,
@@ -242,6 +244,16 @@ export interface AdapterCapabilities {
   /** The source has a product page, so an EAN backfill has something to read. */
   hasProductPages: boolean;
   /**
+   * A walk of this source has a detail phase that a known product can skip
+   * (plan 0119, section 3), so a run takes `details`.
+   *
+   * True for `mercadona-api` alone: its listing carries no EAN and no brand, so
+   * a walk fetched one detail per product. LIDL reads a product whole in one
+   * request, and Carrefour reads its product pages in a backfill of its own, so
+   * neither has a detail phase to skip.
+   */
+  skipsKnownDetails: boolean;
+  /**
    * The language this source's own text is written in, or null when nothing is
    * known (plan 0111, section 7).
    *
@@ -293,6 +305,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: true,
     listsItsOwnStores: true,
     hasProductPages: false,
+    skipsKnownDetails: true,
     printedLocale: 'es',
     // The LOCAL_AREA band alone (plan 0116, section 3): a warehouse is what this
     // chain prices by, and a crawl of one warehouse may claim neither the chain's
@@ -309,6 +322,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    skipsKnownDetails: false,
     printedLocale: 'es',
     // A walk that writes no price writes no scope, so there is no band to state.
     walkablePriorities: null,
@@ -318,6 +332,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: true,
+    skipsKnownDetails: false,
     printedLocale: 'es',
     // One default scope, chosen at the spawn, and no list. Nothing is selected,
     // so there is nothing for a band to refuse.
@@ -330,6 +345,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: true,
     listsItsOwnStores: true,
     hasProductPages: true,
+    skipsKnownDetails: false,
     printedLocale: 'es',
     // It reads every region the week's offers name and creates what is missing,
     // so a run selects no scope and the band has nothing to say about it.
@@ -342,6 +358,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    skipsKnownDetails: false,
     printedLocale: null,
     walkablePriorities: null,
   },
@@ -352,6 +369,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     scopesItsOwn: false,
     listsItsOwnStores: false,
     hasProductPages: false,
+    skipsKnownDetails: false,
     printedLocale: null,
     walkablePriorities: null,
   },
@@ -380,6 +398,7 @@ export function adapterCapabilities(
       scopesItsOwn: false,
       listsItsOwnStores: false,
       hasProductPages: false,
+      skipsKnownDetails: false,
       printedLocale: null,
       walkablePriorities: null,
     }
@@ -855,6 +874,24 @@ export interface SpawnHarvestRunRequest extends AdminCredential {
    * `CATALOG_DISCOVERY` only, and never with {@link detailBackfill}.
    */
   scopeCopies?: ScopeCopy[];
+  /**
+   * What the run writes of what it read (plan 0119, section 7). Default
+   * `PRICES_AND_AVAILABILITY`.
+   *
+   * `CATALOG_DISCOVERY` only, and never with {@link detailBackfill}. `PRICES` is
+   * refused for an adapter that states no price. The resolved value is stored
+   * on the run's input, so a run says what it did after a default changes.
+   */
+  writes?: HarvestRunWrites;
+  /**
+   * Which products a Mercadona walk fetches the detail of (plan 0119, section
+   * 5). Default `NEW`, for an adapter whose capability `skipsKnownDetails` is
+   * true, and `ALL` for every other one.
+   *
+   * `CATALOG_DISCOVERY` only. Stating it for an adapter that has no detail
+   * phase to skip is refused; leaving it out is not, and resolves to `ALL`.
+   */
+  details?: HarvestDetailFetch;
 }
 
 /**

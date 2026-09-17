@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   brandKey,
+  HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
   PriceSourceKind,
@@ -70,6 +71,12 @@ export interface SourceObservationPrice {
  */
 export interface SourceObservation {
   externalId: string;
+  /**
+   * Absent or true: the source was read whole, and every identity field below
+   * is what it said (plan 0119, section 6). The other half of the union is
+   * {@link PartialSourceObservation}.
+   */
+  detailFetched?: true;
   name: string;
   brand: string | null;
   ean: string | null;
@@ -88,6 +95,27 @@ export interface SourceObservation {
    */
   prices: readonly SourceObservationPrice[];
 }
+
+/**
+ * A product the source listed and whose detail was not fetched, because the
+ * harvester already knew it (plan 0119, section 6).
+ *
+ * **It carries no identity field at all**, rather than nulls for the ones it
+ * did not read. A null in an observation is a statement, and the verbatim write
+ * of a full observation would blank a stored EAN with it. What the stored row
+ * says stays what the last full read wrote; this moves only the seen fields
+ * and the prices.
+ */
+export interface PartialSourceObservation {
+  externalId: string;
+  detailFetched: false;
+  observedAt: Date;
+  /** Every price the listing stated for this product, as a full one carries. */
+  prices: readonly SourceObservationPrice[];
+}
+
+/** A product as a runner reports it: read whole, or from the listing alone. */
+export type ReportedObservation = SourceObservation | PartialSourceObservation;
 
 /** What a session writes for, decided once and held across every chunk. */
 export interface SourceIngestSessionInput {
@@ -116,10 +144,17 @@ export interface SourceIngestSessionInput {
    * resolved scope id becomes a write, so a runner never learns about one.
    */
   copiesOf?: (priceScopeId: string) => readonly string[];
+  /**
+   * What the run writes of what it read (plan 0119, section 7). Absent means
+   * both. Without prices, no `source_entry_prices` row is written and nothing
+   * reaches `addPrices`, copies included; the products are ingested either way.
+   * Availability is the sink's to skip, not this.
+   */
+  writes?: HarvestRunWrites;
 }
 
 export interface SourceIngestInput extends SourceIngestSessionInput {
-  observations: readonly SourceObservation[];
+  observations: readonly ReportedObservation[];
 }
 
 /** Which rung of section 4 answered, and what it answered with. */
@@ -254,7 +289,7 @@ export class SourceIngest {
   async writeChunk(
     context: RunContext,
     input: SourceIngestSessionInput,
-    observations: readonly SourceObservation[],
+    reported: readonly ReportedObservation[],
     byExternalId: Map<string, SourceCatalogEntry>,
     siblings: SiblingEntryIndex,
     items: ItemMatchIndex
@@ -274,25 +309,45 @@ export class SourceIngest {
     const observed: ObservedPrice[] = [];
     /** Where each observation's prices landed, by its index, copies included. */
     const placedByIndex: PlacedPrice[][] = [];
+    const writesPrices = input.writes !== HarvestRunWrites.AVAILABILITY;
+    /**
+     * The observations that produced an outcome, index aligned with `outcomes`.
+     * A skipped partial observation produces none, so step 4 reads from here
+     * rather than from what was reported.
+     */
+    const observations: ReportedObservation[] = [];
 
     // Steps 2 and 3, per observation and in the order the runner produced them.
-    for (const observation of observations) {
-      const fields = fieldsOf(observation, input.sourceKind);
+    for (const observation of reported) {
       const held = byExternalId.get(observation.externalId);
-      // Asked before the touch writes, because the touch is what makes it false.
-      const changed = held ? sourceGroupChanged(held, fields) : false;
-
-      const outcome = held
-        ? await this.touch(held, fields, context.runId, seenAt, items)
-        : await this.create(
-            fields,
-            input.supermarketId,
-            context.runId,
-            seenAt,
-            observation,
-            items,
-            siblings
-          );
+      let outcome: SourceEntryOutcome;
+      let changed = false;
+      if (observation.detailFetched === false) {
+        // A partial observation reads no identity field, so it can neither
+        // create a row nor change one (plan 0119, section 6).
+        if (!held) {
+          this.skipUnknownPartial(context, observation);
+          await context.report({ processed: 1 });
+          continue;
+        }
+        outcome = await this.see(held, context.runId, seenAt);
+      } else {
+        const fields = fieldsOf(observation, input.sourceKind);
+        // Asked before the touch writes, because the touch is what makes it false.
+        changed = held ? sourceGroupChanged(held, fields) : false;
+        outcome = held
+          ? await this.touch(held, fields, context.runId, seenAt, items)
+          : await this.create(
+              fields,
+              input.supermarketId,
+              context.runId,
+              seenAt,
+              observation,
+              items,
+              siblings
+            );
+      }
+      observations.push(observation);
 
       if (outcome.created) {
         counters.created += 1;
@@ -310,13 +365,15 @@ export class SourceIngest {
       outcomes.push(outcome);
       // Every price the source stated, each resolved to the scope it names.
       // A price nothing can place is a warning and no row (plan 0103, D4):
-      // writing it to the default would put a Sevilla price on Madrid.
+      // writing it to the default would put a Sevilla price on Madrid. A run
+      // that writes no prices places none, and has nothing to warn about.
       const placed: PlacedPrice[] = [];
-      for (const price of observation.prices) {
+      for (const price of writesPrices ? observation.prices : []) {
         const priceScopeId = this.resolveScope(
           context,
           input,
-          observation,
+          outcome.entry.name,
+          observation.externalId,
           price
         );
         if (priceScopeId) {
@@ -361,7 +418,7 @@ export class SourceIngest {
           entries: [],
         };
         batch.entries.push(
-          priceEntryFor(outcome.itemId, observation, place.price)
+          priceEntryFor(outcome.itemId, observation, outcome.entry, place.price)
         );
         owed.set(key, batch);
       }
@@ -390,7 +447,7 @@ export class SourceIngest {
     }
 
     this.logger.log(
-      `Run ${context.runId}: ${observations.length} observation(s) ` +
+      `Run ${context.runId}: ${reported.length} observation(s) ` +
         `ingested (${counters.created} new, ${counters.updated} changed), ` +
         `${counters.pricesRecorded} price(s) recorded on the source rows, ` +
         `${owedCount} price(s) owed across ${owed.size} scope(s), ` +
@@ -409,7 +466,8 @@ export class SourceIngest {
   private resolveScope(
     context: RunContext,
     input: SourceIngestSessionInput,
-    observation: SourceObservation,
+    name: string,
+    externalId: string,
     price: SourceObservationPrice
   ): string | null {
     const resolved = this.scopeOf(input, price);
@@ -420,22 +478,22 @@ export class SourceIngest {
       context.warn({
         code: HarvestWarningCode.NO_PRICE_SCOPE,
         message:
-          `"${observation.name}" states a price for no particular group of ` +
+          `"${name}" states a price for no particular group of ` +
           'shops, and this run was given no price scope to write it to.',
-        offerId: observation.externalId,
+        offerId: externalId,
         page: null,
-        name: observation.name,
+        name,
       });
       return null;
     }
     context.warn({
       code: HarvestWarningCode.UNKNOWN_PRICE_SCOPE,
       message:
-        `"${observation.name}" states a price for "${price.scopeKey}", which ` +
+        `"${name}" states a price for "${price.scopeKey}", which ` +
         'nothing in this run declared, so there is no scope to write it to.',
-      offerId: observation.externalId,
+      offerId: externalId,
       page: null,
-      name: observation.name,
+      name,
     });
     return null;
   }
@@ -448,6 +506,56 @@ export class SourceIngest {
     return price.scopeKey === null
       ? input.defaultPriceScopeId
       : (input.scopeIdFor?.(price.scopeKey) ?? null);
+  }
+
+  /**
+   * Rung 1 for a partial observation: the row was seen, and nothing else about
+   * it moved (plan 0119, section 6).
+   *
+   * {@link applySourceGroup} is not called, so the stored name, brand and EAN
+   * stay what the last full read wrote, and no status is re-derived: only a new
+   * EAN may do that, and this read fetched none.
+   */
+  private async see(
+    row: SourceCatalogEntry,
+    runId: string,
+    seenAt: Date
+  ): Promise<SourceEntryOutcome> {
+    row.timesSeen += 1;
+    row.lastSeenAt = seenAt;
+    row.lastRunId = runId;
+    const saved = await this.entries.save(row);
+    return {
+      entry: saved,
+      created: false,
+      rung: 1,
+      itemId: activeItemOf(saved),
+    };
+  }
+
+  /**
+   * A partial observation for a product the chain holds no row for.
+   *
+   * It can only happen when a row is deleted between the executor loading what
+   * the chain knows and the ingest reaching the product. A row created from it
+   * would have no name and no EAN, which is worse than waiting a week for the
+   * next run to fetch the detail.
+   */
+  private skipUnknownPartial(
+    context: RunContext,
+    observation: PartialSourceObservation
+  ): void {
+    context.warn({
+      code: HarvestWarningCode.DETAIL_SKIPPED_UNKNOWN,
+      message:
+        `The product ${observation.externalId} was read from the listing ` +
+        'alone, because it was known when the run started, but the chain ' +
+        'holds no row for it now. Nothing was written, and the next run ' +
+        'fetches its detail.',
+      offerId: observation.externalId,
+      page: null,
+      name: null,
+    });
   }
 
   /**
@@ -606,7 +714,7 @@ export class SourceIngest {
         unitPriceLabel: price.unitPriceLabel,
         validFrom: price.validFrom,
         validUntil: price.validUntil,
-        details: observation.extra,
+        details: extraOf(observation, entry),
         observedAt: observation.observedAt,
         runId,
       })
@@ -686,7 +794,7 @@ interface PlacedPrice {
 
 /** One price of one observation, beside the row and the scope it landed on. */
 interface ObservedPrice extends PlacedPrice {
-  observation: SourceObservation;
+  observation: ReportedObservation;
   entry: SourceCatalogEntry;
 }
 
@@ -775,9 +883,21 @@ function fieldsOf(
   };
 }
 
+/**
+ * The free bag a price row carries: the observation's, or for a partial one the
+ * stored row's, which is what the last full read said.
+ */
+function extraOf(
+  observation: ReportedObservation,
+  entry: SourceCatalogEntry
+): Record<string, unknown> | null {
+  return observation.detailFetched === false ? entry.extra : observation.extra;
+}
+
 function priceEntryFor(
   itemId: string,
-  observation: SourceObservation,
+  observation: ReportedObservation,
+  entry: SourceCatalogEntry,
   price: SourceObservationPrice
 ): ItemPriceBatchEntry {
   return {
@@ -789,7 +909,7 @@ function priceEntryFor(
     validFrom: price.validFrom?.toISOString() ?? null,
     validUntil: price.validUntil?.toISOString() ?? null,
     observedAt: observation.observedAt.toISOString(),
-    details: toItemPriceDetails(observation.extra),
+    details: toItemPriceDetails(extraOf(observation, entry)),
   };
 }
 
@@ -840,7 +960,7 @@ export class SourceIngestSession {
    * from {@link close} instead.
    */
   async push(
-    observations: readonly SourceObservation[]
+    observations: readonly ReportedObservation[]
   ): Promise<SourceEntryOutcome[]> {
     if (this.closed) {
       throw new Error(

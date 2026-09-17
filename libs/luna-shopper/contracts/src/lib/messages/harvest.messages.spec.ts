@@ -26,6 +26,7 @@ describe('adapterCapabilities', () => {
       scopesItsOwn: false,
       listsItsOwnStores: false,
       hasProductPages: false,
+      skipsKnownDetails: false,
       printedLocale: null,
       walkablePriorities: null,
     });

@@ -1,3 +1,4 @@
+import type { HarvestDetailFetch } from '@portfolio/luna-shopper/contracts';
 import type { SupermarketSource } from '../entities';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
@@ -74,6 +75,28 @@ export interface CatalogDiscoveryInput {
    * only an id and an EAN would blank the name the crawl wrote.
    */
   backfill?: readonly BackfillEntry[];
+  /**
+   * Which products a walk fetches the detail of (plan 0119, section 5). Absent
+   * means `ALL`, which is what a walk did before and what every adapter with no
+   * detail phase to skip does anyway.
+   */
+  details?: HarvestDetailFetch;
+  /**
+   * The external ids whose stored row carries an EAN, which is what a product
+   * is known by (plan 0119, section 4). Empty or absent when `details` is `ALL`.
+   *
+   * **Data on the input, not a lookup the runner performs**, so plan 0103's rule
+   * that a runner holds no repository stands. A Mercadona chain holds about
+   * 4,300 rows, so the set is small.
+   */
+  knownExternalIds?: ReadonlySet<string>;
+  /**
+   * The external ids whose stored row has no EAN, loaded beside
+   * {@link knownExternalIds}. Their detail is fetched again, which is how a
+   * detail that failed last week is retried, and the runner counts them so a
+   * large number is visible in the report (plan 0119, section 8).
+   */
+  externalIdsWithoutEan?: ReadonlySet<string>;
 }
 
 /**

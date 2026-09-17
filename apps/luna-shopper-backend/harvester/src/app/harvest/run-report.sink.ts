@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import {
+  HarvestRunWrites,
   PriceSourceKind,
   SourceEntryStatus,
 } from '@portfolio/luna-shopper/contracts';
@@ -19,9 +20,9 @@ import type {
   ScopeDeclaration,
 } from './run-report';
 import type {
+  ReportedObservation,
   SourceIngest,
   SourceIngestSession,
-  SourceObservation,
 } from './source-ingest';
 import type { SourceLocationService } from './source-location.service';
 
@@ -74,6 +75,12 @@ export interface RunReportSinkInput {
    * section 4), resolved by the executor. Absent means the run copies nothing.
    */
   copiesOf?: (priceScopeId: string) => readonly string[];
+  /**
+   * What this run writes of what it read (plan 0119, section 7). Absent means
+   * both. The prices are skipped by the ingest, the availability here, and a
+   * copy follows whichever its walked scope wrote.
+   */
+  writes?: HarvestRunWrites;
 }
 
 /** What the run wrote, for the counters and the run's report. */
@@ -138,7 +145,7 @@ export class RunReportSink implements RunReport {
   private chain: Promise<void> = Promise.resolve();
   private session: SourceIngestSession | null = null;
 
-  private products: SourceObservation[] = [];
+  private products: ReportedObservation[] = [];
   private places: ObservedPlace[] = [];
   private readonly claims: AvailabilityClaim[] = [];
   /** The scope keys whose whole assortment this run walked. */
@@ -209,7 +216,7 @@ export class RunReportSink implements RunReport {
     });
   }
 
-  product(observation: SourceObservation): void {
+  product(observation: ReportedObservation): void {
     this.products.push(observation);
     this.observedIds.add(observation.externalId);
     if (this.products.length >= PRODUCT_CHUNK) {
@@ -271,8 +278,12 @@ export class RunReportSink implements RunReport {
     }
     this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
 
-    await this.writeShopAvailability();
-    await this.writeScopeAvailability();
+    // A run that writes prices only states no stock, per shop or per scope, and
+    // its copies state none either (plan 0119, section 7).
+    if (this.input.writes !== HarvestRunWrites.PRICES) {
+      await this.writeShopAvailability();
+      await this.writeScopeAvailability();
+    }
     return this.result;
   }
 
@@ -282,7 +293,7 @@ export class RunReportSink implements RunReport {
   }
 
   private async pushProducts(
-    chunk: readonly SourceObservation[]
+    chunk: readonly ReportedObservation[]
   ): Promise<void> {
     const supermarketId = this.input.supermarketId;
     if (!supermarketId) {
@@ -299,6 +310,7 @@ export class RunReportSink implements RunReport {
       // before this chunk is already resolvable by it.
       scopeIdFor: (key) => this.deps.scopes?.idFor(key) ?? null,
       copiesOf: this.input.copiesOf,
+      writes: this.input.writes,
     });
 
     const outcomes = await this.session.push(chunk);
