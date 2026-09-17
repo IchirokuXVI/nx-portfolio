@@ -91,7 +91,7 @@ export interface ListServiceI {
   setListAccess(
     listId: string,
     entries: readonly ListAccessEntry[]
-  ): Promise<ShoppingListSummary>;
+  ): Promise<string>;
 
   /**
    * What each membership may do on this list (`GET /v1/lists/:id/access`).

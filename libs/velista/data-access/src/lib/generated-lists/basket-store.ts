@@ -355,10 +355,24 @@ export class BasketStore {
    *
    * Empty when the socket is down rather than frozen at its last known value: a stale
    * face row is a claim about the present tense that nothing is checking.
+   *
+   * **One entry per participant.** The server keeps presence per socket, so somebody
+   * with the basket open in two tabs arrives twice, and the face row counted tabs
+   * while the people sheet counted people. The first entry for a participant wins.
    */
-  readonly present = computed<readonly BasketPresenceEntry[]>(() =>
-    this._socket.connected() ? this._present() : []
-  );
+  readonly present = computed<readonly BasketPresenceEntry[]>(() => {
+    if (!this._socket.connected()) {
+      return [];
+    }
+    const seen = new Set<string>();
+    return this._present().filter((entry) => {
+      if (seen.has(entry.participantId)) {
+        return false;
+      }
+      seen.add(entry.participantId);
+      return true;
+    });
+  });
 
   /** The lines, in the order the basket holds them. */
   readonly lines = computed<readonly BasketLine[]>(

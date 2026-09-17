@@ -163,6 +163,12 @@
 .row-reason {
   font-size: var(--app-text-xs);
   color: var(--app-text-secondary);
+
+  // Except losing access, which the reader usually meets as a write that just did
+  // nothing. Quiet grey was easy to miss, so it takes the colour of a refusal.
+  &.lost-access {
+    color: var(--app-status-danger-fg);
+  }
 }
 
 // What the last write on this row came to, stacked where there are two of them.

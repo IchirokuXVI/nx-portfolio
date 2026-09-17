@@ -13,9 +13,10 @@
   <header class="bar">
     <!--
       No back control for a guest: there is nowhere back to go. They arrived on a
-      link and this screen is the whole app to them (section 4.1).
+      link and this screen is the whole app to them (section 4.1). A member of a
+      shared basket has the rest of the app, so they get one too.
     -->
-    @if (isOwner()) {
+    @if (canGoBack()) {
       <button
         (click)="back()"
         [attr.aria-label]="'basket.back' | rokuT"

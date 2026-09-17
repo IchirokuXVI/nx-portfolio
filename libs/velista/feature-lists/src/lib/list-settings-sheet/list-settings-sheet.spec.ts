@@ -121,7 +121,7 @@ async function render(options: Options = {}): Promise<{
       entries: readonly ListAccessEntry[]
     ) => {
       saved.push(entries);
-      return list();
+      return LIST_ID;
     },
     deleteList: async () => LIST_ID,
   } as unknown as ListServiceI;
