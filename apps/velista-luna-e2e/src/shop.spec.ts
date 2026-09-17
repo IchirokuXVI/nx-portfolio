@@ -304,7 +304,16 @@ test.describe('one trip, by the owner', () => {
       await dialog.getByRole('checkbox', { name: /^Groceries/ }).uncheck();
       await dialog.getByRole('button', { name: /^Show \d+ lines?$/ }).click();
       await expectBasketUrl(page, basketId);
-      await expect(chip(page, 'Only Hardware')).toBeVisible();
+      // Four properties are on by now, and the chip row is one line inside a 480
+      // wide column, so the last of them is drawn as a chip or folded into the
+      // `+N` that opens the sheet depending on how wide the words happen to
+      // render. Both are the row working as `0075` designed it, so what this
+      // asserts is the filter itself: the tool counts it, and the lines from the
+      // list that was unchecked are gone.
+      await expect(filterTool(page)).toHaveAccessibleName(
+        /Filter and order, 4 on/
+      );
+      await expect(row(page, 'Milk')).toHaveCount(0);
       await page.getByRole('button', { name: 'Search this list' }).click();
       await page.locator('#basket-search').fill('nail');
       await expect(rows(page)).toHaveCount(1);
