@@ -96,6 +96,7 @@ test('a run walks every fixture row and reports what it decided', async () => {
       assert.deepEqual(row.entry.brandMatch, {
         label: 'Hacendado',
         privateLabelOf: 'Mercadona',
+        printedAs: null,
       });
     }
     if (row.entry.id === 'entry-detergent') {

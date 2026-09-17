@@ -9,7 +9,12 @@
  * until `apply`.
  */
 
-import { chainName, chainNamesById, findBrand } from './rules.mjs';
+import {
+  canonicalBrand,
+  chainName,
+  chainNamesById,
+  findBrand,
+} from './rules.mjs';
 
 /** An `extra` bag can hold a leaflet's whole page text; the model needs a taste. */
 const MAX_EXTRA_CHARS = 2000;
@@ -62,18 +67,26 @@ export function toCandidate(
  * Candidates are not annotated. A `LINK` takes the candidate's brand as it is,
  * because that brand is already a catalog product's brand and nothing here
  * would be deciding anything new about it.
+ *
+ * **A linked spelling resolves to the brand it spells** (plan 0005). `label` is
+ * always the brand to write, so the existing rule "write `brandMatch.label`"
+ * gets `Deborah` out of a chain printing `DEBORAH 48H` on the first attempt,
+ * and `printedAs` names the spelling the chain printed so the model knows what
+ * the name has to keep. It is null when the printed brand is not a link.
  */
 export function brandMatchFor({ entry, brands, supermarkets }) {
   const registered = findBrand(brands, entry?.brand);
   if (!registered) {
     return null;
   }
-  const owner = registered.privateLabelSupermarketId;
+  const canonical = canonicalBrand(brands, registered);
+  const owner = canonical.privateLabelSupermarketId;
   return {
-    label: registered.label,
+    label: canonical.label,
     privateLabelOf: owner
       ? (chainNamesById(supermarkets).get(owner) ?? null)
       : null,
+    printedAs: canonical === registered ? null : registered.label,
   };
 }
 

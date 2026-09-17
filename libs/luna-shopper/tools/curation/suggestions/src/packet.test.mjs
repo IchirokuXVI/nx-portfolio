@@ -28,6 +28,29 @@ const BRANDS = indexBrands([
     label: 'Carbonell',
     privateLabelSupermarketId: null,
   },
+  {
+    id: 'b-deborah',
+    key: 'deborah',
+    label: 'Deborah',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: null,
+  },
+  {
+    id: 'b-deborah-48h',
+    key: 'deborah48h',
+    label: 'DEBORAH 48H',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: 'b-deborah',
+  },
+  // A spelling of the house label, so the chain the packet names comes from
+  // the canonical brand and not from the row the printed brand found.
+  {
+    id: 'b-hacendado-plus',
+    key: 'hacendadoproteinas',
+    label: 'Hacendado +Proteínas',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: 'b-hacendado',
+  },
 ]);
 
 function entry(overrides = {}) {
@@ -54,6 +77,7 @@ test('brandMatch names the registered brand and the chain that owns it', () => {
   assert.deepEqual(match('Hacendado'), {
     label: 'Hacendado',
     privateLabelOf: 'Mercadona',
+    printedAs: null,
   });
 });
 
@@ -63,6 +87,7 @@ test('brandMatch answers the registry label, not the printed spelling', () => {
   assert.deepEqual(match('HACENDADO'), {
     label: 'Hacendado',
     privateLabelOf: 'Mercadona',
+    printedAs: null,
   });
 });
 
@@ -70,6 +95,28 @@ test('a brand with no chain names no chain', () => {
   assert.deepEqual(match('Carbonell'), {
     label: 'Carbonell',
     privateLabelOf: null,
+    printedAs: null,
+  });
+});
+
+test('a linked spelling names the brand to write and the spelling printed', () => {
+  // The chain prints `DEBORAH 48H` and a person registered it as a spelling of
+  // `Deborah`, so `label` is already the brand a CREATE writes and the model
+  // needs no second rule to get it right on the first attempt.
+  assert.deepEqual(match('DEBORAH 48H'), {
+    label: 'Deborah',
+    privateLabelOf: null,
+    printedAs: 'DEBORAH 48H',
+  });
+});
+
+test('a linked spelling takes its chain from the brand it spells', () => {
+  // A linked brand owns no chain of its own (plan 0124 section 2), so reading
+  // the chain off the printed row would tell the model rule 6 does not apply.
+  assert.deepEqual(match('Hacendado +Proteínas'), {
+    label: 'Hacendado',
+    privateLabelOf: 'Mercadona',
+    printedAs: 'Hacendado +Proteínas',
   });
 });
 
@@ -92,6 +139,7 @@ test('the packet carries the field and the candidates are not annotated', () => 
   assert.deepEqual(packet.entry.brandMatch, {
     label: 'Hacendado',
     privateLabelOf: 'Mercadona',
+    printedAs: null,
   });
   // A LINK takes the candidate's brand as it is: that brand is already a
   // catalog product's brand and nothing here decides anything new about it.

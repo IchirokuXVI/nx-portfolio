@@ -35,6 +35,9 @@ entry's own brand as that registry holds it, or null.
 
 - When `entry.brandMatch` is present, write `brandMatch.label` as `item.brand`, exactly as
   it is spelled there.
+- When `entry.brandMatch.printedAs` is present, the chain printed a registered spelling of
+  the brand. Write `brandMatch.label` as the brand, and keep what the spelling adds (a line,
+  range or claim such as `48H`) in the name, by rule 4.
 - When it is absent and the product plainly has a brand, write that brand. If the registry
   does not hold it the tool sends the row to a person, which is the intended outcome. Never
   drop a printed brand to null to avoid that.
@@ -93,6 +96,8 @@ format apart, and rule 1 merges anything they do not separate.
 - `entry.chainName` is the chain this entry belongs to, which is what rule 6 turns on.
 - `entry.brandMatch` is the entry's brand as the registry holds it, or null. Candidates are
   not annotated: a `LINK` takes the candidate's brand as it is.
+- `entry.brandMatch.printedAs` is the spelling the chain printed, when the registry holds it
+  as a spelling of `brandMatch.label`. It is null when the two are the same brand.
 - `entry.extra` is whatever else the source carried, truncated.
 
 `candidates` are the catalog products a search for the entry's name found, most relevant
@@ -173,6 +178,8 @@ send it:
   brand is never this, because plenty of products carry none.
 - `BRAND_DIFFERS_FROM_SOURCE`: a `CREATE` whose `item.brand` is not the brand
   `entry.brandMatch` names.
+- `BRAND_IS_LINKED`: a `CREATE` whose `item.brand` the registry holds as a spelling of
+  another brand. Write that other brand.
 
 ## Three worked entries
 

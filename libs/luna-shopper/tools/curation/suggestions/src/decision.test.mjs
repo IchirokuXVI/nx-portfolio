@@ -15,7 +15,13 @@ const MERCADONA = { id: 'sm-1', name: { es: 'Mercadona', en: 'Mercadona' } };
 const EL_JAMON = { id: 'sm-2', name: { es: 'El Jamón', en: 'El Jamón' } };
 const SUPERMARKETS = [MERCADONA, EL_JAMON];
 
-/** The registry as `start` snapshotted it: one house label and one free brand. */
+/**
+ * The registry as `start` snapshotted it.
+ *
+ * One house label, one free brand, one spelling linked to a brand of its own
+ * and one spelling linked to the house label (plan 0005). A linked row carries
+ * no chain, which is what the backend writes when a person links one.
+ */
 const BRANDS = indexBrands([
   {
     id: 'b-hacendado',
@@ -28,6 +34,27 @@ const BRANDS = indexBrands([
     key: 'carbonell',
     label: 'Carbonell',
     privateLabelSupermarketId: null,
+  },
+  {
+    id: 'b-deborah',
+    key: 'deborah',
+    label: 'Deborah',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: null,
+  },
+  {
+    id: 'b-deborah-48h',
+    key: 'deborah48h',
+    label: 'DEBORAH 48H',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: 'b-deborah',
+  },
+  {
+    id: 'b-hacendado-plus',
+    key: 'hacendadoproteinas',
+    label: 'Hacendado +Proteínas',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: 'b-hacendado',
   },
 ]);
 
@@ -607,6 +634,150 @@ test('neither brand code is retryable', () => {
     ]),
     []
   );
+});
+
+// ---------------------------------------------------------------------------
+// A brand registered as a spelling of another one (plan 0005)
+// ---------------------------------------------------------------------------
+
+test('BRAND_IS_LINKED fires on a CREATE writing a registered spelling', () => {
+  const issues = validateDecision({
+    decision: createDecision(goodItem({ brand: 'DEBORAH 48H' })),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+
+  const found = issues.find((i) => i.code === 'BRAND_IS_LINKED');
+  assert.ok(found);
+  // The detail is the whole of what the model is told on the retry, so it
+  // names the brand to write and says the name may change with it.
+  assert.match(found.detail, /"DEBORAH 48H" is registered as a spelling of/);
+  assert.match(found.detail, /so the brand is "Deborah"/);
+  assert.match(found.detail, /belongs in the name, not in the brand/);
+  // A linked brand is a registered brand, so the other code never fires for it.
+  assert.ok(!codes(issues).includes('BRAND_UNREGISTERED'));
+});
+
+test('BRAND_IS_LINKED is quiet on the brand the spelling names', () => {
+  const issues = validateDecision({
+    decision: createDecision(goodItem({ brand: 'Deborah' })),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.deepEqual(issues, []);
+});
+
+test('BRAND_IS_LINKED leaves a LINK and an unregistered brand alone', () => {
+  const onLink = validateDecision({
+    decision: linkDecision(),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    linkTarget: { id: 'i1', brand: 'DEBORAH 48H', unitSize: 1 },
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.ok(!codes(onLink).includes('BRAND_IS_LINKED'));
+
+  const unregistered = validateDecision({
+    decision: createDecision(goodItem({ brand: 'Deborah 72H' })),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.ok(!codes(unregistered).includes('BRAND_IS_LINKED'));
+  assert.ok(codes(unregistered).includes('BRAND_UNREGISTERED'));
+});
+
+test('BRAND_IS_LINKED is the second issue worth asking a row about again', () => {
+  // The retry carries the correct brand, which the first attempt was not told
+  // in a sentence it had to read. That makes it a different question rather
+  // than the same one, which is the whole test of a retryable code.
+  assert.deepEqual(
+    retryableIssues([issue('BRAND_IS_LINKED', 'x')]).map((i) => i.code),
+    ['BRAND_IS_LINKED']
+  );
+});
+
+test('BRAND_DIFFERS_FROM_SOURCE compares the brands the spellings name', () => {
+  // The chain prints `DEBORAH 48H` and the decision writes `Deborah`, which is
+  // the answer the packet asked for. Two spellings of one brand do not differ.
+  const issues = validateDecision({
+    decision: createDecision(goodItem({ brand: 'Deborah' })),
+    entry: { ...ENTRY, brand: 'DEBORAH 48H' },
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.deepEqual(issues, []);
+
+  // And it still fires on a brand that is neither.
+  const other = validateDecision({
+    decision: createDecision(goodItem({ brand: 'Carbonell' })),
+    entry: { ...ENTRY, brand: 'DEBORAH 48H' },
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.ok(codes(other).includes('BRAND_DIFFERS_FROM_SOURCE'));
+});
+
+test('rule 6 reads the chain through the link, on a CREATE and on a LINK', () => {
+  // `Hacendado +Proteínas` is a spelling of Mercadona's house label and owns no
+  // chain of its own, so reading the chain off the row the spelling names
+  // would walk straight past the hard stop.
+  const onCreate = validateDecision({
+    decision: createDecision(goodItem({ brand: 'Hacendado +Proteínas' })),
+    entry: { ...ENTRY, supermarketId: 'sm-2' },
+    supermarket: EL_JAMON,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  const found = onCreate.find((i) => i.code === 'PRIVATE_LABEL_CROSSES_CHAIN');
+  assert.ok(found);
+  assert.match(found.detail, /"Hacendado" is Mercadona's own label/);
+
+  const onLink = validateDecision({
+    decision: linkDecision(),
+    entry: { ...ENTRY, supermarketId: 'sm-2' },
+    supermarket: EL_JAMON,
+    linkTarget: { id: 'i1', brand: 'Hacendado +Proteínas', unitSize: 1 },
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.ok(codes(onLink).includes('PRIVATE_LABEL_CROSSES_CHAIN'));
+
+  // And it is quiet on the chain that owns the label it is a spelling of.
+  const ownChain = validateDecision({
+    decision: createDecision(goodItem({ brand: 'Hacendado +Proteínas' })),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.ok(!codes(ownChain).includes('PRIVATE_LABEL_CROSSES_CHAIN'));
 });
 
 test('a private label stays quiet on its own chain', () => {

@@ -9,12 +9,14 @@
 
 import {
   brandKey,
+  canonicalBrand,
   carriesBrand,
   carriesGlitch,
   carriesSize,
   chainName,
   chainNamesById,
   findBrand,
+  findCanonicalBrand,
 } from './rules.mjs';
 
 /** Below this a decision is a REVIEW, whatever the model wrote. */
@@ -34,8 +36,18 @@ export const CONFIDENCE_THRESHOLD = 0.9;
  * in every way but the shape of the reply. So `decide` answers `retryable` on
  * it and writes nothing, and a second glitch on the same row is recorded as a
  * REVIEW carrying the code, exactly as a second unparseable reply is.
+ *
+ * `BRAND_IS_LINKED` is the second one (plan 0005), and it is not a judgment
+ * either. The model wrote a brand a person registered as a spelling of another
+ * brand, and the answer the row needs is a fact the registry holds rather than
+ * one anybody has to weigh: the detail names the correct brand, so the second
+ * attempt is asked a question the first one was not. Nothing is written until
+ * it answers, and a second miss is the REVIEW a person reads.
  */
-export const RETRYABLE_ISSUE_CODES = new Set(['NAME_GLITCH']);
+export const RETRYABLE_ISSUE_CODES = new Set([
+  'NAME_GLITCH',
+  'BRAND_IS_LINKED',
+]);
 
 /** Whether these issues are worth asking the same row about once more. */
 export function retryableIssues(issues) {
@@ -290,19 +302,22 @@ export function validateDecision({
     }
   }
 
-  // The two brand registry checks, on a CREATE only (plan 0004). A LINK writes
-  // no brand: it binds the entry to a catalog product whose brand a person
-  // already settled, so there is nothing here for either of them to judge.
+  // The three brand registry checks, on a CREATE only (plans 0004 and 0005). A
+  // LINK writes no brand: it binds the entry to a catalog product whose brand a
+  // person already settled, so there is nothing here for any of them to judge.
   //
-  // Neither is retryable. Both report a judgment the model made and stands by,
-  // and asking the same row again would get the same brand back; what the row
-  // needs is the person who can register it.
+  // Two of the three are not retryable. They report a judgment the model made
+  // and stands by, and asking the same row again would get the same brand back;
+  // what the row needs is the person who can register it. `BRAND_IS_LINKED` is
+  // the exception, for the reason `RETRYABLE_ISSUE_CODES` gives.
   if (decision.decision === 'CREATE' && item) {
-    const sourceBrand = findBrand(brands, entry?.brand);
+    const sourceBrand = canonicalBrand(brands, findBrand(brands, entry?.brand));
+    const writtenBrand = findBrand(brands, item.brand);
+    const writtenCanonical = canonicalBrand(brands, writtenBrand);
 
     // A brand the registry does not hold. A null brand is a real answer and is
     // never demoted for it: plenty of products carry no brand at all.
-    if (item.brand && !findBrand(brands, item.brand)) {
+    if (item.brand && !writtenBrand) {
       issues.push({
         ...issue(
           'BRAND_UNREGISTERED',
@@ -316,11 +331,30 @@ export function validateDecision({
       });
     }
 
+    // A brand a person registered as a spelling of another one. The packet
+    // already named the brand to write, so this is the model writing the
+    // spelling it read on the shelf instead, and the detail is the whole of
+    // what the retry tells it: the correct brand, and that the name is free to
+    // change with it.
+    if (writtenBrand && writtenCanonical !== writtenBrand) {
+      issues.push(
+        issue(
+          'BRAND_IS_LINKED',
+          `"${item.brand}" is registered as a spelling of "${writtenCanonical.label}", so the brand is "${writtenCanonical.label}". Review the decision again with that brand: a line, range or claim in the printed brand (such as "48H") belongs in the name, not in the brand.`
+        )
+      );
+    }
+
     // A spelling difference is not one of these. Catalog stores a registered
     // brand's label on every item written with its key (plan 0115 section 4),
     // so `HACENDADO` and `Hacendado` are one brand and neither is worth a
-    // person's time.
-    if (sourceBrand && brandKey(item.brand) !== sourceBrand.key) {
+    // person's time. Both sides are compared as canonical brands (plan 0005):
+    // a chain printing `DEBORAH 48H` and a decision writing `Deborah` agree,
+    // and it is `BRAND_IS_LINKED` above that answers the other way round.
+    const writtenKey = writtenCanonical
+      ? writtenCanonical.key
+      : brandKey(item.brand);
+    if (sourceBrand && writtenKey !== sourceBrand.key) {
       issues.push(
         issue(
           'BRAND_DIFFERS_FROM_SOURCE',
@@ -335,11 +369,15 @@ export function validateDecision({
   // against the entry's own `supermarketId`. It used to compare the chain's
   // name against a name written beside the brand in a JSON file, which made
   // two spellings of one chain two chains.
+  //
+  // Through the link, on both kinds of decision (plan 0005). A linked brand
+  // owns no chain of its own, so a spelling of a house label would answer no
+  // owner at all and walk straight past the hard stop rule 6 is.
   const brand =
     decision.decision === 'LINK'
       ? (linkTarget?.brand ?? null)
       : (item?.brand ?? null);
-  const label = findBrand(brands, brand);
+  const label = findCanonicalBrand(brands, brand);
   if (label?.privateLabelSupermarketId && entry) {
     if (label.privateLabelSupermarketId !== entry.supermarketId) {
       const owner =
