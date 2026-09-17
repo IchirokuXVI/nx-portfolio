@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`cddb2cb53`](https://github.com/IchirokuXVI/nx-portfolio/commit/cddb2cb53b052db02f4aef665cf599f0f9cb31f0) on `dev`, with no pull request of its own.
+
 # 0033: zone presence is an intent, not a subscription
 
 > Prerequisite reading: `0028` section 2.2 (presence in Redis), `0032` (zone level list

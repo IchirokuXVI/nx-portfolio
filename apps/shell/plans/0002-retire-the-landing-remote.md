@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`2a9ef171a`](https://github.com/IchirokuXVI/nx-portfolio/commit/2a9ef171a1c8d7601fbf8c67993f01490e317e79) on `dev`, with no pull request of its own.
+
 # 0002: Retire the landing remote
 
 ## Implementation status

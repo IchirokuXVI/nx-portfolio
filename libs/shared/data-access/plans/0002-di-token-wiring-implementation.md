@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`f3a7fc02f`](https://github.com/IchirokuXVI/nx-portfolio/commit/f3a7fc02f74fdeb79b63abaa520c997cae71ec5e) on `dev`, with no pull request of its own.
+
 # Data access DI token wiring — implementation plan
 
 > Concrete, step by step implementation of the fix described in

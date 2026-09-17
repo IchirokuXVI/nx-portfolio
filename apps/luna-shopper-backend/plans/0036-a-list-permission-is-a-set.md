@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`01eb5e048`](https://github.com/IchirokuXVI/nx-portfolio/commit/01eb5e04883c20487005b1444e72d2596a87fbad) on `dev`, with no pull request of its own.
+
 # 0036: a list permission is a set, not a role
 
 > Prerequisite reading: `0007` section 1 (`list_access` as the access table) and section

@@ -1,3 +1,5 @@
+> **PR:** [#85](https://github.com/IchirokuXVI/nx-portfolio/pull/85)
+
 # 0049 Generated shopping lists
 
 > **Revised by `0051`, and not current on its own.** This plan was written before a

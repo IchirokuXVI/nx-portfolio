@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`6cfd43413`](https://github.com/IchirokuXVI/nx-portfolio/commit/6cfd43413070b96aa38255c4aa8abcc3fe756712) on `dev`, with no pull request of its own.
+
 # 0025 Squashing the migrations to one baseline per service
 
 Twelve migrations across three services, 751 lines, and **not one of them has ever run outside a

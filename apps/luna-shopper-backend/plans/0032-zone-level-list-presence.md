@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`49d1dce42`](https://github.com/IchirokuXVI/nx-portfolio/commit/49d1dce421b4883dd1bd83ea6e5111800c59d2a7) on `dev`, with no pull request of its own.
+
 # 0032 Zone level list presence
 
 > Depends on 0009 (realtime), 0028 (Redis cache and presence) and **0031** (eviction),

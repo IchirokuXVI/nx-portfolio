@@ -1,3 +1,5 @@
+> **Status: superseded, not built as written.** Plan 0064 took over the specs this plan still owed, and plan 0080 ([#370](https://github.com/IchirokuXVI/nx-portfolio/pull/370)) built the e2e that shops against a real backend. The state as of 2026-09-17 is in [plan 0087](./0087-plan-status-2026-09-17.md).
+
 # 0050: specs for the basket, and an e2e that shops
 
 > Velista `0044` shipped six components and two data access classes with no tests of their own.

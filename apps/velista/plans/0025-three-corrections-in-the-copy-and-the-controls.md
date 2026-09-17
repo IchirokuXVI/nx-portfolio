@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`cddb2cb53`](https://github.com/IchirokuXVI/nx-portfolio/commit/cddb2cb53b052db02f4aef665cf599f0f9cb31f0) on `dev`, with no pull request of its own.
+
 # 0025: three corrections in the copy and the controls
 
 > Three unrelated fixes, gathered because each is a few lines and none earns a plan of

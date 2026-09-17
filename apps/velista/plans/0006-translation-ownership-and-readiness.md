@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`0e5896435`](https://github.com/IchirokuXVI/nx-portfolio/commit/0e5896435ef94dc53f4493c08965713da13f5a92) on `dev`, with no pull request of its own.
+
 # 0006. Translation ownership: feature-shell composes, and waits
 
 > Prerequisite reading: `0005` (injector scope), `0001` section 5 (the extraction

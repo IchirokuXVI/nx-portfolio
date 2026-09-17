@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`fdd01019e`](https://github.com/IchirokuXVI/nx-portfolio/commit/fdd01019ec11ad162fccea0dcb6ec0c2b90b86e6) on `dev`, with no pull request of its own.
+
 # 0005 — e2e: no horizontal scroll / no element overflows the viewport (320→3840)
 
 > Repo-relative paths. Commit locally only. Prereq: `0003` (landing UI) and ideally

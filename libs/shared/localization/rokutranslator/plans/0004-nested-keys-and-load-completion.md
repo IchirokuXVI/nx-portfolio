@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`0508b00e6`](https://github.com/IchirokuXVI/nx-portfolio/commit/0508b00e681a8161840fc9dd4022ea0660252ce4) on `dev`, with no pull request of its own.
+
 # 0004: Nested translation keys, and telling the app when the strings arrive
 
 > Extends [[0003-runtime-locale-switch]], which made the `rokuT` pipe `pure: false` so

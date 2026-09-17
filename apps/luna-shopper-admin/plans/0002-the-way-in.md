@@ -1,3 +1,5 @@
+> **PR:** [#176](https://github.com/IchirokuXVI/nx-portfolio/pull/176)
+
 # 0002 The way in
 
 One screen: a username, a password, and a button. It is the first thing the app shows and the only

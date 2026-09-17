@@ -1,3 +1,5 @@
+> **Status: not built, pending re-evaluation.** Much of the catalog, pricing and line model changed after this plan was written. It will not be built as written: a later session re-evaluates it and writes a new plan if the need remains. The state as of 2026-09-17 is in [plan 0121](./0121-plan-status-2026-09-17.md).
+
 # 0095 A price says what it is per
 
 A product sold by weight has no pack price. The till charges per kilogram, the leaflet prints

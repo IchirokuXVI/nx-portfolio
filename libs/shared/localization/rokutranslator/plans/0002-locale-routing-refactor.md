@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`3e3096e64`](https://github.com/IchirokuXVI/nx-portfolio/commit/3e3096e64186f0368bcbc7db46981dbba3fdf793) on `dev`, with no pull request of its own.
+
 # 0002: Locale routing refactor (per-app locales, locale-less entry, pre-render correction)
 
 > Supersedes Part C of [[0001-localization-refactor]] (global supported-locales union).

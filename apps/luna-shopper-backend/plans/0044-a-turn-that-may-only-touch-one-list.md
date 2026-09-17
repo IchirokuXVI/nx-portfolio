@@ -1,3 +1,5 @@
+> **PR:** [#69](https://github.com/IchirokuXVI/nx-portfolio/pull/69)
+
 # 0044 A turn that may only touch one list
 
 > **The microphone on a list page is not the assistant panel.** Somebody standing over an

@@ -1,3 +1,5 @@
+> **PR:** [#80](https://github.com/IchirokuXVI/nx-portfolio/pull/80)
+
 # 0049 Shopping profiles, and a catalog you cannot list whole
 
 Two ideas that turn out to be one plan: a user says where and how they shop, and the catalog

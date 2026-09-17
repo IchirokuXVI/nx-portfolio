@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`5fe48138a`](https://github.com/IchirokuXVI/nx-portfolio/commit/5fe48138a1f54d905b33485184556cbc56ceed47) on `dev`, with no pull request of its own.
+
 # 0005: An app owned translator (the singleton retires)
 
 ## Implementation status

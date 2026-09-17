@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`af744de82`](https://github.com/IchirokuXVI/nx-portfolio/commit/af744de8226560fa1a5ff25b0b9f7df122e9a498) on `dev`, with no pull request of its own.
+
 # 0027 What the backend needs before it runs in a cluster
 
 Plan 0002 built the chart for these five services and plan 0025 squashed their migrations,

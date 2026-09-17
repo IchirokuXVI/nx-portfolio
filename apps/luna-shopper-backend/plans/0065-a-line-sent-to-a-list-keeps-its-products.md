@@ -1,3 +1,5 @@
+> **PR:** [#137](https://github.com/IchirokuXVI/nx-portfolio/pull/137)
+
 # 0065 A line sent to a list keeps its products
 
 > Backend only. Nothing in velista changes: the basket composer already sends what this plan

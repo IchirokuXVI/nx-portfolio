@@ -1,3 +1,5 @@
+> **PR:** [#104](https://github.com/IchirokuXVI/nx-portfolio/pull/104)
+
 # 0048: a socket a guest can hold
 
 > The basket is the one screen in this app where several people act on the same rows at the

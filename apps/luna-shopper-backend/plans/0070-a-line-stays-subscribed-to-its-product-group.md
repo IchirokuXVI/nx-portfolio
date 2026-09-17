@@ -1,3 +1,5 @@
+> **PR:** [#165](https://github.com/IchirokuXVI/nx-portfolio/pull/165)
+
 # 0070 A line stays subscribed to its product group
 
 > **Backend half.** velista `0065` is the other one: the chip that says who put a product on the

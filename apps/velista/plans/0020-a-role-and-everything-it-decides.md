@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`3f1cf101d`](https://github.com/IchirokuXVI/nx-portfolio/commit/3f1cf101dc16e1c78cdad8d31eb207574f4ec779) on `dev`, with no pull request of its own.
+
 # 0020: a role, and everything it decides
 
 > Prerequisite reading: `0010` (the group page, rules G2 and G3) and `0018` section 2

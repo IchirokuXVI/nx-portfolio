@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`ebc545441`](https://github.com/IchirokuXVI/nx-portfolio/commit/ebc545441ed39840df584280d75b5063ed415211) on `dev`, with no pull request of its own.
+
 # 0035: a token that names nobody is an invalid token
 
 > Written after the fact, from commits `ebc5454` (the gateway half) and `7c2aeed`. The

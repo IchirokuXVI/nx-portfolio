@@ -1,3 +1,5 @@
+> **PR:** [#77](https://github.com/IchirokuXVI/nx-portfolio/pull/77)
+
 # 0042 One place to go, answers to tap, and a bin out of reach
 
 > **A row of chips under a one sentence answer is not a set of links, it is a bill of

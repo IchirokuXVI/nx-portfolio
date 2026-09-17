@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`542e0b877`](https://github.com/IchirokuXVI/nx-portfolio/commit/542e0b8777fc5534119f018f2dfdd1cfce4ad740) on `dev`, with no pull request of its own.
+
 # Plan 0008 — Contact form: input labels should not use Audiowide
 
 **Point:** R3 (your finding #3). Depends on the rule in Plan 0006.

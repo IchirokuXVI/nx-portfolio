@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`8b98315e0`](https://github.com/IchirokuXVI/nx-portfolio/commit/8b98315e0b66241d33db9df2153e50a74b339e51) on `dev`, with no pull request of its own.
+
 # 0011 Account deletion and zone ownership fallback
 
 Built **after realtime (0009)**, per the decision that account deletion follows websockets. It

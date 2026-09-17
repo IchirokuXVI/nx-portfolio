@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`2b4329de0`](https://github.com/IchirokuXVI/nx-portfolio/commit/2b4329de0a43ecf99014fb0a8cd920f8038f938e) on `dev`, with no pull request of its own.
+
 # 0002 — data-access: projects (+damoclesSword, visual config) & hero info-table
 
 > Repo-relative paths. Aliases only across lib boundaries. Commit locally only.

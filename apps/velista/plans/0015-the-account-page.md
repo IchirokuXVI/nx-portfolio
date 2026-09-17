@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`9c5fb9a54`](https://github.com/IchirokuXVI/nx-portfolio/commit/9c5fb9a54bae36eb114912bde89e0074640d782b) on `dev`, with no pull request of its own.
+
 # 0015. The account: your name, your email, and the two ways out
 
 > Prerequisite reading: `0009` (the credential flows, rules C1 to C3, and the resend

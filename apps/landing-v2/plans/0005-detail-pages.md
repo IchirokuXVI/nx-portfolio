@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`f7fdc8f4c`](https://github.com/IchirokuXVI/nx-portfolio/commit/f7fdc8f4ca4a7b3e2e51d3899412f1483d445b68) on `dev`, with no pull request of its own.
+
 # 0004 — Project detail pages: Portfolio, Odontogram, Damocle'Sword
 
 > Repo-relative paths. Aliases only across lib boundaries. Commit locally only.

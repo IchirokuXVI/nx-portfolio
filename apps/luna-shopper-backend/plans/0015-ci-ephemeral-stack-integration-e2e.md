@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`9528f4b2d`](https://github.com/IchirokuXVI/nx-portfolio/commit/9528f4b2da745cd5076d6ea8eabb1ac43bdd7775) on `dev`, with no pull request of its own.
+
 # 0015 Running integration and e2e in CI on an ephemeral stack
 
 Plan 0010 decided the test *layers* and plan 0013 decided the *data* they run on. Both are

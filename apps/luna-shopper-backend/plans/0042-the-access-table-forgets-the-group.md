@@ -1,3 +1,5 @@
+> **PR:** [#64](https://github.com/IchirokuXVI/nx-portfolio/pull/64)
+
 # 0042 The access table forgets the group
 
 > **Two reports, one table, and the same root cause under both.** Nobody can save the share

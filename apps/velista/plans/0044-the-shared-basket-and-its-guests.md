@@ -1,3 +1,5 @@
+> **PR:** [#88](https://github.com/IchirokuXVI/nx-portfolio/pull/88)
+
 # 0044 The shared basket, and the people you send it to
 
 > Server half: `apps/luna-shopper-backend/plans/0051`, which owns every rule this

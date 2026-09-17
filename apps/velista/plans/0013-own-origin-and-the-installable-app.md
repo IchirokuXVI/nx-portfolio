@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`096fee3c8`](https://github.com/IchirokuXVI/nx-portfolio/commit/096fee3c8790ec9b0d45c8c03a866ec4c1fbfb41) on `dev`, with no pull request of its own.
+
 # 0013. velista on its own origin, and the app you can install
 
 > Prerequisite reading: `0001` sections 5 and 8 (the extraction contract, and D3 on why

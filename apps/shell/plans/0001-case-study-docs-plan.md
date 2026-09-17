@@ -1,3 +1,5 @@
+> **Status: partly done.** The case study files exist and most questions are answered. The questions still open as of 2026-09-17 are in [plan 0004](./0004-plan-status-2026-09-17.md).
+
 # Case Study Documentation — Master Plan
 
 > Multi-session effort. Read this file first at the start of every session, then

@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`af1040c40`](https://github.com/IchirokuXVI/nx-portfolio/commit/af1040c40fd4828c6d30552eef33ae97d7e3cf0c) on `dev`, with no pull request of its own.
+
 # 0003 — Landing page UI (header no-nav, dynamic hero/table/grid, dynamic year)
 
 > Repo-relative paths. Aliases only across lib boundaries. Commit locally only.

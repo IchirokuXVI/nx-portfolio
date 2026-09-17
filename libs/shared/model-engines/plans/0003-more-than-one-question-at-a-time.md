@@ -1,3 +1,5 @@
+> **PR:** [#334](https://github.com/IchirokuXVI/nx-portfolio/pull/334)
+
 # 0003 More than one question at a time
 
 A second method on the contract, `askMany`, and one adapter that answers it with

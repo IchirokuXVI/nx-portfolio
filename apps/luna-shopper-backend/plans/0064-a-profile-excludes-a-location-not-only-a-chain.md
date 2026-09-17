@@ -1,3 +1,5 @@
+> **PR:** [#146](https://github.com/IchirokuXVI/nx-portfolio/pull/146)
+
 # 0064 A profile excludes a location, not only a chain
 
 `ProfileSupermarketPreference` is emphatic about its own scope:

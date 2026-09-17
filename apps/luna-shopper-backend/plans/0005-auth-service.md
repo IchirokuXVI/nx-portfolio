@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`943524c28`](https://github.com/IchirokuXVI/nx-portfolio/commit/943524c28e8888a6d40d1fd7c12e4925d459c35a) on `dev`, with no pull request of its own.
+
 # 0005 Auth service
 
 Builds `luna-shopper-backend-auth`: the identity provider. It owns identity data, issues tokens, and

@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`bd3f73c09`](https://github.com/IchirokuXVI/nx-portfolio/commit/bd3f73c0943a79a84c19de8cbf18d7f8e536310d) on `dev`, with no pull request of its own.
+
 # 0006 Zones and membership
 
 First domain slice of `luna-shopper-backend-core`: zones (spaces) and the governance around who is in

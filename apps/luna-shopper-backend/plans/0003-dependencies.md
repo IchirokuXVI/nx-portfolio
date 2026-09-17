@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`c75a77c5f`](https://github.com/IchirokuXVI/nx-portfolio/commit/c75a77c5fe327b94cf3374de9ae04d19cd9fadfb) on `dev`, with no pull request of its own.
+
 # 0003 Dependencies and libraries
 
 Third plan. Decide the libraries every service needs, add them to the root `package.json`

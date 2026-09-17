@@ -1,3 +1,5 @@
+> **PR:** [#69](https://github.com/IchirokuXVI/nx-portfolio/pull/69)
+
 # 0038: adding a line by saying it
 
 > **Somebody standing at an open fridge has one hand free and is not going to type.** The

@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`95381b342`](https://github.com/IchirokuXVI/nx-portfolio/commit/95381b34255faad0fe9cc6ca03dd1a32aa592f35) on `dev`, with no pull request of its own.
+
 # 0017: presence over the socket
 
 > Prerequisite reading: `0016` section 3.5 (finding F4, the gap this closes) and section

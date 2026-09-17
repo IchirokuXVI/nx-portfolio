@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`0d7ce7273`](https://github.com/IchirokuXVI/nx-portfolio/commit/0d7ce72734cb6a536fb6cb1c3c93145574662c2c) on `dev`, with no pull request of its own.
+
 # 0003 Home page
 
 > Prerequisite reading: `0001` (architecture, routing, the extraction contract) and `0002`

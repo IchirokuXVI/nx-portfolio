@@ -1,3 +1,5 @@
+> **Status: implemented.** Built by commit [`c1afe6f11`](https://github.com/IchirokuXVI/nx-portfolio/commit/c1afe6f114c4045bce80d3738a2c7a6daea7dfd3) on `dev`, with no pull request of its own.
+
 # 0032: a chat panel where search was
 
 > The app bar's search button has never done anything. `HomePage.search()` calls
