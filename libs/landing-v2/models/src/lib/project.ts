@@ -14,7 +14,7 @@ export interface Project {
   repoLink: string;
   /** Route to the in-portfolio detail page, e.g. '/en/projects/odontogram'. */
   detailLink?: string;
-  /** Route to the live app, e.g. '/en/odontogram'. */
+  /** Route to the live app, e.g. '/odontogram/en'. */
   appLink?: string;
   /**
    * The live app is this very site (the portfolio itself). When true the card

@@ -63,6 +63,19 @@ describe('ProjectCard', () => {
     expect(host.querySelectorAll('.project-card__tags li').length).toBe(2);
   });
 
+  it('carries the featured modifier only on a featured card', async () => {
+    await renderWith(makeProject());
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.project-card--featured')).toBeNull();
+
+    await renderWith(
+      makeProject({ visual: { columnSpan: 2, featured: true } })
+    );
+    expect(host.querySelector('.project-card')?.classList).toContain(
+      'project-card--featured'
+    );
+  });
+
   it('renders the generic placeholder when the project has no image', async () => {
     await renderWith(makeProject({ image: undefined }));
     const host = fixture.nativeElement as HTMLElement;

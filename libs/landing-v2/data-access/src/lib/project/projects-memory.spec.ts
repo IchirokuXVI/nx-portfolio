@@ -23,7 +23,7 @@ describe('ProjectMemory', () => {
     const projects = await firstValueFrom(service.getList('en'));
 
     expect(projects).toHaveLength(PROJECTS.length);
-    expect(projects).toHaveLength(4);
+    expect(projects).toHaveLength(5);
     projects.forEach((project) => {
       expect(project.visual).toEqual(
         expect.objectContaining({
@@ -55,6 +55,42 @@ describe('ProjectMemory', () => {
     );
     expect(portfolio?.appLink).toBe('/es');
     expect(portfolio?.detailLink).toBe('/es/projects/portfolio');
+  });
+
+  it('lists Velista first, as the only full width featured card', async () => {
+    const projects = await firstValueFrom(service.getList('en'));
+
+    expect(projects.map((p) => p.name)).toEqual([
+      'Velista',
+      'Portfolio',
+      "Damocle'Sword",
+      'Odontogram',
+      'Restaurant Point Of Sale',
+    ]);
+    expect(
+      projects.filter((p) => p.visual.columnSpan === 2).map((p) => p.name)
+    ).toEqual(['Velista']);
+  });
+
+  it('links Velista to its detail page and to its mount in the shell', async () => {
+    const [velistaEn] = await firstValueFrom(service.getList('en'));
+    const velistaEs = await firstValueFrom(
+      service.getByDetailSlug('velista', 'es')
+    );
+
+    expect(velistaEn.detailLink).toBe('/en/projects/velista');
+    expect(velistaEn.appLink).toBe('/velista/en');
+    expect(velistaEs.appLink).toBe('/velista/es');
+    expect(velistaEs.tagline).toBe(
+      'Una app de listas de la compra compartidas, en producción'
+    );
+  });
+
+  it('builds only relative links, never an absolute URL', async () => {
+    const projects = await firstValueFrom(service.getList('en'));
+    const links = projects.flatMap((p) => [p.appLink, p.detailLink]);
+
+    links.forEach((link) => expect(link ?? '').not.toMatch(/^http/));
   });
 
   it('falls back to the English copy for an unknown locale', async () => {
@@ -133,7 +169,7 @@ describe('ProjectMemory', () => {
       expect(odontogram.id).toBe('3');
       expect(odontogram.locale).toBe('es');
       expect(odontogram.name).toBe('Odontogram');
-      expect(odontogram.appLink).toBe('/es/odontogram');
+      expect(odontogram.appLink).toBe('/odontogram/es');
     });
 
     it('throws NotFoundResourceError for an unknown id', () => {
