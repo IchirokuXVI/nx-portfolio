@@ -23,6 +23,7 @@ import {
   type FilterDescriptor,
   type NamedAction,
   type ReferenceField,
+  type ReferencesField,
   type ResourceCell,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
@@ -415,6 +416,21 @@ export class ResourceListPage {
     cell: ResourceCell,
     names: ReadonlyMap<string, string>
   ): ResourceCell {
+    const several = cell.references;
+    if (several !== undefined) {
+      // Several names, each overlaid as it lands, in the order the row holds
+      // them (admin plan 0028, section 3). No link: a list of names is not one
+      // place to go.
+      const field = fieldOf(this.descriptor, name);
+      if (field?.kind !== 'references' || field.nameLookup !== true) {
+        return cell;
+      }
+      const text = several.ids
+        .map((id) => names.get(`${several.resource}:${id}`) ?? id)
+        .join(', ');
+      return text === cell.text ? cell : { ...cell, text };
+    }
+
     const reference = cell.reference;
     if (reference === undefined) {
       return cell;
@@ -467,8 +483,11 @@ export class ResourceListPage {
    */
   private async _resolveNames(rows: readonly ResourceRow[]): Promise<void> {
     const fields = this.descriptor.fields.filter(
-      (field: FieldDescriptor): field is ReferenceField<ResourceRow> =>
-        field.kind === 'reference' && field.nameLookup === true
+      (
+        field: FieldDescriptor
+      ): field is ReferenceField<ResourceRow> | ReferencesField<ResourceRow> =>
+        (field.kind === 'reference' || field.kind === 'references') &&
+        field.nameLookup === true
     );
     if (fields.length === 0) {
       return;
@@ -477,14 +496,17 @@ export class ResourceListPage {
     const wanted: { resource: string; id: string; key: string }[] = [];
     for (const field of fields) {
       for (const row of rows) {
-        const id = row[field.name];
-        if (typeof id !== 'string' || id === '') {
-          continue;
-        }
-        const key = `${field.resource}:${id}`;
-        if (!this._asked.has(key)) {
-          this._asked.add(key);
-          wanted.push({ resource: field.resource, id, key });
+        const value = row[field.name];
+        const ids = Array.isArray(value) ? value : [value];
+        for (const id of ids) {
+          if (typeof id !== 'string' || id === '') {
+            continue;
+          }
+          const key = `${field.resource}:${id}`;
+          if (!this._asked.has(key)) {
+            this._asked.add(key);
+            wanted.push({ resource: field.resource, id, key });
+          }
         }
       }
     }

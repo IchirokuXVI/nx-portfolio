@@ -372,3 +372,50 @@ describe('a field that reads from somewhere else', () => {
     expect(view.cells['ownerName']).toEqual({ text: 'u1' });
   });
 });
+
+describe('a references field', () => {
+  const scopes = {
+    kind: 'references',
+    name: 'priceScopeIds',
+    label: 'shops.scopes',
+    resource: 'price-scopes',
+  } as const;
+
+  it('joins the ids in the order the row holds them, and says what they point at', () => {
+    expect(
+      toCell(scopes, { priceScopeIds: ['store', 'region'] }, options)
+    ).toEqual({
+      text: 'store, region',
+      references: { resource: 'price-scopes', ids: ['store', 'region'] },
+    });
+  });
+
+  it('is empty when the row holds none', () => {
+    expect(toCell(scopes, { priceScopeIds: [] }, options)).toEqual({
+      text: '',
+      key: EMPTY_VALUE_KEY,
+    });
+  });
+});
+
+describe('a value read as a keyed word', () => {
+  it('carries the key and its arguments rather than printing an object', () => {
+    const field = {
+      kind: 'text',
+      name: 'priority',
+      label: 'scopes.priority',
+      editable: false,
+      read: () => ({
+        kind: 'key',
+        key: 'scopes.custom',
+        args: { priority: 250 },
+      }),
+    } as const;
+
+    expect(toCell(field, { priority: 250 }, options)).toEqual({
+      text: '',
+      key: 'scopes.custom',
+      args: { priority: 250 },
+    });
+  });
+});

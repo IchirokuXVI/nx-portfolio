@@ -211,7 +211,10 @@ function toQuery(query: ResourceQuery): PostalCodeQuery {
   return {
     cursor: query.cursor,
     limit: query.limit,
+    // One code. The filter is a search box, so it never holds a list.
     postalCode:
-      postalCode === undefined || postalCode === '' ? undefined : postalCode,
+      typeof postalCode !== 'string' || postalCode === ''
+        ? undefined
+        : postalCode,
   };
 }

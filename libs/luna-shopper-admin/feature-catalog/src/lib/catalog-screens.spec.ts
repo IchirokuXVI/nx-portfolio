@@ -7,6 +7,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   ContentLocaleStore,
   DeploymentStore,
+  ResourceMemoryGateways,
   ServerReachability,
   SessionStorage,
   SessionStore,
@@ -16,7 +17,15 @@ import {
   provideResources,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ReferencePicker } from '@portfolio/luna-shopper-admin/ui';
+import type {
+  ResourceGateway,
+  ResourceInput,
+  ResourceRow,
+} from '@portfolio/luna-shopper-admin/models';
+import {
+  ReferencePicker,
+  ReferencesControl,
+} from '@portfolio/luna-shopper-admin/ui';
 import { ITEMS } from './items';
 import { LOCATION_ITEMS } from './location-items';
 import { LOCATIONS } from './locations';
@@ -382,6 +391,69 @@ describe('the shops list', () => {
 
     expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(1);
     expect(rowsText(fixture)).toContain('14005');
+  });
+});
+
+/**
+ * A shop's stack of price scopes, edited whole (admin plan 0028, section 7).
+ */
+describe('the shop price scopes', () => {
+  /** What the shop gateway was asked to write, by the form's submit. */
+  function recordUpdates(): ResourceInput[] {
+    const sent: ResourceInput[] = [];
+    const original = ResourceMemoryGateways.prototype.for;
+    jest
+      .spyOn(ResourceMemoryGateways.prototype, 'for')
+      .mockImplementation(function <T extends ResourceRow>(
+        this: ResourceMemoryGateways,
+        source: Parameters<ResourceMemoryGateways['for']>[0]
+      ): ResourceGateway<T> {
+        const gateway = original.call(this, source) as ResourceGateway<T>;
+        if (source.path.endsWith('/locations')) {
+          const update = gateway.update.bind(gateway);
+          gateway.update = (id, input) => {
+            sent.push(input);
+            return update(id, input);
+          };
+        }
+        return gateway;
+      });
+    return sent;
+  }
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('lists each shop’s scopes by name', async () => {
+    const fixture = await boot('/locations');
+    await chooseFilter(fixture, 'supermarketId', 'sm_mercadona');
+    await settle(fixture);
+
+    const body = rowsText(fixture);
+    expect(body).toContain('Córdoba warehouse');
+    expect(body).not.toContain('ps_mercadona_4661');
+  });
+
+  it('keeps the store scope when a region is removed, and sends the stack whole', async () => {
+    const sent = recordUpdates();
+    const fixture = await boot('/locations/loc_cordoba_centro');
+    await settle(fixture);
+
+    const control = fixture.debugElement.query(By.directive(ReferencesControl));
+    const chips = [
+      ...control.nativeElement.querySelectorAll('li.chip'),
+    ] as HTMLElement[];
+    expect(chips).toHaveLength(2);
+
+    // The shop's own store scope is locked; the warehouse is not.
+    const [store, region] = chips;
+    expect(store.querySelector('button')).toBeNull();
+    region.querySelector('button')?.click();
+    await settle(fixture);
+
+    buttonSaying(fixture, 'resource.action.save')?.click();
+    await settle(fixture);
+
+    expect(sent).toEqual([{ priceScopeIds: ['ps_store_loc_cordoba_centro'] }]);
   });
 });
 

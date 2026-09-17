@@ -99,6 +99,9 @@ describe('ResourceReferences', () => {
     await expect(references.resolve('price-scopes', 'ps_2')).resolves.toEqual({
       id: 'ps_2',
       title: 'Madrid',
+      // The row rides along, so a references field can ask whether the
+      // target is locked (admin plan 0028, section 4.1).
+      row: { id: 'ps_2', label: 'Madrid' },
     });
   });
 

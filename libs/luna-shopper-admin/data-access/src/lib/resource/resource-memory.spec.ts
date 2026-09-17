@@ -104,6 +104,13 @@ describe('ResourceMemoryGateways', () => {
     expect(none.items).toEqual([]);
   });
 
+  it('matches any entry of a list filter, as a repeated parameter does', async () => {
+    const gateway = gateways.for({ path: PATH, seed });
+
+    const either = await gateway.list({ filters: { name: ['ald', 'cons'] } });
+    expect(either.items.map((row) => row['id'])).toEqual(['a', 'c']);
+  });
+
   /**
    * Admin plan 0017: the parent of a membership or a line is an ordinary
    * filter here too, so both screens can be driven with no backend in either

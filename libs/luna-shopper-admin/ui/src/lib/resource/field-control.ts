@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   input,
   output,
 } from '@angular/core';
@@ -8,11 +9,13 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import type {
   DraftValue,
   FieldDescriptor,
+  ReferenceScope,
   ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import { LocalizedTextControl } from './localized-text-control';
 import type { ReferenceLookup } from './reference-lookup';
 import { ReferencePicker } from './reference-picker';
+import { ReferencesControl } from './references-control';
 
 /**
  * One field, as the control that edits it.
@@ -28,7 +31,12 @@ import { ReferencePicker } from './reference-picker';
  */
 @Component({
   selector: 'lib-field-control',
-  imports: [RokuTranslatorPipe, LocalizedTextControl, ReferencePicker],
+  imports: [
+    RokuTranslatorPipe,
+    LocalizedTextControl,
+    ReferencePicker,
+    ReferencesControl,
+  ],
   template: `
     @switch (field().kind) {
       @case ('localized-text') {
@@ -94,6 +102,19 @@ import { ReferencePicker } from './reference-picker';
           [nullable]="field().nullable === true"
           [resource]="resourceOf()"
           [value]="asText()"
+        />
+      }
+
+      @case ('references') {
+        <lib-references-control
+          (valueChange)="valueChange.emit($event)"
+          [controlId]="controlId()"
+          [disabled]="disabled()"
+          [locks]="locks()"
+          [lookup]="lookup()"
+          [resource]="resourceOf()"
+          [scope]="scopeOf()"
+          [value]="asIds()"
         />
       }
 
@@ -179,6 +200,12 @@ export class FieldControl {
   readonly disabled = input(false);
   /** Only reference fields use it, and only they require one to be supplied. */
   readonly lookup = input<ReferenceLookup>(NO_LOOKUP);
+  /**
+   * The row as the form holds it right now: the row read, with the draft's
+   * values over it. Only a `references` field reads it, to scope its picker
+   * and to ask which targets are locked (admin plan 0028, section 3).
+   */
+  readonly context = input<ResourceRow>({});
 
   readonly valueChange = output<DraftValue>();
 
@@ -189,8 +216,40 @@ export class FieldControl {
 
   asRecord(): Readonly<Record<string, string>> {
     const value = this.value();
-    return typeof value === 'object' && value !== null ? value : {};
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? (value as Readonly<Record<string, string>>)
+      : {};
   }
+
+  asIds(): readonly string[] {
+    const value = this.value();
+    return Array.isArray(value) ? value : [];
+  }
+
+  /**
+   * What a `references` picker is limited to, read from the form's row.
+   *
+   * A computed rather than a method, because `scopeFrom` builds a new object
+   * every call and a binding that changes on every check is an error in
+   * development. The same goes for {@link locks}.
+   */
+  readonly scopeOf = computed<ReferenceScope | null>(() => {
+    const field = this.field();
+    if (field.kind !== 'references' || field.scopeFrom === undefined) {
+      return {};
+    }
+    return field.scopeFrom(this.context());
+  });
+
+  /** The descriptor's lock, bound to the form's row, or `null` for none. */
+  readonly locks = computed<((target: ResourceRow) => boolean) | null>(() => {
+    const field = this.field();
+    if (field.kind !== 'references' || field.locked === undefined) {
+      return null;
+    }
+    const row = this.context();
+    return (target) => field.locked?.(row, target) === true;
+  });
 
   localesOf(): readonly string[] {
     const field = this.field();
@@ -210,7 +269,9 @@ export class FieldControl {
 
   resourceOf(): string {
     const field = this.field();
-    return field.kind === 'reference' ? field.resource : '';
+    return field.kind === 'reference' || field.kind === 'references'
+      ? field.resource
+      : '';
   }
 
   maxLengthOf(): number | undefined {

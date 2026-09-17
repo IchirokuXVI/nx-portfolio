@@ -1,3 +1,5 @@
+> **PR:** [#387](https://github.com/IchirokuXVI/nx-portfolio/pull/387)
+
 # 0028 A shop priced at several scopes
 
 > Backend half: `apps/luna-shopper-backend/plans/0116`.
