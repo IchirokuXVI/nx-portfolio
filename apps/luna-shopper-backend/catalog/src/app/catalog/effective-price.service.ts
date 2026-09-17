@@ -58,6 +58,8 @@ export interface CandidatePriceRow extends PriceRow {
   itemId: string;
   currency: string | null;
   unitPriceLabel: string | null;
+  /** The scope a copied price was read at (plan 0118), and null for a direct one. */
+  copiedFromScopeId: string | null;
 }
 
 /** What {@link effectivePriceCandidates} hands the resolution for one item. */
@@ -83,7 +85,8 @@ const CURRENT_ENABLED = `
     SELECT DISTINCT ON (p."itemId", p."priceScopeId", p."sourceKind")
            p."id", p."itemId", p."priceScopeId", p."sourceKind", p."price",
            p."currency", p."unitPrice", p."unitPriceLabel", p."lastObservedAt",
-           p."validFrom", p."validUntil", p."overrides", p."protectedUntil"
+           p."validFrom", p."validUntil", p."overrides", p."protectedUntil",
+           p."copiedFromScopeId"
       FROM "item_prices" p
      WHERE p."itemId" = ANY($1::uuid[]) AND p."priceScopeId" = ANY($2::uuid[])
      ORDER BY p."itemId", p."priceScopeId", p."sourceKind", p."observedAt" DESC, p."id" DESC
@@ -199,6 +202,7 @@ function toCandidate(raw: RawCandidate): CandidatePriceRow {
     validUntil: raw.validUntil,
     overrides: raw.overrides,
     protectedUntil: raw.protectedUntil,
+    copiedFromScopeId: raw.copiedFromScopeId,
   };
 }
 
