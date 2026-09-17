@@ -269,14 +269,19 @@ export class BrandsGateway implements ResourceGateway<Brand> {
       body.privateLabelSupermarketId = privateLabelSupermarketId;
     }
 
+    // The twin writes through `RESOURCE_GATEWAYS`, so it may only ever run
+    // against the memory table. Over HTTP it would post two plain creates to
+    // the real gateway and link nothing, which is the half registered
+    // suggestion this route exists to prevent.
+    if (this._gateways instanceof ResourceMemoryGateways) {
+      return this._registerInMemory(body);
+    }
     const http = this._http;
     const urls = this._urls;
-    if (
-      http === null ||
-      urls === null ||
-      this._gateways instanceof ResourceMemoryGateways
-    ) {
-      return this._registerInMemory(body);
+    if (http === null || urls === null) {
+      throw new Error(
+        'BrandsGateway.registerSuggestion needs HttpClient and ApiUrl when the gateways are not in memory.'
+      );
     }
 
     try {
