@@ -1,3 +1,5 @@
+> **PR:** [#402](https://github.com/IchirokuXVI/nx-portfolio/pull/402)
+
 # 0088: the zone list grouped by trip
 
 > Backend half: `apps/luna-shopper-backend/plans/0122`, which must be merged first.
