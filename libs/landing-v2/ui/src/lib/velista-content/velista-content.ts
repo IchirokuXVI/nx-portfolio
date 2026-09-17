@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+  signal,
+} from '@angular/core';
 import { TranslatedProject } from '@portfolio/landing-v2/models';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { ArrowIcon } from '@portfolio/shared/ui';
@@ -18,18 +25,27 @@ export const VELISTA_ORIGIN = 'https://velista.app';
 
 interface SectionDef {
   id: string;
-  paragraphCount: number;
-  /** Renders the section's `kicker` key above its heading. */
-  kicker?: boolean;
+  /** Deep-only sections appear only in the expanded view. */
+  deepOnly?: boolean;
+  highlightCount: number;
+  deepCount: number;
 }
 
+/**
+ * Sections in deep-view order. The highlight view is this list with the
+ * deep-only sections filtered out. Paragraphs are i18n keys
+ * `sections.<id>.{highlight,deep}.pN`, the same shape as the Portfolio page.
+ */
 const SECTIONS: SectionDef[] = [
-  { id: 'overview', paragraphCount: 3 },
-  { id: 'stack', paragraphCount: 3 },
-  { id: 'evolution', paragraphCount: 4 },
-  { id: 'catalog', paragraphCount: 3, kicker: true },
-  { id: 'harvester', paragraphCount: 3 },
-  { id: 'baskets', paragraphCount: 2 },
+  { id: 'overview', highlightCount: 1, deepCount: 3 },
+  { id: 'stack', highlightCount: 2, deepCount: 3 },
+  { id: 'evolution', deepOnly: true, highlightCount: 0, deepCount: 4 },
+  { id: 'permissions', highlightCount: 2, deepCount: 4 },
+  { id: 'catalog', highlightCount: 2, deepCount: 3 },
+  { id: 'curation', highlightCount: 2, deepCount: 4 },
+  { id: 'harvester', highlightCount: 2, deepCount: 4 },
+  { id: 'assistant', highlightCount: 1, deepCount: 2 },
+  { id: 'baskets', deepOnly: true, highlightCount: 0, deepCount: 2 },
 ];
 
 /** Chip text is literal (product names); only the group heading localizes. */
@@ -50,13 +66,15 @@ const CHIP_GROUPS: { headingKey: string; chips: string[] }[] = [
 
 /**
  * Velista detail content, resolved by `lib-landing-v2-project-page` for
- * `/{locale}/projects/velista`. A single view page (plan 0009 D3): the own
- * domain panel first, then paragraph list sections, with the table of contents
- * and the tech chips in the side rail.
+ * `/{locale}/projects/velista`. Follows the Portfolio page's design: tech chips
+ * beside the title, the table of contents alone in the side rail, and a
+ * highlights view that swaps to a deep view with deep-only sections (0008).
+ * The own domain panel stays first in the body, above either view.
  */
 @Component({
   selector: 'lib-landing-v2-velista-content',
   imports: [
+    NgTemplateOutlet,
     ArrowIcon,
     DetailPageShell,
     DetailSection,
@@ -71,27 +89,61 @@ const CHIP_GROUPS: { headingKey: string; chips: string[] }[] = [
 export class VelistaContent {
   project = input.required<TranslatedProject>();
 
+  /** Highlights-only by default; flips to reveal the deep view. */
+  readonly deepDive = signal(false);
+
+  /** Drives the collapse, swap, grow height animation (see PortfolioContent). */
+  readonly collapsed = signal(false);
+
+  private _swapTimer?: ReturnType<typeof setTimeout>;
+
   readonly key = KEY;
   readonly origin = VELISTA_ORIGIN;
   readonly chipGroups = CHIP_GROUPS;
 
-  /** The keys never change, so they are built once rather than per check. */
-  readonly sections = SECTIONS.map((section) => {
-    const base = `${KEY}.sections.${section.id}`;
+  readonly visibleSections = computed<SectionDef[]>(() =>
+    this.deepDive() ? SECTIONS : SECTIONS.filter((section) => !section.deepOnly)
+  );
 
-    return {
+  readonly tocItems = computed<TocItem[]>(() =>
+    this.visibleSections().map((section) => ({
       id: section.id,
-      headingKey: `${base}.title`,
-      kickerKey: section.kicker ? `${base}.kicker` : null,
-      paragraphKeys: Array.from(
-        { length: section.paragraphCount },
-        (_, index) => `${base}.p${index + 1}`
-      ),
-    };
-  });
+      labelKey: this.headingKey(section),
+    }))
+  );
 
-  readonly tocItems: TocItem[] = this.sections.map((section) => ({
-    id: section.id,
-    labelKey: section.headingKey,
-  }));
+  headingKey(section: SectionDef): string {
+    return `${KEY}.sections.${section.id}.title`;
+  }
+
+  /** Ordered paragraph keys for the section at the current depth. */
+  paragraphKeys(section: SectionDef): string[] {
+    const depth = this.deepDive() ? 'deep' : 'highlight';
+    const count = this.deepDive() ? section.deepCount : section.highlightCount;
+
+    return Array.from(
+      { length: count },
+      (_, index) => `${KEY}.sections.${section.id}.${depth}.p${index + 1}`
+    );
+  }
+
+  toggleDeepDive(): void {
+    const opening = !this.deepDive();
+    const prefersReduced = window.matchMedia?.(
+      '(prefers-reduced-motion: reduce)'
+    ).matches;
+
+    if (prefersReduced) {
+      this.deepDive.set(opening);
+      return;
+    }
+
+    this.collapsed.set(true);
+
+    clearTimeout(this._swapTimer);
+    this._swapTimer = setTimeout(() => {
+      this.deepDive.set(opening);
+      requestAnimationFrame(() => this.collapsed.set(false));
+    }, 450);
+  }
 }

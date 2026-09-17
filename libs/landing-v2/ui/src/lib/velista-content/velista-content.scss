@@ -5,10 +5,14 @@
   width: 100%;
 }
 
-.velista-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2.25rem;
+// Tech chips: labelled groups, stacked, beside the title on desktop. The same
+// block as the Portfolio page, so both detail pages read as one design.
+.velista-chips {
+  display: none;
+
+  @media (min-width: $breakpoint-desktop) {
+    display: block;
+  }
 }
 
 // The own domain panel: set apart from the body prose by a surface and a gold
@@ -17,6 +21,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
+  margin-bottom: 2.25rem;
   padding: 1.1rem 1.25rem;
   border: 1px solid $hairline;
   border-left: 3px solid $accent;
@@ -81,38 +86,116 @@
   }
 }
 
-.velista-section__kicker {
-  display: block;
-  margin-bottom: 0.35rem;
-  color: $accent;
-  font-family: $font-mono;
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
+// The swapping body. Animating grid-template-rows between 1fr and 0fr gives a
+// real height transition to auto-sized content (see portfolio-content.scss).
+.velista-swap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.45s ease;
 
-.velista-side {
-  display: flex;
-  flex-direction: column;
-  gap: 1.75rem;
-
-  // Desktop only: the mobile page is one column, where the chips lead the body.
-  &__toc {
-    display: none;
+  &--collapsed {
+    grid-template-rows: 0fr;
   }
 
-  @media (min-width: $breakpoint-desktop) {
-    position: sticky;
-    top: 1.5rem;
+  &__inner {
+    min-height: 0;
+    overflow: hidden;
+  }
+}
 
-    &__toc {
-      display: block;
+.velista-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2.25rem;
+}
+
+.velista-reveal {
+  display: flex;
+  justify-content: center;
+
+  &--bottom {
+    margin-top: 2.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid $hairline;
+  }
+
+  &--top {
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid $hairline;
+  }
+
+  &__button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 1.3rem;
+    border-radius: 999px;
+    border: 1px solid rgba($accent, 0.55);
+    background-color: transparent;
+    color: $accent;
+    font-family: $font-display;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease,
+      transform 0.15s ease;
+
+    &:hover,
+    &:focus-visible {
+      background-color: rgba($accent, 0.12);
+      border-color: $accent;
+    }
+
+    &:active {
+      transform: translateY(1px);
+    }
+  }
+
+  &__caret {
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid currentcolor;
+    border-bottom: 2px solid currentcolor;
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 0.25s ease;
+
+    &--up {
+      transform: translateY(1px) rotate(-135deg);
     }
   }
 }
 
+// A short sign-off to the reader, closing the deep read. Quieter than the body.
+.velista-closing {
+  margin: 3rem 0 0;
+  padding-top: 2rem;
+  border-top: 1px solid $hairline;
+  color: $muted;
+  font-style: italic;
+  line-height: 1.75;
+  font-size: 0.95rem;
+  overflow-wrap: break-word;
+}
+
+// The side navigation, sticky on desktop so it stays in view down the body.
+.velista-side {
+  display: block;
+
+  @media (min-width: $breakpoint-desktop) {
+    position: sticky;
+    top: 1.5rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .velista-domain__link {
+  .velista-domain__link,
+  .velista-swap,
+  .velista-reveal__caret,
+  .velista-reveal__button {
     transition: none;
   }
 }

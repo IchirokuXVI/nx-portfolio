@@ -36,8 +36,9 @@ export interface StaticProject {
 
 export const PROJECTS: readonly StaticProject[] = [
   // The main project: first, and the only full width featured card. Ids are
-  // labels, not an order, so the newest id leading the array is correct. No
-  // screenshot yet, so the card and the detail page render the placeholder.
+  // labels, not an order, so the newest id leading the array is correct. The
+  // screenshot is the welcome page, a stand in until a better one exists, and
+  // like the Portfolio's image it is shown on the card only.
   {
     id: '5',
     name: 'Velista',
@@ -46,6 +47,8 @@ export const PROJECTS: readonly StaticProject[] = [
     visual: { columnSpan: 2, featured: true },
     detailSlug: 'velista',
     appSlug: 'velista',
+    image: () =>
+      import('../../assets/velista_screenshot.png').then((m) => m.default),
   },
   {
     id: '1',
