@@ -480,6 +480,36 @@ describe('BasketMemory: raising a list that was asking for none', () => {
     expect(result.line.createdBy).toBe(added.createdBy);
   });
 
+  it('gives the list what the line was carrying for nobody rather than adding to it', async () => {
+    // The report of 2026-09-18. A line added by hand asks for one that no list
+    // asked for, so raising a list to one says that one is theirs. Adding to it
+    // told the shopper to buy two: one for the list and one for nobody.
+    const memory = new BasketMemory();
+    const added = await memory.addLine(ID, { content: 'Foil', quantity: 1 });
+
+    const result = await memory.setOriginQuantity(ID, added.id, {
+      listId: 'list-weekly',
+      quantity: 1,
+      from: 0,
+    });
+
+    expect(result.origin?.contributed).toBe(1);
+    expect(result.line.quantity).toBe(1);
+  });
+
+  it('raises a hand added line by the part it was not already carrying', async () => {
+    const memory = new BasketMemory();
+    const added = await memory.addLine(ID, { content: 'Foil', quantity: 2 });
+
+    const result = await memory.setOriginQuantity(ID, added.id, {
+      listId: 'list-weekly',
+      quantity: 5,
+      from: 0,
+    });
+
+    expect(result.line.quantity).toBe(5);
+  });
+
   it('says a created line is waiting where the list does not accept on its own', async () => {
     const memory = new BasketMemory();
     const added = await memory.addLine(ID, { content: 'Foil' });
