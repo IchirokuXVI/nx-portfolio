@@ -1,6 +1,6 @@
 {
   "title": "Velista: setting up a new account",
-  "lede": "The design for the onboarding a new account walks through, before any plan is written. Three questions and a hand over to the tour, which is a separate design. Every screen here is drawn against routes that already exist: <code>PATCH /v1/account/me</code>, <code>POST /v1/account/shopping-profiles/:id/postal-codes</code>, <code>POST /v1/account/postal-code-lookups</code>, <code>PATCH /v1/account/shopping-profiles/:id</code> and <code>GET /v1/catalog/shops/summary</code>. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The design for the onboarding a new account walks through, before any plan is written. Three questions and a hand over to the tour, which is a separate design. Every screen here is drawn against routes that already exist: <code>PATCH /v1/account/me</code>, <code>POST /v1/account/shopping-profiles/:id/postal-codes</code>, <code>POST /v1/account/postal-code-lookups</code>, <code>PATCH /v1/account/shopping-profiles/:id</code> and <code>GET /v1/catalog/shops/summary</code>. The four questions this design opened are answered, and the answers are on the canvas, bottom right. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
   "artboards": [
     { "file": "Start.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "Welcome, and what we call you" },
     { "file": "Place.dc.html", "x": 1390, "y": 0, "w": 1330, "h": 1010, "title": "Where you shop" },
@@ -34,7 +34,7 @@
       "x": 1590,
       "y": -500,
       "w": 470,
-      "text": "RULE O3: THE COOL NAME ALREADY EXISTS, SO THE SCREEN SHOWS IT. Registration generates one from a per locale adjective and noun pool (auth `username/pool.ts`) and `displayName` is never sent, so by the time onboarding opens the account is already Brave Anchor. The field is therefore empty with the name named beside it, and the button says which one it will keep.\nPick another one is the one control here that needs a route nobody has written: a server side reroll. Say the word and it goes, or it becomes a small addition beside the throttled rename."
+      "text": "RULE O3: THE COOL NAME ALREADY EXISTS, SO THE SCREEN SHOWS IT. Registration generates one from a per locale adjective and noun pool (auth `username/pool.ts`) and `displayName` is never sent, so by the time onboarding opens the account is already Brave Anchor. The field is therefore empty with the name named beside it, and the button says which one it will keep.\nPick another one is in, and it is the one control on these four artboards that needs a route nobody has written: a read that draws from the same pool, in the caller's locale, writes nothing, and is throttled, because it costs a database round trip and a bored thumb can hold it down. The card swaps the name in place and the button follows it."
     },
     {
       "id": "o4",
@@ -51,11 +51,11 @@
       "text": "RULE O5: STEP 3 IS SCOPED BY STEP 2. With a postal code the list is the chains that actually have a shop near it, each with its shop count, from one call to `GET /v1/catalog/shops/summary`. That is a better question than every chain in the country, and it is why the two steps are in this order.\nWith no code the same screen lists every chain from `GET /v1/catalog/supermarkets`, without counts and without the \"Near 14013\" heading. The answer still saves, and it starts applying the day a code arrives."
     },
     {
-      "id": "open",
+      "id": "decided",
       "x": 1920,
       "y": 1660,
       "w": 470,
-      "text": "STILL TO DECIDE, BEFORE A PLAN IS WRITTEN.\n1. Where \"this account has been set up\" lives. Nothing records it today. A field on the user profile costs a contract change and an OpenAPI regeneration, and browser storage makes the setup run again on a second device. The tour's own \"seen\" flag has the same problem, so one decision covers both.\n2. Whether a guest onboards. The last card on the fourth artboard draws step 1 only.\n3. Whether Pick another one is worth a route.\n4. Whether Not now on the welcome screen counts as done, or asks again on the next cold start."
+      "text": "THE FOUR DECISIONS, TAKEN.\n1. A column in the database, not browser storage, so the setup does not run again on a second device. It has to reach the client on a read the app already makes at startup, or every cold start pays for a second request before it can draw anything. That read is `GET /v1/account/me`, which auth answers, and auth is identity only by rule, so the plan has to say whether the column bends that rule or lives in core and is composed into the same answer at the gateway. The tour's flag will sit beside it, whichever way it goes.\n2. A basket guest never sees any of this. The join page already asks their name, beside the basket they were invited to, which is the only one of the three questions that means anything to somebody shopping from somebody else's list.\n3. Pick another one is in. See rule O3 for what it costs.\n4. Not now is final. It writes the same column the last step writes, and the welcome screen says so before the press."
     }
   ]
 }
