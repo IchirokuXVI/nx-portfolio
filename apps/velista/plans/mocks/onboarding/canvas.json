@@ -1,0 +1,61 @@
+{
+  "title": "Velista: setting up a new account",
+  "lede": "The design for the onboarding a new account walks through, before any plan is written. Three questions and a hand over to the tour, which is a separate design. Every screen here is drawn against routes that already exist: <code>PATCH /v1/account/me</code>, <code>POST /v1/account/shopping-profiles/:id/postal-codes</code>, <code>POST /v1/account/postal-code-lookups</code>, <code>PATCH /v1/account/shopping-profiles/:id</code> and <code>GET /v1/catalog/shops/summary</code>. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Start.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "Welcome, and what we call you" },
+    { "file": "Place.dc.html", "x": 1390, "y": 0, "w": 1330, "h": 1010, "title": "Where you shop" },
+    { "file": "Shops.dc.html", "x": 0, "y": 1160, "w": 900, "h": 1010, "title": "Which supermarkets" },
+    { "file": "Done.dc.html", "x": 960, "y": 1160, "w": 900, "h": 1010, "title": "Done, and afterwards" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -500,
+      "w": 470,
+      "text": "THE BRIEF. A new account is asked three things: what to call them, where they shop, and which supermarkets they want. Nothing else, and nothing that repeats a screen the app already has.\nThe order is not arbitrary. The name is the cheapest question and warms somebody up. The postal code has to come before the supermarkets, because the supermarket list is scoped by it. The tour comes last, after the answers, because it points at an app that can already show prices."
+    },
+    {
+      "id": "o1",
+      "x": 530,
+      "y": -500,
+      "w": 470,
+      "text": "RULE O1: EACH STEP SAVES WHEN IT IS ANSWERED, NOT AT THE END. Continue on step 1 writes the name, Continue on step 2 writes the postal code, Done on step 3 writes the chains. Three writes to three routes that exist today.\nSo there is no review screen, no Cancel that undoes, and closing the app halfway loses nothing. It also means a failed write belongs to its own step and is retried there, rather than failing a submit at the end that the person cannot locate."
+    },
+    {
+      "id": "o2",
+      "x": 1060,
+      "y": -500,
+      "w": 470,
+      "text": "RULE O2: SKIPPING IS AN ANSWER, AND EVERY SKIP IS COMPLETE. Skip on step 1 keeps the generated name. Skip on step 2 leaves the profile with no postal code, which backend 0069 already defines: the catalog reads normally and every price comes back null, never an empty catalog. Skip on step 3 leaves every chain included, which is the default a profile already has.\nSo Skip is a quiet text button on every step, never a dialog, and step 2 is the only one that says out loud what its skip costs."
+    },
+    {
+      "id": "o3",
+      "x": 1590,
+      "y": -500,
+      "w": 470,
+      "text": "RULE O3: THE COOL NAME ALREADY EXISTS, SO THE SCREEN SHOWS IT. Registration generates one from a per locale adjective and noun pool (auth `username/pool.ts`) and `displayName` is never sent, so by the time onboarding opens the account is already Brave Anchor. The field is therefore empty with the name named beside it, and the button says which one it will keep.\nPick another one is the one control here that needs a route nobody has written: a server side reroll. Say the word and it goes, or it becomes a small addition beside the throttled rename."
+    },
+    {
+      "id": "o4",
+      "x": 2120,
+      "y": -500,
+      "w": 470,
+      "text": "RULE O4: THE POSITION IS NEVER STORED, AND THE SCREEN SAYS SO BEFORE THE PRESS. `POST /v1/account/postal-code-lookups` takes the point in a body, answers a postal code and a country, and keeps nothing.\nIt answers a country and a code and nothing else, so the screen cannot name the town. The four states are the ones the account's location sheet already has: resolved, refused, too far from any code we hold, and an ordinary failure. Refused is sticky because a browser will not prompt twice, so that state hands over to typing instead of offering a retry."
+    },
+    {
+      "id": "o5",
+      "x": 1920,
+      "y": 1160,
+      "w": 470,
+      "text": "RULE O5: STEP 3 IS SCOPED BY STEP 2. With a postal code the list is the chains that actually have a shop near it, each with its shop count, from one call to `GET /v1/catalog/shops/summary`. That is a better question than every chain in the country, and it is why the two steps are in this order.\nWith no code the same screen lists every chain from `GET /v1/catalog/supermarkets`, without counts and without the \"Near 14013\" heading. The answer still saves, and it starts applying the day a code arrives."
+    },
+    {
+      "id": "open",
+      "x": 1920,
+      "y": 1660,
+      "w": 470,
+      "text": "STILL TO DECIDE, BEFORE A PLAN IS WRITTEN.\n1. Where \"this account has been set up\" lives. Nothing records it today. A field on the user profile costs a contract change and an OpenAPI regeneration, and browser storage makes the setup run again on a second device. The tour's own \"seen\" flag has the same problem, so one decision covers both.\n2. Whether a guest onboards. The last card on the fourth artboard draws step 1 only.\n3. Whether Pick another one is worth a route.\n4. Whether Not now on the welcome screen counts as done, or asks again on the next cold start."
+    }
+  ]
+}
