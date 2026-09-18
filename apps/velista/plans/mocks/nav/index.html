@@ -1,0 +1,514 @@
+<title>Velista: the bottom nav</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Tabs * { box-sizing: border-box; }
+#ab-Tabs a { color: #ffb454; text-decoration: none; }
+#ab-Tabs a:hover { color: #ffc271; }
+#ab-Rules * { box-sizing: border-box; }
+#ab-Rules a { color: #ffb454; text-decoration: none; }
+#ab-Rules a:hover { color: #ffc271; }
+</style>
+
+<header>
+  <h1>Velista: the bottom nav</h1>
+  <p class="lede">Three tabs at the bottom of the app: Home, Catalog and Shopping list. Home is the screen it is today, with its groups, its lists and the basket status above the nav. The Catalog tab has a canvas of its own. Drawn before any plan is written. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 3120px; height: 1510px;">
+      <figure class="board" style="left: 0px; top: 500px; width: 1330px;">
+        <figcaption>The three tabs</figcaption>
+        <div class="frame" id="ab-Tabs" style="width: 1330px; height: 1010px;">
+          <div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ HOME ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">HOME &middot; the screen it is today, with the nav below</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="display: flex; align-items: center; gap: 9px;">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect width="24" height="24" rx="6.4" fill="#ffb454"/>
+                      <g transform="translate(-0.25 0.732) scale(0.98)">
+                        <path d="M11.8 2.4V17" stroke="#0a0c14" stroke-width="1.3" stroke-linecap="round"/>
+                        <path d="M11.8 3.2C14.8 7 17.6 10.8 19.4 14.6C16.8 15.3 14.2 15.5 11.8 15.2Z" fill="#0a0c14"/>
+                        <path d="M5.4 17.3h14.2c-1.1 2.4-3.3 3.5-6 3.5h-2.2c-2.7 0-4.9-1.1-6-3.5z" fill="#0a0c14"/>
+                      </g>
+                    </svg>
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; line-height: 1; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 2px;">
+                    <span style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;" aria-label="Assistant">
+                      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z"/></svg>
+                    </span>
+                    <span style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;" aria-label="Your account">
+                      <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 18px; padding: 18px 20px 0;">
+
+                  <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                      <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">YOUR GROUPS</span>
+                      <span style="display: flex; align-items: center; gap: 6px; color: #ffb454; font-size: 13.5px; font-weight: 600;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                        New group
+                      </span>
+                    </div>
+
+                    <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 14px 15px; display: flex; flex-direction: column; gap: 11px;">
+                      <div style="display: flex; align-items: center; gap: 11px;">
+                        <span style="width: 38px; height: 38px; border-radius: 12px; background: #262b40; color: #ffc271; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">H</span>
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                          <div style="display: flex; align-items: center; gap: 7px;">
+                            <span style="font-size: 16px; font-weight: 600; color: #f7f8fc;">Home</span>
+                            <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #ffc271; background: rgba(255,180,84,0.09); border: 1px solid rgba(255,180,84,0.28); border-radius: 999px; padding: 2px 7px;">OWNER</span>
+                          </div>
+                          <span style="font-size: 12.5px; color: #6f7899;">3 members &middot; 2 lists</span>
+                        </div>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid rgba(255,255,255,0.06);">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+                        <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Weekly shop</span>
+                        <span style="font-size: 12px; color: #ffc271;">5 things needed</span>
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 10px; height: 40px; border-top: 1px solid rgba(255,255,255,0.06);">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg>
+                        <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Costco run</span>
+                        <span style="font-size: 12px; color: #6f7899;">4 items</span>
+                      </div>
+                    </div>
+
+                    <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 14px 15px; display: flex; align-items: center; gap: 11px;">
+                      <span style="width: 38px; height: 38px; border-radius: 12px; background: #262b40; color: #98a0bb; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">F</span>
+                      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;">
+                        <div style="display: flex; align-items: center; gap: 7px;">
+                          <span style="font-size: 16px; font-weight: 600; color: #f7f8fc;">Flat 3B</span>
+                          <span style="font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #98a0bb; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.13); border-radius: 999px; padding: 2px 7px;">MEMBER</span>
+                        </div>
+                        <span style="font-size: 12.5px; color: #6f7899;">5 members &middot; 1 list</span>
+                      </div>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                    </div>
+                  </div>
+
+                </div>
+
+                <!-- the dock: the basket status card, then the nav -->
+                <div style="padding: 0 20px 12px;">
+                  <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; padding: 14px 15px; display: flex; flex-direction: column; gap: 11px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">YOUR SHOPPING LIST</span>
+                        <span style="font-size: 17px; font-weight: 600; color: #f7f8fc;">Saturday big shop</span>
+                      </div>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      <div style="height: 6px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
+                        <div style="width: 33%; height: 100%; border-radius: 999px; background: #34d399;"></div>
+                      </div>
+                      <span style="font-size: 12px; color: #98a0bb;">4 of 12 got &middot; Ana is shopping now</span>
+                    </div>
+                  </div>
+                </div>
+
+                <nav style="display: flex; gap: 4px; padding: 8px 10px 20px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.09);">
+                  <span style="flex: 1; height: 60px; border-radius: 16px; background: rgba(255,180,84,0.10); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 650; color: #ffb454;">Home</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 11.4h12"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Catalog</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; position: relative;">
+                    <span style="position: relative; display: flex;">
+                      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg>
+                      <span style="position: absolute; top: -2px; right: -5px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #ffb454; color: #0a0c14; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;">8</span>
+                    </span>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Shopping list</span>
+                  </span>
+                </nav>
+
+              </div>
+            </div>
+
+            <!-- ============ SHOPPING LIST TAB, A BASKET OPEN ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SHOPPING LIST &middot; the tab opens the one being shopped</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px 12px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 19px; font-weight: 600; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Saturday big shop</div>
+                    <div style="margin-top: 3px; font-size: 12.5px; color: #6f7899;">4 of 12 got</div>
+                  </div>
+                  <span style="display: flex; align-items: center;">
+                    <span style="width: 26px; height: 26px; border-radius: 999px; background: #7c3aed; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
+                    <span style="width: 26px; height: 26px; border-radius: 999px; background: #262b40; border: 2px dashed #6f7899; color: #c2c8db; font-size: 9.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">G2</span>
+                  </span>
+                  <span style="width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;" aria-label="Older shopping lists">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.4"/><path d="M12 7.6V12l3 1.8"/></svg>
+                  </span>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 14px 20px 0; display: flex; flex-direction: column; gap: 9px;">
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 24px; height: 24px; border-radius: 999px; border: 2px solid #4d5470;"></span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Milk, whole</span>
+                      <span style="display: block; margin-top: 2px; font-size: 12.5px; color: #6f7899;">Mercadona &middot; 0.89 &euro;</span>
+                    </span>
+                    <span style="flex: none; font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; color: #f7f8fc;">6</span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 24px; height: 24px; border-radius: 999px; background: #34d399; display: flex; align-items: center; justify-content: center;">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #6f7899; text-decoration: line-through;">Eggs, dozen</span>
+                      <span style="display: block; margin-top: 2px; font-size: 12.5px; color: #525a78;">Ana got these</span>
+                    </span>
+                    <span style="flex: none; font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; color: #6f7899;">1</span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 24px; height: 24px; border-radius: 999px; border: 2px solid #4d5470;"></span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Tomatoes</span>
+                      <span style="display: block; margin-top: 2px; font-size: 12.5px; color: #6f7899;">Deza &middot; 1.45 &euro; / kg</span>
+                    </span>
+                    <span style="flex: none; font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; color: #f7f8fc;">2</span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 24px; height: 24px; border-radius: 999px; border: 2px solid #4d5470;"></span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Bread, sliced</span>
+                      <span style="display: block; margin-top: 2px; font-size: 12.5px; color: #6f7899;">Mercadona &middot; 1.10 &euro;</span>
+                    </span>
+                    <span style="flex: none; font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; color: #f7f8fc;">1</span>
+                  </div>
+
+                </div>
+
+                <div style="padding: 10px 20px 12px;">
+                  <div style="height: 50px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 14px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    <span style="flex: 1; font-size: 15px; color: #6f7899;">Add something</span>
+                  </div>
+                </div>
+
+                <nav style="display: flex; gap: 4px; padding: 8px 10px 20px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.09);">
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Home</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 11.4h12"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Catalog</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; background: rgba(255,180,84,0.10); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 650; color: #ffb454;">Shopping list</span>
+                  </span>
+                </nav>
+
+              </div>
+            </div>
+
+            <!-- ============ SHOPPING LIST TAB, NOTHING TO SHOP ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SHOPPING LIST &middot; nothing to shop, so the tab makes one</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px 12px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <div style="flex: 1; min-width: 0; font-size: 19px; font-weight: 600; color: #f7f8fc;">Shopping list</div>
+                  <span style="width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center;" aria-label="Older shopping lists">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.4"/><path d="M12 7.6V12l3 1.8"/></svg>
+                  </span>
+                </div>
+
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 28px;">
+                  <span style="width: 62px; height: 62px; border-radius: 999px; background: #161a28; border: 1px solid rgba(255,255,255,0.09); display: flex; align-items: center; justify-content: center;">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg>
+                  </span>
+                  <div style="margin-top: 18px; font-size: 20px; font-weight: 650; color: #f7f8fc;">Nothing to shop yet</div>
+                  <div style="margin-top: 10px; font-size: 15px; line-height: 1.6; color: #98a0bb;">Velista makes one shopping list out of everything your groups still need. It tells you where each thing is cheapest.</div>
+                  <button type="button" style="margin-top: 26px; width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Make my shopping list</button>
+                  <button type="button" style="margin-top: 10px; width: 100%; height: 48px; border: 0; border-radius: 14px; background: transparent; color: #98a0bb; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;">See older lists</button>
+                </div>
+
+                <nav style="display: flex; gap: 4px; padding: 8px 10px 20px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.09);">
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Home</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 11.4h12"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Catalog</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; background: rgba(255,180,84,0.10); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 650; color: #ffb454;">Shopping list</span>
+                  </span>
+                </nav>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1390px; top: 500px; width: 1330px;">
+        <figcaption>Where it is not, and what moved</figcaption>
+        <div class="frame" id="ab-Rules" style="width: 1330px; height: 1010px;">
+          <div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ A PUSHED SCREEN HAS NO NAV ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A LIST &middot; pushed into, so the bottom is its own</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="display: flex; align-items: center; gap: 10px; padding: 14px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                  <span style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+                  </span>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 18px; font-weight: 600; color: #f7f8fc;">Weekly shop</div>
+                    <div style="margin-top: 2px; font-size: 12.5px; color: #6f7899;">Home &middot; 5 things needed</div>
+                  </div>
+                  <span style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                  </span>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 14px 16px 0; display: flex; flex-direction: column; gap: 9px;">
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 1; font-size: 15.5px; color: #f7f8fc;">Milk, whole</span>
+                    <span style="font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums;">6</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 1; font-size: 15.5px; color: #f7f8fc;">Coffee beans</span>
+                    <span style="font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums;">1</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 1; font-size: 15.5px; color: #f7f8fc;">Washing powder</span>
+                    <span style="font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums;">1</span>
+                  </div>
+                </div>
+
+                <div style="padding: 10px 16px 22px; border-top: 1px solid rgba(255,255,255,0.07);">
+                  <div style="height: 52px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 12px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    <span style="flex: 1; font-size: 15px; color: #6f7899;">Add to this list</span>
+                    <span style="width: 38px; height: 38px; border-radius: 11px; background: rgba(255,180,84,0.12); display: flex; align-items: center; justify-content: center;">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3.4" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.6"/></svg>
+                    </span>
+                  </div>
+                  <div style="margin-top: 9px; text-align: center; font-size: 12px; color: #525a78;">the composer keeps this space, exactly as it does today</div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ A SHEET COVERS THE NAV ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A SHEET &middot; anchored to the screen, not to the nav</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
+
+                <div style="display: flex; flex-direction: column; height: 100%;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                    <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+                    <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
+                  </div>
+                  <div style="flex: 1; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;">
+                    <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">YOUR GROUPS</span>
+                    <div style="height: 86px; border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.09);"></div>
+                    <div style="height: 86px; border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.09);"></div>
+                  </div>
+                  <nav style="display: flex; gap: 4px; padding: 8px 10px 20px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.09);">
+                    <span style="flex: 1; height: 60px; border-radius: 16px; background: rgba(255,180,84,0.10);"></span>
+                    <span style="flex: 1; height: 60px; border-radius: 16px;"></span>
+                    <span style="flex: 1; height: 60px; border-radius: 16px;"></span>
+                  </nav>
+                </div>
+
+                <div style="position: absolute; inset: 0; background: rgba(4,6,12,0.62);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top: 1px solid rgba(255,255,255,0.12); border-radius: 22px 22px 0 0; padding: 12px 20px 26px;">
+                  <div style="width: 40px; height: 4px; border-radius: 999px; background: #4d5470; margin: 0 auto 16px;"></div>
+                  <div style="font-size: 20px; font-weight: 650; color: #f7f8fc;">New group</div>
+                  <div style="margin-top: 8px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">A group is the people you share lists with, such as your household.</div>
+                  <div style="margin-top: 18px; height: 52px; border-radius: 14px; background: #0a0c14; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 15px;">
+                    <span style="font-size: 16px; color: #f7f8fc;">Home</span>
+                    <span style="width: 1.5px; height: 21px; background: #ffb454; margin-left: 1px;"></span>
+                  </div>
+                  <button type="button" style="margin-top: 16px; width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650;">Create it</button>
+                  <button type="button" style="margin-top: 8px; width: 100%; height: 48px; border: 0; border-radius: 14px; background: transparent; color: #98a0bb; font-family: inherit; font-size: 15px; font-weight: 600;">Cancel</button>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ============ THE RULES ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE RULES &middot; three tabs, and what moved to make room</span>
+              <div style="width: 390px; display: flex; flex-direction: column; gap: 14px;">
+
+                <div style="display: flex; flex-direction: column; gap: 7px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">WHERE THE NAV IS DRAWN</span>
+                  <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10);">
+                    <div style="display: flex; gap: 9px; align-items: flex-start;">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 2px;" stroke="#34d399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg>
+                      <div style="flex: 1; font-size: 13.5px; line-height: 1.55; color: #f7f8fc;">Home, Catalog, Shopping list. Those three screens and no others.</div>
+                    </div>
+                    <div style="margin-top: 11px; display: flex; gap: 9px; align-items: flex-start;">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 2px;" stroke="#6f7899" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M7 7l10 10"/></svg>
+                      <div style="flex: 1; font-size: 13.5px; line-height: 1.55; color: #98a0bb;">A group, a list, a line, your account, the assistant, the front door, sign in, and a shared basket opened from a link. Each of those is a screen you went into, and its bottom belongs to its own work.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 7px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">HOME'S OLD BUTTON ROW &middot; both halves moved, neither was lost</span>
+                  <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10);">
+                    <div style="display: flex; align-items: center; gap: 9px; opacity: 0.55;">
+                      <span style="flex: 1; height: 42px; border-radius: 12px; background: #ffb454; color: #0a0c14; font-size: 14px; font-weight: 650; display: flex; align-items: center; justify-content: center;">Get shopping list</span>
+                      <span style="width: 42px; height: 42px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center;">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.4"/><path d="M12 7.6V12l3 1.8"/></svg>
+                      </span>
+                    </div>
+                    <div style="margin-top: 12px; font-size: 13.5px; line-height: 1.55; color: #f7f8fc;">Both are in the Shopping list tab now: the button is what the empty tab offers, and the clock sits in that tab's header.</div>
+                    <div style="margin-top: 7px; font-size: 13px; line-height: 1.5; color: #98a0bb;">Keeping the row would have put two bars at the bottom of home, about 130 of the 844 pixels a phone has, one above the other, both asking to be pressed.</div>
+                  </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 7px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">PRESSING A TAB</span>
+                  <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10); font-size: 13.5px; line-height: 1.6; color: #98a0bb;">
+                    <div style="color: #f7f8fc;">A tab always opens that tab's own screen, from wherever you are.</div>
+                    <div style="margin-top: 8px;">Pressing the tab you are already on takes you back to the top of it. Nothing is remembered per tab: a group you had opened is not restored under Home, because a person who presses Home is asking for home.</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 470px;"><p>THE BRIEF. A bottom bar with big buttons, so the whole app is reachable with a thumb and nothing important hides behind a chevron.</p><p>Three tabs, not four. Groups were going to be the fourth and are not, because home already lists them: a tab that leads to what the screen behind it is already showing teaches somebody that tabs are decoration. Home therefore keeps its groups, its lists and the basket status, exactly as it is today.</p></aside>
+      <aside class="note" style="left: 530px; top: 0px; width: 470px;"><p>RULE N1: EVERY TAB CARRIES ITS WORD. A row of three bare glyphs is a quiz, and a basket, a grid and a house are not obvious to somebody who has not spent years in apps. So each tab is an icon above a word, the whole tab is the target, and the target is 60 pixels tall and a third of the screen wide.</p><p>The active tab says so twice, in colour and in a tinted pill, because colour alone is not a state somebody with poor contrast vision can read.</p></aside>
+      <aside class="note" style="left: 1060px; top: 0px; width: 470px;"><p>RULE N2: THE NAV BELONGS TO THE APP, NOT TO A PAGE, AND A SHEET COVERS IT. It is drawn once in `AppLayout`, which is the parent of every page, so it cannot drift between screens or appear twice.</p><p>A sheet is a child route that covers the page it was opened from (rule E1), and that includes the nav: the scrim dims it, and the panel keeps its own bottom edge on the screen's bottom edge rather than resting on top of the bar. Anything else leaves three lit buttons under an open sheet, on a phone, a thumb's width from Cancel. `SheetShell` already sits at `z-index: 10`, and the nav goes below it.</p></aside>
+      <aside class="note" style="left: 1590px; top: 0px; width: 470px;"><p>RULE N3: A TAB IS SHOWN ON THE THREE SCREENS IT NAMES, AND NOWHERE ELSE. A screen you went into keeps its own bottom: the list page has its composer there, and the group, the line, the account, the assistant and the front door each have their own business.</p><p>This is what stops the app stacking two bars, and it is the reason the tabs can be as tall as they are. The way back from a pushed screen is the chevron it already has.</p></aside>
+      <aside class="note" style="left: 2120px; top: 0px; width: 470px;"><p>RULE N4: THE SHOPPING LIST TAB OPENS THE ONE BEING SHOPPED. Not a list of lists: the basket in your hand is what the tab is for, and it is one press from any screen.</p><p>With none, the tab is where one is made, which is where Get shopping list went. Older ones are behind the clock in that tab's header, in both states, which is the button that used to sit beside Get shopping list on home. The badge counts what is still to get, and it is the only number on the bar.</p></aside>
+      <aside class="note" style="left: 2650px; top: 0px; width: 470px;"><p>STILL TO DECIDE.</p><p>1. The word on the third tab. Shopping list is what the app calls that thing everywhere else, and it is the longest label on the bar. Basket is shorter and is what the code calls it, and it is not a word the interface uses today.</p><p>2. Whether the badge counts what is left to get, or is a plain dot that says somebody is shopping.</p><p>3. Whether a guest who opened a shared basket from a link sees the bar at all. Drawn as no: two of the three tabs lead to screens a guest has no account for.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 3120;
+    var h = 1510;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

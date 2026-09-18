@@ -20,6 +20,9 @@ on top of them, and the page built from both.
 | `line-sheet/`     | `0083` the line sheet edits the line and `0084` renaming a line from the basket, with backend `0112` and `0113` behind them                      | https://claude.ai/artifact/4zbiAsWxFJFQokU29JouLs                    |
 | `list-trips/`     | `0088` the zone list grouped by trip and `0089` lines the list suggests, with backend `0122` and `0123` behind them. One working page, not a canvas: see its README | https://claude.ai/artifact/2g3FFABu4JMAt8RLrdLgFR                    |
 | `onboarding/`     | The setup a new account walks through: the name, the postal code, the supermarkets. **No plan yet**, the design comes first                       | https://claude.ai/artifact/Y3K3PZNGLnEjNUHjfWBDBF                    |
+| `nav/`            | The bottom nav: Home, Catalog, Shopping list. **No plan yet**                                                                                    | https://claude.ai/artifact/HSJYUM3oq8srUafnH76P81                    |
+| `catalog/`        | The catalog tab: every product, one chain, search and order. **No plan yet**                                                                     | https://claude.ai/artifact/9UppvQ8HfCVouog2WK7fi7                    |
+| `tour/`           | The tour the setup offers and the account screen replays. **No plan yet**                                                                        | https://claude.ai/artifact/YbfH7bVn7DGC1MFqWdqNvS                    |
 | `brand/`          | The mark itself. Source of truth for both, see below                                                                                             |                                                                      |
 
 ## How a folder is put together
