@@ -98,7 +98,7 @@
 </div>
 
 <div class="viewport">
-  <div class="canvas" id="canvas" style="width: 2720px; height: 2670px;">
+  <div class="canvas" id="canvas" style="width: 2720px; height: 2770px;">
       <figure class="board" style="left: 0px; top: 500px; width: 1330px;">
         <figcaption>Welcome, and what we call you</figcaption>
         <div class="frame" id="ab-Start" style="width: 1330px; height: 1010px;">
@@ -127,7 +127,7 @@
                 </div>
 
                 <h1 style="margin: 30px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 34px; line-height: 1.15; color: #f7f8fc;">Three questions and you are shopping</h1>
-                <p style="margin: 14px 0 0; font-size: 15px; line-height: 1.55; color: #98a0bb;">None of them is required. Skip one and the app takes the answer that asks nothing of you.</p>
+                <p style="margin: 14px 0 0; font-size: 15px; line-height: 1.55; color: #98a0bb;">You do not have to answer any of them. If you skip a question, we choose for you, and you can change it later.</p>
 
                 <div style="margin-top: 28px; display: flex; flex-direction: column; gap: 10px;">
 
@@ -161,7 +161,6 @@
 
                 <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Start</button>
                 <button type="button" style="width: 100%; height: 48px; margin-top: 8px; border: 0; border-radius: 14px; background: transparent; color: #98a0bb; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;">Not now</button>
-                <div style="margin-top: 2px; text-align: center; font-size: 12.5px; line-height: 1.5; color: #6f7899;">Not now means never: we do not ask again. All three live on your account screen.</div>
 
               </div>
             </div>
@@ -641,14 +640,14 @@
                 </div>
 
                 <div style="margin-top: 22px; padding: 18px; border-radius: 18px; background: rgba(255,180,84,0.07); border: 1px solid rgba(255,180,84,0.22);">
-                  <div style="font-size: 16px; font-weight: 650; color: #f7f8fc;">Want the short tour?</div>
-                  <div style="margin-top: 6px; font-size: 13.5px; line-height: 1.55; color: #98a0bb;">Five notes over the app itself: groups, the lists inside them, your basket, the assistant, and talking to a list while you shop.</div>
+                  <div style="font-size: 17px; font-weight: 650; color: #f7f8fc;">Would you like a quick tour?</div>
+                  <div style="margin-top: 7px; font-size: 14.5px; line-height: 1.6; color: #c2c8db;">We will show you around the app, one screen at a time, so that nothing is hard to find. It is short, and you can stop it whenever you like.</div>
                 </div>
 
                 <div style="flex: 1;"></div>
 
                 <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Show me around</button>
-                <button type="button" style="width: 100%; height: 48px; margin-top: 8px; border: 0; border-radius: 14px; background: transparent; color: #98a0bb; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;">Take me to the app</button>
+                <button type="button" style="width: 100%; height: 48px; margin-top: 8px; border: 0; border-radius: 14px; background: transparent; color: #98a0bb; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;">No, thank you</button>
 
               </div>
             </div>
@@ -709,7 +708,7 @@
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 2px;" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.6v.9"/></svg>
                       <div style="flex: 1;">
                         <div style="font-size: 14px; line-height: 1.55; color: #f7f8fc;">Not now on the welcome screen writes the same finished field that the last step writes.</div>
-                        <div style="margin-top: 6px; font-size: 13px; line-height: 1.5; color: #98a0bb;">So the setup never opens again, on this device or any other. The welcome says that before the press, because a permanent answer that reads as "later" is a trick.</div>
+                        <div style="margin-top: 6px; font-size: 13px; line-height: 1.5; color: #98a0bb;">So the setup never opens again, on this device or any other. The screen does not say so: a warning about a permanent choice makes a person weigh a press that costs them nothing.</div>
                       </div>
                     </div>
                     <div style="margin-top: 13px; padding: 13px 14px; border-radius: 13px; background: #161a28; border: 1px solid rgba(255,255,255,0.08); font-size: 13px; line-height: 1.5; color: #98a0bb;">Nothing is lost by pressing it. The generated name stays, every chain stays on, and there is no postal code until one is added. All three are rows on the account screen above.</div>
@@ -728,7 +727,8 @@
       <aside class="note" style="left: 1590px; top: 0px; width: 470px;"><p>RULE O3: THE COOL NAME ALREADY EXISTS, SO THE SCREEN SHOWS IT. Registration generates one from a per locale adjective and noun pool (auth `username/pool.ts`) and `displayName` is never sent, so by the time onboarding opens the account is already Brave Anchor. The field is therefore empty with the name named beside it, and the button says which one it will keep.</p><p>Pick another one is in, and it is the one control on these four artboards that needs a route nobody has written: a read that draws from the same pool, in the caller's locale, writes nothing, and is throttled, because it costs a database round trip and a bored thumb can hold it down. The card swaps the name in place and the button follows it.</p></aside>
       <aside class="note" style="left: 2120px; top: 0px; width: 470px;"><p>RULE O4: THE POSITION IS NEVER STORED, AND THE SCREEN SAYS SO BEFORE THE PRESS. `POST /v1/account/postal-code-lookups` takes the point in a body, answers a postal code and a country, and keeps nothing.</p><p>It answers a country and a code and nothing else, so the screen cannot name the town. The four states are the ones the account's location sheet already has: resolved, refused, too far from any code we hold, and an ordinary failure. Refused is sticky because a browser will not prompt twice, so that state hands over to typing instead of offering a retry.</p></aside>
       <aside class="note" style="left: 1920px; top: 1660px; width: 470px;"><p>RULE O5: STEP 3 IS SCOPED BY STEP 2. With a postal code the list is the chains that actually have a shop near it, each with its shop count, from one call to `GET /v1/catalog/shops/summary`. That is a better question than every chain in the country, and it is why the two steps are in this order.</p><p>With no code the same screen lists every chain from `GET /v1/catalog/supermarkets`, without counts and without the "Near 14013" heading. The answer still saves, and it starts applying the day a code arrives.</p></aside>
-      <aside class="note" style="left: 1920px; top: 2160px; width: 470px;"><p>THE FOUR DECISIONS, TAKEN.</p><p>1. A column in the database, not browser storage, so the setup does not run again on a second device. It has to reach the client on a read the app already makes at startup, or every cold start pays for a second request before it can draw anything. That read is `GET /v1/account/me`, which auth answers, and auth is identity only by rule, so the plan has to say whether the column bends that rule or lives in core and is composed into the same answer at the gateway. The tour's flag will sit beside it, whichever way it goes.</p><p>2. A basket guest never sees any of this. The join page already asks their name, beside the basket they were invited to, which is the only one of the three questions that means anything to somebody shopping from somebody else's list.</p><p>3. Pick another one is in. See rule O3 for what it costs.</p><p>4. Not now is final. It writes the same column the last step writes, and the welcome screen says so before the press.</p></aside>
+      <aside class="note" style="left: 1920px; top: 2600px; width: 470px;"><p>RULE O6: WRITTEN FOR SOMEBODY WHO IS NOT AT HOME WITH APPS. Short sentences, ordinary words, the reason before the request, and never a joke instead of an instruction. Some of the people who will use this are old, and a sentence that is clever costs them the screen.</p><p>Two things follow, and both are visible on these artboards. The tour offer says what the tour is and why it helps, and names no feature: stops will be added and dropped, and a list of them ages into a lie on a screen nobody thinks to revisit. And nothing warns that a choice cannot be undone when undoing it costs nothing, which is why Not now carries no small print.</p></aside>
+      <aside class="note" style="left: 1920px; top: 2160px; width: 470px;"><p>THE FOUR DECISIONS, TAKEN.</p><p>1. A column in the database, not browser storage, so the setup does not run again on a second device. It has to reach the client on a read the app already makes at startup, or every cold start pays for a second request before it can draw anything. That read is `GET /v1/account/me`, which auth answers, and auth is identity only by rule, so the plan has to say whether the column bends that rule or lives in core and is composed into the same answer at the gateway. The tour's flag will sit beside it, whichever way it goes.</p><p>2. A basket guest never sees any of this. The join page already asks their name, beside the basket they were invited to, which is the only one of the three questions that means anything to somebody shopping from somebody else's list.</p><p>3. Pick another one is in. See rule O3 for what it costs.</p><p>4. Not now is final. It writes the same column the last step writes, and the screen does not say so, for the reason in rule O6.</p></aside>
   </div>
 </div>
 
@@ -738,7 +738,7 @@
   (function () {
     var canvas = document.getElementById('canvas');
     var w = 2720;
-    var h = 2670;
+    var h = 2770;
     var buttons = document.querySelectorAll('.controls button');
     buttons.forEach(function (button) {
       button.addEventListener('click', function () {

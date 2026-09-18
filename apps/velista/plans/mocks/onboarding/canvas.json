@@ -51,11 +51,18 @@
       "text": "RULE O5: STEP 3 IS SCOPED BY STEP 2. With a postal code the list is the chains that actually have a shop near it, each with its shop count, from one call to `GET /v1/catalog/shops/summary`. That is a better question than every chain in the country, and it is why the two steps are in this order.\nWith no code the same screen lists every chain from `GET /v1/catalog/supermarkets`, without counts and without the \"Near 14013\" heading. The answer still saves, and it starts applying the day a code arrives."
     },
     {
+      "id": "o6",
+      "x": 1920,
+      "y": 2100,
+      "w": 470,
+      "text": "RULE O6: WRITTEN FOR SOMEBODY WHO IS NOT AT HOME WITH APPS. Short sentences, ordinary words, the reason before the request, and never a joke instead of an instruction. Some of the people who will use this are old, and a sentence that is clever costs them the screen.\nTwo things follow, and both are visible on these artboards. The tour offer says what the tour is and why it helps, and names no feature: stops will be added and dropped, and a list of them ages into a lie on a screen nobody thinks to revisit. And nothing warns that a choice cannot be undone when undoing it costs nothing, which is why Not now carries no small print."
+    },
+    {
       "id": "decided",
       "x": 1920,
       "y": 1660,
       "w": 470,
-      "text": "THE FOUR DECISIONS, TAKEN.\n1. A column in the database, not browser storage, so the setup does not run again on a second device. It has to reach the client on a read the app already makes at startup, or every cold start pays for a second request before it can draw anything. That read is `GET /v1/account/me`, which auth answers, and auth is identity only by rule, so the plan has to say whether the column bends that rule or lives in core and is composed into the same answer at the gateway. The tour's flag will sit beside it, whichever way it goes.\n2. A basket guest never sees any of this. The join page already asks their name, beside the basket they were invited to, which is the only one of the three questions that means anything to somebody shopping from somebody else's list.\n3. Pick another one is in. See rule O3 for what it costs.\n4. Not now is final. It writes the same column the last step writes, and the welcome screen says so before the press."
+      "text": "THE FOUR DECISIONS, TAKEN.\n1. A column in the database, not browser storage, so the setup does not run again on a second device. It has to reach the client on a read the app already makes at startup, or every cold start pays for a second request before it can draw anything. That read is `GET /v1/account/me`, which auth answers, and auth is identity only by rule, so the plan has to say whether the column bends that rule or lives in core and is composed into the same answer at the gateway. The tour's flag will sit beside it, whichever way it goes.\n2. A basket guest never sees any of this. The join page already asks their name, beside the basket they were invited to, which is the only one of the three questions that means anything to somebody shopping from somebody else's list.\n3. Pick another one is in. See rule O3 for what it costs.\n4. Not now is final. It writes the same column the last step writes, and the screen does not say so, for the reason in rule O6."
     }
   ]
 }
