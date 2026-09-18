@@ -1273,8 +1273,9 @@ describe('creating the line a list does not have (section 4.2)', () => {
     ]);
     expect(harness.origins).toHaveLength(1);
     expect(harness.origins[0]).toMatchObject({ listId: LIST_B, quantity: 2 });
-    // The basket buys what the list asked for.
-    expect(harness.basketLine.quantity).toBe(3);
+    // The basket buys what the list asked for, and it was already carrying one
+    // of it for nobody, so only the second unit is new demand.
+    expect(harness.basketLine.quantity).toBe(2);
     expect(result.origin?.contributed).toBe(2);
     expect(harness.claims.announced).toEqual([
       {
@@ -1374,7 +1375,9 @@ describe('creating the line a list does not have (section 4.2)', () => {
     await set(harness, { listId: LIST_C, quantity: 1, from: 0 });
 
     expect(harness.origins.map((row) => row.listId)).toEqual([LIST_B, LIST_C]);
-    expect(harness.basketLine.quantity).toBe(4);
+    // The one unit the line was carrying for nobody went to the first list, so
+    // the second list's unit is the only one that raised it again.
+    expect(harness.basketLine.quantity).toBe(3);
   });
 });
 
@@ -1412,5 +1415,61 @@ describe('a purchase with no list belongs to no origin (plan 0093, section 2.2)'
     });
 
     expect(result.origin?.contributed).toBe(1);
+  });
+});
+
+describe('a list joining a line takes the units nobody asked for first', () => {
+  it('assigns what a hand added line was carrying rather than adding to it', async () => {
+    // A line somebody typed into the basket asks for one and no list asked for
+    // any of it, so the whole of it is unassigned. A list then asking for one
+    // says that one of those is theirs, not that the shopper needs two.
+    //
+    // Free text on both sides, because that is what a hand added line is: no
+    // product set, so the two agree on their words (section 3.2).
+    const harness = build({
+      quantity: 1,
+      origins: [],
+      zoneLines: [
+        { id: LINE_B, listId: LIST_B, quantity: 1, itemSetHash: null },
+      ],
+    });
+
+    await set(harness, {
+      listId: LIST_B,
+      lineId: LINE_B,
+      quantity: 1,
+      from: 0,
+    });
+
+    expect(harness.origins[0].quantity).toBe(1);
+    expect(harness.basketLine.quantity).toBe(1);
+  });
+
+  it('does the same when the list holds no line and one is created', async () => {
+    const harness = build({ quantity: 1, origins: [] });
+
+    await set(harness, { listId: LIST_C, quantity: 1, from: 0 });
+
+    expect(harness.basketLine.quantity).toBe(1);
+  });
+
+  it('raises the line by the part no unassigned unit covers', async () => {
+    // Two unassigned, a list asking for five: three of them are new demand.
+    const harness = build({
+      quantity: 2,
+      origins: [],
+      zoneLines: [
+        { id: LINE_B, listId: LIST_B, quantity: 1, itemSetHash: null },
+      ],
+    });
+
+    await set(harness, {
+      listId: LIST_B,
+      lineId: LINE_B,
+      quantity: 5,
+      from: 0,
+    });
+
+    expect(harness.basketLine.quantity).toBe(5);
   });
 });

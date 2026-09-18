@@ -365,11 +365,13 @@ describeIntegration(
         ],
       ]);
 
-      // The basket buys all of it: one typed, then three and two asked for.
+      // The basket buys all of it: three and two asked for, and the one that was
+      // typed went to the flat, which is the first list to ask for any of it. A
+      // unit nobody asked for is not a sixth tin, it is one of the five.
       const basketLine = await dataSource
         .getRepository(GeneratedListLine)
         .findOneByOrFail({ id: line.id });
-      expect(basketLine.quantity).toBe(6);
+      expect(basketLine.quantity).toBe(5);
       // Written on the first list it reached and never again (section 2).
       expect(basketLine.targetListId).toBe(ids.flat);
     });

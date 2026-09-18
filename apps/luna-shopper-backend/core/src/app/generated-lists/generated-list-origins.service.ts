@@ -454,6 +454,25 @@ export class GeneratedListOriginsService {
    * time anybody opened this sheet. The consequence is that a basket line's
    * quantity can exceed the sum of its origins, and that is not drift, it is the
    * sale.
+   *
+   * ## A list joining the line takes the unassigned units first
+   *
+   * The delta is what the **edit** moves the line by. A list that was not on the
+   * line at all is a different gesture, and moving by the whole contribution got
+   * it wrong: a line added by hand asks for one that no list asked for, so a list
+   * then asking for one pushed the line to two, one for that list and one still
+   * assigned to nobody. The shopper needs one tin and was told to buy two.
+   *
+   * So an adoption and a creation are met out of {@link unassignedOf} first, and
+   * the line grows only by the part those units do not cover. Nothing is thrown
+   * away: units nobody asked for become units this list asked for, which is what
+   * assigning a line to a list means. What a shopper added above the sum stays
+   * above it for as long as no list claims it.
+   *
+   * It is also what the other way of sending a line to a list has always done:
+   * `GeneratedListLineService.promote`, reached by adding a line with a target or
+   * by setting one on it, asks the list for the line's own quantity and leaves the
+   * line where it stands. The two routes now say the same thing.
    */
   async setOriginQuantity(
     req: SetGeneratedListOriginQuantityRequest
@@ -666,6 +685,17 @@ export class GeneratedListOriginsService {
         throw new NotFoundException('Line not found');
       }
 
+      // What the line carries that no list asked for, read before the origin row
+      // is written so the row being created is not counted as demand it has yet
+      // to take over. Zero on an edit: the list is already on the line, and the
+      // delta is what that gesture means.
+      const unassigned = existing
+        ? 0
+        : this.unassignedOf(
+            line,
+            await origins.find({ where: { generatedListLineId: line.id } })
+          );
+
       // Section 4.1, computed here rather than by the caller because the number
       // it compares against is the zone line's quantity **at the moment of the
       // write**, which only the locked row can answer.
@@ -710,10 +740,12 @@ export class GeneratedListOriginsService {
 
       // Floored at what has already been settled through this basket rather than
       // at zero: those units are bought, and a line cannot ask for fewer than it
-      // has already got.
+      // has already got. Raised by what the unassigned units do not already
+      // cover, which on an edit is the whole delta.
+      const absorbed = Math.min(Math.max(move.delta, 0), unassigned);
       line.quantity = Math.max(
         line.settledQuantity,
-        line.quantity + move.delta
+        line.quantity + move.delta - absorbed
       );
       line.lastEditedByParticipantId = req.participantId;
       line.lastEditedAt = new Date();
@@ -754,6 +786,27 @@ export class GeneratedListOriginsService {
         claim: await this.claims.claimOf(source.id, manager),
       };
     });
+  }
+
+  /**
+   * How many of the line's units no list asked for.
+   *
+   * The line's own quantity less what its origins between them account for,
+   * floored at zero. It is never a stored number, because there is nothing to
+   * store: it is a difference between two numbers that both move, and a column
+   * beside them could only disagree with them.
+   *
+   * Zero is the ordinary answer on a line a run built, where the origins are
+   * exactly what the line is for. It is positive on a line somebody typed into
+   * the basket, which is what the whole of, and on one a shopper raised above
+   * what the households asked for (plan 0056).
+   */
+  private unassignedOf(
+    line: GeneratedListLine,
+    rows: readonly GeneratedListLineOrigin[]
+  ): number {
+    const asked = rows.reduce((total, row) => total + row.quantity, 0);
+    return Math.max(0, line.quantity - asked);
   }
 
   /**
@@ -859,6 +912,14 @@ export class GeneratedListOriginsService {
       );
     }
 
+    // Read before `promote`, which writes the origin row in its own transaction:
+    // afterwards this list's own contribution would count as demand the line
+    // already had and nothing would be left to assign.
+    const unassigned = this.unassignedOf(
+      line,
+      await this.origins.find({ where: { generatedListLineId: line.id } })
+    );
+
     // The **actor's** account, as plan 0058 section 4 had it: a household's list
     // may name only accounts, and the account that raised the row is the honest
     // author. The owner's own access was checked beside it above, because it is
@@ -878,10 +939,14 @@ export class GeneratedListOriginsService {
       );
     }
 
-    // The basket will buy what the list asked for, so the reel moves by the
-    // whole amount, exactly as an adoption's does. Floored at what this basket
-    // has already settled, like every other move of this number.
-    line.quantity = Math.max(line.settledQuantity, line.quantity + quantity);
+    // The basket will buy what the list asked for, so the reel moves by whatever
+    // of it the line was not already carrying for nobody, exactly as an
+    // adoption's does. Floored at what this basket has already settled, like
+    // every other move of this number.
+    line.quantity = Math.max(
+      line.settledQuantity,
+      line.quantity + Math.max(0, quantity - unassigned)
+    );
     line.lastEditedByParticipantId = req.participantId;
     line.lastEditedAt = new Date();
     await this.lines.save(line);

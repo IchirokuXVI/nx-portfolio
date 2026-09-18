@@ -1118,13 +1118,28 @@ export class BasketMemory implements BasketServiceI {
       });
     }
 
+    // What the line carries that no list asked for, which a list joining the line
+    // takes before the line grows (backend `0092`, section 4.1). A line added by
+    // hand is the whole of it: one that nobody asked for, raised to one for a list,
+    // is one tin and not two. Zero on an edit, where the delta is the gesture.
+    const unassigned =
+      held === null
+        ? Math.max(
+            0,
+            line.quantity -
+              origins.reduce((total, origin) => total + origin.quantity, 0)
+          )
+        : 0;
+    const absorbed = Math.min(Math.max(delta, 0), unassigned);
+
     const moved: BasketLine = {
       ...line,
       // Floored at what has been settled: a basket cannot ask for fewer than it has
       // already bought, whatever the households behind it now want. The basket line
       // moves by the whole delta even on an adoption, because the basket will buy
-      // all of what the list asked for.
-      quantity: Math.max(line.settled, line.quantity + delta),
+      // all of what the list asked for, less whatever it was already carrying for
+      // nobody.
+      quantity: Math.max(line.settled, line.quantity + delta - absorbed),
       // What is left unplaced. Units that fit nowhere stay waiting, and the next
       // list the line reaches gets them.
       waitingSettled: line.waitingSettled - cameHome,
