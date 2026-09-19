@@ -19,6 +19,10 @@ on top of them, and the page built from both.
 | `basket-filter/`  | `0074` to `0078` finding a line in the basket: search, the filter sheet, grouping, one shop's prices, with backend `0109` and `0110` behind them | https://claude.ai/code/artifact/82b53f55-a8a6-41bc-a019-6222a23f44c5 |
 | `line-sheet/`     | `0083` the line sheet edits the line and `0084` renaming a line from the basket, with backend `0112` and `0113` behind them                      | https://claude.ai/artifact/4zbiAsWxFJFQokU29JouLs                    |
 | `list-trips/`     | `0088` the zone list grouped by trip and `0089` lines the list suggests, with backend `0122` and `0123` behind them. One working page, not a canvas: see its README | https://claude.ai/artifact/2g3FFABu4JMAt8RLrdLgFR                    |
+| `nav/`            | `0097` the bar at the bottom of the app                                                                                                          | https://claude.ai/artifact/HSJYUM3oq8srUafnH76P81                    |
+| `onboarding/`     | `0098` the setup a new account walks through, with backend `0145` behind it                                                                      | https://claude.ai/artifact/Y3K3PZNGLnEjNUHjfWBDBF                    |
+| `tour/`           | `0099` the tour, with backend `0145` behind it                                                                                                   | https://claude.ai/artifact/YbfH7bVn7DGC1MFqWdqNvS                    |
+| `catalog/`        | `0100` the catalog tab, with backend `0146` behind it                                                                                            | https://claude.ai/artifact/9UppvQ8HfCVouog2WK7fi7                    |
 | `brand/`          | The mark itself. Source of truth for both, see below                                                                                             |                                                                      |
 
 ## How a folder is put together

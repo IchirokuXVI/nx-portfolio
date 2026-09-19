@@ -1,0 +1,578 @@
+<title>Velista: the catalog</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Browse * { box-sizing: border-box; }
+#ab-Browse a { color: #ffb454; text-decoration: none; }
+#ab-Browse a:hover { color: #ffc271; }
+#ab-States * { box-sizing: border-box; }
+#ab-States a { color: #ffb454; text-decoration: none; }
+#ab-States a:hover { color: #ffc271; }
+</style>
+
+<header>
+  <h1>Velista: the catalog</h1>
+  <p class="lede">The second tab: every product from every supermarket, narrowed to one chain, searched, and ordered, with the search and the order on the screen rather than behind a sheet. Drawn before any plan is written, against <code>GET /v1/catalog/items</code>, which velista does not call today. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 3120px; height: 1550px;">
+      <figure class="board" style="left: 0px; top: 540px; width: 1330px;">
+        <figcaption>Browsing, narrowing, searching</figcaption>
+        <div class="frame" id="ab-Browse" style="width: 1330px; height: 1010px;">
+          <div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ AT REST ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">AT REST &middot; every chain, and the tools are on the screen</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="padding: 14px 16px 0;">
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <h1 style="margin: 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 27px; color: #f7f8fc;">Catalog</h1>
+                    <span style="font-size: 12.5px; color: #6f7899;">near 14013</span>
+                  </div>
+
+                  <div style="margin-top: 12px; height: 48px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 13px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                    <span style="flex: 1; font-size: 15.5px; color: #6f7899;">Search every supermarket</span>
+                  </div>
+
+                  <div style="margin-top: 11px; display: flex; gap: 7px; overflow: hidden;">
+                    <span style="flex: none; height: 34px; padding: 0 13px; border-radius: 999px; background: #ffb454; color: #0a0c14; font-size: 13.5px; font-weight: 650; display: flex; align-items: center;">All shops</span>
+                    <span style="flex: none; height: 34px; padding: 0 13px; border-radius: 999px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); color: #c2c8db; font-size: 13.5px; font-weight: 600; display: flex; align-items: center;">Mercadona</span>
+                    <span style="flex: none; height: 34px; padding: 0 13px; border-radius: 999px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); color: #c2c8db; font-size: 13.5px; font-weight: 600; display: flex; align-items: center;">Deza</span>
+                    <span style="flex: none; height: 34px; padding: 0 13px; border-radius: 999px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); color: #c2c8db; font-size: 13.5px; font-weight: 600; display: flex; align-items: center;">Carrefour</span>
+                  </div>
+
+                  <div style="margin-top: 11px; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px; color: #6f7899;">Order</span>
+                    <span style="height: 32px; padding: 0 12px; border-radius: 999px; background: rgba(255,180,84,0.12); border: 1px solid rgba(255,180,84,0.4); color: #ffc271; font-size: 13px; font-weight: 650; display: flex; align-items: center;">A to Z</span>
+                    <span style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); color: #98a0bb; font-size: 13px; font-weight: 600; display: flex; align-items: center;">Newest</span>
+                  </div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 14px 16px 0; display: flex; flex-direction: column; gap: 8px;">
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Aceite de oliva virgen extra</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Hacendado &middot; 1 L</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">8.45 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">Mercadona</span>
+                    </span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Arroz redondo</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">SOS &middot; 1 kg</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">1.29 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">Deza</span>
+                    </span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Atun claro en aceite</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Calvo &middot; 3 x 80 g</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">2.65 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">Carrefour</span>
+                    </span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Azucar blanco</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Azucarera &middot; 1 kg</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">1.05 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">Mercadona</span>
+                    </span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Cafe molido mezcla</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Marcilla &middot; 250 g</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">2.19 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">Lidl</span>
+                    </span>
+                  </div>
+
+                </div>
+
+                <nav style="display: flex; gap: 4px; padding: 8px 10px 20px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.09);">
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Home</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; background: rgba(255,180,84,0.10); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 11.4h12"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 650; color: #ffb454;">Catalog</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Shopping list</span>
+                  </span>
+                </nav>
+
+              </div>
+            </div>
+
+            <!-- ============ ONE CHAIN ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ONE CHAIN &middot; what it sells, and what it charges</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="padding: 14px 16px 0;">
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <h1 style="margin: 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 27px; color: #f7f8fc;">Catalog</h1>
+                    <span style="font-size: 12.5px; color: #6f7899;">near 14013</span>
+                  </div>
+
+                  <div style="margin-top: 12px; height: 48px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 13px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                    <span style="flex: 1; font-size: 15.5px; color: #6f7899;">Search Mercadona</span>
+                  </div>
+
+                  <div style="margin-top: 11px; display: flex; gap: 7px; overflow: hidden;">
+                    <span style="flex: none; height: 34px; padding: 0 13px; border-radius: 999px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); color: #c2c8db; font-size: 13.5px; font-weight: 600; display: flex; align-items: center;">All shops</span>
+                    <span style="flex: none; height: 34px; padding: 0 13px; border-radius: 999px; background: #ffb454; color: #0a0c14; font-size: 13.5px; font-weight: 650; display: flex; align-items: center; gap: 7px;">
+                      Mercadona
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M7 17L17 7M7 7l10 10"/></svg>
+                    </span>
+                    <span style="flex: none; height: 34px; padding: 0 13px; border-radius: 999px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); color: #c2c8db; font-size: 13.5px; font-weight: 600; display: flex; align-items: center;">Deza</span>
+                  </div>
+
+                  <div style="margin-top: 11px; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px; color: #6f7899;">Order</span>
+                    <span style="height: 32px; padding: 0 12px; border-radius: 999px; background: rgba(255,180,84,0.12); border: 1px solid rgba(255,180,84,0.4); color: #ffc271; font-size: 13px; font-weight: 650; display: flex; align-items: center;">A to Z</span>
+                    <span style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); color: #98a0bb; font-size: 13px; font-weight: 600; display: flex; align-items: center;">Newest</span>
+                  </div>
+
+                  <div style="margin-top: 12px; font-size: 12.5px; color: #6f7899;">7 shops near you. Prices are what Mercadona charges here.</div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 12px 16px 0; display: flex; flex-direction: column; gap: 8px;">
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Aceite de oliva virgen extra</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Hacendado &middot; 1 L</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">8.45 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">8.45 &euro; / L</span>
+                    </span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Arroz redondo</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Hacendado &middot; 1 kg</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">1.15 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">1.15 &euro; / kg</span>
+                    </span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Atun claro en aceite</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Hacendado &middot; 3 x 80 g</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">2.30 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">9.58 &euro; / kg</span>
+                    </span>
+                  </div>
+
+                </div>
+
+                <nav style="display: flex; gap: 4px; padding: 8px 10px 20px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.09);">
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Home</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; background: rgba(255,180,84,0.10); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 11.4h12"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 650; color: #ffb454;">Catalog</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Shopping list</span>
+                  </span>
+                </nav>
+
+              </div>
+            </div>
+
+            <!-- ============ SEARCHING ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SEARCHING &middot; best match arrives, keyboard over the nav</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="padding: 14px 16px 0;">
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <h1 style="margin: 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 27px; color: #f7f8fc;">Catalog</h1>
+                    <span style="font-size: 12.5px; color: #6f7899;">near 14013</span>
+                  </div>
+
+                  <div style="margin-top: 12px; height: 48px; border-radius: 14px; background: #161a28; border: 1px solid #ffb454; display: flex; align-items: center; gap: 10px; padding: 0 13px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                    <span style="flex: 1; font-size: 15.5px; color: #f7f8fc;">leche entera</span>
+                    <span style="width: 26px; height: 26px; border-radius: 999px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center;">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 17L17 7M7 7l10 10"/></svg>
+                    </span>
+                  </div>
+
+                  <div style="margin-top: 11px; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px; color: #6f7899;">Order</span>
+                    <span style="height: 32px; padding: 0 12px; border-radius: 999px; background: rgba(255,180,84,0.12); border: 1px solid rgba(255,180,84,0.4); color: #ffc271; font-size: 13px; font-weight: 650; display: flex; align-items: center;">Best match</span>
+                    <span style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); color: #98a0bb; font-size: 13px; font-weight: 600; display: flex; align-items: center;">A to Z</span>
+                    <span style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); color: #98a0bb; font-size: 13px; font-weight: 600; display: flex; align-items: center;">Newest</span>
+                  </div>
+
+                  <div style="margin-top: 12px; font-size: 12.5px; color: #6f7899;">31 products</div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 12px 16px 0; display: flex; flex-direction: column; gap: 8px;">
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Leche entera</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Hacendado &middot; 1 L</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">0.89 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">Mercadona</span>
+                    </span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Leche entera Puleva</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Puleva &middot; 6 x 1 L</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">6.42 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">Carrefour</span>
+                    </span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Leche entera sin lactosa</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Kaiku &middot; 1 L</span>
+                    </span>
+                    <span style="flex: none; text-align: right;">
+                      <span style="display: block; font-size: 16px; font-weight: 650; color: #f7f8fc; font-variant-numeric: tabular-nums;">1.35 &euro;</span>
+                      <span style="display: block; margin-top: 2px; font-size: 11.5px; color: #6f7899;">Deza</span>
+                    </span>
+                  </div>
+
+                </div>
+
+                <div style="padding: 10px 16px; border-top: 1px solid rgba(255,255,255,0.07); background: #11141f; text-align: center; font-size: 12px; color: #525a78;">the keyboard sits here, over the nav, while the field has focus</div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1390px; top: 540px; width: 900px;">
+        <figcaption>No prices, nothing found, one product</figcaption>
+        <div class="frame" id="ab-States" style="width: 900px; height: 1010px;">
+          <div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ NO POSTAL CODE ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">NO POSTAL CODE &middot; every product, and not one price</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="padding: 14px 16px 0;">
+                  <h1 style="margin: 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 27px; color: #f7f8fc;">Catalog</h1>
+
+                  <div style="margin-top: 12px; height: 48px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 13px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                    <span style="flex: 1; font-size: 15.5px; color: #6f7899;">Search every supermarket</span>
+                  </div>
+
+                  <div style="margin-top: 12px; padding: 15px 16px; border-radius: 16px; background: rgba(255,180,84,0.07); border: 1px solid rgba(255,180,84,0.22);">
+                    <div style="font-size: 15px; font-weight: 650; color: #f7f8fc;">We do not know where you shop</div>
+                    <div style="margin-top: 6px; font-size: 13.5px; line-height: 1.55; color: #98a0bb;">You can read the whole catalog without a postal code. Prices need one, because they are not the same in two towns.</div>
+                    <button type="button" style="margin-top: 13px; height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 14.5px; font-weight: 650; cursor: pointer;">Add my postal code</button>
+                  </div>
+                </div>
+
+                <div style="flex: 1; overflow: hidden; padding: 14px 16px 0; display: flex; flex-direction: column; gap: 8px;">
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Aceite de oliva virgen extra</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Hacendado &middot; 1 L</span>
+                    </span>
+                    <span style="flex: none; font-size: 13px; color: #525a78;">no price</span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Arroz redondo</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">SOS &middot; 1 kg</span>
+                    </span>
+                    <span style="flex: none; font-size: 13px; color: #525a78;">no price</span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; justify-content: center;">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4d5470" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </span>
+                    <span style="flex: 1; min-width: 0;">
+                      <span style="display: block; font-size: 15.5px; color: #f7f8fc;">Atun claro en aceite</span>
+                      <span style="display: block; margin-top: 3px; font-size: 12.5px; color: #6f7899;">Calvo &middot; 3 x 80 g</span>
+                    </span>
+                    <span style="flex: none; font-size: 13px; color: #525a78;">no price</span>
+                  </div>
+
+                </div>
+
+                <nav style="display: flex; gap: 4px; padding: 8px 10px 20px; background: #0a0c14; border-top: 1px solid rgba(255,255,255,0.09);">
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"/><path d="M5.8 10v9.2h12.4V10"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Home</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; background: rgba(255,180,84,0.10); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 11.4h12"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 650; color: #ffb454;">Catalog</span>
+                  </span>
+                  <span style="flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg>
+                    <span style="font-size: 12.5px; font-weight: 600; color: #98a0bb;">Shopping list</span>
+                  </span>
+                </nav>
+
+              </div>
+            </div>
+
+            <!-- ============ THE OTHER STATES ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE REST &middot; nothing found, more coming, and one product</span>
+              <div style="width: 390px; display: flex; flex-direction: column; gap: 14px;">
+
+                <div style="display: flex; flex-direction: column; gap: 7px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">NOTHING FOUND &middot; says which word found nothing</span>
+                  <div style="padding: 22px 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10); text-align: center;">
+                    <div style="font-size: 16px; font-weight: 650; color: #f7f8fc;">Nothing matches "leche desnatda"</div>
+                    <div style="margin-top: 8px; font-size: 13.5px; line-height: 1.55; color: #98a0bb;">Check the spelling, or look for a shorter word.</div>
+                    <button type="button" style="margin-top: 15px; height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.16); background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer;">Clear the search</button>
+                  </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 7px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">MORE COMING &middot; a page at a time, no page numbers</span>
+                  <div style="padding: 14px 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10);">
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+                      <span style="flex: none; width: 52px; height: 52px; border-radius: 12px; background: #1a1e2e;"></span>
+                      <span style="flex: 1;">
+                        <span style="display: block; width: 70%; height: 12px; border-radius: 999px; background: #1a1e2e;"></span>
+                        <span style="display: block; margin-top: 8px; width: 40%; height: 10px; border-radius: 999px; background: #1a1e2e;"></span>
+                      </span>
+                      <span style="flex: none; width: 46px; height: 14px; border-radius: 999px; background: #1a1e2e;"></span>
+                    </div>
+                    <div style="margin-top: 11px; text-align: center; font-size: 13px; color: #6f7899;">Loading more</div>
+                  </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 7px;">
+                  <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">ONE PRODUCT &middot; a sheet, and every shop that sells it</span>
+                  <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10);">
+                    <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; padding: 14px 16px 16px;">
+                      <div style="width: 40px; height: 4px; border-radius: 999px; background: #4d5470; margin: 0 auto 14px;"></div>
+                      <div style="font-size: 17px; font-weight: 650; color: #f7f8fc;">Leche entera</div>
+                      <div style="margin-top: 3px; font-size: 13px; color: #6f7899;">Hacendado &middot; 1 L</div>
+
+                      <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 1px;">
+                        <div style="display: flex; align-items: center; gap: 10px; height: 42px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                          <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Mercadona</span>
+                          <span style="flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; color: #34d399;">CHEAPEST</span>
+                          <span style="flex: none; font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; color: #f7f8fc;">0.89 &euro;</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px; height: 42px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+                          <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Deza</span>
+                          <span style="flex: none; font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; color: #c2c8db;">0.95 &euro;</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px; height: 42px;">
+                          <span style="flex: 1; font-size: 14.5px; color: #6f7899;">Carrefour</span>
+                          <span style="flex: none; font-size: 13px; color: #6f7899;">not sold here</span>
+                        </div>
+                      </div>
+
+                      <div style="margin-top: 12px; font-size: 12px; color: #525a78;">Seen two days ago. Velista reads the shops, so a price can be behind the shelf.</div>
+                    </div>
+                    <div style="margin-top: 11px; font-size: 13px; line-height: 1.55; color: #ffc271;">Open question: whether this sheet also adds the product to one of your lists. Drawn without it, because adding to a list from here is a screen of its own.</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 470px;"><p>THE BRIEF. Every product from every supermarket, in one list. A search. An order. A way to see one chain on its own. No price sorting and no offers: both were dropped on purpose, and the second one has no data behind it anyway.</p><p>The screen reads `GET /v1/catalog/items`, which exists, is paged by cursor, and prices each row from where the person shops. velista has never called it: today the app reaches catalog only to suggest a line and to name a product it already holds.</p></aside>
+      <aside class="note" style="left: 530px; top: 0px; width: 470px;"><p>RULE C1: THE TOOLS ARE ON THE SCREEN, NOT BEHIND A GLYPH. The field is a field, the chains are chips, and the order is three pills. Nothing here opens a sheet.</p><p>That is the opposite of the basket, where `ListTools` hides the search behind a magnifier and the rest behind a filter sheet, and the difference is what each screen is for. In the basket the lines are the point and the tools are occasional. Here narrowing **is** the activity: somebody arrives without knowing what they want, and a screen that hides its own controls gives them a wall of products and a magnifier.</p></aside>
+      <aside class="note" style="left: 1060px; top: 0px; width: 470px;"><p>RULE C2: BEST MATCH EXISTS ONLY WHILE THERE IS SOMETHING TO MATCH. With no words typed, the orders are A to Z and Newest, and A to Z is the one it opens on. Type, and Best match appears in front of them and takes over.</p><p>This is the server's own rule rather than an invention: the read defaults to relevance when it is given a query and to name when it is not, and relevance without a query is an arbitrary order wearing a confident label. Cheapest first is not offered. The read cannot do it, and adding it means ordering on a price that is materialized per shop.</p></aside>
+      <aside class="note" style="left: 1590px; top: 0px; width: 470px;"><p>RULE C3: A CHAIN CHIP NARROWS THE PRODUCTS, AND THIS IS THE ONE THING THE BACKEND CANNOT DO YET. Today `supermarketId` on that read picks which shops the **prices** come from. It does not decide which products are listed, so choosing Mercadona would still list everything Deza sells, priced at nothing.</p><p>The chips promise the other thing: Mercadona means the products Mercadona sells. That is a change in catalog, and it is the only part of this canvas that needs one.</p><p>While a chain is chosen the right hand column switches from the chain's name to the price per litre or kilo, because with one chain the name is the same on every row and the comparison worth making is between sizes.</p></aside>
+      <aside class="note" style="left: 2120px; top: 0px; width: 470px;"><p>RULE C4: NO POSTAL CODE IS NOT AN EMPTY CATALOG. Backend 0069 already settled this: a read with no scopes is ranked and paged exactly as usual and every price comes back null. So the screen lists everything, marks each row "no price", and says once at the top why, with the way to fix it.</p><p>The opposite reading, an empty screen, tells somebody who merely refused every shop near them that there is no such thing as milk.</p></aside>
+      <aside class="note" style="left: 2650px; top: 0px; width: 470px;"><p>STILL TO DECIDE.</p><p>1. What a row does when tapped. Drawn as a sheet naming every shop's price for that product, which is the read velista already makes for a basket line. Whether it also adds the product to one of your lists is a screen of its own and is not drawn.</p><p>2. Whether categories appear as a second chip row. Twelve of them exist in the data and none is drawn here, because two rows of chips above a list is most of a phone.</p><p>3. Whether the catalog is reachable at all by a guest holding a shared basket. Every catalog route is account authenticated today.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 3120;
+    var h = 1550;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

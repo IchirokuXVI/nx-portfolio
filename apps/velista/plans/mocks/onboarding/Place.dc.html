@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ AT REST ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">STEP 2 &middot; two ways in, and Continue waits for one of them</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; padding: 12px 24px 24px;">
+
+      <div style="height: 44px; display: flex; align-items: center; justify-content: space-between; margin: 0 -12px;">
+        <span style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        </span>
+        <button type="button" style="height: 44px; padding: 0 12px; border: 0; background: transparent; color: #98a0bb; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;">Skip</button>
+      </div>
+
+      <div style="margin-top: 4px; display: flex; gap: 6px;">
+        <span style="flex: 1; height: 4px; border-radius: 999px; background: #ffb454;"></span>
+        <span style="flex: 1; height: 4px; border-radius: 999px; background: #ffb454;"></span>
+        <span style="flex: 1; height: 4px; border-radius: 999px; background: #262b40;"></span>
+      </div>
+      <span style="margin-top: 10px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899;">Step 2 of 3</span>
+
+      <h1 style="margin: 10px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.15; color: #f7f8fc;">Where do you shop?</h1>
+      <p style="margin: 12px 0 0; font-size: 15px; line-height: 1.55; color: #98a0bb;">The same product costs different amounts in different towns, so we cannot show you a price until we know which shops are near you. A postal code is as close as we ever need.</p>
+
+      <button type="button" style="margin-top: 20px; width: 100%; height: 52px; border-radius: 14px; border: 1px solid rgba(255,180,84,0.45); background: rgba(255,180,84,0.08); color: #ffc271; font-family: inherit; font-size: 15.5px; font-weight: 650; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffc271" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
+        Use my location
+      </button>
+
+      <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+        <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.10);"></span>
+        <span style="font-size: 12px; color: #6f7899;">or type it</span>
+        <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.10);"></span>
+      </div>
+
+      <div style="margin-top: 16px;">
+        <label style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 7px;">Postal code</label>
+        <div style="height: 52px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; padding: 0 15px;">
+          <span style="font-size: 16px; color: #6f7899; font-variant-numeric: tabular-nums; letter-spacing: 0.08em;">14013</span>
+        </div>
+      </div>
+
+      <div style="margin-top: 16px; display: flex; gap: 11px; align-items: flex-start; padding: 15px 16px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.2-2.9 7.9-7 9-4.1-1.1-7-4.8-7-9V6z"/><path d="M9 12.2l2.1 2.1L15 10.4"/></svg>
+        <div style="flex: 1; font-size: 13px; line-height: 1.55; color: #98a0bb;">If you press the button, your position is turned into a postal code and the position is thrown away. We store the code and nothing finer.</div>
+      </div>
+
+      <div style="flex: 1;"></div>
+
+      <button type="button" disabled style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #262b40; color: #6f7899; font-family: inherit; font-size: 16.5px; font-weight: 650;">Continue</button>
+
+    </div>
+  </div>
+
+  <!-- ============ RESOLVED ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">STEP 2 &middot; resolved, the nearby tick, what it reaches</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; padding: 12px 24px 24px;">
+
+      <div style="height: 44px; display: flex; align-items: center; justify-content: space-between; margin: 0 -12px;">
+        <span style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
+        </span>
+        <button type="button" style="height: 44px; padding: 0 12px; border: 0; background: transparent; color: #98a0bb; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;">Skip</button>
+      </div>
+
+      <div style="margin-top: 4px; display: flex; gap: 6px;">
+        <span style="flex: 1; height: 4px; border-radius: 999px; background: #ffb454;"></span>
+        <span style="flex: 1; height: 4px; border-radius: 999px; background: #ffb454;"></span>
+        <span style="flex: 1; height: 4px; border-radius: 999px; background: #262b40;"></span>
+      </div>
+      <span style="margin-top: 10px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899;">Step 2 of 3</span>
+
+      <h1 style="margin: 10px 0 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.15; color: #f7f8fc;">Where do you shop?</h1>
+
+      <div style="margin-top: 20px; padding: 18px 18px 16px; border-radius: 18px; background: #161a28; border: 1px solid rgba(52,211,153,0.28);">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="flex: none; width: 24px; height: 24px; border-radius: 999px; background: #34d399; display: flex; align-items: center; justify-content: center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span style="font-size: 13px; color: #98a0bb;">We placed you in</span>
+        </div>
+        <div style="margin-top: 10px; font-size: 34px; font-weight: 650; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; color: #f7f8fc;">14013</div>
+        <div style="margin-top: 4px; font-size: 13px; color: #6f7899;">Spain</div>
+      </div>
+
+      <label style="margin-top: 14px; display: flex; align-items: flex-start; gap: 12px; padding: 15px 16px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+        <span style="flex: none; width: 22px; height: 22px; border-radius: 7px; background: #ffb454; display: flex; align-items: center; justify-content: center; margin-top: 1px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span style="flex: 1;">
+          <span style="display: block; font-size: 14.5px; font-weight: 600; color: #f7f8fc;">Include the codes around it</span>
+          <span style="display: block; margin-top: 4px; font-size: 13px; line-height: 1.5; color: #98a0bb;">A shop one street over is often in the next code. Ticked because you just told us where you are.</span>
+        </span>
+      </label>
+
+      <div style="margin-top: 14px;">
+        <span style="display: block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #6f7899; margin-bottom: 8px;">What that reaches</span>
+        <div style="padding: 15px 16px; border-radius: 16px; background: rgba(255,180,84,0.06); border: 1px solid rgba(255,180,84,0.2);">
+          <div style="font-size: 15px; color: #f7f8fc;"><span style="font-weight: 700;">5</span> supermarket chains and <span style="font-weight: 700;">23</span> shops</div>
+          <div style="margin-top: 4px; font-size: 13px; color: #98a0bb;">You choose between them on the next screen.</div>
+        </div>
+      </div>
+
+      <div style="flex: 1;"></div>
+
+      <button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16.5px; font-weight: 650; cursor: pointer;">Continue</button>
+
+    </div>
+  </div>
+
+  <!-- ============ THE THREE WAYS IT DOES NOT RESOLVE ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">STEP 2 &middot; three answers that are not a code</span>
+    <div style="width: 390px; display: flex; flex-direction: column; gap: 14px;">
+
+      <div style="display: flex; flex-direction: column; gap: 7px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">REFUSED &middot; the browser will not ask again, so stop asking</span>
+        <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10);">
+          <div style="display: flex; gap: 11px; align-items: flex-start;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 2px;" stroke="#fb7185" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.2 8.2l7.6 7.6"/></svg>
+            <div style="flex: 1; font-size: 14px; line-height: 1.55; color: #f7f8fc;">You did not allow location, and this app cannot ask a second time. Type the code instead.</div>
+          </div>
+          <div style="margin-top: 13px; height: 48px; border-radius: 13px; background: #161a28; border: 1px solid #ffb454; display: flex; align-items: center; padding: 0 14px;">
+            <span style="font-size: 16px; color: #f7f8fc; font-variant-numeric: tabular-nums; letter-spacing: 0.08em;">1401</span>
+            <span style="width: 1.5px; height: 20px; background: #ffb454;"></span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 7px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">TOO FAR FROM ANYWHERE WE KNOW &middot; about you, not about a fault</span>
+        <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10);">
+          <div style="display: flex; gap: 11px; align-items: flex-start;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 2px;" stroke="#98a0bb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><path d="M12 8.6v2.8M12 13.7v.1"/></svg>
+            <div style="flex: 1; font-size: 14px; line-height: 1.55; color: #f7f8fc;">We could not match where you are to a postal code we hold. Typing it works.</div>
+          </div>
+          <button type="button" style="margin-top: 13px; width: 100%; height: 46px; border-radius: 13px; border: 1px solid rgba(255,255,255,0.16); background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer;">Type it instead</button>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 7px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">SKIPPED &middot; said plainly once, and never nagged again</span>
+        <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10);">
+          <div style="display: flex; gap: 11px; align-items: flex-start;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 2px;" stroke="#ffc271" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4.5l8.5 15H3.5z"/><path d="M12 10v4M12 16.6v.1"/></svg>
+            <div style="flex: 1;">
+              <div style="font-size: 14px; line-height: 1.55; color: #f7f8fc;">Without a postal code the catalog still works and shows no prices.</div>
+              <div style="margin-top: 6px; font-size: 13px; line-height: 1.5; color: #98a0bb;">Lists, groups and the assistant are unaffected. Add a code whenever you like, on your shopping profile.</div>
+            </div>
+          </div>
+          <div style="margin-top: 13px; display: flex; gap: 9px;">
+            <button type="button" style="flex: 1; height: 46px; border-radius: 13px; border: 1px solid rgba(255,255,255,0.16); background: transparent; color: #f7f8fc; font-family: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer;">Skip anyway</button>
+            <button type="button" style="flex: 1; height: 46px; border: 0; border-radius: 13px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 14.5px; font-weight: 650; cursor: pointer;">Back</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

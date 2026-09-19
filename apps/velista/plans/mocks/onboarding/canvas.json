@@ -1,0 +1,68 @@
+{
+  "title": "Velista: setting up a new account",
+  "lede": "The design for the onboarding a new account walks through, before any plan is written. Three questions and a hand over to the tour, which is a separate design. Every screen here is drawn against routes that already exist: <code>PATCH /v1/account/me</code>, <code>POST /v1/account/shopping-profiles/:id/postal-codes</code>, <code>POST /v1/account/postal-code-lookups</code>, <code>PATCH /v1/account/shopping-profiles/:id</code> and <code>GET /v1/catalog/shops/summary</code>. The four questions this design opened are answered, and the answers are on the canvas, bottom right. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Start.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "Welcome, and what we call you" },
+    { "file": "Place.dc.html", "x": 1390, "y": 0, "w": 1330, "h": 1010, "title": "Where you shop" },
+    { "file": "Shops.dc.html", "x": 0, "y": 1160, "w": 900, "h": 1010, "title": "Which supermarkets" },
+    { "file": "Done.dc.html", "x": 960, "y": 1160, "w": 900, "h": 1010, "title": "Done, and afterwards" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -500,
+      "w": 470,
+      "text": "THE BRIEF. A new account is asked three things: what to call them, where they shop, and which supermarkets they want. Nothing else, and nothing that repeats a screen the app already has.\nThe order is not arbitrary. The name is the cheapest question and warms somebody up. The postal code has to come before the supermarkets, because the supermarket list is scoped by it. The tour comes last, after the answers, because it points at an app that can already show prices."
+    },
+    {
+      "id": "o1",
+      "x": 530,
+      "y": -500,
+      "w": 470,
+      "text": "RULE O1: EACH STEP SAVES WHEN IT IS ANSWERED, NOT AT THE END. Continue on step 1 writes the name, Continue on step 2 writes the postal code, Done on step 3 writes the chains. Three writes to three routes that exist today.\nSo there is no review screen, no Cancel that undoes, and closing the app halfway loses nothing. It also means a failed write belongs to its own step and is retried there, rather than failing a submit at the end that the person cannot locate."
+    },
+    {
+      "id": "o2",
+      "x": 1060,
+      "y": -500,
+      "w": 470,
+      "text": "RULE O2: SKIPPING IS AN ANSWER, AND EVERY SKIP IS COMPLETE. Skip on step 1 keeps the generated name. Skip on step 2 leaves the profile with no postal code, which backend 0069 already defines: the catalog reads normally and every price comes back null, never an empty catalog. Skip on step 3 leaves every chain included, which is the default a profile already has.\nSo Skip is a quiet text button on every step, never a dialog, and step 2 is the only one that says out loud what its skip costs."
+    },
+    {
+      "id": "o3",
+      "x": 1590,
+      "y": -500,
+      "w": 470,
+      "text": "RULE O3: THE COOL NAME ALREADY EXISTS, SO THE SCREEN SHOWS IT. Registration generates one from a per locale adjective and noun pool (auth `username/pool.ts`) and `displayName` is never sent, so by the time onboarding opens the account is already Brave Anchor. The field is therefore empty with the name named beside it, and the button says which one it will keep.\nPick another one is in, and it is the one control on these four artboards that needs a route nobody has written: a read that draws from the same pool, in the caller's locale, writes nothing, and is throttled, because it costs a database round trip and a bored thumb can hold it down. The card swaps the name in place and the button follows it."
+    },
+    {
+      "id": "o4",
+      "x": 2120,
+      "y": -500,
+      "w": 470,
+      "text": "RULE O4: THE POSITION IS NEVER STORED, AND THE SCREEN SAYS SO BEFORE THE PRESS. `POST /v1/account/postal-code-lookups` takes the point in a body, answers a postal code and a country, and keeps nothing.\nIt answers a country and a code and nothing else, so the screen cannot name the town. The four states are the ones the account's location sheet already has: resolved, refused, too far from any code we hold, and an ordinary failure. Refused is sticky because a browser will not prompt twice, so that state hands over to typing instead of offering a retry."
+    },
+    {
+      "id": "o5",
+      "x": 1920,
+      "y": 1160,
+      "w": 470,
+      "text": "RULE O5: STEP 3 IS SCOPED BY STEP 2. With a postal code the list is the chains that actually have a shop near it, each with its shop count, from one call to `GET /v1/catalog/shops/summary`. That is a better question than every chain in the country, and it is why the two steps are in this order.\nWith no code the same screen lists every chain from `GET /v1/catalog/supermarkets`, without counts and without the \"Near 14013\" heading. The answer still saves, and it starts applying the day a code arrives."
+    },
+    {
+      "id": "o6",
+      "x": 1920,
+      "y": 2100,
+      "w": 470,
+      "text": "RULE O6: WRITTEN FOR SOMEBODY WHO IS NOT AT HOME WITH APPS. Short sentences, ordinary words, the reason before the request, and never a joke instead of an instruction. Some of the people who will use this are old, and a sentence that is clever costs them the screen.\nTwo things follow, and both are visible on these artboards. The tour offer says what the tour is and why it helps, and names no feature: stops will be added and dropped, and a list of them ages into a lie on a screen nobody thinks to revisit. And nothing warns that a choice cannot be undone when undoing it costs nothing, which is why Not now carries no small print."
+    },
+    {
+      "id": "decided",
+      "x": 1920,
+      "y": 1660,
+      "w": 470,
+      "text": "THE FOUR DECISIONS, TAKEN.\n1. A column in the database, not browser storage, so the setup does not run again on a second device. It has to reach the client on a read the app already makes at startup, or every cold start pays for a second request before it can draw anything. That read is `GET /v1/account/me`, which auth answers, and auth is identity only by rule, so the plan has to say whether the column bends that rule or lives in core and is composed into the same answer at the gateway. The tour's flag will sit beside it, whichever way it goes.\n2. A basket guest never sees any of this. The join page already asks their name, beside the basket they were invited to, which is the only one of the three questions that means anything to somebody shopping from somebody else's list.\n3. Pick another one is in. See rule O3 for what it costs.\n4. Not now is final. It writes the same column the last step writes, and the screen does not say so, for the reason in rule O6."
+    }
+  ]
+}
