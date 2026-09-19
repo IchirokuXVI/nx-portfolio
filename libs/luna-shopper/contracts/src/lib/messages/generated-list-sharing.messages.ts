@@ -954,6 +954,16 @@ export interface GeneratedListReopenResult {
    * every reader, because the fact is the actor's business.
    */
   skippedCount: number;
+  /**
+   * Which origins were missed, and why (plan 0131, section 5). Absent for a
+   * reader who does not pass section 5.2, exactly as on
+   * {@link GeneratedListSettleResult}.
+   *
+   * It is worth naming since that plan, because a skip can now mean the basket's
+   * owner has lost the list as well as the line being gone, and those are two
+   * different things for a shopper to do about.
+   */
+  skipped?: GeneratedListSettleSkip[];
 }
 
 /**
@@ -1431,6 +1441,22 @@ export interface GeneratedListLineOriginDetail {
    * can no longer write is one every subsequent settle skips and reports.
    */
   writable: boolean;
+  /**
+   * Whether this reader, through this basket, can change how many this list asks
+   * for (plan 0131, section 4).
+   *
+   * The owner's standing and the reader's own, by `canChangeDemand`, against the
+   * line as it is approved **now**: an approved quantity is what the group agreed
+   * to, and moving it takes `DECIDE` or `MANAGE` on both surfaces since that
+   * plan. False on a row that is not {@link writable}, because coverage is asked
+   * first and a row nobody can write is a row nobody can move.
+   *
+   * It is a second boolean rather than a widening of `writable` because the two
+   * refusals are different sentences to a person: one says the basket's owner
+   * lost the list, the other says nobody here may move a number the household
+   * agreed.
+   */
+  demandChangeable: boolean;
   /**
    * Whether the run drew from this list (plan 0092, section 3).
    *

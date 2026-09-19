@@ -10,7 +10,9 @@ import {
   RateLimitedException,
   retryAfterSecondsOf,
 } from '@portfolio/luna-shopper/platform';
+import { GeneratedListParticipantController } from './generated-list-sharing.controller';
 import {
+  PARTICIPANT_THROTTLE,
   PARTICIPANT_THROTTLE_LIMITS,
   ParticipantThrottle,
   ParticipantThrottlerGuard,
@@ -207,5 +209,73 @@ describe('ParticipantThrottlerGuard', () => {
     const context = contextFor({});
     await exhaust(guard, context, PARTICIPANT_THROTTLE_LIMITS.write.limit + 5);
     await expect(guard.canActivate(context)).resolves.toBe(true);
+  });
+});
+
+/**
+ * Every write on the participant surface declares a limit (plan 0131, section 6).
+ *
+ * Seven of the eleven had none, the settle among them, whose absence the limit's
+ * own comment already named. The routes are read by reflection rather than
+ * written out here, so a route added by a later plan is covered the day it is
+ * added rather than the day somebody remembers this file.
+ *
+ * Reads are left alone deliberately: what this bounds is how fast one person can
+ * spoil a basket, and reading one spoils nothing.
+ */
+describe('every participant write declares a limit (plan 0131, section 6)', () => {
+  const PROTO = GeneratedListParticipantController.prototype;
+
+  /** Nest stores the verb as a `RequestMethod` ordinal, mapped back to a word. */
+  const VERBS = [
+    'get',
+    'post',
+    'put',
+    'delete',
+    'patch',
+    'all',
+    'options',
+    'head',
+  ];
+  const WRITES = ['post', 'patch', 'put', 'delete'];
+
+  function handlerOf(name: string): object {
+    return PROTO[name as keyof typeof PROTO] as object;
+  }
+
+  /** Every routed handler of the controller, with the verb it answers. */
+  function routes(): { name: string; verb: string }[] {
+    return Object.getOwnPropertyNames(PROTO)
+      .filter((name) => name !== 'constructor')
+      .filter(
+        (name) => Reflect.getMetadata('path', handlerOf(name)) !== undefined
+      )
+      .map((name) => {
+        const ordinal = Reflect.getMetadata('method', handlerOf(name)) as
+          | number
+          | undefined;
+        return { name, verb: ordinal === undefined ? 'none' : VERBS[ordinal] };
+      });
+  }
+
+  it('finds the routes through reflection at all', () => {
+    // The guard of the guard: a spec that enumerated nothing would pass forever.
+    expect(routes().length).toBeGreaterThan(5);
+    expect(
+      routes().filter((route) => WRITES.includes(route.verb)).length
+    ).toBeGreaterThan(5);
+  });
+
+  it('leaves no write without one', () => {
+    const unthrottled = routes()
+      .filter((route) => WRITES.includes(route.verb))
+      .filter(
+        (route) =>
+          Reflect.getMetadata(PARTICIPANT_THROTTLE, handlerOf(route.name)) ===
+          undefined
+      )
+      .map((route) => route.name);
+
+    expect(unthrottled).toEqual([]);
   });
 });

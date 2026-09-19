@@ -226,7 +226,7 @@ export interface LineRowVm {
 export interface ListAbilitiesVm {
   /** Add a line, edit or delete an unapproved one, reorder. `WRITE`. */
   readonly canWrite: boolean;
-  /** Tick off, mark unavailable, approve, reject, change an approved quantity. `DECIDE`. */
+  /** Approve, reject, change an approved quantity. `DECIDE`. */
   readonly canDecide: boolean;
   /** Comment. `WRITE` or `DECIDE`; a read-only caller may not. */
   readonly canComment: boolean;

@@ -1,3 +1,5 @@
+> **PR:** [#420](https://github.com/IchirokuXVI/nx-portfolio/pull/420)
+
 # 0131: one rule for who settles and who changes what a list asks for
 
 > First build plan of the series recorded in `0130`, and it needs no other plan. It is

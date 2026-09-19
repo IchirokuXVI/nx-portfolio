@@ -74,6 +74,7 @@ import {
   mergedItemIds,
 } from './line-merge.service';
 import { ListAccessService } from './list-access.service';
+import { canChangeDemand } from './list-acts';
 import { toLineView } from './list.mappers';
 import { readLineSettlementSummaries } from './settlement.sql';
 
@@ -2241,7 +2242,15 @@ export class LineService {
     if (!permissions.has(ListPermission.WRITE)) {
       throw new ForbiddenException('You need write access to this list');
     }
-    if (approved && req.quantity !== undefined && !decides) {
+    // Asked through the rule rather than restated here (plan 0131): the basket
+    // asks the same question of the same person, and two copies of it are two
+    // things to keep in step. The answer is identical to the test this replaced,
+    // `approved && !decides`, because `MANAGE` returned above and the `WRITE`
+    // an unapproved line needs was checked immediately above it.
+    if (
+      req.quantity !== undefined &&
+      !canChangeDemand(permissions, line.approvalStatus)
+    ) {
       throw new ForbiddenException(
         'Only somebody who can approve lines can change the quantity of an approved line. Change something else on it first, which puts it back to pending'
       );

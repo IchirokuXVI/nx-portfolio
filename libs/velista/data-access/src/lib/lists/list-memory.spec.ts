@@ -304,13 +304,24 @@ describe('LineMemory refuses what the server would refuse', () => {
       expect(line.content).toBe('Chorizo');
     });
 
-    it('may not move a quantity, which is what DECIDE is for now', async () => {
+    it('may not move a quantity, which is what DECIDE is for', async () => {
       const { lines } = await build();
 
-      // The reel's write and the settle, which are the two things that say what the
-      // household now has. Adding a line is `WRITE`; saying it was bought is not.
+      // The reel's write, which is a change of demand: what the household asks
+      // for is what it agreed to, and moving it needs the permission that
+      // agreed (backend plan 0076, section 4.1).
       expect(await codeOf(lines.addQuantity('ln-p-01', 1))).toBe('forbidden');
-      expect(await codeOf(lines.settle('ln-p-01', 'BOUGHT'))).toBe('forbidden');
+    });
+
+    it('may say a line was bought, which is a write since plan 0131', async () => {
+      // Backend plan 0131. It was `DECIDE` here until then, and the same caller
+      // already settled the same line from the basket screen, so the refusal
+      // held on one surface and not the other.
+      const { lines } = await build();
+
+      const { settlement } = await lines.settle('ln-p-01', 'BOUGHT');
+
+      expect(settlement.outcome).toBe('BOUGHT');
     });
 
     it('may not approve anything', async () => {
@@ -368,19 +379,25 @@ describe('LineMemory refuses what the server would refuse', () => {
       );
     });
 
-    it('may move a quantity, settle a line, approve, and turn one down', async () => {
+    it('may move a quantity, approve, and turn one down', async () => {
       const { lines } = await build();
 
       expect((await lines.addQuantity('ln-m-01', 2)).quantity).toBe(5);
-      expect(
-        (await lines.settle('ln-m-01', 'BOUGHT', { quantity: 5 })).line.quantity
-      ).toBe(0);
       expect(
         (await lines.setApproval('ln-m-03', 'APPROVED')).approvalStatus
       ).toBe('APPROVED');
       expect(
         (await lines.setApproval('ln-m-03', 'REJECTED')).approvalStatus
       ).toBe('REJECTED');
+    });
+
+    it('may not say a line was bought, because that is a write', async () => {
+      // The other half of the reversal in backend plan 0131. Deciding what the
+      // household asks for is not the same as writing down what happened in a
+      // shop, and this caller does the first and not the second.
+      const { lines } = await build();
+
+      expect(await codeOf(lines.settle('ln-m-01', 'BOUGHT'))).toBe('forbidden');
     });
 
     it('may change an approved line’s quantity and nothing else about it', async () => {

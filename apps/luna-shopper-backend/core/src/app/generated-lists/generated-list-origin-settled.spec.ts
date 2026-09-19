@@ -1,5 +1,6 @@
 import {
   GeneratedListStatus,
+  ListPermission,
   ParticipantKind,
   RealtimeEvent,
   SettlementOutcome,
@@ -18,6 +19,7 @@ import {
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineSettlements } from '../lists/line-settlements.fake';
+import type { ListAccessService } from '../lists/list-access.service';
 import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import { GeneratedListReopenService } from './generated-list-reopen.service';
@@ -49,6 +51,8 @@ const BASKET = 'gl-1';
 const BASKET_LINE = 'gll-1';
 const LIST_A = 'l-flat';
 const LIST_B = 'l-parents';
+/** The zone caption a skip carries back, kept in one place. */
+const PARENTS_ZONE = 'Parents’ house';
 const ZONE_A = 'z-flat';
 const ZONE_B = 'z-parents';
 const LINE_A = 'zl-1';
@@ -217,6 +221,8 @@ function build(
   const dataSource = {
     transaction: async (fn: (m: typeof manager) => Promise<unknown>) =>
       fn(manager),
+    // The revert's own read outside its transaction (plan 0131, section 5).
+    getRepository: (entity: unknown) => manager.getRepository(entity),
   } as unknown as DataSource;
 
   const seesZoneData = options.actorSeesZoneData ?? true;
@@ -237,6 +243,26 @@ function build(
     writableAmong: async (_userId: string, listIds: readonly string[]) =>
       new Set(listIds.filter((listId) => ownerWritable.has(listId))),
   } as unknown as GeneratedListSharingService;
+
+  // The four permissions the origin row's `demandChangeable` is read from
+  // (plan 0131). Derived from the same writable set the sharing fake answers,
+  // and `DECIDE` throughout, because the lines here are approved and this file
+  // is about what one list got rather than about who may move a number.
+  const listAccess = {
+    permissionsAmong: async (_userId: string, listIds: readonly string[]) =>
+      new Map(
+        listIds
+          .filter((listId) => ownerWritable.has(listId))
+          .map((listId) => [
+            listId,
+            new Set([
+              ListPermission.READ,
+              ListPermission.WRITE,
+              ListPermission.DECIDE,
+            ]),
+          ])
+      ),
+  } as unknown as ListAccessService;
 
   const shoppingLists = {
     find: async ({ where }: { where: { id: { _value: string[] } } }) =>
@@ -337,7 +363,8 @@ function build(
     {} as never,
     claims.service,
     {} as never,
-    publisher
+    publisher,
+    listAccess
   );
 
   const service = new GeneratedListOriginSettledService(
@@ -460,6 +487,39 @@ describe('an origin the write cannot reach is reported (section 4)', () => {
     // Nothing was bought, because there was nowhere to buy it for.
     expect(harness.settlements).toHaveLength(0);
     expect(harness.basketLine.settledQuantity).toBe(0);
+  });
+});
+
+describe('lowering on a list the owner has lost (plan 0131, section 5)', () => {
+  it('answers the named skip and takes nothing back', async () => {
+    // Both directions of one control on one row now refuse the same thing.
+    // Raising has asked since plan 0053; lowering asked nothing at all, so a
+    // guest could raise a household line through an access that was gone.
+    const harness = build({
+      quantity: 5,
+      settledQuantity: 2,
+      zoneQuantity: 0,
+      settlements: [
+        { id: 's-1', lineId: LINE_B, listId: LIST_B, quantity: 2, order: 1 },
+      ],
+      ownerWritable: [LIST_A],
+    });
+
+    const result = await set(harness, LINE_B, 0, 2);
+
+    expect(result.skipped).toEqual([
+      {
+        lineId: LINE_B,
+        listId: LIST_B,
+        reason: 'ACCESS_GONE',
+        listName: 'Parents',
+        zoneName: PARENTS_ZONE,
+      },
+    ]);
+    expect(result.skippedCount).toBe(1);
+    // The purchase stands and the household line did not move.
+    expect(harness.settlements[0].revertedAt).toBeNull();
+    expect(harness.basketLine.settledQuantity).toBe(2);
   });
 });
 
