@@ -7,6 +7,7 @@ import {
   SettlementOutcome,
   type GeneratedListLineMovedEvent,
   type GeneratedListReopenResult,
+  type GeneratedListSettleSkip,
   type LineClaim,
   type LineSettlementSummary,
   type ReopenGeneratedListLineRequest,
@@ -39,6 +40,7 @@ import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
 import { LineClaimService } from './line-claim.service';
+import { namesOfLists } from './list-names';
 
 /**
  * Taking a purchase back, whether it is one unit or the whole line (plan 0054
@@ -158,7 +160,44 @@ export class GeneratedListReopenService {
     const seesZoneData = await this.seesZoneData(req.participantId, list.id);
     const view = await this.generated.basketLineViewFor(line, seesZoneData);
 
-    return { line: view, skippedCount: reverted.skippedCount };
+    // The count survives the redaction and the names do not, exactly as the
+    // settle composes them (plan 0051, section 6.4): a shopper who reached two
+    // households out of three has to be told, and only whose the third was is
+    // gated. A skip is worth naming since plan 0131, because it can now mean the
+    // owner lost the list rather than the line being gone.
+    if (!seesZoneData || reverted.skipped.length === 0) {
+      return { line: view, skippedCount: reverted.skippedCount };
+    }
+    return {
+      line: view,
+      skippedCount: reverted.skippedCount,
+      skipped: await this.nameSkips(reverted.skipped),
+    };
+  }
+
+  /**
+   * A skipped origin, named for a reader entitled to names.
+   *
+   * One query for every skip rather than one each, and none at all in the
+   * ordinary case, which is the one where nothing was skipped. Null where the
+   * list itself could not be read back, which is ordinary for `ORIGIN_DELETED`:
+   * a name nobody can supply is better absent than invented.
+   */
+  private async nameSkips(
+    skipped: readonly RevertSkip[]
+  ): Promise<GeneratedListSettleSkip[]> {
+    const names = await namesOfLists(
+      this.dataSource.getRepository(ShoppingList),
+      skipped.map((entry) => entry.listId)
+    );
+    return skipped.map((entry) => {
+      const named = names.get(entry.listId);
+      return {
+        ...entry,
+        listName: named?.name ?? null,
+        zoneName: named?.zoneName ?? null,
+      };
+    });
   }
 
   /**
@@ -198,6 +237,22 @@ export class GeneratedListReopenService {
     // back is a client showing something that never happened.
     const announcements: ZoneAnnouncement[] = [];
     const skipped: RevertSkip[] = [];
+    /** One skip per zone line, however many of its purchases were reached. */
+    const skippedLines = new Set<string>();
+    const skip = (row: LineSettlement, reason: RevertSkip['reason']): void => {
+      const lineId = row.lineId as string;
+      if (skippedLines.has(lineId)) {
+        return;
+      }
+      skippedLines.add(lineId);
+      skipped.push({ lineId, listId: row.listId as string, reason });
+    };
+
+    // **Before the transaction opens**, because every repository the access
+    // service holds draws its own connection from the pool and asking it a
+    // question from inside a transaction means one request holding two (plan
+    // 0130, section 13). One query for every list this walk could touch.
+    const reachable = await this.writableOrigins(list, line, req);
     let taken = 0;
     // Whether the line was finished before this call, which is what decides
     // whether the claim it released comes back (plan 0052, section 3.3).
@@ -308,6 +363,20 @@ export class GeneratedListReopenService {
         }
 
         if (entry.close) {
+          // **Whole or not at all**, and that now includes access (plan 0131,
+          // section 5): half a close taken back is a state no settle can
+          // produce, so an act touching one list the owner has lost is skipped
+          // entirely rather than partly undone.
+          const lost = entry.rows.filter(
+            (row) => row.lineId !== null && !reachable.has(row.listId as string)
+          );
+          if (lost.length > 0) {
+            for (const row of lost) {
+              skip(row, 'ACCESS_GONE');
+            }
+            consumedEverything = false;
+            continue;
+          }
           // Whole, always (section 3.3), and charged once for the act rather
           // than once per origin it was written against.
           for (const row of entry.rows) {
@@ -324,6 +393,18 @@ export class GeneratedListReopenService {
         }
 
         const [row] = entry.rows;
+        if (row.lineId !== null && !reachable.has(row.listId as string)) {
+          // The hole plan 0131 section 5 closes. The units of this purchase
+          // would land on a list the basket's owner can no longer write, which
+          // is the one thing plan 0051 section 6.4 says cannot happen: a guest
+          // shopping through this basket would be writing a household's list
+          // through an access that is gone. The row is **not** marked reverted,
+          // so the purchase still stands and can go back the day the access
+          // does.
+          skip(row, 'ACCESS_GONE');
+          consumedEverything = false;
+          continue;
+        }
         const take = Math.min(need, row.quantity);
         await mark(row);
         if (take < row.quantity) {
@@ -380,10 +461,7 @@ export class GeneratedListReopenService {
           // settlements are still marked reverted, and the caller is told
           // something did not land, the way plan 0051 section 6.4 reports a skip
           // and for the same reason.
-          skipped.push({
-            lineId: originLineId,
-            listId: held.rows[0].listId as string,
-          });
+          skip(held.rows[0], 'ORIGIN_DELETED');
           continue;
         }
 
@@ -430,6 +508,10 @@ export class GeneratedListReopenService {
       // `settledQuantity - taken`. The two agree in every state the settle can
       // produce; they differ only if the column ever drifts above the rows it is
       // a sum of, and a whole line reopen has to reach zero either way.
+      // A walk that skipped something took less than everything by definition,
+      // so `consumedEverything` is already false and the shortcut does not fire
+      // (plan 0131, section 5): the line falls by what was taken and no more,
+      // leaving the skipped purchases counted where they stand.
       locked.settledQuantity =
         consumedEverything && req.originLineId === undefined
           ? 0
@@ -511,6 +593,49 @@ export class GeneratedListReopenService {
     }
 
     return { skippedCount: skipped.length, skipped, taken };
+  }
+
+  /**
+   * The lists this walk may put units back on (plan 0131, section 5).
+   *
+   * **The basket's owner's standing, read before the transaction opens.** Taking
+   * a purchase back writes a household's zone line, and plan 0051 section 6.4
+   * makes the owner's access what authorizes every write this surface makes on
+   * one. Without this, a guest holding a link could raise a list the owner lost
+   * last week, which is the one thing that section says cannot happen, and the
+   * settle already asks the same question in the other direction.
+   *
+   * The same rows the walk itself reads, read once without a lock: what is
+   * wanted is the set of lists, and the lists a purchase names do not change
+   * between the two reads. A row whose list is absent from the answer is skipped
+   * whole rather than refused, because a walk reaching two households out of
+   * three did reach two (section 6.4 again).
+   */
+  private async writableOrigins(
+    list: GeneratedList,
+    line: GeneratedListLine,
+    req: RevertUnitsRequest
+  ): Promise<ReadonlySet<string>> {
+    const standing = await this.dataSource.getRepository(LineSettlement).find({
+      where: {
+        generatedListLineId: line.id,
+        revertedAt: IsNull(),
+        ...(req.originLineId === undefined
+          ? {}
+          : {
+              lineId: req.originLineId,
+              outcome: SettlementOutcome.BOUGHT,
+            }),
+      },
+    });
+    const listIds = [
+      ...new Set(
+        standing
+          .map((row) => row.listId)
+          .filter((listId): listId is string => listId !== null)
+      ),
+    ];
+    return this.sharing.writableAmong(list.ownerUserId, listIds);
   }
 
   /**
@@ -633,6 +758,16 @@ export interface RevertUnitsRequest {
 export interface RevertSkip {
   lineId: string;
   listId: string;
+  /**
+   * Why (plan 0131, section 5).
+   *
+   * `ACCESS_GONE` when the basket's **owner** may no longer write that list, and
+   * `ORIGIN_DELETED` when the zone line is not there any more. It carried no
+   * reason until this plan, so `GeneratedListOriginSettledService` named every
+   * skip `ORIGIN_DELETED` and a shopper was told the household's line had been
+   * deleted when in fact the owner had lost the list.
+   */
+  reason: GeneratedListSettleSkip['reason'];
 }
 
 export interface RevertUnitsResult {

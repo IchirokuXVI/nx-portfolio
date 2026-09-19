@@ -9,8 +9,14 @@ import {
 /** The bucket these limits are counted under, kept apart from `default`. */
 const PARTICIPANT_BUCKET = 'participant';
 
-/** The metadata key {@link ParticipantThrottle} writes and the guard reads. */
-const PARTICIPANT_THROTTLE = 'luna:participantThrottle';
+/**
+ * The metadata key {@link ParticipantThrottle} writes and the guard reads.
+ *
+ * Exported since plan 0131 for the spec that walks the participant controller's
+ * writes and fails when one of them declares nothing, so a route added later
+ * cannot quietly arrive unthrottled.
+ */
+export const PARTICIPANT_THROTTLE = 'luna:participantThrottle';
 
 /** One per route limit: a window and how many requests fit in it. */
 export interface ParticipantThrottleLimit {
@@ -35,10 +41,15 @@ export const PARTICIPANT_THROTTLE_LIMITS = {
    * Every write on the participant surface: adding a line, settling one,
    * swapping a pick.
    *
-   * The settle route needs it for the same reason the new add does and did not
-   * have it. Sixty a minute is one a second, which no shopper reaches and which
-   * makes filling somebody's basket with rubbish slow enough to be noticed and
+   * Sixty a minute is one a second, which no shopper reaches and which makes
+   * filling somebody's basket with rubbish slow enough to be noticed and
    * revoked. `checkRoom` is what bounds the total.
+   *
+   * **One bucket for every write on the surface** since plan 0131 section 6,
+   * which gave it the seven routes that had none: the settle, the outstanding
+   * reel, the reopen, the pick, both origin writes and the participant token.
+   * The comment here already said the settle needed it. The reads stay
+   * unthrottled, and the search has its own tighter limit below.
    */
   write: { ttl: minutes(1), limit: scaleThrottleLimit(60) },
   /**

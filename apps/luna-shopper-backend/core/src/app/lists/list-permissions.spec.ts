@@ -453,11 +453,13 @@ describe('a member holding {READ, WRITE} (acceptance 3)', () => {
     ).rejects.toThrow();
   });
 
-  it('is refused when it says it bought something', async () => {
-    // The stated cost of the migration (plan 0036, section 3.1), inherited by
-    // the settle that replaced ticking off (plan 0047, section 4): saying what
-    // happened in the shop is DECIDE, so yesterday's WRITER needs it granting
-    // once.
+  it('says it bought something', async () => {
+    // Plan 0131 reverses plan 0036 section 1.2 here and nowhere else. This case
+    // asserted the refusal, as the stated cost of the migration: saying what
+    // happened in the shop was DECIDE, so yesterday's WRITER needed it granting
+    // once. Plan 0051 section 2 then let the same WRITER settle the same line
+    // from a basket, so the refusal held on one screen and not the other.
+    // Approving is still refused, which is the case above.
     const w = world({ permissions: WRITER });
     await expect(
       w.settlements.settle({
@@ -465,7 +467,21 @@ describe('a member holding {READ, WRITE} (acceptance 3)', () => {
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
       })
-    ).rejects.toThrow();
+    ).resolves.toBeDefined();
+  });
+
+  it('records that the shop did not have it, and moves nothing', async () => {
+    const w = world({ permissions: WRITER });
+    const { line, settlement } = await w.settlements.settle({
+      userId: USER_ID,
+      lineId: 'li1',
+      outcome: SettlementOutcome.NOT_AVAILABLE,
+    });
+    expect(settlement.outcome).toBe(SettlementOutcome.NOT_AVAILABLE);
+    // Nothing was bought, so nothing came off what the household still wants
+    // (plan 0047, section 4).
+    expect(settlement.quantity).toBe(0);
+    expect(line.quantity).toBe(3);
   });
 
   it('fixes an approved line, and the fix puts it back to PENDING', async () => {
@@ -577,18 +593,18 @@ describe('a member holding {READ, DECIDE} (acceptance 4)', () => {
     expect(view.approvalStatus).toBe(LineApprovalStatus.REJECTED);
   });
 
-  it('records that the shop did not have it, and moves nothing', async () => {
+  it('is refused when it says the shop did not have it', async () => {
+    // Plan 0131. Reporting a shop that had none is a settle, and a settle is a
+    // write since that plan: this holder decides what the list asks for and does
+    // not write the list. The case itself moved to the WRITER block above.
     const w = world({ permissions: DECIDER });
-    const { line, settlement } = await w.settlements.settle({
-      userId: USER_ID,
-      lineId: 'li1',
-      outcome: SettlementOutcome.NOT_AVAILABLE,
-    });
-    expect(settlement.outcome).toBe(SettlementOutcome.NOT_AVAILABLE);
-    // Nothing was bought, so nothing came off what the household still wants
-    // (plan 0047, section 4).
-    expect(settlement.quantity).toBe(0);
-    expect(line.quantity).toBe(3);
+    await expect(
+      w.settlements.settle({
+        userId: USER_ID,
+        lineId: 'li1',
+        outcome: SettlementOutcome.NOT_AVAILABLE,
+      })
+    ).rejects.toThrow(/write access to this list/);
   });
 
   it('comments', async () => {
@@ -821,8 +837,10 @@ describe('the whole call site table (plan 0036, section 4)', () => {
         }),
     },
     {
+      // `WRITE` since plan 0131: one rule now answers for the list page and the
+      // basket, which settled the same line behind the owner's `WRITE` already.
       operation: 'line.settle',
-      needs: ListPermission.DECIDE,
+      needs: ListPermission.WRITE,
       run: (w) =>
         w.settlements.settle({
           userId: USER_ID,

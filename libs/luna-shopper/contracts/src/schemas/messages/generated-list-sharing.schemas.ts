@@ -581,6 +581,10 @@ const lineOriginDetail = object(
     listQuantity: integer({ minimum: 0 }),
     settledHere: integer({ minimum: 0 }),
     writable: boolean(),
+    // Coverage and the demand rule are two answers (plan 0131, section 4), so
+    // they are two booleans: a row can be writable and still refuse the number,
+    // and the two refusals are different sentences to a person.
+    demandChangeable: boolean(),
     // The same fact on every row of all three collections (plan 0092, section
     // 3): the client draws the run's own lists first and the server sorts
     // nothing.
@@ -600,6 +604,7 @@ const lineOriginDetail = object(
     'listQuantity',
     'settledHere',
     'writable',
+    'demandChangeable',
     'fromRun',
     'approvalStatus',
   ]
@@ -1034,6 +1039,10 @@ const reopenResult = object(
   {
     line: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.basketLineView),
     skippedCount: integer({ minimum: 0 }),
+    // Optional under the same redaction the settle's is (plan 0131, section 5):
+    // the count reaches everybody and the names reach a reader who passes
+    // section 5.2.
+    skipped: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.settleSkip)),
   },
   ['line', 'skippedCount']
 );

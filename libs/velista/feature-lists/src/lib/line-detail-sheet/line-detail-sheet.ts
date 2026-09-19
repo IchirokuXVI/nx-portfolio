@@ -271,8 +271,15 @@ export class LineDetailSheet {
     selectAbilities(this._list()?.myPermissions ?? [])
   );
 
-  /** `DECIDE`, the same permission the reel follows: both say what the household has. */
-  private readonly _canSettle = computed(() => this._abilities().canDecide);
+  /**
+   * `WRITE`, since backend plan 0131: the list page and the basket now ask one
+   * rule who may record a purchase, and a `WRITE` holder already settled the same
+   * line from the basket. Approving, and moving an approved quantity, keep
+   * `DECIDE`, which is why the reel does not follow this.
+   */
+  private readonly _canSettle = computed(
+    () => this._abilities().canWrite || this._abilities().canManage
+  );
 
   /**
    * Which fields this reader may change on this line, or null for none.

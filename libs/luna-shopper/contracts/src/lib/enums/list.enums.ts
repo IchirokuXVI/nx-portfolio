@@ -23,9 +23,12 @@
 export enum ListPermission {
   /** See the list and everything on it. Write nothing, comments included. */
   READ = 'READ',
-  /** Add lines, edit and delete unapproved ones, reorder, comment. */
+  /**
+   * Add lines, edit and delete unapproved ones, reorder, comment, and settle a
+   * line: record what was bought or that the shop had none (plan 0131).
+   */
   WRITE = 'WRITE',
-  /** Approve, reject, settle a line, change an approved quantity, comment. */
+  /** Approve, reject, change an approved quantity, comment. */
   DECIDE = 'DECIDE',
   /** All of the above, plus any line whatever its approval, and governing the list. */
   MANAGE = 'MANAGE',

@@ -55,6 +55,13 @@ interface SettlementSeed {
   listId: string | null;
   quantity: number;
   outcome?: SettlementOutcome;
+  /**
+   * When it was settled, where the default is a distinct minute per row.
+   *
+   * Two rows sharing one is what makes them a single `NOT_AVAILABLE` close:
+   * the act wrote a row per origin at one moment (plan 0104, section 3.3).
+   */
+  settledAt?: Date;
   /** Already taken back before this call, so this call must leave it alone. */
   revertedAt?: Date;
   /** A settlement of somebody else's, which this basket line must not touch. */
@@ -84,6 +91,13 @@ function build(options: {
   missingZoneLines?: string[];
   /** Lists that have been deleted, so their room cannot be addressed. */
   missingLists?: string[];
+  /**
+   * The lists the basket's **owner** may still write (plan 0131, section 5).
+   *
+   * Every list by default. A list left out of this is one the owner has lost,
+   * and the walk puts no units back on it.
+   */
+  ownerWritable?: string[];
   actorSeesZoneData?: boolean;
 }): Harness {
   const seeds = options.settlements ?? [
@@ -91,6 +105,7 @@ function build(options: {
   ];
   const missing = new Set(options.missingZoneLines ?? []);
   const missingLists = new Set(options.missingLists ?? []);
+  const ownerWritable = new Set(options.ownerWritable ?? [LIST_A, LIST_B]);
 
   const basketLine: Partial<GeneratedListLine> = {
     id: BASKET_LINE,
@@ -134,7 +149,7 @@ function build(options: {
       quantity: seed.quantity,
       settledByUserId: null,
       settledByParticipantId: ACTOR,
-      settledAt: new Date(2026, 0, 1, 0, index),
+      settledAt: seed.settledAt ?? new Date(2026, 0, 1, 0, index),
       revertedAt: seed.revertedAt ?? null,
       revertedByParticipantId: seed.revertedAt ? ACTOR : null,
       generatedListLineId:
@@ -174,8 +189,18 @@ function build(options: {
         return {
           find: async () =>
             [
-              { id: LIST_A, zoneId: ZONE_A },
-              { id: LIST_B, zoneId: ZONE_B },
+              {
+                id: LIST_A,
+                zoneId: ZONE_A,
+                name: 'Weekly shop',
+                zone: { name: 'Flat 3B' },
+              },
+              {
+                id: LIST_B,
+                zoneId: ZONE_B,
+                name: 'Parents',
+                zone: { name: 'Parents’ house' },
+              },
             ].filter((row) => !missingLists.has(row.id)),
         };
       }
@@ -199,6 +224,11 @@ function build(options: {
   const dataSource = {
     transaction: async (fn: (m: typeof manager) => Promise<unknown>) =>
       fn(manager),
+    // The reads the revert makes **outside** its transaction: the owner's
+    // standing on the lists a purchase names, and the names of the origins it
+    // skipped. The same fakes the transaction uses, because they are the same
+    // rows read through a pooled connection rather than a held one.
+    getRepository: (entity: unknown) => manager.getRepository(entity),
   } as unknown as DataSource;
 
   const seesZoneData = options.actorSeesZoneData ?? true;
@@ -213,6 +243,8 @@ function build(options: {
     }),
     liveParticipantById: async () => ({ id: ACTOR }),
     seesZoneData: async () => seesZoneData,
+    writableAmong: async (_userId: string, listIds: readonly string[]) =>
+      new Set(listIds.filter((listId) => ownerWritable.has(listId))),
   } as unknown as GeneratedListSharingService;
 
   const generated = {
@@ -711,5 +743,137 @@ describe('a purchase with no list is taken back too (plan 0093, section 4)', () 
     // Three, the seeded quantity, plus the two this basket had taken off it.
     expect(harness.zoneLines.get('zl-1')?.quantity).toBe(5);
     expect(harness.basketLine.settledQuantity).toBe(0);
+  });
+});
+
+/**
+ * A purchase is never taken back onto a list the owner cannot write (plan 0131,
+ * section 5).
+ *
+ * The hole this closes had no second opinion about it in the audit: the revert
+ * wrote units onto a zone line and never asked whether the basket's owner could
+ * still write that list, so a guest holding a link could raise a household's
+ * line through an access that was gone. Plan 0051 section 6.4 says that is the
+ * one thing that cannot happen, and the settle already asked the same question
+ * in the other direction.
+ */
+describe('an origin the owner has lost is skipped (plan 0131, section 5)', () => {
+  /** Two purchases, on two households, one of which the owner no longer writes. */
+  const across = {
+    quantity: 3,
+    settledQuantity: 3,
+    settlements: [
+      { id: 's-1', lineId: 'zl-1', listId: LIST_A, quantity: 2 },
+      { id: 's-2', lineId: 'zl-2', listId: LIST_B, quantity: 1 },
+    ],
+    ownerWritable: [LIST_B],
+  };
+
+  it('leaves the purchase standing, moves no zone line, and says so', async () => {
+    const harness = build(across);
+
+    const result = await reopen(harness);
+
+    const lost = harness.settlements.find((row) => row.id === 's-1');
+    // Not marked reverted: the purchase really happened, and it can go back the
+    // day the access does.
+    expect(lost?.revertedAt).toBeNull();
+    expect(harness.zoneLines.get('zl-1')?.quantity).toBe(3);
+    expect(result.skippedCount).toBe(1);
+    expect(result.skipped).toEqual([
+      expect.objectContaining({ listId: LIST_A, reason: 'ACCESS_GONE' }),
+    ]);
+  });
+
+  it('gives back what it can, and lowers the line by that alone', async () => {
+    const harness = build(across);
+
+    await reopen(harness);
+
+    // The reachable household got its unit back.
+    expect(
+      harness.settlements.find((row) => row.id === 's-2')?.revertedAt
+    ).not.toBeNull();
+    expect(harness.zoneLines.get('zl-2')?.quantity).toBe(4);
+    // Three settled, one taken back, so two stand. The "consumed everything
+    // lands on zero" shortcut must not fire on a walk that skipped something.
+    expect(harness.basketLine.settledQuantity).toBe(2);
+  });
+
+  it('is the regression for a guest reopening after the owner lost the list', async () => {
+    // The whole hole in one case: nothing is written anywhere.
+    const harness = build({
+      quantity: 2,
+      settledQuantity: 2,
+      settlements: [{ id: 's-1', lineId: 'zl-1', listId: LIST_A, quantity: 2 }],
+      ownerWritable: [],
+      actorSeesZoneData: false,
+    });
+
+    const result = await reopen(harness);
+
+    expect(harness.settlements.every((row) => row.revertedAt === null)).toBe(
+      true
+    );
+    expect(harness.zoneLines.get('zl-1')?.quantity).toBe(3);
+    expect(harness.basketLine.settledQuantity).toBe(2);
+    expect(result.skippedCount).toBe(1);
+    // A guest is told how many and never whose (plan 0051, section 5.2).
+    expect(result.skipped).toBeUndefined();
+  });
+
+  it('skips a close whole when one of its origins is unreachable', async () => {
+    // Half a close taken back is a state no settle can produce, so the act goes
+    // back together or not at all.
+    const closedAt = new Date(2026, 0, 1, 0, 9);
+    const harness = build({
+      quantity: 3,
+      settledQuantity: 3,
+      settlements: [
+        {
+          id: 's-1',
+          lineId: 'zl-1',
+          listId: LIST_A,
+          quantity: 0,
+          outcome: SettlementOutcome.NOT_AVAILABLE,
+          settledAt: closedAt,
+        },
+        {
+          id: 's-2',
+          lineId: 'zl-2',
+          listId: LIST_B,
+          quantity: 0,
+          outcome: SettlementOutcome.NOT_AVAILABLE,
+          settledAt: closedAt,
+        },
+      ],
+      ownerWritable: [LIST_B],
+    });
+
+    const result = await reopen(harness);
+
+    expect(harness.settlements.every((row) => row.revertedAt === null)).toBe(
+      true
+    );
+    expect(harness.basketLine.settledQuantity).toBe(3);
+    expect(result.skippedCount).toBe(1);
+    expect(result.skipped).toEqual([
+      expect.objectContaining({ listId: LIST_A, reason: 'ACCESS_GONE' }),
+    ]);
+  });
+
+  it('names a deleted origin with its own reason, not the access one', async () => {
+    const harness = build({
+      quantity: 2,
+      settledQuantity: 2,
+      settlements: [{ id: 's-1', lineId: 'zl-1', listId: LIST_A, quantity: 2 }],
+      missingZoneLines: ['zl-1'],
+    });
+
+    const result = await reopen(harness);
+
+    expect(result.skipped).toEqual([
+      expect.objectContaining({ listId: LIST_A, reason: 'ORIGIN_DELETED' }),
+    ]);
   });
 });

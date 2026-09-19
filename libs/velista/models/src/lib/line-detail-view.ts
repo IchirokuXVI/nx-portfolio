@@ -277,9 +277,13 @@ export interface LineDetailVm {
   /**
    * Whether this caller may record a purchase or a missing product at all.
    *
-   * `DECIDE`, the same permission the reel follows, because both say what the
-   * household now has. A reader gets the sheet with its history and neither
-   * button, which is the honest shape: knowing is not deciding.
+   * `WRITE` since backend plan 0131, which gave the list page and the basket one
+   * rule for who settles: a `WRITE` holder already recorded purchases on this
+   * line from the basket screen. A reader gets the sheet with its history and
+   * neither button, which is the honest shape: knowing is not writing.
+   *
+   * It is **not** the permission the reel follows any more. Moving what the
+   * household asks for is a change of demand and stays behind `DECIDE`.
    */
   readonly canSettle: boolean;
   /**

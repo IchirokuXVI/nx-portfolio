@@ -30771,6 +30771,9 @@
           "writable": {
             "type": "boolean"
           },
+          "demandChangeable": {
+            "type": "boolean"
+          },
           "fromRun": {
             "type": "boolean"
           },
@@ -30789,6 +30792,7 @@
           "listQuantity",
           "settledHere",
           "writable",
+          "demandChangeable",
           "fromRun",
           "approvalStatus"
         ],
@@ -31021,6 +31025,12 @@
           "skippedCount": {
             "type": "integer",
             "minimum": 0
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list-sharing.SettleSkip"
+            }
           }
         },
         "required": [

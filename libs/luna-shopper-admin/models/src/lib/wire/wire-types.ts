@@ -2684,6 +2684,7 @@ export type GeneratedListSharingLineOriginDetail = {
   listQuantity: number;
   settledHere: number;
   writable: boolean;
+  demandChangeable: boolean;
   fromRun: boolean;
   approvalStatus: EnumsLineApprovalStatus;
 };
@@ -2762,6 +2763,7 @@ export type GeneratedListSharingParticipantView = {
 export type GeneratedListSharingReopenResult = {
   line: GeneratedListSharingBasketLineView;
   skippedCount: number;
+  skipped?: GeneratedListSharingSettleSkip[];
 };
 
 /**

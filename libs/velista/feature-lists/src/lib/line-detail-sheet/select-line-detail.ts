@@ -65,7 +65,7 @@ export interface LineDetailInput {
   readonly nameOf: (userId: string) => string | null;
   readonly callerUserId: string | null;
   readonly locale: string;
-  /** Whether this caller may record a purchase at all. `DECIDE`. */
+  /** Whether this caller may record a purchase at all. `WRITE` (backend plan 0131). */
   readonly canSettle: boolean;
   readonly indicators: readonly LineIndicator[];
   readonly busy: boolean;

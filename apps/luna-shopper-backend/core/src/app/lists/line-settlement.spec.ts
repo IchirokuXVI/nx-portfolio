@@ -121,9 +121,10 @@ function build(options: {
         id: 'a1',
         listId: LIST_ID,
         membershipId: 'm1',
+        // `WRITE` since plan 0131, which is what a settle now asks for.
         permissions: options.permissions ?? [
           ListPermission.READ,
-          ListPermission.DECIDE,
+          ListPermission.WRITE,
         ],
       }) as ListAccess,
   };
@@ -516,5 +517,44 @@ describe('line.settle (plan 0047, section 4)', () => {
     ).rejects.toThrow();
     expect(w.written).toHaveLength(0);
     expect(w.events).toHaveLength(0);
+  });
+
+  // Plan 0131, section 3. The two surfaces that record a purchase asked two
+  // different people for it until this; these are the pair that pins which one
+  // won.
+  describe('who may settle (plan 0131)', () => {
+    it('admits a WRITE holder on an approved line, and leaves it approved', async () => {
+      const w = build({
+        quantity: 2,
+        permissions: [ListPermission.READ, ListPermission.WRITE],
+      });
+
+      const result = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 1,
+      });
+
+      expect(w.written).toHaveLength(1);
+      expect(result.line.quantity).toBe(1);
+      expect(result.line.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    });
+
+    it('refuses a DECIDE holder who cannot write, with the write sentence', async () => {
+      const w = build({
+        permissions: [ListPermission.READ, ListPermission.DECIDE],
+      });
+
+      await expect(
+        w.service.settle({
+          userId: SHOPPER,
+          lineId: 'li1',
+          outcome: SettlementOutcome.BOUGHT,
+        })
+      ).rejects.toThrow(/write access to this list/);
+      expect(w.written).toHaveLength(0);
+      expect(w.events).toHaveLength(0);
+    });
   });
 });
