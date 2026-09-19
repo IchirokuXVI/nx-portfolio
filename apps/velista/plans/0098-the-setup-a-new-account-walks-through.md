@@ -1,8 +1,8 @@
-# 0091: the setup a new account walks through
+# 0098: the setup a new account walks through
 
-> Backend half: `apps/luna-shopper-backend/plans/0130`, which must be merged first.
+> Backend half: `apps/luna-shopper-backend/plans/0145`, which must be merged first.
 > Mock: `mocks/onboarding/`, published at https://claude.ai/artifact/Y3K3PZNGLnEjNUHjfWBDBF.
-> The bar: `0090`, whose route data this plan uses to hide itself.
+> The bar: `0097`, whose route data this plan uses to hide itself.
 >
 > A new account lands on an empty home with no name it chose, no postal code and no
 > opinion about supermarkets, and every one of those is a screen somewhere in the
@@ -13,7 +13,7 @@
 >
 > Prerequisite reading: `0009` (registering, and what the client does not send), `0015`
 > (the account page), `0046` and `0049` (shopping profiles, postal codes, chains),
-> `0059` (the screen that picks the shops), backend `0130` in full, and
+> `0059` (the screen that picks the shops), backend `0145` in full, and
 > `libs/velista/feature-account/src/lib/location-sheet/`.
 
 ## Brief for the agent
@@ -26,7 +26,7 @@ any route.
 
 ### Context
 
-- Backend `0130` serves `appState.setupCompletedAt` on `GET /v1/account/me`,
+- Backend `0145` serves `appState.setupCompletedAt` on `GET /v1/account/me`,
   `PATCH /v1/account/app-state` and `GET /v1/account/username-suggestions`.
 - **The name already exists.** Registration generates one from a per locale pool and
   the client never sends a display name (`0009`, section 5.1), so the account is
@@ -97,7 +97,7 @@ Under the locale, beside `home`:
 | `setup/shops` | Step 3 of 3 |
 | `setup/done` | The finish, and the tour's offer |
 
-Every one of them carries `data.chrome: 'none'` (`0090`, section 4). The bar is a way
+Every one of them carries `data.chrome: 'none'` (`0097`, section 4). The bar is a way
 out of a screen, and these five are one task with one way out.
 
 They are pages and not sheets. A sheet covers a page that is still there, and there is
@@ -185,7 +185,7 @@ A tick, "That is everything", the three answers in a small table, and the tour's
 > We will show you around the app, one screen at a time, so that nothing is hard to
 > find. It is short, and you can stop it whenever you like.
 
-**Show me around** starts the tour (`0092`) and **No, thank you** goes home. Both write
+**Show me around** starts the tour (`0099`) and **No, thank you** goes home. Both write
 `setupCompleted` first (section 7).
 
 The offer names no feature. Stops will be added and dropped, and a list of them ages
@@ -282,7 +282,7 @@ here is a paraphrase to be improved.
 
 ## 10. Not in this plan
 
-- The tour itself (`0092`).
+- The tour itself (`0099`).
 - Changing how registration generates a name.
 - A second profile. The setup writes to the default one, and the profiles page is where
   somebody makes another.

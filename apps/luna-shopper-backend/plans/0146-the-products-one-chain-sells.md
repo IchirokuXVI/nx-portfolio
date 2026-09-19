@@ -1,6 +1,6 @@
-# 0131: the products one chain sells
+# 0146: the products one chain sells
 
-> Frontend half: velista `0093` (the catalog tab), which is blocked on this one.
+> Frontend half: velista `0100` (the catalog tab), which is blocked on this one.
 > Mock: `apps/velista/plans/mocks/catalog/`, published at
 > https://claude.ai/artifact/9UppvQ8HfCVouog2WK7fi7.
 >

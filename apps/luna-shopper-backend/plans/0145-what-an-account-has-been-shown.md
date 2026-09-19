@@ -1,6 +1,6 @@
-# 0130: what an account has been shown
+# 0145: what an account has been shown
 
-> Frontend halves: velista `0091` (the setup) and velista `0092` (the tour), both of
+> Frontend halves: velista `0098` (the setup) and velista `0099` (the tour), both of
 > which are blocked on this one.
 > Mocks: `apps/velista/plans/mocks/onboarding/` and `.../tour/`.
 >

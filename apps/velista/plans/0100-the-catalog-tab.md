@@ -1,7 +1,7 @@
-# 0093: the catalog tab
+# 0100: the catalog tab
 
-> Backend half: `apps/luna-shopper-backend/plans/0131`, which must be merged first.
-> Depends on `0090`, which added the tab and the placeholder route this plan fills.
+> Backend half: `apps/luna-shopper-backend/plans/0146`, which must be merged first.
+> Depends on `0097`, which added the tab and the placeholder route this plan fills.
 > Mock: `mocks/catalog/`, published at https://claude.ai/artifact/9UppvQ8HfCVouog2WK7fi7.
 >
 > velista can name a product it already holds and can suggest one while a line is being
@@ -12,8 +12,8 @@
 >
 > Prerequisite reading: `0048` and `0049` (the ranked read and its scopes), `0069`
 > section 2 (no scopes is not an empty catalog), `0074` and `0079` (the tools row, and
-> why the basket hides its search), `0078` (prices from one shop), `0090` in full,
-> backend `0131` in full, and `libs/velista/data-access/src/lib/catalog/`.
+> why the basket hides its search), `0078` (prices from one shop), `0097` in full,
+> backend `0146` in full, and `libs/velista/data-access/src/lib/catalog/`.
 
 ## Brief for the agent
 
@@ -26,7 +26,7 @@ infinite list of priced products, a sheet for one product, and honest empty stat
 
 - `GET /v1/catalog/items` exists and **velista has never called it**. It takes `query`,
   `category`, `productGroupId`, `order`, `cursor`, `limit`, the scope selectors, and
-  after backend `0131` the `soldBy` filter. It answers `ItemPage`.
+  after backend `0146` the `soldBy` filter. It answers `ItemPage`.
 - An `ItemView` carries `name` (localized), `brand`, `imageUrl`, `unitSize`,
   `defaultUnit`, `category`, and `bestOffer` when the read had scopes: `price`,
   `currency`, `unitPrice`, `unitPriceLabel`, `observedAt`, `stale`. With `all` it also
@@ -68,7 +68,7 @@ Do not touch: the basket's tools row, the line composer's suggestions, the shops
 - Prices are formatted with the money helper in `platform`, never by hand, and dates
   with `Intl`, never `DatePipe`.
 - Every string is a key. No `@angular/core/rxjs-interop`. `svh` only.
-- The screen is a tab root, so it keeps the bar from `0090` under it.
+- The screen is a tab root, so it keeps the bar from `0097` under it.
 
 ### Action boundaries
 
@@ -202,7 +202,7 @@ nothing.
   a list is most of a phone.
 - Adding a product to a list from the catalog (section 5).
 - The catalog for a guest. Every catalog route is account authenticated today, and the
-  bar is not drawn for a guest at all (`0090`, section 4).
+  bar is not drawn for a guest at all (`0097`, section 4).
 
 ## 9. Tests
 

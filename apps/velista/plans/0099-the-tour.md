@@ -1,7 +1,7 @@
-# 0092: the tour
+# 0099: the tour
 
-> Backend half: `apps/luna-shopper-backend/plans/0130`, which must be merged first.
-> Depends on `0090` (the bar, which is the first thing the tour points at) and `0091`
+> Backend half: `apps/luna-shopper-backend/plans/0145`, which must be merged first.
+> Depends on `0097` (the bar, which is the first thing the tour points at) and `0098`
 > (the setup, which offers it).
 > Mock: `mocks/tour/`, published at https://claude.ai/artifact/YbfH7bVn7DGC1MFqWdqNvS.
 >
@@ -10,8 +10,8 @@
 > over the real app, each one lighting the control it is about, each one with the same
 > way out. It runs after the setup and plays again from the account screen.
 >
-> Prerequisite reading: `0090` in full, `0091` sections 6 and 7, `0015` (the account
-> page and its rows), `0002` (sections 4 and 7, colour and elevation), backend `0130`
+> Prerequisite reading: `0097` in full, `0098` sections 6 and 7, `0015` (the account
+> page and its rows), `0002` (sections 4 and 7, colour and elevation), backend `0145`
 > section 3, and `libs/velista/ui/src/lib/layout/app-layout.ts`.
 
 ## Brief for the agent
@@ -26,11 +26,11 @@ sentences, and ends for good whether it was finished or skipped.
 - `AppLayout` is the parent of every page and already draws things over the outlet.
   Rule D1 forbids it from injecting `Router`, `ActivatedRoute` or anything from
   `data-access`, and `layering.spec.ts` enforces that.
-- `0090` put `AppNav` in the same place and answered its visibility from a `platform`
+- `0097` put `AppNav` in the same place and answered its visibility from a `platform`
   service that does read the router. That is the pattern this plan follows.
 - `app-providers.ts` is the one file that may see both `platform` and `data-access`. It
   already starts `AppHistory.watch()` in an environment initializer.
-- Backend `0130` serves `appState.tourSeenAt` and `PATCH /v1/account/app-state` with
+- Backend `0145` serves `appState.tourSeenAt` and `PATCH /v1/account/app-state` with
   `tourSeen: true`.
 - The account page's rows are `lib-account-row` in `libs/velista/ui/src/lib/account/`.
 
@@ -224,7 +224,7 @@ right every time, and the account row costs one tap for the person who wants it.
 
 ## 11. Not in this plan
 
-- A tour of the catalog (`0093`). When that screen exists, it is one more entry in
+- A tour of the catalog (`0100`). When that screen exists, it is one more entry in
   `TOUR_STOPS` and one anchor.
 - Any second run offered by the app itself.
 - Per device state. `tourSeenAt` is the account's, wherever it signs in.

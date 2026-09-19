@@ -1,4 +1,4 @@
-# 0090: the bar at the bottom of the app
+# 0097: the bar at the bottom of the app
 
 > Mock: `mocks/nav/`, published at https://claude.ai/artifact/HSJYUM3oq8srUafnH76P81.
 >
@@ -7,7 +7,7 @@
 > no door and the basket being shopped is three taps from the list somebody is reading.
 > This plan adds one bar with three tabs, Home, Catalog and Shopping list, drawn once
 > for the whole app, on every screen except a sheet and the four screens of section 4.
-> The Catalog tab's own screen is `0093` and does not exist yet: this plan gives it a
+> The Catalog tab's own screen is `0100` and does not exist yet: this plan gives it a
 > route that draws a placeholder, so the bar is honest from the day it ships.
 >
 > Prerequisite reading: `0001` (the extraction contract, items 1 and 4), `0002`
@@ -238,9 +238,9 @@ an app should read the row and know where each one goes.
 
 ## 10. Not in this plan
 
-- The catalog screen itself (`0093`). This plan adds the route and a placeholder that
+- The catalog screen itself (`0100`). This plan adds the route and a placeholder that
   says the screen is coming, in one line, with no furniture.
-- The setup and the tour (`0091`, `0092`), which hide the bar with the same route data
+- The setup and the tour (`0098`, `0099`), which hide the bar with the same route data
   this plan introduces.
 - Remembering a scroll position or a stack per tab. Pressing a tab opens that tab's
   screen from the top, always.
