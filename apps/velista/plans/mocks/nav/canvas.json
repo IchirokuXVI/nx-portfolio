@@ -1,52 +1,59 @@
 {
   "title": "Velista: the bottom nav",
-  "lede": "Three tabs at the bottom of the app: Home, Catalog and Shopping list. Home is the screen it is today, with its groups, its lists and the basket status above the nav. The Catalog tab has a canvas of its own. Drawn before any plan is written. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "Three tabs at the bottom of the app: Home, Catalog and Shopping list. The bar is on every screen, including the ones you go into, such as a group, a list and your account. A sheet is the one thing that covers it. Home is the screen it is today, with its groups, its lists and the basket status above the bar. The Catalog tab has a canvas of its own. Drawn before any plan is written. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
   "artboards": [
     { "file": "Tabs.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "The three tabs" },
-    { "file": "Rules.dc.html", "x": 1390, "y": 0, "w": 1330, "h": 1010, "title": "Where it is not, and what moved" }
+    { "file": "Rules.dc.html", "x": 1390, "y": 0, "w": 1330, "h": 1420, "title": "Everywhere, and the one place it is not" }
   ],
   "annotations": [
     {
       "id": "brief",
       "x": 0,
-      "y": -500,
+      "y": -520,
       "w": 470,
-      "text": "THE BRIEF. A bottom bar with big buttons, so the whole app is reachable with a thumb and nothing important hides behind a chevron.\nThree tabs, not four. Groups were going to be the fourth and are not, because home already lists them: a tab that leads to what the screen behind it is already showing teaches somebody that tabs are decoration. Home therefore keeps its groups, its lists and the basket status, exactly as it is today."
+      "text": "THE BRIEF. A bar with big buttons at the bottom of the app, so the whole of it is reachable with a thumb and nothing important hides behind a chevron.\nThree tabs, not four. Groups were going to be the fourth and are not, because home already lists them: a tab that leads to what the screen behind it is already showing teaches somebody that tabs are decoration. Home therefore keeps its groups, its lists and the basket status, exactly as it is today."
     },
     {
       "id": "n1",
       "x": 530,
-      "y": -500,
+      "y": -520,
       "w": 470,
-      "text": "RULE N1: EVERY TAB CARRIES ITS WORD. A row of three bare glyphs is a quiz, and a basket, a grid and a house are not obvious to somebody who has not spent years in apps. So each tab is an icon above a word, the whole tab is the target, and the target is 60 pixels tall and a third of the screen wide.\nThe active tab says so twice, in colour and in a tinted pill, because colour alone is not a state somebody with poor contrast vision can read."
+      "text": "RULE N1: EVERY TAB CARRIES ITS WORD. A row of three bare glyphs is a quiz, and a basket, a carton and a house are not obvious to somebody who has not spent years in apps. So each tab is an icon above a word, the whole tab is the target, and the target is 60 pixels tall and a third of the screen wide.\nThe active tab says so twice, in colour and in a tinted pill, because colour alone is not a state somebody with poor contrast vision can read."
     },
     {
       "id": "n2",
       "x": 1060,
-      "y": -500,
+      "y": -520,
       "w": 470,
-      "text": "RULE N2: THE NAV BELONGS TO THE APP, NOT TO A PAGE, AND A SHEET COVERS IT. It is drawn once in `AppLayout`, which is the parent of every page, so it cannot drift between screens or appear twice.\nA sheet is a child route that covers the page it was opened from (rule E1), and that includes the nav: the scrim dims it, and the panel keeps its own bottom edge on the screen's bottom edge rather than resting on top of the bar. Anything else leaves three lit buttons under an open sheet, on a phone, a thumb's width from Cancel. `SheetShell` already sits at `z-index: 10`, and the nav goes below it."
+      "text": "RULE N2: THE BAR BELONGS TO THE APP, NOT TO A PAGE. It is drawn once in `AppLayout`, which is the parent of every page, so it cannot drift between screens, appear twice, or be forgotten by a page added later.\nA page does not opt in. It is there unless the route says otherwise, which is the opposite of the first draft of this canvas and is what the walk through of the app asked for: somebody four screens deep must not have to find their way back."
     },
     {
       "id": "n3",
       "x": 1590,
-      "y": -500,
+      "y": -520,
       "w": 470,
-      "text": "RULE N3: A TAB IS SHOWN ON THE THREE SCREENS IT NAMES, AND NOWHERE ELSE. A screen you went into keeps its own bottom: the list page has its composer there, and the group, the line, the account, the assistant and the front door each have their own business.\nThis is what stops the app stacking two bars, and it is the reason the tabs can be as tall as they are. The way back from a pushed screen is the chevron it already has."
+      "text": "RULE N3: A SHEET COVERS IT, AND THAT IS THE ONLY CASE THE APP DECIDES ALONE. A sheet is a child route that covers the page it was opened from (rule E1), and the bar is part of that page: the scrim dims it, and the panel keeps its own bottom edge on the screen's bottom edge rather than resting on the bar.\nAnything else leaves three lit buttons under an open sheet, on a phone, a thumb's width from Cancel. `SheetShell` already sits at `z-index: 10`, and the bar goes below it."
     },
     {
       "id": "n4",
       "x": 2120,
-      "y": -500,
+      "y": -520,
       "w": 470,
-      "text": "RULE N4: THE SHOPPING LIST TAB OPENS THE ONE BEING SHOPPED. Not a list of lists: the basket in your hand is what the tab is for, and it is one press from any screen.\nWith none, the tab is where one is made, which is where Get shopping list went. Older ones are behind the clock in that tab's header, in both states, which is the button that used to sit beside Get shopping list on home. The badge counts what is still to get, and it is the only number on the bar."
+      "text": "RULE N4: A SCREEN YOU WENT INTO KEEPS ITS OWN BOTTOM, AND THE BAR SITS UNDER IT. A list keeps its composer, the basket keeps its own, and the bar is drawn beneath. That stack is 52 pixels over 88, which is the heaviest the app has, and it is the price of a bar that is always there.\nThe keyboard takes the bar's place whenever a field has focus, so the busiest moment on those screens is also the one where the bar is absent. No tab is lit on a screen that is not one of the three: the bar is a way out, not a claim about where you are."
     },
     {
-      "id": "open",
+      "id": "n5",
       "x": 2650,
-      "y": -500,
+      "y": -520,
       "w": 470,
-      "text": "STILL TO DECIDE.\n1. The word on the third tab. Shopping list is what the app calls that thing everywhere else, and it is the longest label on the bar. Basket is shorter and is what the code calls it, and it is not a word the interface uses today.\n2. Whether the badge counts what is left to get, or is a plain dot that says somebody is shopping.\n3. Whether a guest who opened a shared basket from a link sees the bar at all. Drawn as no: two of the three tabs lead to screens a guest has no account for."
+      "text": "RULE N5: THE SHOPPING LIST TAB OPENS THE ONE BEING SHOPPED. Not a list of lists: the basket in your hand is what the tab is for, and it is one press from any screen.\nWith none, the tab is where one is made, which is where Get shopping list went. Older ones are behind the clock in that tab's header, in both states, which is the button that used to sit beside Get shopping list on home. Home is the one screen where the bar replaces something rather than being added under it. The badge counts what is still to get, and it is the only number on the bar."
+    },
+    {
+      "id": "off",
+      "x": 3180,
+      "y": -520,
+      "w": 470,
+      "text": "THE FOUR SCREENS I WOULD LEAVE IT OFF, FOR YOU TO CONFIRM. The front door. Sign in, register, secure your account and the pages their mail links open. An invitation opened from a link, before the code is accepted. A guest holding a shared basket.\nOne reason covers all four: two of the three tabs need an account, and every catalog read the app makes is refused without one, so the bar would answer with a sign in screen and teach that the bar is a trap. A guest is the same case with a nicer name.\nThe startup, connection and update screens are not on the list. No page is drawn at all while they are up, so there is nothing for a bar to sit under."
     }
   ]
 }
