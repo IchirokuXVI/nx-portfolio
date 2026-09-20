@@ -763,6 +763,18 @@ export interface AddLineQuantityRequest {
   userId: string;
   lineId: string;
   delta: number;
+  /**
+   * What the caller believed the line's quantity was, checked against the row
+   * the lock reads and refused with `stale_quantity` on a mismatch (plan 0136,
+   * section 5.3).
+   *
+   * Optional, and absent is the ordinary case: a delta needs no starting point,
+   * which is the whole reason it exists. The basket sends one because a shopper
+   * moving a household's demand is acting on a number they were **shown**, and a
+   * settle that landed in between makes the gesture mean something the person
+   * did not intend. A delta alone would apply silently on top of it.
+   */
+  expect?: number;
 }
 
 export interface SetLineApprovalRequest {

@@ -493,6 +493,9 @@ const addLineQuantityRequest = object(
     // Schema states "not zero" only as a `not`, which reads far worse than the
     // one decorator that says it (plan 0040, section 3.7).
     delta: integer({ minimum: -LINE_QUANTITY_MAX, maximum: LINE_QUANTITY_MAX }),
+    // Optional: a delta needs no starting point, and the basket sends one so a
+    // settle that landed in between refuses the gesture (plan 0136, section 5.3).
+    expect: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
   },
   ['userId', 'lineId', 'delta']
 );

@@ -108,7 +108,14 @@ export interface BasketSessionRow {
  * Ordered by `("createdAt", id)`, which is what makes the first line of a group
  * its anchor: the oldest ask for a thing names the row.
  */
-export const COVERED_LINES_SQL = `
+export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
+  const extra =
+    narrow === 'SET'
+      ? 'AND ll."itemSetHash" = $5'
+      : narrow === 'TEXT'
+        ? 'AND ll."itemSetHash" IS NULL'
+        : '';
+  return `
   SELECT
     ll.id AS "id",
     ll."listId" AS "listId",
@@ -135,8 +142,26 @@ export const COVERED_LINES_SQL = `
         )
       )
     )
+    ${extra}
   ORDER BY ll."createdAt", ll.id
 `;
+}
+
+/**
+ * Which slice of the coverage a read wants.
+ *
+ * `ALL` is the basket read. The other two are the row resolver, which wants the
+ * entries of **one** row: a `set:` merge key is a hash the database can compare,
+ * and a `text:` key is `normalizeContent`, a fold that lives in TypeScript. A
+ * second definition of that fold in SQL would be free to drift from the first,
+ * which is the reasoning `ORDER_HISTORY_SQL` gives for stopping one step short
+ * of the key, so `TEXT` narrows to the lines that have no hash and the caller
+ * folds them.
+ */
+export type CoveredLineNarrowing = 'ALL' | 'SET' | 'TEXT';
+
+/** Every covered line of the basket. `$1` to `$4` as above. */
+export const COVERED_LINES_SQL = coveredLinesSql('ALL');
 
 /** One row of {@link COVERED_LINES_SQL}: one covered list line. */
 export interface CoveredLineRow {

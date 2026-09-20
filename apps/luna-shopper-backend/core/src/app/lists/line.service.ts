@@ -39,6 +39,7 @@ import {
   LineMergeRequiredException,
   LineMergeTooManyProductsException,
   NotFoundException,
+  StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import {
@@ -705,19 +706,23 @@ export class LineService {
       itemIds,
       groupItemIds: source === LineItemSource.GROUP ? [...itemIds] : [],
     };
-    // A line cannot have been bought in the same breath as being added, nor be
-    // in somebody's basket a moment after it was typed, so the empty pair is the
-    // truth here rather than a stand in for two unread values.
+    // **A line is born claimed** (plan 0136, section 7.1). A line cannot have
+    // been bought in the same breath as being added, so the settlements really
+    // are empty. The claim is not: under coverage a basket holds every covered
+    // line, so a line added to a covered list is in somebody's basket the moment
+    // it is typed, and announcing `NO_LINE_CLAIM` would take the indicator off a
+    // line that is being shopped right now.
+    const claim = await this.claims.claimOf(outcome.line.id);
     this.emit(
       RealtimeEvent.LineAdded,
       list.zoneId,
       outcome.line,
       items,
       NO_LINE_SETTLEMENTS,
-      NO_LINE_CLAIM
+      claim
     );
     return {
-      line: toLineView(outcome.line, items, NO_LINE_SETTLEMENTS, NO_LINE_CLAIM),
+      line: toLineView(outcome.line, items, NO_LINE_SETTLEMENTS, claim),
       merged: false,
     };
   }
@@ -2016,6 +2021,19 @@ export class LineService {
       });
       if (!line) {
         throw new NotFoundException('Line not found');
+      }
+
+      if (req.expect !== undefined && line.quantity !== req.expect) {
+        // The `from` bargain of plan 0136 section 5.3, checked against **this**
+        // read and never against the caller's: a shopper moving a household's
+        // demand is acting on a number they were shown, and a settle that landed
+        // in between makes the gesture mean something they did not intend. A
+        // delta applied on top of it would move the line silently and correctly
+        // to the wrong number.
+        throw new StaleQuantityException(
+          'Somebody else changed this while you were looking at it',
+          { messageArgs: { current: line.quantity } }
+        );
       }
 
       const quantity = this.validateQuantity(line.quantity + req.delta);

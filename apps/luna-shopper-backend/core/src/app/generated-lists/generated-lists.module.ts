@@ -1,8 +1,16 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BasketCoverageModule } from '../baskets/basket-coverage.module';
+import { BasketDemandService } from '../baskets/basket-demand.service';
+import { BasketLineAddService } from '../baskets/basket-line-add.service';
 import { BasketLiveService } from '../baskets/basket-live.service';
 import { BasketReadService } from '../baskets/basket-read.service';
+import { BasketRevertService } from '../baskets/basket-revert.service';
+import { BasketRowRenameService } from '../baskets/basket-row-rename.service';
+import { BasketRowResolver } from '../baskets/basket-row-resolver';
+import { BasketSettleService } from '../baskets/basket-settle.service';
+import { BasketWriteContext } from '../baskets/basket-write.context';
+import { BasketWriteController } from '../baskets/basket-write.controller';
 import { BasketController } from '../baskets/basket.controller';
 import {
   BasketSource,
@@ -104,12 +112,23 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     // counts an open basket through it: a `BasketsModule` would have to import
     // this one and be imported by it.
     BasketController,
+    BasketWriteController,
   ],
   providers: [
     GeneratedListService,
     // The basket read, and the basket that is always there (plan 0136).
     BasketReadService,
     BasketLiveService,
+    // The five writes on a row, and the three things all of them need: a key
+    // resolved back to list lines, the coverage and redaction they resolve
+    // against, and the answer shape they share.
+    BasketRowResolver,
+    BasketWriteContext,
+    BasketSettleService,
+    BasketRevertService,
+    BasketDemandService,
+    BasketLineAddService,
+    BasketRowRenameService,
     // The freeze and the thaw of a trip's ask (plan 0135). A provider of its
     // own rather than two private methods, because it is the seam plan 0136
     // replaces: the statement changes and its caller does not.
