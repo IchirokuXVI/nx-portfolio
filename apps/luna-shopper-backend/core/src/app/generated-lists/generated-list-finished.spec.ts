@@ -17,6 +17,10 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { LineService } from '../lists/line.service';
 import type { ListAccessService } from '../lists/list-access.service';
 import type { ProfileService } from '../profiles/profile.service';
+import {
+  fakeBasketTripRows,
+  fakeUpdateDataSource,
+} from './basket-trip-rows.fake';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
@@ -549,26 +553,28 @@ describe('finishing and unfinishing (section 2)', () => {
     const claims = fakeLineClaims({}, () => CLAIMING);
     // The lists told to read their trips again (plan 0122, section 6).
     const tripsChanged: (string | undefined)[] = [];
+    const tripRows = fakeBasketTripRows();
+    const lists = {
+      // The one raw read an update makes: which lists the basket draws from.
+      // Two origins in one list, so the answer has to come back once.
+      query: async () => [{ listId: LIST }],
+      // The owner's `where`, honoured: anybody else gets not found.
+      findOne: async ({
+        where,
+      }: {
+        where: { id: string; ownerUserId: string };
+      }) =>
+        where.id === row.id && where.ownerUserId === row.ownerUserId
+          ? row
+          : null,
+      save: async (list: GeneratedList) => {
+        saved.push({ ...list });
+        return list;
+      },
+    };
     const service = new GeneratedListService(
-      {} as DataSource,
-      {
-        // The one raw read an update makes: which lists the basket draws from.
-        // Two origins in one list, so the answer has to come back once.
-        query: async () => [{ listId: LIST }],
-        // The owner's `where`, honoured: anybody else gets not found.
-        findOne: async ({
-          where,
-        }: {
-          where: { id: string; ownerUserId: string };
-        }) =>
-          where.id === row.id && where.ownerUserId === row.ownerUserId
-            ? row
-            : null,
-        save: async (list: GeneratedList) => {
-          saved.push({ ...list });
-          return list;
-        },
-      } as never,
+      fakeUpdateDataSource(lists),
+      lists as never,
       { find: async () => [] } as never,
       {} as never,
       {} as never,
@@ -591,9 +597,10 @@ describe('finishing and unfinishing (section 2)', () => {
       } as unknown as CoreEventsPublisher,
       {} as never,
       {} as never,
-      { find: async () => [] } as never
+      { find: async () => [] } as never,
+      tripRows.service
     );
-    return { service, saved, events, claims, tripsChanged };
+    return { service, saved, events, claims, tripsChanged, tripRows };
   }
 
   it('unfinishes through the same PATCH, and the claims come back with it', async () => {

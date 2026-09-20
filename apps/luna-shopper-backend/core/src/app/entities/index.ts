@@ -1,4 +1,5 @@
 import { BasketSource } from './basket-source.entity';
+import { BasketTripRow } from './basket-trip-row.entity';
 import { CommentAudio } from './comment-audio.entity';
 import { CoreAudit } from './core-audit.entity';
 import { GeneratedListLineOption } from './generated-list-line-option.entity';
@@ -26,6 +27,7 @@ import { Zone } from './zone.entity';
 
 export { BaseEntity } from './base.entity';
 export { BasketSource } from './basket-source.entity';
+export { BasketTripRow } from './basket-trip-row.entity';
 export { CommentAudio } from './comment-audio.entity';
 export {
   CoreAudit,
@@ -94,6 +96,9 @@ export const CORE_ENTITIES = [
   // before the participants, which reference the link they arrived by.
   GeneratedListShareLink,
   GeneratedListParticipant,
+  // What each finished trip asked of each zone line (plan 0135). After the
+  // basket and the zone line it hangs off, since it references both.
+  BasketTripRow,
   // The audit trail (plan 0077, section 8). Last, because it references
   // nothing and nothing references it: the actor lives in auth's database and
   // the row it describes is named by table and id rather than by a foreign key.

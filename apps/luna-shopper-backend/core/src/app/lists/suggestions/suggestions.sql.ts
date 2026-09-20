@@ -1,7 +1,5 @@
-import {
-  GENERATED_BASKET,
-  OPEN_GENERATED_BASKET,
-} from '../../baskets/open-basket.sql';
+import { OPEN_GENERATED_BASKET } from '../../baskets/open-basket.sql';
+import { basketAskedCte } from '../trips/basket-asked.sql';
 
 /**
  * The reads behind the lines a list suggests (plan 0123, sections 2, 4 and 5).
@@ -15,7 +13,15 @@ import {
  *
  * **A trip is a `GENERATED` basket, always** (plan 0133, section 6). The
  * permanent basket holds every line its owner can write, so counting it would
- * hold every candidate and suggest nothing, for ever.
+ * hold every candidate and suggest nothing, for ever. The two history reads ask
+ * it inside {@link basketAskedCte}; the candidates read asks it itself.
+ *
+ * **What an ended trip asked is read from `basket_trip_rows`** (plan 0135). Its
+ * finish wrote the numbers down, so the two history reads go through
+ * {@link basketAskedCte} rather than naming origins, and they keep working when
+ * plan 0136 drops that table. The relation also answers for an `OPEN` basket,
+ * from its origins, and both reads then set that half aside with their own
+ * `status <> 'OPEN'`: "ended" is a status here and nothing else.
  *
  * **"Live" is the claim's own test, and "ended" is the trip being over.** The
  * candidates read asks `OPEN_GENERATED_BASKET` beside the claim's own window,
@@ -96,50 +102,51 @@ export const SUGGESTION_PURCHASES_SQL = `
  * asked for (section 4). `$1` is the list, `$2` the candidate line ids, `$3` how
  * many trips.
  *
- * A basket trip of a list is a basket with an origin in it (plan 0122). It is
- * found from the list's own lines, so every join is an index lookup, and a line
- * since deleted contributes no trip, as in `TRIPS_CTE`. A deleted basket has no
- * origins left, so it is not a trip at all and cannot count as an absence.
+ * A basket trip of a list is a basket that asked something of it (plan 0122),
+ * which since plan 0135 is a row of `basket_trip_rows` for an ended basket. A
+ * line since deleted contributes no trip, as in `TRIPS_CTE`, and a deleted
+ * basket took its rows with it, so it is not a trip at all and cannot count as
+ * an absence.
  *
  * Only trips of **this list** are read, so a basket that drew from another list
  * says nothing about this one.
  *
- * A line is present where the trip asked for more than zero of it. An origin
- * taken back to zero is a trip that stopped asking.
+ * A line is present where the trip asked for more than zero of it, and the
+ * number asked is the sum over the trip's basket lines. It was "an origin with
+ * `quantity > 0`" before plan 0135, and the two differ only where sibling
+ * origins of one zone line (plan 0094) split a positive ask with a zero. The sum
+ * is the honest reading of "the trip asked for it".
  *
  * `lineIds` is cast to `text[]` so the driver hands back an array and not the
  * literal `{...}` it answers for a `uuid[]`.
  */
 export const SUGGESTION_RECENT_TRIPS_SQL = `
-  WITH "ended" AS (
+  WITH ${basketAskedCte(null)},
+  "ended" AS (
     SELECT gl.id AS "tripId",
            gl."generatedAt" AS "generatedAt"
-    FROM "list_lines" ll
-    JOIN "generated_list_line_origins" o
-      ON o."lineId" = ll.id AND o."listId" = $1::uuid
-    JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
-    JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
-    WHERE ll."listId" = $1::uuid
-      AND ll."deletedAt" IS NULL
-      AND ${GENERATED_BASKET}
-      AND gl."status" <> 'OPEN'
+    FROM "basket_asked" a
+    JOIN "list_lines" ll
+      ON ll.id = a."lineId"
+     AND ll."listId" = $1::uuid
+     AND ll."deletedAt" IS NULL
+    JOIN "generated_lists" gl ON gl.id = a."basketId"
+    WHERE gl."status" <> 'OPEN'
     GROUP BY gl.id
     ORDER BY gl."generatedAt" DESC, gl.id DESC
     LIMIT $3
   )
   SELECT e."tripId" AS "tripId",
          COALESCE(
-           ARRAY_AGG(DISTINCT o."lineId"::text)
-             FILTER (WHERE o."lineId" IS NOT NULL),
+           ARRAY_AGG(DISTINCT a."lineId"::text)
+             FILTER (WHERE a."lineId" IS NOT NULL),
            '{}'
          ) AS "lineIds"
   FROM "ended" e
-  LEFT JOIN "generated_list_lines" gll ON gll."generatedListId" = e."tripId"
-  LEFT JOIN "generated_list_line_origins" o
-    ON o."generatedListLineId" = gll.id
-   AND o."listId" = $1::uuid
-   AND o."lineId" = ANY($2::uuid[])
-   AND o."quantity" > 0
+  LEFT JOIN "basket_asked" a
+    ON a."basketId" = e."tripId"
+   AND a."lineId" = ANY($2::uuid[])
+   AND a."asked" > 0
   GROUP BY e."tripId", e."generatedAt"
   ORDER BY e."generatedAt" DESC, e."tripId" DESC
 `;
@@ -149,29 +156,26 @@ export const SUGGESTION_RECENT_TRIPS_SQL = `
  * (section 5). `$1` is the list, `$2` the line ids.
  *
  * Summed over the trip's basket lines, because sibling basket lines (plan 0094)
- * each carry a part of one ask. A line no ended basket ever asked for has no row,
- * and the service falls back to its last purchase.
+ * each carry a part of one ask. That sum is what a finished basket's trip rows
+ * already hold (plan 0135), so this reads them rather than repeating it. A line
+ * no ended basket ever asked for has no row, and the service falls back to its
+ * last purchase.
+ *
+ * `DISTINCT ON` keeps the newest trip per line, by `generatedAt` and then by the
+ * basket's id, so two baskets generated in the same microsecond still have one
+ * answer.
  */
 export const SUGGESTION_LAST_ASKED_SQL = `
+  WITH ${basketAskedCte(null)}
   SELECT DISTINCT ON (a."lineId")
          a."lineId" AS "lineId",
          a."asked" AS "asked"
-  FROM (
-    SELECT o."lineId" AS "lineId",
-           gl.id AS "tripId",
-           gl."generatedAt" AS "generatedAt",
-           SUM(o."quantity")::int AS "asked"
-    FROM "generated_list_line_origins" o
-    JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
-    JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
-    WHERE o."lineId" = ANY($2::uuid[])
-      AND o."listId" = $1::uuid
-      AND ${GENERATED_BASKET}
-      AND gl."status" <> 'OPEN'
-    GROUP BY o."lineId", gl.id
-  ) a
-  WHERE a."asked" > 0
-  ORDER BY a."lineId", a."generatedAt" DESC, a."tripId" DESC
+  FROM "basket_asked" a
+  JOIN "generated_lists" gl ON gl.id = a."basketId"
+  WHERE a."lineId" = ANY($2::uuid[])
+    AND a."asked" > 0
+    AND gl."status" <> 'OPEN'
+  ORDER BY a."lineId", gl."generatedAt" DESC, gl.id DESC
 `;
 
 /** One row of {@link SUGGESTION_CANDIDATES_SQL}. */

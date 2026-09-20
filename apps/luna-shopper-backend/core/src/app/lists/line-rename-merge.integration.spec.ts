@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import {
+  BasketTripRow,
   CORE_ENTITIES,
   GeneratedList,
   GeneratedListLine,
@@ -562,6 +563,50 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     expect(
       onBreadOnly.map((row) => [row.lineId, row.quantity, row.lineVersion])
     ).toEqual([[milk.id, 1, 2]]);
+  });
+
+  it('moves a finished trip’s rows, summing a basket that asked for both (plan 0135, test 10)', async () => {
+    // A trip row names its line by a foreign key, so a row left on the absorbed
+    // line would be deleted with it. The merge moves it, and a basket holding a
+    // row on both lines ends with one, because `uq_basket_trip_rows_line` allows
+    // one row per basket and zone line.
+    const milk = await seedLine({ content: 'Milk', position: 1, quantity: 2 });
+    const bread = await seedLine({ content: 'Bread', position: 2 });
+
+    const baskets = dataSource.getRepository(GeneratedList);
+    const ended = (name: string) =>
+      baskets.save(
+        baskets.create({
+          ownerUserId: ids.owner,
+          name,
+          status: GeneratedListStatus.FINISHED,
+          generatedAt: new Date(),
+          kind: BasketKind.GENERATED,
+          defaultTargetListId: null,
+          idempotencyKey: null,
+        })
+      );
+    const both = await ended('Asked for both');
+    const breadOnly = await ended('Asked for bread');
+
+    const rows = dataSource.getRepository(BasketTripRow);
+    await rows.insert([
+      { basketId: both.id, listId: ids.list, lineId: milk.id, asked: 2 },
+      { basketId: both.id, listId: ids.list, lineId: bread.id, asked: 3 },
+      { basketId: breadOnly.id, listId: ids.list, lineId: bread.id, asked: 4 },
+    ]);
+
+    await rename(bread, 'milk', { confirmMerge: true });
+
+    const askedOf = async (basketId: string) =>
+      (await rows.find({ where: { basketId } })).map((row) => [
+        row.lineId,
+        row.asked,
+      ]);
+    // Both asks on the survivor, as one row.
+    expect(await askedOf(both.id)).toEqual([[milk.id, 5]]);
+    // The other basket's row is repointed and keeps its number.
+    expect(await askedOf(breadOnly.id)).toEqual([[milk.id, 4]]);
   });
 
   it('never collides on a change of case or accents alone (case 10)', async () => {

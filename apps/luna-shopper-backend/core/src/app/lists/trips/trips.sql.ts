@@ -2,6 +2,7 @@ import {
   GENERATED_BASKET,
   OPEN_GENERATED_BASKET,
 } from '../../baskets/open-basket.sql';
+import { basketAskedCte } from './basket-asked.sql';
 
 /**
  * The reads behind the trips of a zone list (plan 0122, sections 3 and 4).
@@ -11,9 +12,18 @@ import {
  * `alias.property` inside a raw select expression, and every rule here is a
  * `WHERE`, a `GROUP BY` or a window that no mocked repository could prove.
  *
- * Nothing here is stored. A trip is derived on every read from two tables that
- * already exist: `generated_list_line_origins` says what each basket asked of
- * each zone line, and `line_settlements` says what was bought and when.
+ * A trip is derived on every read from what each basket asked of each zone line
+ * and from `line_settlements`, which says what was bought and when. Since plan
+ * 0135 the first of those has two sources rather than one: a finished basket's
+ * ask was written into `basket_trip_rows` by its finish, and an open basket's is
+ * still summed from its origins. `basketAskedCte` is the one place that chooses
+ * between them, and nothing here needs to know which half answered.
+ *
+ * Plan 0122 section 4 is reversed in one sentence. A finished trip's rows no
+ * longer freeze because nothing writes its origins; they freeze because the
+ * finish wrote them down. Everything else that section says still holds: one row
+ * per zone line, `left` is `max(0, asked - bought)`, and no name and no current
+ * quantity on the row.
  *
  * ## Which purchase belongs to which kind of trip
  *
@@ -35,16 +45,20 @@ import {
  */
 
 /**
- * One row per (basket, zone line) of the list: what the basket's origins asked
- * of the line, and what its standing settlements bought of it.
+ * One row per (basket, zone line) of the list: what the basket asked of the
+ * line, and what its standing settlements bought of it.
  *
  * `$1` is the list. `basketParam` is the parameter naming one basket, for the
  * rows read, and null for the heads.
  *
  * **It is the parameter and not a ready made fragment** (plan 0134,
- * section 4.2). The two halves reach the basket by different columns now, the
- * `asked` half through the basket line and the `bought` half through the
+ * section 4.2). The two halves reach the basket by different columns, the
+ * `asked` half through {@link basketAskedCte} and the `bought` half through the
  * settlement's own `basketId`, so one spliced predicate cannot serve both.
+ *
+ * The `asked` half is a plain read of that relation (plan 0135, section 4.1),
+ * which already chose between a finished basket's frozen rows and an open
+ * basket's origins.
  *
  * **One row per zone line, however many sibling basket lines or origins fed it**
  * (plan 0094): both halves group by the basket and the zone line, never by the
@@ -53,7 +67,8 @@ import {
  * **Both halves ask `GENERATED_BASKET`** (plan 0133, section 6). A trip is
  * something somebody composed, and the permanent basket is not one: it holds
  * every line its owner can write, so counting it would give every list one
- * endless trip that never leaves the head.
+ * endless trip that never leaves the head. The `asked` half asks it inside
+ * `basketAskedCte`, which every reader of that relation needs it to.
  *
  * A `FULL JOIN`, because either half can stand alone. Asked and never bought is
  * the ordinary unfinished line. Bought and no longer asked is a purchase whose
@@ -61,26 +76,21 @@ import {
  * out of the basket, and dropping it would make a standing purchase belong to no
  * trip at all.
  *
- * The join to `list_lines` is what skips a line that was deleted or merged away:
- * an origin's `lineId` has no foreign key and may name no row.
+ * The join to `list_lines` is what skips a line that was deleted or merged away,
+ * and what drops one the household deleted (plan 0132): an origin's `lineId` has
+ * no foreign key and may name no row at all.
  */
 function basketRowsCte(basketParam: string | null): string {
-  const askedFilter = basketParam
-    ? `AND gll."generatedListId" = ${basketParam}::uuid`
-    : '';
   const boughtFilter = basketParam
     ? `AND s."basketId" = ${basketParam}::uuid`
     : '';
   return `
+  ${basketAskedCte(basketParam)},
   "asked" AS (
-    SELECT gll."generatedListId" AS "tripId",
-           o."lineId" AS "lineId",
-           SUM(o."quantity")::int AS "asked"
-    FROM "generated_list_line_origins" o
-    JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
-    JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
-    WHERE o."listId" = $1::uuid AND ${GENERATED_BASKET} ${askedFilter}
-    GROUP BY gll."generatedListId", o."lineId"
+    SELECT a."basketId" AS "tripId",
+           a."lineId" AS "lineId",
+           a."asked" AS "asked"
+    FROM "basket_asked" a
   ),
   "bought" AS (
     SELECT s."basketId" AS "tripId",

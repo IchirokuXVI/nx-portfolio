@@ -19,6 +19,7 @@ import { ParticipantInvitesAndEndings1756002000000 } from './1756002000000-Parti
 import { SoftDeletedLines1756002100000 } from './1756002100000-SoftDeletedLines';
 import { BasketKindStatusAndSources1756002200000 } from './1756002200000-BasketKindStatusAndSources';
 import { SettlementBasket1756002300000 } from './1756002300000-SettlementBasket';
+import { BasketTripRows1756002400000 } from './1756002400000-BasketTripRows';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -88,4 +89,10 @@ export const CORE_MIGRATIONS = [
   // migration last touched, and reads `generated_lists.kind`, which plan 0133's
   // creates. It follows all three and nothing else (plan 0134, section 6).
   SettlementBasket1756002300000,
+  // A new table referencing `generated_lists`, which plan 0050's migration
+  // created and plan 0133's last reshaped, and `list_lines`, which plan 0132's
+  // last touched. Its backfill reads plan 0133's status literals, so it follows
+  // that migration, plan 0132's and plan 0134's, and nothing else (plan 0135,
+  // section 6).
+  BasketTripRows1756002400000,
 ];

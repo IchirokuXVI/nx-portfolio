@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
   BasketSource,
+  BasketTripRow,
   CORE_ENTITIES,
   GeneratedList,
   GeneratedListLine,
@@ -33,6 +34,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../../entities';
+import { BasketTripRowsService } from '../../generated-lists/basket-trip-rows.service';
 import { GeneratedListService } from '../../generated-lists/generated-list.service';
 import { fakeLineClaims } from '../../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../../zones/zone-authz.service';
@@ -59,6 +61,7 @@ const WINDOW_MS = 60 * 60 * 60 * 1000;
 describeIntegration('the trips of a zone list (real Postgres)', () => {
   let dataSource: DataSource;
   let trips: TripsService;
+  const tripRows = new BasketTripRowsService();
 
   const ids = {
     zone: '',
@@ -153,6 +156,43 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         lineVersion: 1,
       })
     );
+    await refreezeIfEnded(generatedListLineId);
+  }
+
+  /**
+   * The freeze a finished basket would have had (plan 0135).
+   *
+   * These fixtures write a finished basket's rows straight into the tables, so
+   * no status change ever ran and nothing wrote `basket_trip_rows`. This is that
+   * write, applied again after each origin, which is what
+   * `GeneratedListService.update` does inside the transaction that ends a trip.
+   * Thawed first, because the freeze inserts and never updates a row it already
+   * wrote.
+   */
+  /**
+   * End a trip that was seeded `OPEN`: the status, then the freeze, in that
+   * order, which is the order `GeneratedListService.update` writes them in.
+   */
+  async function finish(basketId: string): Promise<void> {
+    await dataSource
+      .getRepository(GeneratedList)
+      .update({ id: basketId }, { status: GeneratedListStatus.FINISHED });
+    await tripRows.freeze(dataSource.manager, basketId);
+  }
+
+  async function refreezeIfEnded(generatedListLineId: string): Promise<void> {
+    const [row] = await dataSource.query<{ id: string; status: string }[]>(
+      `SELECT gl.id AS "id", gl."status"::text AS "status"
+       FROM "generated_lists" gl
+       JOIN "generated_list_lines" gll ON gll."generatedListId" = gl.id
+       WHERE gll.id = $1::uuid`,
+      [generatedListLineId]
+    );
+    if (!row || row.status === GeneratedListStatus.OPEN) {
+      return;
+    }
+    await tripRows.thaw(dataSource.manager, row.id);
+    await tripRows.freeze(dataSource.manager, row.id);
   }
 
   /**
@@ -559,6 +599,107 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
     });
   });
 
+  describe('where an ask is read from (plan 0135, tests 11 and 12)', () => {
+    it('reads a finished trip’s ask after its origins are deleted by hand', async () => {
+      // The proof that the read is off the origins table. Nothing deletes a
+      // finished basket's origins in the product, and plan 0136 deletes the
+      // whole table; until then this is what says the trips no longer need it.
+      const flat = await list('Origins taken away');
+      const milk = await line(flat, 'Milk');
+      const id = await basket({ name: 'Frozen' });
+      const carrier = await basketLine(id);
+      await origin(carrier, flat, milk, 4);
+
+      await dataSource
+        .getRepository(GeneratedListLineOrigin)
+        .delete({ generatedListLineId: carrier });
+
+      const page = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.BASKET,
+        tripId: id,
+      });
+
+      expect(page.items).toEqual([
+        {
+          lineId: milk,
+          asked: 4,
+          bought: 0,
+          left: 4,
+          outcome: TripRowOutcome.NOT_BOUGHT,
+          settledByUserId: null,
+        },
+      ]);
+    });
+
+    it('answers a finished trip once while its origins still stand', async () => {
+      // Both halves of `basket_asked` can see a finished basket until plan 0136
+      // drops the origins, so the `status = 'OPEN'` on the open half is what
+      // keeps every finished row from being counted twice.
+      const flat = await list('Counted once');
+      const milk = await line(flat, 'Milk');
+      const id = await basket({ name: 'Once' });
+      await origin(await basketLine(id), flat, milk, 3);
+
+      const page = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.BASKET,
+        tripId: id,
+      });
+      const heads = await trips.list({ userId: ids.shopper, listId: flat });
+
+      expect(page.items.map((row) => [row.lineId, row.asked])).toEqual([
+        [milk, 3],
+      ]);
+      expect(heads.items.map((head) => [head.id, head.lineCount])).toEqual([
+        [id, 1],
+      ]);
+    });
+
+    it('reads an open basket from its origins and a finished one from its rows', async () => {
+      const flat = await list('One of each');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread');
+      const ended = await basket({ name: 'Ended' });
+      await origin(await basketLine(ended), flat, milk, 2);
+      const open = await basket({
+        name: 'Open',
+        status: GeneratedListStatus.OPEN,
+        generatedAt: new Date('2026-01-11T10:00:00Z'),
+      });
+      await origin(await basketLine(open), flat, bread, 5);
+
+      const endedRows = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.BASKET,
+        tripId: ended,
+      });
+      const openRows = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.BASKET,
+        tripId: open,
+      });
+
+      // The ended one has rows and no longer needs its origins; the open one
+      // has none and is still summed from them.
+      expect(endedRows.items.map((row) => [row.lineId, row.asked])).toEqual([
+        [milk, 2],
+      ]);
+      expect(openRows.items.map((row) => [row.lineId, row.asked])).toEqual([
+        [bread, 5],
+      ]);
+      expect(
+        await dataSource
+          .getRepository(BasketTripRow)
+          .count({ where: { basketId: open } })
+      ).toBe(0);
+    });
+  });
+
   describe('a purchase belongs to the basket, not to its line (plan 0134)', () => {
     it('keeps a purchase in the basket’s trip after the basket line is deleted', async () => {
       // The consequence section 4.1 calls new and wanted. Taking a line out of a
@@ -568,7 +709,13 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const flat = await list('Line taken out');
       const milk = await line(flat, 'Milk');
 
-      const id = await basket({ name: 'Saturday' });
+      // Open while the line is taken out, because a finished basket refuses
+      // every write (plan 0059) and the freeze happens at the finish: the trip
+      // therefore ends having asked for nothing, and plan 0135 writes that down.
+      const id = await basket({
+        name: 'Saturday',
+        status: GeneratedListStatus.OPEN,
+      });
       const carrier = await basketLine(id);
       await origin(carrier, flat, milk, 2);
       await settled(flat, milk, '2026-01-10T11:00:00Z', {
@@ -577,6 +724,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       });
 
       await dataSource.getRepository(GeneratedListLine).delete({ id: carrier });
+      await finish(id);
 
       const heads = await trips.list({ userId: ids.shopper, listId: flat });
       expect(heads.items).toEqual([
@@ -1204,7 +1352,8 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         { emitTo, emitToUsers: jest.fn() } as never,
         undefined as never,
         { liveRegistered: async () => [] } as never,
-        dataSource.getRepository(BasketSource)
+        dataSource.getRepository(BasketSource),
+        tripRows
       );
     });
 

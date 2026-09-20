@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BasketCoverageModule } from '../baskets/basket-coverage.module';
 import {
   BasketSource,
+  BasketTripRow,
   GeneratedList,
   GeneratedListLine,
   GeneratedListLineOption,
@@ -17,6 +18,7 @@ import {
 import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
+import { BasketTripRowsService } from './basket-trip-rows.service';
 import { GeneratedListBasketService } from './generated-list-basket.service';
 import { GeneratedListLineRenameService } from './generated-list-line-rename.service';
 import { GeneratedListLineService } from './generated-list-line.service';
@@ -61,6 +63,10 @@ import { WaitingSettlementService } from './waiting-settlement.service';
       // What the run was asked to draw from (plan 0133), written by the run and
       // read back on every view of a basket.
       BasketSource,
+      // What each finished trip asked of each zone line (plan 0135). Registered
+      // so the entity is part of the data source; the freeze and the thaw are
+      // raw statements on the caller's manager.
+      BasketTripRow,
       GeneratedListLine,
       GeneratedListLineOrigin,
       GeneratedListLineOption,
@@ -89,6 +95,10 @@ import { WaitingSettlementService } from './waiting-settlement.service';
   controllers: [GeneratedListController, GeneratedListSharingController],
   providers: [
     GeneratedListService,
+    // The freeze and the thaw of a trip's ask (plan 0135). A provider of its
+    // own rather than two private methods, because it is the seam plan 0136
+    // replaces: the statement changes and its caller does not.
+    BasketTripRowsService,
     // The order a shopper walks (plan 0110). The run asks it once, between
     // composing a basket and writing it, and nothing asks it again.
     GeneratedListOrderService,

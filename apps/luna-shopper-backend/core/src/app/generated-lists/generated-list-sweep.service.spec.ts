@@ -4,10 +4,14 @@ import {
   RealtimeEvent,
   type GeneratedListView,
 } from '@portfolio/luna-shopper/contracts';
-import type { DataSource, FindOperator } from 'typeorm';
+import type { FindOperator } from 'typeorm';
 import type { GeneratedList } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ProfileService } from '../profiles/profile.service';
+import {
+  fakeBasketTripRows,
+  fakeUpdateDataSource,
+} from './basket-trip-rows.fake';
 import { GeneratedListSweepService } from './generated-list-sweep.service';
 import { GeneratedListService } from './generated-list.service';
 import type { ZoneLineClaimRef } from './line-claim.sql';
@@ -161,8 +165,9 @@ function build(options: {
 
   const claims = fakeLineClaims({}, (id) => options.claiming?.[id] ?? []);
 
+  const tripRows = fakeBasketTripRows();
   const generated = new GeneratedListService(
-    {} as DataSource,
+    fakeUpdateDataSource(lists),
     lists as never,
     lines as never,
     {} as never,
@@ -173,7 +178,8 @@ function build(options: {
     publisher,
     {} as never,
     {} as never,
-    { find: async () => [] } as never
+    { find: async () => [] } as never,
+    tripRows.service
   );
 
   const logger = { log: jest.fn(), error: jest.fn() };
@@ -197,7 +203,7 @@ function build(options: {
     configService as never
   );
 
-  return { service, rows, events, claims, tripsChanged, logger };
+  return { service, rows, events, claims, tripsChanged, logger, tripRows };
 }
 
 const statusOf = (harness: Harness, id: string) =>
