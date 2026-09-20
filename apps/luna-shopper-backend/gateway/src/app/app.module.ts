@@ -21,6 +21,7 @@ import { GatewayAccountModule } from './account/account.module';
 import { GatewayAdminModule } from './admin/admin.module';
 import { GatewayAssistantModule } from './assistant/assistant.module';
 import { GatewayAuthModule } from './auth/auth.module';
+import { GatewayBasketsModule } from './baskets/baskets.module';
 import { GatewayCatalogModule } from './catalog/catalog.module';
 import { MinClientVersionGuard } from './client-version/min-client-version.guard';
 import type { GatewayConfig } from './config/app-config';
@@ -113,6 +114,10 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayAccountModule,
     // The basket a person carries around the shop (plan 0050).
     GatewayGeneratedListsModule,
+    // The basket, read from the lists it covers (plan 0136). A module of its
+    // own because it is a different resource with a different path; it imports
+    // the one above for the participant guard alone.
+    GatewayBasketsModule,
     // Catalog endpoints — items, supermarkets, per scope prices (plan 0012, and
     // plan 0038 for the scopes).
     GatewayCatalogModule,

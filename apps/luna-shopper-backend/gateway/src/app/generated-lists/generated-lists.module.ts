@@ -57,5 +57,10 @@ import { ParticipantGuard } from './participant.guard';
     ParticipantThrottlerGuard,
     BasketPresenceService,
   ],
+  // Exported for `GatewayBasketsModule` (plan 0136), whose participant surface
+  // is behind both. They are exported rather than copied because a guard
+  // provided twice is two instances with two throttler buckets, and the bucket
+  // **is** the rate limit. They stay here until plan 0144 renames this folder.
+  exports: [ParticipantGuard, ParticipantThrottlerGuard],
 })
 export class GatewayGeneratedListsModule {}
