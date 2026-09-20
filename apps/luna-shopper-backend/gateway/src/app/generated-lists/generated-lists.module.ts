@@ -58,9 +58,15 @@ import { ParticipantGuard } from './participant.guard';
     BasketPresenceService,
   ],
   // Exported for `GatewayBasketsModule` (plan 0136), whose participant surface
-  // is behind both. They are exported rather than copied because a guard
+  // is behind both guards. They are exported rather than copied because a guard
   // provided twice is two instances with two throttler buckets, and the bucket
   // **is** the rate limit. They stay here until plan 0144 renames this folder.
-  exports: [ParticipantGuard, ParticipantThrottlerGuard],
+  //
+  // `JwtModule` is exported with them, and it is not optional: a guard named as
+  // a class in `@UseGuards` is instantiated in the **importing** module, so
+  // `ParticipantGuard`'s own `JwtService` has to be resolvable there. Without it
+  // the basket routes fail at boot rather than at a request, which is how the
+  // OpenAPI spec caught it.
+  exports: [ParticipantGuard, ParticipantThrottlerGuard, JwtModule],
 })
 export class GatewayGeneratedListsModule {}

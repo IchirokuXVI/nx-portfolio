@@ -209,7 +209,12 @@ export class BasketController {
   @Post(':id/rows/:rowKey/settle')
   @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
   @UseGuards(ParticipantThrottlerGuard)
-  @ApiContractResponse(BASKET_PATTERNS.rowSettle)
+  // 201, which is what Nest answers for a `POST` and what the settle this
+  // replaced already documented: a write on a row appends a settlement row
+  // rather than replacing one.
+  @ApiContractResponse(BASKET_PATTERNS.rowSettle, {
+    status: HttpStatus.CREATED,
+  })
   @ApiProblemResponses({
     auth: true,
     participant: true,
@@ -240,7 +245,12 @@ export class BasketController {
   @Post(':id/rows/:rowKey/revert')
   @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
   @UseGuards(ParticipantThrottlerGuard)
-  @ApiContractResponse(BASKET_PATTERNS.rowRevert)
+  // 201, which is what Nest answers for a `POST` and what the settle this
+  // replaced already documented: a write on a row appends a settlement row
+  // rather than replacing one.
+  @ApiContractResponse(BASKET_PATTERNS.rowRevert, {
+    status: HttpStatus.CREATED,
+  })
   @ApiProblemResponses({
     auth: true,
     participant: true,
@@ -280,7 +290,12 @@ export class BasketController {
   @Post(':id/rows/:rowKey/demand')
   @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
   @UseGuards(ParticipantThrottlerGuard)
-  @ApiContractResponse(BASKET_PATTERNS.rowDemand)
+  // 201, which is what Nest answers for a `POST` and what the settle this
+  // replaced already documented: a write on a row appends a settlement row
+  // rather than replacing one.
+  @ApiContractResponse(BASKET_PATTERNS.rowDemand, {
+    status: HttpStatus.CREATED,
+  })
   @ApiProblemResponses({
     auth: true,
     participant: true,

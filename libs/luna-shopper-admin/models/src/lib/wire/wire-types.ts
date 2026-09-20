@@ -16,6 +16,16 @@ export type AcceptSourceEntryDto = {
 };
 
 /**
+ * `AddBasketLineDto` in the gateway's OpenAPI document.
+ */
+export type AddBasketLineDto = {
+  targetListId: string;
+  content: string;
+  quantity?: number;
+  itemIds?: string[];
+};
+
+/**
  * `AddCommentDto` in the gateway's OpenAPI document.
  */
 export type AddCommentDto = {
@@ -23,31 +33,10 @@ export type AddCommentDto = {
 };
 
 /**
- * `AddGeneratedListLineDto` in the gateway's OpenAPI document.
- */
-export type AddGeneratedListLineDto = {
-  content: string;
-  quantity?: number;
-  itemId?: string | null;
-  options?: string[];
-  targetListId?: string | null;
-};
-
-/**
  * `AddGeneratedListParticipantDto` in the gateway's OpenAPI document.
  */
 export type AddGeneratedListParticipantDto = {
   userId: string;
-};
-
-/**
- * `AddGeneratedListParticipantLineDto` in the gateway's OpenAPI document.
- */
-export type AddGeneratedListParticipantLineDto = {
-  content: string;
-  quantity?: number;
-  itemId?: string;
-  options?: string[];
 };
 
 /**
@@ -174,6 +163,14 @@ export type AvailabilityEntryDto = {
 };
 
 /**
+ * `BasketAllocationDto` in the gateway's OpenAPI document.
+ */
+export type BasketAllocationDto = {
+  lineId: string;
+  quantity: number;
+};
+
+/**
  * `CreateBrandDto` in the gateway's OpenAPI document.
  */
 export type CreateBrandDto = {
@@ -189,7 +186,6 @@ export type CreateGeneratedListDto = {
   sources?: GeneratedListSourceDto[];
   profileId?: string;
   name?: string | null;
-  defaultTargetListId?: string | null;
   idempotencyKey?: string;
   memberUserIds?: string[];
 };
@@ -354,22 +350,6 @@ export type ForgotPasswordDto = {
 };
 
 /**
- * `GeneratedListAllocationDto` in the gateway's OpenAPI document.
- */
-export type GeneratedListAllocationDto = {
-  listId: string;
-  quantity: number;
-};
-
-/**
- * `GeneratedListLineShareDto` in the gateway's OpenAPI document.
- */
-export type GeneratedListLineShareDto = {
-  itemId: string;
-  quantity: number;
-};
-
-/**
  * `GeneratedListSourceDto` in the gateway's OpenAPI document.
  */
 export type GeneratedListSourceDto = {
@@ -509,7 +489,6 @@ export type ProblemDetails = {
     | 'client_too_old'
     | 'generated_list_finished'
     | 'stale_quantity'
-    | 'below_settled'
     | 'account_locked'
     | 'postal_code_unknown'
     | 'run_in_progress'
@@ -626,18 +605,11 @@ export type RegisterDto = {
 };
 
 /**
- * `RenameGeneratedListBasketLineDto` in the gateway's OpenAPI document.
+ * `RenameBasketRowDto` in the gateway's OpenAPI document.
  */
-export type RenameGeneratedListBasketLineDto = {
+export type RenameBasketRowDto = {
   content: string;
   confirmMerge?: boolean;
-};
-
-/**
- * `ReorderGeneratedListLinesDto` in the gateway's OpenAPI document.
- */
-export type ReorderGeneratedListLinesDto = {
-  lineIds: string[];
 };
 
 /**
@@ -680,6 +652,15 @@ export type ResolvePostalCodeDto = {
 };
 
 /**
+ * `RevertBasketRowDto` in the gateway's OpenAPI document.
+ */
+export type RevertBasketRowDto = {
+  target: 'UNITS' | 'CLOSE';
+  units?: number;
+  from?: number;
+};
+
+/**
  * `ScopeCopyDto` in the gateway's OpenAPI document.
  */
 export type ScopeCopyDto = {
@@ -702,29 +683,11 @@ export type SetApprovalDto = {
 };
 
 /**
- * `SetGeneratedListLineOutstandingDto` in the gateway's OpenAPI document.
+ * `SetBasketRowDemandDto` in the gateway's OpenAPI document.
  */
-export type SetGeneratedListLineOutstandingDto = {
-  outstanding: number;
-  from: number;
-};
-
-/**
- * `SetGeneratedListOriginQuantityDto` in the gateway's OpenAPI document.
- */
-export type SetGeneratedListOriginQuantityDto = {
-  listId: string;
+export type SetBasketRowDemandDto = {
   lineId?: string;
   quantity: number;
-  from: number;
-};
-
-/**
- * `SetGeneratedListOriginSettledDto` in the gateway's OpenAPI document.
- */
-export type SetGeneratedListOriginSettledDto = {
-  lineId: string;
-  settled: number;
   from: number;
 };
 
@@ -789,13 +752,14 @@ export type SetSupermarketLocationItemAvailabilityDto = {
 };
 
 /**
- * `SettleGeneratedListLineDto` in the gateway's OpenAPI document.
+ * `SettleBasketRowDto` in the gateway's OpenAPI document.
  */
-export type SettleGeneratedListLineDto = {
+export type SettleBasketRowDto = {
   outcome: SettlementOutcome;
   quantity?: number;
-  allocations?: GeneratedListAllocationDto[];
+  from: number;
   itemId?: string;
+  allocations?: BasketAllocationDto[];
 };
 
 /**
@@ -850,14 +814,6 @@ export type SpawnHarvestRunDto = {
   scopeCopies?: ScopeCopyDto[];
   writes?: 'PRICES_AND_AVAILABILITY' | 'PRICES' | 'AVAILABILITY';
   details?: 'NEW' | 'ALL';
-};
-
-/**
- * `SplitGeneratedListLineDto` in the gateway's OpenAPI document.
- */
-export type SplitGeneratedListLineDto = {
-  from: number;
-  shares: GeneratedListLineShareDto[];
 };
 
 /**
@@ -928,18 +884,6 @@ export type UpdateBrandDto = {
 export type UpdateGeneratedListDto = {
   name?: string | null;
   status?: 'OPEN' | 'FINISHED' | 'ARCHIVED';
-  defaultTargetListId?: string | null;
-};
-
-/**
- * `UpdateGeneratedListLineDto` in the gateway's OpenAPI document.
- */
-export type UpdateGeneratedListLineDto = {
-  content?: string;
-  quantity?: number;
-  itemId?: string | null;
-  targetListId?: string | null;
-  confirmMerge?: boolean;
 };
 
 /**
@@ -1185,17 +1129,7 @@ export type AdminCoreAdminBasketDetailView = {
   generatedAt: string;
   createdAt: string;
   updatedAt: string;
-  lines: AdminCoreAdminBasketLineView[];
-};
-
-/**
- * `admin-core.AdminBasketLineView` in the gateway's OpenAPI document.
- */
-export type AdminCoreAdminBasketLineView = {
-  id: string;
-  content: string;
-  quantity: number;
-  createdAt: string;
+  lines: AdminCoreAdminBasketRowView[];
 };
 
 /**
@@ -1206,6 +1140,17 @@ export type AdminCoreAdminBasketLineView = {
 export type AdminCoreAdminBasketPage = {
   items: AdminCoreAdminBasketView[];
   nextCursor: string | null;
+};
+
+/**
+ * `admin-core.AdminBasketRowView` in the gateway's OpenAPI document.
+ */
+export type AdminCoreAdminBasketRowView = {
+  rowKey: string;
+  content: string;
+  left: number;
+  bought: number;
+  asked: number;
 };
 
 /**
@@ -1691,6 +1636,119 @@ export type AuthUserProfileView = {
   email: string | null;
   emailVerified: boolean;
   displayName: string | null;
+};
+
+/**
+ * `basket.BasketListRef` in the gateway's OpenAPI document.
+ */
+export type BasketBasketListRef = {
+  listId: string;
+  name: string;
+  zoneId: string;
+  zoneName: string;
+};
+
+/**
+ * `basket.BasketPriceScopeView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketPriceScopeView = {
+  priceScopeId: string;
+  supermarketId: string;
+  supermarketName: CatalogLocalizedText;
+  locations: BasketBasketScopeLocationView[];
+};
+
+/**
+ * `basket.BasketProgress` in the gateway's OpenAPI document.
+ */
+export type BasketBasketProgress = {
+  done: number;
+  unavailable: number;
+  total: number;
+  pending: number;
+};
+
+/**
+ * `basket.BasketResult` in the gateway's OpenAPI document.
+ */
+export type BasketBasketResult = {
+  id: string;
+  kind: EnumsBasketKind;
+  name: string | null;
+  status: EnumsGeneratedListStatus;
+  createdAt: string;
+  rows: BasketBasketRowView[];
+  lists: BasketBasketListRef[];
+  participants: GeneratedListSharingParticipantView[];
+  me: GeneratedListSharingParticipantView;
+  progress: BasketBasketProgress;
+  truncated: boolean;
+  servesLocations: boolean;
+  products: CatalogItemView[];
+  scopes: BasketBasketPriceScopeView[];
+};
+
+/**
+ * `basket.BasketRowEntryView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketRowEntryView = {
+  lineId: string;
+  listId?: string;
+  left: number;
+  bought: number;
+  state: EnumsBasketRowState;
+  approvalStatus: EnumsLineApprovalStatus;
+  demandEditable: boolean;
+};
+
+/**
+ * `basket.BasketRowResult` in the gateway's OpenAPI document.
+ */
+export type BasketBasketRowResult = {
+  row: BasketBasketRowView;
+  progress: BasketBasketProgress;
+  skippedCount?: number;
+  replacedRowKey?: string;
+};
+
+/**
+ * `basket.BasketRowView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketRowView = {
+  rowKey: string;
+  content: string;
+  left: number;
+  bought: number;
+  asked: number;
+  state: EnumsBasketRowState;
+  note: EnumsBasketRowNote | null;
+  noteAt: string | null;
+  mark: EnumsBasketRowMark | null;
+  awaitingApproval: boolean;
+  optionIds: string[];
+  touchedBy: string | null;
+  touchedAt: string | null;
+  entries: BasketBasketRowEntryView[];
+};
+
+/**
+ * `basket.BasketScopeLocationView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketScopeLocationView = {
+  supermarketLocationId: string;
+  label: CatalogLocalizedText | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+};
+
+/**
+ * `basket.BasketSummaryView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketSummaryView = {
+  id: string;
+  kind: EnumsBasketKind;
+  progress: BasketBasketProgress;
 };
 
 /**
@@ -2329,6 +2387,27 @@ export type EnumsAuthProvider = 'GOOGLE' | 'EMAIL';
 export type EnumsBasketKind = 'LIVE' | 'GENERATED';
 
 /**
+ * `enums.BasketRowMark` in the gateway's OpenAPI document.
+ */
+export type EnumsBasketRowMark = 'ADDED' | 'CHANGED' | 'REMOVED';
+
+/**
+ * `enums.BasketRowNote` in the gateway's OpenAPI document.
+ */
+export type EnumsBasketRowNote = 'SKIPPED_EARLIER';
+
+/**
+ * `enums.BasketRowState` in the gateway's OpenAPI document.
+ */
+export type EnumsBasketRowState =
+  | 'WANTED'
+  | 'PARTLY'
+  | 'DONE'
+  | 'NOT_AVAILABLE'
+  | 'SKIPPED'
+  | 'REMOVED';
+
+/**
  * `enums.BulkOperationErrorCode` in the gateway's OpenAPI document.
  */
 export type EnumsBulkOperationErrorCode =
@@ -2353,11 +2432,6 @@ export type EnumsCommentTranscription =
  * `enums.DiscoveredPlaceStatus` in the gateway's OpenAPI document.
  */
 export type EnumsDiscoveredPlaceStatus = 'NEW' | 'IMPORTED' | 'REJECTED';
-
-/**
- * `enums.GeneratedLineOrigin` in the gateway's OpenAPI document.
- */
-export type EnumsGeneratedLineOrigin = 'DERIVED' | 'ADDED';
 
 /**
  * `enums.GeneratedListStatus` in the gateway's OpenAPI document.
@@ -2492,14 +2566,6 @@ export type EnumsMergeRequestStatus =
   | 'CANCELLED';
 
 /**
- * `enums.OriginUnavailableReason` in the gateway's OpenAPI document.
- */
-export type EnumsOriginUnavailableReason =
-  | 'REJECTED'
-  | 'NOT_APPROVED'
-  | 'SETTLED';
-
-/**
  * `enums.ParticipantKind` in the gateway's OpenAPI document.
  */
 export type EnumsParticipantKind = 'OWNER' | 'REGISTERED' | 'GUEST';
@@ -2604,66 +2670,6 @@ export type EnumsZoneRole = 'OWNER' | 'ADMIN' | 'MEMBER';
 export type EnumsZoneStatus = 'ACTIVE' | 'MARKED_FOR_DELETION';
 
 /**
- * `generated-list-sharing.BasketLineView` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingBasketLineView = {
-  id: string;
-  content: string;
-  quantity: number;
-  settledQuantity: number;
-  itemId: string | null;
-  options: string[];
-  position: number;
-  createdByParticipantId: string | null;
-  lastEditedByParticipantId: string | null;
-  lastEditedAt: string | null;
-  lastOutcome: 'BOUGHT' | 'NOT_AVAILABLE' | null | null;
-  origins?: GeneratedListGeneratedListLineOriginView[];
-  targetListId?: string | null;
-  origin?: EnumsGeneratedLineOrigin;
-};
-
-/**
- * `generated-list-sharing.BasketPriceScopeView` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingBasketPriceScopeView = {
-  priceScopeId: string;
-  supermarketId: string;
-  supermarketName: CatalogLocalizedText;
-  locations: GeneratedListSharingBasketScopeLocationView[];
-};
-
-/**
- * `generated-list-sharing.BasketResult` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingBasketResult = {
-  id: string;
-  kind: EnumsBasketKind;
-  name: string | null;
-  status: EnumsGeneratedListStatus;
-  generatedAt: string;
-  lines: GeneratedListSharingBasketLineView[];
-  participants: GeneratedListSharingParticipantView[];
-  me: GeneratedListSharingParticipantView;
-  seesZoneData: boolean;
-  sources?: GeneratedListBasketSourceView[];
-  sourceNames?: GeneratedListSharingSourceName[];
-  products: CatalogItemView[];
-  scopes: GeneratedListSharingBasketPriceScopeView[];
-};
-
-/**
- * `generated-list-sharing.BasketScopeLocationView` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingBasketScopeLocationView = {
-  supermarketLocationId: string;
-  label: CatalogLocalizedText | null;
-  address: string | null;
-  city: string | null;
-  postalCode: string | null;
-};
-
-/**
  * `generated-list-sharing.JoinResult` in the gateway's OpenAPI document.
  */
 export type GeneratedListSharingJoinResult = {
@@ -2675,58 +2681,12 @@ export type GeneratedListSharingJoinResult = {
 };
 
 /**
- * `generated-list-sharing.LineOriginDetail` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingLineOriginDetail = {
-  originId: string;
-  listId: string;
-  lineId: string;
-  zoneId: string;
-  listName: string | null;
-  zoneName: string | null;
-  contributed: number;
-  listQuantity: number;
-  settledHere: number;
-  writable: boolean;
-  demandChangeable: boolean;
-  fromRun: boolean;
-  approvalStatus: EnumsLineApprovalStatus;
-};
-
-/**
  * `generated-list-sharing.LinkPreview` in the gateway's OpenAPI document.
  */
 export type GeneratedListSharingLinkPreview = {
   joinable: boolean;
   name?: string | null;
   participantCount?: number;
-};
-
-/**
- * `generated-list-sharing.ListRef` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingListRef = {
-  listId: string;
-  zoneId: string;
-  listName: string | null;
-  zoneName: string | null;
-  fromRun: boolean;
-};
-
-/**
- * `generated-list-sharing.OriginCandidate` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingOriginCandidate = {
-  listId: string;
-  lineId: string;
-  zoneId: string;
-  listName: string | null;
-  zoneName: string | null;
-  listQuantity: number;
-  content: string;
-  matchedOnText: boolean;
-  unavailable?: EnumsOriginUnavailableReason;
-  fromRun: boolean;
 };
 
 /**
@@ -2762,46 +2722,6 @@ export type GeneratedListSharingParticipantView = {
 };
 
 /**
- * `generated-list-sharing.ReopenResult` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingReopenResult = {
-  line: GeneratedListSharingBasketLineView;
-  skippedCount: number;
-  skipped?: GeneratedListSharingSettleSkip[];
-};
-
-/**
- * `generated-list-sharing.SettleResult` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingSettleResult = {
-  line: GeneratedListSharingBasketLineView;
-  skippedCount: number;
-  settlements?: GeneratedListSharingSettlementRef[];
-  skipped?: GeneratedListSharingSettleSkip[];
-};
-
-/**
- * `generated-list-sharing.SettleSkip` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingSettleSkip = {
-  lineId: string;
-  listId: string;
-  reason: 'ACCESS_GONE' | 'ORIGIN_DELETED';
-  listName: string | null;
-  zoneName: string | null;
-};
-
-/**
- * `generated-list-sharing.SettlementRef` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingSettlementRef = {
-  settlementId: string;
-  lineId: string;
-  listId: string;
-  quantity: number;
-};
-
-/**
  * `generated-list-sharing.ShareLinkResult` in the gateway's OpenAPI document.
  */
 export type GeneratedListSharingShareLinkResult = {
@@ -2822,59 +2742,11 @@ export type GeneratedListSharingShareLinkView = {
 };
 
 /**
- * `generated-list-sharing.SourceName` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingSourceName = {
-  listId: string;
-  name: string;
-  zoneName: string | null;
-};
-
-/**
- * `generated-list-sharing.SplitLineResult` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingSplitLineResult = {
-  line: GeneratedListSharingBasketLineView;
-  created: GeneratedListSharingBasketLineView[];
-  merged: GeneratedListSharingBasketLineView[];
-  removed: string[];
-};
-
-/**
  * `generated-list.BasketSourceView` in the gateway's OpenAPI document.
  */
 export type GeneratedListBasketSourceView = {
   zoneId: string;
   listId: string | null;
-};
-
-/**
- * `generated-list.GeneratedListLineOriginView` in the gateway's OpenAPI document.
- */
-export type GeneratedListGeneratedListLineOriginView = {
-  id: string;
-  zoneId: string;
-  listId: string;
-  lineId: string;
-  quantity: number;
-  settled: number;
-  lineVersion: number;
-};
-
-/**
- * `generated-list.GeneratedListLineView` in the gateway's OpenAPI document.
- */
-export type GeneratedListGeneratedListLineView = {
-  id: string;
-  content: string;
-  quantity: number;
-  settledQuantity: number;
-  itemId: string | null;
-  options: string[];
-  origin: EnumsGeneratedLineOrigin;
-  targetListId: string | null;
-  position: number;
-  origins: GeneratedListGeneratedListLineOriginView[];
 };
 
 /**
@@ -2928,7 +2800,6 @@ export type GeneratedListGeneratedListView = {
   status: EnumsGeneratedListStatus;
   generatedAt: string;
   sources: GeneratedListBasketSourceView[];
-  lines: GeneratedListGeneratedListLineView[];
 };
 
 /**
@@ -2957,23 +2828,6 @@ export type GeneratedListSharedGeneratedListView = {
   presentCount: number;
   owner: GeneratedListGeneratedListOwnerView;
   sharedAt: string;
-};
-
-/**
- * `generated-list.UpdateGeneratedListLineResult` in the gateway's OpenAPI document.
- */
-export type GeneratedListUpdateGeneratedListLineResult = {
-  id: string;
-  content: string;
-  quantity: number;
-  settledQuantity: number;
-  itemId: string | null;
-  options: string[];
-  origin: EnumsGeneratedLineOrigin;
-  targetListId: string | null;
-  position: number;
-  origins: GeneratedListGeneratedListLineOriginView[];
-  absorbedLineId?: string;
 };
 
 /**
@@ -3776,48 +3630,10 @@ export type MsgAssistantTurnResponse = {
 };
 
 /**
- * `msg.generatedList.lineOrigins.response` in the gateway's OpenAPI document.
- */
-export type MsgGeneratedListLineOriginsResponse = {
-  generatedListId: string;
-  lineId: string;
-  origins: GeneratedListSharingLineOriginDetail[];
-  candidates: GeneratedListSharingOriginCandidate[];
-  others: GeneratedListSharingListRef[];
-};
-
-/**
  * `msg.generatedList.participant.revoke.response` in the gateway's OpenAPI document.
  */
 export type MsgGeneratedListParticipantRevokeResponse = {
   id: string;
-};
-
-/**
- * `msg.generatedList.renameLine.response` in the gateway's OpenAPI document.
- */
-export type MsgGeneratedListRenameLineResponse = {
-  line: GeneratedListSharingBasketLineView;
-  absorbedLineId?: string;
-};
-
-/**
- * `msg.generatedList.setOriginQuantity.response` in the gateway's OpenAPI document.
- */
-export type MsgGeneratedListSetOriginQuantityResponse = {
-  line: GeneratedListSharingBasketLineView;
-  origin: GeneratedListSharingLineOriginDetail | null;
-  listQuantity: number;
-};
-
-/**
- * `msg.generatedList.setOriginSettled.response` in the gateway's OpenAPI document.
- */
-export type MsgGeneratedListSetOriginSettledResponse = {
-  line: GeneratedListSharingBasketLineView;
-  origin: GeneratedListSharingLineOriginDetail | null;
-  skippedCount: number;
-  skipped: GeneratedListSharingSettleSkip[];
 };
 
 /**
