@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   SettlementOutcome,
@@ -56,13 +57,9 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
       repo.create({
         ownerUserId,
         name: null,
-        status: GeneratedListStatus.COMPLETED,
+        status: GeneratedListStatus.FINISHED,
         generatedAt: new Date(generatedAt),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
+        kind: BasketKind.GENERATED,
         defaultTargetListId: null,
         idempotencyKey: null,
       })
@@ -129,7 +126,7 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
   async function historyRows(owner: string): Promise<OrderHistoryRow[]> {
     return dataSource.query<OrderHistoryRow[]>(ORDER_HISTORY_SQL, [
       owner,
-      [GeneratedListStatus.COMPLETED, GeneratedListStatus.ARCHIVED],
+      [GeneratedListStatus.FINISHED, GeneratedListStatus.ARCHIVED],
       7,
     ]);
   }

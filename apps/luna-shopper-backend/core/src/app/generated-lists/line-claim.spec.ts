@@ -1,12 +1,12 @@
 import { ConfigService } from '@nestjs/config';
 import {
   GeneratedListStatus,
-  LIVE_GENERATED_LIST_STATUSES,
   RealtimeEvent,
-  isLiveGeneratedList,
+  isOpenBasket,
   type LineClaimChangedEvent,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource } from 'typeorm';
+import { OPEN_GENERATED_BASKET } from '../baskets/open-basket.sql';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from './line-claim.service';
 import {
@@ -60,23 +60,24 @@ function build(rows: unknown[] = [], basketRefs: unknown[] = []) {
   };
 }
 
-describe('what counts as a live basket (plan 0052, section 3)', () => {
-  it('includes DRAFT, because a run composes one', () => {
-    // The whole reason the constant exists. Exit criterion 1 says generating a
-    // basket claims the lines it took, and a run writes `DRAFT`, so a claim that
-    // counted only `ACTIVE` would announce nothing at the one moment the
-    // indicator is for.
-    expect([...LIVE_GENERATED_LIST_STATUSES]).toEqual([
-      GeneratedListStatus.DRAFT,
-      GeneratedListStatus.ACTIVE,
-    ]);
-    expect(isLiveGeneratedList(GeneratedListStatus.DRAFT)).toBe(true);
-    expect(isLiveGeneratedList(GeneratedListStatus.ACTIVE)).toBe(true);
+describe('what counts as a basket somebody is shopping (plan 0133, section 3)', () => {
+  it('is OPEN, and only OPEN', () => {
+    // Exit criterion 1 of plan 0052 says generating a basket claims the lines it
+    // took, and a run composes an `OPEN` one, so this is the moment the
+    // indicator exists for. There used to be a second spelling of this state,
+    // `ACTIVE`, that nothing in core ever wrote.
+    expect(isOpenBasket(GeneratedListStatus.OPEN)).toBe(true);
   });
 
   it('excludes the two a trip is over in', () => {
-    expect(isLiveGeneratedList(GeneratedListStatus.COMPLETED)).toBe(false);
-    expect(isLiveGeneratedList(GeneratedListStatus.ARCHIVED)).toBe(false);
+    expect(isOpenBasket(GeneratedListStatus.FINISHED)).toBe(false);
+    expect(isOpenBasket(GeneratedListStatus.ARCHIVED)).toBe(false);
+  });
+
+  it('asks the kind as well, so the permanent basket claims nothing', () => {
+    // The status alone would say yes to a `LIVE` basket, which is always open
+    // and holds every line its owner can write (plan 0133, section 6).
+    expect(LINE_CLAIMS_SQL).toContain(OPEN_GENERATED_BASKET);
   });
 });
 
@@ -84,7 +85,7 @@ describe('the claim query (plan 0052, sections 3 and 4)', () => {
   it('counts only baskets inside the window', () => {
     // Section 4.1: a basket generated on Tuesday that nobody shopped must stop
     // claiming, or the household reads "Ana is buying this" for a month.
-    expect(LINE_CLAIMS_SQL).toContain(`gl."generatedAt" >= $3::timestamptz`);
+    expect(LINE_CLAIMS_SQL).toContain(`gl."generatedAt" >= $2::timestamptz`);
   });
 
   it('releases a basket line that has been settled all the way through', () => {
@@ -115,12 +116,7 @@ describe('reading the claim', () => {
   const query = (rows: unknown[]) => async () => rows;
 
   it('defaults every line nothing carries', async () => {
-    const claims = await readLineClaims(
-      query([]),
-      ['li1', 'li2'],
-      LIVE_GENERATED_LIST_STATUSES,
-      new Date()
-    );
+    const claims = await readLineClaims(query([]), ['li1', 'li2'], new Date());
 
     expect(claims.get('li1')).toEqual({
       claimed: false,
@@ -133,7 +129,6 @@ describe('reading the claim', () => {
     const claims = await readLineClaims(
       query([{ lineId: 'li1', ownerUserId: ANA, ownerInZone: true }]),
       ['li1'],
-      LIVE_GENERATED_LIST_STATUSES,
       new Date()
     );
 
@@ -147,7 +142,6 @@ describe('reading the claim', () => {
     const claims = await readLineClaims(
       query([{ lineId: 'li1', ownerUserId: ANA, ownerInZone: false }]),
       ['li1'],
-      LIVE_GENERATED_LIST_STATUSES,
       new Date()
     );
 
@@ -162,7 +156,6 @@ describe('reading the claim', () => {
         return [];
       },
       [],
-      LIVE_GENERATED_LIST_STATUSES,
       new Date()
     );
 

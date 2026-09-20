@@ -185,8 +185,13 @@ const coreDashboard = object(
     baskets: {
       type: 'object',
       additionalProperties: false,
-      required: ['total', 'draft', 'completed'],
-      properties: { total: count(), draft: count(), completed: count() },
+      required: ['total', 'open', 'finished', 'live'],
+      properties: {
+        total: count(),
+        open: count(),
+        finished: count(),
+        live: count(),
+      },
     },
     zonesCreated: series(),
     listsCreated: series(),

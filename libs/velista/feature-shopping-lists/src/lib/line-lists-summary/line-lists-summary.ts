@@ -158,14 +158,13 @@ interface RowNotice extends RowCaption {
 /**
  * What a row that cannot be raised says, keyed on the server's reason.
  *
- * Two entries where `0055` had three, and the third is gone rather than renamed:
- * backend `0092` section 3.2 made a pending line and a line at zero adoptable, so
- * `NOT_APPROVED` and `SETTLED` are no longer answered and no longer drawn. Anything
- * this build cannot read arrives as `UNAVAILABLE` from the mapper and says only
- * that.
+ * One entry where `0055` had three, and the others are gone rather than renamed:
+ * backend `0092` section 3.2 made a pending line and a line at zero adoptable, and
+ * backend `0133` section 7 made a line another basket carries adoptable too. None of
+ * the three is answered any more and none is drawn. Anything this build cannot read
+ * arrives as `UNAVAILABLE` from the mapper and says only that.
  */
 const UNAVAILABLE_KEY: Readonly<Record<string, string>> = {
-  CLAIMED: 'basket.units.claimed',
   REJECTED: 'basket.units.rejected',
   UNAVAILABLE: 'basket.units.cannotTake',
 };

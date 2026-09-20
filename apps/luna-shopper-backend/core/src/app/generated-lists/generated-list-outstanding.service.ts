@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
-  isLiveGeneratedList,
+  isOpenBasket,
   SettlementOutcome,
   type GeneratedListSettleResult,
   type SetGeneratedListLineOutstandingRequest,
@@ -113,7 +113,7 @@ export class GeneratedListOutstandingService {
     if (!list) {
       throw new NotFoundException('Generated list not found');
     }
-    if (!isLiveGeneratedList(list.status)) {
+    if (!isOpenBasket(list.status)) {
       // Both directions, with its own code rather than a bare conflict, so the
       // screen can say "this shopping list is finished" instead of "that did not
       // work" (section 5, and plan 0055 section 3.3).

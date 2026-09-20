@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GENERATED_LIST_LIMITS,
-  isLiveGeneratedList,
+  isOpenBasket,
   SettlementOutcome,
   type GeneratedListLineOriginDetail,
   type GeneratedListSettleSkip,
@@ -362,7 +362,7 @@ export class GeneratedListOriginSettledService {
     if (!list) {
       throw new NotFoundException('Generated list not found');
     }
-    if (!isLiveGeneratedList(list.status)) {
+    if (!isOpenBasket(list.status)) {
       // Plan 0059's one rule: this writes the zone line and the settlement table
       // exactly as a settle does, and a finished trip does neither.
       throw new GeneratedListFinishedException(

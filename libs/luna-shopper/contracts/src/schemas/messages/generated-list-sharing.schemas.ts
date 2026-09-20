@@ -380,6 +380,7 @@ const basketView = object(
   GENERATED_LIST_SHARING_SCHEMA_IDS.basketView,
   {
     id: nonEmptyString(),
+    kind: ref(GENERATED_LIST_SCHEMA_IDS.basketKind),
     name: nullableString(),
     status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
     generatedAt: nonEmptyString(),
@@ -388,11 +389,12 @@ const basketView = object(
     me: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
     seesZoneData: boolean(),
     // Zone data, so absent under section 5.2 like the line's three fields.
-    sourceSnapshot: ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshot),
+    sources: array(ref(GENERATED_LIST_SCHEMA_IDS.basketSourceView)),
     sourceNames: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.sourceName)),
   },
   [
     'id',
+    'kind',
     'name',
     'status',
     'generatedAt',
@@ -436,6 +438,7 @@ const basketResult = object(
   GENERATED_LIST_SHARING_SCHEMA_IDS.basketResult,
   {
     id: nonEmptyString(),
+    kind: ref(GENERATED_LIST_SCHEMA_IDS.basketKind),
     name: nullableString(),
     status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
     generatedAt: nonEmptyString(),
@@ -443,7 +446,7 @@ const basketResult = object(
     participants: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)),
     me: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
     seesZoneData: boolean(),
-    sourceSnapshot: ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshot),
+    sources: array(ref(GENERATED_LIST_SCHEMA_IDS.basketSourceView)),
     sourceNames: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.sourceName)),
     products: array(ref(CATALOG_SCHEMA_IDS.itemView)),
     // Plan 0066, section 4: one entry per scope id any product's `bestOffer`
@@ -453,6 +456,7 @@ const basketResult = object(
   },
   [
     'id',
+    'kind',
     'name',
     'status',
     'generatedAt',

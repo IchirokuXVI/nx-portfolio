@@ -32,7 +32,7 @@ function coreRow(
   return {
     id,
     name: null,
-    status: GeneratedListStatus.ACTIVE,
+    status: GeneratedListStatus.OPEN,
     generatedAt: '2026-09-01T08:00:00.000Z',
     lineCount: 3,
     settledLineCount: 1,
@@ -113,7 +113,7 @@ describe('the shared baskets read names every owner (plan 0114, sections 8 and 9
     expect(row).toEqual({
       id: 'gl-1',
       name: null,
-      status: GeneratedListStatus.ACTIVE,
+      status: GeneratedListStatus.OPEN,
       generatedAt: '2026-09-01T08:00:00.000Z',
       lineCount: 3,
       settledLineCount: 1,

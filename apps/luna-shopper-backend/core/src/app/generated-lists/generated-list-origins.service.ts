@@ -2,10 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GENERATED_LIST_LIMITS,
-  isLiveGeneratedList,
+  isOpenBasket,
   LineApprovalStatus,
   ListPermission,
-  LIVE_GENERATED_LIST_STATUSES,
   OriginUnavailableReason,
   RealtimeEvent,
   SettlementOutcome,
@@ -33,6 +32,7 @@ import {
   Repository,
   type EntityManager,
 } from 'typeorm';
+import { BasketCoverageService } from '../baskets/basket-coverage.service';
 import {
   GeneratedList,
   GeneratedListLine,
@@ -52,9 +52,7 @@ import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
 import {
-  LIVE_OVERLAP_SQL,
   SHEET_CANDIDATE_LINES_SQL,
-  type LiveOverlapRow,
   type SheetCandidateLineRow,
   type WritableListRow,
 } from './generated-list.sql';
@@ -132,7 +130,11 @@ export class GeneratedListOriginsService {
     // `GeneratedListSharingService.writableAmong` cannot answer: the demand rule
     // branches on `DECIDE` and `MANAGE` as well. Last in the list on purpose, so
     // that adding it shifts no existing positional argument in the specs.
-    private readonly listAccess: ListAccessService
+    private readonly listAccess: ListAccessService,
+    // Which lists this basket draws from, now (plan 0133, section 5), which is
+    // what `fromRun` reports. Last in the list on purpose, so that adding it
+    // shifts no existing positional argument in the specs.
+    private readonly coverage: BasketCoverageService
   ) {}
 
   // --- The read --------------------------------------------------------------
@@ -208,7 +210,7 @@ export class GeneratedListOriginsService {
       ...rows.map((row) => row.listId),
       ...scope.map((row) => row.listId),
     ]);
-    const fromRun = this.runSources(list);
+    const fromRun = await this.runSources(list);
 
     // A list that appears above appears once. An origin is not offered again as
     // a candidate, and a list holding a matching line is a candidate rather than
@@ -298,15 +300,22 @@ export class GeneratedListOriginsService {
   }
 
   /**
-   * The lists the run drew this basket from (plan 0092, section 3).
+   * The lists this basket draws from (plan 0092, section 3).
    *
-   * Read from the basket's own source snapshot rather than from the line's
-   * origins, because an added line has no origins at all: what makes one row the
-   * likely answer is where this **basket** came from. It is the same fact on all
-   * three collections, which is why it is computed once here.
+   * Asked of the basket rather than of the line's origins, because an added line
+   * has no origins at all: what makes one row the likely answer is where this
+   * **basket** came from. It is the same fact on all three collections, which is
+   * why it is computed once here.
+   *
+   * Since plan 0133 it is coverage rather than a stored snapshot, so `fromRun` on
+   * a row now means "this basket covers that list **today**". That is a change of
+   * meaning and it is the right one: the sheet is offering the reader somewhere
+   * to put a line now, and a list the run read in March that the owner has since
+   * been removed from is not somewhere they can put anything.
    */
-  private runSources(list: GeneratedList): ReadonlySet<string> {
-    return new Set(list.sourceSnapshot.sources.map((source) => source.listId));
+  private async runSources(list: GeneratedList): Promise<ReadonlySet<string>> {
+    const covered = await this.coverage.listsOf(list);
+    return new Set(covered.map((row) => row.listId));
   }
 
   /**
@@ -342,15 +351,7 @@ export class GeneratedListOriginsService {
       return [];
     }
 
-    // The run's own overlap query, asked about the **owner**: a line another
-    // live basket of theirs is carrying is one plan 0050 section 3 refuses to
-    // put in two places at once.
-    const claimed = await this.carriedElsewhere(
-      list,
-      found.map((row) => row.id)
-    );
-
-    const fromRun = this.runSources(list);
+    const fromRun = await this.runSources(list);
     const zoneOf = new Map(scope.map((row) => [row.listId, row.zoneId]));
     return found.map((row) => ({
       listId: row.listId,
@@ -365,67 +366,33 @@ export class GeneratedListOriginsService {
       // than offered silently (section 8).
       matchedOnText: !row.itemSetHash,
       fromRun: fromRun.has(row.listId),
-      ...this.unavailability(row, claimed),
+      ...this.unavailability(row),
     }));
-  }
-
-  /**
-   * Which of these zone lines another live basket of the owner's is carrying
-   * (plan 0092, section 3.2).
-   *
-   * **Another**, which is the fix as much as the statuses are. The query tested
-   * `status = 'ACTIVE'` and nothing ever writes that, so it never fired; asking
-   * it against the live set makes it fire, and this basket's own lines would be
-   * the first thing it refused. Plan 0094 puts two siblings of one split on one
-   * zone line deliberately, so a basket is never in the way of itself.
-   *
-   * The window is the claim's own, for the reason the query's doc gives at
-   * length: a row that says `CLAIMED` while the line's claim says nobody has it
-   * is one screen contradicting the next.
-   */
-  private async carriedElsewhere(
-    list: GeneratedList,
-    lineIds: readonly string[]
-  ): Promise<ReadonlySet<string>> {
-    if (lineIds.length === 0) {
-      return new Set();
-    }
-    const rows = await this.lists.query<LiveOverlapRow[]>(LIVE_OVERLAP_SQL, [
-      list.ownerUserId,
-      lineIds,
-      LIVE_GENERATED_LIST_STATUSES,
-      list.id,
-      this.claims.since(),
-    ]);
-    return new Set(rows.map((row) => row.lineId));
   }
 
   /**
    * Why this candidate cannot be adopted, or nothing at all when it can.
    *
-   * Two reasons survive plan 0092 section 3.2, and what went is the interesting
-   * half. A **pending** line is adoptable, because a pending origin is still
-   * claimed and still settled and the row says it is waiting; a line **at zero**
-   * is adoptable, because a list at zero is a list that can be asked again and
-   * raising it is exactly that. Both used to be refused for reasons that read as
-   * "the run would not have taken it", which is a rule about composing a basket
-   * rather than about a person deciding to buy something.
+   * **One reason survives**, and what went is the interesting part. A **pending**
+   * line is adoptable, because a pending origin is still claimed and still
+   * settled and the row says it is waiting; a line **at zero** is adoptable,
+   * because a list at zero is a list that can be asked again and raising it is
+   * exactly that (plan 0092, section 3.2). A line **another basket of the
+   * owner's carries** is adoptable too, since plan 0133 section 7: that refusal
+   * was about two frozen copies of one line, and with a permanent basket over
+   * every list it would refuse everything.
    *
    * The property that matters is unchanged: a candidate carrying a reason is
    * **served rather than filtered out**.
    */
-  private unavailability(
-    row: SheetCandidateLineRow,
-    claimed: ReadonlySet<string>
-  ): { unavailable?: OriginUnavailableReason } {
+  private unavailability(row: SheetCandidateLineRow): {
+    unavailable?: OriginUnavailableReason;
+  } {
     if (row.approvalStatus === LineApprovalStatus.REJECTED) {
       // The household said no (plan 0091, section 3.1). Raising it would ask a
       // list for something it has already decided against, and re-requesting
       // through a rejected line is a decision this sheet does not get to make.
       return { unavailable: OriginUnavailableReason.REJECTED };
-    }
-    if (claimed.has(row.id)) {
-      return { unavailable: OriginUnavailableReason.CLAIMED };
     }
     return {};
   }
@@ -534,7 +501,7 @@ export class GeneratedListOriginsService {
     req: SetGeneratedListOriginQuantityRequest
   ): Promise<SetGeneratedListOriginQuantityResult> {
     const { list, line, seesZoneData, actorUserId } = await this.resolve(req);
-    if (!isLiveGeneratedList(list.status)) {
+    if (!isOpenBasket(list.status)) {
       // Not in plan 0059's table of nine, and refused by its one rule all the
       // same (section 3.2): this saves the basket line as well as the zone line,
       // and a household changing what it wants belongs on the list page once
@@ -941,14 +908,6 @@ export class GeneratedListOriginsService {
       // being one line in one basket and two in the next.
       throw new ValidationException(
         'That line is not the same thing as this basket line',
-        { messageArgs: { field: 'sourceLineId' } }
-      );
-    }
-
-    const carried = await this.carriedElsewhere(list, [source.id]);
-    if (carried.size > 0) {
-      throw new ValidationException(
-        'Another basket is already carrying that line',
         { messageArgs: { field: 'sourceLineId' } }
       );
     }
@@ -1376,7 +1335,7 @@ export class GeneratedListOriginsService {
         writable &&
         canChangeDemand(owner, source.approvalStatus) &&
         canChangeDemand(actor, source.approvalStatus),
-      fromRun: this.runSources(list).has(origin.listId),
+      fromRun: (await this.runSources(list)).has(origin.listId),
       // Read off the zone line rather than derived from the list's settings: a
       // created line is `PENDING` unless the list's own rules approved it (plan
       // 0058, section 4.3), and an adopted one was already whatever it was.

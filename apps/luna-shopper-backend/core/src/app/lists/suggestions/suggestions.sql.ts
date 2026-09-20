@@ -1,3 +1,8 @@
+import {
+  GENERATED_BASKET,
+  OPEN_GENERATED_BASKET,
+} from '../../baskets/open-basket.sql';
+
 /**
  * The reads behind the lines a list suggests (plan 0123, sections 2, 4 and 5).
  *
@@ -8,16 +13,23 @@
  * Four statements, each over a set of lines and never one per line. The service
  * runs them one after the other, so a request never holds two pooled connections.
  *
- * **"Live" is the claim's own test, and "ended" is its negation.** `$2` is the
- * statuses that count as live and `$3` the oldest a basket may have been
- * generated and still be live, read from the same two places `LineClaimService`
- * reads them. A basket is live while it may still claim a line, and ended from
- * the moment it may not.
+ * **A trip is a `GENERATED` basket, always** (plan 0133, section 6). The
+ * permanent basket holds every line its owner can write, so counting it would
+ * hold every candidate and suggest nothing, for ever.
+ *
+ * **"Live" is the claim's own test, and "ended" is the trip being over.** The
+ * candidates read asks `OPEN_GENERATED_BASKET` beside the claim's own window,
+ * from `LineClaimService.since`, so a line is held exactly while a basket may
+ * claim it. The two history reads ask for a trip that is no longer open, and
+ * they do not ask the window: an open basket past it is finished by the sweep
+ * within one tick, and until then it is a trip in progress rather than a trip to
+ * learn from.
  */
 
 /**
  * The candidates of section 2: lines of the list at zero, approved, bought at
- * least once, and held by no live basket. `$1` is the list.
+ * least once, and held by no open trip. `$1` is the list, `$2` the oldest a
+ * basket may have been generated and still hold anything.
  *
  * **The hold is an origin in a live basket, and not `claimed`.** A claim ends the
  * moment its basket line is settled all the way through, which is the moment a
@@ -55,8 +67,8 @@ export const SUGGESTION_CANDIDATES_SQL = `
       JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
       JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
       WHERE o."lineId" = ll.id
-        AND gl."status"::text = ANY($2::text[])
-        AND gl."generatedAt" >= $3::timestamptz
+        AND ${OPEN_GENERATED_BASKET}
+        AND gl."generatedAt" >= $2::timestamptz
     )
 `;
 
@@ -81,8 +93,8 @@ export const SUGGESTION_PURCHASES_SQL = `
 
 /**
  * The list's newest ended basket trips, newest first, each with the candidates it
- * asked for (section 4). `$1` is the list, `$2` and `$3` as above, `$4` the
- * candidate line ids, `$5` how many trips.
+ * asked for (section 4). `$1` is the list, `$2` the candidate line ids, `$3` how
+ * many trips.
  *
  * A basket trip of a list is a basket with an origin in it (plan 0122). It is
  * found from the list's own lines, so every join is an index lookup, and a line
@@ -109,13 +121,11 @@ export const SUGGESTION_RECENT_TRIPS_SQL = `
     JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
     WHERE ll."listId" = $1::uuid
       AND ll."deletedAt" IS NULL
-      AND NOT (
-        gl."status"::text = ANY($2::text[])
-        AND gl."generatedAt" >= $3::timestamptz
-      )
+      AND ${GENERATED_BASKET}
+      AND gl."status" <> 'OPEN'
     GROUP BY gl.id
     ORDER BY gl."generatedAt" DESC, gl.id DESC
-    LIMIT $5
+    LIMIT $3
   )
   SELECT e."tripId" AS "tripId",
          COALESCE(
@@ -128,7 +138,7 @@ export const SUGGESTION_RECENT_TRIPS_SQL = `
   LEFT JOIN "generated_list_line_origins" o
     ON o."generatedListLineId" = gll.id
    AND o."listId" = $1::uuid
-   AND o."lineId" = ANY($4::uuid[])
+   AND o."lineId" = ANY($2::uuid[])
    AND o."quantity" > 0
   GROUP BY e."tripId", e."generatedAt"
   ORDER BY e."generatedAt" DESC, e."tripId" DESC
@@ -136,7 +146,7 @@ export const SUGGESTION_RECENT_TRIPS_SQL = `
 
 /**
  * What the newest ended basket trip that asked for each candidate asked for it
- * (section 5). `$1` is the list, `$2` and `$3` as above, `$4` the line ids.
+ * (section 5). `$1` is the list, `$2` the line ids.
  *
  * Summed over the trip's basket lines, because sibling basket lines (plan 0094)
  * each carry a part of one ask. A line no ended basket ever asked for has no row,
@@ -154,12 +164,10 @@ export const SUGGESTION_LAST_ASKED_SQL = `
     FROM "generated_list_line_origins" o
     JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
     JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
-    WHERE o."lineId" = ANY($4::uuid[])
+    WHERE o."lineId" = ANY($2::uuid[])
       AND o."listId" = $1::uuid
-      AND NOT (
-        gl."status"::text = ANY($2::text[])
-        AND gl."generatedAt" >= $3::timestamptz
-      )
+      AND ${GENERATED_BASKET}
+      AND gl."status" <> 'OPEN'
     GROUP BY o."lineId", gl.id
   ) a
   WHERE a."asked" > 0

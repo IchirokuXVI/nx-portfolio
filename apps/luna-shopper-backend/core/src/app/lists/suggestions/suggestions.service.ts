@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
   LineSuggestionReason,
-  LIVE_GENERATED_LIST_STATUSES,
   type LineSuggestionPage,
   type LineSuggestionView,
   type ListSuggestionsRequest,
@@ -70,13 +69,12 @@ export class SuggestionsService {
     await this.listAccess.requireRead(req.listId, req.userId);
 
     const now = new Date();
-    const live = [[...LIVE_GENERATED_LIST_STATUSES], this.claims.since()];
 
     // One after the other, never together: each query draws its own pooled
     // connection, and a request holding several is how the pool runs dry.
     const candidates = await this.dataSource.query<CandidateRow[]>(
       SUGGESTION_CANDIDATES_SQL,
-      [req.listId, ...live]
+      [req.listId, this.claims.since()]
     );
     if (candidates.length === 0) {
       return { items: [] };
@@ -89,11 +87,11 @@ export class SuggestionsService {
     );
     const trips = await this.dataSource.query<RecentTripRow[]>(
       SUGGESTION_RECENT_TRIPS_SQL,
-      [req.listId, ...live, lineIds, STAPLE_TRIPS]
+      [req.listId, lineIds, STAPLE_TRIPS]
     );
     const asked = await this.dataSource.query<LastAskedRow[]>(
       SUGGESTION_LAST_ASKED_SQL,
-      [req.listId, ...live, lineIds]
+      [req.listId, lineIds]
     );
 
     const purchases = groupPurchases(purchaseRows);

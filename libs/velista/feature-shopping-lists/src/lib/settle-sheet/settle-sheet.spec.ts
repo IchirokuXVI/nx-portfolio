@@ -158,7 +158,7 @@ function storeDouble(world: World) {
   const basket = signal<BasketView | null>({
     id: BASKET_ID,
     name: 'Saturday big shop',
-    status: 'ACTIVE',
+    status: 'OPEN',
     generatedAt: new Date('2026-08-21T09:00:00.000Z'),
     lines: lines(),
     participants: world.participants ?? [me],

@@ -27,8 +27,9 @@ import { GeneratedListStore } from './generated-list-store';
 function summary(overrides: Partial<GeneratedListSummary> = {}) {
   return {
     id: 'gl1',
+    kind: 'GENERATED',
     name: 'Saturday big shop',
-    status: 'ACTIVE',
+    status: 'OPEN',
     generatedAt: new Date('2026-08-21T10:00:00.000Z'),
     lineCount: 12,
     settledLineCount: 4,
@@ -194,19 +195,17 @@ describe('GeneratedListStore', () => {
 
   describe('the active baskets', () => {
     /**
-     * **`DRAFT` is in the set, and this assertion used to say the opposite.**
+     * **There used to be two spellings of this state, and the set had one of them.**
      *
-     * It asserted that a draft is left out, on the reasoning that a draft has not been
-     * taken to a shop yet and so is not what somebody is in the middle of. That was a
+     * The filter asserted `ACTIVE`, on the reasoning that a draft has not been taken
+     * to a shop yet and so is not what somebody is in the middle of. That was a
      * defensible thing to believe about the word and a wrong thing to believe about
-     * this server: core composes every run as `DRAFT` and has no path that promotes one
-     * to `ACTIVE`, so the filter this spec was protecting matched nothing velista had
-     * ever generated. The dashboard card and the history's Shopping now badge both drew
-     * for nobody from the day they shipped, with a green suite over them, because the
-     * fixtures said `ACTIVE` and the server never did.
-     *
-     * The lesson worth keeping in the spec is the one about fixtures: `summary()`
-     * defaults to `ACTIVE` here, so the draft row is written out explicitly.
+     * this server: core composed every run as `DRAFT` and had no path that promoted
+     * one, so the filter this spec was protecting matched nothing velista had ever
+     * generated. The dashboard card and the history's Shopping now badge both drew for
+     * nobody from the day they shipped, with a green suite over them, because the
+     * fixtures said `ACTIVE` and the server never did. Backend `0133` folded the two
+     * into `OPEN`, so there is one value for both to agree on.
      */
     it('keeps every basket still to be shopped, in the listing order', async () => {
       const { store } = harness({
@@ -214,8 +213,8 @@ describe('GeneratedListStore', () => {
           {
             items: [
               summary({ id: 'live' }),
-              summary({ id: 'done', status: 'COMPLETED' }),
-              summary({ id: 'draft', status: 'DRAFT' }),
+              summary({ id: 'done', status: 'FINISHED' }),
+              summary({ id: 'archived', status: 'ARCHIVED' }),
               summary({ id: 'live2' }),
             ],
             nextCursor: null,
@@ -225,20 +224,17 @@ describe('GeneratedListStore', () => {
 
       await store.load();
 
-      expect(store.active().map((list) => list.id)).toEqual([
-        'live',
-        'draft',
-        'live2',
-      ]);
+      expect(store.active().map((list) => list.id)).toEqual(['live', 'live2']);
     });
 
-    // The other half of the pair, stated on its own so a regression names itself: what
-    // a run actually produces is a draft, and a draft has to reach the dashboard.
-    it('keeps a draft, which is what a run composes', async () => {
+    // The safe direction, stated on its own: a status this build has never heard of
+    // costs a card, where reading it as open would offer somebody a way back into a
+    // trip the server considers over.
+    it('leaves out a status it could not read', async () => {
       const { store } = harness({
         pages: [
           {
-            items: [summary({ id: 'fresh', status: 'DRAFT' })],
+            items: [summary({ id: 'strange', status: 'UNKNOWN' })],
             nextCursor: null,
           },
         ],
@@ -246,7 +242,7 @@ describe('GeneratedListStore', () => {
 
       await store.load();
 
-      expect(store.active().map((list) => list.id)).toEqual(['fresh']);
+      expect(store.active()).toEqual([]);
     });
 
     // An unrecognised status must never read as live, or a basket the server considers
@@ -544,7 +540,7 @@ describe('GeneratedListStore', () => {
       realtime.emit('generatedList.created', {
         id: 'remote',
         name: 'From the laptop',
-        status: 'ACTIVE',
+        status: 'OPEN',
         generatedAt: '2026-08-21T10:00:00.000Z',
         lines: [],
       });
@@ -568,7 +564,7 @@ describe('GeneratedListStore', () => {
       realtime.emit('generatedList.updated', {
         id: 'b',
         name: 'Renamed',
-        status: 'ACTIVE',
+        status: 'OPEN',
         generatedAt: '2026-08-21T10:00:00.000Z',
         lines: [],
       });
@@ -625,28 +621,28 @@ describe('GeneratedListStore', () => {
       });
       await store.load();
 
-      await store.setStatus('a', 'COMPLETED');
+      await store.setStatus('a', 'FINISHED');
 
       expect(calls).toContainEqual({
         method: 'setStatus',
         generatedListId: 'a',
-        status: 'COMPLETED',
+        status: 'FINISHED',
       });
     });
 
     it('moves the row it holds before the server has answered', async () => {
       const { store } = harness({
         pages: [
-          { items: [summary({ id: 'a', status: 'ACTIVE' })], nextCursor: null },
+          { items: [summary({ id: 'a', status: 'OPEN' })], nextCursor: null },
         ],
       });
       await store.load();
 
       // Deliberately not awaited: the flip is what the screen is drawn from, and it
       // has to be true the moment the gesture is made rather than a round trip later.
-      const landing = store.setStatus('a', 'COMPLETED');
+      const landing = store.setStatus('a', 'FINISHED');
 
-      expect(store.lists()[0]?.status).toBe('COMPLETED');
+      expect(store.lists()[0]?.status).toBe('FINISHED');
       await landing;
     });
 
@@ -655,13 +651,13 @@ describe('GeneratedListStore', () => {
     it('takes the trip out of the live set', async () => {
       const { store } = harness({
         pages: [
-          { items: [summary({ id: 'a', status: 'ACTIVE' })], nextCursor: null },
+          { items: [summary({ id: 'a', status: 'OPEN' })], nextCursor: null },
         ],
       });
       await store.load();
       expect(store.active()).toHaveLength(1);
 
-      await store.setStatus('a', 'COMPLETED');
+      await store.setStatus('a', 'FINISHED');
 
       expect(store.active()).toEqual([]);
     });
@@ -669,7 +665,10 @@ describe('GeneratedListStore', () => {
     it('puts back the status the row held when the write does not land', async () => {
       const { store } = harness({
         pages: [
-          { items: [summary({ id: 'a', status: 'DRAFT' })], nextCursor: null },
+          {
+            items: [summary({ id: 'a', status: 'ARCHIVED' })],
+            nextCursor: null,
+          },
         ],
         setStatusRejectsWith: new GatewayError({
           code: 'forbidden',
@@ -679,14 +678,12 @@ describe('GeneratedListStore', () => {
       });
       await store.load();
 
-      const landed = await store.setStatus('a', 'COMPLETED');
+      const landed = await store.setStatus('a', 'FINISHED');
 
-      // `DRAFT` and not `ACTIVE`: the rollback restores what the row actually held,
-      // rather than guessing at the status a live basket ought to have. Core
-      // composes a run as `DRAFT` and never promotes one, so a guess would be wrong
-      // for every basket this app has ever generated.
+      // `ARCHIVED` and not `OPEN`: the rollback restores what the row actually
+      // held, rather than guessing at the status a basket ought to have.
       expect(landed).toBe(false);
-      expect(store.lists()[0]?.status).toBe('DRAFT');
+      expect(store.lists()[0]?.status).toBe('ARCHIVED');
     });
 
     /**
@@ -696,14 +693,14 @@ describe('GeneratedListStore', () => {
     it('writes for a basket it is not holding, and holds nothing new', async () => {
       const { store, calls } = harness();
 
-      const landed = await store.setStatus('never-read', 'COMPLETED');
+      const landed = await store.setStatus('never-read', 'FINISHED');
 
       expect(landed).toBe(true);
       expect(store.lists()).toEqual([]);
       expect(calls).toContainEqual({
         method: 'setStatus',
         generatedListId: 'never-read',
-        status: 'COMPLETED',
+        status: 'FINISHED',
       });
     });
 
@@ -711,16 +708,16 @@ describe('GeneratedListStore', () => {
       const { store } = harness({
         pages: [
           {
-            items: [summary({ id: 'a', status: 'COMPLETED' })],
+            items: [summary({ id: 'a', status: 'FINISHED' })],
             nextCursor: null,
           },
         ],
       });
       await store.load();
 
-      await store.setStatus('a', 'ACTIVE');
+      await store.setStatus('a', 'OPEN');
 
-      expect(store.lists()[0]?.status).toBe('ACTIVE');
+      expect(store.lists()[0]?.status).toBe('OPEN');
       expect(store.active()).toHaveLength(1);
     });
   });

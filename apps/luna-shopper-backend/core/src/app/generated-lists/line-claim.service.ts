@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  LIVE_GENERATED_LIST_STATUSES,
   NO_LINE_CLAIM,
   RealtimeEvent,
   type LineClaim,
@@ -73,12 +72,7 @@ export class LineClaimService {
       ? (sql: string, parameters: unknown[]) => manager.query(sql, parameters)
       : (sql: string, parameters: unknown[]) =>
           this.dataSource.query(sql, parameters);
-    return readLineClaims(
-      query,
-      lineIds,
-      LIVE_GENERATED_LIST_STATUSES,
-      this.since()
-    );
+    return readLineClaims(query, lineIds, this.since());
   }
 
   /** One line's claim, for the paths that answer with a single line. */

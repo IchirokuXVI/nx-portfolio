@@ -1,4 +1,6 @@
 import {
+  BASKET_KIND_FALLBACK,
+  BASKET_KINDS,
   BASKET_LINE_KINDS,
   BASKET_ORIGIN_UNAVAILABLE_REASONS,
   LINE_APPROVAL_STATUS_FALLBACK,
@@ -55,7 +57,7 @@ import {
  *
  * Backend `0051` section 5.2 redacts **by omission**: a reader who does not hold
  * `WRITE` on every source list of the run receives no `origins` key, no
- * `targetListId`, no `sourceSnapshot`, no `userAgent` and no `skipped`, rather
+ * `targetListId`, no `userAgent` and no `skipped`, rather
  * than receiving them empty. These mappers preserve that distinction with `in`
  * checks rather than collapsing everything to a default, because the screen draws
  * three genuinely different things:
@@ -641,6 +643,7 @@ export function toBasketView(raw: unknown): BasketView | null {
 
   const view: BasketView = {
     id,
+    kind: oneOf(raw['kind'], BASKET_KINDS, BASKET_KIND_FALLBACK),
     name: nullableStr(raw['name']),
     status: strOr(raw['status'], 'UNKNOWN'),
     generatedAt: date(raw['generatedAt']),
@@ -684,8 +687,8 @@ export function toBasketView(raw: unknown): BasketView | null {
     ),
   };
 
-  const snapshot = raw['sourceSnapshot'];
-  if (!isRecord(snapshot)) {
+  const sources = raw['sources'];
+  if (!Array.isArray(sources)) {
     // Absent, which is the redacted case. `sources` stays undefined rather than
     // becoming an empty array, so "you may not see this" and "the run drew from
     // nothing" remain different answers.
@@ -694,13 +697,16 @@ export function toBasketView(raw: unknown): BasketView | null {
 
   return {
     ...view,
-    sources: mapArray(snapshot['sources'], (entry) => {
+    sources: mapArray(sources, (entry) => {
       if (!isRecord(entry)) {
         return null;
       }
       const zoneId = str(entry['zoneId']);
-      const listId = str(entry['listId']);
-      return zoneId === null || listId === null ? null : { zoneId, listId };
+      // Null is a value here and not an absence: it says every list of that
+      // zone (backend `0133`, section 4).
+      return zoneId === null
+        ? null
+        : { zoneId, listId: nullableStr(entry['listId']) };
     }),
   };
 }

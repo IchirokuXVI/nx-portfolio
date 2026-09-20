@@ -79,7 +79,7 @@ function build(
     id: BASKET,
     ownerUserId: OWNER,
     name: 'Saturday',
-    status: options.status ?? GeneratedListStatus.ACTIVE,
+    status: options.status ?? GeneratedListStatus.OPEN,
     generatedAt: new Date('2026-01-01T00:00:00.000Z'),
   };
 
@@ -400,7 +400,7 @@ describe('the link preview discloses nothing (section 4, step 1)', () => {
     // Section 11's leaning: an unauthenticated read of somebody's shopping
     // habits should not outlive the trip.
     const harness = build({
-      status: GeneratedListStatus.COMPLETED,
+      status: GeneratedListStatus.FINISHED,
       links: [
         { id: 'l', generatedListId: BASKET, secret: 'live', revokedAt: null },
       ],

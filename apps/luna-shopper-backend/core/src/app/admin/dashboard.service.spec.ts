@@ -136,7 +136,12 @@ describe('CoreDashboardService', () => {
     // No count is ever null, so a screen can tell a service that did not answer
     // from one that answered zero.
     expect(block.zones).toEqual({ total: 0, active: 0, markedForDeletion: 0 });
-    expect(block.baskets).toEqual({ total: 0, draft: 0, completed: 0 });
+    expect(block.baskets).toEqual({
+      total: 0,
+      open: 0,
+      finished: 0,
+      live: 0,
+    });
     expect(block.zonesCreated).toHaveLength(30);
     expect(block.listsCreated).toHaveLength(30);
   });

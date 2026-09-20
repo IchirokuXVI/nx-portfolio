@@ -95,12 +95,16 @@ export class GeneratedListMemory implements GeneratedListServiceI {
 
     const summary: GeneratedListSummary = {
       id: `gl-${this._nextId++}`,
+      // A run composes a trip, always. The permanent basket of backend `0136` is
+      // not made by anything here.
+      kind: 'GENERATED',
       name: request.name ?? null,
-      // `DRAFT`, because that is what core composes: it writes a run as `DRAFT` and has
-      // no path that promotes one to `ACTIVE`. This double said `ACTIVE` and so agreed
-      // with the dashboard's old filter instead of with the server, which is precisely
-      // how a card that worked in demo mode drew for nobody on a real account.
-      status: 'DRAFT',
+      // `OPEN`, because that is what core composes. This double used to say
+      // `ACTIVE`, agreeing with the dashboard's old filter instead of with the
+      // server, which is precisely how a card that worked in demo mode drew for
+      // nobody on a real account. Backend `0133` folded the two spellings of this
+      // state into one, so there is one value for both to agree on now.
+      status: 'OPEN',
       generatedAt: new Date(),
       // A plausible basket rather than an empty one, so a card and a row have counts
       // to draw and the progress bar has a fraction to be.
@@ -117,7 +121,7 @@ export class GeneratedListMemory implements GeneratedListServiceI {
 
     this._lists = [summary, ...this._lists];
 
-    const run: GeneratedListRun = { list: summary, skipped: [] };
+    const run: GeneratedListRun = { list: summary };
     if (key !== undefined) {
       this._byKey.set(key, run);
     }

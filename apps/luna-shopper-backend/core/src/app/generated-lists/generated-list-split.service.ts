@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GENERATED_LIST_LIMITS,
-  isLiveGeneratedList,
+  isOpenBasket,
   RealtimeEvent,
   SettlementOutcome,
   type GeneratedListBasketLineView,
@@ -98,7 +98,7 @@ export class GeneratedListSplitService {
   ): Promise<SplitGeneratedListLineResult> {
     const { list, seesZoneData } = await this.resolve(req);
 
-    if (!isLiveGeneratedList(list.status)) {
+    if (!isOpenBasket(list.status)) {
       // Plan 0055 section 3.3's code rather than a validation failure: a client
       // that cannot tell a state it can explain from a bug it cannot will show
       // the wrong sentence for both.

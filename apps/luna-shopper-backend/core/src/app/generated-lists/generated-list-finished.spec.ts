@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   ParticipantKind,
@@ -77,14 +78,11 @@ function basketWith(status: GeneratedListStatus): GeneratedList {
   return {
     id: BASKET,
     ownerUserId: OWNER,
+    kind: BasketKind.GENERATED,
     name: null,
     status,
     generatedAt: new Date('2026-08-28T10:00:00.000Z'),
-    sourceSnapshot: {
-      profileId: null,
-      pricingProfileId: null,
-      sources: [{ zoneId: ZONE, listIds: [LIST] }],
-    },
+    pricingProfileId: null,
     defaultTargetListId: null,
     idempotencyKey: null,
   } as GeneratedList;
@@ -250,7 +248,8 @@ function build(status: GeneratedListStatus): Harness {
     generated,
     sharing,
     lineWrites,
-    publisher
+    publisher,
+    { listsOf: async () => [] } as never
   );
   const splitWrites = new GeneratedListSplitService(
     dataSource,
@@ -275,7 +274,8 @@ function build(status: GeneratedListStatus): Harness {
     lineWrites,
     claims.service,
     waiting,
-    publisher
+    publisher,
+    { listsOf: async () => [] } as never
   );
   const settledWrites = new GeneratedListOriginSettledService(
     lists as never,
@@ -391,7 +391,7 @@ function build(status: GeneratedListStatus): Harness {
   return { writes, events, claims };
 }
 
-const WRITES = Object.keys(build(GeneratedListStatus.COMPLETED).writes);
+const WRITES = Object.keys(build(GeneratedListStatus.FINISHED).writes);
 
 describe('a finished basket refuses every write (section 3)', () => {
   it('covers every row of the table, and the two rows it omits', () => {
@@ -404,7 +404,7 @@ describe('a finished basket refuses every write (section 3)', () => {
 
   describe.each(WRITES)('%s', (name) => {
     it('is refused on a COMPLETED basket with the code the client branches on', async () => {
-      const harness = build(GeneratedListStatus.COMPLETED);
+      const harness = build(GeneratedListStatus.FINISHED);
       expect(await codeOf(harness.writes[name]())).toBe(FINISHED);
     });
 
@@ -414,7 +414,7 @@ describe('a finished basket refuses every write (section 3)', () => {
     });
 
     it('says nothing and writes nothing when it refuses', async () => {
-      const harness = build(GeneratedListStatus.COMPLETED);
+      const harness = build(GeneratedListStatus.FINISHED);
       await codeOf(harness.writes[name]());
       expect(harness.events).toEqual([]);
       expect(harness.claims.calls).toEqual([]);
@@ -428,7 +428,7 @@ describe('a finished basket refuses every write (section 3)', () => {
       // record says exactly that. Putting them on the last list as extra was the
       // alternative, and the last list is whichever the shopper happened to
       // raise last, which is not a fact about who wanted the units.
-      const harness = build(GeneratedListStatus.COMPLETED);
+      const harness = build(GeneratedListStatus.FINISHED);
       await codeOf(harness.writes[name]());
       // The harness's write repositories throw, so a settlement that moved would
       // have surfaced as a `threw:` code above rather than as this refusal.
@@ -436,7 +436,7 @@ describe('a finished basket refuses every write (section 3)', () => {
     });
 
     it('gets past the status on an ACTIVE basket, so the refusal above was the status', async () => {
-      const harness = build(GeneratedListStatus.ACTIVE);
+      const harness = build(GeneratedListStatus.OPEN);
       expect(await codeOf(harness.writes[name]())).not.toBe(FINISHED);
     });
   });
@@ -448,7 +448,7 @@ describe('a finished basket refuses every write (section 3)', () => {
  */
 describe('what a finished basket still does (section 3.4)', () => {
   it('still answers the basket to a guest who was already in it', async () => {
-    const basket = basketWith(GeneratedListStatus.COMPLETED);
+    const basket = basketWith(GeneratedListStatus.FINISHED);
     const guest = {
       id: 'p-guest',
       userId: null,
@@ -475,7 +475,8 @@ describe('what a finished basket still does (section 3.4)', () => {
       generated,
       sharing,
       {} as unknown as GeneratedListLineService,
-      {} as unknown as CoreEventsPublisher
+      {} as unknown as CoreEventsPublisher,
+      { listsOf: async () => [] } as never
     );
 
     const view = await service.getBasket({
@@ -485,12 +486,12 @@ describe('what a finished basket still does (section 3.4)', () => {
 
     // The read carries the status rather than hiding the basket, which is what
     // lets the screen draw the trip as over instead of drawing a 404.
-    expect(view.status).toBe(GeneratedListStatus.COMPLETED);
+    expect(view.status).toBe(GeneratedListStatus.FINISHED);
     expect(view.me.id).toBe('p-guest');
     expect(view.lines).toEqual([{ id: LINE }]);
   });
 
-  it('still lists it in the history, which hides ARCHIVED alone', async () => {
+  it('lists trips, and hides ARCHIVED among them', async () => {
     const clauses: string[] = [];
     const qb = {
       where: () => qb,
@@ -514,12 +515,16 @@ describe('what a finished basket still does (section 3.4)', () => {
       fakeLineClaims().service,
       {} as unknown as CoreEventsPublisher,
       {} as never,
-      {} as never
+      {} as never,
+      { find: async () => [] } as never
     );
 
     await service.listMine({ userId: OWNER });
 
-    expect(clauses).toEqual(['gl.status != :archived']);
+    // The kind is asked on every listing and the status only when `ARCHIVED` is
+    // not wanted: the history is the baskets somebody made, and the permanent
+    // one was made by nobody (plan 0133, section 6).
+    expect(clauses).toEqual(['gl.kind = :generated', 'gl.status != :archived']);
   });
 });
 
@@ -585,21 +590,22 @@ describe('finishing and unfinishing (section 2)', () => {
         },
       } as unknown as CoreEventsPublisher,
       {} as never,
-      {} as never
+      {} as never,
+      { find: async () => [] } as never
     );
     return { service, saved, events, claims, tripsChanged };
   }
 
   it('unfinishes through the same PATCH, and the claims come back with it', async () => {
-    const w = owned(GeneratedListStatus.COMPLETED);
+    const w = owned(GeneratedListStatus.FINISHED);
 
     const view = await w.service.update({
       userId: OWNER,
       generatedListId: BASKET,
-      status: GeneratedListStatus.ACTIVE,
+      status: GeneratedListStatus.OPEN,
     });
 
-    expect(view.status).toBe(GeneratedListStatus.ACTIVE);
+    expect(view.status).toBe(GeneratedListStatus.OPEN);
     expect(w.events).toEqual([
       {
         event: RealtimeEvent.GeneratedListUpdated,
@@ -622,13 +628,13 @@ describe('finishing and unfinishing (section 2)', () => {
   });
 
   it('answers not found to a participant who is not the owner, and moves nothing', async () => {
-    const w = owned(GeneratedListStatus.ACTIVE);
+    const w = owned(GeneratedListStatus.OPEN);
 
     await expect(
       w.service.update({
         userId: 'u-registered-participant',
         generatedListId: BASKET,
-        status: GeneratedListStatus.COMPLETED,
+        status: GeneratedListStatus.FINISHED,
       })
     ).rejects.toBeInstanceOf(NotFoundException);
 

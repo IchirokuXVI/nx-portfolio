@@ -801,8 +801,9 @@ describe('toAssistantReply', () => {
 describe('toGeneratedListSummary', () => {
   const wire = {
     id: 'gl1',
+    kind: 'GENERATED',
     name: 'Saturday big shop',
-    status: 'ACTIVE',
+    status: 'OPEN',
     generatedAt: '2026-08-21T10:00:00.000Z',
     lineCount: 12,
     settledLineCount: 4,
@@ -814,8 +815,9 @@ describe('toGeneratedListSummary', () => {
   it('maps the listing shape', () => {
     expect(toGeneratedListSummary(wire)).toEqual({
       id: 'gl1',
+      kind: 'GENERATED',
       name: 'Saturday big shop',
-      status: 'ACTIVE',
+      status: 'OPEN',
       generatedAt: new Date('2026-08-21T10:00:00.000Z'),
       lineCount: 12,
       settledLineCount: 4,
@@ -837,8 +839,9 @@ describe('toGeneratedListSummary', () => {
   it('reads a summary with no breakdown as zeroes rather than dropping it', () => {
     const mapped = toGeneratedListSummary({
       id: 'gl1',
+      kind: 'GENERATED',
       name: null,
-      status: 'ACTIVE',
+      status: 'OPEN',
       generatedAt: '2026-08-21T10:00:00.000Z',
       lineCount: 12,
       settledLineCount: 4,
@@ -960,38 +963,33 @@ describe('toGeneratedListRun', () => {
   const run = {
     list: {
       id: 'gl1',
+      kind: 'GENERATED',
       name: null,
-      status: 'ACTIVE',
+      status: 'OPEN',
       generatedAt: '2026-08-21T10:00:00.000Z',
       lines: [{ id: 'l1', content: 'Milk', quantity: 1, settledQuantity: 0 }],
     },
-    skipped: [
-      {
-        zoneId: 'z1',
-        listId: 'list-1',
-        lineId: 'line-1',
-        content: 'Milk',
-        carriedByGeneratedListId: 'gl0',
-      },
-    ],
   };
 
   /**
-   * What a run **did not** take is part of the answer to "why is this basket what it
-   * is". A basket missing the milk somebody distinctly remembers putting on the list is
-   * a bug report, and this is the difference between answering it and guessing.
+   * The basket, and nothing else. A run used to answer what it had refused as
+   * well, and backend `0133` section 7 deleted the refusal: it was about two
+   * frozen copies of one line and false of two views of it.
    */
-  it('keeps what the run skipped beside the basket it made', () => {
+  it('keeps the basket the run made', () => {
     const mapped = toGeneratedListRun(run);
 
-    expect(mapped?.list.id).toBe('gl1');
-    expect(mapped?.skipped).toEqual([{ listId: 'list-1', content: 'Milk' }]);
+    expect(mapped).toEqual({ list: expect.objectContaining({ id: 'gl1' }) });
   });
 
-  it('answers an empty skipped list rather than omitting it', () => {
-    expect(toGeneratedListRun({ ...run, skipped: undefined })?.skipped).toEqual(
-      []
-    );
+  it('reads an unknown kind as UNKNOWN rather than dropping the run', () => {
+    // A kind this build has never heard of must not read as the permanent
+    // basket, which is the safe direction the enum's fallback takes.
+    const mapped = toGeneratedListRun({
+      list: { ...run.list, kind: 'SOMETHING_NEW' },
+    });
+
+    expect(mapped?.list.kind).toBe('UNKNOWN');
   });
 
   it('drops a run whose basket cannot be read', () => {

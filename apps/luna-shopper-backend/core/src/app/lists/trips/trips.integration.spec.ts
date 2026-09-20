@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   MembershipStatus,
@@ -17,6 +18,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
+  BasketSource,
   CORE_ENTITIES,
   GeneratedList,
   GeneratedListLine,
@@ -100,13 +102,9 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       repo.create({
         ownerUserId: ids.shopper,
         name: options.name ?? null,
-        status: options.status ?? GeneratedListStatus.COMPLETED,
+        status: options.status ?? GeneratedListStatus.FINISHED,
         generatedAt: options.generatedAt ?? new Date('2026-01-10T10:00:00Z'),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
+        kind: BasketKind.GENERATED,
         defaultTargetListId: null,
         idempotencyKey: null,
       })
@@ -802,19 +800,19 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const now = new Date();
       const inside = await basket({
         name: 'Out now',
-        status: GeneratedListStatus.DRAFT,
+        status: GeneratedListStatus.OPEN,
         generatedAt: now,
       });
       // Still `DRAFT`, because the sweep has not reached it, and past the
       // window: it claims nothing, so it is not live.
       const outside = await basket({
         name: 'Forgotten',
-        status: GeneratedListStatus.DRAFT,
+        status: GeneratedListStatus.OPEN,
         generatedAt: new Date(now.getTime() - WINDOW_MS - 60_000),
       });
       const finished = await basket({
         name: 'Finished today',
-        status: GeneratedListStatus.COMPLETED,
+        status: GeneratedListStatus.FINISHED,
         generatedAt: new Date(now.getTime() - 60_000),
       });
       for (const id of [inside, outside, finished]) {
@@ -940,7 +938,8 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         fakeLineClaims({}).service,
         { emitTo, emitToUsers: jest.fn() } as never,
         undefined as never,
-        { liveRegistered: async () => [] } as never
+        { liveRegistered: async () => [] } as never,
+        dataSource.getRepository(BasketSource)
       );
     });
 
@@ -954,7 +953,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
     }> {
       const flat = await list('Event flat');
       const parents = await list('Event parents');
-      const id = await basket({ status: GeneratedListStatus.DRAFT });
+      const id = await basket({ status: GeneratedListStatus.OPEN });
       await origin(await basketLine(id), flat, await line(flat, 'Milk'), 1);
       await origin(await basketLine(id), flat, await line(flat, 'Bread'), 1);
       await origin(
@@ -991,7 +990,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       await generated.update({
         userId: ids.shopper,
         generatedListId: id,
-        status: GeneratedListStatus.COMPLETED,
+        status: GeneratedListStatus.FINISHED,
       });
       expect(announcedLists().sort()).toEqual([flat, parents].sort());
     });

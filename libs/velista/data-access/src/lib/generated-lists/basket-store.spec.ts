@@ -708,7 +708,7 @@ describe('BasketStore', () => {
       // field. Losing the item somebody just remembered in an aisle is the
       // failure this screen cannot afford.
       const memory = new BasketMemory();
-      memory.status = 'COMPLETED';
+      memory.status = 'FINISHED';
       const { store } = build({
         addLine: (id, body) => memory.addLine(id, body),
       });
@@ -723,7 +723,7 @@ describe('BasketStore', () => {
 
     it('says a finished basket takes no lines', async () => {
       const memory = new BasketMemory();
-      memory.status = 'COMPLETED';
+      memory.status = 'FINISHED';
       const { store } = build({ getBasket: () => memory.getBasket() });
       await store.open('basket-saturday');
 
@@ -934,7 +934,7 @@ describe('BasketStore', () => {
   describe('a finished basket', () => {
     it('says so once the basket has been read', async () => {
       const memory = new BasketMemory();
-      memory.status = 'COMPLETED';
+      memory.status = 'FINISHED';
       const { store } = build({ getBasket: () => memory.getBasket() });
       await store.open('basket-saturday');
 
@@ -990,7 +990,7 @@ describe('BasketStore', () => {
         await store.open('basket-saturday');
         expect(store.finished()).toBe(false);
 
-        memory.status = 'COMPLETED';
+        memory.status = 'FINISHED';
         socket.events.next({
           type: 'generatedList.updated',
           list: { id: 'basket-saturday' },
@@ -1061,7 +1061,7 @@ describe('BasketStore', () => {
       const readsAfterOpen = reads.length;
       let told = -1;
 
-      memory.status = 'COMPLETED';
+      memory.status = 'FINISHED';
       const result = await store
         .settle('line-milk', { outcome: 'BOUGHT' })
         .then((answer) => {
@@ -1087,7 +1087,7 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
       const readsAfterOpen = reads.length;
 
-      memory.status = 'COMPLETED';
+      memory.status = 'FINISHED';
       const line = await store.addLine({ content: 'Batteries' });
 
       expect(line).toBeNull();

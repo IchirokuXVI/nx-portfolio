@@ -1,4 +1,5 @@
 import type {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
 } from '../enums/generated-list.enums';
@@ -158,37 +159,17 @@ export interface GeneratedListLineView {
 }
 
 /**
- * What a run drew from, kept because a run's meaning depends on it (section 4).
+ * One source of a basket, as it was named (plan 0133, section 4).
  *
- * Without it a three week old basket cannot be explained to the person looking at
- * it: the profile it used has been edited since, and the lists it read may not
- * exist any more.
+ * What the request **asked for**, never the lists it resolved to on the day. The
+ * snapshot this replaced stored the resolved lists, so a run for a whole zone
+ * came back as that zone's lists at that moment and could not follow a list
+ * added to the zone next month.
  */
-export interface GeneratedListSourceSnapshot {
-  /** The profile whose sources the run used, or null when the request named them. */
-  profileId: string | null;
-  /**
-   * The profile the basket is priced against: the one the request named, else
-   * the owner's default at the moment the run was composed (plan 0078, section
-   * 3).
-   *
-   * Separate from {@link profileId} because the two record different facts.
-   * That one names the profile whose **sources** the run read, and a request
-   * that names its own sources reads none, so it stays null. This one names who
-   * the run belongs to for pricing, and a run composed by hand still belongs to
-   * a person who shops somewhere.
-   *
-   * The **owner's** profile, captured at composition, never the reader's. A
-   * participant who opens the basket a week later, and a guest with no account
-   * at all, both price it by the profile the run was composed against.
-   *
-   * Null only on a run composed before plan 0078, which stays unpriced. There
-   * is no backfill: the owner's default today is a guess about what an old run
-   * was composed against, and this snapshot is a record rather than a guess.
-   */
-  pricingProfileId: string | null;
-  /** Every (zone, list) pair the run actually read, after access filtering. */
-  sources: { zoneId: string; listId: string }[];
+export interface BasketSourceView {
+  zoneId: string;
+  /** Null means every list of the zone the owner can write. */
+  listId: string | null;
 }
 
 /**
@@ -201,10 +182,13 @@ export interface GeneratedListSourceSnapshot {
  */
 export interface GeneratedListView {
   id: string;
+  /** What this basket is (plan 0133, section 2). */
+  kind: BasketKind;
   name: string | null;
   status: GeneratedListStatus;
   generatedAt: string;
-  sourceSnapshot: GeneratedListSourceSnapshot;
+  /** What the run was asked to draw from, as it was named (section 4). */
+  sources: BasketSourceView[];
   lines: GeneratedListLineView[];
 }
 
@@ -217,6 +201,8 @@ export interface GeneratedListView {
  */
 export interface GeneratedListSummaryView {
   id: string;
+  /** What this basket is (plan 0133, section 2). */
+  kind: BasketKind;
   name: string | null;
   status: GeneratedListStatus;
   generatedAt: string;
@@ -258,31 +244,14 @@ export interface GeneratedListSummaryView {
 }
 
 /**
- * A line a run **did not** take, and why (section 3).
+ * What a run produced.
  *
- * Reported rather than silently dropped. A basket missing the milk somebody
- * distinctly remembers putting on the list is a bug report, and this is the
- * difference between answering it and guessing.
- */
-export interface GeneratedListSkippedLineView {
-  zoneId: string;
-  listId: string;
-  lineId: string;
-  content: string;
-  /** The `ACTIVE` basket already carrying this line. */
-  carriedByGeneratedListId: string;
-}
-
-/**
- * What a run produced: the basket, and what it left behind.
- *
- * A named result rather than a bare {@link GeneratedListView} because the skipped
- * lines are part of the answer to "why is this basket what it is", and a client
- * that discarded them would have nothing to show the person asking.
+ * A wrapper with one field, where it used to carry the lines the run refused as
+ * well. Plan 0133 section 7 deleted that refusal, and plan 0136 replaces the run
+ * outright, so the wrapper stays for one plan rather than being unwrapped twice.
  */
 export interface GeneratedListRunResult {
   list: GeneratedListView;
-  skipped: GeneratedListSkippedLineView[];
 }
 
 // --- Requests --------------------------------------------------------------
@@ -399,7 +368,7 @@ export interface SharedGeneratedListView extends GeneratedListSummaryView {
 
 export type SharedGeneratedListPage = Paginated<SharedGeneratedListView>;
 
-/** Rename a basket, or move it between the four statuses. */
+/** Rename a basket, or move it between the three statuses. */
 export interface UpdateGeneratedListRequest {
   userId: string;
   generatedListId: string;

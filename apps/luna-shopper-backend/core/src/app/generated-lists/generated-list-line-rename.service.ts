@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GENERATED_LIST_LIMITS,
-  isLiveGeneratedList,
+  isOpenBasket,
   ParticipantKind,
   RealtimeEvent,
   type BasketLineMergeRequiredDetails,
@@ -184,7 +184,7 @@ export class GeneratedListLineRenameService {
     );
     const permissions = await this.authorize(participant, listIds);
 
-    if (!isLiveGeneratedList(list.status)) {
+    if (!isOpenBasket(list.status)) {
       throw new GeneratedListFinishedException(
         'This basket is finished, so its lines cannot be renamed'
       );
@@ -436,12 +436,10 @@ export class GeneratedListLineRenameService {
     const zones =
       zoneIds.length === 0
         ? []
-        : await manager
-            .getRepository(Zone)
-            .find({
-              where: { id: In(zoneIds) },
-              select: { id: true, name: true },
-            });
+        : await manager.getRepository(Zone).find({
+            where: { id: In(zoneIds) },
+            select: { id: true, name: true },
+          });
     const zoneNames = new Map(zones.map((zone) => [zone.id, zone.name]));
     const details: BasketLineMergeRequiredDetails = {
       lists: collided.map((plan) => ({

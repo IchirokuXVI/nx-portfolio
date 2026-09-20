@@ -1,3 +1,8 @@
+import {
+  GENERATED_BASKET,
+  OPEN_GENERATED_BASKET,
+} from '../../baskets/open-basket.sql';
+
 /**
  * The reads behind the trips of a zone list (plan 0122, sections 3 and 4).
  *
@@ -43,6 +48,11 @@ export const LOOSE_TRIP_GAP_MS = 6 * 60 * 60 * 1000;
  * (plan 0094): both halves group by the basket and the zone line, never by the
  * basket line.
  *
+ * **Both halves ask `GENERATED_BASKET`** (plan 0133, section 6). A trip is
+ * something somebody composed, and the permanent basket is not one: it holds
+ * every line its owner can write, so counting it would give every list one
+ * endless trip that never leaves the head.
+ *
  * A `FULL JOIN`, because either half can stand alone. Asked and never bought is
  * the ordinary unfinished line. Bought and no longer asked is a purchase whose
  * origin was taken back to zero afterwards, and dropping it would make a
@@ -59,7 +69,8 @@ function basketRowsCte(basketFilter: string): string {
            SUM(o."quantity")::int AS "asked"
     FROM "generated_list_line_origins" o
     JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
-    WHERE o."listId" = $1::uuid ${basketFilter}
+    JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
+    WHERE o."listId" = $1::uuid AND ${GENERATED_BASKET} ${basketFilter}
     GROUP BY gll."generatedListId", o."lineId"
   ),
   "bought" AS (
@@ -72,8 +83,10 @@ function basketRowsCte(basketFilter: string): string {
              AS "lastOutcome"
     FROM "line_settlements" s
     JOIN "generated_list_lines" gll ON gll.id = s."generatedListLineId"
+    JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
     WHERE s."listId" = $1::uuid
-      AND s."revertedAt" IS NULL ${basketFilter}
+      AND s."revertedAt" IS NULL
+      AND ${GENERATED_BASKET} ${basketFilter}
     GROUP BY gll."generatedListId", s."lineId"
   ),
   "basket_rows" AS (
@@ -135,7 +148,9 @@ const LOOSE_ROWS_CTE = `
       AND NOT EXISTS (
         SELECT 1
         FROM "generated_list_lines" gll
+        JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
         WHERE gll.id = s."generatedListLineId"
+          AND ${GENERATED_BASKET}
       )
   ),
   "marked" AS (
@@ -180,11 +195,10 @@ const LOOSE_ROWS_CTE = `
 /**
  * Every trip of the list, as one relation both head queries select from.
  *
- * `$3` is the statuses that count as live and `$4` the oldest a basket may have
- * been generated and still be live. They are the claim's own two values, read
- * from the same two places (`LIVE_GENERATED_LIST_STATUSES` and
- * `LineClaimService.since`), so a trip is live exactly while its basket can
- * claim a line.
+ * `$3` is the oldest a basket may have been generated and still be live, which
+ * is the claim's own value from `LineClaimService.since`. Beside
+ * `OPEN_GENERATED_BASKET`, which the claim asks too, it makes a trip live exactly
+ * while its basket can claim a line.
  *
  * **A trip left with no line is not here at all**: both halves are built from
  * rows that already joined `list_lines`, so a trip whose only line was deleted
@@ -203,8 +217,8 @@ const TRIPS_CTE = `
            gl."name"::text AS "name",
            gl."generatedAt" AS "startedAt",
            (
-             gl."status"::text = ANY($3::text[])
-             AND gl."generatedAt" >= $4::timestamptz
+             ${OPEN_GENERATED_BASKET}
+             AND gl."generatedAt" >= $3::timestamptz
            ) AS "live",
            COUNT(*)::int AS "lineCount",
            (COUNT(*) FILTER (
@@ -231,7 +245,7 @@ const TRIP_COLUMNS = `
   t."lineCount", t."boughtLineCount"`;
 
 /**
- * The live trips of a list, newest first. `$1` to `$4` as {@link TRIPS_CTE}.
+ * The live trips of a list, newest first. `$1` to `$3` as {@link TRIPS_CTE}.
  *
  * Not paged (section 2): they are bounded by the claim window, and a client
  * needs all of them to know where a claimed line is drawn.
@@ -246,8 +260,8 @@ export const LIVE_TRIPS_SQL = `
 
 /**
  * A page of ended trips, newest first: the union of ended baskets and loose
- * trips in one keyset order. `$1` to `$4` as {@link TRIPS_CTE}, `$5` the cursor
- * trip's id or null, `$6` its kind or null, `$7` the limit.
+ * trips in one keyset order. `$1` to `$3` as {@link TRIPS_CTE}, `$4` the cursor
+ * trip's id or null, `$5` its kind or null, `$6` the limit.
  *
  * The cursor carries `{ kind, id }` and the boundary's `startedAt` is looked up
  * here, after `SettlementService`: an ISO timestamp in a token is milliseconds
@@ -269,22 +283,22 @@ export const ENDED_TRIPS_SQL = `
   FROM "trips" t
   WHERE NOT t."live"
     AND (
-      $5::uuid IS NULL
+      $4::uuid IS NULL
       OR (t."startedAt", t."id") < (
         SELECT b."at", b."id"
         FROM (
           SELECT gl."generatedAt" AS "at", gl.id AS "id"
           FROM "generated_lists" gl
-          WHERE $6::text = 'BASKET' AND gl.id = $5::uuid
+          WHERE $5::text = 'BASKET' AND gl.id = $4::uuid
           UNION ALL
           SELECT s."settledAt" AS "at", s.id AS "id"
           FROM "line_settlements" s
-          WHERE $6::text = 'LOOSE' AND s.id = $5::uuid
+          WHERE $5::text = 'LOOSE' AND s.id = $4::uuid
         ) b
       )
     )
   ORDER BY t."startedAt" DESC, t."id" DESC
-  LIMIT $7
+  LIMIT $6
 `;
 
 /**

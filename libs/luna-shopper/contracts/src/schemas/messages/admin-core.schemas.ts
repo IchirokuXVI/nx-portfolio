@@ -242,6 +242,7 @@ const listPage = paginated(
 const basketFields = {
   id: nonEmptyString(),
   ownerUserId: nonEmptyString(),
+  kind: ref(GENERATED_LIST_SCHEMA_IDS.basketKind),
   name: nullableString(),
   status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
   zoneIds: array(nonEmptyString()),
@@ -252,6 +253,7 @@ const basketFields = {
 const basketKeys = [
   'id',
   'ownerUserId',
+  'kind',
   'name',
   'status',
   'zoneIds',

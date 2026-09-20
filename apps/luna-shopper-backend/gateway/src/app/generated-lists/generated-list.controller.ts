@@ -71,9 +71,9 @@ export class GeneratedListController {
   /**
    * Compose a basket from the caller's chosen sources.
    *
-   * The answer carries the basket **and what the run left behind**: a line a live
-   * basket is already carrying is skipped and named, because a basket missing the
-   * milk somebody distinctly remembers writing is a bug report otherwise.
+   * It refuses no line for being in another basket of the caller's. That rule
+   * came from plan 0050 section 3 and plan 0133 section 7 deleted it: it was
+   * about two frozen copies of one line, and it is false of two views of one.
    *
    * `memberUserIds` shares it with people from the caller's groups as it is
    * made (plan 0114, section 4), and a person who is not one of their contacts

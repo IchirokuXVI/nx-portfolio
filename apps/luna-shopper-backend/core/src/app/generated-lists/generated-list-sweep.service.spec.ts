@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedListStatus,
   RealtimeEvent,
   type GeneratedListView,
@@ -40,6 +41,8 @@ interface Seed {
   /** How long before `NOW` the basket was generated. */
   ageMs: number;
   ownerUserId?: string;
+  /** `GENERATED` unless a spec is about the permanent basket (plan 0133). */
+  kind?: BasketKind;
 }
 
 interface Harness {
@@ -70,14 +73,11 @@ function build(options: {
       ({
         id: seed.id,
         ownerUserId: seed.ownerUserId ?? OWNER,
+        kind: seed.kind ?? BasketKind.GENERATED,
         name: null,
         status: seed.status,
         generatedAt: new Date(NOW - seed.ageMs),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
+        pricingProfileId: null,
         defaultTargetListId: null,
         idempotencyKey: null,
       }) as GeneratedList
@@ -92,18 +92,20 @@ function build(options: {
   const lists = {
     find: async (query: {
       where: {
-        status: FindOperator<GeneratedListStatus>;
+        kind: BasketKind;
+        status: GeneratedListStatus;
         generatedAt: FindOperator<Date>;
       };
       order: { generatedAt: 'ASC' | 'DESC' };
       take: number;
     }) => {
-      const statuses = query.where.status.value as GeneratedListStatus[];
+      const { kind, status } = query.where;
       const before = query.where.generatedAt.value as Date;
       return rows
         .filter(
           (row) =>
-            statuses.includes(row.status) &&
+            row.kind === kind &&
+            row.status === status &&
             row.generatedAt.getTime() < before.getTime()
         )
         .sort((a, b) => a.generatedAt.getTime() - b.generatedAt.getTime())
@@ -170,7 +172,8 @@ function build(options: {
     claims.service,
     publisher,
     {} as never,
-    {} as never
+    {} as never,
+    { find: async () => [] } as never
   );
 
   const logger = { log: jest.fn(), error: jest.fn() };
@@ -216,17 +219,17 @@ describe('GeneratedListSweepService.sweep', () => {
     const harness = build({
       baskets: [
         // Never shopped at all, and closed anyway (section 4.1).
-        { id: 'gl-draft', status: GeneratedListStatus.DRAFT, ageMs: 61 * HOUR },
+        { id: 'gl-draft', status: GeneratedListStatus.OPEN, ageMs: 61 * HOUR },
         // Shopped and walked away from with lines unsettled: the case section 1
         // is about, and the one a sweep of the tidy baskets would have missed.
         {
           id: 'gl-active',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           ageMs: 3 * 24 * HOUR,
         },
         {
           id: 'gl-fresh',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           ageMs: 59 * HOUR,
         },
       ],
@@ -234,9 +237,9 @@ describe('GeneratedListSweepService.sweep', () => {
 
     await expect(harness.service.sweep()).resolves.toBe(2);
 
-    expect(statusOf(harness, 'gl-draft')).toBe(GeneratedListStatus.COMPLETED);
-    expect(statusOf(harness, 'gl-active')).toBe(GeneratedListStatus.COMPLETED);
-    expect(statusOf(harness, 'gl-fresh')).toBe(GeneratedListStatus.ACTIVE);
+    expect(statusOf(harness, 'gl-draft')).toBe(GeneratedListStatus.FINISHED);
+    expect(statusOf(harness, 'gl-active')).toBe(GeneratedListStatus.FINISHED);
+    expect(statusOf(harness, 'gl-fresh')).toBe(GeneratedListStatus.OPEN);
   });
 
   it('writes through update, so the owner hears it and every zone room hears the release', async () => {
@@ -244,12 +247,12 @@ describe('GeneratedListSweepService.sweep', () => {
       baskets: [
         {
           id: 'gl-a',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           ageMs: 4 * 24 * HOUR,
         },
         {
           id: 'gl-b',
-          status: GeneratedListStatus.DRAFT,
+          status: GeneratedListStatus.OPEN,
           ageMs: 5 * 24 * HOUR,
           ownerUserId: 'u-other',
         },
@@ -279,13 +282,13 @@ describe('GeneratedListSweepService.sweep', () => {
         event: RealtimeEvent.GeneratedListUpdated,
         userIds: ['u-other'],
         id: 'gl-b',
-        status: GeneratedListStatus.COMPLETED,
+        status: GeneratedListStatus.FINISHED,
       },
       {
         event: RealtimeEvent.GeneratedListUpdated,
         userIds: [OWNER],
         id: 'gl-a',
-        status: GeneratedListStatus.COMPLETED,
+        status: GeneratedListStatus.FINISHED,
       },
     ]);
     // The release, one call per basket carrying every line it held (section
@@ -310,7 +313,7 @@ describe('GeneratedListSweepService.sweep', () => {
         },
         {
           id: 'gl-done',
-          status: GeneratedListStatus.COMPLETED,
+          status: GeneratedListStatus.FINISHED,
           ageMs: 30 * 24 * HOUR,
         },
       ],
@@ -321,7 +324,7 @@ describe('GeneratedListSweepService.sweep', () => {
     // Archiving is a person hiding a basket (section 4.5), and rewriting it
     // would be rewriting their choice.
     expect(statusOf(harness, 'gl-archived')).toBe(GeneratedListStatus.ARCHIVED);
-    expect(statusOf(harness, 'gl-done')).toBe(GeneratedListStatus.COMPLETED);
+    expect(statusOf(harness, 'gl-done')).toBe(GeneratedListStatus.FINISHED);
     expect(harness.events).toEqual([]);
     expect(harness.claims.calls).toEqual([]);
     expect(harness.tripsChanged).toEqual([]);
@@ -334,29 +337,29 @@ describe('GeneratedListSweepService.sweep', () => {
       baskets: [
         {
           id: 'gl-newest',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           ageMs: 3 * 24 * HOUR,
         },
         {
           id: 'gl-oldest',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           ageMs: 9 * 24 * HOUR,
         },
         {
           id: 'gl-middle',
-          status: GeneratedListStatus.DRAFT,
+          status: GeneratedListStatus.OPEN,
           ageMs: 6 * 24 * HOUR,
         },
       ],
     });
 
     await expect(harness.service.sweep()).resolves.toBe(2);
-    expect(statusOf(harness, 'gl-oldest')).toBe(GeneratedListStatus.COMPLETED);
-    expect(statusOf(harness, 'gl-middle')).toBe(GeneratedListStatus.COMPLETED);
-    expect(statusOf(harness, 'gl-newest')).toBe(GeneratedListStatus.ACTIVE);
+    expect(statusOf(harness, 'gl-oldest')).toBe(GeneratedListStatus.FINISHED);
+    expect(statusOf(harness, 'gl-middle')).toBe(GeneratedListStatus.FINISHED);
+    expect(statusOf(harness, 'gl-newest')).toBe(GeneratedListStatus.OPEN);
 
     await expect(harness.service.sweep()).resolves.toBe(1);
-    expect(statusOf(harness, 'gl-newest')).toBe(GeneratedListStatus.COMPLETED);
+    expect(statusOf(harness, 'gl-newest')).toBe(GeneratedListStatus.FINISHED);
 
     await expect(harness.service.sweep()).resolves.toBe(0);
   });
@@ -366,12 +369,12 @@ describe('GeneratedListSweepService.sweep', () => {
       baskets: [
         {
           id: 'gl-gone',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           ageMs: 4 * 24 * HOUR,
         },
         {
           id: 'gl-here',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           ageMs: 3 * 24 * HOUR,
         },
       ],
@@ -381,7 +384,7 @@ describe('GeneratedListSweepService.sweep', () => {
     // The one that went is logged and skipped; the one that stayed is finished
     // on this tick rather than the next.
     await expect(harness.service.sweep()).resolves.toBe(1);
-    expect(statusOf(harness, 'gl-here')).toBe(GeneratedListStatus.COMPLETED);
+    expect(statusOf(harness, 'gl-here')).toBe(GeneratedListStatus.FINISHED);
     expect(harness.logger.error).toHaveBeenCalledTimes(1);
   });
 
@@ -391,22 +394,22 @@ describe('GeneratedListSweepService.sweep', () => {
         // One minute inside the window: still claiming, so still live.
         {
           id: 'gl-inside',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           ageMs: WINDOW_MS - 60_000,
         },
         // One minute past it: the claim has already expired, and this is the
         // sweep writing down what the read already believed (section 4.2).
         {
           id: 'gl-past',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           ageMs: WINDOW_MS + 60_000,
         },
       ],
     });
 
     await expect(harness.service.sweep()).resolves.toBe(1);
-    expect(statusOf(harness, 'gl-inside')).toBe(GeneratedListStatus.ACTIVE);
-    expect(statusOf(harness, 'gl-past')).toBe(GeneratedListStatus.COMPLETED);
+    expect(statusOf(harness, 'gl-inside')).toBe(GeneratedListStatus.OPEN);
+    expect(statusOf(harness, 'gl-past')).toBe(GeneratedListStatus.FINISHED);
   });
 });
 

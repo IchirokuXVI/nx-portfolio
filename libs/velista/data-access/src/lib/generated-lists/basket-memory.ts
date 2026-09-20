@@ -376,7 +376,10 @@ const MILK_CANDIDATES: readonly BasketOriginCandidate[] = [
     // of match that can be wrong. The sheet says so rather than presenting it as an
     // identity.
     matchedOnText: true,
-    unavailable: 'CLAIMED',
+    // Adoptable, which it became when backend `0133` section 7 deleted the rule
+    // about a line another basket carries. The mock keeps it as a plain
+    // candidate so a screen reading it meets what the server now answers.
+    unavailable: null,
     fromRun: false,
   },
   {
@@ -504,7 +507,7 @@ export class BasketMemory implements BasketServiceI {
    * composer over a finished basket, and that branch is otherwise unreachable
    * without a second fake.
    */
-  status = 'ACTIVE';
+  status = 'OPEN';
 
   /** The catalog behind the composer's dropdown. See {@link suggest}. */
   private readonly _catalog = new CatalogMemory();
@@ -712,6 +715,7 @@ export class BasketMemory implements BasketServiceI {
   async getBasket(): Promise<BasketView> {
     return {
       id: BASKET_ID,
+      kind: 'GENERATED',
       name: 'Saturday big shop',
       status: this.status,
       generatedAt: new Date('2026-09-01T08:00:00.000Z'),

@@ -113,7 +113,7 @@ const CORE: Wire.AdminDashboardAdminCoreDashboard = {
   // Work waiting, which is what the screen draws it as.
   memberships: { pending: 3 },
   lists: { total: 512 },
-  baskets: { total: 1046, draft: 87, completed: 951 },
+  baskets: { total: 1046, open: 87, finished: 951, live: 412 },
   zonesCreated: series(3, 1, { at: 20, count: 11 }),
   listsCreated: series(9, 4, { at: 20, count: 26 }),
   activity: [],

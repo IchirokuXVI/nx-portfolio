@@ -647,7 +647,7 @@ export class AdminListLinesController {
  *
  * **Read only in full, and it stays that way** (plan 0077, section 6.4). A
  * `GeneratedList` is output: it is composed from the wanted, approved lines of the
- * zones and lists a person chose, at the moment `sourceSnapshot` records, and
+ * zones and lists a person chose, which `basket_sources` records, and
  * every line in it carries an origin naming the list line it came from. A changed
  * `content` contradicts that origin, a changed `quantity` contradicts settlement
  * rows already written against it, and none of it is repairable. A basket is

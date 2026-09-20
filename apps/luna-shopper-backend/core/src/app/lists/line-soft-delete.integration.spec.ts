@@ -484,7 +484,6 @@ describeIntegration(
 
         const before = await dataSource.query(SUGGESTION_CANDIDATES_SQL, [
           ids.list,
-          ['OPEN'],
           new Date('2026-01-01T00:00:00.000Z'),
         ]);
         expect(before.map((row: { lineId: string }) => row.lineId)).toEqual([
@@ -495,7 +494,6 @@ describeIntegration(
 
         const after = await dataSource.query(SUGGESTION_CANDIDATES_SQL, [
           ids.list,
-          ['OPEN'],
           new Date('2026-01-01T00:00:00.000Z'),
         ]);
         expect(after).toEqual([]);

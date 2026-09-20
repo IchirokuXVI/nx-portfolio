@@ -51,11 +51,11 @@ export const WRITABLE_AMONG_SQL = `
  * Every zone line one basket draws on, with the list and zone it belongs to.
  * `$1` is the basket.
  *
- * The provenance rows are the basket's real sources, as opposed to
- * `sourceSnapshot`, which records the lists the **run** was pointed at. The two
- * differ in an ordinary way: a run may read a list that contributed no qualifying
- * line, and a basket edited afterwards may carry lines whose origins were since
- * deleted. Section 5.2 asks about "every source list of the run", and this is the
+ * The provenance rows are the lists the basket really drew a line from, as
+ * opposed to `basket_sources`, which records what the run was **asked** for. The
+ * two differ in an ordinary way: a source may narrow to a list that contributed
+ * no qualifying line, and a basket edited afterwards may carry lines whose
+ * origins were since deleted. Section 5.2 asks about "every source list of the run", and this is the
  * narrower and more honest reading of it, because a list that contributed nothing
  * discloses nothing by being hidden.
  */

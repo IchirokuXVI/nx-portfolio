@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GeneratedLineOrigin,
-  isLiveGeneratedList,
+  isOpenBasket,
   RealtimeEvent,
   type AddGeneratedListLineRequest,
   type GeneratedListLineIdRequest,
@@ -63,7 +63,7 @@ const NO_SUCH_LINE = 'Generated list line not found';
  * per write to save three lines.
  */
 function requireLive(list: GeneratedList): void {
-  if (!isLiveGeneratedList(list.status)) {
+  if (!isOpenBasket(list.status)) {
     throw new GeneratedListFinishedException(
       'This basket is finished, so its lines cannot be edited'
     );

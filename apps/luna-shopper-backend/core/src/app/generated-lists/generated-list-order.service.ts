@@ -11,11 +11,15 @@ import { normalizeContent } from './line-dedup';
  *
  * `ARCHIVED` is in it because archiving hides a basket from the listing without
  * saying anything about whether it was shopped, and the sweep turns a forgotten
- * basket into a `COMPLETED` one. A live basket is deliberately out: the shopper
+ * basket into a `FINISHED` one. An open basket is deliberately out: the shopper
  * is still walking it, so its offsets are a fragment of a trip rather than one.
+ *
+ * The kind is not here, because `ORDER_HISTORY_SQL` asks `GENERATED_BASKET`
+ * itself (plan 0133, section 6): the permanent basket is never a past trip, and
+ * it is never in either of these statuses either.
  */
 const PAST_TRIP_STATUSES: readonly GeneratedListStatus[] = [
-  GeneratedListStatus.COMPLETED,
+  GeneratedListStatus.FINISHED,
   GeneratedListStatus.ARCHIVED,
 ];
 

@@ -557,7 +557,8 @@ describe('waitingSettled on the basket line', () => {
       fakeLineClaims({}).service,
       { emitToUsers: () => undefined } as unknown as CoreEventsPublisher,
       {} as never,
-      {} as never
+      {} as never,
+      { find: async () => [] } as never
     );
     return service.basketLineViewFor(
       { id: BASKET_LINE } as GeneratedListLine,

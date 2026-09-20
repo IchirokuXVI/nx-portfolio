@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   GENERATED_LIST_SHARING_LIMITS,
-  GeneratedListStatus,
+  isOpenBasket,
   ParticipantEndedReason,
   ParticipantKind,
   type AddGeneratedListParticipantRequest,
@@ -972,16 +972,18 @@ export class GeneratedListSharingService {
   /**
    * Whether a basket may still take people (plan 0051, section 11's leaning).
    *
-   * A completed or archived basket stops accepting them, because an
+   * A finished or archived basket stops accepting them, because an
    * unauthenticated read of somebody's shopping habits should not outlive the
    * trip. It does **not** evict the people already on it, on exactly the reasoning
    * section 3.4 applies to a revoked link.
+   *
+   * It asks the status alone and not the kind (plan 0133). The permanent basket
+   * is always open, so it always accepts, and that is right: plan 0114 shares a
+   * basket with a named person, and the one that is always there is the one worth
+   * sharing standing.
    */
   private listAccepts(list: GeneratedList): boolean {
-    return (
-      list.status === GeneratedListStatus.DRAFT ||
-      list.status === GeneratedListStatus.ACTIVE
-    );
+    return isOpenBasket(list.status);
   }
 
   private resolveExpiry(requested: string | null | undefined): Date | null {

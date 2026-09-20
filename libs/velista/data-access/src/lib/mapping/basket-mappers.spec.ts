@@ -1,3 +1,4 @@
+import { basketTakesLines } from '@portfolio/velista/models';
 import {
   toBasketLine,
   toBasketLineOrigins,
@@ -250,6 +251,59 @@ describe('toBasketOriginQuantityResult', () => {
  * beside `quantity` and read the same way, because the reel under a list heading is
  * bound to the difference between the two and sends the second as its `from`.
  */
+describe('toBasketView: the kind and what the run was asked for (backend 0133)', () => {
+  const VIEW = {
+    id: 'gl-1',
+    kind: 'GENERATED',
+    status: 'OPEN',
+    me: { id: 'p-1', kind: 'OWNER' },
+    lines: [],
+    participants: [],
+    products: [],
+    seesZoneData: true,
+  };
+
+  it('reads the kind, and an unknown one as UNKNOWN', () => {
+    // The safe direction: a kind this build has never heard of must not read as
+    // the permanent basket, which is what every rule it will drive is about.
+    expect(toBasketView(VIEW)?.kind).toBe('GENERATED');
+    expect(toBasketView({ ...VIEW, kind: 'SOMETHING_NEW' })?.kind).toBe(
+      'UNKNOWN'
+    );
+  });
+
+  it('reads a source with no list as a whole zone rather than dropping it', () => {
+    const view = toBasketView({
+      ...VIEW,
+      sources: [
+        { zoneId: 'z-home', listId: 'l-flat' },
+        { zoneId: 'z-parents', listId: null },
+      ],
+    });
+
+    expect(view?.sources).toEqual([
+      { zoneId: 'z-home', listId: 'l-flat' },
+      { zoneId: 'z-parents', listId: null },
+    ]);
+  });
+
+  it('leaves sources undefined when the reader may not see them', () => {
+    // "You may not see this" and "the run drew from nothing" stay different
+    // answers, which is why an absent field is not an empty array.
+    expect(toBasketView(VIEW)?.sources).toBeUndefined();
+  });
+
+  it('carries the status through as the string it is', () => {
+    // This view's `status` is a raw string rather than the enum, and what reads
+    // it is `basketTakesLines`, which asks for `OPEN` and says no to everything
+    // else. An old server still saying `DRAFT` therefore costs a composer rather
+    // than drawing one over a basket the server would refuse.
+    expect(toBasketView({ ...VIEW, status: 'OPEN' })?.status).toBe('OPEN');
+    expect(basketTakesLines('OPEN')).toBe(true);
+    expect(basketTakesLines('DRAFT')).toBe(false);
+  });
+});
+
 describe('toBasketView: the product’s aisle, and what each list got', () => {
   const VIEW = {
     id: 'gl-1',

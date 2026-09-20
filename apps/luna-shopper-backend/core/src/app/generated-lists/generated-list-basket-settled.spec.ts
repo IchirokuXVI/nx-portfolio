@@ -109,7 +109,8 @@ function build(world: World = {}) {
     fakeLineClaims({}).service,
     { emitToUsers: () => undefined } as unknown as CoreEventsPublisher,
     {} as never,
-    {} as never
+    {} as never,
+    { find: async () => [] } as never
   );
   return { service, reads: () => settlementReads };
 }
