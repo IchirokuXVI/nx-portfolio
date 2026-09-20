@@ -9,11 +9,13 @@ import { RealtimeEvent } from '../events/realtime.events';
 import {
   baseContentType,
   COMMENT_PATTERNS,
+  continuesPurchaseSession,
   LINE_BATCH_MAX_ITEMS,
   LINE_PATTERNS,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
   LIST_PATTERNS,
+  PURCHASE_SESSION_GAP_MS,
   VOICE_COMMENT_CONTENT_TYPES,
 } from './list.messages';
 
@@ -92,5 +94,33 @@ describe('list contracts', () => {
     expect(baseContentType('audio/webm;codecs=opus')).toBe('audio/webm');
     expect(baseContentType('AUDIO/OGG; codecs="opus"')).toBe('audio/ogg');
     expect(baseContentType('audio/mp4')).toBe('audio/mp4');
+  });
+
+  describe('the session a purchase belongs to (plan 0134, section 7)', () => {
+    const at = (ms: number) => new Date(Date.UTC(2026, 0, 10, 10) + ms);
+
+    it('is six hours of elapsed time', () => {
+      expect(PURCHASE_SESSION_GAP_MS).toBe(6 * 60 * 60 * 1000);
+    });
+
+    it('continues on a shorter silence and on exactly the gap', () => {
+      expect(continuesPurchaseSession(at(0), at(1000))).toBe(true);
+      expect(continuesPurchaseSession(at(0), at(PURCHASE_SESSION_GAP_MS))).toBe(
+        true
+      );
+    });
+
+    it('ends on a silence one millisecond longer', () => {
+      expect(
+        continuesPurchaseSession(at(0), at(PURCHASE_SESSION_GAP_MS + 1))
+      ).toBe(false);
+    });
+
+    it('is elapsed time, so a shop across midnight stays one session', () => {
+      const before = new Date('2026-01-10T22:30:00.000Z');
+      const after = new Date('2026-01-11T01:30:00.000Z');
+
+      expect(continuesPurchaseSession(before, after)).toBe(true);
+    });
   });
 });

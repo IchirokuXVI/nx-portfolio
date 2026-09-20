@@ -1085,6 +1085,27 @@ export function baseContentType(value: string): string {
 }
 
 /**
+ * How long a silence ends a session of purchases: six hours (plan 0130,
+ * section 3; plan 0134, section 7).
+ *
+ * Elapsed time and never a calendar day, so no time zone is involved and a shop
+ * that crosses midnight stays one session. A gap of exactly this long continues
+ * the session. Only a longer one starts the next.
+ *
+ * **One constant, here.** Two used to say it, six hours for a loose trip and
+ * twelve for the fold behind a suggestion, so the same shopping read as one trip
+ * on the list and two purchases in the estimate. A session is one thing, so it
+ * is one number, and velista mirrors this one because rule D4 forbids it a
+ * contract import.
+ */
+export const PURCHASE_SESSION_GAP_MS = 6 * 60 * 60 * 1000;
+
+/** Whether `next` continues the session `previous` belongs to. */
+export function continuesPurchaseSession(previous: Date, next: Date): boolean {
+  return next.getTime() - previous.getTime() <= PURCHASE_SESSION_GAP_MS;
+}
+
+/**
  * One shopping trip that touched a list (plan 0122, section 3).
  *
  * A trip says its name, its date and what it did to **this** list. It never says

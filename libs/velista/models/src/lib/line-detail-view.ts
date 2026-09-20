@@ -16,13 +16,19 @@ import type { LineIndicator } from './list-view';
 export const ESTIMATE_MIN_PURCHASES = 3;
 
 /**
- * Two purchases closer than this are one purchase: twelve hours (velista `0089`,
- * section 4). Backend `0123` section 3 step 1 folds with the same number, so the line
- * sheet and the list state the same period for the same line.
+ * How long a silence ends a session of purchases: six hours (velista `0089`,
+ * section 4).
  *
- * Elapsed time and never a calendar day, so no time zone decides it.
+ * It mirrors `PURCHASE_SESSION_GAP_MS` in the backend contracts, which rule D4
+ * forbids this library to import, and it mirrors that one and no other number
+ * because the estimate promises to merge "as the server does". It was twelve
+ * hours until backend plan `0134`, against a server folding at six, which showed
+ * one line two different periods.
+ *
+ * Elapsed time and never a calendar day, so no time zone decides it. A gap of
+ * exactly this long continues the session. Only a longer one starts the next.
  */
-export const PURCHASE_MERGE_MS = 12 * 60 * 60 * 1000;
+export const PURCHASE_SESSION_GAP_MS = 6 * 60 * 60 * 1000;
 
 /**
  * The last purchase count that still reads as a phrase rather than a number

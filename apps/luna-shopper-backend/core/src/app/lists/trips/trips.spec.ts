@@ -1,4 +1,5 @@
 import {
+  PURCHASE_SESSION_GAP_MS,
   RealtimeEvent,
   SettlementOutcome,
   TripKind,
@@ -15,7 +16,6 @@ import {
   BASKET_TRIP_ROWS_SQL,
   ENDED_TRIPS_SQL,
   LIVE_TRIPS_SQL,
-  LOOSE_TRIP_GAP_MS,
   LOOSE_TRIP_ROWS_SQL,
 } from './trips.sql';
 
@@ -194,7 +194,11 @@ describe('the two reads', () => {
     // The statuses are no longer a parameter: "open and a trip" is a fragment
     // both queries carry (plan 0133, section 6), so the window is all that is
     // left of what the claim hands over.
-    expect(w.queries[0].parameters).toEqual([LIST, LOOSE_TRIP_GAP_MS, SINCE]);
+    expect(w.queries[0].parameters).toEqual([
+      LIST,
+      PURCHASE_SESSION_GAP_MS,
+      SINCE,
+    ]);
     // No cursor, and one row past the default page to learn whether more exist.
     expect(w.queries[1].parameters.slice(3)).toEqual([null, null, 21]);
   });
@@ -264,7 +268,7 @@ describe('the two reads', () => {
       { sql: BASKET_TRIP_ROWS_SQL, parameters: [LIST, TRIP, null, 21] },
       {
         sql: LOOSE_TRIP_ROWS_SQL,
-        parameters: [LIST, LOOSE_TRIP_GAP_MS, TRIP, null, 101],
+        parameters: [LIST, PURCHASE_SESSION_GAP_MS, TRIP, null, 101],
       },
     ]);
   });

@@ -196,6 +196,24 @@ describe('line.settle (plan 0047, section 4)', () => {
     expect(w.written).toHaveLength(1);
   });
 
+  it('came through no basket, so both basket columns are null', async () => {
+    // Plan 0134, section 2: null `basketId` is the list page, and it is null
+    // together with the basket line, which this path has never had.
+    const w = build({ quantity: 2 });
+
+    await w.service.settle({
+      userId: SHOPPER,
+      lineId: 'li1',
+      outcome: SettlementOutcome.BOUGHT,
+      quantity: 2,
+    });
+
+    expect(w.written[0]).toMatchObject({
+      generatedListLineId: null,
+      basketId: null,
+    });
+  });
+
   /**
    * The two indicators the list page draws every row from (section 5).
    *

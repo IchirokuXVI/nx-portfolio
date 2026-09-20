@@ -2,7 +2,7 @@ import {
   ESTIMATE_MIN_PURCHASES,
   ESTIMATE_ROUGH_TO,
   inLocale,
-  PURCHASE_MERGE_MS,
+  PURCHASE_SESSION_GAP_MS,
   toSettlementRow,
   type CatalogItem,
   type ConsumptionEstimateVm,
@@ -246,10 +246,13 @@ export function estimateFrom(
 /**
  * One time per merged purchase, oldest first.
  *
- * Sorted, then every purchase closer than {@link PURCHASE_MERGE_MS} to **the one before
+ * Sorted, then every purchase within {@link PURCHASE_SESSION_GAP_MS} of **the one before
  * it** joins that one, which keeps the first time of the run. The one before it and not
  * the first of the run, so a slow partial settle that writes a row every few hours stays
  * one purchase, exactly as `mergePurchases` in core decides it.
+ *
+ * A gap of exactly the session length still joins, which is the boundary `continuesPurchaseSession`
+ * draws in core: only a longer silence starts the next purchase.
  */
 function mergedPurchaseTimes(purchases: readonly LineSettlement[]): number[] {
   const sorted = purchases
@@ -259,7 +262,7 @@ function mergedPurchaseTimes(purchases: readonly LineSettlement[]): number[] {
   const merged: number[] = [];
   let previous: number | null = null;
   for (const at of sorted) {
-    if (previous === null || at - previous >= PURCHASE_MERGE_MS) {
+    if (previous === null || at - previous > PURCHASE_SESSION_GAP_MS) {
       merged.push(at);
     }
     previous = at;

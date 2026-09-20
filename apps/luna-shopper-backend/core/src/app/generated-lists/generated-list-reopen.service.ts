@@ -427,6 +427,10 @@ export class GeneratedListReopenService {
               revertedAt: null,
               revertedByParticipantId: null,
               generatedListLineId: row.generatedListLineId,
+              // Copied from the row it splits and never looked up again (plan
+              // 0134, section 3): a split is two parts of one purchase, so
+              // every fact about the purchase travels.
+              basketId: row.basketId,
               pricePaidCents: row.pricePaidCents,
               supermarketLocationId: row.supermarketLocationId,
             })

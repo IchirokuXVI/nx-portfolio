@@ -182,6 +182,9 @@ export class SettlementService {
           revertedAt: null,
           revertedByParticipantId: null,
           generatedListLineId: null,
+          // Both null together, and null is the list page (plan 0134,
+          // section 2): this settle came off the list and through no basket.
+          basketId: null,
           pricePaidCents: null,
           supermarketLocationId: null,
         })

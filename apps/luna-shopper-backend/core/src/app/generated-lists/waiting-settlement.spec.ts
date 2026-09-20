@@ -35,6 +35,7 @@ import { WaitingSettlementService } from './waiting-settlement.service';
  * around one.
  */
 
+const BASKET = 'gl-1';
 const BASKET_LINE = 'gll-1';
 const PARTICIPANT = 'p-guest';
 const LIST_A = 'l-flat';
@@ -124,6 +125,7 @@ function build(options: {
       revertedAt: null,
       revertedByParticipantId: null,
       generatedListLineId: BASKET_LINE,
+      basketId: BASKET,
       pricePaidCents: null,
       supermarketLocationId: null,
     })),
@@ -143,6 +145,9 @@ function build(options: {
       revertedAt: row.reverted ? new Date('2026-01-02T11:00:00.000Z') : null,
       revertedByParticipantId: row.reverted ? PARTICIPANT : null,
       generatedListLineId: BASKET_LINE,
+      // A waiting row belongs to a basket and to no household yet (plan 0134,
+      // section 3), so it carries the basket like every other basket settle.
+      basketId: BASKET,
       pricePaidCents: null,
       supermarketLocationId: null,
     })),
@@ -271,6 +276,10 @@ describe('a list that receives a line receives its purchases (section 3)', () =>
       quantity: 3,
       settledAt: new Date('2026-01-02T10:00:00.000Z'),
       settledByParticipantId: PARTICIPANT,
+      // Copied from the row it splits (plan 0134, section 3): both halves were
+      // bought through the same basket, on the same trip.
+      generatedListLineId: BASKET_LINE,
+      basketId: BASKET,
     });
     expect(stillWaiting(harness)).toHaveLength(1);
     expect(stillWaiting(harness)[0]).toMatchObject({

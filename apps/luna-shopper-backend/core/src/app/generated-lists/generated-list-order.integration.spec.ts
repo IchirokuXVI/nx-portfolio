@@ -90,7 +90,13 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
     return line.id;
   }
 
-  /** One settling act on a basket line, at a stated moment. */
+  /**
+   * One settling act on a basket line, at a stated moment.
+   *
+   * It writes the basket beside the basket line, as every settle path does since
+   * plan 0134: the `trips` CTE asks whether a basket has a standing purchase and
+   * reads `basketId` for it, while `visits` still reads the line's own text.
+   */
   async function seedSettlement(
     generatedListLineId: string,
     settledByUserId: string,
@@ -99,10 +105,20 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
       outcome?: SettlementOutcome;
       itemId?: string | null;
       reverted?: boolean;
+      /** Left out when the basket is the one the line belongs to. */
+      basketId?: string;
     } = {}
   ): Promise<void> {
     const outcome = options.outcome ?? SettlementOutcome.BOUGHT;
     const repo = dataSource.getRepository(LineSettlement);
+    const basketId =
+      options.basketId ??
+      (
+        await dataSource
+          .getRepository(GeneratedListLine)
+          .findOne({ where: { id: generatedListLineId } })
+      )?.generatedListId ??
+      null;
     await repo.save(
       repo.create({
         lineId: null,
@@ -118,6 +134,7 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
         revertedAt: options.reverted ? new Date(settledAt) : null,
         revertedByParticipantId: options.reverted ? randomUUID() : null,
         generatedListLineId,
+        basketId,
       })
     );
   }
@@ -287,6 +304,80 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
         'Trip 07',
         'Trip 08',
       ]);
+    });
+  });
+
+  /**
+   * The permanent basket is excluded by its **kind** and not by its status (plan
+   * 0134, section 5).
+   *
+   * It is asked with `OPEN` in the statuses, which the service never passes, for
+   * exactly that reason: `ck_generated_lists_live_shape` requires a `LIVE` basket
+   * to be `OPEN`, so a spec that passed the service's own two statuses would pass
+   * with the kind predicate deleted.
+   */
+  describe('the permanent basket is no trip (plan 0134, section 5)', () => {
+    const owner = randomUUID();
+
+    beforeAll(async () => {
+      // An open basket somebody composed, which the kind predicate admits.
+      const repo = dataSource.getRepository(GeneratedList);
+      const open = await repo.save(
+        repo.create({
+          ownerUserId: owner,
+          name: 'Shopping now',
+          status: GeneratedListStatus.OPEN,
+          generatedAt: new Date('2026-05-01T10:00:00Z'),
+          kind: BasketKind.GENERATED,
+          defaultTargetListId: null,
+          idempotencyKey: null,
+        })
+      );
+      baskets.push(open.id);
+      await seedSettlement(
+        await seedLine(open.id, 'Milk'),
+        owner,
+        '2026-05-01T12:00:00Z'
+      );
+
+      // The permanent basket, seeded by hand because plan 0136 is what creates
+      // one. It is settled, and it never ends, so counting it would give the
+      // shopper one endless trip that crowds the seven out. `OPEN` and unnamed
+      // is the shape `ck_generated_lists_live_shape` allows.
+      const live = await repo.save(
+        repo.create({
+          ownerUserId: owner,
+          name: null,
+          status: GeneratedListStatus.OPEN,
+          generatedAt: new Date('2026-05-02T10:00:00Z'),
+          kind: BasketKind.LIVE,
+          defaultTargetListId: null,
+          idempotencyKey: null,
+        })
+      );
+      baskets.push(live.id);
+      await seedSettlement(
+        await seedLine(live.id, 'Bread'),
+        owner,
+        '2026-05-02T12:00:00Z'
+      );
+    });
+
+    it('leaves it out, however recently it was settled', async () => {
+      const rows = await dataSource.query<OrderHistoryRow[]>(
+        ORDER_HISTORY_SQL,
+        [
+          owner,
+          [
+            GeneratedListStatus.OPEN,
+            GeneratedListStatus.FINISHED,
+            GeneratedListStatus.ARCHIVED,
+          ],
+          7,
+        ]
+      );
+
+      expect(rows.map((row) => row.content)).toEqual(['Milk']);
     });
   });
 });

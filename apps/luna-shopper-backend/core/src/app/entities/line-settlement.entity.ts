@@ -36,6 +36,17 @@ import { ListLine } from './list-line.entity';
 @Index('ix_settlements_item', ['itemId', 'settledAt'])
 // A list scoped read needs no join, which is what `listId` is denormalized for.
 @Index('ix_settlements_list', ['listId', 'settledAt'])
+// One basket and one zone line, which is what every read of a basket's purchases
+// asks for (plan 0134, section 6): the `bought` half of the trips, the `EXISTS`
+// of the walk order, and the revert walk.
+@Index('ix_settlements_basket_live', ['basketId', 'lineId', 'settledAt'], {
+  where: '"revertedAt" IS NULL AND "basketId" IS NOT NULL',
+})
+// One person's purchases, newest first. It has no reader until plan 0142, and it
+// is declared here so that the largest table in core is reshaped once.
+@Index('ix_settlements_user', ['settledByUserId', 'settledAt'], {
+  where: '"settledByUserId" IS NOT NULL',
+})
 export class LineSettlement {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -180,6 +191,27 @@ export class LineSettlement {
    */
   @Column({ type: 'uuid', nullable: true })
   generatedListLineId!: string | null;
+
+  /**
+   * The basket this purchase was made through, or null when it was made on the
+   * list page (plan 0134).
+   *
+   * The basket and not a line of it, because an open basket stores no lines
+   * (plan 0130, section 2). Stored and **never served**, for the reason
+   * {@link generatedListLineId} gives: the purchase is a zone fact and the
+   * basket is private.
+   *
+   * No foreign key, for the reason {@link settledByParticipantId} gives. A
+   * settlement outlives the basket it came off, and a basket id that names no row
+   * is how a read learns the basket was deleted.
+   *
+   * It is written beside {@link generatedListLineId} by every path that settles
+   * through a basket, and that is a service rule rather than a check constraint:
+   * a row whose basket line was deleted before plan 0134 legitimately has one and
+   * not the other.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  basketId!: string | null;
 
   /**
    * What was actually paid, and where (section 3.4).

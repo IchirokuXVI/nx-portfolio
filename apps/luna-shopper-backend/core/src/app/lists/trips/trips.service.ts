@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  PURCHASE_SESSION_GAP_MS,
   TripKind,
   type ListTripRowsRequest,
   type ListTripsRequest,
@@ -21,7 +22,6 @@ import {
   BASKET_TRIP_ROWS_SQL,
   ENDED_TRIPS_SQL,
   LIVE_TRIPS_SQL,
-  LOOSE_TRIP_GAP_MS,
   LOOSE_TRIP_ROWS_SQL,
   type TripLineRow,
   type TripRow,
@@ -105,7 +105,7 @@ export class TripsService {
         ? cursor
         : null;
 
-    const window = [req.listId, LOOSE_TRIP_GAP_MS, this.claims.since()];
+    const window = [req.listId, PURCHASE_SESSION_GAP_MS, this.claims.since()];
 
     // One after the other rather than together: each query draws a connection
     // from the pool, and a request holding two at once is how the pool runs dry.
@@ -174,7 +174,7 @@ export class TripsService {
           ])
         : await this.dataSource.query<TripLineRow[]>(LOOSE_TRIP_ROWS_SQL, [
             req.listId,
-            LOOSE_TRIP_GAP_MS,
+            PURCHASE_SESSION_GAP_MS,
             req.tripId,
             cursorId,
             limit + 1,

@@ -245,7 +245,12 @@ export interface WritableListRow {
  *   to the shelf, so the join filters on no outcome at all.
  * - **`EXISTS` a live settlement.** A basket nobody settled anything in is not a
  *   trip and must not use up one of the seven, or a shopper who composed three
- *   baskets and shopped none of them would read as having no history.
+ *   baskets and shopped none of them would read as having no history. It is asked
+ *   of the settlement's own `basketId` (plan 0134, section 5), because whether a
+ *   basket was shopped is a question about the basket, and it rides
+ *   `ix_settlements_basket_live`. The `visits` CTE below still reads the basket
+ *   line, because what it wants is the line's own text and pick, and that stays
+ *   true until plan 0141 rewrites this read over sessions.
  *
  * A line settled twice, in two shops, counts from the first: `min(settledAt)`
  * per line, and the trip's own start is the earliest of those.
@@ -259,9 +264,8 @@ export const ORDER_HISTORY_SQL = `
       AND gl."status"::text = ANY($2::text[])
       AND EXISTS (
         SELECT 1
-        FROM "generated_list_lines" gll
-        JOIN "line_settlements" ls ON ls."generatedListLineId" = gll.id
-        WHERE gll."generatedListId" = gl.id
+        FROM "line_settlements" ls
+        WHERE ls."basketId" = gl.id
           AND ls."revertedAt" IS NULL
       )
     ORDER BY gl."generatedAt" DESC, gl.id DESC

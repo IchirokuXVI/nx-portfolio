@@ -238,6 +238,10 @@ export class GeneratedListSettleService {
             revertedAt: null,
             revertedByParticipantId: null,
             generatedListLineId: line.id,
+            // The basket beside the basket line (plan 0134, section 3). It is
+            // what every read asking "which trip was this bought on" uses, and
+            // it keeps answering once plan 0136 deletes the line above.
+            basketId: list.id,
             pricePaidCents: null,
             supermarketLocationId: null,
           })
@@ -326,6 +330,10 @@ export class GeneratedListSettleService {
             // The only thing it belongs to, which is why
             // `ck_line_settlements_waiting_basket` requires it.
             generatedListLineId: line.id,
+            // Beside it, as on every other basket settle (plan 0134,
+            // section 3). A waiting row is a purchase made through this basket
+            // that has not found a household yet.
+            basketId: list.id,
             pricePaidCents: null,
             supermarketLocationId: null,
           })

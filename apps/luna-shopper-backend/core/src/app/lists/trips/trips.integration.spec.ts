@@ -3,6 +3,7 @@ import {
   GeneratedLineOrigin,
   GeneratedListStatus,
   MembershipStatus,
+  ParticipantKind,
   RealtimeEvent,
   SettlementOutcome,
   TripKind,
@@ -24,6 +25,7 @@ import {
   GeneratedListLine,
   GeneratedListLineOption,
   GeneratedListLineOrigin,
+  GeneratedListParticipant,
   LineSettlement,
   ListAccess,
   ListLine,
@@ -60,6 +62,8 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
 
   const ids = {
     zone: '',
+    /** The shopper's one permanent basket, made on demand. */
+    live: '',
     shopper: randomUUID(),
     leaver: randomUUID(),
     stranger: randomUUID(),
@@ -95,6 +99,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       name?: string | null;
       status?: GeneratedListStatus;
       generatedAt?: Date;
+      kind?: BasketKind;
     } = {}
   ): Promise<string> {
     const repo = dataSource.getRepository(GeneratedList);
@@ -104,7 +109,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         name: options.name ?? null,
         status: options.status ?? GeneratedListStatus.FINISHED,
         generatedAt: options.generatedAt ?? new Date('2026-01-10T10:00:00Z'),
-        kind: BasketKind.GENERATED,
+        kind: options.kind ?? BasketKind.GENERATED,
         defaultTargetListId: null,
         idempotencyKey: null,
       })
@@ -151,10 +156,77 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
   }
 
   /**
+   * The owner's permanent basket, seeded by hand and shared by the tests that
+   * need one (plan 0134, tests 9 and 11).
+   *
+   * Plan 0136 is what creates them, so there is none to settle through yet, and
+   * the shape the database holds is narrow: `uq_generated_lists_live_owner`
+   * allows one per owner and `ck_generated_lists_live_shape` requires it to be
+   * `OPEN`, unnamed and without an idempotency key (plan 0133, section 2).
+   */
+  async function liveBasket(): Promise<string> {
+    if (ids.live) {
+      return ids.live;
+    }
+    const repo = dataSource.getRepository(GeneratedList);
+    const saved = await repo.save(
+      repo.create({
+        ownerUserId: ids.shopper,
+        name: null,
+        status: GeneratedListStatus.OPEN,
+        generatedAt: new Date('2026-01-10T10:00:00Z'),
+        kind: BasketKind.LIVE,
+        defaultTargetListId: null,
+        idempotencyKey: null,
+      })
+    );
+    ids.live = saved.id;
+    return saved.id;
+  }
+
+  /**
+   * A participant of a basket, so a purchase made through one can name a buyer.
+   *
+   * `userId` is the account behind it, and null is a guest, who has none (plan
+   * 0134, section 4.3).
+   */
+  async function participant(
+    generatedListId: string,
+    userId: string | null
+  ): Promise<string> {
+    const repo = dataSource.getRepository(GeneratedListParticipant);
+    const saved = await repo.save(
+      repo.create({
+        generatedListId,
+        shareLinkId: null,
+        kind: userId ? ParticipantKind.REGISTERED : ParticipantKind.GUEST,
+        userId,
+        displayName: userId ? null : 'Guest',
+        username: userId ? 'Shopper' : null,
+        guestNumber: userId ? null : 1,
+        sessionSecretHash: null,
+        userAgent: null,
+        joinedAt: new Date('2026-01-10T09:00:00Z'),
+        lastSeenAt: new Date('2026-01-10T09:00:00Z'),
+        revokedAt: null,
+        endedReason: null,
+        invitedAt: null,
+        invitedByUserId: null,
+      })
+    );
+    return saved.id;
+  }
+
+  /**
    * One purchase, at a stated moment so the order is not a race.
    *
-   * With a basket line it is a basket settle, which names a participant and no
-   * user. Without one it is a settle off the list page, which names a user.
+   * With a basket it is a basket settle, which names a participant and no user,
+   * and it writes both basket columns the way every settle path does (plan 0134,
+   * section 3). Without one it is a settle off the list page, which names a user
+   * and leaves both null.
+   *
+   * `basketId` can be passed on its own, which is how a purchase through a `LIVE`
+   * basket is seeded before plan 0136 creates one.
    */
   async function settled(
     listId: string,
@@ -164,13 +236,27 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       outcome?: SettlementOutcome;
       quantity?: number;
       basketLineId?: string;
+      basketId?: string;
+      participantId?: string;
       userId?: string;
       reverted?: boolean;
     } = {}
   ): Promise<string> {
     const repo = dataSource.getRepository(LineSettlement);
     const outcome = options.outcome ?? SettlementOutcome.BOUGHT;
-    const byBasket = options.basketLineId !== undefined;
+    const byBasket =
+      options.basketLineId !== undefined || options.basketId !== undefined;
+    // A basket line names its basket, so a caller that gave one gets both
+    // columns written together, which is what every settle path does.
+    const basketId =
+      options.basketId ??
+      (options.basketLineId
+        ? ((
+            await dataSource
+              .getRepository(GeneratedListLine)
+              .findOne({ where: { id: options.basketLineId } })
+          )?.generatedListId ?? null)
+        : null);
     const saved = await repo.save(
       repo.create({
         lineId,
@@ -180,12 +266,15 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         quantity:
           outcome === SettlementOutcome.BOUGHT ? (options.quantity ?? 1) : 0,
         settledByUserId: byBasket ? null : (options.userId ?? ids.shopper),
-        settledByParticipantId: byBasket ? randomUUID() : null,
+        settledByParticipantId: byBasket
+          ? (options.participantId ?? randomUUID())
+          : null,
         settledAt: new Date(at),
         revertedAt: options.reverted ? new Date() : null,
         // A reverted row names who took it back (`ck_line_settlements_revert`).
         revertedByParticipantId: options.reverted ? randomUUID() : null,
         generatedListLineId: options.basketLineId ?? null,
+        basketId,
         pricePaidCents: null,
         supermarketLocationId: null,
       })
@@ -470,6 +559,98 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
     });
   });
 
+  describe('a purchase belongs to the basket, not to its line (plan 0134)', () => {
+    it('keeps a purchase in the basket’s trip after the basket line is deleted', async () => {
+      // The consequence section 4.1 calls new and wanted. Taking a line out of a
+      // basket that still exists used to drop its purchases into a session,
+      // because the test was "the basket line exists". They stay where they were
+      // made, as a row that was bought and is no longer asked.
+      const flat = await list('Line taken out');
+      const milk = await line(flat, 'Milk');
+
+      const id = await basket({ name: 'Saturday' });
+      const carrier = await basketLine(id);
+      await origin(carrier, flat, milk, 2);
+      await settled(flat, milk, '2026-01-10T11:00:00Z', {
+        basketLineId: carrier,
+        quantity: 2,
+      });
+
+      await dataSource.getRepository(GeneratedListLine).delete({ id: carrier });
+
+      const heads = await trips.list({ userId: ids.shopper, listId: flat });
+      expect(heads.items).toEqual([
+        expect.objectContaining({
+          id,
+          kind: TripKind.BASKET,
+          lineCount: 1,
+          boughtLineCount: 1,
+        }),
+      ]);
+
+      const page = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.BASKET,
+        tripId: id,
+      });
+      // Nothing asked, because the origins went with the line, and two bought.
+      expect(page.items).toEqual([
+        {
+          lineId: milk,
+          asked: 0,
+          bought: 2,
+          left: 0,
+          outcome: TripRowOutcome.BOUGHT,
+          settledByUserId: null,
+        },
+      ]);
+    });
+
+    it('reads one basket’s purchases where two bought the same zone line', async () => {
+      // The `bought` half is narrowed by the settlement's own `basketId` now and
+      // no longer by a join through the basket line (section 4.2), so the
+      // parameter has to reach the right half of the statement.
+      const flat = await list('Two baskets');
+      const milk = await line(flat, 'Milk');
+
+      const mine = await basket({ name: 'Mine' });
+      const theirs = await basket({ name: 'Theirs' });
+      const myLine = await basketLine(mine);
+      const theirLine = await basketLine(theirs);
+      await origin(myLine, flat, milk, 2);
+      await origin(theirLine, flat, milk, 5);
+      await settled(flat, milk, '2026-01-10T11:00:00Z', {
+        basketLineId: myLine,
+        quantity: 2,
+      });
+      await settled(flat, milk, '2026-01-10T11:30:00Z', {
+        basketLineId: theirLine,
+        quantity: 4,
+      });
+
+      const ofMine = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.BASKET,
+        tripId: mine,
+      });
+      const ofTheirs = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.BASKET,
+        tripId: theirs,
+      });
+
+      expect(ofMine.items).toEqual([
+        expect.objectContaining({ lineId: milk, asked: 2, bought: 2 }),
+      ]);
+      expect(ofTheirs.items).toEqual([
+        expect.objectContaining({ lineId: milk, asked: 5, bought: 4 }),
+      ]);
+    });
+  });
+
   describe('a loose trip (section 3)', () => {
     it('groups purchases made by hand by a six hour gap, and never by the calendar', async () => {
       const flat = await list('By hand');
@@ -518,6 +699,19 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const heads = await trips.list({ userId: ids.shopper, listId: flat });
 
       expect(heads.items.map((trip) => trip.id)).toEqual([first]);
+    });
+
+    it('starts the next trip a millisecond past the gap', async () => {
+      // The other side of the boundary the contract states once (plan 0134,
+      // section 7): only a silence longer than the gap begins a session.
+      const flat = await list('Six and one');
+      const milk = await line(flat, 'Milk');
+      const first = await settled(flat, milk, '2026-03-01T10:00:00Z');
+      const next = await settled(flat, milk, '2026-03-01T16:00:00.001Z');
+
+      const heads = await trips.list({ userId: ids.shopper, listId: flat });
+
+      expect(heads.items.map((trip) => trip.id)).toEqual([next, first]);
     });
 
     it('splits a session when the purchase bridging it is taken back', async () => {
@@ -636,6 +830,77 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
           tripId: id,
         })
       ).rejects.toThrow('Trip not found');
+    });
+
+    it('takes in a purchase made through the permanent basket', async () => {
+      // Plan 0130 sections 3 and 9: the permanent basket never ends, so counting
+      // it as a trip would give the list one endless trip. Its purchases are
+      // session purchases, and they fold with a purchase made by hand.
+      const flat = await list('Live basket');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread');
+
+      const live = await liveBasket();
+      const first = await settled(flat, milk, '2026-03-01T10:00:00Z', {
+        basketId: live,
+        quantity: 2,
+      });
+      await settled(flat, bread, '2026-03-01T15:00:00Z');
+
+      const heads = await trips.list({ userId: ids.shopper, listId: flat });
+
+      expect(heads.items).toEqual([
+        expect.objectContaining({
+          id: first,
+          kind: TripKind.LOOSE,
+          lineCount: 2,
+        }),
+      ]);
+    });
+
+    it('names the account behind the participant who bought through a basket', async () => {
+      // Section 4.3. A basket settle leaves `settledByUserId` null and names a
+      // participant, so a session purchase made through one reads its buyer
+      // through that participant, under the same zone membership gate.
+      const flat = await list('Buyer through a basket');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread');
+      const eggs = await line(flat, 'Eggs');
+
+      const live = await liveBasket();
+      const mine = await participant(live, ids.shopper);
+      const leaver = await participant(live, ids.leaver);
+      const guest = await participant(live, null);
+
+      const first = await settled(flat, milk, '2026-03-01T10:00:00Z', {
+        basketId: live,
+        participantId: mine,
+      });
+      await settled(flat, bread, '2026-03-01T10:10:00Z', {
+        basketId: live,
+        participantId: leaver,
+      });
+      await settled(flat, eggs, '2026-03-01T10:20:00Z', {
+        basketId: live,
+        participantId: guest,
+      });
+
+      const page = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.LOOSE,
+        tripId: first,
+      });
+
+      expect(
+        page.items.map((row) => [row.lineId, row.settledByUserId])
+      ).toEqual([
+        [milk, ids.shopper],
+        // Removed from the zone since, so nobody the reader can resolve.
+        [bread, null],
+        // A guest has no account at all.
+        [eggs, null],
+      ]);
     });
   });
 

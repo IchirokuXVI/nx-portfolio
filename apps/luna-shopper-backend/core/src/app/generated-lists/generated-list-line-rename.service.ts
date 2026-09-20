@@ -511,6 +511,9 @@ export class GeneratedListLineRenameService {
       }
     }
 
+    // `basketId` is deliberately not in the update (plan 0134, section 3). Both
+    // lines belong to one basket, so the purchase does not move between baskets
+    // and the column already says the right thing.
     await manager
       .getRepository(LineSettlement)
       .update(

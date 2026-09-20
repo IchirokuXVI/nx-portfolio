@@ -17,32 +17,34 @@ import {
  *
  * ## Which purchase belongs to which kind of trip
  *
- * One test, asked the same way in every query below: **does the basket line the
- * settlement names still exist?** `generatedListLineId` has no foreign key, so
- * after a basket is deleted it names a row that is gone. A purchase whose basket
- * line exists is that basket's. Every other purchase, the ones made by hand and
- * the ones a deleted basket left behind, is loose. So every standing purchase of
- * the list is in exactly one trip.
+ * One test, asked the same way in every query below (plan 0134, section 4.1):
+ * **does `basketId` name a row of `generated_lists` whose kind is `GENERATED`?**
+ * The column has no foreign key, so after a basket is deleted it names a row that
+ * is gone. A purchase whose basket exists and is `GENERATED` is that basket's.
+ * Every other standing purchase of the list is a session purchase: the ones made
+ * on the list page, the ones made through the permanent basket, and the ones a
+ * deleted basket left behind. So every standing purchase is in exactly one trip.
+ *
+ * It used to ask the basket **line**, and plan 0136 deletes basket lines. Asking
+ * the basket also keeps a purchase in the trip it was made on when the line it
+ * came off is taken out of a basket that still exists, where the old test dropped
+ * it into a session.
  *
  * `revertedAt IS NULL` is the definition of a purchase that counts, as everywhere
  * else in core.
  */
 
 /**
- * How long a silence ends a loose trip: six hours.
- *
- * Elapsed time and never a calendar day, so no time zone is involved and a shop
- * that crosses midnight stays one trip. A gap of exactly this long continues the
- * session: only a longer one starts the next.
- */
-export const LOOSE_TRIP_GAP_MS = 6 * 60 * 60 * 1000;
-
-/**
  * One row per (basket, zone line) of the list: what the basket's origins asked
  * of the line, and what its standing settlements bought of it.
  *
- * `$1` is the list. `basketFilter` narrows both halves to one basket, for the
- * rows read, and is empty for the heads.
+ * `$1` is the list. `basketParam` is the parameter naming one basket, for the
+ * rows read, and null for the heads.
+ *
+ * **It is the parameter and not a ready made fragment** (plan 0134,
+ * section 4.2). The two halves reach the basket by different columns now, the
+ * `asked` half through the basket line and the `bought` half through the
+ * settlement's own `basketId`, so one spliced predicate cannot serve both.
  *
  * **One row per zone line, however many sibling basket lines or origins fed it**
  * (plan 0094): both halves group by the basket and the zone line, never by the
@@ -55,13 +57,20 @@ export const LOOSE_TRIP_GAP_MS = 6 * 60 * 60 * 1000;
  *
  * A `FULL JOIN`, because either half can stand alone. Asked and never bought is
  * the ordinary unfinished line. Bought and no longer asked is a purchase whose
- * origin was taken back to zero afterwards, and dropping it would make a
- * standing purchase belong to no trip at all.
+ * origin was taken back to zero afterwards, or one whose basket line was taken
+ * out of the basket, and dropping it would make a standing purchase belong to no
+ * trip at all.
  *
  * The join to `list_lines` is what skips a line that was deleted or merged away:
  * an origin's `lineId` has no foreign key and may name no row.
  */
-function basketRowsCte(basketFilter: string): string {
+function basketRowsCte(basketParam: string | null): string {
+  const askedFilter = basketParam
+    ? `AND gll."generatedListId" = ${basketParam}::uuid`
+    : '';
+  const boughtFilter = basketParam
+    ? `AND s."basketId" = ${basketParam}::uuid`
+    : '';
   return `
   "asked" AS (
     SELECT gll."generatedListId" AS "tripId",
@@ -70,11 +79,11 @@ function basketRowsCte(basketFilter: string): string {
     FROM "generated_list_line_origins" o
     JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
     JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
-    WHERE o."listId" = $1::uuid AND ${GENERATED_BASKET} ${basketFilter}
+    WHERE o."listId" = $1::uuid AND ${GENERATED_BASKET} ${askedFilter}
     GROUP BY gll."generatedListId", o."lineId"
   ),
   "bought" AS (
-    SELECT gll."generatedListId" AS "tripId",
+    SELECT s."basketId" AS "tripId",
            s."lineId" AS "lineId",
            COALESCE(
              SUM(s."quantity") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
@@ -82,12 +91,10 @@ function basketRowsCte(basketFilter: string): string {
            (ARRAY_AGG(s."outcome"::text ORDER BY s."settledAt" DESC, s.id DESC))[1]
              AS "lastOutcome"
     FROM "line_settlements" s
-    JOIN "generated_list_lines" gll ON gll.id = s."generatedListLineId"
-    JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
+    JOIN "generated_lists" gl ON gl.id = s."basketId" AND ${GENERATED_BASKET}
     WHERE s."listId" = $1::uuid
-      AND s."revertedAt" IS NULL
-      AND ${GENERATED_BASKET} ${basketFilter}
-    GROUP BY gll."generatedListId", s."lineId"
+      AND s."revertedAt" IS NULL ${boughtFilter}
+    GROUP BY s."basketId", s."lineId"
   ),
   "basket_rows" AS (
     SELECT COALESCE(a."tripId", b."tripId") AS "tripId",
@@ -108,11 +115,11 @@ function basketRowsCte(basketFilter: string): string {
 
 /**
  * One row per (loose trip, zone line) of the list. `$1` is the list, `$2` is
- * {@link LOOSE_TRIP_GAP_MS}.
+ * {@link PURCHASE_SESSION_GAP_MS}.
  *
  * Four steps, each a CTE:
  *
- * 1. `loose`: the standing purchases of the list that belong to no basket.
+ * 1. `loose`: the standing purchases of the list that belong to no basket trip.
  * 2. `marked`: a purchase starts a session when the one before it is more than
  *    the gap away. The first has no predecessor, so `LAG` is null, the comparison
  *    is null and it lands in session zero, which is what it should do.
@@ -128,6 +135,17 @@ function basketRowsCte(basketFilter: string): string {
  * The window is over the list's loose purchases, which `ix_settlements_list`
  * serves. It cannot be narrowed to a page, because where a session starts depends
  * on every purchase before it.
+ *
+ * ## Who bought it (plan 0134, section 4.3)
+ *
+ * A session purchase can now have been made through a basket, where the actor is
+ * a participant and `settledByUserId` is null by rule (plan 0051, section 6). So
+ * the buyer is the settling user, or the account behind the participant when
+ * there is one: `COALESCE`, one primary key lookup per loose row.
+ *
+ * A guest participant has no account and reads null, as it does today. So does a
+ * purchase a deleted basket left behind, because the participant rows went with
+ * the basket, and nothing new is kept to name them.
  */
 const LOOSE_ROWS_CTE = `
   "loose" AS (
@@ -137,19 +155,20 @@ const LOOSE_ROWS_CTE = `
            s."settledAt" AS "settledAt",
            s."outcome"::text AS "outcome",
            s."quantity" AS "quantity",
-           s."settledByUserId" AS "settledByUserId"
+           COALESCE(s."settledByUserId", p."userId") AS "buyerUserId"
     FROM "line_settlements" s
     JOIN "list_lines" ll
       ON ll.id = s."lineId"
      AND ll."listId" = $1::uuid
      AND ll."deletedAt" IS NULL
+    LEFT JOIN "generated_list_participants" p
+      ON p.id = s."settledByParticipantId"
     WHERE s."listId" = $1::uuid
       AND s."revertedAt" IS NULL
       AND NOT EXISTS (
         SELECT 1
-        FROM "generated_list_lines" gll
-        JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
-        WHERE gll.id = s."generatedListLineId"
+        FROM "generated_lists" gl
+        WHERE gl.id = s."basketId"
           AND ${GENERATED_BASKET}
       )
   ),
@@ -186,7 +205,7 @@ const LOOSE_ROWS_CTE = `
            )::int AS "bought",
            (ARRAY_AGG(x."outcome" ORDER BY x."settledAt" DESC, x."id" DESC))[1]
              AS "lastOutcome",
-           (ARRAY_AGG(x."settledByUserId" ORDER BY x."settledAt" DESC, x."id" DESC))[1]
+           (ARRAY_AGG(x."buyerUserId" ORDER BY x."settledAt" DESC, x."id" DESC))[1]
              AS "buyer"
     FROM "sessioned" x
     GROUP BY x."tripId", x."lineId", x."position"
@@ -209,7 +228,7 @@ const LOOSE_ROWS_CTE = `
  * left.
  */
 const TRIPS_CTE = `
-  ${basketRowsCte('')},
+  ${basketRowsCte(null)},
   ${LOOSE_ROWS_CTE},
   "trips" AS (
     SELECT gl.id AS "id",
@@ -326,7 +345,7 @@ function lineKeyset(cursorParam: string): string {
  * `$2` the basket, `$3` the cursor line's id or null, `$4` the limit.
  */
 export const BASKET_TRIP_ROWS_SQL = `
-  WITH ${basketRowsCte('AND gll."generatedListId" = $2::uuid')}
+  WITH ${basketRowsCte('$2')}
   SELECT r."lineId", r."asked", r."bought", r."lastOutcome"
   FROM "basket_rows" r
   WHERE ${lineKeyset('$3')}
@@ -336,14 +355,15 @@ export const BASKET_TRIP_ROWS_SQL = `
 
 /**
  * The rows of one loose trip, in the zone line's own order. `$1` is the list,
- * `$2` is {@link LOOSE_TRIP_GAP_MS}, `$3` the session's id, `$4` the cursor
+ * `$2` is {@link PURCHASE_SESSION_GAP_MS}, `$3` the session's id, `$4` the cursor
  * line's id or null, `$5` the limit.
  *
  * The buyer is served only while they are an approved member of the list's zone,
  * which is the rule `LINE_CLAIMS_SQL` follows for a claim: somebody who has left
- * reports as nobody rather than as an id the reader can no longer resolve. A
- * purchase a deleted basket left behind has no user at all, only a participant,
- * so it reads null by itself.
+ * reports as nobody rather than as an id the reader can no longer resolve. The
+ * gate is word for word what it was before plan 0134 widened who the buyer can
+ * be: a purchase a deleted basket left behind names nobody, because its
+ * participant row went with the basket, and a guest's names nobody either.
  */
 export const LOOSE_TRIP_ROWS_SQL = `
   WITH ${LOOSE_ROWS_CTE}
