@@ -314,7 +314,7 @@ function build(
     findOne: async () => ({
       id: BASKET,
       ownerUserId: OWNER,
-      status: options.status ?? GeneratedListStatus.ACTIVE,
+      status: options.status ?? GeneratedListStatus.OPEN,
     }),
   } as never;
   const lines = { findOne: async () => basketLine } as never;
@@ -897,7 +897,7 @@ describe('a finished basket refuses both directions (section 5)', () => {
     const raising = build({
       quantity: 5,
       settledQuantity: 5,
-      status: GeneratedListStatus.COMPLETED,
+      status: GeneratedListStatus.FINISHED,
       settlements: [
         { id: 's-1', lineId: 'zl-1', listId: LIST_A, quantity: 5, order: 1 },
       ],

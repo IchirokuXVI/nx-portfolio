@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   RealtimeEvent,
@@ -6,6 +7,7 @@ import {
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, type DataSource } from 'typeorm';
 import {
+  BasketSource,
   GeneratedList,
   GeneratedListLine,
   GeneratedListLineOption,
@@ -20,7 +22,6 @@ import { GeneratedListService } from './generated-list.service';
 import {
   CANDIDATE_LINES_SQL,
   CANDIDATE_LINE_ITEMS_SQL,
-  LIVE_OVERLAP_SQL,
   ORDER_HISTORY_SQL,
   WRITABLE_LISTS_SQL,
   type OrderHistoryRow,
@@ -59,11 +60,20 @@ interface CandidateSeed {
   itemIds?: string[];
 }
 
+/**
+ * The source rows a run wrote, as (zone, list) pairs, so an assertion reads like
+ * the table in plan 0133 section 4.2 rather than like an insert.
+ */
+const sourcesOf = (written: Harness['written']) =>
+  written.sources.map((row) => ({ zoneId: row.zoneId, listId: row.listId }));
+
 interface Harness {
   service: GeneratedListService;
   /** Rows written inside the run's transaction, in write order. */
   written: {
     lists: Partial<GeneratedList>[];
+    /** What the run recorded it was asked to draw from (plan 0133, section 4). */
+    sources: Partial<BasketSource>[];
     lines: Partial<GeneratedListLine>[];
     origins: Partial<GeneratedListLineOrigin>[];
     options: Partial<GeneratedListLineOption>[];
@@ -83,8 +93,6 @@ interface Harness {
 function build(options: {
   writable?: { listId: string; zoneId: string }[];
   candidates?: CandidateSeed[];
-  /** lineId -> the ACTIVE basket already carrying it. */
-  overlaps?: Record<string, string>;
   profileSources?: { zoneId: string; listId: string | null }[];
   profileId?: string;
   /**
@@ -120,10 +128,10 @@ function build(options: {
     { listId: LIST_B, zoneId: ZONE_B },
   ];
   const candidates = options.candidates ?? [];
-  const overlaps = options.overlaps ?? {};
 
   const written: Harness['written'] = {
     lists: [],
+    sources: [],
     lines: [],
     origins: [],
     options: [],
@@ -152,12 +160,6 @@ function build(options: {
       return candidates.flatMap((line) =>
         (line.itemIds ?? []).map((itemId) => ({ lineId: line.id, itemId }))
       );
-    }
-    if (sql === LIVE_OVERLAP_SQL) {
-      return Object.entries(overlaps).map(([lineId, generatedListId]) => ({
-        lineId,
-        generatedListId,
-      }));
     }
     if (sql === BASKET_ORIGIN_LISTS_SQL) {
       // `DISTINCT`, as the real read is. What the run wrote when there was a
@@ -234,6 +236,15 @@ function build(options: {
             const stored = { ...row, id: id('gl') };
             written.lists.push(stored);
             return stored;
+          },
+        };
+      }
+      if (entity === BasketSource) {
+        return {
+          insert: async (rows: Partial<BasketSource>[]) => {
+            written.sources.push(
+              ...rows.map((row) => ({ ...row, id: id('bs') }))
+            );
           },
         };
       }
@@ -331,7 +342,9 @@ function build(options: {
     claims.service,
     publisher,
     new GeneratedListOrderService(orderRepo as never),
-    members
+    members,
+    // The source rows the run wrote, read back by every view of the basket.
+    { find: async () => written.sources } as never
   );
 
   return {
@@ -378,7 +391,9 @@ describe('the generation run', () => {
       'Milk',
     ]);
     expect(written.lines.map((line) => line.position)).toEqual([1, 2]);
-    expect(result.skipped).toEqual([]);
+    // The result is the basket and nothing else since plan 0133 section 7: the
+    // run refuses no line, so there is nothing left behind to report.
+    expect(Object.keys(result)).toEqual(['list']);
   });
 
   it('writes the positions of the order the owner walks, once', async () => {
@@ -530,29 +545,26 @@ describe('the generation run', () => {
     expect(written.options).toEqual([]);
   });
 
-  it('skips a line a live basket already carries, and says which basket has it', async () => {
+  it('takes a line another basket of the owner\u2019s is carrying (plan 0133)', async () => {
+    // Plan 0050 section 3 refused it and plan 0133 section 7 reversed that. The
+    // rule was true of two frozen copies of one line and false of two views of
+    // it, and with a permanent basket over every list it would refuse
+    // everything.
     const { service, written } = build({
       candidates: [
         { id: 'a1', listId: LIST_A, content: 'Milk', quantity: 2 },
         { id: 'a2', listId: LIST_A, content: 'Bread', quantity: 1 },
       ],
-      overlaps: { a1: 'gl-already-shopping' },
+      claiming: [{ zoneId: ZONE_A, listId: LIST_A, lineId: 'a1' }],
     });
 
     const result = await service.create({ userId: OWNER });
 
-    expect(written.lines.map((line) => line.content)).toEqual(['Bread']);
-    // Reported rather than silently dropped: a basket missing the milk somebody
-    // remembers writing is a bug report otherwise.
-    expect(result.skipped).toEqual([
-      {
-        zoneId: ZONE_A,
-        listId: LIST_A,
-        lineId: 'a1',
-        content: 'Milk',
-        carriedByGeneratedListId: 'gl-already-shopping',
-      },
+    expect(written.lines.map((line) => line.content)).toEqual([
+      'Bread',
+      'Milk',
     ]);
+    expect(result).toEqual({ list: expect.objectContaining({ id: 'gl-1' }) });
   });
 
   it('draws from every writable list when nothing narrows it', async () => {
@@ -565,15 +577,13 @@ describe('the generation run', () => {
 
     await service.create({ userId: OWNER });
 
-    expect(written.lists[0].sourceSnapshot).toEqual({
-      profileId: 'p-default',
-      // One profile answered both questions, so the two ids agree here.
-      pricingProfileId: 'p-default',
-      sources: [
-        { zoneId: ZONE_A, listId: LIST_A },
-        { zoneId: ZONE_B, listId: LIST_B },
-      ],
-    });
+    // `ALL` names no source of its own, so it is recorded as one whole zone row
+    // per zone the caller can draw from (plan 0133, section 4.2).
+    expect(written.lists[0].pricingProfileId).toBe('p-default');
+    expect(sourcesOf(written)).toEqual([
+      { zoneId: ZONE_A, listId: null },
+      { zoneId: ZONE_B, listId: null },
+    ]);
   });
 
   it('narrows to the sources the request names, and never widens past access', async () => {
@@ -591,13 +601,12 @@ describe('the generation run', () => {
       sources: [{ zoneId: ZONE_A }, { zoneId: 'z-stranger' }],
     });
 
-    expect(written.lists[0].sourceSnapshot).toEqual({
-      profileId: null,
-      // Null there and set here: the run read no profile's sources, and it
-      // still belongs to somebody who shops somewhere (plan 0078, section 3).
-      pricingProfileId: 'p-default',
-      sources: [{ zoneId: ZONE_A, listId: LIST_A }],
-    });
+    // The run belongs to somebody who shops somewhere even when it read no
+    // profile's sources (plan 0078, section 3).
+    expect(written.lists[0].pricingProfileId).toBe('p-default');
+    // The zone was named, so the zone is what is recorded, and the stranger's
+    // zone narrowed to nothing and wrote no row at all.
+    expect(sourcesOf(written)).toEqual([{ zoneId: ZONE_A, listId: null }]);
   });
 
   it('narrows to a named list inside a zone', async () => {
@@ -610,11 +619,44 @@ describe('the generation run', () => {
       sources: [{ zoneId: ZONE_B, listId: LIST_B }],
     });
 
-    expect(written.lists[0].sourceSnapshot).toEqual({
-      profileId: null,
-      pricingProfileId: 'p-default',
-      sources: [{ zoneId: ZONE_B, listId: LIST_B }],
+    expect(sourcesOf(written)).toEqual([{ zoneId: ZONE_B, listId: LIST_B }]);
+  });
+
+  it('writes the whole zone row alone when a source names one of its lists too', async () => {
+    // Section 4.1's second rule: both rows would describe the same coverage, and
+    // the pair would make `listsOf` ask two questions where one answers.
+    const { service, written } = build({
+      writable: [
+        { listId: LIST_A, zoneId: ZONE_A },
+        { listId: 'l-second', zoneId: ZONE_A },
+      ],
+      candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
     });
+
+    await service.create({
+      userId: OWNER,
+      sources: [{ zoneId: ZONE_A }, { zoneId: ZONE_A, listId: LIST_A }],
+    });
+
+    expect(sourcesOf(written)).toEqual([{ zoneId: ZONE_A, listId: null }]);
+  });
+
+  it('writes no row for a source that narrows to nothing', async () => {
+    // Plan 0050 section 2's rule kept: a source is only ever a narrowing, and
+    // one that names nothing is silently nothing.
+    const { service, written } = build({
+      candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
+    });
+
+    await service.create({
+      userId: OWNER,
+      sources: [
+        { zoneId: ZONE_A, listId: LIST_A },
+        { zoneId: ZONE_B, listId: 'l-gone' },
+      ],
+    });
+
+    expect(sourcesOf(written)).toEqual([{ zoneId: ZONE_A, listId: LIST_A }]);
   });
 
   it('falls back to the profile sources when the request names none', async () => {
@@ -626,11 +668,10 @@ describe('the generation run', () => {
 
     await service.create({ userId: OWNER });
 
-    expect(written.lists[0].sourceSnapshot).toEqual({
-      profileId: 'p-weekly',
-      pricingProfileId: 'p-weekly',
-      sources: [{ zoneId: ZONE_A, listId: LIST_A }],
-    });
+    expect(written.lists[0].pricingProfileId).toBe('p-weekly');
+    // The profile named the whole zone, so the whole zone is recorded, even
+    // though it narrowed to one list today.
+    expect(sourcesOf(written)).toEqual([{ zoneId: ZONE_A, listId: null }]);
   });
 
   describe('what the basket is priced against (plan 0078, section 3)', () => {
@@ -649,13 +690,8 @@ describe('the generation run', () => {
         profileId: 'p-weekly',
       });
 
-      expect(written.lists[0].sourceSnapshot).toEqual({
-        // Plan 0050 section 2's order is untouched: the profile's sources were
-        // never read, so nothing claims they were.
-        profileId: null,
-        pricingProfileId: 'p-weekly',
-        sources: [{ zoneId: ZONE_A, listId: LIST_A }],
-      });
+      expect(written.lists[0].pricingProfileId).toBe('p-weekly');
+      expect(sourcesOf(written)).toEqual([{ zoneId: ZONE_A, listId: null }]);
     });
 
     it('refuses a profile the caller does not own before writing anything', async () => {
@@ -686,7 +722,7 @@ describe('the generation run', () => {
 
     await service.create({ userId: OWNER });
 
-    expect(written.lists[0].status).toBe(GeneratedListStatus.DRAFT);
+    expect(written.lists[0].status).toBe(GeneratedListStatus.OPEN);
     expect(written.lines[0].origin).toBe(GeneratedLineOrigin.DERIVED);
     expect(written.lines[0].settledQuantity).toBe(0);
     // A basket is private, so the owner's own sessions are the only audience an
@@ -705,13 +741,10 @@ describe('the generation run', () => {
         id: 'gl-first',
         ownerUserId: OWNER,
         name: null,
-        status: GeneratedListStatus.DRAFT,
+        status: GeneratedListStatus.OPEN,
         generatedAt: new Date('2026-09-01T10:00:00.000Z'),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
+        kind: BasketKind.GENERATED,
+        pricingProfileId: null,
       },
       candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
     });
@@ -736,13 +769,10 @@ describe('the generation run', () => {
         id: 'gl-winner',
         ownerUserId: OWNER,
         name: null,
-        status: GeneratedListStatus.DRAFT,
+        status: GeneratedListStatus.OPEN,
         generatedAt: new Date('2026-09-01T10:00:00.000Z'),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
+        kind: BasketKind.GENERATED,
+        pricingProfileId: null,
       },
       candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
     });
@@ -802,14 +832,11 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
       existing: {
         id: 'gl-old',
         ownerUserId: OWNER,
-        status: GeneratedListStatus.ACTIVE,
+        status: GeneratedListStatus.OPEN,
         name: null,
         generatedAt: new Date('2026-03-01T00:00:00.000Z'),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
+        kind: BasketKind.GENERATED,
+        pricingProfileId: null,
       },
       claiming: CLAIMING,
     });
@@ -817,7 +844,7 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
     await w.service.update({
       userId: OWNER,
       generatedListId: 'gl-old',
-      status: GeneratedListStatus.COMPLETED,
+      status: GeneratedListStatus.FINISHED,
     });
 
     expect(w.claims.calls).toEqual([
@@ -830,14 +857,11 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
       existing: {
         id: 'gl-old',
         ownerUserId: OWNER,
-        status: GeneratedListStatus.ACTIVE,
+        status: GeneratedListStatus.OPEN,
         name: null,
         generatedAt: new Date('2026-03-01T00:00:00.000Z'),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
+        kind: BasketKind.GENERATED,
+        pricingProfileId: null,
       },
       claiming: CLAIMING,
     });
@@ -856,7 +880,7 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
       existing: {
         id: 'gl-old',
         ownerUserId: OWNER,
-        status: GeneratedListStatus.DRAFT,
+        status: GeneratedListStatus.OPEN,
         name: null,
         generatedAt: new Date('2026-03-01T00:00:00.000Z'),
       },
@@ -875,7 +899,7 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
       existing: {
         id: 'gl-old',
         ownerUserId: OWNER,
-        status: GeneratedListStatus.COMPLETED,
+        status: GeneratedListStatus.FINISHED,
         name: null,
         generatedAt: new Date('2026-03-01T00:00:00.000Z'),
       },
@@ -897,10 +921,11 @@ describe('a basket tells the lists it touches (plan 0122, section 6)', () => {
   const existing = {
     id: 'gl-old',
     ownerUserId: OWNER,
-    status: GeneratedListStatus.ACTIVE,
+    status: GeneratedListStatus.OPEN,
     name: null,
     generatedAt: new Date('2026-03-01T00:00:00.000Z'),
-    sourceSnapshot: { profileId: null, pricingProfileId: null, sources: [] },
+    kind: BasketKind.GENERATED,
+    pricingProfileId: null,
   };
   const CLAIMING = [
     { zoneId: ZONE_A, listId: LIST_A, lineId: 'li-1' },
@@ -956,7 +981,7 @@ describe('a basket tells the lists it touches (plan 0122, section 6)', () => {
 
   it('tells them when the basket is deleted, finished or not', async () => {
     const w = build({
-      existing: { ...existing, status: GeneratedListStatus.COMPLETED },
+      existing: { ...existing, status: GeneratedListStatus.FINISHED },
       claiming: CLAIMING,
     });
 

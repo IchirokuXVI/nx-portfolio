@@ -6,11 +6,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  BasketKind,
   GeneratedListStatus,
-  LIVE_GENERATED_LIST_STATUSES,
 } from '@portfolio/luna-shopper/contracts';
 import { Logger } from 'nestjs-pino';
-import { In, LessThan, Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import type { CoreConfig } from '../config/app-config';
 import { GeneratedList } from '../entities';
 import { GeneratedListService } from './generated-list.service';
@@ -18,12 +18,19 @@ import { GeneratedListService } from './generated-list.service';
 /**
  * The backstop for a trip nobody finished (plan 0059, section 4).
  *
- * Moves a `DRAFT` or `ACTIVE` basket whose `generatedAt` is older than the claim
- * window to `COMPLETED`. **Every** live basket past the window, not only the
+ * Moves an `OPEN` **`GENERATED`** basket whose `generatedAt` is older than the
+ * claim window to `FINISHED`. **Every** open trip past the window, not only the
  * fully settled ones: the basket with six unsettled lines is precisely the one
  * that needs closing, because those six are what the household is still being
  * told somebody is out buying. A sweep that only closed the tidy ones would close
  * the baskets that were already claiming nothing and leave the ones that were.
+ *
+ * ## The kind is the predicate that keeps the permanent basket out
+ *
+ * A `LIVE` basket is open by definition and never ends (plan 0133, section 2), so
+ * it is older than any window within sixty hours of being created. Without the
+ * kind this sweep would finish it, and the settle would then refuse every write
+ * to it: the whole feature would stop working on its third day.
  *
  * ## One number, not two (section 4.2)
  *
@@ -115,7 +122,8 @@ export class GeneratedListSweepService
     const cutoff = new Date(Date.now() - this.cfg.claimWindowMs);
     const stale = await this.lists.find({
       where: {
-        status: In([...LIVE_GENERATED_LIST_STATUSES]),
+        kind: BasketKind.GENERATED,
+        status: GeneratedListStatus.OPEN,
         generatedAt: LessThan(cutoff),
       },
       order: { generatedAt: 'ASC', id: 'ASC' },
@@ -128,7 +136,7 @@ export class GeneratedListSweepService
         await this.generated.update({
           userId: list.ownerUserId,
           generatedListId: list.id,
-          status: GeneratedListStatus.COMPLETED,
+          status: GeneratedListStatus.FINISHED,
         });
         finished++;
       } catch (err) {

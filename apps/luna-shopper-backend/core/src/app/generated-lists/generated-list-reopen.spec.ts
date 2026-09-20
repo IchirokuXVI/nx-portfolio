@@ -272,7 +272,7 @@ function build(options: {
       findOne: async () => ({
         id: BASKET,
         ownerUserId: OWNER,
-        status: GeneratedListStatus.ACTIVE,
+        status: GeneratedListStatus.OPEN,
       }),
     } as never,
     { findOne: async () => basketLine } as never,

@@ -100,7 +100,7 @@ describe('the order a shopper walks (plan 0110)', () => {
     await service.order(OWNER, [line('Milk')]);
 
     expect(asked).toEqual([
-      [OWNER, [GeneratedListStatus.COMPLETED, GeneratedListStatus.ARCHIVED], 7],
+      [OWNER, [GeneratedListStatus.FINISHED, GeneratedListStatus.ARCHIVED], 7],
     ]);
   });
 

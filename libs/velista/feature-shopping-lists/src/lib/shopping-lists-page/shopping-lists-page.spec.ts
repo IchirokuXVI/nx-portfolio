@@ -35,8 +35,9 @@ import { ShoppingListsPage } from './shopping-lists-page';
 function basket(overrides: Partial<GeneratedListSummary> = {}) {
   return {
     id: 'gl1',
+    kind: 'GENERATED',
     name: 'Saturday big shop',
-    status: 'ACTIVE',
+    status: 'OPEN',
     generatedAt: new Date('2026-08-21T10:00:00.000Z'),
     lineCount: 12,
     settledLineCount: 4,
@@ -154,7 +155,7 @@ describe('ShoppingListsPage', () => {
       const fixture = await render(
         fakeGeneratedListStore([
           basket({ id: 'a', name: 'Newest' }),
-          basket({ id: 'b', name: 'Older', status: 'COMPLETED' }),
+          basket({ id: 'b', name: 'Older', status: 'FINISHED' }),
         ])
       );
 
@@ -165,27 +166,27 @@ describe('ShoppingListsPage', () => {
     });
 
     // Never colour alone (section 7): the word is what says it.
-    it('marks an active trip with the word, not only a colour', async () => {
+    it('marks an open trip with the word, not only a colour', async () => {
       const fixture = await render(fakeGeneratedListStore([basket()]));
 
       expect(text(fixture)).toContain('history.status.active');
     });
 
-    // A draft is a trip somebody is still going to make, and it is what a run actually
-    // composes: core writes `DRAFT` and never promotes it, so a badge that asked for
-    // `ACTIVE` alone was a badge no row could ever earn. Same one line bug as the
-    // dashboard card's, and both now ask `isLiveGeneratedList`.
-    it('marks a draft too, since that is what a run composes', async () => {
+    // The badge used to ask for `ACTIVE` alone, which core never wrote: it composed
+    // every run as `DRAFT` and never promoted one, so it was a badge no row could
+    // ever earn. Same one line bug as the dashboard card's, and both now ask
+    // `isOpenBasket`, against the one value backend `0133` left.
+    it('says nothing about being shopped now on a status it cannot read', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'DRAFT' })])
+        fakeGeneratedListStore([basket({ status: 'UNKNOWN' })])
       );
 
-      expect(text(fixture)).toContain('history.status.active');
+      expect(text(fixture)).not.toContain('history.status.active');
     });
 
     it('says nothing about being shopped now on a finished trip', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'COMPLETED' })])
+        fakeGeneratedListStore([basket({ status: 'FINISHED' })])
       );
 
       expect(text(fixture)).not.toContain('history.status.active');
@@ -202,7 +203,7 @@ describe('ShoppingListsPage', () => {
      */
     it('marks a finished trip, and keeps it in the listing', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'COMPLETED' })])
+        fakeGeneratedListStore([basket({ status: 'FINISHED' })])
       );
 
       expect(all(fixture, 'lib-shopping-list-row')).toHaveLength(1);

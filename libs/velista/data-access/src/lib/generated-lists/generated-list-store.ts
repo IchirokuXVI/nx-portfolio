@@ -6,7 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import {
-  isLiveGeneratedList,
+  isOpenBasket,
   type CreateGeneratedListRequest,
   type GeneratedListRun,
   type GeneratedListStatus,
@@ -129,21 +129,22 @@ export class GeneratedListStore {
   /**
    * The baskets being shopped right now, newest first.
    *
-   * The live pair, `DRAFT` and `ACTIVE` both, through {@link isLiveGeneratedList}.
+   * `OPEN`, through {@link isOpenBasket}.
    *
    * **This used to read `status === 'ACTIVE'` and therefore never matched anything.**
    * The paragraph that stood here argued that a draft is composed and not yet taken to
    * a shop, so it is not an answer to "what am I in the middle of", and closed by
    * asserting that nothing in this app produces a draft anyway because a run lands
-   * `ACTIVE`. The second half was simply wrong about the server: core composes a run as
-   * `DRAFT` and has no path that promotes one, so every basket velista has ever
+   * `ACTIVE`. The second half was simply wrong about the server: core composed a run as
+   * `DRAFT` and had no path that promoted one, so every basket velista had ever
    * generated was filtered out here and the dashboard card drew for nobody. The first
    * half does not survive it either. A basket composed minutes ago and not yet finished
    * **is** the thing somebody is in the middle of, whatever the column calls it, and
-   * the way back into it is the only reason this signal exists.
+   * the way back into it is the only reason this signal exists. Backend plan 0133
+   * deleted the second spelling, so there is one value to ask about now.
    */
   readonly active = computed<readonly GeneratedListSummary[]>(() =>
-    this._lists().filter((list) => isLiveGeneratedList(list.status))
+    this._lists().filter((list) => isOpenBasket(list.status))
   );
 
   constructor() {

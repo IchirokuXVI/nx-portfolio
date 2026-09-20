@@ -1,4 +1,5 @@
 import type {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   OriginUnavailableReason,
@@ -10,8 +11,8 @@ import type {
 } from '../enums/list.enums';
 import type { ItemView, LocalizedText } from './catalog.messages';
 import type {
+  BasketSourceView,
   GeneratedListLineOriginView,
-  GeneratedListSourceSnapshot,
 } from './generated-list.messages';
 
 /**
@@ -1185,6 +1186,8 @@ export interface GeneratedListBasketLineView {
  */
 export interface GeneratedListBasketView {
   id: string;
+  /** What this basket is (plan 0133, section 2). */
+  kind: BasketKind;
   /** Null is not missing: the client renders the generation date (plan 0050). */
   name: string | null;
   status: GeneratedListStatus;
@@ -1196,8 +1199,11 @@ export interface GeneratedListBasketView {
   me: GeneratedListParticipantView;
   /** Whether this reader passes section 5.2, evaluated on this request. */
   seesZoneData: boolean;
-  /** What the run drew from. Zone data, so absent unless {@link seesZoneData}. */
-  sourceSnapshot?: GeneratedListSourceSnapshot;
+  /**
+   * What the run was asked to draw from (plan 0133, section 4). Zone data, so
+   * absent unless {@link seesZoneData}.
+   */
+  sources?: BasketSourceView[];
   /**
    * The names behind those ids, so a row can say "from Weekly shop" rather than
    * "from 0f3a…" (velista `0044`, section 4.1).
@@ -1208,7 +1214,7 @@ export interface GeneratedListBasketView {
    * in a way that has loaded a zone store, and an owner would otherwise need
    * every source list on screen to caption one row.
    *
-   * **Absent under exactly the same rule as {@link sourceSnapshot}**, and that is
+   * **Absent under exactly the same rule as {@link sources}**, and that is
    * the whole of its access control: a household's list name is the plainest
    * zone data there is, and it is the one field on this view whose leaking would
    * be legible to the person it leaked to.

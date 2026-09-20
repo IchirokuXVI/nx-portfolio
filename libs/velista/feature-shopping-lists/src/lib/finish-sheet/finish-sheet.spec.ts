@@ -168,7 +168,7 @@ describe('FinishSheet', () => {
       footer(fixture)[1].click();
       await fixture.whenStable();
 
-      expect(generated.setStatus).toHaveBeenCalledWith(BASKET_ID, 'COMPLETED');
+      expect(generated.setStatus).toHaveBeenCalledWith(BASKET_ID, 'FINISHED');
     });
 
     it('re-reads the basket before it closes, so the controls go with it', async () => {

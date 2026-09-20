@@ -1208,7 +1208,7 @@ describe('finishing the shopping', () => {
       query(fixture, '.finished-action')?.click();
       await settleWrite(fixture);
 
-      expect(store.setStatus).toHaveBeenCalledWith('basket-saturday', 'ACTIVE');
+      expect(store.setStatus).toHaveBeenCalledWith('basket-saturday', 'OPEN');
       expect(store.refresh).toHaveBeenCalled();
       expect(store.navigate).not.toHaveBeenCalled();
     });

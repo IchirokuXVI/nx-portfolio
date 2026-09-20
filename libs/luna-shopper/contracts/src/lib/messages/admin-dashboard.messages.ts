@@ -137,10 +137,12 @@ export interface AdminIdentityDashboard {
 /**
  * Core's block (plan 0088, section 3.2).
  *
- * `baskets` are `generated_lists`. `draft` and `completed` are the two statuses
- * a basket is ever in, since `ACTIVE` is never written and the live basket is
- * `DRAFT`, and their sum falls short of `total` only when an `ARCHIVED` row
- * exists, which is why `total` is sent rather than derived.
+ * `baskets` are `generated_lists`. `total`, `open` and `finished` are counted
+ * over `GENERATED` baskets alone, so their sum falls short of `total` only when
+ * an `ARCHIVED` row exists, which is why `total` is sent rather than derived.
+ * `live` counts the permanent baskets beside them (plan 0133, section 6), and it
+ * is deliberately outside `total`: one row per person is a different number from
+ * how many trips have been composed.
  */
 export interface AdminCoreDashboard {
   zones: {
@@ -156,9 +158,14 @@ export interface AdminCoreDashboard {
     total: number;
   };
   baskets: {
+    /** `GENERATED` baskets, whatever status. */
     total: number;
-    draft: number;
-    completed: number;
+    /** Of those, the ones still being shopped. */
+    open: number;
+    /** Of those, the ones whose trip is over. */
+    finished: number;
+    /** The permanent baskets, one per person (plan 0133). */
+    live: number;
   };
   zonesCreated: DailyCount[];
   listsCreated: DailyCount[];

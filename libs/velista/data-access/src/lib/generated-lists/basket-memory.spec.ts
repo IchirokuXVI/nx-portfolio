@@ -80,7 +80,7 @@ describe('BasketMemory: saying how many are still to get', () => {
     // Not a plain conflict: "this list is finished" and "somebody already finished
     // this line" are different sentences, and the screen picks between them by code.
     const memory = new BasketMemory();
-    memory.status = 'COMPLETED';
+    memory.status = 'FINISHED';
 
     expect(
       await refusal(() =>
@@ -130,18 +130,19 @@ describe('BasketMemory: the lists on a line', () => {
     );
   });
 
-  it('offers the three kinds of candidate, so a sheet cannot draw them all alike', async () => {
-    // One adoptable, one another basket is carrying, one the household said no to.
-    // A fake with only the first would let a screen ship that draws every candidate
-    // as a reel. `NOT_APPROVED` and `SETTLED` are not among them: backend `0092`
-    // section 3.2 made both adoptable and neither is answered any more.
+  it('offers both kinds of candidate, so a sheet cannot draw them alike', async () => {
+    // Adoptable, and one the household said no to. A fake with only the first
+    // would let a screen ship that draws every candidate as a reel.
+    // `NOT_APPROVED` and `SETTLED` are not among them, because backend `0092`
+    // section 3.2 made both adoptable, and neither is `CLAIMED`: backend `0133`
+    // section 7 made a line another basket carries adoptable too.
     const memory = new BasketMemory();
 
     const answer = await memory.getLineOrigins(ID, 'line-milk');
 
     expect(answer.candidates.map((row) => row.unavailable)).toEqual([
       null,
-      'CLAIMED',
+      null,
       'REJECTED',
     ]);
   });
@@ -579,7 +580,7 @@ describe('BasketMemory: raising a list that was asking for none', () => {
   it('refuses a basket whose trip is over', async () => {
     const memory = new BasketMemory();
     const added = await memory.addLine(ID, { content: 'Foil' });
-    memory.status = 'COMPLETED';
+    memory.status = 'FINISHED';
 
     expect(
       await refusal(() =>

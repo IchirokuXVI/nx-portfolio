@@ -12,10 +12,22 @@ export type Basket = BasketRow;
 
 /** Where a basket is in its life, which is the whole of `GeneratedListStatus`. */
 export const BASKET_STATUS_OPTIONS = [
-  { value: 'DRAFT', label: 'people.baskets.status.DRAFT' },
-  { value: 'ACTIVE', label: 'people.baskets.status.ACTIVE' },
-  { value: 'COMPLETED', label: 'people.baskets.status.COMPLETED' },
+  { value: 'OPEN', label: 'people.baskets.status.OPEN' },
+  { value: 'FINISHED', label: 'people.baskets.status.FINISHED' },
   { value: 'ARCHIVED', label: 'people.baskets.status.ARCHIVED' },
+] as const;
+
+/**
+ * What a basket is (backend plan 0133, section 2).
+ *
+ * `LIVE` is the one permanent basket a person has and `GENERATED` is a trip
+ * somebody composed. An operator reads the column to tell a row that never ends
+ * from one that does, which is the difference that decides whether an old open
+ * basket is a forgotten trip or the ordinary state of things.
+ */
+export const BASKET_KIND_OPTIONS = [
+  { value: 'LIVE', label: 'people.baskets.kind.LIVE' },
+  { value: 'GENERATED', label: 'people.baskets.kind.GENERATED' },
 ] as const;
 
 /**
@@ -30,8 +42,8 @@ export const BASKET_STATUS_OPTIONS = [
  *
  * **It stayed read only when plan 0009 made the rest of the app editable**, and
  * the screen says so rather than looking unfinished. A basket is output: it is
- * composed from the wanted, approved lines of the zones somebody chose, at a
- * moment recorded in `sourceSnapshot`, and its lines accumulate claims and
+ * composed from the wanted, approved lines of the zones somebody chose, which
+ * `basket_sources` records, and its lines accumulate claims and
  * settlements while that person walks around the shop. A changed `content`
  * contradicts the origin that says where it came from, and a changed `quantity`
  * contradicts settlement rows already written against it. None of that is
@@ -62,6 +74,13 @@ export const BASKETS = defineResource<Basket>({
     },
     {
       kind: 'enum',
+      name: 'kind',
+      label: 'people.baskets.kind.label',
+      options: BASKET_KIND_OPTIONS,
+      editable: false,
+    },
+    {
+      kind: 'enum',
       name: 'status',
       label: 'people.baskets.status.label',
       options: BASKET_STATUS_OPTIONS,
@@ -83,7 +102,7 @@ export const BASKETS = defineResource<Basket>({
   ],
 
   list: {
-    columns: ['name', 'status', 'lineCount', 'generatedAt'],
+    columns: ['name', 'kind', 'status', 'lineCount', 'generatedAt'],
     compact: ['status', 'lineCount'],
   },
 

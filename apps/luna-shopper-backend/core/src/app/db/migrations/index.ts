@@ -17,6 +17,7 @@ import { CoreAudit1756001800000 } from './1756001800000-CoreAudit';
 import { WaitingSettlements1756001900000 } from './1756001900000-WaitingSettlements';
 import { ParticipantInvitesAndEndings1756002000000 } from './1756002000000-ParticipantInvitesAndEndings';
 import { SoftDeletedLines1756002100000 } from './1756002100000-SoftDeletedLines';
+import { BasketKindStatusAndSources1756002200000 } from './1756002200000-BasketKindStatusAndSources';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -77,4 +78,9 @@ export const CORE_MIGRATIONS = [
   // there made partial. It follows those and nothing else (plan 0132, section
   // 5).
   SoftDeletedLines1756002100000,
+  // Rebuilds two things on `generated_lists`, which plan 0050's migration
+  // created: its status enum, and the sources it kept in a `jsonb` column. Both
+  // are read by every migration that touched the table before it and by none
+  // after, so it follows all of them and nothing else (plan 0133, section 8).
+  BasketKindStatusAndSources1756002200000,
 ];

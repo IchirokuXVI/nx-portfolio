@@ -5,47 +5,55 @@
  */
 
 /**
- * Where a generated list has got to (plan 0050, section 1).
+ * What a basket is (plan 0133, section 2).
  *
- * `DRAFT` is a basket that has been composed and not yet taken to a shop,
- * `ACTIVE` is the one being worked through, `COMPLETED` is a trip that is over,
- * and `ARCHIVED` hides a list from the default listing without deleting it
- * (section 7).
+ * The two kinds are not two flavours of one row: they answer differently to
+ * every "is somebody still shopping this" question in core. A `GENERATED`
+ * basket is a trip, so it claims lines, the sweep finishes it, and it appears in
+ * the history. A `LIVE` one is a door onto the lists its owner can write, so it
+ * never ends and none of those questions is about it.
+ */
+export enum BasketKind {
+  /** One per person, covering every list they can write. Never finished (plan 0136). */
+  LIVE = 'LIVE',
+  /** Made on purpose, with a name, sources and people. Finished by its owner. */
+  GENERATED = 'GENERATED',
+}
+
+/**
+ * Where a basket has got to (plan 0133, section 3).
  *
- * `ACTIVE` is the only value carrying a rule beyond display: the overlap check in
- * section 3 refuses to put one zone line in two live baskets at once, which is
- * how a household ends up with two of everything.
+ * Three values, where there were four and two of them were one state with two
+ * spellings. A run wrote `DRAFT`, nothing in core ever wrote `ACTIVE`, and every
+ * reader folded the pair back together through a constant. Plan 0092 section 3.2
+ * had already found the overlap check testing `ACTIVE` and therefore never
+ * firing, which is what a state nobody writes buys.
+ *
+ * The word "live" moved to {@link BasketKind}, so a status claiming it as well
+ * would now say two different things at once.
  */
 export enum GeneratedListStatus {
-  DRAFT = 'DRAFT',
-  ACTIVE = 'ACTIVE',
-  COMPLETED = 'COMPLETED',
+  /** Somebody is still going to shop it, or is shopping it now. */
+  OPEN = 'OPEN',
+  /** The trip is over. Refuses every write, and its owner can open it again. */
+  FINISHED = 'FINISHED',
+  /** Finished and hidden from the default listing. */
   ARCHIVED = 'ARCHIVED',
 }
 
 /**
- * The statuses of a basket somebody is still going to shop (plan 0052, section
- * 3), which is the set the line claim in plan 0052 derives from.
+ * Whether this basket still takes writes.
  *
- * `DRAFT` is in it, and that is the whole reason this constant exists rather than
- * a comparison against `ACTIVE` written out at each call site. A run composes a
- * `DRAFT`, so a claim that counted only `ACTIVE` would announce nothing at
- * generation time and plan 0052 section 3.1 asks for the opposite: the lines a
- * run took are claimed the moment it took them, because that is the moment two
- * people in one household would otherwise both put the milk in a trolley.
+ * A function over one value rather than a set, because a set of one value is not
+ * a set. It stays a function so that a call site reads as it did before, and so
+ * that a fourth status, if one is ever added, has one place to be decided in.
  *
- * `GeneratedListSharingService.listAccepts` draws the same line for a different
- * reason (plan 0051, section 11), and the two agreeing is not a coincidence: a
- * basket that may still take people is a basket somebody is still going to shop.
+ * **It says nothing about the kind.** A `LIVE` basket is always open and is
+ * never a trip, so a question about claims, sweeps or history asks
+ * `OPEN_GENERATED_BASKET` instead (plan 0133, section 6).
  */
-export const LIVE_GENERATED_LIST_STATUSES: readonly GeneratedListStatus[] = [
-  GeneratedListStatus.DRAFT,
-  GeneratedListStatus.ACTIVE,
-] as const;
-
-/** Whether this basket is one somebody is still going to shop. */
-export function isLiveGeneratedList(status: GeneratedListStatus): boolean {
-  return LIVE_GENERATED_LIST_STATUSES.includes(status);
+export function isOpenBasket(status: GeneratedListStatus): boolean {
+  return status === GeneratedListStatus.OPEN;
 }
 
 /**
@@ -128,17 +136,19 @@ export enum ParticipantEndedReason {
  * it as a caption with no control beside it, so the **control** is absent and the
  * information is present, which is what keeps plan 0030's rule intact.
  *
- * ## Two of these are no longer produced
+ * ## Only one of these is produced
  *
  * Plan 0092 made a pending line and a line at zero **adoptable**, because a
  * pending origin is still claimed and still settled, and a list at zero is a list
  * that can be asked again. {@link NOT_APPROVED} and {@link SETTLED} are kept so a
  * client still drawing their captions keeps reading this enum, and velista 0068
  * is where they stop being drawn. Nothing on the server answers with either.
+ *
+ * `CLAIMED` is **gone rather than kept**, because plan 0133 section 7 deleted the
+ * rule behind it. A line another basket of the owner's carries is now adoptable,
+ * so nothing can answer the reason and no client can be handed it again.
  */
 export enum OriginUnavailableReason {
-  /** Another live basket of the owner's already carries it (plan 0050, section 3). */
-  CLAIMED = 'CLAIMED',
   /**
    * The household said no to it (plan 0091, section 3.1).
    *

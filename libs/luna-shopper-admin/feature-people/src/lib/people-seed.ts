@@ -274,8 +274,9 @@ export const BASKET_SEED: readonly BasketRow[] = [
   {
     id: 'b-saturday',
     ownerUserId: ROSA,
+    kind: 'GENERATED',
     name: 'Saturday',
-    status: 'DRAFT',
+    status: 'OPEN',
     zoneIds: [KITCHEN],
     lineCount: 2,
     generatedAt: '2026-08-29T09:00:00.000Z',
@@ -299,8 +300,9 @@ export const BASKET_SEED: readonly BasketRow[] = [
   {
     id: 'b-allotment',
     ownerUserId: MARC,
+    kind: 'GENERATED',
     name: null,
-    status: 'COMPLETED',
+    status: 'FINISHED',
     zoneIds: [ALLOTMENT],
     lineCount: 1,
     generatedAt: '2026-02-02T10:00:00.000Z',

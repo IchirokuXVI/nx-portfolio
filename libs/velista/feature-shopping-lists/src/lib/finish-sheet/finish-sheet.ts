@@ -112,7 +112,7 @@ export class FinishSheet {
 
     const landed = await this._generated.setStatus(
       this._generatedListId(),
-      'COMPLETED'
+      'FINISHED'
     );
 
     if (!landed) {

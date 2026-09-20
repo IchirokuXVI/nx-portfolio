@@ -3,6 +3,7 @@ import {
   type LineClaim,
   type LineClaimRef,
 } from '@portfolio/luna-shopper/contracts';
+import { OPEN_GENERATED_BASKET } from '../baskets/open-basket.sql';
 
 /**
  * The two reads behind "somebody is out buying this" (plan 0052, section 4).
@@ -15,16 +16,17 @@ import {
  */
 
 /**
- * Which of these zone lines is in a live basket, and whose it is. `$1` is the
- * line ids, `$2` the statuses that count as live, `$3` the oldest a basket may
- * have been generated and still claim anything.
+ * Which of these zone lines is in a basket somebody is shopping, and whose it
+ * is. `$1` is the line ids, `$2` the oldest a basket may have been generated and
+ * still claim anything.
  *
  * Four predicates, and each is one of plan 0052's rules written down once:
  *
- * - **`gl.status`** against the live set, which is `DRAFT` and `ACTIVE` both. A
- *   run composes a `DRAFT`, so counting only `ACTIVE` would leave the lines a run
- *   just took unclaimed, which is the one moment the indicator exists for.
- * - **`gl."generatedAt" >= $3`**, section 4.1. A basket nobody finished holds its
+ * - **`OPEN_GENERATED_BASKET`** (plan 0133, section 6). Open, so a trip that is
+ *   over claims nothing, and `GENERATED`, so the permanent basket claims nothing
+ *   either: it holds every line its owner can write, and a claim over all of them
+ *   would tell every household that somebody is always out buying everything.
+ * - **`gl."generatedAt" >= $2`**, section 4.1. A basket nobody finished holds its
  *   lines forever, and the honest place to answer that is here rather than in a
  *   repair job over the lines: an old live basket simply stops claiming.
  * - **`gll."settledQuantity" < gll."quantity"`**, section 3.3. A basket line that
@@ -57,8 +59,8 @@ export const LINE_CLAIMS_SQL = `
   JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
   JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
   WHERE o."lineId" = ANY($1::uuid[])
-    AND gl.status::text = ANY($2::text[])
-    AND gl."generatedAt" >= $3::timestamptz
+    AND ${OPEN_GENERATED_BASKET}
+    AND gl."generatedAt" >= $2::timestamptz
     AND gll."settledQuantity" < gll."quantity"
   ORDER BY o."lineId", gl."generatedAt" DESC, gl.id DESC
 `;
@@ -116,7 +118,7 @@ export interface ZoneLineClaimRef extends LineClaimRef {
 }
 
 /**
- * Run {@link LINE_CLAIMS_SQL} and shape it, defaulting every line no live basket
+ * Run {@link LINE_CLAIMS_SQL} and shape it, defaulting every line no open trip
  * carries.
  *
  * Takes the query function rather than a `DataSource` or an `EntityManager`, for
@@ -130,7 +132,6 @@ export interface ZoneLineClaimRef extends LineClaimRef {
 export async function readLineClaims(
   query: (sql: string, parameters: unknown[]) => Promise<unknown>,
   lineIds: readonly string[],
-  liveStatuses: readonly string[],
   generatedSince: Date
 ): Promise<Map<string, LineClaim>> {
   const claims = new Map<string, LineClaim>(
@@ -142,7 +143,6 @@ export async function readLineClaims(
 
   const rows = (await query(LINE_CLAIMS_SQL, [
     [...lineIds],
-    [...liveStatuses],
     generatedSince,
   ])) as LineClaimRow[];
 

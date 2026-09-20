@@ -127,6 +127,13 @@ export class BasketDetailPage extends DetailPage<BasketRow> {
       { label: 'people.baskets.id', text: basket.id },
       { label: 'people.baskets.name', text: basket.name ?? '' },
       {
+        // Above the state, because it decides how to read it: a `LIVE` basket
+        // is open for ever and that is not a trip somebody forgot to finish
+        // (backend plan 0133, section 2).
+        label: 'people.baskets.kind.label',
+        text: this.translator.t(`people.baskets.kind.${basket.kind}`),
+      },
+      {
         label: 'people.baskets.status.label',
         text: this.translator.t(`people.baskets.status.${basket.status}`),
       },

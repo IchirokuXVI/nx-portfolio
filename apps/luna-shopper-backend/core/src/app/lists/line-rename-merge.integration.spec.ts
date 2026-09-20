@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   LINE_ITEM_SET_MAX,
@@ -493,13 +494,9 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
       dataSource.getRepository(GeneratedList).create({
         ownerUserId: ids.owner,
         name: 'Saturday',
-        status: GeneratedListStatus.DRAFT,
+        status: GeneratedListStatus.OPEN,
         generatedAt: new Date(),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [{ zoneId: ids.zone, listId: ids.list }],
-        },
+        kind: BasketKind.GENERATED,
         defaultTargetListId: null,
         idempotencyKey: null,
       })

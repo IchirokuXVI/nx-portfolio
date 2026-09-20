@@ -1,16 +1,17 @@
 import type {
+  BasketSourceView,
   GeneratedListBasketLineView,
   GeneratedListBasketView,
   GeneratedListLineOriginView,
   GeneratedListLineView,
   GeneratedListParticipantView,
   GeneratedListSourceName,
-  GeneratedListSourceSnapshot,
   GeneratedListSummaryView,
   GeneratedListView,
   SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
 import type {
+  BasketSource,
   GeneratedList,
   GeneratedListLine,
   GeneratedListLineOption,
@@ -28,19 +29,14 @@ import type {
  */
 
 /**
- * The stored snapshot as the contract describes it (plan 0078, section 3.2).
+ * One source row as the wire describes it (plan 0133, section 4).
  *
- * `sourceSnapshot` is a `jsonb` column, so a run composed before that plan
- * carries no `pricingProfileId` key at all. The contract makes the field
- * required and nullable rather than optional, so the absence is read as null
- * here and every run leaves core with the same shape. Nothing is written back:
- * the owner's default today is a guess about what an old run was composed
- * against, and this column is a record rather than a guess.
+ * A row is what the run was **asked for**, so a null `listId` travels as null and
+ * means the whole zone. The client reads it that way and draws nothing different
+ * for it in this plan.
  */
-function readSnapshot(
-  snapshot: GeneratedListSourceSnapshot
-): GeneratedListSourceSnapshot {
-  return { ...snapshot, pricingProfileId: snapshot.pricingProfileId ?? null };
+export function toBasketSourceView(row: BasketSource): BasketSourceView {
+  return { zoneId: row.zoneId, listId: row.listId };
 }
 
 /**
@@ -210,10 +206,12 @@ export function toBasketView(
     me: GeneratedListParticipantView;
   },
   seesZoneData: boolean,
-  sourceNames: GeneratedListSourceName[] = []
+  sourceNames: GeneratedListSourceName[] = [],
+  sources: BasketSourceView[] = []
 ): GeneratedListBasketView {
   const view: GeneratedListBasketView = {
     id: row.id,
+    kind: row.kind,
     name: row.name,
     status: row.status,
     generatedAt: row.generatedAt.toISOString(),
@@ -223,26 +221,28 @@ export function toBasketView(
     seesZoneData,
   };
 
-  // What the run drew from is a list of (zone, list) pairs, and the names behind
-  // them are the plainest zone data there is. Both go under the same rule as the
-  // line's three fields.
-  return seesZoneData
-    ? { ...view, sourceSnapshot: readSnapshot(row.sourceSnapshot), sourceNames }
-    : view;
+  // What the basket draws from is a list of (zone, list) pairs, and the names
+  // behind them are the plainest zone data there is. Both go under the same rule
+  // as the line's three fields.
+  return seesZoneData ? { ...view, sources, sourceNames } : view;
 }
 
 export function toGeneratedListView(
   row: GeneratedList,
-  lines: GeneratedListLineView[]
+  lines: GeneratedListLineView[],
+  sources: BasketSourceView[] = []
 ): GeneratedListView {
   return {
     id: row.id,
+    kind: row.kind,
     // Null travels as null. The client renders the generation date; core has no
     // locale to render it in (plan 0050, section 1).
     name: row.name,
     status: row.status,
     generatedAt: row.generatedAt.toISOString(),
-    sourceSnapshot: readSnapshot(row.sourceSnapshot),
+    // What the run was asked to draw from (plan 0133, section 4). Empty on a
+    // `LIVE` basket, whose coverage is a rule rather than a list of sources.
+    sources,
     lines,
   };
 }
@@ -269,6 +269,7 @@ export function toGeneratedListSummaryView(
 ): GeneratedListSummaryView {
   return {
     id: row.id,
+    kind: row.kind,
     name: row.name,
     status: row.status,
     generatedAt: row.generatedAt.toISOString(),

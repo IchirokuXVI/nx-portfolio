@@ -927,7 +927,7 @@ export type UpdateBrandDto = {
  */
 export type UpdateGeneratedListDto = {
   name?: string | null;
-  status?: 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+  status?: 'OPEN' | 'FINISHED' | 'ARCHIVED';
   defaultTargetListId?: string | null;
 };
 
@@ -1177,6 +1177,7 @@ export type AdminAuthAdminMeView = {
 export type AdminCoreAdminBasketDetailView = {
   id: string;
   ownerUserId: string;
+  kind: EnumsBasketKind;
   name: string | null;
   status: EnumsGeneratedListStatus;
   zoneIds: string[];
@@ -1213,6 +1214,7 @@ export type AdminCoreAdminBasketPage = {
 export type AdminCoreAdminBasketView = {
   id: string;
   ownerUserId: string;
+  kind: EnumsBasketKind;
   name: string | null;
   status: EnumsGeneratedListStatus;
   zoneIds: string[];
@@ -1437,8 +1439,9 @@ export type AdminDashboardAdminCoreDashboard = {
   };
   baskets: {
     total: number;
-    draft: number;
-    completed: number;
+    open: number;
+    finished: number;
+    live: number;
   };
   zonesCreated: AdminDashboardDailyCount[];
   listsCreated: AdminDashboardDailyCount[];
@@ -2321,6 +2324,11 @@ export type EnumsAdapterKey =
 export type EnumsAuthProvider = 'GOOGLE' | 'EMAIL';
 
 /**
+ * `enums.BasketKind` in the gateway's OpenAPI document.
+ */
+export type EnumsBasketKind = 'LIVE' | 'GENERATED';
+
+/**
  * `enums.BulkOperationErrorCode` in the gateway's OpenAPI document.
  */
 export type EnumsBulkOperationErrorCode =
@@ -2354,11 +2362,7 @@ export type EnumsGeneratedLineOrigin = 'DERIVED' | 'ADDED';
 /**
  * `enums.GeneratedListStatus` in the gateway's OpenAPI document.
  */
-export type EnumsGeneratedListStatus =
-  | 'DRAFT'
-  | 'ACTIVE'
-  | 'COMPLETED'
-  | 'ARCHIVED';
+export type EnumsGeneratedListStatus = 'OPEN' | 'FINISHED' | 'ARCHIVED';
 
 /**
  * `enums.GenerationScope` in the gateway's OpenAPI document.
@@ -2491,7 +2495,6 @@ export type EnumsMergeRequestStatus =
  * `enums.OriginUnavailableReason` in the gateway's OpenAPI document.
  */
 export type EnumsOriginUnavailableReason =
-  | 'CLAIMED'
   | 'REJECTED'
   | 'NOT_APPROVED'
   | 'SETTLED';
@@ -2635,6 +2638,7 @@ export type GeneratedListSharingBasketPriceScopeView = {
  */
 export type GeneratedListSharingBasketResult = {
   id: string;
+  kind: EnumsBasketKind;
   name: string | null;
   status: EnumsGeneratedListStatus;
   generatedAt: string;
@@ -2642,7 +2646,7 @@ export type GeneratedListSharingBasketResult = {
   participants: GeneratedListSharingParticipantView[];
   me: GeneratedListSharingParticipantView;
   seesZoneData: boolean;
-  sourceSnapshot?: GeneratedListGeneratedListSourceSnapshot;
+  sources?: GeneratedListBasketSourceView[];
   sourceNames?: GeneratedListSharingSourceName[];
   products: CatalogItemView[];
   scopes: GeneratedListSharingBasketPriceScopeView[];
@@ -2837,6 +2841,14 @@ export type GeneratedListSharingSplitLineResult = {
 };
 
 /**
+ * `generated-list.BasketSourceView` in the gateway's OpenAPI document.
+ */
+export type GeneratedListBasketSourceView = {
+  zoneId: string;
+  listId: string | null;
+};
+
+/**
  * `generated-list.GeneratedListLineOriginView` in the gateway's OpenAPI document.
  */
 export type GeneratedListGeneratedListLineOriginView = {
@@ -2888,35 +2900,6 @@ export type GeneratedListGeneratedListPage = {
  */
 export type GeneratedListGeneratedListRunResult = {
   list: GeneratedListGeneratedListView;
-  skipped: GeneratedListGeneratedListSkippedLineView[];
-};
-
-/**
- * `generated-list.GeneratedListSkippedLineView` in the gateway's OpenAPI document.
- */
-export type GeneratedListGeneratedListSkippedLineView = {
-  zoneId: string;
-  listId: string;
-  lineId: string;
-  content: string;
-  carriedByGeneratedListId: string;
-};
-
-/**
- * `generated-list.GeneratedListSourceSnapshot` in the gateway's OpenAPI document.
- */
-export type GeneratedListGeneratedListSourceSnapshot = {
-  profileId: string | null;
-  pricingProfileId: string | null;
-  sources: GeneratedListGeneratedListSourceSnapshotEntry[];
-};
-
-/**
- * `generated-list.GeneratedListSourceSnapshotEntry` in the gateway's OpenAPI document.
- */
-export type GeneratedListGeneratedListSourceSnapshotEntry = {
-  zoneId: string;
-  listId: string;
 };
 
 /**
@@ -2924,6 +2907,7 @@ export type GeneratedListGeneratedListSourceSnapshotEntry = {
  */
 export type GeneratedListGeneratedListSummaryView = {
   id: string;
+  kind: EnumsBasketKind;
   name: string | null;
   status: EnumsGeneratedListStatus;
   generatedAt: string;
@@ -2939,10 +2923,11 @@ export type GeneratedListGeneratedListSummaryView = {
  */
 export type GeneratedListGeneratedListView = {
   id: string;
+  kind: EnumsBasketKind;
   name: string | null;
   status: EnumsGeneratedListStatus;
   generatedAt: string;
-  sourceSnapshot: GeneratedListGeneratedListSourceSnapshot;
+  sources: GeneratedListBasketSourceView[];
   lines: GeneratedListGeneratedListLineView[];
 };
 
@@ -2961,6 +2946,7 @@ export type GeneratedListSharedGeneratedListPage = {
  */
 export type GeneratedListSharedGeneratedListView = {
   id: string;
+  kind: EnumsBasketKind;
   name: string | null;
   status: EnumsGeneratedListStatus;
   generatedAt: string;

@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BasketCoverageModule } from '../baskets/basket-coverage.module';
 import {
+  BasketSource,
   GeneratedList,
   GeneratedListLine,
   GeneratedListLineOption,
@@ -56,6 +58,9 @@ import { WaitingSettlementService } from './waiting-settlement.service';
   imports: [
     TypeOrmModule.forFeature([
       GeneratedList,
+      // What the run was asked to draw from (plan 0133), written by the run and
+      // read back on every view of a basket.
+      BasketSource,
       GeneratedListLine,
       GeneratedListLineOrigin,
       GeneratedListLineOption,
@@ -76,6 +81,10 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     // The one zone event a basket emits (plan 0052). `ListsModule` imports it
     // too, which is why it is a module rather than a provider declared here.
     LineClaimModule,
+    // What a basket covers, now (plan 0133, section 5). A module of its own for
+    // the same reason `LineClaimModule` is one: `ListsModule` needs it in plan
+    // 0139 and already points the other way.
+    BasketCoverageModule,
   ],
   controllers: [GeneratedListController, GeneratedListSharingController],
   providers: [

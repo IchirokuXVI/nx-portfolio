@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   LineApprovalStatus,
@@ -18,6 +19,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource, IsNull } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import {
+  BasketSource,
   CORE_ENTITIES,
   GeneratedList,
   GeneratedListLine,
@@ -126,7 +128,8 @@ describeIntegration(
         claims.service,
         basketEvents as never,
         undefined as never,
-        undefined as never
+        undefined as never,
+        dataSource.getRepository(BasketSource)
       );
       const participants = dataSource.getRepository(GeneratedListParticipant);
       const sharing = {
@@ -245,13 +248,9 @@ describeIntegration(
         dataSource.getRepository(GeneratedList).create({
           ownerUserId: ids.owner,
           name: 'Saturday',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           generatedAt: new Date(),
-          sourceSnapshot: {
-            profileId: null,
-            pricingProfileId: null,
-            sources: [],
-          },
+          kind: BasketKind.GENERATED,
           defaultTargetListId: null,
           idempotencyKey: null,
         })

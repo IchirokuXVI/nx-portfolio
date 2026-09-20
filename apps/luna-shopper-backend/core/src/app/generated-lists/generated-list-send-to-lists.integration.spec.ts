@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   LineApprovalStatus,
@@ -16,6 +17,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { BasketCoverageService } from '../baskets/basket-coverage.service';
 import {
   CORE_ENTITIES,
   GeneratedList,
@@ -223,7 +225,10 @@ describeIntegration(
         // The real one, against the real database, which is what makes the
         // demand rule of plan 0131 answer here from the same rows the service
         // under test writes.
-        listAccess
+        listAccess,
+        // The real service: coverage is raw SQL over four tables, and this file
+        // has the database to answer it (plan 0133, section 5).
+        new BasketCoverageService(dataSource.getRepository(GeneratedList))
       );
 
       settles = new GeneratedListSettleService(
@@ -281,13 +286,9 @@ describeIntegration(
           ownerUserId: ids.shopper,
           name: 'Saturday',
           // Live, which is DRAFT as well as ACTIVE: nothing writes ACTIVE.
-          status: GeneratedListStatus.DRAFT,
+          status: GeneratedListStatus.OPEN,
           generatedAt: new Date(),
-          sourceSnapshot: {
-            profileId: null,
-            pricingProfileId: null,
-            sources: [{ zoneId: zone.id, listId: ids.flat }],
-          },
+          kind: BasketKind.GENERATED,
           defaultTargetListId: null,
           idempotencyKey: null,
         })
@@ -417,12 +418,12 @@ describeIntegration(
       expect(origin.quantity).toBe(2);
     });
 
-    it('refuses a line another basket is carrying, and takes it once that basket has bought it', async () => {
-      // The two predicates plan 0092 had to copy from `LINE_CLAIMS_SQL` when it
-      // turned this check on. Without them a line bought all the way through, in
-      // a basket somebody left open, reads as carried here and as claimed by
-      // nobody there: one screen says the milk is free and the next refuses to
-      // put it in a basket.
+    it('takes a line another basket of the owner’s is carrying (plan 0133)', async () => {
+      // Plan 0050 section 3 refused this and plan 0092 section 3.2 made the
+      // refusal actually fire, against a query that had tested `ACTIVE` and so
+      // never had. Plan 0133 section 7 deleted it outright: it was true of two
+      // frozen copies of one line and false of two views of it, and with a
+      // permanent basket over every list it would refuse everything.
       const content = `Rice ${randomUUID().slice(0, 8)}`;
       const zoneLine = await dataSource.getRepository(ListLine).save(
         dataSource.getRepository(ListLine).create({
@@ -441,13 +442,9 @@ describeIntegration(
         dataSource.getRepository(GeneratedList).create({
           ownerUserId: ids.shopper,
           name: 'Thursday',
-          status: GeneratedListStatus.DRAFT,
+          status: GeneratedListStatus.OPEN,
           generatedAt: new Date(),
-          sourceSnapshot: {
-            profileId: null,
-            pricingProfileId: null,
-            sources: [],
-          },
+          kind: BasketKind.GENERATED,
           defaultTargetListId: null,
           idempotencyKey: null,
         })
@@ -487,21 +484,19 @@ describeIntegration(
           from: 0,
         });
 
-      await expect(adopt()).rejects.toMatchObject({
-        code: 'validation_failed',
-      });
-
-      // The other basket bought all of it, so it is done with the line and
-      // releases it, exactly as the claim says it does.
-      await dataSource
-        .getRepository(GeneratedListLine)
-        .update({ id: otherLine.id }, { settledQuantity: 2 });
-
       await adopt();
+
       const written = await dataSource
         .getRepository(GeneratedListLineOrigin)
         .find({ where: { generatedListLineId: line.id } });
       expect(written).toHaveLength(1);
+      // The claim is untouched by any of this (section 7): the other basket is
+      // still carrying the line, and a second basket taking it simply becomes
+      // the newest claimant. What went is the **refusal**.
+      const stillCarried = await dataSource
+        .getRepository(GeneratedListLineOrigin)
+        .find({ where: { generatedListLineId: otherLine.id } });
+      expect(stillCarried).toHaveLength(1);
 
       await dataSource.getRepository(GeneratedList).delete({ id: other.id });
     });

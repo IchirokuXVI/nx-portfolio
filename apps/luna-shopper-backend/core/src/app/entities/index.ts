@@ -1,10 +1,11 @@
+import { BasketSource } from './basket-source.entity';
 import { CommentAudio } from './comment-audio.entity';
 import { CoreAudit } from './core-audit.entity';
-import { GeneratedListParticipant } from './generated-list-participant.entity';
-import { GeneratedListShareLink } from './generated-list-share-link.entity';
 import { GeneratedListLineOption } from './generated-list-line-option.entity';
 import { GeneratedListLineOrigin } from './generated-list-line-origin.entity';
 import { GeneratedListLine } from './generated-list-line.entity';
+import { GeneratedListParticipant } from './generated-list-participant.entity';
+import { GeneratedListShareLink } from './generated-list-share-link.entity';
 import { GeneratedList } from './generated-list.entity';
 import { LineComment } from './line-comment.entity';
 import { LineSettlement } from './line-settlement.entity';
@@ -24,17 +25,18 @@ import { ZoneMembership } from './zone-membership.entity';
 import { Zone } from './zone.entity';
 
 export { BaseEntity } from './base.entity';
+export { BasketSource } from './basket-source.entity';
 export { CommentAudio } from './comment-audio.entity';
 export {
   CoreAudit,
   CoreAuditAction,
   CoreAuditActorKind,
 } from './core-audit.entity';
-export { GeneratedListParticipant } from './generated-list-participant.entity';
-export { GeneratedListShareLink } from './generated-list-share-link.entity';
 export { GeneratedListLineOption } from './generated-list-line-option.entity';
 export { GeneratedListLineOrigin } from './generated-list-line-origin.entity';
 export { GeneratedListLine } from './generated-list-line.entity';
+export { GeneratedListParticipant } from './generated-list-participant.entity';
+export { GeneratedListShareLink } from './generated-list-share-link.entity';
 export { GeneratedList } from './generated-list.entity';
 export { LineComment } from './line-comment.entity';
 export { LineSettlement } from './line-settlement.entity';
@@ -82,6 +84,9 @@ export const CORE_ENTITIES = [
   // Generated shopping lists (plan 0050). The basket comes first: its lines
   // reference it, and the origins and options reference the lines.
   GeneratedList,
+  // What the run was asked to draw from (plan 0133). After the basket it hangs
+  // off, and it also references zones and lists, which are created far above.
+  BasketSource,
   GeneratedListLine,
   GeneratedListLineOrigin,
   GeneratedListLineOption,

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
-  isLiveGeneratedList,
+  isOpenBasket,
   NO_LINE_CLAIM,
   RealtimeEvent,
   SettlementOutcome,
@@ -115,7 +115,7 @@ export class GeneratedListReopenService {
     if (!list) {
       throw new NotFoundException('Generated list not found');
     }
-    if (!isLiveGeneratedList(list.status)) {
+    if (!isOpenBasket(list.status)) {
       // The mirror of the settle's refusal (plan 0059, section 3.2): a reopen
       // writes the zone line and the settlement table exactly as a settle does,
       // in the other direction, and a finished trip does neither.

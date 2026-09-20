@@ -204,7 +204,10 @@ export class BasketViewStore {
     // drawn twice, and the two checkboxes would set the same thing.
     const seen = new Set<string>();
     for (const source of sources) {
-      if (seen.has(source.listId)) {
+      // A source naming no list names a whole zone (backend `0133`, section 4).
+      // This sheet offers lists, and the names it draws from are the basket's
+      // own origins, so a whole zone contributes nothing to offer here.
+      if (source.listId === null || seen.has(source.listId)) {
         continue;
       }
       const name = names.get(source.listId);

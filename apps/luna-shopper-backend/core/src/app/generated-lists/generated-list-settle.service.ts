@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
-  isLiveGeneratedList,
+  isOpenBasket,
   NO_LINE_CLAIM,
   RealtimeEvent,
   SettlementOutcome,
@@ -98,7 +98,7 @@ export class GeneratedListSettleService {
     if (!list) {
       throw new NotFoundException('Generated list not found');
     }
-    if (!isLiveGeneratedList(list.status)) {
+    if (!isOpenBasket(list.status)) {
       // The write that matters most (plan 0059, section 3.1): a finished trip
       // that still took settlements could write into a household's zone lines
       // days after the shopper went home, from a link shared with somebody who

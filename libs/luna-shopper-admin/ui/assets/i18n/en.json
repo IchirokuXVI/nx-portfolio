@@ -1422,11 +1422,15 @@
       "updatedAt": "Last changed",
       "lines": "Lines",
       "noLines": "This shopping list has no lines.",
+      "kind": {
+        "label": "Kind",
+        "LIVE": "Always there",
+        "GENERATED": "A trip"
+      },
       "status": {
         "label": "State",
-        "DRAFT": "Being shopped",
-        "ACTIVE": "Active",
-        "COMPLETED": "Finished",
+        "OPEN": "Being shopped",
+        "FINISHED": "Finished",
         "ARCHIVED": "Archived"
       },
       "filter": {
@@ -1630,7 +1634,7 @@
       "zonesCaption": "{{active}} active of {{total}}",
       "lists": "Lists",
       "baskets": "Baskets",
-      "basketsCaption": "{{draft}} draft, {{completed}} completed",
+      "basketsCaption": "{{open}} being shopped, {{finished}} finished, {{live}} always there",
       "signUps": "Sign ups",
       "signUpsTitle": "Sign ups per day",
       "zonesSeries": "Zones",

@@ -44,7 +44,7 @@ function build(options: {
   const basket = {
     id: BASKET,
     ownerUserId: OWNER,
-    status: options.status ?? GeneratedListStatus.ACTIVE,
+    status: options.status ?? GeneratedListStatus.OPEN,
   } as GeneratedList;
   const line = {
     id: LINE,
@@ -211,7 +211,7 @@ describe('who may rename a basket line (plan 0113, section 2)', () => {
 describe('what a rename refuses or skips before it locks anything', () => {
   it('refuses a finished basket with its own code', async () => {
     const { rename, transactions } = build({
-      status: GeneratedListStatus.COMPLETED,
+      status: GeneratedListStatus.FINISHED,
       origins: [FLAT],
       writable: [FLAT],
     });

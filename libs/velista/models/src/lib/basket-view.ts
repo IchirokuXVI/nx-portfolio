@@ -7,7 +7,7 @@ import type {
   ProductCategory,
   SettlementOutcome,
 } from './enums';
-import { isLiveGeneratedList } from './enums';
+import { isOpenBasket, type BasketKind } from './enums';
 import type { LocalizedName } from './shopping-profile';
 
 /**
@@ -680,6 +680,8 @@ export function basketLinesProgress(
  */
 export interface BasketView {
   id: string;
+  /** What this basket is (backend `0133`, section 2). */
+  kind: BasketKind;
   /** Null is not missing: an unnamed basket is displayed as its generation date. */
   name: string | null;
   status: string;
@@ -709,8 +711,14 @@ export interface BasketView {
    * scope is not here resolves to no place and is still a price.
    */
   readonly scopes: ReadonlyMap<string, BasketPriceScope>;
-  /** Which lists the run drew from. Absent unless {@link seesZoneData}. */
-  sources?: readonly { zoneId: string; listId: string }[];
+  /**
+   * What the run was asked to draw from. Absent unless {@link seesZoneData}.
+   *
+   * A null `listId` means every list of that zone the owner can write (backend
+   * `0133`, section 4). Nothing in velista draws a source yet, so the difference
+   * between a zone and a list costs no screen today.
+   */
+  sources?: readonly { zoneId: string; listId: string | null }[];
   /**
    * Those lists by name, keyed by list id, for the row's "from" caption.
    *
@@ -801,22 +809,23 @@ export interface BasketAddLineRequest {
  * submit is the invitation `0038` section 2.1 refuses to draw. So the question is
  * asked here once and the page has no second reading of it.
  *
- * **It names the live statuses rather than the finished ones**, which is the safe
- * direction and the same one the server's own `LIVE_GENERATED_LIST_STATUSES` takes.
- * A status this build has never heard of costs a composer; the other way round it
- * would draw a field over a basket the server considers closed, and every line
- * typed into it would come back refused.
+ * **It names the open status rather than the finished ones**, which is the safe
+ * direction and the same one the server's own `isOpenBasket` takes. A status this
+ * build has never heard of costs a composer; the other way round it would draw a
+ * field over a basket the server considers closed, and every line typed into it would
+ * come back refused.
  *
- * It delegates to {@link isLiveGeneratedList} rather than naming the pair a second
- * time, and the delegation is the point: this function used to be the only place in
- * the app that had the set right, while the dashboard and the history each asked
- * `status === 'ACTIVE'` and drew nothing for the whole life of the feature. Two names
- * for one question are worth keeping, because "does this take lines" and "is somebody
- * still going to shop this" are asked by different screens for different reasons; two
- * **answers** are not, which is what this line stops.
+ * It delegates to {@link isOpenBasket} rather than naming the value a second time,
+ * and the delegation is the point: this function used to be the only place in the app
+ * that had the set right, while the dashboard and the history each asked
+ * `status === 'ACTIVE'` and drew nothing for the whole life of the feature. Backend
+ * plan 0133 folded that second spelling away, so there is one value to name now; two
+ * names for one question are still worth keeping, because "does this take lines" and
+ * "is somebody still going to shop this" are asked by different screens for different
+ * reasons. Two **answers** are not, which is what this line stops.
  */
 export function basketTakesLines(status: string): boolean {
-  return isLiveGeneratedList(status);
+  return isOpenBasket(status);
 }
 
 /** What one settling act asked for. The three gestures of section 4.2. */

@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   MembershipStatus,
@@ -13,6 +14,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
+  BasketSource,
   CORE_ENTITIES,
   GeneratedList,
   GeneratedListLine,
@@ -117,7 +119,8 @@ describeIntegration('a run history row (real Postgres)', () => {
       fakeLineClaims({}).service,
       { emitToUsers: jest.fn() } as never,
       {} as never,
-      {} as never
+      {} as never,
+      dataSource.getRepository(BasketSource)
     );
 
     const zone = await dataSource.getRepository(Zone).save(
@@ -162,13 +165,9 @@ describeIntegration('a run history row (real Postgres)', () => {
       dataSource.getRepository(GeneratedList).create({
         ownerUserId: ids.owner,
         name: 'Saturday',
-        status: GeneratedListStatus.ACTIVE,
+        status: GeneratedListStatus.OPEN,
         generatedAt: new Date('2026-02-01T10:00:00Z'),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
+        kind: BasketKind.GENERATED,
         defaultTargetListId: null,
         idempotencyKey: null,
       })

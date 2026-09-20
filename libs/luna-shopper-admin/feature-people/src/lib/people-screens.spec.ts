@@ -7,10 +7,10 @@ import {
   ContentLocaleStore,
   DeploymentStore,
   DIRECTORY_SERVICE,
-  type DirectoryServiceI,
   ServerReachability,
   SessionStorage,
   SessionStore,
+  type DirectoryServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   adminRoutes,
@@ -315,7 +315,10 @@ describe('the shopping list detail screen', () => {
     const fixture = await boot('/shopping-lists/b-saturday');
 
     expect(text(fixture)).toContain('Bread');
-    expect(text(fixture)).toContain('people.baskets.status.DRAFT');
+    expect(text(fixture)).toContain('people.baskets.status.OPEN');
+    // The kind is drawn beside it, because an `OPEN` basket that never ends and
+    // one nobody finished read the same without it.
+    expect(text(fixture)).toContain('people.baskets.kind.GENERATED');
   });
 });
 

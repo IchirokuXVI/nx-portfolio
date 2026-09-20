@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
 } from '../../lib/enums/generated-list.enums';
@@ -35,17 +36,14 @@ import { AUTH_SCHEMA_IDS } from './auth.schemas';
  * hundred means.
  */
 export const GENERATED_LIST_SCHEMA_IDS = {
+  basketKind: schemaId('enums/BasketKind'),
   generatedListStatus: schemaId('enums/GeneratedListStatus'),
   generatedLineOrigin: schemaId('enums/GeneratedLineOrigin'),
   lineOriginView: schemaId('generated-list/GeneratedListLineOriginView'),
   lineView: schemaId('generated-list/GeneratedListLineView'),
-  sourceSnapshotEntry: schemaId(
-    'generated-list/GeneratedListSourceSnapshotEntry'
-  ),
-  sourceSnapshot: schemaId('generated-list/GeneratedListSourceSnapshot'),
+  basketSourceView: schemaId('generated-list/BasketSourceView'),
   listView: schemaId('generated-list/GeneratedListView'),
   summaryView: schemaId('generated-list/GeneratedListSummaryView'),
-  skippedLineView: schemaId('generated-list/GeneratedListSkippedLineView'),
   runResult: schemaId('generated-list/GeneratedListRunResult'),
   page: schemaId('generated-list/GeneratedListPage'),
   sourceInput: schemaId('generated-list/GeneratedListSourceInput'),
@@ -126,51 +124,43 @@ const updateLineResult = object(
 );
 
 /**
- * One (zone, list) pair a run actually read.
+ * One source of a basket, as it was named (plan 0133, section 4).
  *
- * A registered schema of its own rather than an object inlined into the snapshot
- * below, and that is a rule of this file rather than a preference: a nested
- * `$id` opens a new resolution scope inside its parent, which leaves the sibling
- * schemas registered after it unreachable and turns every `$ref` to them into
- * "can't resolve reference" at compile time. Every schema here is top level and
- * referenced by id.
+ * A registered schema of its own rather than an object inlined into the views
+ * that hold it, and that is a rule of this file rather than a preference: a
+ * nested `$id` opens a new resolution scope inside its parent, which leaves the
+ * sibling schemas registered after it unreachable and turns every `$ref` to them
+ * into "can't resolve reference" at compile time. Every schema here is top level
+ * and referenced by id.
+ *
+ * `listId` is nullable and null is the meaning rather than the absence: it says
+ * every list of the zone the owner can write.
  */
-const sourceSnapshotEntry = object(
-  GENERATED_LIST_SCHEMA_IDS.sourceSnapshotEntry,
-  { zoneId: nonEmptyString(), listId: nonEmptyString() },
+const basketSourceView = object(
+  GENERATED_LIST_SCHEMA_IDS.basketSourceView,
+  { zoneId: nonEmptyString(), listId: nullableString() },
   ['zoneId', 'listId']
-);
-
-const sourceSnapshot = object(
-  GENERATED_LIST_SCHEMA_IDS.sourceSnapshot,
-  {
-    profileId: nullableString(),
-    // Required and nullable, not optional: a run composed before plan 0078 has
-    // no such key in its stored `jsonb`, and the mapper reads that absence as
-    // null so the wire shape is the same for every run.
-    pricingProfileId: nullableString(),
-    sources: array(ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshotEntry)),
-  },
-  ['profileId', 'pricingProfileId', 'sources']
 );
 
 const listView = object(
   GENERATED_LIST_SCHEMA_IDS.listView,
   {
     id: nonEmptyString(),
+    kind: ref(GENERATED_LIST_SCHEMA_IDS.basketKind),
     // Null is the value the client renders as the generation date, because core
     // has no locale to render it in (plan 0050, section 1).
     name: nullableString(),
     status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
     generatedAt: nonEmptyString(),
-    sourceSnapshot: ref(GENERATED_LIST_SCHEMA_IDS.sourceSnapshot),
+    sources: array(ref(GENERATED_LIST_SCHEMA_IDS.basketSourceView)),
     lines: array(ref(GENERATED_LIST_SCHEMA_IDS.lineView)),
   },
-  ['id', 'name', 'status', 'generatedAt', 'sourceSnapshot', 'lines']
+  ['id', 'kind', 'name', 'status', 'generatedAt', 'sources', 'lines']
 );
 
 const summaryViewProperties = {
   id: nonEmptyString(),
+  kind: ref(GENERATED_LIST_SCHEMA_IDS.basketKind),
   name: nullableString(),
   status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
   generatedAt: nonEmptyString(),
@@ -183,6 +173,7 @@ const summaryViewProperties = {
 
 const summaryViewRequired = [
   'id',
+  'kind',
   'name',
   'status',
   'generatedAt',
@@ -232,25 +223,10 @@ const sharedView = object(
   [...summaryViewRequired, 'owner', 'sharedAt']
 );
 
-const skippedLineView = object(
-  GENERATED_LIST_SCHEMA_IDS.skippedLineView,
-  {
-    zoneId: nonEmptyString(),
-    listId: nonEmptyString(),
-    lineId: nonEmptyString(),
-    content: string(),
-    carriedByGeneratedListId: nonEmptyString(),
-  },
-  ['zoneId', 'listId', 'lineId', 'content', 'carriedByGeneratedListId']
-);
-
 const runResult = object(
   GENERATED_LIST_SCHEMA_IDS.runResult,
-  {
-    list: ref(GENERATED_LIST_SCHEMA_IDS.listView),
-    skipped: array(ref(GENERATED_LIST_SCHEMA_IDS.skippedLineView)),
-  },
-  ['list', 'skipped']
+  { list: ref(GENERATED_LIST_SCHEMA_IDS.listView) },
+  ['list']
 );
 
 const sourceInput = object(
@@ -387,6 +363,7 @@ const reorderRequest = object(
 );
 
 export const generatedListSchemas: JsonSchema[] = [
+  enumOf(GENERATED_LIST_SCHEMA_IDS.basketKind, Object.values(BasketKind)),
   enumOf(
     GENERATED_LIST_SCHEMA_IDS.generatedListStatus,
     Object.values(GeneratedListStatus)
@@ -397,11 +374,9 @@ export const generatedListSchemas: JsonSchema[] = [
   ),
   lineOriginView,
   lineView,
-  sourceSnapshotEntry,
-  sourceSnapshot,
+  basketSourceView,
   listView,
   summaryView,
-  skippedLineView,
   runResult,
   paginated(
     GENERATED_LIST_SCHEMA_IDS.page,

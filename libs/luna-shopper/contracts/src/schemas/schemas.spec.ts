@@ -391,22 +391,20 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    it('generatedList.get carries both snapshot profiles (plan 0078, section 3)', () => {
-      // The two fields answer two questions, and the run this stands for is the
-      // shape velista always sends: it named its own sources, so no profile's
-      // sources were read, and it still names the profile the basket is priced
-      // against.
+    it('generatedList.get names its kind and its sources (plan 0133)', () => {
+      // A source is what the run was asked for, so a null `listId` is a value
+      // rather than an absence: it says every list of that zone.
       expect(
         validateMessageResponse('generatedList.get', {
           id: 'gl',
+          kind: 'GENERATED',
           name: null,
-          status: 'DRAFT',
+          status: 'OPEN',
           generatedAt: '2026-01-01T00:00:00.000Z',
-          sourceSnapshot: {
-            profileId: null,
-            pricingProfileId: 'sp-1',
-            sources: [{ zoneId: 'z', listId: 'l' }],
-          },
+          sources: [
+            { zoneId: 'z', listId: 'l' },
+            { zoneId: 'z2', listId: null },
+          ],
           lines: [],
         }).valid
       ).toBe(true);
@@ -1123,17 +1121,17 @@ describe('contract schemas', () => {
   });
 
   describe('malformed payloads fail', () => {
-    it('rejects a snapshot that omits the pricing profile (plan 0078)', () => {
-      // Required and nullable, not optional. Core reads a pre plan 0078 row's
-      // missing key as null before the view leaves it, so a payload on the wire
-      // without the key is a mapper that stopped doing that.
+    it('rejects a basket that does not say what kind it is (plan 0133)', () => {
+      // Required, with no default on the wire and none on the column either: a
+      // basket whose kind nothing states is one seven queries would each answer
+      // differently about.
       expect(
         validateMessageResponse('generatedList.get', {
           id: 'gl',
           name: null,
-          status: 'DRAFT',
+          status: 'OPEN',
           generatedAt: '2026-01-01T00:00:00.000Z',
-          sourceSnapshot: { profileId: null, sources: [] },
+          sources: [],
           lines: [],
         }).valid
       ).toBe(false);

@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedListStatus,
   ListPermission,
   ParticipantKind,
@@ -306,8 +307,9 @@ function build(
   const list = {
     id: BASKET,
     ownerUserId: OWNER,
-    status: GeneratedListStatus.ACTIVE,
-    sourceSnapshot: { profileId: null, pricingProfileId: null, sources: [] },
+    kind: BasketKind.GENERATED,
+    status: GeneratedListStatus.OPEN,
+    pricingProfileId: null,
   };
   const lists = { findOne: async () => list } as never;
   // A copy per read, as TypeORM answers one: the service's own read of the line
@@ -364,7 +366,8 @@ function build(
     claims.service,
     {} as never,
     publisher,
-    listAccess
+    listAccess,
+    { listsOf: async () => [] } as never
   );
 
   const service = new GeneratedListOriginSettledService(

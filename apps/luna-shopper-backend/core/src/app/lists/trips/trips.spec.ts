@@ -191,14 +191,12 @@ describe('the two reads', () => {
       LIVE_TRIPS_SQL,
       ENDED_TRIPS_SQL,
     ]);
-    expect(w.queries[0].parameters).toEqual([
-      LIST,
-      LOOSE_TRIP_GAP_MS,
-      ['DRAFT', 'ACTIVE'],
-      SINCE,
-    ]);
+    // The statuses are no longer a parameter: "open and a trip" is a fragment
+    // both queries carry (plan 0133, section 6), so the window is all that is
+    // left of what the claim hands over.
+    expect(w.queries[0].parameters).toEqual([LIST, LOOSE_TRIP_GAP_MS, SINCE]);
     // No cursor, and one row past the default page to learn whether more exist.
-    expect(w.queries[1].parameters.slice(4)).toEqual([null, null, 21]);
+    expect(w.queries[1].parameters.slice(3)).toEqual([null, null, 21]);
   });
 
   it('carries the kind and the id in the cursor, and skips live trips behind one', async () => {
@@ -223,7 +221,7 @@ describe('the two reads', () => {
 
     expect(next.live).toEqual([]);
     expect(second.queries.map((query) => query.sql)).toEqual([ENDED_TRIPS_SQL]);
-    expect(second.queries[0].parameters.slice(4)).toEqual([TRIP, 'LOOSE', 2]);
+    expect(second.queries[0].parameters.slice(3)).toEqual([TRIP, 'LOOSE', 2]);
   });
 
   it('starts from the beginning on a cursor it cannot read', async () => {
@@ -238,7 +236,7 @@ describe('the two reads', () => {
       LIVE_TRIPS_SQL,
       ENDED_TRIPS_SQL,
     ]);
-    expect(w.queries[1].parameters.slice(4, 6)).toEqual([null, null]);
+    expect(w.queries[1].parameters.slice(3, 5)).toEqual([null, null]);
   });
 
   it('reads the rows of a basket or of a loose trip, each through its own query', async () => {

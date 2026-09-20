@@ -17,8 +17,9 @@ import { SharedListStore } from './shared-list-store';
 function shared(id: string): SharedGeneratedListSummary {
   return {
     id,
+    kind: 'GENERATED',
     name: null,
-    status: 'DRAFT',
+    status: 'OPEN',
     generatedAt: new Date('2026-08-21T10:00:00.000Z'),
     lineCount: 3,
     settledLineCount: 0,

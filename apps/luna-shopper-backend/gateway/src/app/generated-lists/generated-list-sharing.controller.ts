@@ -1146,7 +1146,7 @@ export class GeneratedListParticipantController {
    * Two ways to be refused with a state rather than a fault, and they are told
    * apart by code: `stale_quantity` when somebody else moved the line while it
    * was on screen, so the client refetches rather than correcting anything, and
-   * `generated_list_finished` when the basket is `COMPLETED` or `ARCHIVED`.
+   * `generated_list_finished` when the basket is `FINISHED` or `ARCHIVED`.
    * Both are plan 0057's and plan 0055's codes respectively, reused rather than
    * doubled: one sentence per state, wherever the state is met.
    */

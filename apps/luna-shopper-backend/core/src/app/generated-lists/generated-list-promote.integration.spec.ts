@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   MembershipStatus,
@@ -201,13 +202,9 @@ describeIntegration('a promotion keeps its products (real Postgres)', () => {
       dataSource.getRepository(GeneratedList).create({
         ownerUserId: ids.shopper,
         name: 'Saturday',
-        status: GeneratedListStatus.ACTIVE,
+        status: GeneratedListStatus.OPEN,
         generatedAt: new Date(),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
+        kind: BasketKind.GENERATED,
         defaultTargetListId: null,
         idempotencyKey: null,
       })

@@ -780,7 +780,7 @@ export class BasketPage {
     this._statusBusy.set(true);
     this._reopenFailed.set(false);
 
-    const landed = await this._generated.setStatus(this._id, 'ACTIVE');
+    const landed = await this._generated.setStatus(this._id, 'OPEN');
     if (landed) {
       await this._store.refresh();
     }

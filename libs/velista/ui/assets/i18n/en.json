@@ -1203,7 +1203,6 @@
       "listNow": "its list now asks for {{count}}",
       "pending": "waiting for the list to agree",
       "noAccess": "You can no longer change this list",
-      "claimed": "somebody is already buying this for that list",
       "rejected": "that list said no to this line",
       "cannotTake": "this line cannot be added to that list",
       "cameHome": "Added to {{name}}. {{count}} recorded as bought there",

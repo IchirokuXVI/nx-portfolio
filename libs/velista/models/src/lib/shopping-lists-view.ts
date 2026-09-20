@@ -137,7 +137,7 @@ export interface ShoppingListRowVm {
   /**
    * Whether this trip is the one being shopped now.
    *
-   * Drawn as the word, never as colour alone (section 7). It is `status === 'ACTIVE'`
+   * Drawn as the word, never as colour alone (section 7). It is `status === 'OPEN'`
    * and is derived here so no template re-derives it from an enum.
    */
   readonly active: boolean;
@@ -148,7 +148,7 @@ export interface ShoppingListRowVm {
    * than a second badge: a row says one thing about where a trip has got to, and the
    * two can never both be true.
    *
-   * `status === 'COMPLETED'` exactly, which is narrower than "not live" on purpose.
+   * `status === 'FINISHED'` exactly, which is narrower than "not open" on purpose.
    * `UNKNOWN` is this build's fallback for a status it does not recognise, and the
    * one thing a history row must not do is tell somebody their shopping is over
    * because the app could not read a word.

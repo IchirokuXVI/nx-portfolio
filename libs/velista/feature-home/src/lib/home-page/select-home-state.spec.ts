@@ -45,8 +45,9 @@ function basket(
 ): GeneratedListSummary {
   return {
     id: 'gl1',
+    kind: 'GENERATED',
     name: 'Saturday big shop',
-    status: 'ACTIVE',
+    status: 'OPEN',
     generatedAt: new Date('2026-08-21T10:00:00.000Z'),
     lineCount: 12,
     settledLineCount: 4,

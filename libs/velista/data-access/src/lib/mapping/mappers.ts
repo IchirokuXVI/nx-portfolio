@@ -1,4 +1,6 @@
 import {
+  BASKET_KIND_FALLBACK,
+  BASKET_KINDS,
   COMMENT_TRANSCRIPTION_FALLBACK,
   COMMENT_TRANSCRIPTIONS,
   GENERATED_LIST_STATUS_FALLBACK,
@@ -39,7 +41,6 @@ import {
   type CommentTranscription,
   type Contact,
   type GeneratedListRun,
-  type GeneratedListSkippedLine,
   type GeneratedListSummary,
   type Line,
   type LineSettlement,
@@ -1223,6 +1224,7 @@ export function toGeneratedListSummary(
 
   return {
     id,
+    kind: oneOf(raw['kind'], BASKET_KINDS, BASKET_KIND_FALLBACK),
     name: nullableStr(raw['name']),
     status: oneOf(
       raw['status'],
@@ -1293,20 +1295,6 @@ export function toContact(raw: unknown): Contact | null {
     : { userId, zoneId, username };
 }
 
-/** From `GeneratedListSkippedLineView`. */
-function toGeneratedListSkippedLine(
-  raw: unknown
-): GeneratedListSkippedLine | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const listId = str(raw['listId']);
-  return listId === null
-    ? null
-    : { listId, content: strOr(raw['content'], '') };
-}
-
 /**
  * From `GeneratedListRunResult` (backend `0050` section 4), keeping the summary alone.
  *
@@ -1326,9 +1314,7 @@ export function toGeneratedListRun(raw: unknown): GeneratedListRun | null {
   }
 
   const list = toGeneratedListFromView(raw['list']);
-  return list === null
-    ? null
-    : { list, skipped: mapArray(raw['skipped'], toGeneratedListSkippedLine) };
+  return list === null ? null : { list };
 }
 
 /**

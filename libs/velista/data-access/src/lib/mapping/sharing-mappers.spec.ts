@@ -28,8 +28,9 @@ describe('toBasketParticipant without a join time', () => {
 describe('toSharedGeneratedListSummary', () => {
   const view = {
     id: 'gl1',
+    kind: 'GENERATED',
     name: null,
-    status: 'DRAFT',
+    status: 'OPEN',
     generatedAt: '2026-08-21T10:00:00.000Z',
     lineCount: 4,
     settledLineCount: 1,

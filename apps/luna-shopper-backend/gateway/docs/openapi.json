@@ -24379,9 +24379,8 @@
           "status": {
             "type": "string",
             "enum": [
-              "DRAFT",
-              "ACTIVE",
-              "COMPLETED",
+              "OPEN",
+              "FINISHED",
               "ARCHIVED"
             ]
           },
@@ -26370,6 +26369,9 @@
             "type": "string",
             "minLength": 1
           },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
+          },
           "name": {
             "type": [
               "string",
@@ -26412,6 +26414,7 @@
         "required": [
           "id",
           "ownerUserId",
+          "kind",
           "name",
           "status",
           "zoneIds",
@@ -26483,6 +26486,9 @@
             "type": "string",
             "minLength": 1
           },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
+          },
           "name": {
             "type": [
               "string",
@@ -26519,6 +26525,7 @@
         "required": [
           "id",
           "ownerUserId",
+          "kind",
           "name",
           "status",
           "zoneIds",
@@ -27233,19 +27240,24 @@
             "additionalProperties": false,
             "required": [
               "total",
-              "draft",
-              "completed"
+              "open",
+              "finished",
+              "live"
             ],
             "properties": {
               "total": {
                 "type": "integer",
                 "minimum": 0
               },
-              "draft": {
+              "open": {
                 "type": "integer",
                 "minimum": 0
               },
-              "completed": {
+              "finished": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "live": {
                 "type": "integer",
                 "minimum": 0
               }
@@ -30124,6 +30136,13 @@
           "EMAIL"
         ]
       },
+      "enums.BasketKind": {
+        "type": "string",
+        "enum": [
+          "LIVE",
+          "GENERATED"
+        ]
+      },
       "enums.BulkOperationErrorCode": {
         "type": "string",
         "enum": [
@@ -30163,9 +30182,8 @@
       "enums.GeneratedListStatus": {
         "type": "string",
         "enum": [
-          "DRAFT",
-          "ACTIVE",
-          "COMPLETED",
+          "OPEN",
+          "FINISHED",
           "ARCHIVED"
         ]
       },
@@ -30315,7 +30333,6 @@
       "enums.OriginUnavailableReason": {
         "type": "string",
         "enum": [
-          "CLAIMED",
           "REJECTED",
           "NOT_APPROVED",
           "SETTLED"
@@ -30579,6 +30596,9 @@
             "type": "string",
             "minLength": 1
           },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
+          },
           "name": {
             "type": [
               "string",
@@ -30610,8 +30630,11 @@
           "seesZoneData": {
             "type": "boolean"
           },
-          "sourceSnapshot": {
-            "$ref": "#/components/schemas/generated-list.GeneratedListSourceSnapshot"
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list.BasketSourceView"
+            }
           },
           "sourceNames": {
             "type": "array",
@@ -30634,6 +30657,7 @@
         },
         "required": [
           "id",
+          "kind",
           "name",
           "status",
           "generatedAt",
@@ -31249,6 +31273,26 @@
         ],
         "additionalProperties": false
       },
+      "generated-list.BasketSourceView": {
+        "type": "object",
+        "properties": {
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "zoneId",
+          "listId"
+        ],
+        "additionalProperties": false
+      },
       "generated-list.GeneratedListLineOriginView": {
         "type": "object",
         "properties": {
@@ -31402,96 +31446,10 @@
         "properties": {
           "list": {
             "$ref": "#/components/schemas/generated-list.GeneratedListView"
-          },
-          "skipped": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/generated-list.GeneratedListSkippedLineView"
-            }
           }
         },
         "required": [
-          "list",
-          "skipped"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list.GeneratedListSkippedLineView": {
-        "type": "object",
-        "properties": {
-          "zoneId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "listId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "lineId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "content": {
-            "type": "string"
-          },
-          "carriedByGeneratedListId": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": [
-          "zoneId",
-          "listId",
-          "lineId",
-          "content",
-          "carriedByGeneratedListId"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list.GeneratedListSourceSnapshot": {
-        "type": "object",
-        "properties": {
-          "profileId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pricingProfileId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "sources": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/generated-list.GeneratedListSourceSnapshotEntry"
-            }
-          }
-        },
-        "required": [
-          "profileId",
-          "pricingProfileId",
-          "sources"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list.GeneratedListSourceSnapshotEntry": {
-        "type": "object",
-        "properties": {
-          "zoneId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "listId": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": [
-          "zoneId",
-          "listId"
+          "list"
         ],
         "additionalProperties": false
       },
@@ -31501,6 +31459,9 @@
           "id": {
             "type": "string",
             "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
           },
           "name": {
             "type": [
@@ -31538,6 +31499,7 @@
         },
         "required": [
           "id",
+          "kind",
           "name",
           "status",
           "generatedAt",
@@ -31556,6 +31518,9 @@
             "type": "string",
             "minLength": 1
           },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
+          },
           "name": {
             "type": [
               "string",
@@ -31569,8 +31534,11 @@
             "type": "string",
             "minLength": 1
           },
-          "sourceSnapshot": {
-            "$ref": "#/components/schemas/generated-list.GeneratedListSourceSnapshot"
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/generated-list.BasketSourceView"
+            }
           },
           "lines": {
             "type": "array",
@@ -31581,10 +31549,11 @@
         },
         "required": [
           "id",
+          "kind",
           "name",
           "status",
           "generatedAt",
-          "sourceSnapshot",
+          "sources",
           "lines"
         ],
         "additionalProperties": false
@@ -31618,6 +31587,9 @@
           "id": {
             "type": "string",
             "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
           },
           "name": {
             "type": [
@@ -31662,6 +31634,7 @@
         },
         "required": [
           "id",
+          "kind",
           "name",
           "status",
           "generatedAt",

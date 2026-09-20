@@ -1,4 +1,4 @@
-import type { GeneratedListStatus } from './enums';
+import type { BasketKind, GeneratedListStatus } from './enums';
 
 /**
  * A generated shopping list: the basket somebody carries around the shop (plan 0045;
@@ -31,6 +31,8 @@ import type { GeneratedListStatus } from './enums';
  */
 export interface GeneratedListSummary {
   readonly id: string;
+  /** What this basket is (backend `0133`, section 2). */
+  readonly kind: BasketKind;
   readonly name: string | null;
   readonly status: GeneratedListStatus;
   /** When the run composed it. The history is ordered by this, newest first. */
@@ -88,23 +90,15 @@ export interface SharedGeneratedListSummary extends GeneratedListSummary {
 }
 
 /**
- * What one run left behind, and why (backend `0050` section 3).
+ * What a run produced: the basket it made.
  *
- * A line already carried by another `ACTIVE` basket is skipped rather than duplicated,
- * because putting one zone line in two live baskets is how a household ends up with two
- * of everything. It is **reported** rather than silently dropped: a basket missing the
- * milk somebody distinctly remembers putting on the list is a bug report, and this is
- * the difference between answering it and guessing.
+ * A wrapper with one field, where it used to carry the lines the run refused as well.
+ * Backend `0050` section 3 skipped a line another basket of the owner's was already
+ * carrying, and backend `0133` section 7 deleted that rule: it was true of two frozen
+ * copies of one line and false of two views of it.
  */
-export interface GeneratedListSkippedLine {
-  readonly listId: string;
-  readonly content: string;
-}
-
-/** What a run produced: the basket it made, and what it did not take. */
 export interface GeneratedListRun {
   readonly list: GeneratedListSummary;
-  readonly skipped: readonly GeneratedListSkippedLine[];
 }
 
 /**

@@ -23,7 +23,7 @@ import {
 import {
   displayNames,
   formatGeneratedDate,
-  isLiveGeneratedList,
+  isOpenBasket,
   outcomeBreakdown,
   type GeneratedListSummary,
   type SharedListRowVm,
@@ -430,12 +430,12 @@ function rowOf(
     // The live pair, not `ACTIVE` alone: the server composes a run as `DRAFT` and
     // never promotes it, so the Shopping now badge asked a question nothing could
     // answer yes to. Same one line and same reason as the dashboard card's, which
-    // is why both now read `isLiveGeneratedList` rather than each naming a status.
-    active: isLiveGeneratedList(list.status),
+    // is why both now read `isOpenBasket` rather than each naming a status.
+    active: isOpenBasket(list.status),
     // The one status this app can now write, and the one the sweep in luna
     // `0059` section 4 eventually writes for a trip nobody finished. Nothing
     // here tells those two apart and nothing should: the row says the trip is
     // over, which is true either way (velista `0057`, section 9).
-    finished: list.status === 'COMPLETED',
+    finished: list.status === 'FINISHED',
   };
 }

@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   LineApprovalStatus,
@@ -102,11 +103,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
         name: null,
         status,
         generatedAt,
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
+        kind: BasketKind.GENERATED,
         defaultTargetListId: null,
         idempotencyKey: null,
       })
@@ -162,7 +159,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
     lines: readonly string[],
     quantity = 1
   ): Promise<string> {
-    const id = await basket(GeneratedListStatus.COMPLETED, at);
+    const id = await basket(GeneratedListStatus.FINISHED, at);
     const basketLineId = await basketLine(id, quantity);
     for (const lineId of lines) {
       await origin(basketLineId, listId, lineId, quantity);
@@ -315,7 +312,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       await weekly(flat, bought, 6);
       await weekly(flat, waiting, 6);
 
-      const live = await basket(GeneratedListStatus.ACTIVE, daysAgo(0, -1));
+      const live = await basket(GeneratedListStatus.OPEN, daysAgo(0, -1));
       // Settled all the way through, so the claim has already ended.
       const done = await basketLine(live, 1, 1);
       await origin(done, flat, bought, 1);
@@ -327,7 +324,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
 
       await dataSource
         .getRepository(GeneratedList)
-        .update({ id: live }, { status: GeneratedListStatus.COMPLETED });
+        .update({ id: live }, { status: GeneratedListStatus.FINISHED });
 
       // The basket settle just now is a new purchase, which starts the period
       // again, so the bought line is no longer due by period. The other still is.
@@ -338,7 +335,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       const flat = await list('Flat');
       const milk = await line(flat, 'Milk');
       await weekly(flat, milk, 6);
-      const stale = await basket(GeneratedListStatus.DRAFT, daysAgo(4));
+      const stale = await basket(GeneratedListStatus.OPEN, daysAgo(4));
       await origin(await basketLine(stale), flat, milk, 1);
 
       expect((await read(flat)).map((row) => row.lineId)).toEqual([milk]);
@@ -428,7 +425,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       const flat = await list('Flat');
       const milk = await line(flat, 'Milk');
       await weekly(flat, milk, 6);
-      const id = await basket(GeneratedListStatus.COMPLETED, daysAgo(13));
+      const id = await basket(GeneratedListStatus.FINISHED, daysAgo(13));
       await origin(await basketLine(id, 2), flat, milk, 2);
       await origin(await basketLine(id, 1), flat, milk, 1);
 

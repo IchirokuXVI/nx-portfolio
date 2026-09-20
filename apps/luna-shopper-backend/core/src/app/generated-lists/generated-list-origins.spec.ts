@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedListStatus,
   LineApprovalStatus,
   ListPermission,
@@ -23,7 +24,6 @@ import { GeneratedListOriginsService } from './generated-list-origins.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
 import type { GeneratedListService } from './generated-list.service';
 import {
-  LIVE_OVERLAP_SQL,
   SHEET_CANDIDATE_LINES_SQL,
   WRITABLE_LISTS_SQL,
 } from './generated-list.sql';
@@ -55,8 +55,6 @@ const OWNER = 'u-owner';
 const CO_SHOPPER = 'u-marc';
 const OWNER_PARTICIPANT = 'p-owner';
 const BASKET = 'gl-1';
-/** Another live basket of the owner's, which is what a claim refuses. */
-const OTHER_BASKET = 'gl-other';
 const BASKET_LINE = 'gll-1';
 
 const LIST_A = 'l-flat';
@@ -163,10 +161,6 @@ function build(
      * copy that does not.
      */
     approvedUnderLock?: string;
-    /** Lines another live basket of the owner's is carrying (plan 0050, section 3). */
-    carried?: string[];
-    /** The same, naming the basket, so a seed can say "this one carries it". */
-    carriedBy?: Record<string, string>;
     /**
      * The zone line a promotion into this list lands on, when the list already
      * holds the name (plan 0091, section 4). Absent means the add creates one.
@@ -174,7 +168,12 @@ function build(
     promoteLandsOn?: Record<string, string>;
     /** The approval a created line starts with (plan 0058, section 4.3). */
     promoteApproval?: LineApprovalStatus;
-    /** The run's own source lists, which every row reports as `fromRun`. */
+    /**
+     * The lists this basket covers, which every row reports as `fromRun`.
+     *
+     * Coverage since plan 0133 section 4.4, where it was the stored snapshot:
+     * `fromRun` now means "this basket draws from that list today".
+     */
     runLists?: string[];
     actorUserId?: string;
     actorKind?: ParticipantKind;
@@ -223,15 +222,6 @@ function build(
     [CO_SHOPPER]: [LIST_A, LIST_B, LIST_C],
   };
   const zoneOfList = ZONE_OF;
-  // Which live basket carries each line. The sugar names another basket, which
-  // is the ordinary case; a seed may name this one, which must not refuse
-  // anything (plan 0092, section 3.2).
-  const carriedBy = new Map<string, string>([
-    ...(options.carried ?? []).map(
-      (lineId) => [lineId, OTHER_BASKET] as [string, string]
-    ),
-    ...Object.entries(options.carriedBy ?? {}),
-  ]);
   const events: Harness['events'] = [];
   const tripsChanged: Harness['tripsChanged'] = [];
   const promotions: PromotionCall[] = [];
@@ -264,20 +254,6 @@ function build(
           itemSetHash: row.itemSetHash,
           approvalStatus: row.approvalStatus,
         }));
-    }
-    if (sql === LIVE_OVERLAP_SQL) {
-      const lineIds = parameters[1] as string[];
-      // The query excludes the asking basket on its fourth parameter (plan
-      // 0092, section 3.2), and the fake honours it rather than ignoring it, so
-      // a line this basket itself carries answers nothing.
-      const excluded = parameters[3] as string | null;
-      return lineIds
-        .filter((lineId) => carriedBy.has(lineId))
-        .map((lineId) => ({
-          lineId,
-          generatedListId: carriedBy.get(lineId) as string,
-        }))
-        .filter((row) => row.generatedListId !== excluded);
     }
     throw new Error('unmocked raw query');
   };
@@ -537,15 +513,9 @@ function build(
       findOne: async () => ({
         id: BASKET,
         ownerUserId: OWNER,
-        status: GeneratedListStatus.ACTIVE,
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: (options.runLists ?? [LIST_A]).map((listId) => ({
-            zoneId: zoneOfList[listId],
-            listId,
-          })),
-        },
+        kind: BasketKind.GENERATED,
+        status: GeneratedListStatus.OPEN,
+        pricingProfileId: null,
       }),
       query,
     } as never,
@@ -592,7 +562,14 @@ function build(
     // list of events every other assertion here reads.
     new WaitingSettlementService(claims.service, publisher),
     publisher,
-    listAccess
+    listAccess,
+    {
+      listsOf: async () =>
+        (options.runLists ?? [LIST_A]).map((listId) => ({
+          listId,
+          zoneId: zoneOfList[listId],
+        })),
+    } as never
   );
 
   return {
@@ -712,13 +689,26 @@ describe('reading what a basket line is made of (section 3)', () => {
 
   it('serves a candidate it cannot offer rather than hiding it', async () => {
     // The one place this codebase deliberately serves something the caller
-    // cannot act on: "somebody else is already buying it" is worth knowing while
-    // standing in a dairy aisle.
-    const result = await read(build({ carried: [LINE_B] }));
+    // cannot act on. One reason is left to serve after plan 0133 section 7, and
+    // the property is about serving rather than about which reason it is.
+    const harness = build({
+      zoneLines: [
+        { id: LINE_A, listId: LIST_A, quantity: 5, itemSetHash: MILK },
+        {
+          id: LINE_B,
+          listId: LIST_B,
+          quantity: 1,
+          itemSetHash: MILK,
+          approvalStatus: LineApprovalStatus.REJECTED,
+        },
+      ],
+    });
+
+    const result = await read(harness);
 
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0].unavailable).toBe(
-      OriginUnavailableReason.CLAIMED
+      OriginUnavailableReason.REJECTED
     );
   });
 
@@ -771,17 +761,12 @@ describe('reading what a basket line is made of (section 3)', () => {
     );
   });
 
-  it('ignores a line this basket carries itself, and refuses one another does', async () => {
-    // Plan 0092 section 3.2's other half. The query tested `ACTIVE`, which is
-    // never written, so it never fired; asking it against the live set makes it
-    // fire, and this basket's own lines would be the first thing it refused.
-    const mine = build({ carriedBy: { [LINE_B]: BASKET } });
-    const theirs = build({ carriedBy: { [LINE_B]: OTHER_BASKET } });
-
-    expect((await read(mine)).candidates[0].unavailable).toBeUndefined();
-    expect((await read(theirs)).candidates[0].unavailable).toBe(
-      OriginUnavailableReason.CLAIMED
-    );
+  it('offers a line another basket of the owner\u2019s carries (plan 0133)', async () => {
+    // Plan 0050 section 3 refused it, plan 0092 section 3.2 made the refusal
+    // actually fire, and plan 0133 section 7 deleted it: the rule was true of
+    // two frozen copies of one line and false of two views of it. Nothing here
+    // asks which basket holds a line any more.
+    expect((await read(build())).candidates[0].unavailable).toBeUndefined();
   });
 
   it('narrows the scope to the lists the owner and the actor can both write', async () => {
@@ -1205,17 +1190,19 @@ describe('adopting a list that was not in the run (section 5)', () => {
     expect(harness.settlements).toEqual([]);
   });
 
-  it('refuses a line another live basket already carries', async () => {
-    // The sheet marks it and the write refuses it: a projection is not the
-    // authority, and a client holding a stale sheet meets the same rule.
-    const harness = build({ carried: [LINE_B] });
+  it('adopts a line another basket of the owner\u2019s carries (plan 0133)', async () => {
+    // The sheet offers it and the write takes it, which is one rule read twice
+    // rather than a projection disagreeing with the authority it stands for.
+    const harness = build();
 
-    expect(
-      await codeOf(
-        set(harness, { listId: LIST_B, lineId: LINE_B, quantity: 1, from: 0 })
-      )
-    ).toBe('validation_failed');
-    expect(harness.origins).toHaveLength(1);
+    await set(harness, {
+      listId: LIST_B,
+      lineId: LINE_B,
+      quantity: 1,
+      from: 0,
+    });
+
+    expect(harness.origins).toHaveLength(2);
   });
 
   it('refuses a rejected line and takes a pending one', async () => {

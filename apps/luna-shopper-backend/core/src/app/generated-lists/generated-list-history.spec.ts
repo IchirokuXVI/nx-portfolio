@@ -42,7 +42,7 @@ function build(options: {
   const rows = baskets.map((basket, index) => ({
     id: basket.id,
     name: null,
-    status: basket.status ?? GeneratedListStatus.ACTIVE,
+    status: basket.status ?? GeneratedListStatus.OPEN,
     generatedAt: new Date(2026, 0, index + 1),
   }));
 
@@ -82,7 +82,8 @@ function build(options: {
     fakeLineClaims({}).service,
     { emitToUsers: () => undefined } as unknown as CoreEventsPublisher,
     {} as never,
-    {} as never
+    {} as never,
+    { find: async () => [] } as never
   );
 
   return { service, queries };

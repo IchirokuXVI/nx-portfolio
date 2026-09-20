@@ -1,4 +1,7 @@
-import type { GeneratedListStatus } from '../enums/generated-list.enums';
+import type {
+  BasketKind,
+  GeneratedListStatus,
+} from '../enums/generated-list.enums';
 import type { LineApprovalStatus } from '../enums/list.enums';
 import type {
   MembershipStatus,
@@ -571,6 +574,8 @@ export interface AdminLineDeleteResult {
 export interface AdminBasketView {
   id: string;
   ownerUserId: string;
+  /** What this basket is (plan 0133, section 2). */
+  kind: BasketKind;
   /** Null is not missing: an unnamed basket displays as its generation date. */
   name: string | null;
   status: GeneratedListStatus;

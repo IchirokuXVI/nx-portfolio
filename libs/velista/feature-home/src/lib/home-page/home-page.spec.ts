@@ -581,15 +581,16 @@ describe('HomePage', () => {
       overrides: Partial<GeneratedListSummary> = {}
     ): GeneratedListSummary => ({
       id: 'gl1',
+      kind: 'GENERATED',
       name: 'Saturday big shop',
-      status: 'ACTIVE',
+      status: 'OPEN',
       generatedAt: new Date('2026-08-21T10:00:00.000Z'),
       lineCount: 12,
       settledLineCount: 4,
       ...overrides,
     });
 
-    it('appears for an active basket, and names it', async () => {
+    it('appears for an open basket, and names it', async () => {
       const fixture = await render({
         generated: fakeGeneratedListStore([basket()]),
       });
@@ -599,21 +600,22 @@ describe('HomePage', () => {
     });
 
     /**
-     * **The case the whole feature exists for, and the one it did not handle.**
+     * **The case the whole feature exists for, read from the other side.**
      *
-     * Core composes a run as `DRAFT` and never promotes it, so a draft is not an edge
-     * case here: it is every basket velista has ever generated. The card filtered on
-     * `ACTIVE` alone and therefore drew for nobody, while a suite full of `ACTIVE`
-     * fixtures stayed green over it. This is that suite disagreeing with the server,
-     * written down so it cannot happen quietly a second time.
+     * The card filtered on `ACTIVE`, which core never wrote: it composed every run as
+     * `DRAFT` and never promoted one, so the card drew for nobody while a suite full
+     * of `ACTIVE` fixtures stayed green over it. Backend `0133` deleted the second
+     * spelling, so there is one value to agree on, and what is left to state is the
+     * direction this app falls when it cannot read the word at all: a status it has
+     * never heard of costs a card, where the other way round would offer somebody a
+     * way back into a trip the server considers over.
      */
-    it('appears for a draft, which is what the server actually composes', async () => {
+    it('stays away for a status it cannot read, which is the safe direction', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket({ status: 'DRAFT' })]),
+        generated: fakeGeneratedListStore([basket({ status: 'UNKNOWN' })]),
       });
 
-      expect(query(fixture, 'lib-shopping-list-card')).not.toBeNull();
-      expect(text(fixture)).toContain('Saturday big shop');
+      expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
     });
 
     /**
@@ -657,7 +659,7 @@ describe('HomePage', () => {
     // history page and not on the dashboard.
     it('stays away for a basket that is no longer active', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket({ status: 'COMPLETED' })]),
+        generated: fakeGeneratedListStore([basket({ status: 'FINISHED' })]),
       });
 
       expect(query(fixture, 'lib-shopping-list-card')).toBeNull();

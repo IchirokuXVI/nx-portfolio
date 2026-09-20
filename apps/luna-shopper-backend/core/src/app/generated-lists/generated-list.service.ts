@@ -1,23 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  BasketKind,
   GENERATED_LIST_LIMITS,
   GENERATED_LIST_SHARING_LIMITS,
   GeneratedLineOrigin,
   GeneratedListStatus,
-  isLiveGeneratedList,
-  LIVE_GENERATED_LIST_STATUSES,
+  isOpenBasket,
   RealtimeEvent,
   SettlementOutcome,
+  type BasketSourceView,
   type CreateGeneratedListRequest,
   type GeneratedListBasketLineView,
   type GeneratedListIdRequest,
   type GeneratedListLineView,
   type GeneratedListPage,
   type GeneratedListRunResult,
-  type GeneratedListSkippedLineView,
   type GeneratedListSourceInput,
-  type GeneratedListSourceSnapshot,
   type GeneratedListView,
   type ListGeneratedListsRequest,
   type ListSharedGeneratedListsRequest,
@@ -26,11 +25,13 @@ import {
   type UpdateGeneratedListRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  ConflictException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, In, IsNull, QueryFailedError, Repository } from 'typeorm';
 import {
+  BasketSource,
   GeneratedList,
   GeneratedListLine,
   GeneratedListLineOption,
@@ -54,6 +55,7 @@ import { GeneratedListOrderService } from './generated-list-order.service';
 import {
   NO_GENERATED_LINE_COUNTS,
   toBasketLineView,
+  toBasketSourceView,
   toGeneratedLineView,
   toGeneratedListSummaryView,
   toGeneratedListView,
@@ -63,11 +65,9 @@ import {
   CANDIDATE_LINE_ITEMS_SQL,
   CANDIDATE_LINES_SQL,
   GENERATED_LIST_COUNTS_SQL,
-  LIVE_OVERLAP_SQL,
   WRITABLE_LISTS_SQL,
   type CandidateLineRow,
   type GeneratedListCountsRow,
-  type LiveOverlapRow,
   type WritableListRow,
 } from './generated-list.sql';
 import { LineClaimService } from './line-claim.service';
@@ -154,7 +154,12 @@ export class GeneratedListService {
     // The people a basket is shared with on purpose (plan 0114): checked and
     // written by the run, read back by the shared listing, and told of a
     // deletion.
-    private readonly members: GeneratedListMembersService
+    private readonly members: GeneratedListMembersService,
+    // What the run was asked to draw from (plan 0133, section 4), read back on
+    // every view of a basket. Last in the list on purpose, so that adding it
+    // shifts no existing positional argument in the specs.
+    @InjectRepository(BasketSource)
+    private readonly sources: Repository<BasketSource>
   ) {}
 
   /**
@@ -187,7 +192,7 @@ export class GeneratedListService {
         where: { ownerUserId: req.userId, idempotencyKey: req.idempotencyKey },
       });
       if (existing) {
-        return { list: await this.viewFor(existing), skipped: [] };
+        return { list: await this.viewFor(existing) };
       }
     }
 
@@ -209,14 +214,9 @@ export class GeneratedListService {
     const zoneOf = new Map(
       resolved.sources.map((source) => [source.listId, source.zoneId])
     );
-    const { kept, skipped } = await this.dropOverlaps(
-      req.userId,
-      candidates,
-      zoneOf
-    );
-    const itemsByLine = await this.itemsOf(kept.map((line) => line.id));
+    const itemsByLine = await this.itemsOf(candidates.map((line) => line.id));
 
-    const composed = this.compose(kept, itemsByLine, zoneOf);
+    const composed = this.compose(candidates, itemsByLine, zoneOf);
     if (composed.length > GENERATED_LIST_LIMITS.maxLines) {
       throw new ValidationException(
         `a generated list can hold at most ${GENERATED_LIST_LIMITS.maxLines} lines`,
@@ -224,21 +224,24 @@ export class GeneratedListService {
       );
     }
 
-    const snapshot: GeneratedListSourceSnapshot = {
-      profileId: resolved.profileId,
-      pricingProfileId: resolved.pricingProfileId,
-      sources: resolved.sources.map((source) => ({
-        zoneId: source.zoneId,
-        listId: source.listId,
-      })),
-    };
+    // What the request **named**, not the lists it resolved to (plan 0133,
+    // section 4.2), so a whole zone stays a whole zone and follows a list added
+    // to that zone next month.
+    const sources = recordedSources(resolved.named, resolved.sources);
 
     // The order the owner walks (plan 0110), decided here and written once. The
     // positions below are the index in **this** array, not the order the source
     // lists happened to be read in.
     const walked = await this.order.order(req.userId, composed);
     const invited: GeneratedListParticipant[] = [];
-    const saved = await this.write(req, snapshot, walked, members, invited);
+    const saved = await this.write(
+      req,
+      resolved.pricingProfileId,
+      sources,
+      walked,
+      members,
+      invited
+    );
     const view = await this.viewFor(saved);
     this.events.emitToUsers(
       RealtimeEvent.GeneratedListCreated,
@@ -267,7 +270,7 @@ export class GeneratedListService {
       this.events,
       await tripListsOfBasket(this.tripQuery, saved.id)
     );
-    return { list: view, skipped };
+    return { list: view };
   }
 
   /**
@@ -281,6 +284,14 @@ export class GeneratedListService {
    * failing the run. A list that disappears between two runs simply stops
    * contributing, exactly as section 2 says.
    *
+   * **Every branch also answers what it was asked for**, beside what that
+   * resolved to (plan 0133, section 4.2). The resolved lists compose the basket;
+   * the named sources are what `basket_sources` records, and the two differ in
+   * exactly the way that matters: a request for a whole zone resolves to that
+   * zone's lists today and is recorded as the zone. `null` is `ALL`, which names
+   * no source of its own and is recorded as one whole zone row per zone the
+   * caller can draw from.
+   *
    * **Both branches also answer a pricing profile** (plan 0078, section 3), and
    * it is a second answer rather than the same one because the two questions
    * differ. `profileId` says whose sources were read, so the explicit branch
@@ -293,6 +304,9 @@ export class GeneratedListService {
   private async resolveSources(req: CreateGeneratedListRequest): Promise<{
     profileId: string | null;
     pricingProfileId: string;
+    /** What was asked for, or null for `ALL`. */
+    named: GeneratedListSourceInput[] | null;
+    /** What that narrowed to, which is what the run composes from. */
     sources: WritableListRow[];
   }> {
     const writable = await this.lists.query<WritableListRow[]>(
@@ -312,6 +326,7 @@ export class GeneratedListService {
       return {
         profileId: null,
         pricingProfileId,
+        named: req.sources,
         sources: narrow(writable, req.sources),
       };
     }
@@ -330,6 +345,7 @@ export class GeneratedListService {
     return {
       profileId: profile.profileId,
       pricingProfileId: profile.profileId,
+      named: profile.sources.length === 0 ? null : profile.sources,
       sources,
     };
   }
@@ -383,61 +399,6 @@ export class GeneratedListService {
         { messageArgs: { field: 'sources' } }
       );
     }
-  }
-
-  /**
-   * Drop the candidates a live basket of this user is already carrying, and say
-   * which ones and where they went (plan 0050, section 3).
-   */
-  private async dropOverlaps(
-    userId: string,
-    candidates: CandidateLineRow[],
-    zoneOf: Map<string, string>
-  ): Promise<{
-    kept: CandidateLineRow[];
-    skipped: GeneratedListSkippedLineView[];
-  }> {
-    if (candidates.length === 0) {
-      return { kept: [], skipped: [] };
-    }
-    const rows = await this.lists.query<LiveOverlapRow[]>(LIVE_OVERLAP_SQL, [
-      userId,
-      candidates.map((line) => line.id),
-      LIVE_GENERATED_LIST_STATUSES,
-      // No basket to exclude: this run is composing the one that would hold
-      // these lines, and it does not exist yet.
-      null,
-      // The same window the claim uses, so a run refuses exactly the lines the
-      // household is being told somebody is out buying.
-      this.claims.since(),
-    ]);
-    if (rows.length === 0) {
-      return { kept: candidates, skipped: [] };
-    }
-
-    const carriedBy = new Map(
-      rows.map((row) => [row.lineId, row.generatedListId])
-    );
-    const kept: CandidateLineRow[] = [];
-    const skipped: GeneratedListSkippedLineView[] = [];
-    for (const line of candidates) {
-      const carrier = carriedBy.get(line.id);
-      if (carrier) {
-        skipped.push({
-          // The report names the zone as well as the list, because "your milk is
-          // in another basket" is only actionable if the person can tell which
-          // household's milk it was.
-          zoneId: zoneOf.get(line.listId) ?? '',
-          listId: line.listId,
-          lineId: line.id,
-          content: line.content,
-          carriedByGeneratedListId: carrier,
-        });
-        continue;
-      }
-      kept.push(line);
-    }
-    return { kept, skipped };
   }
 
   /** Every candidate line's product set, in attachment order, in one query. */
@@ -541,16 +502,18 @@ export class GeneratedListService {
   }
 
   /**
-   * Write the basket, its lines, their provenance rows, their options and the
-   * people it is shared with in one transaction, so a basket never exists
-   * without the lines it was composed of, or shared with fewer people than asked.
+   * Write the basket, its sources, its lines, their provenance rows, their
+   * options and the people it is shared with in one transaction, so a basket
+   * never exists without the lines it was composed of, its sources, or shared
+   * with fewer people than asked.
    *
    * The rows written for those people are pushed onto `invited`, for the caller
    * to announce once this has committed.
    */
   private async write(
     req: CreateGeneratedListRequest,
-    sourceSnapshot: GeneratedListSourceSnapshot,
+    pricingProfileId: string,
+    sources: BasketSourceView[],
     composed: ComposedLine[],
     members: InvitedMember[],
     invited: GeneratedListParticipant[]
@@ -558,6 +521,7 @@ export class GeneratedListService {
     try {
       return await this.dataSource.transaction(async (manager) => {
         const listRepo = manager.getRepository(GeneratedList);
+        const sourceRepo = manager.getRepository(BasketSource);
         const lineRepo = manager.getRepository(GeneratedListLine);
         const originRepo = manager.getRepository(GeneratedListLineOrigin);
         const optionRepo = manager.getRepository(GeneratedListLineOption);
@@ -565,14 +529,30 @@ export class GeneratedListService {
         const list = await listRepo.save(
           listRepo.create({
             ownerUserId: req.userId,
+            // A run composes a trip, always. The permanent basket is not made
+            // by anything here (plan 0133, section 2; plan 0136).
+            kind: BasketKind.GENERATED,
             name: checkName(req.name),
-            status: GeneratedListStatus.DRAFT,
+            status: GeneratedListStatus.OPEN,
             generatedAt: new Date(),
-            sourceSnapshot,
+            pricingProfileId,
             defaultTargetListId: req.defaultTargetListId ?? null,
             idempotencyKey: req.idempotencyKey ?? null,
           })
         );
+
+        // Before the lines, so that a basket never has a line whose source is
+        // not yet recorded, and inside this transaction so a run that fails
+        // leaves neither.
+        if (sources.length > 0) {
+          await sourceRepo.insert(
+            sources.map((source) => ({
+              basketId: list.id,
+              zoneId: source.zoneId,
+              listId: source.listId,
+            }))
+          );
+        }
 
         for (const [index, entry] of composed.entries()) {
           const line = await lineRepo.save(
@@ -647,12 +627,17 @@ export class GeneratedListService {
    *
    * `ARCHIVED` is hidden unless asked for, which is what archiving is: hiding a
    * basket from the default listing without deleting it.
+   *
+   * **Trips only** (plan 0133, section 6). The history lists the baskets somebody
+   * made, and the permanent basket was made by nobody: it has no name, no date
+   * worth showing and no end, and plan 0136 gives it its own door.
    */
   async listMine(req: ListGeneratedListsRequest): Promise<GeneratedListPage> {
     const limit = clampPageSize(req.limit);
     const qb = this.lists
       .createQueryBuilder('gl')
       .where('gl."ownerUserId" = :userId', { userId: req.userId })
+      .andWhere('gl.kind = :generated', { generated: BasketKind.GENERATED })
       .orderBy('gl."generatedAt"', 'DESC')
       .addOrderBy('gl.id', 'DESC')
       .take(limit + 1);
@@ -790,10 +775,34 @@ export class GeneratedListService {
 
   // --- Writing the basket's own fields ---------------------------------------
 
-  /** Rename a basket, move it between statuses, or change its default target. */
+  /**
+   * Rename a basket, move it between statuses, or change its default target.
+   *
+   * The permanent basket takes neither of the first two (plan 0133, section 2):
+   * it has no name and it never ends. Both are refused here, naming the field, so
+   * the caller is told which write was wrong rather than meeting
+   * `ck_generated_lists_live_shape` as a database error.
+   */
   async update(req: UpdateGeneratedListRequest): Promise<GeneratedListView> {
     const list = await this.load(req.userId, req.generatedListId);
-    const wasLive = isLiveGeneratedList(list.status);
+    const live = list.kind === BasketKind.LIVE;
+    if (live && req.name !== undefined) {
+      throw new ValidationException(
+        'The basket that is always there has no name',
+        {
+          messageArgs: { field: 'name' },
+        }
+      );
+    }
+    if (live && req.status !== undefined) {
+      throw new ValidationException(
+        'The basket that is always there cannot be finished',
+        { messageArgs: { field: 'status' } }
+      );
+    }
+    // Open **and** a trip, in both directions (plan 0133, section 6), so the
+    // permanent basket never announces a claim and never releases one.
+    const wasLive = isTripInProgress(list);
     const before = { name: list.name, status: list.status };
     if (req.name !== undefined) {
       list.name = checkName(req.name);
@@ -819,7 +828,7 @@ export class GeneratedListService {
     // `DRAFT` claims its lines again and the read would say so on the next cold
     // load; an event that only ever released would leave a live socket showing
     // less than a refresh.
-    const isLive = isLiveGeneratedList(saved.status);
+    const isLive = isTripInProgress(saved);
     if (wasLive && !isLive) {
       await this.claims.announceReleased(await this.claims.refsOf(saved.id));
     } else if (!wasLive && isLive) {
@@ -852,11 +861,18 @@ export class GeneratedListService {
    */
   async delete(req: GeneratedListIdRequest): Promise<{ id: string }> {
     const list = await this.load(req.userId, req.generatedListId);
+    if (list.kind === BasketKind.LIVE) {
+      // One per person, and it is the door onto their lists (plan 0136), so
+      // deleting it would take a screen away rather than a trip.
+      throw new ConflictException(
+        'The basket that is always there cannot be deleted'
+      );
+    }
     // **Before** the delete, because the provenance rows go with it and there
     // would be nothing left to ask afterwards (plan 0052, section 3.2). The
     // announcement is still made after the write, so a client is never told a
     // line is free while the basket holding it is still there.
-    const refs = isLiveGeneratedList(list.status)
+    const refs = isOpenBasket(list.status)
       ? await this.claims.refsOf(list.id)
       : [];
     // Before the delete too, for the same reason: the participant rows go with
@@ -919,7 +935,30 @@ export class GeneratedListService {
 
   /** A basket and its lines, with every child read in one query each. */
   async viewFor(list: GeneratedList): Promise<GeneratedListView> {
-    return toGeneratedListView(list, await this.lineViewsFor(list.id));
+    return toGeneratedListView(
+      list,
+      await this.lineViewsFor(list.id),
+      await this.sourcesOf(list.id)
+    );
+  }
+
+  /**
+   * What this basket was asked to draw from, in the order it was written
+   * (plan 0133, section 4).
+   *
+   * Public, because `GeneratedListBasketService` answers the same field on the
+   * shared basket view and a second read of the same rows would be a second
+   * chance to order them differently.
+   *
+   * A `LIVE` basket has no rows, and the empty array is the right answer for it:
+   * its coverage is a rule rather than a list of sources.
+   */
+  async sourcesOf(generatedListId: string): Promise<BasketSourceView[]> {
+    const rows = await this.sources.find({
+      where: { basketId: generatedListId },
+      order: { createdAt: 'ASC', id: 'ASC' },
+    });
+    return rows.map(toBasketSourceView);
   }
 
   /** Every line of a basket, with its origins and options attached. */
@@ -1181,6 +1220,74 @@ function narrow(
       wholeZones.has(row.zoneId) ||
       namedLists.has(`${row.zoneId}:${row.listId}`)
   );
+}
+
+/**
+ * Whether this basket is a trip somebody is still shopping (plan 0133, section
+ * 6), which is the only kind of basket that claims a household's lines.
+ *
+ * Open **and** a trip. `isOpenBasket` alone would say yes to the permanent
+ * basket, which is always open and claims nothing, and the claim announcements
+ * either side of a status change would then fire for a basket that never
+ * changes status. It is the TypeScript half of `OPEN_GENERATED_BASKET`.
+ */
+function isTripInProgress(
+  basket: Pick<GeneratedList, 'kind' | 'status'>
+): boolean {
+  return basket.kind === BasketKind.GENERATED && isOpenBasket(basket.status);
+}
+
+/**
+ * The source rows a run records, from what it was **named** and what that
+ * narrowed to (plan 0133, section 4.2).
+ *
+ * `named` is null for `ALL`, which names no source of its own: it is recorded as
+ * one whole zone row per zone the caller can draw from now, so the basket is a
+ * chosen set of zones rather than a standing "everything". The basket that
+ * follows everything is the `LIVE` one.
+ *
+ * Two rules the table cannot hold are held here:
+ *
+ * - **A source that narrows to nothing writes no row.** Plan 0050 section 2's
+ *   rule kept: a source is only ever a narrowing, and one that names nothing is
+ *   silently nothing.
+ * - **A whole zone row wins over a list row of that same zone.** Both would
+ *   describe the same coverage, and the pair would make `listsOf` ask two
+ *   questions where one answers.
+ */
+function recordedSources(
+  named: GeneratedListSourceInput[] | null,
+  resolved: readonly WritableListRow[]
+): BasketSourceView[] {
+  const zones = new Set(resolved.map((row) => row.zoneId));
+  if (named === null) {
+    return [...zones].map((zoneId) => ({ zoneId, listId: null }));
+  }
+
+  const wholeZones = new Set(
+    named
+      .filter((source) => !source.listId && zones.has(source.zoneId))
+      .map((source) => source.zoneId)
+  );
+  const rows: BasketSourceView[] = [...wholeZones].map((zoneId) => ({
+    zoneId,
+    listId: null,
+  }));
+
+  const lists = new Set(resolved.map((row) => `${row.zoneId}:${row.listId}`));
+  const written = new Set<string>();
+  for (const source of named) {
+    if (!source.listId || wholeZones.has(source.zoneId)) {
+      continue;
+    }
+    const key = `${source.zoneId}:${source.listId}`;
+    if (!lists.has(key) || written.has(key)) {
+      continue;
+    }
+    written.add(key);
+    rows.push({ zoneId: source.zoneId, listId: source.listId });
+  }
+  return rows;
 }
 
 /** Trimmed, capped, and an empty name is no name rather than an empty one. */

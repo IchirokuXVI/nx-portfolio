@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import {
-  LIVE_GENERATED_LIST_STATUSES,
   TripKind,
   type ListTripRowsRequest,
   type ListTripsRequest,
@@ -106,12 +105,7 @@ export class TripsService {
         ? cursor
         : null;
 
-    const window = [
-      req.listId,
-      LOOSE_TRIP_GAP_MS,
-      [...LIVE_GENERATED_LIST_STATUSES],
-      this.claims.since(),
-    ];
+    const window = [req.listId, LOOSE_TRIP_GAP_MS, this.claims.since()];
 
     // One after the other rather than together: each query draws a connection
     // from the pool, and a request holding two at once is how the pool runs dry.

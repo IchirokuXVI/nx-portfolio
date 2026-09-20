@@ -203,7 +203,7 @@ export async function ensurePostalCode(
 export interface GeneratedListSummary {
   id: string;
   name: string | null;
-  status: 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+  status: 'OPEN' | 'FINISHED' | 'ARCHIVED';
 }
 
 /** `GET /v1/generated-lists`: the user's own baskets, live and finished. */
@@ -215,16 +215,18 @@ export async function listBaskets(s: Session): Promise<GeneratedListSummary[]> {
 }
 
 /**
- * `PATCH /v1/generated-lists/:id` to COMPLETED on every live basket. A live
- * basket claims the zone lines it carries, and a run refuses a line another
- * basket still holds, so a spec that generates a basket from the seeded lists
- * needs every earlier one out of the way first.
+ * `PATCH /v1/generated-lists/:id` to FINISHED on every open basket.
+ *
+ * An open basket claims the zone lines it carries, so a spec that reads a claim
+ * needs every earlier basket out of the way first. It no longer clears the way
+ * for a **run**: backend `0133` section 7 deleted the rule that refused a line
+ * another basket of the owner's was holding.
  */
 export async function finishOpenBaskets(s: Session): Promise<void> {
   for (const basket of await listBaskets(s)) {
-    if (basket.status === 'DRAFT' || basket.status === 'ACTIVE') {
+    if (basket.status === 'OPEN') {
       await s.patch(`/v1/generated-lists/${basket.id}`, {
-        status: 'COMPLETED',
+        status: 'FINISHED',
       });
     }
   }

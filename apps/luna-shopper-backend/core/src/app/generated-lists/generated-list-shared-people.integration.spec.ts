@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   LineApprovalStatus,
@@ -21,7 +22,9 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource, In } from 'typeorm';
+import { BasketCoverageService } from '../baskets/basket-coverage.service';
 import {
+  BasketSource,
   CORE_ENTITIES,
   GeneratedList,
   GeneratedListLine,
@@ -128,13 +131,9 @@ describeIntegration(
         repo.create({
           ownerUserId: users.owner,
           name: 'Saturday',
-          status: GeneratedListStatus.ACTIVE,
+          status: GeneratedListStatus.OPEN,
           generatedAt: new Date(),
-          sourceSnapshot: {
-            profileId: null,
-            pricingProfileId: null,
-            sources: [],
-          },
+          kind: BasketKind.GENERATED,
           defaultTargetListId: null,
           idempotencyKey: null,
           ...overrides,
@@ -185,7 +184,8 @@ describeIntegration(
         {
           order: async (_userId: string, composed: unknown[]) => composed,
         } as never,
-        members
+        members,
+        dataSource.getRepository(BasketSource)
       );
       baskets = new GeneratedListBasketService(
         dataSource.getRepository(GeneratedList),
@@ -196,7 +196,10 @@ describeIntegration(
         sharing,
         // The owner's default target, which no read reaches.
         undefined as never,
-        events as never
+        events as never,
+        // The real service: coverage is raw SQL over four tables, and this file
+        // has the database to answer it (plan 0133, section 5).
+        new BasketCoverageService(dataSource.getRepository(GeneratedList))
       );
 
       const zones = dataSource.getRepository(Zone);
@@ -634,7 +637,7 @@ describeIntegration(
 
         const finished = await newBasket({
           name: 'Finished',
-          status: GeneratedListStatus.COMPLETED,
+          status: GeneratedListStatus.FINISHED,
         });
         const finishedRow = await add(finished, users.reader);
         await participants.update(
@@ -765,14 +768,7 @@ describeIntegration(
 
       it('names only the source lists the basket has an origin in', async () => {
         const basket = await newBasket({
-          sourceSnapshot: {
-            profileId: null,
-            pricingProfileId: null,
-            sources: [
-              { zoneId: ids.home, listId: ids.weekly },
-              { zoneId: ids.home, listId: ids.unused },
-            ],
-          },
+          kind: BasketKind.GENERATED,
         });
         const zoneLines = dataSource.getRepository(ListLine);
         const zoneLine = await zoneLines.save(
@@ -808,6 +804,14 @@ describeIntegration(
           quantity: 1,
           lineVersion: 1,
         });
+        // The basket's coverage, which is where the names come from since plan
+        // 0133 section 4.4: the whole zone, so the narrowing to the origins is
+        // what leaves one name rather than the source rows doing it.
+        await dataSource.getRepository(BasketSource).insert({
+          basketId: basket,
+          zoneId: ids.home,
+          listId: null,
+        });
         await sharing.ensureLink({
           userId: users.owner,
           generatedListId: basket,
@@ -827,6 +831,9 @@ describeIntegration(
         expect(read.sourceNames?.map((source) => source.listId)).toEqual([
           ids.weekly,
         ]);
+        // What the run was asked for travels beside the names, as it was named:
+        // a whole zone rather than the lists it resolved to today.
+        expect(read.sources).toEqual([{ zoneId: ids.home, listId: null }]);
       });
     });
 

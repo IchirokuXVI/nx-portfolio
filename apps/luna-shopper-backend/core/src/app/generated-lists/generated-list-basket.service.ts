@@ -4,7 +4,7 @@ import {
   GeneratedLineOrigin,
   ParticipantKind,
   RealtimeEvent,
-  isLiveGeneratedList,
+  isOpenBasket,
   type AddGeneratedListParticipantLineRequest,
   type GeneratedListBasketLineView,
   type GeneratedListBasketScope,
@@ -20,6 +20,7 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
+import { BasketCoverageService } from '../baskets/basket-coverage.service';
 import {
   GeneratedList,
   GeneratedListLine,
@@ -85,7 +86,11 @@ export class GeneratedListBasketService {
     // back belongs to the service that owns plan 0050 section 5's rule, and
     // reimplementing it here would drift from it the first time it changed.
     private readonly lineWrites: GeneratedListLineService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // Which lists this basket draws from, now (plan 0133, section 5). Last in
+    // the list on purpose, so that adding it shifts no existing positional
+    // argument in the specs.
+    private readonly coverage: BasketCoverageService
   ) {}
 
   /**
@@ -100,16 +105,18 @@ export class GeneratedListBasketService {
   ): Promise<GeneratedListBasketView> {
     const { list, seesZoneData } = await this.resolve(req);
 
-    const [lines, people, sourceNames] = await Promise.all([
+    const [lines, people, sourceNames, sources] = await Promise.all([
       this.generated.basketLineViewsFor(list.id, seesZoneData),
       this.sharing.listParticipants({
         generatedListId: list.id,
         asParticipantId: req.participantId,
       }),
-      // Only asked for when it may be answered. A reader who does not pass the
-      // rule costs no query here rather than costing one and having the result
-      // thrown away, which is the difference between a rule and a filter.
+      // Only asked for when they may be answered. A reader who does not pass
+      // the rule costs no query here rather than costing one and having the
+      // result thrown away, which is the difference between a rule and a
+      // filter. Both fields are redacted together, so both are asked together.
       seesZoneData ? this.sourceNames(list) : Promise.resolve([]),
+      seesZoneData ? this.generated.sourcesOf(list.id) : Promise.resolve([]),
     ]);
 
     const me = people.participants.find((row) => row.id === req.participantId);
@@ -124,17 +131,18 @@ export class GeneratedListBasketService {
       lines,
       { participants: people.participants, me },
       seesZoneData,
-      sourceNames
+      sourceNames,
+      sources
     );
   }
 
   /**
-   * The names behind the (zone, list) pairs the run drew from.
+   * The names behind the lists this basket draws from.
    *
    * So a row can say "from Weekly shop" rather than "from 0f3a…". Read from the
-   * snapshot, because the snapshot is what the run actually drew from and is the
-   * thing a three week old basket can still be explained by (plan 0050,
-   * section 4).
+   * basket's coverage since plan 0133, where it used to be read from the stored
+   * snapshot: what the basket draws from is a rule evaluated now, so a list the
+   * owner has since lost `WRITE` on is no longer named.
    *
    * **Narrowed to the lists the basket's origins point at** (plan 0114, section
    * 11). `seesZoneData` is decided from those origins, not from the snapshot, and
@@ -150,11 +158,10 @@ export class GeneratedListBasketService {
     list: GeneratedList
   ): Promise<GeneratedListSourceName[]> {
     const origins = new Set(await this.sharing.sourceListIds(list.id));
+    const covered = await this.coverage.listsOf(list);
     const named = await namesOfLists(
       this.shoppingLists,
-      list.sourceSnapshot.sources
-        .map((source) => source.listId)
-        .filter((listId) => origins.has(listId))
+      covered.map((row) => row.listId).filter((listId) => origins.has(listId))
     );
     // A list that has since been deleted is absent from the map and therefore
     // from the captions, which is the intended answer: naming fewer households
@@ -198,7 +205,7 @@ export class GeneratedListBasketService {
   ): Promise<GeneratedListBasketLineView> {
     const { list, participant, seesZoneData } = await this.resolve(req);
 
-    if (!isLiveGeneratedList(list.status)) {
+    if (!isOpenBasket(list.status)) {
       // Its own code rather than a validation failure (section 3.3): a client
       // that cannot tell a state it can explain from a bug it cannot will show
       // the wrong sentence for both, and "this basket is finished" is a sentence
@@ -403,13 +410,14 @@ export class GeneratedListBasketService {
    * basket to the person looking at it" applied live.
    *
    * **The field read is `pricingProfileId`, not `profileId`** (plan 0078). The
-   * other one answers whose sources the run read, and a request that names its
-   * own sources reads none, so it is null on every run velista has ever
+   * other one answered whose sources the run read, and a request that names its
+   * own sources reads none, so it was null on every run velista had ever
    * created. Reading it here is why no basket has ever shown a price. This one
    * is the owner's profile captured when the run was composed, which is the row
    * section 5.1's table accepts, and it is null only on a run composed before
    * that plan. Such a run stays unpriced, which is the same table's "no scope
-   * at all" fallback.
+   * at all" fallback. Plan 0133 section 4.3 moved it out of the snapshot into a
+   * column of its own, and `profileId` left the wire with the snapshot.
    */
   async searchScope(
     req: GetGeneratedListBasketRequest
@@ -419,9 +427,9 @@ export class GeneratedListBasketService {
     const { list } = await this.resolve(req);
     return {
       ownerUserId: list.ownerUserId,
-      // A snapshot stored before plan 0078 has no such key, and `undefined` is
-      // not a value this message carries: read the absence as null.
-      profileId: list.sourceSnapshot.pricingProfileId ?? null,
+      // Null on a basket composed before plan 0078, which stays unpriced, and
+      // on every `LIVE` basket, whose profile plan 0136 resolves at read time.
+      profileId: list.pricingProfileId,
     };
   }
 

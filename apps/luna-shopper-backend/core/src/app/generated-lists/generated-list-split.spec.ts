@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   ParticipantKind,
@@ -96,10 +97,11 @@ function build(
   const list = {
     id: BASKET,
     ownerUserId: OWNER,
+    kind: BasketKind.GENERATED,
     name: null,
-    status: options.status ?? GeneratedListStatus.ACTIVE,
+    status: options.status ?? GeneratedListStatus.OPEN,
     generatedAt: new Date('2026-09-01T10:00:00.000Z'),
-    sourceSnapshot: { profileId: null, pricingProfileId: null, sources: [] },
+    pricingProfileId: null,
     defaultTargetListId: null,
     idempotencyKey: null,
   } as GeneratedList;

@@ -224,24 +224,42 @@ export type ParticipantKind = (typeof PARTICIPANT_KINDS)[number];
 export const PARTICIPANT_KIND_FALLBACK: ParticipantKind = 'UNKNOWN';
 
 /**
- * Where a generated shopping list has got to (backend plan 0050, section 1).
+ * What a basket is (backend plan 0133, section 2).
  *
- * `DRAFT` is composed and not yet taken to a shop, `ACTIVE` is the one being worked
- * through, `COMPLETED` is a trip that is over, and `ARCHIVED` hides a trip from the
- * default listing without deleting it.
+ * `LIVE` is the one permanent basket a person has, covering every list they can
+ * write. `GENERATED` is a trip somebody composed on purpose, with a name, sources and
+ * people. Nothing in velista draws them differently yet: the server does not create a
+ * `LIVE` one until backend plan 0136.
  *
- * What this app derives from is not one of them but a **pair**: see
- * {@link LIVE_GENERATED_LIST_STATUSES}. The other two are carried so the history can be
- * read back, and nothing branches on them.
+ * `UNKNOWN` is the fallback, following `ZONE_STATUSES`, and it is the safe direction
+ * here for the same reason: every rule this kind will drive is about a basket that
+ * never ends, and a kind this build has never heard of must not be read as one.
+ */
+export const BASKET_KINDS = ['LIVE', 'GENERATED', 'UNKNOWN'] as const;
+export type BasketKind = (typeof BASKET_KINDS)[number];
+export const BASKET_KIND_FALLBACK: BasketKind = 'UNKNOWN';
+
+/**
+ * Where a basket has got to (backend plan 0133, section 3).
+ *
+ * `OPEN` is one somebody is still going to shop, or is shopping now, `FINISHED` is a
+ * trip that is over, and `ARCHIVED` hides a trip from the default listing without
+ * deleting it.
+ *
+ * There used to be four, and two of them were one state with two spellings: a run
+ * composed a `DRAFT` and nothing on the server ever wrote `ACTIVE`, so every filter
+ * written as `status === 'ACTIVE'` matched nothing a run had ever produced. That is
+ * what kept the dashboard card off every screen in this app between plan 0045 and the
+ * pair being folded together. Backend plan 0133 made the two into one value, so
+ * asking about one status is no longer how the two disagree.
  *
  * `UNKNOWN` is the fallback for a status this build does not recognise, following
- * `ZONE_STATUSES`: an unrecognised value must not read as live, because that would put
+ * `ZONE_STATUSES`: an unrecognised value must not read as open, because that would put
  * a basket the server considers finished back on the dashboard.
  */
 export const GENERATED_LIST_STATUSES = [
-  'DRAFT',
-  'ACTIVE',
-  'COMPLETED',
+  'OPEN',
+  'FINISHED',
   'ARCHIVED',
   'UNKNOWN',
 ] as const;
@@ -249,51 +267,31 @@ export type GeneratedListStatus = (typeof GENERATED_LIST_STATUSES)[number];
 export const GENERATED_LIST_STATUS_FALLBACK: GeneratedListStatus = 'UNKNOWN';
 
 /**
- * The statuses of a basket somebody is still going to shop.
+ * Whether this basket still takes writes.
  *
- * **`DRAFT` is in it, and leaving it out is what kept the dashboard card off every
- * screen in the app since plan 0045 shipped it.** The server composes a run as `DRAFT`
- * (core's `GeneratedListService.write`) and has no path that promotes one to `ACTIVE`,
- * so a filter written as `status === 'ACTIVE'` matched nothing a run had ever produced.
- * The card was correct, tested and unreachable, and so was the history's Shopping now
- * badge, which asked the same question the same wrong way.
- *
- * It mirrors the server's `LIVE_GENERATED_LIST_STATUSES` deliberately, and mirrors the
- * reasoning with it: the question worth asking about a basket is whether somebody is
- * still going to shop it, and `DRAFT` and `ACTIVE` are both yes. Asking about one value
- * is how the two ended up disagreeing.
+ * Takes a `string` rather than a {@link GeneratedListStatus} so a caller holding a raw
+ * status off the wire can ask without a cast, which is the shape {@link basketTakesLines}
+ * already had and the reason it can delegate here.
  *
  * `UNKNOWN` is outside it, which is the safe direction: a status this build has never
  * heard of costs a card, where the other way round would offer somebody a way back into
  * a trip the server considers over.
  */
-export const LIVE_GENERATED_LIST_STATUSES = [
-  'DRAFT',
-  'ACTIVE',
-] as const satisfies readonly GeneratedListStatus[];
-
-/**
- * Whether this basket is one somebody is still going to shop.
- *
- * Takes a `string` rather than a {@link GeneratedListStatus} so a caller holding a raw
- * status off the wire can ask without a cast, which is the shape {@link basketTakesLines}
- * already had and the reason it can delegate here.
- */
-export function isLiveGeneratedList(status: string): boolean {
-  return (LIVE_GENERATED_LIST_STATUSES as readonly string[]).includes(status);
+export function isOpenBasket(status: string): boolean {
+  return status === 'OPEN';
 }
 
 /**
  * The statuses this app ever asks the server to write (velista `0057`).
  *
- * Two of the five, because there are two gestures: Finish ends the trip and Reopen
- * takes it back, and nothing in velista archives a basket or puts one back into
- * `DRAFT`. Narrower than {@link GeneratedListStatus} on purpose, and `UNKNOWN` is
- * why: it is this build's fallback for a status it does not recognise, not a value
- * the server has ever heard of, so a write signature that accepted it would let a
- * round trip turn "I could not read this" into a request the gateway refuses.
+ * Two of the four, because there are two gestures: Finish ends the trip and Reopen
+ * takes it back, and nothing in velista archives a basket. Narrower than
+ * {@link GeneratedListStatus} on purpose, and `UNKNOWN` is why: it is this build's
+ * fallback for a status it does not recognise, not a value the server has ever heard
+ * of, so a write signature that accepted it would let a round trip turn "I could not
+ * read this" into a request the gateway refuses.
  */
-export type WritableGeneratedListStatus = 'ACTIVE' | 'COMPLETED';
+export type WritableGeneratedListStatus = 'OPEN' | 'FINISHED';
 
 /**
  * Where a basket line came from (backend `0055`, section 3; velista `0056`).
@@ -316,14 +314,14 @@ export type BasketLineKind = (typeof BASKET_LINE_KINDS)[number];
  * Why a list holding the same thing cannot be taken onto a basket line (backend
  * `0057` section 4.3, as `0092` section 3.2 revised it).
  *
- * `CLAIMED` is a line another basket is already carrying, and `REJECTED` is one the
- * household said no to. Two reasons rather than one flag, because the sheet says
- * which: "somebody else is shopping this" and "that house does not want it" send a
- * person to two different places.
+ * `REJECTED` is a line the household said no to, and it is the only reason the
+ * server answers.
  *
- * **`NOT_APPROVED` and `SETTLED` are gone.** Backend `0092` made a pending line and
- * a line at zero adoptable, so neither is answered any more and neither is drawn
- * (velista `0068`, section 4.3). A build reading one off an older backend gets
+ * **`NOT_APPROVED`, `SETTLED` and `CLAIMED` are gone.** Backend `0092` made a pending
+ * line and a line at zero adoptable, and backend `0133` section 7 made a line another
+ * basket carries adoptable too: that refusal was about two frozen copies of one line
+ * and is false of two views of it. None of the three is answered any more and none is
+ * drawn (velista `0068`, section 4.3). A build reading one off an older backend gets
  * {@link BASKET_ORIGIN_UNAVAILABLE_REASONS}' catch-all instead of a caption that is
  * no longer true.
  *
@@ -336,7 +334,6 @@ export type BasketLineKind = (typeof BASKET_LINE_KINDS)[number];
  * missing one.
  */
 export const BASKET_ORIGIN_UNAVAILABLE_REASONS = [
-  'CLAIMED',
   'REJECTED',
   'UNAVAILABLE',
 ] as const;

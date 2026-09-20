@@ -88,10 +88,10 @@ interface LineCursor {
  * so an operator's edit is the edit a member with `MANAGE` makes and it emits
  * what that emits. A basket has no such service to delegate to, because the app
  * offers no basket line editor either: a `GeneratedList` is **output**, composed
- * from the lines of the lists somebody chose at the moment its `sourceSnapshot`
- * records, and a changed line contradicts both the origin that explains where it
- * came from and any settlement already written against it. So baskets stay read
- * only in full (plan 0077, section 6.4).
+ * from the lines of the lists its `basket_sources` name, and a changed line
+ * contradicts both the origin that explains where it came from and any
+ * settlement already written against it. So baskets stay read only in full (plan
+ * 0077, section 6.4).
  *
  * Creating a list line is absent for a narrower reason: `createdByUserId` is not
  * nullable and an operator is not a user, so a created line would be attributed
@@ -615,6 +615,7 @@ function toBasketRow(
   return {
     id: basket.id,
     ownerUserId: basket.ownerUserId,
+    kind: basket.kind,
     name: basket.name,
     status: basket.status,
     zoneIds,
