@@ -1,3 +1,5 @@
+> **PR:** [#424](https://github.com/IchirokuXVI/nx-portfolio/pull/424)
+
 # 0134: a purchase names its basket
 
 > Part of the series `0130` records. Needs `0133`. Plan `0135` needs this one, and `0136`
