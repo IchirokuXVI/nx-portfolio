@@ -1,5 +1,12 @@
 import { LineApprovalStatus } from '@portfolio/luna-shopper/contracts';
-import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
+import {
+  Column,
+  DeleteDateColumn,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+} from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { ShoppingList } from './shopping-list.entity';
 
@@ -27,11 +34,20 @@ import { ShoppingList } from './shopping-list.entity';
  * now, in {@link productGroupId}, and a record of how it differs from it: a
  * `source` per membership row and a tombstone per product a person took off. The
  * divergence still wins, and every edit that was possible before still is.
+ *
+ * Since plan 0132 deleting it is a **soft** delete. The row stays, marked by
+ * {@link deletedAt}, and it keeps its `line_settlements` rows; everything else it
+ * owned goes in the same transaction. A purchase outlives the line it was made
+ * on, because spend, a person's history and a basket's removed row are all drawn
+ * from purchases and none of them may shrink because somebody tidied a list.
  */
 @Entity({ name: 'list_lines' })
 // Serves both line counts, total and wanted (plan 0017, section 4.3; plan 0047,
 // section 2.3). It was `(listId, status)` when the second count was "ready".
-@Index('ix_lines_list_quantity', ['listId', 'quantity'])
+// Partial on a standing line since plan 0132: neither count reads a deleted one.
+@Index('ix_lines_list_quantity', ['listId', 'quantity'], {
+  where: '"deletedAt" IS NULL',
+})
 export class ListLine extends BaseEntity {
   @Column({ type: 'uuid' })
   listId!: string;
@@ -102,4 +118,27 @@ export class ListLine extends BaseEntity {
 
   @Column({ type: 'int', default: 1 })
   version!: number;
+
+  /**
+   * When the line was deleted, or null while it stands (plan 0132).
+   *
+   * TypeORM's own soft delete column: every repository read and every query
+   * builder made from this entity skips a row where it is set, and `softDelete`
+   * is the only call that writes it. Raw SQL does not skip anything, so every
+   * raw read of `list_lines` carries `"deletedAt" IS NULL` by hand.
+   *
+   * `repo.delete` stays a real delete on this entity, which the rename merge
+   * depends on: an absorbed line has moved everything it owned onto the survivor
+   * by the time it goes, so a tombstone per rename would be a ghost per rename.
+   */
+  @DeleteDateColumn({ type: 'timestamptz', nullable: true })
+  deletedAt!: Date | null;
+
+  /**
+   * The member who deleted it. Null while it stands, and null when an operator
+   * deleted it, because the audit trail names an operator and this names a
+   * member.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  deletedByUserId!: string | null;
 }

@@ -143,7 +143,7 @@ export class AdminListService {
       .addSelect('l."createdAt"', 'createdAt')
       .addSelect('l."updatedAt"', 'updatedAt')
       .addSelect(
-        '(SELECT COUNT(*) FROM list_lines n WHERE n."listId" = l.id)',
+        '(SELECT COUNT(*) FROM list_lines n WHERE n."listId" = l.id AND n."deletedAt" IS NULL)',
         'lineCount'
       )
       .orderBy('l."createdAt"', 'DESC')
@@ -204,7 +204,7 @@ export class AdminListService {
       .addSelect('l."createdAt"', 'createdAt')
       .addSelect('l."updatedAt"', 'updatedAt')
       .addSelect(
-        '(SELECT COUNT(*) FROM list_lines n WHERE n."listId" = l.id)',
+        '(SELECT COUNT(*) FROM list_lines n WHERE n."listId" = l.id AND n."deletedAt" IS NULL)',
         'lineCount'
       )
       .where('l.id = :id', { id: req.listId })
@@ -422,10 +422,7 @@ export class AdminListService {
    * list is not found here, so a mistyped list id cannot silently address a line
    * in somebody else's household.
    */
-  private async requireLine(
-    listId: string,
-    lineId: string
-  ): Promise<ListLine> {
+  private async requireLine(listId: string, lineId: string): Promise<ListLine> {
     const line = await this.lines.findOne({ where: { id: lineId, listId } });
     if (!line) {
       throw new NotFoundException('Line not found on this list');

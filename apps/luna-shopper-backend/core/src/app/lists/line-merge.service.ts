@@ -162,6 +162,12 @@ export class LineMergeService {
 
     // Last, once nothing the absorbed line owned still points at it. Most of
     // those tables cascade on this delete, which is why the order matters.
+    //
+    // A **real** delete, on purpose, although plan 0132 made a line soft
+    // deletable: `repo.delete` stays real on a soft deletable entity, and
+    // everything the absorbed line owned has moved onto the survivor by this
+    // point, its settlements included. There is nothing left for a row to keep,
+    // and a tombstone per merge would leave a ghost behind every rename.
     await manager.getRepository(ListLine).delete({ id: absorbed.id });
     return manager.getRepository(ListLine).save(survivor);
   }

@@ -87,7 +87,9 @@ function basketRowsCte(basketFilter: string): string {
     FULL JOIN "bought" b
       ON b."tripId" = a."tripId" AND b."lineId" = a."lineId"
     JOIN "list_lines" ll
-      ON ll.id = COALESCE(a."lineId", b."lineId") AND ll."listId" = $1::uuid
+      ON ll.id = COALESCE(a."lineId", b."lineId")
+     AND ll."listId" = $1::uuid
+     AND ll."deletedAt" IS NULL
   )`;
 }
 
@@ -124,7 +126,10 @@ const LOOSE_ROWS_CTE = `
            s."quantity" AS "quantity",
            s."settledByUserId" AS "settledByUserId"
     FROM "line_settlements" s
-    JOIN "list_lines" ll ON ll.id = s."lineId" AND ll."listId" = $1::uuid
+    JOIN "list_lines" ll
+      ON ll.id = s."lineId"
+     AND ll."listId" = $1::uuid
+     AND ll."deletedAt" IS NULL
     WHERE s."listId" = $1::uuid
       AND s."revertedAt" IS NULL
       AND NOT EXISTS (
@@ -282,7 +287,15 @@ export const ENDED_TRIPS_SQL = `
   LIMIT $7
 `;
 
-/** The keyset over the zone line's `(position, id)`, shared by both row reads. */
+/**
+ * The keyset over the zone line's `(position, id)`, shared by both row reads.
+ *
+ * The lookup carries **no** `"deletedAt"` predicate, deliberately (plan 0132).
+ * It reads the boundary row a cursor names, and a line deleted between two pages
+ * still has to give up its position, or the subquery answers nothing, the
+ * comparison is null and the page starts over from the top. The rows themselves
+ * are already filtered where they are built.
+ */
 function lineKeyset(cursorParam: string): string {
   return `(
       ${cursorParam}::uuid IS NULL

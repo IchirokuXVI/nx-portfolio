@@ -170,6 +170,31 @@ export function fakeAudit(
             after: null,
           });
         },
+        softDelete: async (
+          target: EntityTarget<ObjectLiteral>,
+          row: ObjectLiteral
+        ) => {
+          // Routed to the fake repository's own `softDelete` when it has one,
+          // and to `update` otherwise, so a spec asserts on whichever of the two
+          // it already built. Recorded as a DELETE, exactly as the real one does.
+          const binding = bindingFor(target);
+          const criteria = { id: row['id'] } as never;
+          if (binding.repository.softDelete) {
+            await binding.repository.softDelete(criteria);
+          } else {
+            await binding.repository.update?.(criteria, {
+              deletedAt: new Date(),
+            } as never);
+          }
+          recorded.push({
+            actorId,
+            action: 'DELETE',
+            entity: binding.name,
+            entityId: row['id'],
+            before: snapshot(row),
+            after: null,
+          });
+        },
         recordCreate: async (
           target: EntityTarget<ObjectLiteral>,
           row: ObjectLiteral

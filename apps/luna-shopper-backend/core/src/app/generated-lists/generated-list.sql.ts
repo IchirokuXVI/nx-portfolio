@@ -90,6 +90,7 @@ export const CANDIDATE_LINES_SQL = `
     ll."itemSetHash" AS "itemSetHash"
   FROM "list_lines" ll
   WHERE ll."listId" = ANY($1)
+    AND ll."deletedAt" IS NULL
     AND ll."approvalStatus" = 'APPROVED'
     AND ll.quantity > 0
   ORDER BY ll."listId", ll.position ASC, ll.id ASC
@@ -106,6 +107,10 @@ export const CANDIDATE_LINES_SQL = `
  * yet" is actionable in a way that its absence is not. So the two predicates
  * become `approvalStatus` and the quantity, and the service turns them into
  * `NOT_APPROVED` and `SETTLED` reasons beside the row.
+ *
+ * A deleted line is the one thing this read drops rather than explains (plan
+ * 0132). The reasons beside a row say why a run left a line the household can
+ * still see alone, and a deleted line is not on anybody's list to see.
  *
  * A separate constant rather than a parameterised one, because the two reads
  * want opposite things and a flag that flips a `WHERE` clause reads as an
@@ -125,6 +130,7 @@ export const SHEET_CANDIDATE_LINES_SQL = `
     ll."approvalStatus" AS "approvalStatus"
   FROM "list_lines" ll
   WHERE ll."listId" = ANY($1)
+    AND ll."deletedAt" IS NULL
   ORDER BY ll."listId", ll.position ASC, ll.id ASC
 `;
 

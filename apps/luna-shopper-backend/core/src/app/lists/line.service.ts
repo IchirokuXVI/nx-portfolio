@@ -52,6 +52,7 @@ import {
 } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import {
+  LineComment,
   LineSettlement,
   ListLine,
   ListLineGroupRemoval,
@@ -532,8 +533,7 @@ export class LineService {
     if (line.productGroupId !== null) {
       const refused = before
         .filter(
-          (row) =>
-            row.source === LineItemSource.GROUP && !kept.has(row.itemId)
+          (row) => row.source === LineItemSource.GROUP && !kept.has(row.itemId)
         )
         .map((row) => ({ lineId: line.id, itemId: row.itemId }));
       if (refused.length > 0) {
@@ -999,6 +999,13 @@ export class LineService {
    * made. Asking for the same thing again is a new request that they get to
    * decide again, and merging into the rejected line would instead raise a
    * quantity on a line the list will never buy.
+   *
+   * A **deleted** line is skipped too, and by TypeORM rather than by a branch
+   * here: the read below is a repository read, so plan 0132's `deletedAt` keeps
+   * it out. So adding "Milk" to a list whose Milk was deleted creates a new line,
+   * with a new id and no history. That is intended. The old purchases stay
+   * reachable by product through `GET /v1/items/:id/settlements`, and a merge
+   * into a tombstone would put a household's deleted line back on their list.
    */
   private async findMergeTarget(
     manager: EntityManager,
@@ -2375,6 +2382,11 @@ export class LineService {
    * been agreed to cannot quietly remove what was agreed to, and a list admin has
    * to be able to remove an approved line that should never have existed, which
    * includes a remainder somebody minds (plan 0037, section 4.2).
+   *
+   * Since plan 0132 it is a **soft** delete. The row stays, marked, and keeps its
+   * `line_settlements` rows; {@link removeLineContents} takes everything else
+   * away in the same transaction. Nothing a client can see changes: no read
+   * serves a deleted line, and `line.deleted` carries what it always did.
    */
   async delete(req: DeleteLineRequest): Promise<{ id: string }> {
     const line = await this.listAccess.getLine(req.lineId);
@@ -2392,9 +2404,13 @@ export class LineService {
         throw new ForbiddenException('You need write access to this list');
       }
     }
-    return this.applyLineDeletion(line, list, async (row) => {
-      await this.lines.delete({ id: row.id });
-    });
+    return this.applyLineDeletion(line, list, (row) =>
+      this.dataSource.transaction((manager) =>
+        this.removeLineContents(manager, row.id, req.userId, () =>
+          manager.getRepository(ListLine).softDelete({ id: row.id })
+        )
+      )
+    );
   }
 
   /**
@@ -2413,7 +2429,78 @@ export class LineService {
   ): Promise<{ id: string }> {
     const { line, list } = await this.loadLineOfList(listId, lineId);
     return this.applyLineDeletion(line, list, (row) =>
-      this.audit.write(actorId, (tx) => tx.delete(ListLine, row))
+      this.audit.write(actorId, (tx) =>
+        // No `deletedByUserId`: the column names a member, and the trail this
+        // write lands in is where an operator's name is kept (plan 0132).
+        this.removeLineContents(tx.manager, row.id, null, () =>
+          tx.softDelete(ListLine, row)
+        )
+      )
+    );
+  }
+
+  /**
+   * Everything a deleted line owned apart from its purchases (plan 0132,
+   * section 2).
+   *
+   * This is today's cascade with one table taken out of it. `comment_audio`
+   * follows its comment by cascade, so the three deletes here reach four tables,
+   * and `line_settlements` is the one that stays: spend, a person's history and
+   * a basket's removed row are all drawn from it.
+   *
+   * The row is left consistent with what it lost. `itemSetHash` and
+   * `productGroupId` go to null, so no index and no group sync ever treats a
+   * deleted line as holding products or following a group. `quantity`,
+   * `approvalStatus`, `position` and `version` are left exactly as they were:
+   * `version` is not bumped, because nothing reconciles against a deleted line.
+   *
+   * The row is locked first. A line deleted a moment ago answers "Line not
+   * found", which is what a second delete of it has to say.
+   *
+   * `mark` is the call that writes `deletedAt`, and it is the caller's because
+   * the two delete paths mark differently: a member's is a plain `softDelete`,
+   * an operator's is the audited one, which records what the row said. It is
+   * **the only** call in either path that writes that column.
+   *
+   * It runs **before** the update rather than after it, which is not the order
+   * section 6 of the plan lists. `ck_list_lines_deleted_by` refuses a
+   * `deletedByUserId` on a row whose `deletedAt` is still null, so a standing
+   * line cannot be given a deleter and the mark has to land first. The
+   * constraint is the stricter of the two statements, and it is the one worth
+   * keeping: it is what makes a deleter impossible to leave behind on a line
+   * that stands.
+   */
+  private async removeLineContents(
+    manager: EntityManager,
+    lineId: string,
+    deletedByUserId: string | null,
+    // Whatever the two calls answer with: one hands back an `UpdateResult` and
+    // the other nothing, and neither is read.
+    mark: () => Promise<unknown>
+  ): Promise<void> {
+    const locked = await manager.getRepository(ListLine).findOne({
+      where: { id: lineId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!locked) {
+      throw new NotFoundException('Line not found');
+    }
+
+    await manager.getRepository(LineComment).delete({ lineId });
+    await manager.getRepository(ListLineItem).delete({ lineId });
+    await manager.getRepository(ListLineGroupRemoval).delete({ lineId });
+
+    await mark();
+
+    // An ordinary `update`, which is not filtered by the soft delete column, so
+    // it reaches the row the line above has just marked.
+    await manager.getRepository(ListLine).update(
+      { id: lineId },
+      {
+        itemSetHash: null,
+        productGroupId: null,
+        deletedByUserId,
+      }
     );
   }
 
@@ -2422,8 +2509,9 @@ export class LineService {
     list: ShoppingList,
     remove: (line: ListLine) => Promise<void>
   ): Promise<{ id: string }> {
-    // Read before the removal: the trail's delete strips the primary key off the
-    // object it is handed, so an id read afterwards is undefined.
+    // Read before the removal, and kept that way. Neither delete strips the
+    // object any more, but the two ids the event carries are read from the line
+    // as it stood, which is the only state either of them is certain to have.
     const { id, listId } = line;
     await remove(line);
     this.events.emit(

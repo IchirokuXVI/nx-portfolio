@@ -25,8 +25,13 @@
  * so this asks only whether a live basket has an origin for the line, however much
  * of it is settled. The line becomes a candidate when that basket ends.
  *
- * `ix_lines_list_quantity` serves the list and the zero. Both `EXISTS` are index
- * lookups by line: `ix_settlements_line` and
+ * A deleted line is skipped by hand (plan 0132). It has to be: a line at zero
+ * that was bought before is precisely what the rest of this matches, so a
+ * deleted one would be suggested back onto the list it was deleted from.
+ *
+ * `ix_lines_list_quantity` serves the list and the zero, and since plan 0132 it
+ * holds only standing lines, so it serves the new predicate too. Both `EXISTS`
+ * are index lookups by line: `ix_settlements_line` and
  * `ix_generated_list_line_origins_source`.
  */
 export const SUGGESTION_CANDIDATES_SQL = `
@@ -34,6 +39,7 @@ export const SUGGESTION_CANDIDATES_SQL = `
          ll."position" AS "position"
   FROM "list_lines" ll
   WHERE ll."listId" = $1::uuid
+    AND ll."deletedAt" IS NULL
     AND ll."quantity" = 0
     AND ll."approvalStatus" = 'APPROVED'
     AND EXISTS (
@@ -102,6 +108,7 @@ export const SUGGESTION_RECENT_TRIPS_SQL = `
     JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
     JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
     WHERE ll."listId" = $1::uuid
+      AND ll."deletedAt" IS NULL
       AND NOT (
         gl."status"::text = ANY($2::text[])
         AND gl."generatedAt" >= $3::timestamptz

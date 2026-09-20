@@ -535,6 +535,37 @@ describeIntegration(
         });
       }
 
+      it('reports ORIGIN_DELETED for a zone line soft deleted since, and writes nothing', async () => {
+        // Plan 0132: a member's delete keeps the row now, so the answer here
+        // has to come from the read rather than from the row being gone. The
+        // settle finds its origin with a locking `findOne`, which the soft
+        // delete column filters, so the basket outliving its origin still reads
+        // as the ordinary history it always was.
+        const line = await seedBasketLine(`Olives ${randomUUID().slice(0, 8)}`);
+        await raise(line, ids.flat, 2);
+        const [origin] = await dataSource
+          .getRepository(GeneratedListLineOrigin)
+          .find({ where: { generatedListLineId: line.id } });
+        await dataSource
+          .getRepository(ListLine)
+          .softDelete({ id: origin.lineId });
+
+        const result = await settle(line, 2);
+
+        expect(result.skippedCount).toBe(1);
+        expect(result.skipped).toEqual([
+          expect.objectContaining({
+            lineId: origin.lineId,
+            reason: 'ORIGIN_DELETED',
+          }),
+        ]);
+        expect(
+          await dataSource
+            .getRepository(LineSettlement)
+            .count({ where: { lineId: origin.lineId } })
+        ).toBe(0);
+      });
+
       it('is recorded when it happens and lands on the first list raised', async () => {
         // The whole plan in one pass, through real Postgres and its two new
         // check constraints. A guest types a line in the aisle, buys four before
