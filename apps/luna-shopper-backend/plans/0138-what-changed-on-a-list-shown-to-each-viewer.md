@@ -1,3 +1,5 @@
+> **PR:** [#428](https://github.com/IchirokuXVI/nx-portfolio/pull/428)
+
 # 0138: what changed on a list, kept and shown to each viewer
 
 > Client half: `apps/velista/plans/0093`. Series record: `0130`, which is the contract for
