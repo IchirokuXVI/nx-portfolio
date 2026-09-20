@@ -16,6 +16,7 @@ import { LineProductGroupSubscription1756001700000 } from './1756001700000-LineP
 import { CoreAudit1756001800000 } from './1756001800000-CoreAudit';
 import { WaitingSettlements1756001900000 } from './1756001900000-WaitingSettlements';
 import { ParticipantInvitesAndEndings1756002000000 } from './1756002000000-ParticipantInvitesAndEndings';
+import { SoftDeletedLines1756002100000 } from './1756002100000-SoftDeletedLines';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -72,4 +73,8 @@ export const CORE_MIGRATIONS = [
   // created and plan 0054's last touched, so it follows both and nothing else
   // (plan 0114, section 3).
   ParticipantInvitesAndEndings1756002000000,
+  // Additive on `list_lines`, plus the one index plan 0017's migration created
+  // there made partial. It follows those and nothing else (plan 0132, section
+  // 5).
+  SoftDeletedLines1756002100000,
 ];

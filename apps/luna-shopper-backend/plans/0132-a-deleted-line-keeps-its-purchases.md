@@ -1,3 +1,5 @@
+> **PR:** [#421](https://github.com/IchirokuXVI/nx-portfolio/pull/421)
+
 # 0132: a deleted line keeps its purchases
 
 > Second build plan of the series recorded in `0130`, and it needs no other plan.

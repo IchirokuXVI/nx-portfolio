@@ -157,6 +157,17 @@ export class MergeService {
         .where('"approvedByUserId" = :src', { src })
         .andWhere(inZoneLines, { zoneId })
         .execute();
+      // Lines the source deleted (plan 0132). An `UPDATE` query builder is not
+      // filtered by the soft delete column, which is what this one needs: every
+      // row it reaches is a deleted line, and a merged away member must not stay
+      // the author of a tombstone when they are gone from everything else.
+      await manager
+        .createQueryBuilder()
+        .update(ListLine)
+        .set({ deletedByUserId: tgt })
+        .where('"deletedByUserId" = :src', { src })
+        .andWhere(inZoneLines, { zoneId })
+        .execute();
 
       // Comments the source authored, scoped to this zone's lines.
       await manager

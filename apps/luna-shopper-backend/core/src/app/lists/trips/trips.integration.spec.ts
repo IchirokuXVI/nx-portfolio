@@ -683,6 +683,95 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       ).rejects.toThrow('Trip not found');
     });
 
+    it('does the same for a line soft deleted rather than removed', async () => {
+      // Since plan 0132 a member's delete keeps the row, so the sentence this
+      // section states ("a purchase whose line was deleted is skipped, and a
+      // trip left with no line is not returned") has to hold for a row that is
+      // still there. It holds because each read of `list_lines` here carries
+      // `"deletedAt" IS NULL` by hand; the join alone no longer does it.
+      const flat = await list('Soft deleted lines');
+      const kept = await line(flat, 'Kept');
+      const gone = await line(flat, 'Gone');
+      const alone = await line(flat, 'Alone');
+
+      const two = await basket({ name: 'Two lines' });
+      const carrier = await basketLine(two);
+      await origin(carrier, flat, kept, 1);
+      await origin(carrier, flat, gone, 1);
+      await settled(flat, gone, '2026-01-10T11:00:00Z', {
+        basketLineId: carrier,
+        quantity: 1,
+      });
+
+      const one = await basket({ name: 'One line' });
+      const lonely = await basketLine(one);
+      await origin(lonely, flat, alone, 1);
+
+      const repo = dataSource.getRepository(ListLine);
+      await repo.softDelete({ id: gone });
+      await repo.softDelete({ id: alone });
+
+      const heads = await trips.list({ userId: ids.shopper, listId: flat });
+      expect(heads.items).toEqual([
+        expect.objectContaining({ id: two, lineCount: 1 }),
+      ]);
+
+      const page = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.BASKET,
+        tripId: two,
+      });
+      expect(page.items.map((row) => row.lineId)).toEqual([kept]);
+
+      await expect(
+        trips.rows({
+          userId: ids.shopper,
+          listId: flat,
+          kind: TripKind.BASKET,
+          tripId: one,
+        })
+      ).rejects.toThrow('Trip not found');
+    });
+
+    it('pages on from a cursor naming a line deleted since', async () => {
+      // The keyset lookup carries no predicate on purpose (plan 0132, section
+      // 4.2). It reads the boundary row's position, and a deleted line that
+      // could not give one up would restart the page from the top.
+      const flat = await list('Cursor over a tombstone');
+      const id = await basket();
+      const carrier = await basketLine(id);
+      const lineIds: string[] = [];
+      for (let i = 0; i < 4; i += 1) {
+        const lineId = await line(flat, `Line ${i}`);
+        lineIds.push(lineId);
+        await origin(carrier, flat, lineId, 1);
+      }
+
+      const first = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.BASKET,
+        tripId: id,
+        limit: 2,
+      });
+      expect(first.items.map((row) => row.lineId)).toEqual(lineIds.slice(0, 2));
+
+      // The line the cursor names goes between the two pages.
+      await dataSource.getRepository(ListLine).softDelete({ id: lineIds[1] });
+
+      const second = await trips.rows({
+        userId: ids.shopper,
+        listId: flat,
+        kind: TripKind.BASKET,
+        tripId: id,
+        limit: 2,
+        cursor: first.nextCursor ?? undefined,
+      });
+
+      expect(second.items.map((row) => row.lineId)).toEqual(lineIds.slice(2));
+    });
+
     it('answers not found for a trip that never existed', async () => {
       const flat = await list('Nothing here');
 

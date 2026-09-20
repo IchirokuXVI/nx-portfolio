@@ -10,6 +10,7 @@ import {
 import type { DataSource } from 'typeorm';
 import type { ListAccess, ListLine } from '../entities';
 import {
+  LineComment,
   LineSettlement,
   ListLineGroupRemoval,
   ListLineItem,
@@ -147,6 +148,15 @@ function world(options: {
       deleted.push(id);
       return { affected: 1 };
     },
+    // The two calls plan 0132's delete ends in: what the row is left saying, and
+    // the one call that marks it. Neither is what this file asks about, and both
+    // have to answer, or a delete never reaches the point the permission branch
+    // above was deciding about.
+    update: async () => ({ affected: 1 }),
+    softDelete: async ({ id }: { id: string }) => {
+      deleted.push(id);
+      return { affected: 1 };
+    },
     createQueryBuilder: () => {
       const qb = {
         select: () => qb,
@@ -184,10 +194,22 @@ function world(options: {
   const settlementRows = fakeLineSettlements();
   const settlementRepo = settlementRows.repo;
 
+  // Plan 0132: a delete empties the line's comments in the same transaction.
+  // Nothing here leaves one, so the table is always already empty.
+  const commentsOfDeletedLines = {
+    delete: async () => ({ affected: 0 }),
+  };
+
   const dataSource = {
     transaction: async <T>(run: (m: unknown) => Promise<T>) =>
       run({
         getRepository: (entity: unknown) => {
+          // A deleted line's conversation goes with it (plan 0132). Bound by
+          // name, because the line repository answering for it would count an
+          // emptied comment table as a deleted line.
+          if (entity === LineComment) {
+            return commentsOfDeletedLines;
+          }
           if (entity === ListLineGroupRemoval) {
             return groupRemovals.repo;
           }
