@@ -102,6 +102,14 @@ export function fakeLineClaims(
      * do is not exclude it.
      */
     since: () => new Date(Date.now() - 24 * 60 * 60 * 1000),
+
+    /**
+     * How long a skip keeps a line free (plan 0137, section 5.4).
+     *
+     * The default twelve hours. The coverage test the suggestions run takes
+     * it as a parameter, and no spec that uses this fake writes a skip.
+     */
+    skipWindow: () => 12 * 60 * 60 * 1000,
   } as unknown as LineClaimService;
 
   return { announced, calls, service };

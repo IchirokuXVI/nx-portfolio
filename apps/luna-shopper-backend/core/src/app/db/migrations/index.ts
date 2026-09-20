@@ -21,6 +21,7 @@ import { BasketKindStatusAndSources1756002200000 } from './1756002200000-BasketK
 import { SettlementBasket1756002300000 } from './1756002300000-SettlementBasket';
 import { BasketTripRows1756002400000 } from './1756002400000-BasketTripRows';
 import { BasketsBecomeViews1756002500000 } from './1756002500000-BasketsBecomeViews';
+import { BasketLineSkips1756002600000 } from './1756002600000-BasketLineSkips';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -103,4 +104,10 @@ export const CORE_MIGRATIONS = [
   // follows every migration that touched `generated_list_lines`,
   // `line_settlements` or `basket_trip_rows`, and nothing else.
   BasketsBecomeViews1756002500000,
+  // A new table referencing `generated_lists`, which plan 0050's migration
+  // created and plan 0133's last reshaped, and `list_lines`, which plan 0132's
+  // last touched. It reads nothing plan 0136's migration dropped and adds
+  // nothing anything before it needs, so it follows that one and nothing else
+  // (plan 0137, section 2).
+  BasketLineSkips1756002600000,
 ];

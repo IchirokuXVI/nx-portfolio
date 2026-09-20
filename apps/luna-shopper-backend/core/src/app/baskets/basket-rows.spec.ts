@@ -1,4 +1,6 @@
 import {
+  BasketKind,
+  BasketRowNote,
   BasketRowState,
   LineApprovalStatus,
   ListPermission,
@@ -10,12 +12,16 @@ import {
   boughtOf,
   groupEntries,
   newestSettlement,
+  noteOf,
+  NO_BASKET_SKIPS,
   optionIdsOf,
   progressOf,
   stateOf,
   toRowView,
   type BasketEntry,
+  type BasketFacts,
   type BasketSettlementFact,
+  type BasketSkipFact,
 } from './basket-rows';
 
 /**
@@ -46,7 +52,10 @@ function entry(over: Partial<BasketEntry> = {}): BasketEntry {
   };
 }
 
-function bought(quantity: number, over: Partial<BasketSettlementFact> = {}) {
+function bought(
+  quantity: number,
+  over: Partial<BasketSettlementFact> = {}
+): BasketSettlementFact {
   seq += 1;
   return {
     id: `s-${seq}`,
@@ -54,9 +63,38 @@ function bought(quantity: number, over: Partial<BasketSettlementFact> = {}) {
     quantity,
     settledAt: new Date(2026, 0, 1, 10, 0, seq),
     settledByParticipantId: 'p1',
+    // The database answered it (plan 0137, section 4). These rules receive
+    // booleans and never a clock, which is what lets a spec state "the window
+    // ran out" without moving anybody's time.
+    fresh: true,
     ...over,
   };
 }
+
+/** One line's standing skip, as the read hands it to these rules. */
+function skip(over: Partial<BasketSkipFact> = {}): BasketSkipFact {
+  seq += 1;
+  return {
+    skippedAt: new Date(2026, 0, 1, 11, 0, seq),
+    skippedByParticipantId: 'p2',
+    fresh: true,
+    ...over,
+  };
+}
+
+/** A `GENERATED` basket with these lines skipped and nothing else. */
+function facts(
+  skips: Record<string, BasketSkipFact> = {},
+  kind: BasketKind = BasketKind.GENERATED
+): BasketFacts {
+  return { skips: new Map(Object.entries(skips)), kind };
+}
+
+/** Nothing skipped, on a trip. The state of a basket before plan 0137. */
+const NO_FACTS: BasketFacts = {
+  skips: NO_BASKET_SKIPS,
+  kind: BasketKind.GENERATED,
+};
 
 function closed(over: Partial<BasketSettlementFact> = {}) {
   return bought(0, { outcome: SettlementOutcome.NOT_AVAILABLE, ...over });
@@ -67,6 +105,7 @@ const OPEN_CONTEXT = {
   servedListIds: new Set(['list-a', 'list-b']),
   demandEditable: (row: BasketEntry) =>
     canChangeDemand(new Set([ListPermission.MANAGE]), row.approvalStatus),
+  facts: NO_FACTS,
 };
 
 describe('grouping (section 3.1, step 5)', () => {
@@ -120,28 +159,38 @@ describe('grouping (section 3.1, step 5)', () => {
   });
 });
 
-describe('the four states this plan produces (plan 0130, section 4)', () => {
+describe('the states of a row (plan 0130, section 4)', () => {
   it('is WANTED with nothing bought', () => {
-    expect(stateOf(2, 0, null)).toBe(BasketRowState.WANTED);
+    expect(stateOf([entry({ quantity: 2 })], 2, 0, null, NO_FACTS)).toBe(
+      BasketRowState.WANTED
+    );
   });
 
   it('is PARTLY with both above zero', () => {
-    expect(stateOf(1, 1, bought(1))).toBe(BasketRowState.PARTLY);
+    expect(
+      stateOf([entry({ quantity: 1 })], 1, 1, bought(1), NO_FACTS)
+    ).toBe(BasketRowState.PARTLY);
   });
 
   it('is DONE at zero left with something bought', () => {
-    expect(stateOf(0, 2, bought(2))).toBe(BasketRowState.DONE);
+    expect(stateOf([entry({ quantity: 0 })], 0, 2, bought(2), NO_FACTS)).toBe(
+      BasketRowState.DONE
+    );
   });
 
   it('is NOT_AVAILABLE when the newest act says so and units remain', () => {
-    expect(stateOf(2, 0, closed())).toBe(BasketRowState.NOT_AVAILABLE);
+    expect(stateOf([entry({ quantity: 2 })], 2, 0, closed(), NO_FACTS)).toBe(
+      BasketRowState.NOT_AVAILABLE
+    );
   });
 
   it('is DONE rather than NOT_AVAILABLE once nothing is left', () => {
     // The guard plan 0136 section 3.1 step 7 adds to the table's order. A
     // demand taken to zero after a close would otherwise leave the row claiming
     // the shop had none of something nobody is asking for.
-    expect(stateOf(0, 1, closed())).toBe(BasketRowState.DONE);
+    expect(stateOf([entry({ quantity: 0 })], 0, 1, closed(), NO_FACTS)).toBe(
+      BasketRowState.DONE
+    );
   });
 
   it('breaks a tie between two settlements of one act on the id', () => {
@@ -271,6 +320,7 @@ describe('redaction, per list (section 3.4)', () => {
     return toRowView(group, {
       servedListIds: new Set(listIds),
       demandEditable: () => true,
+      facts: NO_FACTS,
     });
   }
 
@@ -311,6 +361,7 @@ describe('demandEditable is the owner’s answer (plan 0131)', () => {
       servedListIds: new Set(['list-a']),
       demandEditable: (row: BasketEntry) =>
         canChangeDemand(new Set([ListPermission.WRITE]), row.approvalStatus),
+      facts: NO_FACTS,
     };
     const group = groupEntries([
       entry({ content: 'Milk', approvalStatus: LineApprovalStatus.APPROVED }),
@@ -346,10 +397,184 @@ describe('what the row says about who touched it', () => {
     const row = toRowView(group, OPEN_CONTEXT);
     expect(row.touchedBy).toBeNull();
     expect(row.touchedAt).toBeNull();
-    // Both arrive with plans 0137 and 0138; the fields exist so those plans
-    // change a value rather than the wire shape.
+    // A row nobody skipped carries no note, and `mark` arrives with plan 0138.
     expect(row.note).toBeNull();
     expect(row.noteAt).toBeNull();
     expect(row.mark).toBeNull();
+  });
+});
+
+
+describe('a line skipped for now (plan 0137, section 10)', () => {
+  /** A row of one entry, skipped or not, as the read would hand it over. */
+  function rowOf(
+    over: Partial<BasketEntry>,
+    skips: Record<string, BasketSkipFact> = {},
+    kind: BasketKind = BasketKind.GENERATED
+  ) {
+    const only = entry(over);
+    const group = groupEntries([only])[0];
+    const keyed = Object.fromEntries(
+      Object.entries(skips).map(([, value]) => [only.lineId, value])
+    );
+    return {
+      only,
+      view: toRowView(group, { ...OPEN_CONTEXT, facts: facts(keyed, kind) }),
+    };
+  }
+
+  // --- 1. every entry with something left has to be skipped ----------------
+
+  it('is SKIPPED when the one entry asking for something is freshly skipped', () => {
+    const { view } = rowOf({ quantity: 2 }, { it: skip() });
+    expect(view.state).toBe(BasketRowState.SKIPPED);
+    // The state already says it, so the note would say it twice.
+    expect(view.note).toBeNull();
+  });
+
+  it('is WANTED with the note when one entry of two has no skip', () => {
+    // A row of two lists' milk is skipped as one gesture. When a third
+    // household asks for milk an hour later that entry carries no skip, and new
+    // demand is a reason to look at the row again.
+    const skipped = entry({ listId: 'list-a', content: 'Milk', quantity: 1 });
+    const asking = entry({ listId: 'list-b', content: 'Milk', quantity: 1 });
+    const group = groupEntries([skipped, asking])[0];
+
+    const view = toRowView(group, {
+      ...OPEN_CONTEXT,
+      facts: facts({ [skipped.lineId]: skip() }),
+    });
+
+    expect(view.state).toBe(BasketRowState.WANTED);
+    expect(view.note).toBe(BasketRowNote.SKIPPED_EARLIER);
+    // The entry that was skipped still says so on its own.
+    expect(view.entries[0].state).toBe(BasketRowState.SKIPPED);
+    expect(view.entries[1].state).toBe(BasketRowState.WANTED);
+  });
+
+  // --- 2. the window, and the note it leaves behind -------------------------
+
+  it('is WANTED with the note once the window has run out', () => {
+    const at = new Date(2026, 0, 1, 7, 0, 0);
+    const { view } = rowOf(
+      { quantity: 2 },
+      { it: skip({ fresh: false, skippedAt: at }) }
+    );
+
+    expect(view.state).toBe(BasketRowState.WANTED);
+    expect(view.note).toBe(BasketRowNote.SKIPPED_EARLIER);
+    expect(view.noteAt).toBe(at.toISOString());
+  });
+
+  it('carries no note when no skip stands', () => {
+    const { view } = rowOf({ quantity: 2 });
+    expect(view.note).toBeNull();
+    expect(view.noteAt).toBeNull();
+  });
+
+  // --- 3. the five sequences of section 3.2 --------------------------------
+
+  it('answers the five sequences of a skip beside a settlement', () => {
+    // The read hands over what still stands, so each sequence is stated as the
+    // facts it leaves behind rather than as a series of writes.
+    const only = entry({ quantity: 2 });
+    const state = (
+      standing: BasketSkipFact | null,
+      newest: BasketSettlementFact | null,
+      bought = 0
+    ) =>
+      stateOf(
+        [{ ...only, quantity: 2 - bought }],
+        2 - bought,
+        bought,
+        newest,
+        facts(standing ? { [only.lineId]: standing } : {})
+      );
+
+    // skip
+    expect(state(skip(), null)).toBe(BasketRowState.SKIPPED);
+    // skip, then the shop had none: the close ended the skip
+    expect(state(null, closed())).toBe(BasketRowState.NOT_AVAILABLE);
+    // the shop had none, then skip: the skip is the newer act
+    expect(state(skip(), closed())).toBe(BasketRowState.SKIPPED);
+    // skip, then bought in part: the purchase ended the skip
+    expect(state(null, bought(1), 1)).toBe(BasketRowState.PARTLY);
+    // skip, bought, purchase taken back: the skip stands again
+    expect(state(skip(), null)).toBe(BasketRowState.SKIPPED);
+  });
+
+  // --- 4. the counts -------------------------------------------------------
+
+  it('counts a skipped row in total and in pending and nowhere else', () => {
+    const { view } = rowOf({ quantity: 2 }, { it: skip() });
+    expect(progressOf([view])).toEqual({
+      done: 0,
+      unavailable: 0,
+      total: 1,
+      pending: 1,
+    });
+  });
+
+  // --- 5. the close runs out on a LIVE basket alone ------------------------
+
+  it('lets a LIVE basket close run out, and holds a GENERATED one', () => {
+    const only = entry({ quantity: 2 });
+    const stale = closed({ fresh: false });
+
+    expect(
+      stateOf([only], 2, 0, stale, { skips: NO_BASKET_SKIPS, kind: BasketKind.LIVE })
+    ).toBe(BasketRowState.WANTED);
+    // A trip's close holds until the trip is finished (plan 0130, section 4).
+    expect(stateOf([only], 2, 0, stale, NO_FACTS)).toBe(
+      BasketRowState.NOT_AVAILABLE
+    );
+  });
+
+  it('leaves a run out LIVE close with no note', () => {
+    // Plan 0137 section 9: plan 0130 defines one note, and `touchedBy` already
+    // says who looked and when.
+    const only = entry({ quantity: 2, settlements: [closed({ fresh: false })] });
+    const view = toRowView(groupEntries([only])[0], {
+      ...OPEN_CONTEXT,
+      facts: { skips: NO_BASKET_SKIPS, kind: BasketKind.LIVE },
+    });
+
+    expect(view.state).toBe(BasketRowState.WANTED);
+    expect(view.note).toBeNull();
+    expect(view.touchedBy).toBe('p1');
+  });
+
+  // --- who touched it ------------------------------------------------------
+
+  it('names the skipper when the skip is the newest act on the row', () => {
+    const at = new Date(2026, 0, 1, 20, 0, 0);
+    const only = entry({
+      quantity: 2,
+      settlements: [
+        bought(0, {
+          outcome: SettlementOutcome.NOT_AVAILABLE,
+          settledByParticipantId: 'earlier',
+          settledAt: new Date(2026, 0, 1, 9),
+        }),
+      ],
+    });
+    const view = toRowView(groupEntries([only])[0], {
+      ...OPEN_CONTEXT,
+      facts: facts({
+        [only.lineId]: skip({ skippedAt: at, skippedByParticipantId: 'marta' }),
+      }),
+    });
+
+    // A skip is an act on the row, and "Marta, 20:00" under a skipped row is
+    // the same answer to the same question a purchase gets.
+    expect(view.touchedBy).toBe('marta');
+    expect(view.touchedAt).toBe(at.toISOString());
+  });
+
+  it('leaves noteOf silent on a row that is done', () => {
+    const only = entry({ quantity: 0 });
+    expect(
+      noteOf([only], BasketRowState.DONE, facts({ [only.lineId]: skip() }))
+    ).toBeNull();
   });
 });

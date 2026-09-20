@@ -74,7 +74,7 @@ export class SuggestionsService {
     // connection, and a request holding several is how the pool runs dry.
     const candidates = await this.dataSource.query<CandidateRow[]>(
       SUGGESTION_CANDIDATES_SQL,
-      [req.listId, this.claims.since()]
+      [req.listId, this.claims.since(), this.claims.skipWindow()]
     );
     if (candidates.length === 0) {
       return { items: [] };

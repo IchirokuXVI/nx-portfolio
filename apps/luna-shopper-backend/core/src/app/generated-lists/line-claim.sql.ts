@@ -3,6 +3,7 @@ import {
   type LineClaim,
   type LineClaimRef,
 } from '@portfolio/luna-shopper/contracts';
+import { noFreshSkip } from '../baskets/basket.sql';
 import { OPEN_GENERATED_BASKET } from '../baskets/open-basket.sql';
 import { WRITABLE_LIST } from './generated-list.sql';
 
@@ -25,7 +26,7 @@ import { WRITABLE_LIST } from './generated-list.sql';
 /**
  * Which of these zone lines is in a basket somebody is shopping, and whose it
  * is. `$1` is the line ids, `$2` the oldest a basket may have been generated and
- * still claim anything.
+ * still claim anything, `$3` the skip window in milliseconds.
  *
  * The predicates, and each is one rule written down once:
  *
@@ -49,10 +50,13 @@ import { WRITABLE_LIST } from './generated-list.sql';
  *   old `settledQuantity < quantity`: a line bought all the way down to zero is
  *   done, and so is one the household deleted (plan 0132), so both release
  *   without waiting for the trip to end.
- * - **The `NOT EXISTS`**, which is the other half of "done". A line the shop did
- *   not have keeps its quantity, so only the basket's newest standing settlement
- *   on it can say the shopper has finished with it. Plan 0137 adds "and no
- *   standing skip" to the same clause.
+ * - **The first `NOT EXISTS`**, which is the other half of "done". A line the
+ *   shop did not have keeps its quantity, so only the basket's newest standing
+ *   settlement on it can say the shopper has finished with it.
+ * - **The second**, {@link noFreshSkip} (plan 0137, section 5.4). A shopper who
+ *   said "not today" is not out buying it, so the line is free while that skip
+ *   is fresh. It is the same fragment the coverage test asks, so the claim and
+ *   the suggestions cannot disagree about it.
  *
  * `DISTINCT ON` resolves section 3.4, where one line is covered by two baskets at
  * once: the most recently generated wins, so the last person to take it is the
@@ -93,6 +97,7 @@ export const LINE_CLAIMS_SQL = `
             AND (s2."settledAt", s2.id) > (s."settledAt", s.id)
         )
     )
+    AND ${noFreshSkip('gl', 'll', '$3')}
   ORDER BY ll.id, gl."generatedAt" DESC, gl.id DESC
 `;
 
@@ -170,7 +175,8 @@ export interface ZoneLineClaimRef extends LineClaimRef {
 export async function readLineClaims(
   query: (sql: string, parameters: unknown[]) => Promise<unknown>,
   lineIds: readonly string[],
-  generatedSince: Date
+  generatedSince: Date,
+  skipWindowMs: number
 ): Promise<Map<string, LineClaim>> {
   const claims = new Map<string, LineClaim>(
     lineIds.map((id) => [id, NO_LINE_CLAIM])
@@ -182,6 +188,7 @@ export async function readLineClaims(
   const rows = (await query(LINE_CLAIMS_SQL, [
     [...lineIds],
     generatedSince,
+    skipWindowMs,
   ])) as LineClaimRow[];
 
   for (const row of rows) {

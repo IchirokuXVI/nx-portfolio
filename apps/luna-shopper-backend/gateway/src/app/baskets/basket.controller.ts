@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpStatus,
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -30,6 +32,7 @@ import {
   type RevertBasketRowRequest,
   type SetBasketRowDemandRequest,
   type SettleBasketRowRequest,
+  type SkipBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
@@ -149,7 +152,7 @@ export class BasketLiveController {
 }
 
 /**
- * The basket, and the five writes on a row (plan 0136).
+ * The basket, and the seven writes on a row (plan 0136; plan 0137).
  *
  * Every route is behind {@link ParticipantGuard}: the gateway turns a credential
  * into a participant and the participant is the whole of the identity here. An
@@ -349,6 +352,64 @@ export class BasketController {
       confirmMerge: dto.confirmMerge,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowRename, req);
+  }
+
+  /**
+   * Put a row off for now (plan 0137, section 5.1).
+   *
+   * A `PUT` rather than a `POST`, because it states a condition the row is to be
+   * in rather than appending an act: a second call changes nothing and answers
+   * the same row. Any live participant may send it, a guest included, and
+   * neither this nor the `DELETE` takes a body.
+   */
+  @Put(':id/rows/:rowKey/skip')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(BASKET_PATTERNS.rowSkip)
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    notFound: true,
+    // A row bought to zero while the sheet was open has nothing left to skip,
+    // which is a plain conflict beside the finished basket's own code.
+    conflict: true,
+    finishedBasket: true,
+  })
+  skip(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('rowKey') rowKey: string
+  ): Promise<BasketRowResult> {
+    const req: SkipBasketRowRequest = {
+      basketId: id,
+      participantId: participant.participantId,
+      rowKey,
+    };
+    return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowSkip, req);
+  }
+
+  /** Take the skip back (plan 0137, section 5.2). Finding none is not an error. */
+  @Delete(':id/rows/:rowKey/skip')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(BASKET_PATTERNS.rowUnskip)
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    notFound: true,
+    finishedBasket: true,
+  })
+  unskip(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Param('rowKey') rowKey: string
+  ): Promise<BasketRowResult> {
+    const req: SkipBasketRowRequest = {
+      basketId: id,
+      participantId: participant.participantId,
+      rowKey,
+    };
+    return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowUnskip, req);
   }
 
   /**

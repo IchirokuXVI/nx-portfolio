@@ -26,6 +26,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
+import { fakeCoreConfig } from './basket-config.fake';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketReadService } from './basket-read.service';
 import { BasketRedaction } from './basket-redaction';
@@ -91,7 +92,10 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
       } as never,
       // The walk order learns from finished trips, and none of these tests has
       // one, so it answers what it was given.
-      { order: async <T>(_userId: string, rows: T[]) => rows } as never
+      { order: async <T>(_userId: string, rows: T[]) => rows } as never,
+      // The skip window (plan 0137). Nothing here skips anything, so the
+      // default is the only value it has to be.
+      fakeCoreConfig()
     );
 
     const zones = dataSource.getRepository(Zone);

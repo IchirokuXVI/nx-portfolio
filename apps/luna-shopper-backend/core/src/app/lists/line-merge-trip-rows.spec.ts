@@ -1,5 +1,6 @@
 import type { EntityManager } from 'typeorm';
 import {
+  BasketLineSkip,
   BasketTripRow,
   LineComment,
   LineSettlement,
@@ -95,6 +96,9 @@ function managerOver(rows: BasketTripRow[]): EntityManager {
     ListLineGroupRemoval,
     LineComment,
     LineSettlement,
+    // A merge carries a basket's skips onto the survivor (plan 0137, section
+    // 6). The move itself is proved against a real database.
+    BasketLineSkip,
   ]);
   return {
     getRepository: (entity: unknown) => {

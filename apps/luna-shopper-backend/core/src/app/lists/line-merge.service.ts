@@ -9,6 +9,7 @@ import {
 import { LineMergeTooManyProductsException } from '@portfolio/luna-shopper/platform';
 import { In, type EntityManager } from 'typeorm';
 import {
+  BasketLineSkip,
   BasketTripRow,
   LineComment,
   LineSettlement,
@@ -157,6 +158,16 @@ export class LineMergeService {
     // is one row on its next read with both lines' purchases, with nothing to
     // move.
     await this.moveTripRows(manager, survivor.id, absorbed.id);
+
+    // Before the delete as well, and for the same reason (plan 0137, section
+    // 6): `basket_line_skips` names the line by a foreign key that cascades, so
+    // a skip still pointing at the absorbed line would go with it and a row the
+    // shopper skipped would come back as wanted because somebody fixed a
+    // spelling. There is no unique index to collide with, and two standing
+    // skips on the survivor for one basket read as the newer one.
+    await manager
+      .getRepository(BasketLineSkip)
+      .update({ lineId: absorbed.id }, { lineId: survivor.id });
 
     survivor.quantity = Math.min(
       survivor.quantity + absorbed.quantity,

@@ -3,7 +3,7 @@ import { WRITABLE_LIST } from '../generated-lists/generated-list.sql';
 import { OPEN_GENERATED_BASKET } from './open-basket.sql';
 
 /**
- * The four reads behind a basket (plan 0136, section 3).
+ * The five reads behind a basket (plan 0136, section 3; plan 0137, section 3).
  *
  * Raw SQL rather than a query builder, for the reason `generated-list.sql.ts`
  * gives at length: every camelCase column is quoted by hand, because TypeORM does
@@ -12,7 +12,8 @@ import { OPEN_GENERATED_BASKET } from './open-basket.sql';
  * repository could catch it.
  *
  * **None of them is per line.** A basket read is the session, the covered lines,
- * their product sets and the settlements in scope, whatever the basket holds.
+ * their product sets, the settlements in scope and the standing skips, whatever
+ * the basket holds.
  */
 
 /**
@@ -198,7 +199,8 @@ export interface CoveredLineItemRow {
 
 /**
  * This basket's standing purchases of these lines, in scope. `$1` is the basket,
- * `$2` the line ids, `$3` the session start or null.
+ * `$2` the line ids, `$3` the session start or null, `$4` the skip window in
+ * milliseconds.
  *
  * It rides `ix_settlements_basket_live` from plan 0134, which is
  * `("basketId", "lineId", "settledAt")` over the standing rows: exactly this
@@ -206,6 +208,15 @@ export interface CoveredLineItemRow {
  *
  * Oldest first per line, so the caller reading the newest act of a row takes the
  * last entry rather than sorting again.
+ *
+ * ## `fresh`, and why it is computed here
+ *
+ * A `LIVE` basket's "the shop had none" runs out with the skip window (plan
+ * 0137, section 4), and the comparison is the database's rather than an
+ * application server's: two readers must not disagree about whether a close
+ * still holds because their clocks differ by a minute. It is computed for every
+ * row and read for none of a `GENERATED` basket's, where the close holds until
+ * the trip is finished.
  */
 export const BASKET_SETTLEMENTS_SQL = `
   SELECT
@@ -214,7 +225,9 @@ export const BASKET_SETTLEMENTS_SQL = `
     s."outcome"::text AS "outcome",
     s.quantity AS "quantity",
     s."settledAt" AS "settledAt",
-    s."settledByParticipantId" AS "settledByParticipantId"
+    s."settledByParticipantId" AS "settledByParticipantId",
+    (s."settledAt" > now() - ($4::double precision * interval '1 millisecond'))
+      AS "fresh"
   FROM "line_settlements" s
   WHERE s."basketId" = $1::uuid
     AND s."lineId" = ANY($2::uuid[])
@@ -231,6 +244,188 @@ export interface BasketSettlementRow {
   quantity: number;
   settledAt: Date;
   settledByParticipantId: string | null;
+  /** Inside the skip window, by the database's clock. Read for `LIVE` alone. */
+  fresh: boolean;
+}
+
+/**
+ * "This skip still stands", for a `basket_line_skips` row aliased `k` (plan
+ * 0137, section 3).
+ *
+ * A skip stands while nobody took it back **and** its basket has no standing
+ * settlement on that line later than it. The second half is the whole of section
+ * 3.1: the settle, the revert and any later path that buys through a basket end
+ * a skip without naming one, because a rule that lives in one `WHERE` cannot be
+ * forgotten by the fourth writer. A purchase taken back stops being standing, so
+ * the skip comes back with no write either.
+ *
+ * It filters on **no outcome**. A close ends a skip that came before it and a
+ * skip ends a close that came before it, so only the newer of the two acts is
+ * ever left standing and the state order of plan 0130 section 4 then answers
+ * correctly in both directions.
+ *
+ * One definition, read by the basket and by the two writes, so none of them can
+ * disagree with the others about what is still skipped.
+ */
+export const SKIP_STANDS = `
+    k."revertedAt" IS NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM "line_settlements" s
+      WHERE s."basketId" = k."basketId"
+        AND s."lineId" = k."lineId"
+        AND s."revertedAt" IS NULL
+        AND s."settledAt" > k."skippedAt"
+    )`;
+
+/**
+ * The standing skips of one basket, newest per line. `$1` is the basket, `$2`
+ * the skip window in milliseconds (plan 0137, section 3).
+ *
+ * A skip **stands** while it was not taken back and this basket has no standing
+ * settlement on that line later than it. That second half is the whole of
+ * section 3.1: the settle, the revert and any later path that buys through a
+ * basket end a skip without naming one, because a rule that lives in one
+ * `WHERE` cannot be forgotten by the fourth writer, and a purchase taken back
+ * puts the skip back with no write either.
+ *
+ * **It filters on no outcome**, on purpose. A close ends a skip that came before
+ * it and a skip ends a close that came before it, so only the newer of the two
+ * acts is left standing and the state order of plan 0130 section 4 then gives
+ * the right answer in both directions.
+ *
+ * `fresh` is the twelve hour window, computed against the database's `now()` for
+ * the reason {@link BASKET_SESSION_SQL} gives about its own: two readers must
+ * agree, and `basket-rows.ts` receives booleans and never a clock.
+ *
+ * The `NOT EXISTS` is one index lookup per standing skip on
+ * `ix_settlements_basket_line`, and a basket holds a handful of skips.
+ */
+export const STANDING_SKIPS_SQL = `
+  SELECT DISTINCT ON (k."lineId")
+         k."lineId" AS "lineId",
+         k."skippedAt" AS "skippedAt",
+         k."skippedByParticipantId" AS "skippedByParticipantId",
+         (k."skippedAt" > now() - ($2::double precision * interval '1 millisecond'))
+           AS "fresh"
+  FROM "basket_line_skips" k
+  WHERE k."basketId" = $1::uuid
+    AND ${SKIP_STANDS}
+  ORDER BY k."lineId", k."skippedAt" DESC, k.id DESC
+`;
+
+/**
+ * Which of these lines already carry a standing skip of this basket. `$1` is the
+ * basket, `$2` the line ids.
+ *
+ * The `PUT` asks it through its own transaction's manager, so it sees the
+ * purchases and the skips that transaction has written, and inserts a row only
+ * for an entry that has none (plan 0137, section 5.1). That is what makes a
+ * second `PUT` write nothing.
+ *
+ * It shares {@link SKIP_STANDS} with the read, which is the point: a skip the
+ * read calls standing and the write calls gone would let one row be skipped
+ * twice.
+ */
+export const STANDING_SKIP_LINES_SQL = `
+  SELECT DISTINCT k."lineId" AS "lineId"
+  FROM "basket_line_skips" k
+  WHERE k."basketId" = $1::uuid
+    AND k."lineId" = ANY($2::uuid[])
+    AND ${SKIP_STANDS}
+`;
+
+/**
+ * Which of these lines this basket holds an unreverted skip on. `$1` is the
+ * basket, `$2` the line ids.
+ *
+ * The `DELETE` asks it under the lock, immediately before
+ * {@link REVERT_SKIPS_SQL}, so it knows which entries actually changed and
+ * announces those alone.
+ *
+ * **Standing or not**, which is where it differs from
+ * {@link STANDING_SKIP_LINES_SQL}: section 5.2 marks a skip a purchase already
+ * ended, so it has to name one too.
+ *
+ * A separate statement rather than a `RETURNING` on the update, because what
+ * TypeORM's `manager.query` hands back for an `UPDATE ... RETURNING` is not the
+ * plain row array a `SELECT` gives, and a rule that only works when the driver
+ * shapes its answer a particular way is a rule that breaks silently: the
+ * announce simply stops firing, and nothing fails.
+ */
+export const UNREVERTED_SKIP_LINES_SQL = `
+  SELECT DISTINCT k."lineId" AS "lineId"
+  FROM "basket_line_skips" k
+  WHERE k."basketId" = $1::uuid
+    AND k."lineId" = ANY($2::uuid[])
+    AND k."revertedAt" IS NULL
+`;
+
+/**
+ * Take back every skip this basket still holds on these lines. `$1` is the
+ * basket, `$2` the line ids, `$3` the participant taking them back.
+ *
+ * **Standing or not** (plan 0137, section 5.2). Marking one a purchase already
+ * ended costs nothing and leaves no stray row that a later revert of that
+ * purchase could bring back to life. Finding none is not an error.
+ */
+export const REVERT_SKIPS_SQL = `
+  UPDATE "basket_line_skips" k
+  SET "revertedAt" = now(),
+      "revertedByParticipantId" = $3::uuid
+  WHERE k."basketId" = $1::uuid
+    AND k."lineId" = ANY($2::uuid[])
+    AND k."revertedAt" IS NULL
+`;
+
+/**
+ * One line id, as {@link STANDING_SKIP_LINES_SQL} and
+ * {@link UNREVERTED_SKIP_LINES_SQL} answer it.
+ */
+export interface BasketSkipLineRow {
+  lineId: string;
+}
+
+/** One row of {@link STANDING_SKIPS_SQL}: one line's newest standing skip. */
+export interface BasketLineSkipRow {
+  lineId: string;
+  skippedAt: Date;
+  skippedByParticipantId: string;
+  fresh: boolean;
+}
+
+/**
+ * "This basket holds no fresh skip on this line" (plan 0137, section 5.4).
+ *
+ * A household is told "Marta is buying this" so that nobody buys it twice, and
+ * Marta has said she is not buying it today, so the line is free again. The
+ * claim and the coverage test both ask it, from the one definition, so a line
+ * the suggestions offer back while the claim calls it taken cannot happen.
+ *
+ * **Fresh, not merely standing.** A skip that outlived its window says nothing
+ * about the claim any more, and a stale one holding a line free for ever would
+ * be a claim that expired quietly rather than one that was released.
+ *
+ * When the window runs out **no event fires**, because nothing happened except
+ * the clock: a cold read says claimed and a socket that was listening still says
+ * free until the next event on that line. Plan 0052 section 4.1 accepted exactly
+ * that for the claim window itself, and a sweep emitting an event per expired
+ * skip is more machinery than a twelve hour courtesy deserves.
+ */
+export function noFreshSkip(
+  basketAlias: string,
+  lineAlias: string,
+  windowParam: string
+): string {
+  return `NOT EXISTS (
+    SELECT 1
+    FROM "basket_line_skips" k
+    WHERE k."basketId" = ${basketAlias}.id
+      AND k."lineId" = ${lineAlias}.id
+      AND k."skippedAt"
+          > now() - (${windowParam}::double precision * interval '1 millisecond')
+      AND ${SKIP_STANDS}
+  )`;
 }
 
 /**
@@ -242,9 +437,14 @@ export interface BasketSettlementRow {
  * claimed and the claim calls free would put the same line in two states on one
  * screen.
  *
- * `lineAlias` is the `list_lines` row being asked about and `sinceParam` is the
+ * `lineAlias` is the `list_lines` row being asked about, `sinceParam` is the
  * oldest a basket may have been generated and still claim anything, which is
- * `LineClaimService.since`.
+ * `LineClaimService.since`, and `skipWindowParam` is `LineClaimService.skipWindow`.
+ *
+ * **A basket a shopper skipped this line on does not cover it** (plan 0137,
+ * section 5.4). The suggestions share the fragment, so a skipped line can be
+ * suggested to the household again, and that is the intended consequence rather
+ * than an accident: nobody is out buying it.
  *
  * **It answers for `GENERATED` baskets alone.** The permanent basket has no
  * `basket_sources` rows, so the join excludes it before `OPEN_GENERATED_BASKET`
@@ -256,7 +456,8 @@ export interface BasketSettlementRow {
  */
 export function openBasketCoversLine(
   lineAlias: string,
-  sinceParam: string
+  sinceParam: string,
+  skipWindowParam: string
 ): string {
   return `EXISTS (
     SELECT 1
@@ -271,6 +472,7 @@ export function openBasketCoversLine(
       AND ${OPEN_GENERATED_BASKET}
       AND gl."generatedAt" >= ${sinceParam}::timestamptz
       AND ${WRITABLE_LIST}
+      AND ${noFreshSkip('gl', lineAlias, skipWindowParam)}
   )`;
 }
 

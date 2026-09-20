@@ -484,6 +484,9 @@ describeIntegration(
         const before = await dataSource.query(SUGGESTION_CANDIDATES_SQL, [
           ids.list,
           new Date('2026-01-01T00:00:00.000Z'),
+          // The skip window the claim's coverage fragment carries (plan 0137).
+          // Nothing here skips anything.
+          12 * 60 * 60 * 1000,
         ]);
         expect(before.map((row: { lineId: string }) => row.lineId)).toEqual([
           going.id,
@@ -494,6 +497,9 @@ describeIntegration(
         const after = await dataSource.query(SUGGESTION_CANDIDATES_SQL, [
           ids.list,
           new Date('2026-01-01T00:00:00.000Z'),
+          // The skip window the claim's coverage fragment carries (plan 0137).
+          // Nothing here skips anything.
+          12 * 60 * 60 * 1000,
         ]);
         expect(after).toEqual([]);
       });

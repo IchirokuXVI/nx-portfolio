@@ -39,13 +39,17 @@ export class LineClaimService {
   /** A live basket older than this claims nothing (section 4.1). */
   private readonly windowMs: number;
 
+  /** A line skipped inside this window is free again (plan 0137, section 5.4). */
+  private readonly skipWindowMs: number;
+
   constructor(
     private readonly dataSource: DataSource,
     private readonly events: CoreEventsPublisher,
     @Inject(ConfigService) configService: ConfigService
   ) {
-    this.windowMs =
-      configService.getOrThrow<CoreConfig>('core').generatedList.claimWindowMs;
+    const core = configService.getOrThrow<CoreConfig>('core');
+    this.windowMs = core.generatedList.claimWindowMs;
+    this.skipWindowMs = core.basket.skipWindowMs;
   }
 
   /**
@@ -71,7 +75,7 @@ export class LineClaimService {
       ? (sql: string, parameters: unknown[]) => manager.query(sql, parameters)
       : (sql: string, parameters: unknown[]) =>
           this.dataSource.query(sql, parameters);
-    return readLineClaims(query, lineIds, this.since());
+    return readLineClaims(query, lineIds, this.since(), this.skipWindow());
   }
 
   /** One line's claim, for the paths that answer with a single line. */
@@ -174,5 +178,17 @@ export class LineClaimService {
    */
   since(): Date {
     return new Date(Date.now() - this.windowMs);
+  }
+
+  /**
+   * How long a skip keeps a line free (plan 0137, section 5.4).
+   *
+   * Public beside {@link since} and for the same reason: the coverage test the
+   * suggestions run asks the same question the claim does, so both windows have
+   * to travel from one place or one screen would call a line taken while the
+   * other offered it back.
+   */
+  skipWindow(): number {
+    return this.skipWindowMs;
   }
 }

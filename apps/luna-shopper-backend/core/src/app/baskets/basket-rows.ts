@@ -1,4 +1,6 @@
 import {
+  BasketKind,
+  BasketRowNote,
   BasketRowState,
   LineApprovalStatus,
   SettlementOutcome,
@@ -26,7 +28,41 @@ export interface BasketSettlementFact {
   quantity: number;
   settledAt: Date;
   settledByParticipantId: string | null;
+  /**
+   * Inside the skip window, decided by the database (plan 0137, section 4).
+   *
+   * Read for a `LIVE` basket alone, where "the shop had none" runs out with the
+   * same clock a skip does. A `GENERATED` basket's close holds until the trip is
+   * finished, so this is computed for its rows and looked at for none of them.
+   */
+  fresh: boolean;
 }
+
+/** One line's newest standing skip, as the read hands it to these rules. */
+export interface BasketSkipFact {
+  skippedAt: Date;
+  skippedByParticipantId: string;
+  /** Inside the skip window, decided by the database (plan 0137, section 3). */
+  fresh: boolean;
+}
+
+/**
+ * What the read knows about a basket that its entries do not say (plan 0137,
+ * section 4).
+ *
+ * Both fields are answers the database already gave. These rules receive
+ * booleans and never a clock, which is the property that lets one spec state
+ * "a stale skip reads as wanted" without moving anybody's time.
+ */
+export interface BasketFacts {
+  /** This basket's standing skips, by line. Empty for a finished basket. */
+  skips: ReadonlyMap<string, BasketSkipFact>;
+  /** Only `LIVE` lets a close expire, which is the one thing the kind decides. */
+  kind: BasketKind;
+}
+
+/** A basket with no skips of any kind, which is what a finished one reads as. */
+export const NO_BASKET_SKIPS: ReadonlyMap<string, BasketSkipFact> = new Map();
 
 /** One covered list line, with everything this file needs about it. */
 export interface BasketEntry {
@@ -115,17 +151,32 @@ export function newestSettlement(
  * The state of a left/bought pair and the newest thing said about it (plan 0130,
  * section 4).
  *
- * The table's order, with `REMOVED` and `SKIPPED` skipped because nothing in
- * this plan can produce them: they arrive with plans 0138 and 0137, and the
- * union is declared whole so that those plans change a value here rather than
- * the wire shape.
+ * The table's order, with `REMOVED` skipped because nothing produces it before
+ * plan 0138 and the union is declared whole so that plan changes a value here
+ * rather than the wire shape.
+ *
+ * `entries` is the group the numbers came from, which is what a skip is asked
+ * about: a skip belongs to a line, and a row is skipped only when every line it
+ * still asks something of is.
  */
 export function stateOf(
+  entries: readonly BasketEntry[],
   left: number,
   bought: number,
-  newest: BasketSettlementFact | null
+  newest: BasketSettlementFact | null,
+  facts: BasketFacts
 ): BasketRowState {
-  if (newest?.outcome === SettlementOutcome.NOT_AVAILABLE && left > 0) {
+  if (left > 0 && isSkipped(entries, facts)) {
+    // Tested before `NOT_AVAILABLE`, which is the table's order, and right in
+    // both directions because only the newer of a skip and a close is ever
+    // standing (plan 0137, section 3.2).
+    return BasketRowState.SKIPPED;
+  }
+  if (
+    newest?.outcome === SettlementOutcome.NOT_AVAILABLE &&
+    left > 0 &&
+    closeHolds(newest, facts)
+  ) {
     // Tested before `DONE`, which is the table's order, and guarded on `left`
     // because a demand taken to zero after a close would otherwise leave a row
     // claiming the shop had none of something nobody is asking for.
@@ -138,6 +189,90 @@ export function stateOf(
     return BasketRowState.PARTLY;
   }
   return BasketRowState.WANTED;
+}
+
+/**
+ * Every entry the row still asks something of has a **fresh** standing skip
+ * (plan 0137, section 4).
+ *
+ * **One unskipped entry makes the row wanted again.** A row of two lists' milk
+ * is skipped as one gesture, and when a third household asks for milk an hour
+ * later that entry carries no skip. New demand is a reason to look at the row
+ * again, and the note below then says it was skipped earlier, so nothing about
+ * the first gesture is lost.
+ *
+ * An entry at zero is not asked about: there is nothing left of it to skip, and
+ * requiring a skip on it would leave a partly bought row wanted for ever.
+ */
+function isSkipped(
+  entries: readonly BasketEntry[],
+  facts: BasketFacts
+): boolean {
+  const asking = entries.filter((entry) => entry.quantity > 0);
+  return (
+    asking.length > 0 &&
+    asking.every((entry) => facts.skips.get(entry.lineId)?.fresh === true)
+  );
+}
+
+/**
+ * Whether a close still says anything (plan 0137, section 4).
+ *
+ * A `GENERATED` basket is a trip, so the shop not having something holds until
+ * the trip is finished. A `LIVE` basket never ends, so the close runs out with
+ * the skip window, whichever comes first: plan 0136 already held it to the
+ * current session, and this is the other bound. After it the row is `WANTED`
+ * with no note, and `touchedBy` still says who looked and when.
+ */
+function closeHolds(newest: BasketSettlementFact, facts: BasketFacts): boolean {
+  return facts.kind !== BasketKind.LIVE || newest.fresh;
+}
+
+/**
+ * The fact about a row's past worth saying beside it (plan 0137, section 4).
+ *
+ * One value, and it is the skip that is no longer the row's state: the window
+ * ran out under it, or one entry of it was bought, or a third household asked
+ * for the same thing. It clears when the skip stops standing, which is when the
+ * row is bought, closed or unskipped.
+ *
+ * `DONE` and `REMOVED` carry no note because there is nothing left to decide
+ * about the row, and `SKIPPED` carries none because the state already says it.
+ */
+export function noteOf(
+  entries: readonly BasketEntry[],
+  state: BasketRowState,
+  facts: BasketFacts
+): { note: BasketRowNote; noteAt: Date } | null {
+  if (
+    state === BasketRowState.SKIPPED ||
+    state === BasketRowState.DONE ||
+    state === BasketRowState.REMOVED
+  ) {
+    return null;
+  }
+  const newest = newestSkip(entries, facts);
+  return newest
+    ? { note: BasketRowNote.SKIPPED_EARLIER, noteAt: newest.skippedAt }
+    : null;
+}
+
+/** The newest standing skip over these entries, fresh or not. */
+function newestSkip(
+  entries: readonly BasketEntry[],
+  facts: BasketFacts
+): BasketSkipFact | null {
+  let newest: BasketSkipFact | null = null;
+  for (const entry of entries) {
+    const skip = facts.skips.get(entry.lineId);
+    if (
+      skip &&
+      (!newest || skip.skippedAt.getTime() > newest.skippedAt.getTime())
+    ) {
+      newest = skip;
+    }
+  }
+  return newest;
 }
 
 /**
@@ -169,6 +304,8 @@ export interface EntryContext {
   servedListIds: ReadonlySet<string>;
   /** Whether the **owner** may change this entry's demand (plan 0131). */
   demandEditable: (entry: BasketEntry) => boolean;
+  /** What the read knows and the entries do not (plan 0137, section 4). */
+  facts: BasketFacts;
 }
 
 /** One entry, as the wire carries it. */
@@ -181,7 +318,16 @@ export function toEntryView(
     lineId: entry.lineId,
     left: entry.quantity,
     bought,
-    state: stateOf(entry.quantity, bought, newestSettlement([entry])),
+    // The same rule as the row's, asked of a group of one: an entry the shopper
+    // skipped reads `SKIPPED` whether or not its neighbours did, which is what
+    // lets a client draw the half of a row that was put off.
+    state: stateOf(
+      [entry],
+      entry.quantity,
+      bought,
+      newestSettlement([entry]),
+      context.facts
+    ),
     approvalStatus: entry.approvalStatus,
     demandEditable: context.demandEditable(entry),
   };
@@ -203,6 +349,9 @@ export function toRowView(
   const left = entries.reduce((sum, entry) => sum + entry.left, 0);
   const bought = entries.reduce((sum, entry) => sum + entry.bought, 0);
   const newest = newestSettlement(group.entries);
+  const state = stateOf(group.entries, left, bought, newest, context.facts);
+  const note = noteOf(group.entries, state, context.facts);
+  const touched = newestAct(group.entries, newest, context.facts);
   return {
     rowKey: group.anchor.lineId,
     content: group.anchor.content,
@@ -210,21 +359,49 @@ export function toRowView(
     bought,
     // Computed here and stored nowhere, which is the whole of plan 0136.
     asked: bought + left,
-    state: stateOf(left, bought, newest),
-    // Both arrive with plan 0137 and plan 0138. Until then a row says nothing
-    // about its past and carries no mark, and the fields exist so that those
-    // plans change a value rather than the shape.
-    note: null,
-    noteAt: null,
+    state,
+    note: note?.note ?? null,
+    noteAt: note ? note.noteAt.toISOString() : null,
+    // Arrives with plan 0138. Until then a row carries no mark, and the field
+    // exists so that plan changes a value rather than the shape.
     mark: null,
     awaitingApproval: group.entries.some(
       (entry) => entry.approvalStatus === LineApprovalStatus.PENDING
     ),
     optionIds: optionIdsOf(group.entries),
-    touchedBy: newest?.settledByParticipantId ?? null,
-    touchedAt: newest ? newest.settledAt.toISOString() : null,
+    touchedBy: touched?.participantId ?? null,
+    touchedAt: touched ? touched.at.toISOString() : null,
     entries,
   };
+}
+
+/**
+ * Who last did something to this row, and when (plan 0137, section 4).
+ *
+ * The newest of the row's scoped settlements **and** its standing skips. A skip
+ * is an act on the row, and "Marta, 10:42" under a skipped row is the same
+ * answer to the same question a purchase gets.
+ */
+function newestAct(
+  entries: readonly BasketEntry[],
+  newest: BasketSettlementFact | null,
+  facts: BasketFacts
+): { participantId: string | null; at: Date } | null {
+  const settled = newest
+    ? { participantId: newest.settledByParticipantId, at: newest.settledAt }
+    : null;
+  const skip = newestSkip(entries, facts);
+  if (!skip) {
+    return settled;
+  }
+  const skipped = {
+    participantId: skip.skippedByParticipantId,
+    at: skip.skippedAt,
+  };
+  if (!settled) {
+    return skipped;
+  }
+  return skip.skippedAt.getTime() > settled.at.getTime() ? skipped : settled;
 }
 
 /** The three numbers a basket card draws (plan 0130, section 4). */
@@ -232,6 +409,9 @@ export function progressOf(rows: readonly BasketRowView[]): BasketProgress {
   // Nothing produces `REMOVED` before plan 0138, so every row counts. The
   // filter is written anyway, because that plan adds a value and not a rule.
   const counted = rows.filter((row) => row.state !== BasketRowState.REMOVED);
+  // A `SKIPPED` row falls into `pending` by arithmetic rather than by a branch,
+  // which is the answer plan 0130 section 4 asks for: it is neither done nor
+  // unavailable, and it is still something somebody has to decide about.
   const done = counted.filter(
     (row) => row.state === BasketRowState.DONE
   ).length;

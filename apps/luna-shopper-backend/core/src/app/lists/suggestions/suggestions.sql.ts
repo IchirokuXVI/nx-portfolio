@@ -35,7 +35,13 @@ import { basketAskedCte } from '../trips/basket-asked.sql';
 /**
  * The candidates of section 2: lines of the list at zero, approved, bought at
  * least once, and held by no open trip. `$1` is the list, `$2` the oldest a
- * basket may have been generated and still hold anything.
+ * basket may have been generated and still hold anything, `$3` the skip window
+ * in milliseconds.
+ *
+ * **A trip a shopper skipped the line on does not hold it** (plan 0137, section
+ * 5.4). The fragment carries that rule too, so the line is suggested back while
+ * the skip is fresh. That is the intended consequence and not an accident:
+ * nobody is out buying it.
  *
  * **The hold is coverage, and not `claimed`** (plan 0136, section 7.3). A claim
  * ends the moment the line is bought all the way through, which is the moment a
@@ -71,7 +77,7 @@ export const SUGGESTION_CANDIDATES_SQL = `
         AND s."outcome" = 'BOUGHT'
         AND s."revertedAt" IS NULL
     )
-    AND NOT ${openBasketCoversLine('ll', '$2')}
+    AND NOT ${openBasketCoversLine('ll', '$2', '$3')}
 `;
 
 /**

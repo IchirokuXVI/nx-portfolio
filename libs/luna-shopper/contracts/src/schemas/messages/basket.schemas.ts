@@ -53,6 +53,7 @@ export const BASKET_SCHEMA_IDS = {
   revertRequest: schemaId('msg/basket.row.revert/request'),
   demandRequest: schemaId('msg/basket.row.demand/request'),
   renameRequest: schemaId('msg/basket.row.rename/request'),
+  skipRequest: schemaId('msg/basket.row.skip/request'),
   addLineRequest: schemaId('msg/basket.line.add/request'),
 } as const;
 
@@ -322,6 +323,23 @@ const renameRequest = object(
   ['basketId', 'participantId', 'userId', 'rowKey', 'content']
 );
 
+/**
+ * One shape for both directions of a skip (plan 0137, section 5).
+ *
+ * The `PUT` and the `DELETE` take the same three fields, all of them from the
+ * path and the guard, so one schema serves both patterns and neither takes a
+ * body.
+ */
+const skipRequest = object(
+  BASKET_SCHEMA_IDS.skipRequest,
+  {
+    basketId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    rowKey: nonEmptyString(),
+  },
+  ['basketId', 'participantId', 'rowKey']
+);
+
 const addLineRequest = object(
   BASKET_SCHEMA_IDS.addLineRequest,
   {
@@ -391,6 +409,14 @@ export const basketMessageContracts: Record<
   },
   [BASKET_PATTERNS.rowRename]: {
     request: BASKET_SCHEMA_IDS.renameRequest,
+    response: BASKET_SCHEMA_IDS.rowResult,
+  },
+  [BASKET_PATTERNS.rowSkip]: {
+    request: BASKET_SCHEMA_IDS.skipRequest,
+    response: BASKET_SCHEMA_IDS.rowResult,
+  },
+  [BASKET_PATTERNS.rowUnskip]: {
+    request: BASKET_SCHEMA_IDS.skipRequest,
     response: BASKET_SCHEMA_IDS.rowResult,
   },
   [BASKET_PATTERNS.lineAdd]: {

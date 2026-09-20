@@ -357,6 +357,25 @@ export interface AddBasketLineRequest {
   itemIds?: string[];
 }
 
+/**
+ * Put a row off for now, or take that back (plan 0137, section 5).
+ *
+ * One shape for both directions, because they are one gesture aimed twice: the
+ * `PUT` marks every entry the row still asks for and the `DELETE` takes every
+ * mark back.
+ *
+ * **It carries no `from`**, which is the one exception to "every write on a row
+ * names the number it started from" (plan 0130, section 8). That guard exists
+ * because a number's meaning depends on where it started, and "not today" means
+ * the same thing whether the row says two or three. What the state refuses
+ * instead is a row with nothing left to skip.
+ */
+export interface SkipBasketRowRequest {
+  basketId: string;
+  participantId: string;
+  rowKey: string;
+}
+
 /** Rename every entry of a row, on each of their lists (plan 0113's rule). */
 export interface RenameBasketRowRequest {
   basketId: string;
@@ -415,6 +434,9 @@ export const BASKET_PATTERNS = {
   rowRevert: 'basket.row.revert',
   rowDemand: 'basket.row.demand',
   rowRename: 'basket.row.rename',
+  /** Put a row off for now, and take that back (plan 0137). */
+  rowSkip: 'basket.row.skip',
+  rowUnskip: 'basket.row.unskip',
   lineAdd: 'basket.line.add',
   searchScope: 'basket.searchScope',
 } as const;

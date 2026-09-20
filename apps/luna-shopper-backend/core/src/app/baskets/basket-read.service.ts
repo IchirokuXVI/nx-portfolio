@@ -1,8 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   BASKET_LIMITS,
   BasketKind,
+  isOpenBasket,
   PURCHASE_SESSION_GAP_MS,
   SettlementOutcome,
   type BasketListRef,
@@ -16,6 +18,7 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
+import type { CoreConfig } from '../config/app-config';
 import { GeneratedList, GeneratedListParticipant } from '../entities';
 import { GeneratedListOrderService } from '../generated-lists/generated-list-order.service';
 import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
@@ -29,6 +32,8 @@ import {
   toRowView,
   type BasketEntry,
   type BasketGroup,
+  type BasketSettlementFact,
+  type BasketSkipFact,
 } from './basket-rows';
 import {
   BASKET_LIST_REFS_SQL,
@@ -37,6 +42,8 @@ import {
   BASKET_SETTLEMENTS_SQL,
   COVERED_LINE_ITEMS_SQL,
   COVERED_LINES_SQL,
+  STANDING_SKIPS_SQL,
+  type BasketLineSkipRow,
   type BasketListRefRow,
   type BasketSessionRow,
   type BasketSettlementRow,
@@ -60,15 +67,19 @@ import {
  *
  * ## What it costs
  *
- * Four queries for the rows, none of them per line: the session, the covered
- * lines, their product sets and the settlements in scope. The settlements read
- * rides `ix_settlements_basket_live` from plan 0134. The participants and the
- * list names are two more, and the access reads run **before any transaction**
- * (plan 0130, section 13).
+ * Five queries for the rows, none of them per line: the session, the covered
+ * lines, their product sets, the settlements in scope and the standing skips
+ * (plan 0137). The settlements read rides `ix_settlements_basket_live` from plan
+ * 0134 and the skips read rides `ix_basket_line_skips_standing`. The
+ * participants and the list names are two more, and the access reads run
+ * **before any transaction** (plan 0130, section 13).
  */
 @Injectable()
 export class BasketReadService {
   private readonly logger = new Logger(BasketReadService.name);
+
+  /** How long a skip, and a `LIVE` basket's close, keep a row marked (0137). */
+  private readonly skipWindowMs: number;
 
   constructor(
     @InjectRepository(GeneratedList)
@@ -78,8 +89,12 @@ export class BasketReadService {
     // For the **owner's** permissions on each covered list, which is what
     // `demandEditable` answers (plan 0131). Never the actor's.
     private readonly listAccess: ListAccessService,
-    private readonly order: GeneratedListOrderService
-  ) {}
+    private readonly order: GeneratedListOrderService,
+    @Inject(ConfigService) configService: ConfigService
+  ) {
+    this.skipWindowMs =
+      configService.getOrThrow<CoreConfig>('core').basket.skipWindowMs;
+  }
 
   /** The basket as one participant reads it. */
   async read(req: GetBasketRequest): Promise<BasketView> {
@@ -169,7 +184,7 @@ export class BasketReadService {
   }
 
   /**
-   * The rows themselves: the four queries, the grouping, the order and the cap.
+   * The rows themselves: the five queries, the grouping, the order and the cap.
    *
    * Public so that the writes can recompute a row without composing the whole
    * view, and so that the finish can freeze the numbers it draws.
@@ -197,7 +212,7 @@ export class BasketReadService {
     }
 
     const lineIds = lines.map((line) => line.id);
-    const [items, settlements, permissions] = await Promise.all([
+    const [items, settlements, skips, permissions] = await Promise.all([
       this.baskets.query<CoveredLineItemRow[]>(COVERED_LINE_ITEMS_SQL, [
         lineIds,
       ]),
@@ -206,8 +221,10 @@ export class BasketReadService {
             basket.id,
             lineIds,
             scope.startedAt,
+            this.skipWindowMs,
           ])
         : Promise.resolve([]),
+      this.skipsOf(basket),
       // The **owner's** permissions, never the actor's (plan 0131). A reader
       // never learns them, which is why `demandEditable` is served at all.
       this.listAccess.permissionsAmong(basket.ownerUserId, coveredListIds),
@@ -248,12 +265,51 @@ export class BasketReadService {
           permissions.get(entry.listId) ?? new Set(),
           entry.approvalStatus
         ),
+      facts: { skips, kind: basket.kind },
     };
     return {
       rows: kept.map((group) => toRowView(group, context)),
       groups: kept,
       truncated,
     };
+  }
+
+  /**
+   * This basket's standing skips, by line (plan 0137, section 3).
+   *
+   * One query per read and never one per row, over the whole basket rather than
+   * over the lines it just read: the statement is an index range on
+   * `("basketId", "lineId")` and a basket holds a handful of skips, so narrowing
+   * it to a line list would add a parameter and save nothing.
+   *
+   * **A finished basket reads none.** Its rows come from `basket_trip_rows`,
+   * and a skip is an intention about a trip that is over.
+   */
+  private async skipsOf(
+    basket: GeneratedList
+  ): Promise<Map<string, BasketSkipFact>> {
+    if (!isOpenBasket(basket.status)) {
+      return new Map();
+    }
+    const rows = await this.baskets.query<BasketLineSkipRow[]>(
+      STANDING_SKIPS_SQL,
+      [basket.id, this.skipWindowMs]
+    );
+    return new Map(
+      rows.map((row) => [
+        row.lineId,
+        {
+          // `pg` hands a `timestamptz` back as a `Date`, but a driver that
+          // handed back a string would otherwise reach `getTime` and throw.
+          skippedAt:
+            row.skippedAt instanceof Date
+              ? row.skippedAt
+              : new Date(row.skippedAt),
+          skippedByParticipantId: row.skippedByParticipantId,
+          fresh: row.fresh,
+        },
+      ])
+    );
   }
 
   /**
@@ -340,12 +396,9 @@ export function toEntries(
     }
   }
 
-  const settlementsByLine = new Map<
-    string,
-    { id: string; outcome: SettlementOutcome; quantity: number; settledAt: Date; settledByParticipantId: string | null }[]
-  >();
+  const settlementsByLine = new Map<string, BasketSettlementFact[]>();
   for (const row of settlements) {
-    const fact = {
+    const fact: BasketSettlementFact = {
       id: row.id,
       outcome: row.outcome as SettlementOutcome,
       quantity: row.quantity,
@@ -353,6 +406,9 @@ export function toEntries(
       // back a string would otherwise reach `toISOString` and throw.
       settledAt: row.settledAt instanceof Date ? row.settledAt : new Date(row.settledAt),
       settledByParticipantId: row.settledByParticipantId,
+      // Computed by the database against its own `now()` (plan 0137, section
+      // 4), and read for a `LIVE` basket's close alone.
+      fresh: row.fresh,
     };
     const held = settlementsByLine.get(row.lineId);
     if (held) {
