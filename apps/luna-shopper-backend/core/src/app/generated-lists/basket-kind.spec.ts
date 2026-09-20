@@ -23,10 +23,10 @@ import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
 /**
  * What a basket's kind decides (plan 0133, sections 2, 3 and 6).
  *
- * The permanent basket of plan 0136 does not exist yet, so every case here puts
- * a `LIVE` row in by hand. That is the point of building the rules first: by the
- * time something creates one, the seven queries that would each have been wrong
- * about it already are not.
+ * Every case here puts a `LIVE` row in by hand, as it did when plan 0133 wrote
+ * the rules and nothing created one yet. It still does: `BasketLiveService`
+ * (plan 0136, section 4) is what creates one now, and this file is about what
+ * the rules say of a row that exists, not about who wrote it.
  */
 
 const OWNER = 'u-owner';
@@ -44,13 +44,12 @@ function basket(overrides: Partial<GeneratedList> = {}): GeneratedList {
     status: GeneratedListStatus.OPEN,
     generatedAt: new Date(NOW),
     pricingProfileId: null,
-    defaultTargetListId: null,
     idempotencyKey: null,
     ...overrides,
   } as GeneratedList;
 }
 
-/** The permanent basket as plan 0136 will write it: unnamed, open, no key. */
+/** The permanent basket as plan 0136 writes it: unnamed, open, no key. */
 const liveBasket = () =>
   basket({ id: LIVE, kind: BasketKind.LIVE, generatedAt: new Date(NOW - 1) });
 
@@ -88,10 +87,6 @@ function build(rows: GeneratedList[]): Harness {
   const service = new GeneratedListService(
     fakeUpdateDataSource(lists),
     lists as never,
-    { find: async () => [] } as never,
-    {} as never,
-    {} as never,
-    {} as never,
     {} as unknown as ProfileService,
     claims.service,
     {
@@ -101,7 +96,8 @@ function build(rows: GeneratedList[]): Harness {
     {} as never,
     { liveRegistered: async () => [] } as never,
     { find: async () => [] } as never,
-    tripRows.service
+    tripRows.service,
+    {} as never
   );
 
   return { service, rows, claims, events, tripRows };
@@ -148,16 +144,20 @@ describe('what the permanent basket refuses (section 2)', () => {
     });
   });
 
-  it('takes a default target list, which is neither of those', async () => {
+  it('refuses those two and nothing else', async () => {
+    // Was "takes a default target list, which is neither of those".
+    // `defaultTargetListId` is deleted from the request and from the column
+    // (plan 0136, sections 9 and 10), because a basket has no line of its own
+    // for a default to target: the add names its list outright. So the two
+    // refusals above are now the whole of what the permanent basket refuses,
+    // and a write carrying neither still answers with the basket.
     const { service } = build([liveBasket()]);
 
-    const view = await service.update({
-      userId: OWNER,
-      generatedListId: LIVE,
-      defaultTargetListId: 'l-flat',
-    });
+    const view = await service.update({ userId: OWNER, generatedListId: LIVE });
 
     expect(view.kind).toBe(BasketKind.LIVE);
+    expect(view.status).toBe(GeneratedListStatus.OPEN);
+    expect(view.name).toBeNull();
   });
 
   it('refuses to be deleted, and leaves the row where it is', async () => {
@@ -188,11 +188,7 @@ describe('what the permanent basket refuses (section 2)', () => {
     // down, every line they can write.
     const { service, claims } = build([liveBasket()]);
 
-    await service.update({
-      userId: OWNER,
-      generatedListId: LIVE,
-      defaultTargetListId: 'l-flat',
-    });
+    await service.update({ userId: OWNER, generatedListId: LIVE });
 
     expect(claims.calls).toEqual([]);
   });

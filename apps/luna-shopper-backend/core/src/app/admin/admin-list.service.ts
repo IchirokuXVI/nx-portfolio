@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type {
   AdminBasketDetailView,
-  AdminBasketLineView,
   AdminBasketPage,
+  AdminBasketRowView,
   AdminBasketView,
   AdminListDetailView,
   AdminListIdRequest,
@@ -24,6 +24,7 @@ import type {
   UpdateAdminListLineRequest,
   UpdateAdminListRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { GeneratedListStatus } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
   decodeCursor,
@@ -31,13 +32,14 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
+import { BasketReadService } from '../baskets/basket-read.service';
 import {
+  BasketSource,
   GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOrigin,
   ListLine,
   ShoppingList,
 } from '../entities';
+import { GeneratedListService } from '../generated-lists/generated-list.service';
 import { LineService } from '../lists/line.service';
 import { ListService } from '../lists/list.service';
 import { CorePlatformAdminService } from './platform-admin.service';
@@ -87,10 +89,9 @@ interface LineCursor {
  * inconsistency. A list's writes all delegate to `ListService` and `LineService`,
  * so an operator's edit is the edit a member with `MANAGE` makes and it emits
  * what that emits. A basket has no such service to delegate to, because the app
- * offers no basket line editor either: a `GeneratedList` is **output**, composed
- * from the lines of the lists its `basket_sources` name, and a changed line
- * contradicts both the origin that explains where it came from and any
- * settlement already written against it. So baskets stay read only in full (plan
+ * offers no basket line editor either: since plan 0136 a `GeneratedList` is a
+ * **view** of the lines of the lists its `basket_sources` name, and there is no
+ * row of its own here to edit at all. So baskets stay read only in full (plan
  * 0077, section 6.4).
  *
  * Creating a list line is absent for a narrower reason: `createdByUserId` is not
@@ -107,13 +108,21 @@ export class AdminListService {
     private readonly lines: Repository<ListLine>,
     @InjectRepository(GeneratedList)
     private readonly baskets: Repository<GeneratedList>,
-    @InjectRepository(GeneratedListLine)
-    private readonly basketLines: Repository<GeneratedListLine>,
-    @InjectRepository(GeneratedListLineOrigin)
-    private readonly origins: Repository<GeneratedListLineOrigin>,
+    // What a basket was asked to draw from (plan 0133), which is the only thing
+    // that puts a basket in a zone now that it holds no lines of its own.
+    @InjectRepository(BasketSource)
+    private readonly sources: Repository<BasketSource>,
     private readonly gate: CorePlatformAdminService,
     private readonly listService: ListService,
-    private readonly lineService: LineService
+    private readonly lineService: LineService,
+    // The history counts, so the back office and the owner's own history cannot
+    // disagree about how large a basket is (plan 0136, section 7.5). A value
+    // import, never a `type` one: a `type` import on a constructor dependency
+    // erases its DI token.
+    private readonly generated: GeneratedListService,
+    // The rows of an **open** basket, unredacted: an operator reads what the
+    // shopper reads.
+    private readonly basketRead: BasketReadService
   ) {}
 
   /**
@@ -433,11 +442,16 @@ export class AdminListService {
   /**
    * A page of baskets, newest generated first, by owner or by zone.
    *
-   * **The zone filter goes through the line origins**, not through the basket
-   * itself, because a basket has no zone: it belongs to a person, and its lines
-   * record which (zone, list) pair each of them came from. The other candidate,
-   * the default target list's zone, is null on every basket nobody chose a
-   * destination for, which is most of them.
+   * **The zone filter goes through `basket_sources`** (plan 0136, section 7.5),
+   * not through the basket itself, because a basket has no zone: it belongs to a
+   * person, and what it was asked to draw from is the only record of which zones
+   * it looks at. It used to go through the line origins, and there are none any
+   * more. The other candidate, the default target list's zone, is null on every
+   * basket nobody chose a destination for, which is most of them.
+   *
+   * A `LIVE` basket has no sources, so a zone filter never answers one. It is
+   * listed unfiltered with its `kind` shown, because an operator looking for
+   * "what is this person shopping" needs that before anything else.
    */
   async listBaskets(req: ListAdminBasketsRequest): Promise<AdminBasketPage> {
     await this.gate.requireAdmin(req);
@@ -456,9 +470,8 @@ export class AdminListService {
     if (req.zoneId) {
       qb.andWhere(
         `EXISTS (
-           SELECT 1 FROM generated_list_line_origins o
-           JOIN generated_list_lines gl ON gl.id = o."generatedListLineId"
-           WHERE gl."generatedListId" = b.id AND o."zoneId" = :zoneId)`,
+           SELECT 1 FROM basket_sources bs
+           WHERE bs."basketId" = b.id AND bs."zoneId" = :zoneId)`,
         { zoneId: req.zoneId }
       );
     }
@@ -476,7 +489,7 @@ export class AdminListService {
 
     const ids = page.map((basket) => basket.id);
     const [counts, zones] = await Promise.all([
-      this.countBasketLines(ids),
+      this.generated.countsFor(page),
       this.zonesForBaskets(ids),
     ]);
 
@@ -484,7 +497,7 @@ export class AdminListService {
       items: page.map((basket) =>
         toBasketRow(
           basket,
-          counts.get(basket.id) ?? 0,
+          counts.get(basket.id)?.lineCount ?? 0,
           zones.get(basket.id) ?? []
         )
       ),
@@ -495,7 +508,19 @@ export class AdminListService {
     };
   }
 
-  /** One basket and its lines, in the order it was generated in. */
+  /**
+   * One basket and its rows (plan 0136, section 7.5).
+   *
+   * **Two sources, split on the status**, as the history counts are. An `OPEN`
+   * basket has nothing written down anywhere, so the operator is shown what the
+   * shopper is shown, unredacted: `BasketReadService.openRows` composes it from
+   * the lines the basket covers. A basket that is over answers from
+   * `basket_trip_rows`, which its finish froze, against the settlements standing
+   * under its own id.
+   *
+   * The field is still called `lines`, because the route is, and renaming a wire
+   * field is plan 0144's.
+   */
   async getBasket(req: GetAdminBasketRequest): Promise<AdminBasketDetailView> {
     await this.gate.requireAdmin(req);
 
@@ -504,54 +529,65 @@ export class AdminListService {
       throw new NotFoundException('Basket not found');
     }
 
-    const lines = await this.basketLines.find({
-      where: { generatedListId: basket.id },
-      order: { position: 'ASC', id: 'ASC' },
-    });
-    const zones = await this.zonesForBaskets([basket.id]);
+    const [counts, zones, lines] = await Promise.all([
+      this.generated.countsFor([basket]),
+      this.zonesForBaskets([basket.id]),
+      this.rowsOfBasket(basket),
+    ]);
     return {
-      ...toBasketRow(basket, lines.length, zones.get(basket.id) ?? []),
-      lines: lines.map(toBasketLineView),
+      ...toBasketRow(
+        basket,
+        counts.get(basket.id)?.lineCount ?? 0,
+        zones.get(basket.id) ?? []
+      ),
+      lines,
     };
   }
 
-  private async countBasketLines(ids: string[]): Promise<Map<string, number>> {
-    if (!ids.length) {
-      return new Map();
+  /** The rows an operator is shown, whichever half of the split answers them. */
+  private async rowsOfBasket(
+    basket: GeneratedList
+  ): Promise<AdminBasketRowView[]> {
+    if (basket.status === GeneratedListStatus.OPEN) {
+      return (await this.basketRead.openRows(basket)).map((row) => ({
+        rowKey: row.rowKey,
+        content: row.content,
+        left: row.left,
+        bought: row.bought,
+        asked: row.asked,
+      }));
     }
-    const rows = await this.basketLines
-      .createQueryBuilder('gl')
-      .select('gl."generatedListId"', 'basketId')
-      .addSelect('COUNT(*)', 'count')
-      .where('gl."generatedListId" IN (:...ids)', { ids })
-      .groupBy('gl."generatedListId"')
-      .getRawMany<{ basketId: string; count: string }>();
-    return new Map(rows.map((row) => [row.basketId, Number(row.count)]));
+    const rows = await this.baskets.query<FrozenRow[]>(
+      FINISHED_BASKET_ROWS_SQL,
+      [basket.id]
+    );
+    return rows.map((row) => ({
+      rowKey: row.lineId,
+      content: row.content,
+      left: Math.max(row.asked - row.bought, 0),
+      bought: row.bought,
+      asked: row.asked,
+    }));
   }
 
   /**
-   * The distinct zones each basket's lines were drawn from, in one query for the
+   * The distinct zones each basket was asked to draw from, in one query for the
    * whole page.
    *
-   * Empty is a real answer and not a failure: a basket whose lines all came from
-   * free text rather than from a list has no origins, and reports no zones.
+   * Empty is a real answer and not a failure: the permanent basket has no
+   * sources at all (plan 0133), so it reports no zones.
    */
   private async zonesForBaskets(ids: string[]): Promise<Map<string, string[]>> {
     if (!ids.length) {
       return new Map();
     }
-    const rows = await this.origins
-      .createQueryBuilder('o')
-      .innerJoin(
-        'generated_list_lines',
-        'gl',
-        'gl.id = o."generatedListLineId"'
-      )
-      .select('gl."generatedListId"', 'basketId')
-      .addSelect('o."zoneId"', 'zoneId')
-      .where('gl."generatedListId" IN (:...ids)', { ids })
-      .groupBy('gl."generatedListId"')
-      .addGroupBy('o."zoneId"')
+    const rows = await this.sources
+      .createQueryBuilder('bs')
+      .select('bs."basketId"', 'basketId')
+      .addSelect('bs."zoneId"', 'zoneId')
+      .where('bs."basketId" IN (:...ids)', { ids })
+      .groupBy('bs."basketId"')
+      .addGroupBy('bs."zoneId"')
       .getRawMany<{ basketId: string; zoneId: string }>();
 
     const byBasket = new Map<string, string[]>();
@@ -562,6 +598,45 @@ export class AdminListService {
     }
     return byBasket;
   }
+}
+
+/**
+ * The frozen rows of one finished basket, with what was bought of each. `$1` is
+ * the basket.
+ *
+ * One row per zone line, as `basket_trip_rows` is, and `left` is derived rather
+ * than stored, exactly as `trips.mappers.ts` derives it. The text comes from the
+ * line itself, because a trip row carries none: a basket never had text of its
+ * own that the list did not have first.
+ *
+ * Every camelCase column is quoted by hand, for the reason the SQL in
+ * `generated-list.sql.ts` gives at length: TypeORM does not rewrite
+ * `alias.property` inside a raw select expression.
+ */
+const FINISHED_BASKET_ROWS_SQL = `
+  SELECT r."lineId" AS "lineId",
+         ll.content AS "content",
+         r."asked" AS "asked",
+         COALESCE((
+           SELECT SUM(s."quantity")
+           FROM "line_settlements" s
+           WHERE s."basketId" = r."basketId"
+             AND s."lineId" = r."lineId"
+             AND s."revertedAt" IS NULL
+             AND s."outcome" = 'BOUGHT'
+         ), 0)::int AS "bought"
+  FROM "basket_trip_rows" r
+  JOIN "list_lines" ll ON ll.id = r."lineId"
+  WHERE r."basketId" = $1::uuid
+  ORDER BY ll."createdAt", ll.id
+`;
+
+/** One row of {@link FINISHED_BASKET_ROWS_SQL}. */
+interface FrozenRow {
+  lineId: string;
+  content: string;
+  asked: number;
+  bought: number;
 }
 
 /** The raw shape both list reads select, before the counts are numbers. */
@@ -623,14 +698,5 @@ function toBasketRow(
     generatedAt: basket.generatedAt.toISOString(),
     createdAt: basket.createdAt.toISOString(),
     updatedAt: basket.updatedAt.toISOString(),
-  };
-}
-
-function toBasketLineView(line: GeneratedListLine): AdminBasketLineView {
-  return {
-    id: line.id,
-    content: line.content,
-    quantity: line.quantity,
-    createdAt: line.createdAt.toISOString(),
   };
 }

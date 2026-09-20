@@ -1,21 +1,11 @@
 import type {
   BasketSourceView,
-  GeneratedListBasketLineView,
-  GeneratedListBasketView,
-  GeneratedListLineOriginView,
-  GeneratedListLineView,
-  GeneratedListParticipantView,
-  GeneratedListSourceName,
   GeneratedListSummaryView,
   GeneratedListView,
-  SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
 import type {
   BasketSource,
   GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOption,
-  GeneratedListLineOrigin,
 } from '../entities';
 
 /**
@@ -40,196 +30,19 @@ export function toBasketSourceView(row: BasketSource): BasketSourceView {
 }
 
 /**
- * One provenance row as the wire describes it.
- *
- * `settled` is passed in rather than read off the row, because it is not on the
- * row: it is a sum over this basket's live purchases against the origin's zone
- * line (plan 0109, section 4). It is an argument rather than an optional field
- * so that every composer of this view has to have asked for it, which is the
- * one thing that stops a read quietly reporting that a household has received
- * none of what it asked for.
- */
-export function toOriginView(
-  row: GeneratedListLineOrigin,
-  settled: number
-): GeneratedListLineOriginView {
-  return {
-    id: row.id,
-    zoneId: row.zoneId,
-    listId: row.listId,
-    lineId: row.lineId,
-    quantity: row.quantity,
-    settled,
-    lineVersion: row.lineVersion,
-  };
-}
-
-/**
  * What this basket has bought for each of a line's origins, keyed on the **zone
  * line** a settlement landed on, which is what `generated_list_line_origins`
  * is unique on beside the basket line.
  */
-export type SettledPerOrigin = ReadonlyMap<string, number>;
-
-/** Nothing settled, shared rather than allocated per line. */
-const EMPTY_SETTLED: SettledPerOrigin = new Map<string, number>();
-
-/** The one place the two mappers turn that map into a row's own number. */
-function originViews(
-  origins: GeneratedListLineOrigin[],
-  settled: SettledPerOrigin
-): GeneratedListLineOriginView[] {
-  return origins.map((origin) =>
-    toOriginView(origin, settled.get(origin.lineId) ?? 0)
-  );
-}
-
-export function toGeneratedLineView(
-  row: GeneratedListLine,
-  children: {
-    origins: GeneratedListLineOrigin[];
-    options: GeneratedListLineOption[];
-    /** Keyed on the origin's zone line (plan 0109, section 4). */
-    settledPerOrigin: SettledPerOrigin;
-  }
-): GeneratedListLineView {
-  return {
-    id: row.id,
-    content: row.content,
-    quantity: row.quantity,
-    settledQuantity: row.settledQuantity,
-    itemId: row.itemId,
-    options: children.options.map((option) => option.itemId),
-    origin: row.origin,
-    targetListId: row.targetListId,
-    position: row.position,
-    origins: originViews(children.origins, children.settledPerOrigin),
-  };
-}
-
 /**
- * One line as a **participant** reads it (plan 0051, section 5).
+ * The basket's header and the sources it was composed from (plan 0136).
  *
- * `seesZoneData` decides by **omission**, not by nulling: `origins`,
- * `targetListId` and `origin` all name a zone or a list, so for a reader who does
- * not pass section 5.2 they are absent from the object entirely. That is what
- * makes the redaction hold even if a template somewhere forgets to hide a field,
- * and it is why this is a separate mapper rather than a flag on
- * {@link toGeneratedLineView}.
- *
- * Both attributions are always present, for everybody. "Who got the bread" and
- * "who put this here" are the two questions a shop where four people are working
- * one list actually asks (velista `0044`, section 4.3; plan 0055, section 4),
- * and a participant id names a person on this basket without naming anything
- * outside it.
+ * It carries **no lines**, because a basket stores none: its rows are read from
+ * `list_lines` on every request by `BasketReadService`, and this is the owner's
+ * view of the trip itself rather than of what is in it.
  */
-export function toBasketLineView(
-  row: GeneratedListLine,
-  children: {
-    origins: GeneratedListLineOrigin[];
-    options: GeneratedListLineOption[];
-    /** What the newest settle on this line said, or null if there has been none. */
-    lastOutcome?: SettlementOutcome | null;
-    /**
-     * Units bought before this line reached any list (plan 0093, section 2.2).
-     *
-     * Defaulted to zero rather than made required, because that is the answer
-     * for every line that has never been settled off a list, which is nearly all
-     * of them.
-     */
-    waitingSettled?: number;
-    /**
-     * Keyed on the origin's zone line (plan 0109, section 4). Defaulted to an
-     * empty map for the same reason `waitingSettled` is defaulted to zero: a
-     * line nobody has settled off a list has nothing in it, which is nearly
-     * every line.
-     */
-    settledPerOrigin?: SettledPerOrigin;
-  },
-  seesZoneData: boolean
-): GeneratedListBasketLineView {
-  const line: GeneratedListBasketLineView = {
-    id: row.id,
-    content: row.content,
-    quantity: row.quantity,
-    settledQuantity: row.settledQuantity,
-    itemId: row.itemId,
-    options: children.options.map((option) => option.itemId),
-    position: row.position,
-    // Written once and never afterwards, which is why it is a second field and
-    // not a reuse of the one below (plan 0055, section 4): that one becomes
-    // whoever settles the line, and then nobody can say who typed it.
-    createdByParticipantId: row.createdByParticipantId,
-    lastEditedByParticipantId: row.lastEditedByParticipantId,
-    lastEditedAt: row.lastEditedAt?.toISOString() ?? null,
-    // Not derivable from the numbers: NOT_AVAILABLE closes the outstanding
-    // amount exactly as a purchase does, so a row without this would caption a
-    // shop that had none as somebody who bought it.
-    lastOutcome: children.lastOutcome ?? null,
-    // Above the redaction, deliberately (plan 0093, section 2.2): it counts this
-    // basket's own purchases and names no list, so a guest is told it too. It is
-    // the number the screen needs to say what a list is about to receive.
-    waitingSettled: children.waitingSettled ?? 0,
-  };
-
-  if (!seesZoneData) {
-    return line;
-  }
-
-  return {
-    ...line,
-    // Under the redaction, deliberately: `settled` rides on `origins`, so it is
-    // absent for exactly the readers `origins` is absent for (plan 0109,
-    // section 4). It names a zone line, which is the rule's own subject.
-    origins: originViews(
-      children.origins,
-      children.settledPerOrigin ?? EMPTY_SETTLED
-    ),
-    targetListId: row.targetListId,
-    origin: row.origin,
-  };
-}
-
-/**
- * The basket, its people and the reader's own row, in one view (velista `0044`,
- * section 4).
- *
- * One shape rather than three reads because the screen cannot draw a single row
- * without all of it: a line's attribution is a participant id, so the people are
- * this screen's vocabulary rather than a second screen's data.
- */
-export function toBasketView(
-  row: GeneratedList,
-  lines: GeneratedListBasketLineView[],
-  people: {
-    participants: GeneratedListParticipantView[];
-    me: GeneratedListParticipantView;
-  },
-  seesZoneData: boolean,
-  sourceNames: GeneratedListSourceName[] = [],
-  sources: BasketSourceView[] = []
-): GeneratedListBasketView {
-  const view: GeneratedListBasketView = {
-    id: row.id,
-    kind: row.kind,
-    name: row.name,
-    status: row.status,
-    generatedAt: row.generatedAt.toISOString(),
-    lines,
-    participants: people.participants,
-    me: people.me,
-    seesZoneData,
-  };
-
-  // What the basket draws from is a list of (zone, list) pairs, and the names
-  // behind them are the plainest zone data there is. Both go under the same rule
-  // as the line's three fields.
-  return seesZoneData ? { ...view, sources, sourceNames } : view;
-}
-
 export function toGeneratedListView(
   row: GeneratedList,
-  lines: GeneratedListLineView[],
   sources: BasketSourceView[] = []
 ): GeneratedListView {
   return {
@@ -243,7 +56,6 @@ export function toGeneratedListView(
     // What the run was asked to draw from (plan 0133, section 4). Empty on a
     // `LIVE` basket, whose coverage is a rule rather than a list of sources.
     sources,
-    lines,
   };
 }
 

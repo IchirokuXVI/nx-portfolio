@@ -82,15 +82,6 @@ export class CreateGeneratedListDto {
   @MaxLength(GENERATED_LIST_LIMITS.nameMaxLength)
   name?: string | null;
 
-  @ApiPropertyOptional({
-    format: 'uuid',
-    nullable: true,
-    description:
-      'The list every line added to this basket should also be written into. A default on new lines, never a retroactive sweep over lines already added.',
-  })
-  @IsOptional()
-  @IsUUID()
-  defaultTargetListId?: string | null;
 
   @ApiPropertyOptional({
     maxLength: 200,
@@ -134,118 +125,6 @@ export class UpdateGeneratedListDto {
   @IsEnum(GeneratedListStatus)
   status?: GeneratedListStatus;
 
-  @ApiPropertyOptional({ format: 'uuid', nullable: true })
-  @IsOptional()
-  @IsUUID()
-  defaultTargetListId?: string | null;
-}
-
-export class AddGeneratedListLineDto {
-  @ApiProperty({ maxLength: GENERATED_LIST_LIMITS.contentMaxLength })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(GENERATED_LIST_LIMITS.contentMaxLength)
-  content!: string;
-
-  @ApiPropertyOptional({
-    minimum: 1,
-    maximum: GENERATED_LIST_LIMITS.maxQuantity,
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(GENERATED_LIST_LIMITS.maxQuantity)
-  quantity?: number;
-
-  @ApiPropertyOptional({
-    format: 'uuid',
-    nullable: true,
-    description:
-      'The product this line means to buy. Null for a free text line.',
-  })
-  @IsOptional()
-  @IsUUID()
-  itemId?: string | null;
-
-  @ApiPropertyOptional({
-    type: [String],
-    description: 'The products the pick may be switched between.',
-  })
-  @IsOptional()
-  @IsArray()
-  @IsUUID(undefined, { each: true })
-  options?: string[];
-
-  @ApiPropertyOptional({
-    format: 'uuid',
-    nullable: true,
-    description:
-      'The zone list to also create this line in, through the ordinary add path. Omitted falls back to the basket default; an explicit null means this basket alone, whatever the default says.',
-  })
-  @IsOptional()
-  @IsUUID()
-  targetListId?: string | null;
-}
-
-export class UpdateGeneratedListLineDto {
-  @ApiPropertyOptional({ maxLength: GENERATED_LIST_LIMITS.contentMaxLength })
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(GENERATED_LIST_LIMITS.contentMaxLength)
-  content?: string;
-
-  @ApiPropertyOptional({
-    minimum: 0,
-    maximum: GENERATED_LIST_LIMITS.maxQuantity,
-    description:
-      'Zero is allowed on an edit: a line at zero is one the basket knows about and does not currently need.',
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(GENERATED_LIST_LIMITS.maxQuantity)
-  quantity?: number;
-
-  @ApiPropertyOptional({
-    format: 'uuid',
-    nullable: true,
-    description:
-      'Switch the pick to another of this line options. An id that is not one of them is refused.',
-  })
-  @IsOptional()
-  @IsUUID()
-  itemId?: string | null;
-
-  @ApiPropertyOptional({
-    format: 'uuid',
-    nullable: true,
-    description:
-      'Send an added line into a zone list. Only meaningful on a line added to this basket, and it promotes the line once.',
-  })
-  @IsOptional()
-  @IsUUID()
-  targetListId?: string | null;
-
-  @ApiPropertyOptional({
-    description:
-      'A new content renames every zone line this line came from as well (plan 0113). Merge where the new name is already taken, on one of those lists or in the basket. Without it such a rename is refused with `line_merge_required`, and nothing is written.',
-  })
-  @IsOptional()
-  @IsBoolean()
-  confirmMerge?: boolean;
-}
-
-export class ReorderGeneratedListLinesDto {
-  @ApiProperty({
-    type: [String],
-    description:
-      'Every line of the basket, in the order it should now be in. A partial order is refused.',
-  })
-  @IsArray()
-  @ArrayMaxSize(GENERATED_LIST_LIMITS.maxLines)
-  @IsUUID(undefined, { each: true })
-  lineIds!: string[];
 }
 
 /** The query half of the history listing (plan 0050, section 7). */

@@ -181,9 +181,9 @@ export class SettlementService {
           // off the list page (plan 0054, section 7).
           revertedAt: null,
           revertedByParticipantId: null,
-          generatedListLineId: null,
-          // Both null together, and null is the list page (plan 0134,
-          // section 2): this settle came off the list and through no basket.
+          // Null is the list page (plan 0134, section 2): this settle came off
+          // the list and through no basket, which is what the trips read calls
+          // a session purchase.
           basketId: null,
           pricePaidCents: null,
           supermarketLocationId: null,

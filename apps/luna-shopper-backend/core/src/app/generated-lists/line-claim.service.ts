@@ -11,7 +11,6 @@ import type { CoreConfig } from '../config/app-config';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
   BASKET_CLAIMED_LINES_SQL,
-  BASKET_LINE_CLAIMED_LINES_SQL,
   readLineClaims,
   type ZoneLineClaimRef,
 } from './line-claim.sql';
@@ -82,12 +81,16 @@ export class LineClaimService {
   }
 
   /**
-   * The zone lines a basket is claiming right now, read before the transition
-   * that ends the claim.
+   * The zone lines a basket covers right now, read before the transition that
+   * ends the claim.
    *
    * Read **before** for deletion and it does not matter for a status change, so
    * every caller reads first and announces after: one order that is correct in
    * both cases beats two orders that are each correct in one.
+   *
+   * The per basket line twin is gone with the lines themselves (plan 0136,
+   * section 7.1): a write that settles or removes one line asks this and lets
+   * {@link announceReleased} decide, which it had to do anyway.
    */
   async refsOf(
     generatedListId: string,
@@ -96,20 +99,6 @@ export class LineClaimService {
     const runner = manager ?? this.dataSource;
     return (await runner.query(BASKET_CLAIMED_LINES_SQL, [
       generatedListId,
-    ])) as ZoneLineClaimRef[];
-  }
-
-  /**
-   * The zone lines one basket line is claiming, for the two transitions that are
-   * about one line: settled all the way through, or taken out of the basket.
-   */
-  async refsOfBasketLine(
-    generatedListLineId: string,
-    manager?: EntityManager
-  ): Promise<ZoneLineClaimRef[]> {
-    const runner = manager ?? this.dataSource;
-    return (await runner.query(BASKET_LINE_CLAIMED_LINES_SQL, [
-      generatedListLineId,
     ])) as ZoneLineClaimRef[];
   }
 

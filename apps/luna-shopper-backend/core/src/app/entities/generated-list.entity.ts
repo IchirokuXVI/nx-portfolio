@@ -106,17 +106,6 @@ export class GeneratedList extends BaseEntity {
   @Column({ type: 'uuid', nullable: true })
   pricingProfileId!: string | null;
 
-  /**
-   * The list every `ADDED` line is also written into unless it names its own
-   * (section 5): "everything I add today also goes in the flat list".
-   *
-   * A default on new lines and **never a retroactive sweep** over lines already
-   * added, which is the difference between an ergonomic default and an edit
-   * nobody asked for.
-   */
-  @Column({ type: 'uuid', nullable: true })
-  defaultTargetListId!: string | null;
-
   /** Null for a run that carried no key; unique per owner when it did. */
   @Column({ type: 'varchar', length: 200, nullable: true })
   idempotencyKey!: string | null;

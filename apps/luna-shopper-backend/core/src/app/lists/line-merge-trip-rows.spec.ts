@@ -1,7 +1,6 @@
 import type { EntityManager } from 'typeorm';
 import {
   BasketTripRow,
-  GeneratedListLineOrigin,
   LineComment,
   LineSettlement,
   ListLine,
@@ -96,7 +95,6 @@ function managerOver(rows: BasketTripRow[]): EntityManager {
     ListLineGroupRemoval,
     LineComment,
     LineSettlement,
-    GeneratedListLineOrigin,
   ]);
   return {
     getRepository: (entity: unknown) => {

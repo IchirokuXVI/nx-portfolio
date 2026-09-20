@@ -43,13 +43,10 @@ import {
   toShareLinkView,
 } from './generated-list-sharing.mappers';
 import {
-  BASKET_SOURCE_LISTS_SQL,
   NEXT_GUEST_NUMBER_SQL,
   WRITABLE_AMONG_SQL,
-  type BasketSourceListRow,
   type WritableAmongRow,
 } from './generated-list-sharing.sql';
-import { WRITABLE_LISTS_SQL, type WritableListRow } from './generated-list.sql';
 
 /**
  * Sharing a basket with people who have no account (plan 0051, sections 3, 4, 5
@@ -584,9 +581,11 @@ export class GeneratedListSharingService {
    * read. The link's state is never consulted, which is exactly what lets
    * section 3.4 revoke a link without evicting the people already shopping.
    *
-   * `seesZoneData` is resolved here rather than by the caller because it is a
-   * question about core's own access tables, and section 5.2 insists it is asked
-   * **at request time** rather than read off the snapshot.
+   * It carries no `seesZoneData` since plan 0136 (section 3.4). That flag was
+   * all or nothing over every source list of the run, and a `LIVE` basket covers
+   * every list its owner can write, so "every source list" is not a set a second
+   * reader can be measured against at all. What replaced it is per list and is
+   * answered by the basket read, which knows the coverage.
    */
   async resolveParticipant(
     req: ResolveParticipantRequest
@@ -605,7 +604,6 @@ export class GeneratedListSharingService {
       generatedListId: participant.generatedListId,
       kind: participant.kind,
       userId: participant.userId,
-      seesZoneData: await this.seesZoneData(participant),
     };
   }
 
@@ -665,8 +663,9 @@ export class GeneratedListSharingService {
    * One live participant by id, on this basket (plan 0051, section 3.3).
    *
    * The row itself rather than {@link livePresenceEntry}'s projection, because
-   * the callers that need it go on to ask {@link seesZoneData}, which is a
-   * question about the participant's account and not about what is shown.
+   * the callers that need it go on to ask about the participant's account: the
+   * basket's redaction is per list and reads `userId`, and the read composes the
+   * whole row into its answer.
    *
    * The basket is part of the lookup rather than assumed from the id, on the same
    * reasoning as {@link isParticipantLive}: a participant of one basket must
@@ -721,37 +720,6 @@ export class GeneratedListSharingService {
     return null;
   }
 
-  /**
-   * Whether this participant may see zone data (plan 0051, section 5.2).
-   *
-   * True only for somebody holding `WRITE` on **every** list the run drew from,
-   * evaluated now rather than at generation time. The owner passes by
-   * construction (section 2), a `GUEST` never passes, having no account to hold
-   * access with, and a `REGISTERED` participant passes only if they independently
-   * have `WRITE` everywhere.
-   *
-   * The all or nothing shape has a known cliff: one source list where they hold
-   * only `READ` collapses the whole view even when they have `WRITE` on the other
-   * four. Section 11 keeps the per line alternative as the eventual target; it is
-   * accepted here because it fails in the safe direction.
-   */
-  async seesZoneData(participant: GeneratedListParticipant): Promise<boolean> {
-    if (participant.kind === ParticipantKind.OWNER) {
-      return true;
-    }
-    if (!participant.userId) {
-      return false;
-    }
-    const sources = await this.sourceListIds(participant.generatedListId);
-    if (sources.length === 0) {
-      // A basket with no origins draws on no zone at all, so there is no zone
-      // data to withhold and nothing for the rule to protect.
-      return true;
-    }
-    const writable = await this.writableAmong(participant.userId, sources);
-    return sources.every((listId) => writable.has(listId));
-  }
-
   /** Which of `listIds` this person may write, at request time (section 5.2). */
   async writableAmong(
     userId: string,
@@ -767,59 +735,7 @@ export class GeneratedListSharingService {
     return new Set(rows.map((row) => row.listId));
   }
 
-  /**
-   * Every list **both** these people may write right now (plan 0057, section
-   * 4.1; plan 0058, section 3.1).
-   *
-   * The scope behind both pickers on this surface, and it lives here rather than
-   * on either of them because they must not be allowed to disagree about it: one
-   * offers a list to adopt and the other offers a list to bind into, and both
-   * end in a provenance row that every later settle acts on.
-   *
-   * For the overwhelming case, where the actor **is** the owner, it is their
-   * entire writable set across every zone they are in, which is exactly what
-   * both plans ask for: a list from a zone the run never drew from qualifies,
-   * and so does a zone the run never heard of.
-   *
-   * The intersection bites only on a registered co-shopper, and it is plan 0051
-   * section 6.4 that puts it there. **A settle is authorized by the owner's
-   * access.** A row created against a list the owner cannot write is one every
-   * subsequent settle skips and reports, for the life of the basket: the
-   * household would see the line and never see it bought, and the shopper would
-   * get a skip report they cannot act on. Lifting it needs that security rule to
-   * become per origin, which plan 0057 section 8 records as one decision for
-   * both plans rather than two.
-   */
-  async writableIntersection(
-    ownerUserId: string,
-    actorUserId: string
-  ): Promise<WritableListRow[]> {
-    const owned = await this.lists.query<WritableListRow[]>(
-      WRITABLE_LISTS_SQL,
-      [ownerUserId]
-    );
-    if (actorUserId === ownerUserId) {
-      return owned;
-    }
-    const actors = new Set(
-      (
-        await this.lists.query<WritableListRow[]>(WRITABLE_LISTS_SQL, [
-          actorUserId,
-        ])
-      ).map((row) => row.listId)
-    );
-    return owned.filter((row) => actors.has(row.listId));
-  }
-
   /** The distinct zone lists a basket's provenance rows point at. */
-  async sourceListIds(generatedListId: string): Promise<string[]> {
-    const rows = await this.lists.query<BasketSourceListRow[]>(
-      BASKET_SOURCE_LISTS_SQL,
-      [generatedListId]
-    );
-    return rows.map((row) => row.listId);
-  }
-
   // --- Reading the people ---------------------------------------------------
 
   /**
@@ -854,7 +770,15 @@ export class GeneratedListSharingService {
     let withDevices = true;
     if (req.asParticipantId) {
       const asker = rows.find((row) => row.id === req.asParticipantId);
-      withDevices = asker ? await this.seesZoneData(asker) : false;
+      // Who may inspect the people on a basket, since plan 0136 deleted
+      // `seesZoneData`. The same rule as the shop addresses and for the same
+      // reason: when somebody arrived and what device they are on is a fact
+      // about **them** rather than about any list, so no list's permissions can
+      // decide it. The owner and the people they named see it; a link visitor,
+      // guest or registered, does not.
+      withDevices = asker
+        ? asker.kind === ParticipantKind.OWNER || asker.invitedAt !== null
+        : false;
     }
     return {
       participants: rows.map((row) => toParticipantView(row, withDevices)),

@@ -48,25 +48,6 @@ export const WRITABLE_AMONG_SQL = `
 `;
 
 /**
- * Every zone line one basket draws on, with the list and zone it belongs to.
- * `$1` is the basket.
- *
- * The provenance rows are the lists the basket really drew a line from, as
- * opposed to `basket_sources`, which records what the run was **asked** for. The
- * two differ in an ordinary way: a source may narrow to a list that contributed
- * no qualifying line, and a basket edited afterwards may carry lines whose
- * origins were since deleted. Section 5.2 asks about "every source list of the run", and this is the
- * narrower and more honest reading of it, because a list that contributed nothing
- * discloses nothing by being hidden.
- */
-export const BASKET_SOURCE_LISTS_SQL = `
-  SELECT DISTINCT o."listId" AS "listId", o."zoneId" AS "zoneId"
-  FROM "generated_list_line_origins" o
-  JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
-  WHERE gll."generatedListId" = $1
-`;
-
-/**
  * The next guest number for a basket. `$1` is the basket.
  *
  * `max + 1` under the transaction the join runs in, rather than a sequence,
@@ -91,8 +72,3 @@ export interface WritableAmongRow {
   listId: string;
 }
 
-/** One row of {@link BASKET_SOURCE_LISTS_SQL}. */
-export interface BasketSourceListRow {
-  listId: string;
-  zoneId: string;
-}

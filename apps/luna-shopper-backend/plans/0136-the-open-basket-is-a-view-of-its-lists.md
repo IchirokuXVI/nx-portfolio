@@ -1,3 +1,5 @@
+> **PR:** [#426](https://github.com/IchirokuXVI/nx-portfolio/pull/426)
+
 # 0136: the open basket is a view of its lists
 
 > The centre of the series in `0130`. A basket stops storing lines. `generated_list_lines`,

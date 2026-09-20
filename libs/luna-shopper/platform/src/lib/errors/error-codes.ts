@@ -68,17 +68,6 @@ export const ERROR_CODES = {
    */
   STALE_QUANTITY: 'stale_quantity',
   /**
-   * A contribution was set below what this basket has already bought against it
-   * (plan 0057, section 5.2).
-   *
-   * The message names the floor, so the client can say the number rather than
-   * only that it failed. Distinct from {@link STALE_QUANTITY} because nothing
-   * moved underneath the caller: the number they sent is simply lower than a
-   * purchase that has already happened, and two units of the flat's milk having
-   * been bought means the flat cannot retroactively have wanted one.
-   */
-  BELOW_SETTLED: 'below_settled',
-  /**
    * The account itself is refusing attempts, having failed too many times in a
    * row (plan 0071, section 7; `apps/luna-shopper-admin/plans/0002`, section 2).
    *
@@ -256,11 +245,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // conflict is. It stays distinguishable from a plain `conflict` by its code,
   // which is what lets velista say "this basket is finished".
   [ERROR_CODES.GENERATED_LIST_FINISHED]: HttpStatus.CONFLICT,
-  // Both are 409 for the same reason and stay apart from it, and from each
-  // other, by code: the request was well formed, and what it conflicts with is
-  // state that moved or state that has already happened.
+  // 409 for the same reason and apart from it by code: the request was well
+  // formed, and what it conflicts with is state that moved underneath it.
   [ERROR_CODES.STALE_QUANTITY]: HttpStatus.CONFLICT,
-  [ERROR_CODES.BELOW_SETTLED]: HttpStatus.CONFLICT,
   // 423 rather than 429. A 429 is a statement about how fast the caller is
   // going, and slowing down fixes it; this one is a statement about the state
   // the account is in, which no amount of waiting between requests changes. It

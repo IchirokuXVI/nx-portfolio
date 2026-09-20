@@ -4,16 +4,12 @@ import {
   BasketKind,
   GENERATED_LIST_LIMITS,
   GENERATED_LIST_SHARING_LIMITS,
-  GeneratedLineOrigin,
   GeneratedListStatus,
   isOpenBasket,
   RealtimeEvent,
-  SettlementOutcome,
   type BasketSourceView,
   type CreateGeneratedListRequest,
-  type GeneratedListBasketLineView,
   type GeneratedListIdRequest,
-  type GeneratedListLineView,
   type GeneratedListPage,
   type GeneratedListRunResult,
   type GeneratedListSourceInput,
@@ -29,15 +25,16 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { DataSource, In, IsNull, QueryFailedError, Repository } from 'typeorm';
+import {
+  DataSource,
+  In,
+  QueryFailedError,
+  Repository,
+} from 'typeorm';
 import {
   BasketSource,
   GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOption,
-  GeneratedListLineOrigin,
   GeneratedListParticipant,
-  LineSettlement,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
@@ -57,24 +54,21 @@ import {
 import { GeneratedListOrderService } from './generated-list-order.service';
 import {
   NO_GENERATED_LINE_COUNTS,
-  toBasketLineView,
   toBasketSourceView,
-  toGeneratedLineView,
   toGeneratedListSummaryView,
   toGeneratedListView,
   type GeneratedListLineCounts,
 } from './generated-list.mappers';
 import {
-  CANDIDATE_LINE_ITEMS_SQL,
-  CANDIDATE_LINES_SQL,
-  GENERATED_LIST_COUNTS_SQL,
+  FINISHED_BASKET_COUNTS_SQL,
   WRITABLE_LISTS_SQL,
-  type CandidateLineRow,
-  type GeneratedListCountsRow,
+  type BasketCountsRow,
   type WritableListRow,
 } from './generated-list.sql';
 import { LineClaimService } from './line-claim.service';
-import { mergeKey } from './line-dedup';
+// A value import, never a `type` one: a `type` import on a constructor
+// dependency erases its DI token and only booting catches it.
+import { BasketReadService } from '../baskets/basket-read.service';
 
 /** Postgres unique-violation, raised by the partial index on the idempotency key. */
 const PG_UNIQUE_VIOLATION = '23505';
@@ -137,16 +131,6 @@ export class GeneratedListService {
     private readonly dataSource: DataSource,
     @InjectRepository(GeneratedList)
     private readonly lists: Repository<GeneratedList>,
-    @InjectRepository(GeneratedListLine)
-    private readonly lines: Repository<GeneratedListLine>,
-    @InjectRepository(GeneratedListLineOrigin)
-    private readonly origins: Repository<GeneratedListLineOrigin>,
-    @InjectRepository(GeneratedListLineOption)
-    private readonly options: Repository<GeneratedListLineOption>,
-    // Read only here, to answer "what did the last settle on this line say".
-    // The writes all belong to `GeneratedListSettleService`.
-    @InjectRepository(LineSettlement)
-    private readonly settlements: Repository<LineSettlement>,
     private readonly profiles: ProfileService,
     private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher,
@@ -166,7 +150,12 @@ export class GeneratedListService {
     // alone, inside the transaction that moves the status. Last in the list on
     // purpose, so that adding it shifts no existing positional argument in the
     // specs.
-    private readonly tripRows: BasketTripRowsService
+    private readonly tripRows: BasketTripRowsService,
+    // The basket as a view of its lists (plan 0136), for the history counts of
+    // an **open** basket alone. A value import, never a `type` one, for the
+    // reason stated over `BasketTripRowsService`. Last in the list on purpose,
+    // so that adding it shifts no existing positional argument in the specs.
+    private readonly basketRead: BasketReadService
   ) {}
 
   /**
@@ -209,43 +198,24 @@ export class GeneratedListService {
     const members = await this.checkMembers(req);
 
     const resolved = await this.resolveSources(req);
-    const listIds = resolved.sources.map((source) => source.listId);
-
-    const candidates =
-      listIds.length === 0
-        ? []
-        : await this.lists.query<CandidateLineRow[]>(CANDIDATE_LINES_SQL, [
-            listIds,
-          ]);
-
-    const zoneOf = new Map(
-      resolved.sources.map((source) => [source.listId, source.zoneId])
-    );
-    const itemsByLine = await this.itemsOf(candidates.map((line) => line.id));
-
-    const composed = this.compose(candidates, itemsByLine, zoneOf);
-    if (composed.length > GENERATED_LIST_LIMITS.maxLines) {
-      throw new ValidationException(
-        `a generated list can hold at most ${GENERATED_LIST_LIMITS.maxLines} lines`,
-        { messageArgs: { field: 'sources' } }
-      );
-    }
 
     // What the request **named**, not the lists it resolved to (plan 0133,
     // section 4.2), so a whole zone stays a whole zone and follows a list added
     // to that zone next month.
+    //
+    // **That is the whole of the run since plan 0136.** It reads no candidate
+    // lines, composes nothing, merges nothing and orders nothing: a basket is a
+    // header, the rule saying which lists it covers, and the people on it, and
+    // its rows are read from `list_lines` on every request. So a line added to a
+    // covered list after the run appears in the basket with no write to it, and
+    // `maxLines` is gone because there is nothing left to refuse.
     const sources = recordedSources(resolved.named, resolved.sources);
 
-    // The order the owner walks (plan 0110), decided here and written once. The
-    // positions below are the index in **this** array, not the order the source
-    // lists happened to be read in.
-    const walked = await this.order.order(req.userId, composed);
     const invited: GeneratedListParticipant[] = [];
     const saved = await this.write(
       req,
       resolved.pricingProfileId,
       sources,
-      walked,
       members,
       invited
     );
@@ -261,18 +231,17 @@ export class GeneratedListService {
     }
     // The one zone event a generated list emits (plan 0052, section 3.1), and
     // the declared exception to plan 0050 section 8 rather than a contradiction
-    // to be discovered later. Every origin the run took is now claimed, in one
-    // event per zone room: two people in one household putting the same milk in
-    // two trolleys is the entire reason the indicator exists.
+    // to be discovered later. Every line the basket now covers is claimed, in
+    // one event per zone room: two people in one household putting the same milk
+    // in two trolleys is the entire reason the indicator exists.
     //
     // Named as the **owner** and never as a participant (section 2): a basket
     // shared with three guests is still one person's trip from the household's
     // point of view.
     this.claims.announce(true, req.userId, await this.claims.refsOf(saved.id));
-    // And each list it drew from has a new trip (plan 0122, section 6). Asked of
-    // the origins that were written rather than of the sources that were named:
-    // a source every line of which another basket already carries contributed
-    // nothing, and its list has no new trip to read.
+    // And each list it covers has a new trip (plan 0122, section 6). Asked of
+    // the coverage rather than of the sources that were named, so a source
+    // naming a zone the owner has since left contributes no trip.
     announceTripsChanged(
       this.events,
       await tripListsOfBasket(this.tripQuery, saved.id)
@@ -409,105 +378,6 @@ export class GeneratedListService {
   }
 
   /** Every candidate line's product set, in attachment order, in one query. */
-  private async itemsOf(lineIds: string[]): Promise<Map<string, string[]>> {
-    const byLine = new Map<string, string[]>();
-    if (lineIds.length === 0) {
-      return byLine;
-    }
-    const rows = await this.lists.query<{ lineId: string; itemId: string }[]>(
-      CANDIDATE_LINE_ITEMS_SQL,
-      [lineIds]
-    );
-    for (const row of rows) {
-      const items = byLine.get(row.lineId);
-      if (items) {
-        items.push(row.itemId);
-        continue;
-      }
-      byLine.set(row.lineId, [row.itemId]);
-    }
-    return byLine;
-  }
-
-  /**
-   * Merge the qualifying lines into basket lines (plan 0050, section 3).
-   *
-   * Quantities sum and every contributing line gets its provenance row, which is
-   * the whole reason the origins table exists: settling has to know how many
-   * units each source list was asking for.
-   *
-   * The options are the **union** of the contributing lines' product sets, in
-   * first seen order, because a basket line that merged two zone lines means
-   * either household's product and the person at the shelf picks between them.
-   */
-  private compose(
-    lines: CandidateLineRow[],
-    itemsByLine: Map<string, string[]>,
-    zoneOf: Map<string, string>
-  ): ComposedLine[] {
-    const byKey = new Map<string, ComposedLine>();
-    for (const line of lines) {
-      const zoneId = zoneOf.get(line.listId);
-      if (!zoneId) {
-        // A list the caller may not draw from produced no candidate, so this is
-        // unreachable. Skipped rather than asserted: a run that cannot name the
-        // zone of an origin must not write a provenance row that lies about it.
-        continue;
-      }
-      const key = mergeKey(line);
-      const items = itemsByLine.get(line.id) ?? [];
-      const existing = byKey.get(key);
-      if (existing) {
-        existing.quantity += line.quantity;
-        existing.origins.push({
-          zoneId,
-          listId: line.listId,
-          lineId: line.id,
-          quantity: line.quantity,
-          lineVersion: line.version,
-        });
-        for (const itemId of items) {
-          if (!existing.options.includes(itemId)) {
-            existing.options.push(itemId);
-          }
-        }
-        continue;
-      }
-      byKey.set(key, {
-        content: line.content,
-        quantity: line.quantity,
-        options: [...new Set(items)],
-        origins: [
-          {
-            zoneId,
-            listId: line.listId,
-            lineId: line.id,
-            quantity: line.quantity,
-            lineVersion: line.version,
-          },
-        ],
-      });
-    }
-    return [...byKey.values()];
-  }
-
-  /**
-   * The product a basket line means to buy today.
-   *
-   * **The first option added**, which is the fallback plan 0050 section 4 names
-   * for a line whose options are not priced. It is the only branch this plan can
-   * take: core holds no prices, and the "cheapest of these products at these
-   * scopes" read the priced branch needs is not a subject catalog exposes.
-   * Pricing a basket is backlog 0004, which consumes what this plan produces, and
-   * replacing this one function is the whole of what it has to change here.
-   *
-   * A free text line has no options and keeps a null pick, which is section 1's
-   * rule rather than an accident of the fallback.
-   */
-  private resolvePick(options: string[]): string | null {
-    return options[0] ?? null;
-  }
-
   /**
    * Write the basket, its sources, its lines, their provenance rows, their
    * options and the people it is shared with in one transaction, so a basket
@@ -521,7 +391,6 @@ export class GeneratedListService {
     req: CreateGeneratedListRequest,
     pricingProfileId: string,
     sources: BasketSourceView[],
-    composed: ComposedLine[],
     members: InvitedMember[],
     invited: GeneratedListParticipant[]
   ): Promise<GeneratedList> {
@@ -529,9 +398,6 @@ export class GeneratedListService {
       return await this.dataSource.transaction(async (manager) => {
         const listRepo = manager.getRepository(GeneratedList);
         const sourceRepo = manager.getRepository(BasketSource);
-        const lineRepo = manager.getRepository(GeneratedListLine);
-        const originRepo = manager.getRepository(GeneratedListLineOrigin);
-        const optionRepo = manager.getRepository(GeneratedListLineOption);
 
         const list = await listRepo.save(
           listRepo.create({
@@ -543,14 +409,12 @@ export class GeneratedListService {
             status: GeneratedListStatus.OPEN,
             generatedAt: new Date(),
             pricingProfileId,
-            defaultTargetListId: req.defaultTargetListId ?? null,
             idempotencyKey: req.idempotencyKey ?? null,
           })
         );
 
-        // Before the lines, so that a basket never has a line whose source is
-        // not yet recorded, and inside this transaction so a run that fails
-        // leaves neither.
+        // Inside this transaction, so a run that fails leaves neither a header
+        // nor the rule saying what it covers.
         if (sources.length > 0) {
           await sourceRepo.insert(
             sources.map((source) => ({
@@ -559,36 +423,6 @@ export class GeneratedListService {
               listId: source.listId,
             }))
           );
-        }
-
-        for (const [index, entry] of composed.entries()) {
-          const line = await lineRepo.save(
-            lineRepo.create({
-              generatedListId: list.id,
-              content: entry.content,
-              quantity: entry.quantity,
-              settledQuantity: 0,
-              itemId: this.resolvePick(entry.options),
-              origin: GeneratedLineOrigin.DERIVED,
-              targetListId: null,
-              position: index + 1,
-            })
-          );
-          await originRepo.insert(
-            entry.origins.map((origin) => ({
-              generatedListLineId: line.id,
-              ...origin,
-            }))
-          );
-          if (entry.options.length > 0) {
-            await optionRepo.insert(
-              entry.options.map((itemId, position) => ({
-                generatedListLineId: line.id,
-                itemId,
-                position,
-              }))
-            );
-          }
         }
 
         for (const member of members) {
@@ -664,7 +498,7 @@ export class GeneratedListService {
 
     const rows = await qb.getMany();
     const page = rows.slice(0, limit);
-    const counts = await this.countsFor(page.map((row) => row.id));
+    const counts = await this.countsFor(page);
     return {
       items: page.map((row) =>
         toGeneratedListSummaryView(
@@ -715,7 +549,7 @@ export class GeneratedListService {
         row,
       ])
     );
-    const counts = await this.countsFor(ids);
+    const counts = await this.countsFor([...baskets.values()]);
     const owners = await this.members.commonGroups(
       req.userId,
       [...baskets.values()].map((row) => row.ownerUserId)
@@ -750,31 +584,66 @@ export class GeneratedListService {
   }
 
   /**
-   * The numbers a history row shows, for a whole page, in one query (plan 0053,
-   * section 2).
+   * The numbers a history row shows, for a page of baskets (plan 0136, section
+   * 7.4).
    *
-   * A basket whose id is absent from the answer had no lines at all, so the
+   * **Two reads, split on the status**, because the two kinds of basket keep
+   * their numbers in different places since plan 0135. A basket that is not
+   * `OPEN` has its ask frozen in `basket_trip_rows`, so a whole page of them is
+   * one aggregate. An `OPEN` basket has nothing written down at all: its rows
+   * are a view of the lists it covers, recomputed on every request, and the only
+   * honest way to count them is to compose them.
+   *
+   * **So an open basket costs a read of its own, and that is acceptable.** The
+   * sweep finishes a basket a fixed time after it was generated, so a page holds
+   * at most a few open ones however long the account has been shopping, and the
+   * alternative is a second definition of a basket row in SQL that would be free
+   * to disagree with the screen.
+   *
+   * A basket whose id is absent from the answer had no rows at all, so the
    * caller defaults it rather than this inserting a zero row per id: `GROUP BY`
    * produces nothing for an empty group, and inventing one here would only move
    * the same default a line earlier.
    */
-  private async countsFor(
-    listIds: string[]
+  async countsFor(
+    baskets: readonly GeneratedList[]
   ): Promise<Map<string, GeneratedListLineCounts>> {
     const counts = new Map<string, GeneratedListLineCounts>();
-    if (listIds.length === 0) {
+    if (baskets.length === 0) {
       return counts;
     }
-    const rows = await this.lines.query<GeneratedListCountsRow[]>(
-      GENERATED_LIST_COUNTS_SQL,
-      [listIds]
+
+    const open = baskets.filter(
+      (basket) => basket.status === GeneratedListStatus.OPEN
     );
-    for (const row of rows) {
-      counts.set(row.generatedListId, {
-        lineCount: row.lineCount,
-        settledLineCount: row.settledLineCount,
-        boughtLineCount: row.boughtLineCount,
-        notAvailableLineCount: row.notAvailableLineCount,
+    const finishedIds = baskets
+      .filter((basket) => basket.status !== GeneratedListStatus.OPEN)
+      .map((basket) => basket.id);
+
+    if (finishedIds.length > 0) {
+      const rows = await this.lists.query<BasketCountsRow[]>(
+        FINISHED_BASKET_COUNTS_SQL,
+        [finishedIds]
+      );
+      for (const row of rows) {
+        counts.set(row.generatedListId, {
+          lineCount: row.lineCount,
+          settledLineCount: row.settledLineCount,
+          boughtLineCount: row.boughtLineCount,
+          notAvailableLineCount: row.notAvailableLineCount,
+        });
+      }
+    }
+
+    for (const basket of open) {
+      const progress = await this.basketRead.progressOf(basket);
+      counts.set(basket.id, {
+        lineCount: progress.total,
+        // Still the sum of the two, as plan 0053 defined it: a line the shop
+        // did not have has nothing left to do on it either.
+        settledLineCount: progress.done + progress.unavailable,
+        boughtLineCount: progress.done,
+        notAvailableLineCount: progress.unavailable,
       });
     }
     return counts;
@@ -863,9 +732,6 @@ export class GeneratedListService {
       if (req.status !== undefined) {
         locked.status = req.status;
       }
-      if (req.defaultTargetListId !== undefined) {
-        locked.defaultTargetListId = req.defaultTargetListId;
-      }
       const row = await manager.getRepository(GeneratedList).save(locked);
 
       // The two branches the claim announcement already has, asked of the
@@ -906,7 +772,6 @@ export class GeneratedListService {
     // A trip's head is the basket's name and whether it is live, so either one
     // moving is a reason to read the trips again (plan 0122, section 6). The
     // sweep finishes a basket through this method, so it is covered here too.
-    // A change of the default target list is neither, and says nothing.
     if (saved.name !== before.name || saved.status !== before.status) {
       announceTripsChanged(
         this.events,
@@ -997,22 +862,18 @@ export class GeneratedListService {
     return row;
   }
 
-  /** A basket and its lines, with every child read in one query each. */
+  /** A basket's header and what it was asked to draw from, in one query. */
   async viewFor(list: GeneratedList): Promise<GeneratedListView> {
-    return toGeneratedListView(
-      list,
-      await this.lineViewsFor(list.id),
-      await this.sourcesOf(list.id)
-    );
+    return toGeneratedListView(list, await this.sourcesOf(list.id));
   }
 
   /**
    * What this basket was asked to draw from, in the order it was written
    * (plan 0133, section 4).
    *
-   * Public, because `GeneratedListBasketService` answers the same field on the
-   * shared basket view and a second read of the same rows would be a second
-   * chance to order them differently.
+   * Public, because the run's answer and the owner's read of a basket both name
+   * them, and a second read of the same rows would be a second chance to order
+   * them differently.
    *
    * A `LIVE` basket has no rows, and the empty array is the right answer for it:
    * its coverage is a rule rather than a list of sources.
@@ -1025,237 +886,12 @@ export class GeneratedListService {
     return rows.map(toBasketSourceView);
   }
 
-  /** Every line of a basket, with its origins and options attached. */
-  async lineViewsFor(
-    generatedListId: string
-  ): Promise<GeneratedListLineView[]> {
-    const lines = await this.lines.find({
-      where: { generatedListId },
-      order: { position: 'ASC', createdAt: 'ASC' },
-    });
-    if (lines.length === 0) {
-      return [];
-    }
-    const lineIds = lines.map((line) => line.id);
-    const [origins, options, facts] = await Promise.all([
-      this.origins.find({
-        where: { generatedListLineId: In(lineIds) },
-        order: { createdAt: 'ASC' },
-      }),
-      this.options.find({
-        where: { generatedListLineId: In(lineIds) },
-        order: { position: 'ASC', createdAt: 'ASC' },
-      }),
-      this.settlementFacts(lineIds),
-    ]);
-    return lines.map((line) =>
-      toGeneratedLineView(line, {
-        origins: origins.filter((row) => row.generatedListLineId === line.id),
-        options: options.filter((row) => row.generatedListLineId === line.id),
-        settledPerOrigin:
-          facts.get(line.id)?.settledPerOrigin ?? NO_SETTLED_ORIGINS,
-      })
-    );
-  }
-
-  /** One line's view, for the endpoints that answer with a single line. */
-  async lineViewFor(line: GeneratedListLine): Promise<GeneratedListLineView> {
-    const [origins, options, facts] = await Promise.all([
-      this.origins.find({
-        where: { generatedListLineId: line.id },
-        order: { createdAt: 'ASC' },
-      }),
-      this.options.find({
-        where: { generatedListLineId: line.id },
-        order: { position: 'ASC', createdAt: 'ASC' },
-      }),
-      this.settlementFacts([line.id]),
-    ]);
-    return toGeneratedLineView(line, {
-      origins,
-      options,
-      settledPerOrigin:
-        facts.get(line.id)?.settledPerOrigin ?? NO_SETTLED_ORIGINS,
-    });
-  }
-
-  /**
-   * Every line of a basket, projected for the participant reading it (plan 0051,
-   * section 5).
-   *
-   * The same two queries as {@link lineViewsFor}; only the projection differs, so
-   * a redacted read costs a privileged one's work and hands back less.
-   */
-  async basketLineViewsFor(
-    generatedListId: string,
-    seesZoneData: boolean
-  ): Promise<GeneratedListBasketLineView[]> {
-    const lines = await this.lines.find({
-      where: { generatedListId },
-      order: { position: 'ASC', createdAt: 'ASC' },
-    });
-    if (lines.length === 0) {
-      return [];
-    }
-    const lineIds = lines.map((line) => line.id);
-    const [origins, options, facts] = await Promise.all([
-      this.origins.find({
-        where: { generatedListLineId: In(lineIds) },
-        order: { createdAt: 'ASC' },
-      }),
-      this.options.find({
-        where: { generatedListLineId: In(lineIds) },
-        order: { position: 'ASC', createdAt: 'ASC' },
-      }),
-      this.settlementFacts(lineIds),
-    ]);
-    return lines.map((line) =>
-      toBasketLineView(
-        line,
-        {
-          origins: origins.filter((row) => row.generatedListLineId === line.id),
-          options: options.filter((row) => row.generatedListLineId === line.id),
-          ...(facts.get(line.id) ?? {}),
-        },
-        seesZoneData
-      )
-    );
-  }
-
-  /** One line, projected, for the routes that answer with a single line. */
-  async basketLineViewFor(
-    line: GeneratedListLine,
-    seesZoneData: boolean
-  ): Promise<GeneratedListBasketLineView> {
-    const [origins, options, facts] = await Promise.all([
-      this.origins.find({
-        where: { generatedListLineId: line.id },
-        order: { createdAt: 'ASC' },
-      }),
-      this.options.find({
-        where: { generatedListLineId: line.id },
-        order: { position: 'ASC', createdAt: 'ASC' },
-      }),
-      this.settlementFacts([line.id]),
-    ]);
-    return toBasketLineView(
-      line,
-      { origins, options, ...(facts.get(line.id) ?? {}) },
-      seesZoneData
-    );
-  }
-
-  /**
-   * The two things a basket line's own settlements say about it: what the newest
-   * settle said, and how many units are still waiting for a list.
-   *
-   * **Neither is derivable from the line itself**, which is why this query
-   * exists. `NOT_AVAILABLE` closes the outstanding amount exactly as a purchase
-   * does, so a screen reading `settledQuantity` alone would caption a shop that
-   * had none as somebody who bought it (velista `0044`, section 4.2). And a
-   * waiting purchase (plan 0093, section 2) has advanced `settledQuantity`
-   * without landing on any list, so nothing on the line says how much a list is
-   * about to receive.
-   *
-   * One query for the whole basket rather than one per line and per fact,
-   * ordered oldest first so the last write into the map wins. A settle writes one
-   * row per origin it touched, all with the same outcome, so reading the newest
-   * answers "what did the last act on this line say" whichever of its rows comes
-   * last.
-   */
-  private async settlementFacts(
-    lineIds: string[]
-  ): Promise<Map<string, BasketLineSettlementFacts>> {
-    const facts = new Map<string, BasketLineSettlementFacts>();
-    if (lineIds.length === 0) {
-      return facts;
-    }
-    const rows = await this.settlements.find({
-      // A settlement somebody took back says nothing about the line any more
-      // (plan 0054, section 3.3). Without this a reopened line would keep the
-      // caption of the settle that was undone, which is the one field on the row
-      // that cannot be derived from the numbers, and would count units a reopen
-      // has already given back.
-      where: { generatedListLineId: In(lineIds), revertedAt: IsNull() },
-      order: { createdAt: 'ASC', id: 'ASC' },
-      // No `select` projection: TypeORM's typed form rejects a partial entity
-      // here, and the rows are small and bounded by one basket's settlements.
-    });
-
-    for (const row of rows) {
-      if (row.generatedListLineId === null) {
-        continue;
-      }
-      const known = facts.get(row.generatedListLineId) ?? {
-        lastOutcome: null,
-        waitingSettled: 0,
-        settledPerOrigin: new Map<string, number>(),
-      };
-      known.lastOutcome = row.outcome;
-      if (row.outcome === SettlementOutcome.BOUGHT) {
-        if (row.lineId === null) {
-          // Bought, and still belonging to no list (plan 0093, section 4). A
-          // `NOT_AVAILABLE` waiting row is not counted, because it moved no
-          // units: it is an outcome rather than a quantity.
-          known.waitingSettled += row.quantity;
-        } else {
-          // What this origin got (plan 0109, section 4). Keyed on the zone line
-          // the purchase landed on, which is what an origin row is unique on,
-          // and counted for `BOUGHT` alone: a shop that had none closes the
-          // outstanding amount without buying anything, so it cannot raise what
-          // a household can be said to have received.
-          known.settledPerOrigin.set(
-            row.lineId,
-            (known.settledPerOrigin.get(row.lineId) ?? 0) + row.quantity
-          );
-        }
-      }
-      facts.set(row.generatedListLineId, known);
-    }
-    return facts;
-  }
 }
-
-/** What a basket line's own settlements say about it, for its view. */
-interface BasketLineSettlementFacts {
-  lastOutcome: SettlementOutcome | null;
-  waitingSettled: number;
-  /**
-   * How many units each of the line's origins got, keyed on its zone line (plan
-   * 0109, section 4).
-   *
-   * Read off the rows this query already loads rather than by a second, grouped
-   * one: the basket's live settlements are all here, and asking the database
-   * twice for two sums over one set of rows would be a second definition of
-   * "reverted" free to drift from the first.
-   */
-  settledPerOrigin: Map<string, number>;
-}
-
-/** A line nobody has settled: no last outcome, and nothing against any origin. */
-const NO_SETTLED_ORIGINS: ReadonlyMap<string, number> = new Map<
-  string,
-  number
->();
 
 /** One person a run shares its basket with, and the name their row carries. */
 interface InvitedMember {
   userId: string;
   username: string | null;
-}
-
-/** A basket line as the run composed it, before it is written. */
-interface ComposedLine {
-  content: string;
-  quantity: number;
-  options: string[];
-  origins: {
-    zoneId: string;
-    listId: string;
-    lineId: string;
-    quantity: number;
-    lineVersion: number;
-  }[];
 }
 
 /**

@@ -8,6 +8,7 @@ import {
 import type { DataSource } from 'typeorm';
 import { OPEN_GENERATED_BASKET } from '../baskets/open-basket.sql';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { WRITABLE_LIST } from './generated-list.sql';
 import { LineClaimService } from './line-claim.service';
 import {
   BASKET_CLAIMED_LINES_SQL,
@@ -88,19 +89,51 @@ describe('the claim query (plan 0052, sections 3 and 4)', () => {
     expect(LINE_CLAIMS_SQL).toContain(`gl."generatedAt" >= $2::timestamptz`);
   });
 
-  it('releases a basket line that has been settled all the way through', () => {
-    // Section 3.3, and the reason it is a predicate here rather than an event
-    // the settle has to remember to send: a finished line is finished whether
-    // it was bought or the shop did not have it.
-    expect(LINE_CLAIMS_SQL).toContain(`gll."settledQuantity" < gll."quantity"`);
+  it('stands on coverage rather than on rows of the basket', () => {
+    // Plan 0136, section 7.1. A basket holds no lines any more, so what it is
+    // carrying is the lines of the lists its sources name.
+    expect(LINE_CLAIMS_SQL).toContain(`"basket_sources" bs`);
+    expect(LINE_CLAIMS_SQL).not.toContain('generated_list_line_origins');
+    expect(LINE_CLAIMS_SQL).not.toContain('generated_list_lines');
+  });
+
+  it('reads the same writable list predicate the coverage does', () => {
+    // One definition, imported rather than restated, so the claim and the
+    // basket cannot disagree about which lists a trip reads.
+    expect(LINE_CLAIMS_SQL).toContain(WRITABLE_LIST.trim());
+  });
+
+  it('needs the owner to still be in the line zone', () => {
+    // Section 7.1 again, and it is what replaces "claimed without a name": a
+    // basket that cannot write a line is not out buying it.
+    expect(LINE_CLAIMS_SQL).toContain(`"zone_memberships" m`);
+    expect(LINE_CLAIMS_SQL).toContain(`m."userId" = gl."ownerUserId"`);
+  });
+
+  it('releases a line bought all the way down, and one deleted', () => {
+    // What replaces `settledQuantity < quantity`, and the reason is the same: a
+    // finished line is finished, and nobody is out buying a line the household
+    // deleted (plan 0132).
+    expect(LINE_CLAIMS_SQL).toContain(`ll.quantity > 0`);
+    expect(LINE_CLAIMS_SQL).toContain(`ll."deletedAt" IS NULL`);
+  });
+
+  it('releases a line whose newest standing act said the shop had none', () => {
+    // The other half of "done". A line the shop did not have keeps its
+    // quantity, so only the newest settlement can say the shopper is finished
+    // with it.
+    expect(LINE_CLAIMS_SQL).toContain(`s."outcome" = 'NOT_AVAILABLE'`);
+    expect(LINE_CLAIMS_SQL).toContain(
+      `(s2."settledAt", s2.id) > (s."settledAt", s.id)`
+    );
   });
 
   it('resolves two baskets holding one line to the newer one', () => {
     // Section 3.4. The last person to take it is the one named, and the read and
     // the event agree because both come from this ordering.
-    expect(LINE_CLAIMS_SQL).toContain(`DISTINCT ON (o."lineId")`);
+    expect(LINE_CLAIMS_SQL).toContain(`DISTINCT ON (ll.id)`);
     expect(LINE_CLAIMS_SQL).toContain(
-      `ORDER BY o."lineId", gl."generatedAt" DESC, gl.id DESC`
+      `ORDER BY ll.id, gl."generatedAt" DESC, gl.id DESC`
     );
   });
 
@@ -127,7 +160,7 @@ describe('reading the claim', () => {
 
   it('names the basket owner', async () => {
     const claims = await readLineClaims(
-      query([{ lineId: 'li1', ownerUserId: ANA, ownerInZone: true }]),
+      query([{ lineId: 'li1', ownerUserId: ANA }]),
       ['li1'],
       new Date()
     );
@@ -135,17 +168,21 @@ describe('reading the claim', () => {
     expect(claims.get('li1')).toEqual({ claimed: true, claimedByUserId: ANA });
   });
 
-  it('reports claimed without a name when the owner has left the zone', async () => {
-    // Section 6's leaning, implemented: the same "access at request time" rule
-    // everything else here uses. The household still needs to know somebody has
-    // it; who that was is no longer theirs to read.
+  it('always names the owner, because a row is proof of membership', async () => {
+    // Plan 0136, section 7.1 ends plan 0052 section 6's "claimed without a
+    // name". Coverage needs an approved membership, so an owner who left the
+    // zone produces no row at all rather than a nameless claim.
     const claims = await readLineClaims(
-      query([{ lineId: 'li1', ownerUserId: ANA, ownerInZone: false }]),
-      ['li1'],
+      query([{ lineId: 'li1', ownerUserId: ANA }]),
+      ['li1', 'li2'],
       new Date()
     );
 
-    expect(claims.get('li1')).toEqual({ claimed: true, claimedByUserId: null });
+    expect(claims.get('li1')?.claimedByUserId).toBe(ANA);
+    expect(claims.get('li2')).toEqual({
+      claimed: false,
+      claimedByUserId: null,
+    });
   });
 
   it('asks nothing at all for an empty page', async () => {
@@ -240,7 +277,7 @@ describe('releasing a claim (plan 0052, section 3.4)', () => {
     // The transition is a correct write and the answer is still "somebody has
     // this", so telling the household otherwise would be a wrong answer produced
     // by a correct write.
-    const w = build([{ lineId: 'li2', ownerUserId: ANA, ownerInZone: true }]);
+    const w = build([{ lineId: 'li2', ownerUserId: ANA }]);
 
     await w.service.announceReleased([
       { zoneId: ZONE_HOME, listId: 'l1', lineId: 'li1' },
@@ -258,5 +295,30 @@ describe('releasing a claim (plan 0052, section 3.4)', () => {
     await w.service.announceReleased([]);
     expect(w.queries).toHaveLength(0);
     expect(w.emitted).toHaveLength(0);
+  });
+});
+
+describe('the lines a basket could be releasing (plan 0136, section 7.1)', () => {
+  it('is one read where there were two', () => {
+    // `BASKET_LINE_CLAIMED_LINES_SQL` asked one basket line, and a basket has
+    // none, so the narrow twin has nothing left to be narrow about.
+    expect(BASKET_CLAIMED_LINES_SQL).toContain(`"basket_sources" bs`);
+    expect(BASKET_CLAIMED_LINES_SQL).not.toContain(
+      'generated_list_line_origins'
+    );
+  });
+
+  it('names only lines the household still wants', () => {
+    // Not redundant with the caller's transition: a basket being finished
+    // covers lines that were released an hour ago, and announcing those again
+    // would be an event saying nothing changed.
+    expect(BASKET_CLAIMED_LINES_SQL).toContain(`ll.quantity > 0`);
+    expect(BASKET_CLAIMED_LINES_SQL).toContain(`ll."deletedAt" IS NULL`);
+  });
+
+  it('carries the room each line goes to', () => {
+    expect(BASKET_CLAIMED_LINES_SQL).toContain(`sl."zoneId" AS "zoneId"`);
+    expect(BASKET_CLAIMED_LINES_SQL).toContain(`sl.id AS "listId"`);
+    expect(BASKET_CLAIMED_LINES_SQL).toContain(`ll.id AS "lineId"`);
   });
 });

@@ -1,6 +1,5 @@
 import {
   BasketKind,
-  GeneratedLineOrigin,
   GeneratedListStatus,
   LINE_ITEM_SET_MAX,
   LineApprovalStatus,
@@ -23,8 +22,6 @@ import {
   BasketTripRow,
   CORE_ENTITIES,
   GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOrigin,
   LineComment,
   LineSettlement,
   ListAccess,
@@ -46,10 +43,10 @@ import { ListAccessService } from './list-access.service';
  * A renamed line joins the line of that name (plan 0112, section 9).
  *
  * Against Postgres, because what is asserted is mostly rows that moved between
- * tables under a lock: comments, settlements and basket origins that cascade on
- * delete and are lost if the merge forgets one, a unique key on origins that a
- * careless move violates, and two renames that only stay one line because the
- * list row was held. A mocked repository has none of those.
+ * tables under a lock: comments, settlements and a finished trip's rows that
+ * cascade on delete and are lost if the merge forgets one, a unique key on the
+ * trip rows that a careless move violates, and two renames that only stay one
+ * line because the list row was held. A mocked repository has none of those.
  */
 describeIntegration('a rename that collides merges (real Postgres)', () => {
   let dataSource: DataSource;
@@ -459,9 +456,27 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     expect(view.approvedByUserId).toBe(ids.owner);
   });
 
-  it('moves comments, settlements and basket origins, summing an origin both lines had (case 9)', async () => {
+  it('moves comments and settlements, and the purchases keep the basket they were made on (case 9)', async () => {
+    // Plan 0136, section 7.6 reverses half of this test. The merge used to move
+    // `generated_list_line_origins` to the survivor and sum an origin both lines
+    // had; there are no origins any more, because an open basket holds no copy
+    // of a line. What is left is the half that always did the work: the
+    // settlements move, carrying the `basketId` they were made on, so the basket
+    // reads one row afterwards with both lines' purchases on it. The trip rows
+    // of a finished basket are the next test's.
     const milk = await seedLine({ content: 'Milk', position: 1, quantity: 2 });
     const bread = await seedLine({ content: 'Bread', position: 2 });
+
+    const basket = await dataSource.getRepository(GeneratedList).save(
+      dataSource.getRepository(GeneratedList).create({
+        ownerUserId: ids.owner,
+        name: 'Saturday',
+        status: GeneratedListStatus.OPEN,
+        generatedAt: new Date(),
+        kind: BasketKind.GENERATED,
+        idempotencyKey: null,
+      })
+    );
 
     for (const line of [milk, bread]) {
       await dataSource.getRepository(LineComment).save(
@@ -486,56 +501,10 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
           settledByParticipantId: null,
           settledAt: new Date(),
           revertedAt: null,
-          generatedListLineId: null,
+          basketId: basket.id,
         })
       );
     }
-
-    const basket = await dataSource.getRepository(GeneratedList).save(
-      dataSource.getRepository(GeneratedList).create({
-        ownerUserId: ids.owner,
-        name: 'Saturday',
-        status: GeneratedListStatus.OPEN,
-        generatedAt: new Date(),
-        kind: BasketKind.GENERATED,
-        defaultTargetListId: null,
-        idempotencyKey: null,
-      })
-    );
-    const basketLine = (content: string) =>
-      dataSource.getRepository(GeneratedListLine).save(
-        dataSource.getRepository(GeneratedListLine).create({
-          generatedListId: basket.id,
-          content,
-          quantity: 3,
-          settledQuantity: 0,
-          itemId: null,
-          origin: GeneratedLineOrigin.ADDED,
-          targetListId: null,
-          position: 1,
-        })
-      );
-    const both = await basketLine('milk');
-    const breadOnly = await basketLine('bread');
-    const origins = dataSource.getRepository(GeneratedListLineOrigin);
-    const origin = (
-      generatedListLineId: string,
-      line: ListLine,
-      quantity: number
-    ) =>
-      origins.save(
-        origins.create({
-          generatedListLineId,
-          zoneId: ids.zone,
-          listId: ids.list,
-          lineId: line.id,
-          quantity,
-          lineVersion: 1,
-        })
-      );
-    await origin(both.id, milk, 2);
-    await origin(both.id, bread, 1);
-    await origin(breadOnly.id, bread, 1);
 
     const view = await rename(bread, 'milk', { confirmMerge: true });
 
@@ -551,18 +520,19 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     ).toBe(2);
     expect(view.boughtCount).toBe(2);
 
-    const onBoth = await origins.find({
-      where: { generatedListLineId: both.id },
-    });
+    // Both purchases are the survivor's and both still name the basket, which
+    // is what makes the open basket's `bought` for that one row the sum of the
+    // two: the number is read from these rows on every request rather than
+    // copied anywhere at the merge.
+    const moved = await dataSource
+      .getRepository(LineSettlement)
+      .find({ where: { lineId: milk.id } });
+    expect(moved.map((row) => row.basketId)).toEqual([basket.id, basket.id]);
     expect(
-      onBoth.map((row) => [row.lineId, row.quantity, row.lineVersion])
-    ).toEqual([[milk.id, 3, 2]]);
-    const onBreadOnly = await origins.find({
-      where: { generatedListLineId: breadOnly.id },
-    });
-    expect(
-      onBreadOnly.map((row) => [row.lineId, row.quantity, row.lineVersion])
-    ).toEqual([[milk.id, 1, 2]]);
+      await dataSource
+        .getRepository(LineSettlement)
+        .count({ where: { lineId: bread.id } })
+    ).toBe(0);
   });
 
   it('moves a finished trip’s rows, summing a basket that asked for both (plan 0135, test 10)', async () => {
@@ -582,7 +552,6 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
           status: GeneratedListStatus.FINISHED,
           generatedAt: new Date(),
           kind: BasketKind.GENERATED,
-          defaultTargetListId: null,
           idempotencyKey: null,
         })
       );

@@ -282,18 +282,23 @@ export const BASKET_SEED: readonly BasketRow[] = [
     generatedAt: '2026-08-29T09:00:00.000Z',
     createdAt: '2026-08-29T09:00:00.000Z',
     updatedAt: '2026-08-29T09:30:00.000Z',
+    // A row rather than a basket line since plan 0136: the basket stores none,
+    // and what the back office reads is the anchor's list line id, the three
+    // numbers and nothing else. `asked` is `bought + left`, always.
     lines: [
       {
-        id: 'bline-milk',
+        rowKey: 'line-milk',
         content: 'Milk, two litres',
-        quantity: 2,
-        createdAt: '2026-08-29T09:00:00.000Z',
+        left: 2,
+        bought: 0,
+        asked: 2,
       },
       {
-        id: 'bline-bread',
+        rowKey: 'line-bread',
         content: 'Bread',
-        quantity: 1,
-        createdAt: '2026-08-29T09:00:00.000Z',
+        left: 0,
+        bought: 1,
+        asked: 1,
       },
     ],
   },
@@ -308,12 +313,15 @@ export const BASKET_SEED: readonly BasketRow[] = [
     generatedAt: '2026-02-02T10:00:00.000Z',
     createdAt: '2026-02-02T10:00:00.000Z',
     updatedAt: '2026-02-02T11:20:00.000Z',
+    // A finished trip, so the row comes from `basket_trip_rows` and its numbers
+    // have stopped moving (plan 0135).
     lines: [
       {
-        id: 'bline-tomato',
+        rowKey: 'line-tomato',
         content: 'Tomato seeds',
-        quantity: 3,
-        createdAt: '2026-02-02T10:00:00.000Z',
+        left: 0,
+        bought: 3,
+        asked: 3,
       },
     ],
   },

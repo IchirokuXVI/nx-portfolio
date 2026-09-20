@@ -1,13 +1,21 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BasketCoverageModule } from '../baskets/basket-coverage.module';
+import { BasketDemandService } from '../baskets/basket-demand.service';
+import { BasketLineAddService } from '../baskets/basket-line-add.service';
+import { BasketLiveService } from '../baskets/basket-live.service';
+import { BasketReadService } from '../baskets/basket-read.service';
+import { BasketRevertService } from '../baskets/basket-revert.service';
+import { BasketRowRenameService } from '../baskets/basket-row-rename.service';
+import { BasketRowResolver } from '../baskets/basket-row-resolver';
+import { BasketSettleService } from '../baskets/basket-settle.service';
+import { BasketWriteContext } from '../baskets/basket-write.context';
+import { BasketWriteController } from '../baskets/basket-write.controller';
+import { BasketController } from '../baskets/basket.controller';
 import {
   BasketSource,
   BasketTripRow,
   GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOption,
-  GeneratedListLineOrigin,
   GeneratedListParticipant,
   GeneratedListShareLink,
   LineSettlement,
@@ -19,24 +27,14 @@ import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
 import { BasketTripRowsService } from './basket-trip-rows.service';
-import { GeneratedListBasketService } from './generated-list-basket.service';
-import { GeneratedListLineRenameService } from './generated-list-line-rename.service';
-import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListOrderService } from './generated-list-order.service';
-import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
-import { GeneratedListOriginsService } from './generated-list-origins.service';
-import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
-import { GeneratedListReopenService } from './generated-list-reopen.service';
-import { GeneratedListSettleService } from './generated-list-settle.service';
 import { GeneratedListSharingController } from './generated-list-sharing.controller';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
-import { GeneratedListSplitService } from './generated-list-split.service';
 import { GeneratedListSweepService } from './generated-list-sweep.service';
 import { GeneratedListController } from './generated-list.controller';
 import { GeneratedListService } from './generated-list.service';
 import { LineClaimModule } from './line-claim.module';
-import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * Generated shopping lists (plan 0050): the four tables, the run that composes
@@ -67,9 +65,6 @@ import { WaitingSettlementService } from './waiting-settlement.service';
       // so the entity is part of the data source; the freeze and the thaw are
       // raw statements on the caller's manager.
       BasketTripRow,
-      GeneratedListLine,
-      GeneratedListLineOrigin,
-      GeneratedListLineOption,
       // Sharing (plan 0051): the link and the people who arrived by it.
       GeneratedListShareLink,
       GeneratedListParticipant,
@@ -92,9 +87,32 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     // 0139 and already points the other way.
     BasketCoverageModule,
   ],
-  controllers: [GeneratedListController, GeneratedListSharingController],
+  controllers: [
+    GeneratedListController,
+    GeneratedListSharingController,
+    // The basket's own reads (plan 0136). Its files live in `baskets/` and its
+    // providers are declared here rather than in a module of their own, because
+    // the finish freezes a trip's rows from `BasketReadService` and the history
+    // counts an open basket through it: a `BasketsModule` would have to import
+    // this one and be imported by it.
+    BasketController,
+    BasketWriteController,
+  ],
   providers: [
     GeneratedListService,
+    // The basket read, and the basket that is always there (plan 0136).
+    BasketReadService,
+    BasketLiveService,
+    // The five writes on a row, and the three things all of them need: a key
+    // resolved back to list lines, the coverage and redaction they resolve
+    // against, and the answer shape they share.
+    BasketRowResolver,
+    BasketWriteContext,
+    BasketSettleService,
+    BasketRevertService,
+    BasketDemandService,
+    BasketLineAddService,
+    BasketRowRenameService,
     // The freeze and the thaw of a trip's ask (plan 0135). A provider of its
     // own rather than two private methods, because it is the seam plan 0136
     // replaces: the statement changes and its caller does not.
@@ -102,49 +120,39 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     // The order a shopper walks (plan 0110). The run asks it once, between
     // composing a basket and writing it, and nothing asks it again.
     GeneratedListOrderService,
-    GeneratedListLineService,
     GeneratedListSharingService,
     // The people an owner shares a basket with on purpose (plan 0114). The run
     // and the share sheet both add people, so the contact check, the name rule
     // and the row table live here rather than in either of them.
     GeneratedListMembersService,
-    GeneratedListSettleService,
     // The reverse of the settle (plan 0054, section 3), and a provider of its
     // own for the same reason: it is the other operation here that reaches a
     // zone list, with its own transaction and its own announcements.
-    GeneratedListReopenService,
     // Moving what is still to get (plan 0056, rewritten by plan 0104). Small,
     // because neither direction is implemented in it: lowering calls the settle
     // above it and raising calls the reopen's walk, rather than either of them
     // settling its own way.
-    GeneratedListOutstandingService,
-    GeneratedListBasketService,
     // A line split by the product that was got (plan 0094). A provider of its
     // own rather than a method on the basket service, because it is the one
     // write here that creates rows, folds rows away and moves provenance rows
     // between them, all in one transaction, and it replaced the pick that did
     // live there.
-    GeneratedListSplitService,
     // Editing what each household asked for, which is deliberately not the
     // settle service (plan 0057, section 1): it changes a zone list without
     // buying anything. Since plan 0092 it is also the one gesture that takes a
     // line out of the basket, because raising a list from zero is what sending
     // a line there means, and plan 0058's separate bind service went with it.
-    GeneratedListOriginsService,
     // What one list **got**, which is deliberately not the service above it
     // (plan 0104, section 4): that one says what a household asked for, this one
     // says how much of it this basket bought for them, and the two move in
     // opposite directions on the same row of the same sheet.
-    GeneratedListOriginSettledService,
     // Renaming a basket line and every zone line it came from (plan 0113). A
     // provider of its own, because it is the one write here that renames zone
     // lines, merges them through plan 0112's merge, and merges two basket lines,
     // all in one transaction. The owner's line edit calls it too.
-    GeneratedListLineRenameService,
     // The purchases waiting for a list to arrive (plan 0092 section 4.3, filled
     // by plan 0093). It does nothing yet, and it is provided rather than left
     // out so the two origin inserts already call the one method.
-    WaitingSettlementService,
     // The backstop for a trip nobody finished (plan 0059, section 4). A timer
     // in the zone reaper's shape that finishes live baskets past the claim
     // window, through `GeneratedListService.update` so the release is heard.
@@ -154,6 +162,12 @@ import { WaitingSettlementService } from './waiting-settlement.service';
   // without reaching into the repositories itself. The sharing service is
   // exported for the same reason plus one more: a settle (plan 0051, section 6)
   // has to resolve the acting participant before it may write anything.
-  exports: [GeneratedListService, GeneratedListSharingService],
+  exports: [
+    GeneratedListService,
+    GeneratedListSharingService,
+    // The admin back office counts an open basket's rows through it (plan 0136,
+    // section 7.5), and so does the history.
+    BasketReadService,
+  ],
 })
 export class GeneratedListsModule {}

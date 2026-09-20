@@ -11,7 +11,6 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import {
-  BASKET_SOURCE_LISTS_SQL,
   NEXT_GUEST_NUMBER_SQL,
   WRITABLE_AMONG_SQL,
 } from './generated-list-sharing.sql';
@@ -62,7 +61,6 @@ function build(
     links?: Partial<GeneratedListShareLink>[];
     participants?: Partial<GeneratedListParticipant>[];
     /** Source lists the basket's provenance rows point at. */
-    sourceLists?: { listId: string; zoneId: string }[];
     /** userId -> the lists that user may write, at request time. */
     writable?: Record<string, string[]>;
     /** Make the next link insert lose the partial unique index. */
@@ -72,7 +70,6 @@ function build(
   const links = [...(options.links ?? [])];
   const participants = [...(options.participants ?? [])];
   const events: Harness['events'] = [];
-  const sourceLists = options.sourceLists ?? [];
   const writable = options.writable ?? {};
 
   const list = {
@@ -87,9 +84,6 @@ function build(
   const id = (prefix: string) => `${prefix}-${++nextId}`;
 
   const query = async (sql: string, params: unknown[]): Promise<unknown[]> => {
-    if (sql === BASKET_SOURCE_LISTS_SQL) {
-      return sourceLists;
-    }
     if (sql === WRITABLE_AMONG_SQL) {
       const [userId, listIds] = params as [string, string[]];
       const allowed = new Set(writable[userId] ?? []);
@@ -855,14 +849,26 @@ describe('a revoked participant is refused with no cache to wait out (section 3.
   });
 });
 
-describe('what a participant may see (section 5.2)', () => {
+describe('what a participant may see (plan 0136, section 3.4)', () => {
   const sources = [
     { listId: LIST_A, zoneId: ZONE_A },
     { listId: LIST_B, zoneId: ZONE_A },
   ];
 
-  it('never lets a guest see zone data, having no account to hold access with', async () => {
-    const harness = build({ sourceLists: sources, writable: {} });
+  /**
+   * `seesZoneData` is deleted, and these four tests are the reversal of the four
+   * that asserted it.
+   *
+   * It was all or nothing over **every** source list of the run, and a `LIVE`
+   * basket covers every list its owner can write, so "every source list" stopped
+   * being a set a second reader could be measured against. What replaces it is
+   * per list and is answered by {@link GeneratedListSharingService.writableAmong},
+   * which the basket read asks of the coverage: a reader is told which list a row
+   * belongs to for exactly the covered lists they write themselves.
+   */
+
+  it('answers a guest no flag at all, because the question is per list now', async () => {
+    const harness = build({ writable: {} });
     const link = await harness.service.ensureLink({
       userId: OWNER,
       generatedListId: BASKET,
@@ -873,11 +879,18 @@ describe('what a participant may see (section 5.2)', () => {
       generatedListId: BASKET,
       sessionSecret: guest.sessionSecret as string,
     });
-    expect(context.seesZoneData).toBe(false);
+    expect(context).not.toHaveProperty('seesZoneData');
+    // A guest holds no account, so no list is served to them by name. The rows
+    // themselves still are.
+    expect(await harness.service.writableAmong('', [LIST_A, LIST_B])).toEqual(
+      new Set()
+    );
   });
 
-  it('lets the owner see it by construction (section 2)', async () => {
-    const harness = build({ sourceLists: sources, writable: {} });
+  it('answers the owner no flag either, writing every covered list by construction', async () => {
+    const harness = build({
+      writable: { [OWNER]: [LIST_A, LIST_B] },
+    });
     await harness.service.ensureLink({
       userId: OWNER,
       generatedListId: BASKET,
@@ -887,12 +900,15 @@ describe('what a participant may see (section 5.2)', () => {
       generatedListId: BASKET,
       userId: OWNER,
     });
-    expect(context.seesZoneData).toBe(true);
+    expect(context).not.toHaveProperty('seesZoneData');
+    // Covered means the owner writes it, so the owner is served all of them.
+    expect(
+      await harness.service.writableAmong(OWNER, [LIST_A, LIST_B])
+    ).toEqual(new Set([LIST_A, LIST_B]));
   });
 
-  it('lets a registered participant see it only with WRITE everywhere', async () => {
+  it('serves a registered reader every covered list they write themselves', async () => {
     const harness = build({
-      sourceLists: sources,
       writable: { [OTHER_USER]: [LIST_A, LIST_B] },
     });
     const link = await harness.service.ensureLink({
@@ -905,13 +921,18 @@ describe('what a participant may see (section 5.2)', () => {
       generatedListId: BASKET,
       userId: OTHER_USER,
     });
-    expect(context.seesZoneData).toBe(true);
+    expect(context).not.toHaveProperty('seesZoneData');
+    expect(
+      await harness.service.writableAmong(OTHER_USER, [LIST_A, LIST_B])
+    ).toEqual(new Set([LIST_A, LIST_B]));
   });
 
-  it('collapses the whole view when one source is only readable', async () => {
-    // The known cliff, accepted because it fails in the safe direction.
+  it('keeps the list it does not collapse, which is the cliff this replaced', async () => {
+    // The reversal. One list where the reader holds only `READ` used to collapse
+    // the whole view, and the old test asserted that cliff as accepted because it
+    // failed in the safe direction. Per list, there is no cliff to accept: the
+    // list they write is named and the other one is not, on the same read.
     const harness = build({
-      sourceLists: sources,
       writable: { [OTHER_USER]: [LIST_A] },
     });
     const link = await harness.service.ensureLink({
@@ -924,13 +945,20 @@ describe('what a participant may see (section 5.2)', () => {
       generatedListId: BASKET,
       userId: OTHER_USER,
     });
-    expect(context.seesZoneData).toBe(false);
+    expect(context).not.toHaveProperty('seesZoneData');
+    expect(
+      await harness.service.writableAmong(OTHER_USER, [LIST_A, LIST_B])
+    ).toEqual(new Set([LIST_A]));
   });
 });
 
 describe('the device string is not presence data (section 7)', () => {
-  it('shows it to a reader who passes section 5.2 and hides it from a guest', async () => {
-    const harness = build({ sourceLists: [], writable: {} });
+  // Who may see it is `kind === OWNER || invitedAt !== null` since plan 0136
+  // section 3.4 deleted `seesZoneData`, and for the reason that flag could not
+  // answer: when somebody arrived and what device they are on is a fact about
+  // **them** rather than about any list, so no list's permissions decide it.
+  it('shows it to the owner and hides it from a link visitor', async () => {
+    const harness = build({ writable: {} });
     const link = await harness.service.ensureLink({
       userId: OWNER,
       generatedListId: BASKET,
@@ -959,6 +987,55 @@ describe('the device string is not presence data (section 7)', () => {
     // see" stay distinguishable.
     expect(
       asGuest.participants.find((p) => p.id === guest.participant.id)
+    ).not.toHaveProperty('userAgent');
+  });
+
+  it('shows it to somebody the owner named and hides it from a registered link visitor', async () => {
+    // The other half of plan 0136 section 3.4's rule, and the half no list's
+    // permissions could ever have answered: both of these people hold an
+    // account, and only one of them was invited by the owner.
+    const named = {
+      id: 'p-named',
+      generatedListId: BASKET,
+      kind: ParticipantKind.REGISTERED,
+      userId: OTHER_USER,
+      displayName: null,
+      username: 'friend',
+      guestNumber: null,
+      shareLinkId: null,
+      revokedAt: null,
+      invitedAt: new Date('2026-01-01T00:00:00.000Z'),
+      joinedAt: new Date('2026-01-01T00:00:00.000Z'),
+      lastSeenAt: new Date('2026-01-01T00:00:00.000Z'),
+      userAgent: 'Pixel 8',
+    };
+    const harness = build({ participants: [named] });
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    const visitor = await harness.service.join({
+      secret: link.secret,
+      userId: 'u-third',
+      userAgent: 'iPhone',
+    });
+
+    const asNamed = await harness.service.listParticipants({
+      generatedListId: BASKET,
+      asParticipantId: named.id,
+    });
+    const asVisitor = await harness.service.listParticipants({
+      generatedListId: BASKET,
+      asParticipantId: visitor.participant.id,
+    });
+
+    expect(
+      asNamed.participants.find((p) => p.id === visitor.participant.id)
+        ?.userAgent
+    ).toBe('iPhone');
+    // Registered, and still a link visitor: an account is not an invitation.
+    expect(
+      asVisitor.participants.find((p) => p.id === named.id)
     ).not.toHaveProperty('userAgent');
   });
 

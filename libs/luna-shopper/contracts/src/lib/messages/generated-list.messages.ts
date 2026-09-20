@@ -1,8 +1,5 @@
-import type {
-  BasketKind,
-  GeneratedLineOrigin,
-  GeneratedListStatus,
-} from '../enums/generated-list.enums';
+import type { BasketKind } from '../enums/basket.enums';
+import type { GeneratedListStatus } from '../enums/generated-list.enums';
 import type { Paginated } from '../pagination';
 import type { UserUsernameView } from './auth.messages';
 
@@ -40,20 +37,12 @@ export const GENERATED_LIST_PATTERNS = {
   create: 'generatedList.create',
   /** The caller's baskets, newest first, cursor paginated (section 7). */
   listMine: 'generatedList.listMine',
-  /** One basket with its lines, their origins and their options. */
+  /** One basket's header and the sources it was composed from. */
   get: 'generatedList.get',
-  /** Rename it, or move it between the four statuses. */
+  /** Rename it, or move it between the three statuses. */
   update: 'generatedList.update',
   /** A real delete of the generated rows alone. It never touches a zone list. */
   delete: 'generatedList.delete',
-  /** Type a line into the basket, optionally naming a list to receive it. */
-  addLine: 'generatedList.addLine',
-  /** Edit one line: its text, its quantity, its pick, or its target list. */
-  updateLine: 'generatedList.updateLine',
-  /** Take a line out of the basket, leaving every origin untouched. */
-  deleteLine: 'generatedList.deleteLine',
-  /** Reorder the basket, which is a local edit like every other one here. */
-  reorderLines: 'generatedList.reorderLines',
   /**
    * The baskets other people shared with the caller, newest share first (plan
    * 0114, section 8).
@@ -65,13 +54,12 @@ export const GENERATED_LIST_PATTERNS = {
  * The bounds a basket has to satisfy, stated once so the DTO, the JSON Schema and
  * the service enforce the same numbers.
  *
- * `maxLines` is a bound rather than a budget, like `PROFILE_LIMITS`: a run that
- * would compose more lines than this is drawing from more lists than anybody
- * shops for in one trip, and it is refused rather than silently truncated, so
- * nobody carries a basket that quietly lost its last forty items.
+ * `maxLines` is gone with the run that enforced it (plan 0136, section 3.6). A
+ * basket composes nothing, so it cannot refuse lines that arrive on a covered
+ * list afterwards; what guards a pathological account is `BASKET_LIMITS.maxRows`,
+ * applied to the answer rather than to anybody's data.
  */
 export const GENERATED_LIST_LIMITS = {
-  maxLines: 500,
   maxSources: 100,
   nameMaxLength: 120,
   contentMaxLength: 500,
@@ -90,73 +78,6 @@ export const GENERATED_LIST_LIMITS = {
 } as const;
 
 // --- Views -----------------------------------------------------------------
-
-/**
- * One zone line that fed a basket line (plan 0050, section 1).
- *
- * `lineVersion` is copied at generation time. `0050` needed it to reconcile a
- * status write back; `0047` made settling an append, so what it is for now is
- * telling a reader that the origin has moved since the basket was made, which is
- * information rather than a conflict to resolve.
- */
-export interface GeneratedListLineOriginView {
-  id: string;
-  zoneId: string;
-  listId: string;
-  lineId: string;
-  /** What this origin contributed to the basket line's summed quantity. */
-  quantity: number;
-  /**
-   * How many of that contribution have been bought for this origin (plan 0109,
-   * section 4).
-   *
-   * **`BOUGHT` rows only, and reverted ones excluded**, which is the same number
-   * `GeneratedListLineOriginDetail.settledHere` answers and the floor plan 0104
-   * checks a correction against. A `NOT_AVAILABLE` outcome closes an outstanding
-   * amount without buying anything, so it counts zero here: a shop that did not
-   * have the milk cannot raise what a household can be said to have received.
-   */
-  settled: number;
-  lineVersion: number;
-}
-
-/**
- * One line of a basket (plan 0050, section 1).
- *
- * `itemId` is **the pick**: the exact product this line means to buy, defaulted
- * at generation to the best priced of the line's options and switchable to any
- * other one (section 5). It is null for a free text line, which has no product
- * identity and therefore no pick to make.
- */
-export interface GeneratedListLineView {
-  id: string;
-  content: string;
-  /** How many the basket is asking for, summed across the origins. */
-  quantity: number;
-  /**
-   * How many have been settled so far (`0051` section 6, brought forward by
-   * `0047`'s cumulative settling).
-   *
-   * Outstanding is the difference, and a line is finished when the two are equal.
-   * It is a column rather than a count over settlements because it is read on
-   * every row of the main screen and a `NOT_AVAILABLE` outcome closes the
-   * outstanding amount without contributing any bought units to sum.
-   */
-  settledQuantity: number;
-  /** The pick. Null for a free text line. */
-  itemId: string | null;
-  /** The products the pick may be switched between, in the order they arrived. */
-  options: string[];
-  origin: GeneratedLineOrigin;
-  /**
-   * The zone list an `ADDED` line is also written into (section 5). Null while it
-   * lives in the basket alone, and always null on a `DERIVED` line, which is
-   * already in the lists its origins name.
-   */
-  targetListId: string | null;
-  position: number;
-  origins: GeneratedListLineOriginView[];
-}
 
 /**
  * One source of a basket, as it was named (plan 0133, section 4).
@@ -189,7 +110,6 @@ export interface GeneratedListView {
   generatedAt: string;
   /** What the run was asked to draw from, as it was named (section 4). */
   sources: BasketSourceView[];
-  lines: GeneratedListLineView[];
 }
 
 /**
@@ -279,15 +199,6 @@ export interface CreateGeneratedListRequest {
   sources?: GeneratedListSourceInput[];
   profileId?: string;
   name?: string | null;
-  /**
-   * The list every `ADDED` line should also be written into, unless the line
-   * names its own (section 5).
-   *
-   * A default on new lines and **never a retroactive sweep** over lines already
-   * added, which is the difference between an ergonomic default and an edit
-   * nobody asked for.
-   */
-  defaultTargetListId?: string | null;
   idempotencyKey?: string;
   /**
    * People to share the basket with as it is created (plan 0114, section 4).
@@ -374,86 +285,6 @@ export interface UpdateGeneratedListRequest {
   generatedListId: string;
   name?: string | null;
   status?: GeneratedListStatus;
-  defaultTargetListId?: string | null;
-}
-
-/**
- * Type a line into a basket (section 5).
- *
- * With a `targetListId` it is also created in that zone list through the ordinary
- * `line.add` path, subject to the ordinary rules: the caller must hold `WRITE`
- * **at that moment**, and the new line starts `PENDING` approval like any other.
- * Without one it lives in the basket alone.
- */
-export interface AddGeneratedListLineRequest {
-  userId: string;
-  generatedListId: string;
-  content: string;
-  quantity?: number;
-  /** The pick, when the client already knows which product it means. */
-  itemId?: string | null;
-  /** The products the pick may be switched between. */
-  options?: string[];
-  /**
-   * The zone list to also create it in. Omitted falls back to the basket's
-   * `defaultTargetListId`; explicit null means the basket alone, whatever the
-   * default says.
-   */
-  targetListId?: string | null;
-}
-
-/**
- * Edit one basket line (section 5). Every field here is **local**: the zone line
- * an origin names is not touched by any of them.
- *
- * Editing the text or the quantity of a `DERIVED` line changes the generated copy
- * alone, because the user asked for a shopping list and not for a way to rewrite
- * other people's lists by accident.
- */
-export interface UpdateGeneratedListLineRequest {
-  userId: string;
-  generatedListId: string;
-  lineId: string;
-  content?: string;
-  quantity?: number;
-  /** Switch the pick to another of the line's options. */
-  itemId?: string | null;
-  /** Only meaningful on an `ADDED` line; setting it promotes the line once. */
-  targetListId?: string | null;
-  /**
-   * Whether a rename that collides may merge (plan 0113, section 7).
-   *
-   * A new `content` renames the zone lines this line came from as well, through
-   * the participant route's own rule, so a name already taken on one of those
-   * lists or in the basket is refused with `line_merge_required` unless this is
-   * `true`.
-   */
-  confirmMerge?: boolean;
-}
-
-/**
- * What an owner's line edit answers: the line as it now stands.
- *
- * After a rename that merged two basket lines, that is the surviving line, whose
- * `id` can differ from the line the request addressed, and
- * {@link absorbedLineId} names the line that went away. The field is absent when
- * no basket line merged.
- */
-export interface UpdateGeneratedListLineResult extends GeneratedListLineView {
-  absorbedLineId?: string;
-}
-
-export interface GeneratedListLineIdRequest {
-  userId: string;
-  generatedListId: string;
-  lineId: string;
-}
-
-export interface ReorderGeneratedListLinesRequest {
-  userId: string;
-  generatedListId: string;
-  /** Every line of the basket, in the order it should now be in. */
-  lineIds: string[];
 }
 
 /*

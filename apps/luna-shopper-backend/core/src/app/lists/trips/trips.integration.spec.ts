@@ -1,6 +1,5 @@
 import {
   BasketKind,
-  GeneratedLineOrigin,
   GeneratedListStatus,
   MembershipStatus,
   ParticipantKind,
@@ -23,9 +22,6 @@ import {
   BasketTripRow,
   CORE_ENTITIES,
   GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOption,
-  GeneratedListLineOrigin,
   GeneratedListParticipant,
   LineSettlement,
   ListAccess,
@@ -82,14 +78,18 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
   }
 
   /** A zone line. Positions rise across the file, so creation order is row order. */
-  async function line(listId: string, content: string): Promise<string> {
+  async function line(
+    listId: string,
+    content: string,
+    quantity = 5
+  ): Promise<string> {
     const repo = dataSource.getRepository(ListLine);
     position += 1;
     const saved = await repo.save(
       repo.create({
         listId,
         content,
-        quantity: 5,
+        quantity,
         position,
         createdByUserId: ids.shopper,
       })
@@ -113,62 +113,60 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         status: options.status ?? GeneratedListStatus.FINISHED,
         generatedAt: options.generatedAt ?? new Date('2026-01-10T10:00:00Z'),
         kind: options.kind ?? BasketKind.GENERATED,
-        defaultTargetListId: null,
         idempotencyKey: null,
       })
     );
     return saved.id;
   }
 
-  async function basketLine(generatedListId: string): Promise<string> {
-    const repo = dataSource.getRepository(GeneratedListLine);
-    position += 1;
-    const saved = await repo.save(
-      repo.create({
-        generatedListId,
-        content: 'Basket line',
-        quantity: 1,
-        settledQuantity: 0,
-        itemId: null,
-        origin: GeneratedLineOrigin.DERIVED,
-        targetListId: null,
-        position,
-      })
-    );
-    return saved.id;
-  }
-
-  /** What one basket line asked of one zone line. */
-  async function origin(
-    generatedListLineId: string,
+  /**
+   * What one basket asked of one zone line.
+   *
+   * Since plan 0136 that is **two** facts and no basket line at all. The basket
+   * covers the line's list, which is a `basket_sources` row plus the owner's
+   * `WRITE`; and the ask itself lives in one of two places by the status, which
+   * is `basketAskedCte`'s whole shape. An open trip asks `bought + left`, where
+   * `left` is the zone line's own quantity, so the number is written onto the
+   * line. An ended one asks what its finish froze, so the number is written into
+   * `basket_trip_rows`.
+   *
+   * Two calls naming one zone line **sum**, which is where plan 0094's sibling
+   * basket lines went: a trip has one ask of a line however it arrived at it,
+   * and `uq_basket_trip_rows_line` is what makes that a fact of the database.
+   */
+  async function asked(
+    basketId: string,
     listId: string,
     lineId: string,
     quantity: number
   ): Promise<void> {
-    const repo = dataSource.getRepository(GeneratedListLineOrigin);
-    await repo.save(
-      repo.create({
-        generatedListLineId,
-        zoneId: ids.zone,
-        listId,
-        lineId,
-        quantity,
-        lineVersion: 1,
-      })
-    );
-    await refreezeIfEnded(generatedListLineId);
+    const sources = dataSource.getRepository(BasketSource);
+    if (!(await sources.findOne({ where: { basketId, listId } }))) {
+      await sources.save(
+        sources.create({ basketId, zoneId: ids.zone, listId })
+      );
+    }
+    const basket = await dataSource
+      .getRepository(GeneratedList)
+      .findOneByOrFail({ id: basketId });
+    if (basket.status === GeneratedListStatus.OPEN) {
+      await dataSource
+        .getRepository(ListLine)
+        .update({ id: lineId }, { quantity });
+      return;
+    }
+    const rows = dataSource.getRepository(BasketTripRow);
+    const existing = await rows.findOne({ where: { basketId, lineId } });
+    if (existing) {
+      await rows.update(
+        { id: existing.id },
+        { asked: existing.asked + quantity }
+      );
+      return;
+    }
+    await rows.insert({ basketId, listId, lineId, asked: quantity });
   }
 
-  /**
-   * The freeze a finished basket would have had (plan 0135).
-   *
-   * These fixtures write a finished basket's rows straight into the tables, so
-   * no status change ever ran and nothing wrote `basket_trip_rows`. This is that
-   * write, applied again after each origin, which is what
-   * `GeneratedListService.update` does inside the transaction that ends a trip.
-   * Thawed first, because the freeze inserts and never updates a row it already
-   * wrote.
-   */
   /**
    * End a trip that was seeded `OPEN`: the status, then the freeze, in that
    * order, which is the order `GeneratedListService.update` writes them in.
@@ -178,21 +176,6 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       .getRepository(GeneratedList)
       .update({ id: basketId }, { status: GeneratedListStatus.FINISHED });
     await tripRows.freeze(dataSource.manager, basketId);
-  }
-
-  async function refreezeIfEnded(generatedListLineId: string): Promise<void> {
-    const [row] = await dataSource.query<{ id: string; status: string }[]>(
-      `SELECT gl.id AS "id", gl."status"::text AS "status"
-       FROM "generated_lists" gl
-       JOIN "generated_list_lines" gll ON gll."generatedListId" = gl.id
-       WHERE gll.id = $1::uuid`,
-      [generatedListLineId]
-    );
-    if (!row || row.status === GeneratedListStatus.OPEN) {
-      return;
-    }
-    await tripRows.thaw(dataSource.manager, row.id);
-    await tripRows.freeze(dataSource.manager, row.id);
   }
 
   /**
@@ -216,7 +199,6 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         status: GeneratedListStatus.OPEN,
         generatedAt: new Date('2026-01-10T10:00:00Z'),
         kind: BasketKind.LIVE,
-        defaultTargetListId: null,
         idempotencyKey: null,
       })
     );
@@ -260,13 +242,13 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
   /**
    * One purchase, at a stated moment so the order is not a race.
    *
-   * With a basket it is a basket settle, which names a participant and no user,
-   * and it writes both basket columns the way every settle path does (plan 0134,
+   * With a basket it is a basket settle, which names a participant and no user
+   * and stamps the purchase with the basket it was made through (plan 0134,
    * section 3). Without one it is a settle off the list page, which names a user
-   * and leaves both null.
+   * and leaves the basket null.
    *
-   * `basketId` can be passed on its own, which is how a purchase through a `LIVE`
-   * basket is seeded before plan 0136 creates one.
+   * There is no basket line to name any more: a purchase belongs to the basket
+   * and to the zone line, and to nothing in between (plan 0136, section 5.1).
    */
   async function settled(
     listId: string,
@@ -275,7 +257,6 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
     options: {
       outcome?: SettlementOutcome;
       quantity?: number;
-      basketLineId?: string;
       basketId?: string;
       participantId?: string;
       userId?: string;
@@ -284,19 +265,8 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
   ): Promise<string> {
     const repo = dataSource.getRepository(LineSettlement);
     const outcome = options.outcome ?? SettlementOutcome.BOUGHT;
-    const byBasket =
-      options.basketLineId !== undefined || options.basketId !== undefined;
-    // A basket line names its basket, so a caller that gave one gets both
-    // columns written together, which is what every settle path does.
-    const basketId =
-      options.basketId ??
-      (options.basketLineId
-        ? ((
-            await dataSource
-              .getRepository(GeneratedListLine)
-              .findOne({ where: { id: options.basketLineId } })
-          )?.generatedListId ?? null)
-        : null);
+    const byBasket = options.basketId !== undefined;
+    const basketId = options.basketId ?? null;
     const saved = await repo.save(
       repo.create({
         lineId,
@@ -313,7 +283,6 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         revertedAt: options.reverted ? new Date() : null,
         // A reverted row names who took it back (`ck_line_settlements_revert`).
         revertedByParticipantId: options.reverted ? randomUUID() : null,
-        generatedListLineId: options.basketLineId ?? null,
         basketId,
         pricePaidCents: null,
         supermarketLocationId: null,
@@ -422,13 +391,11 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const eggs = await line(parents, 'Eggs');
 
       const id = await basket({ name: 'Saturday' });
-      const first = await basketLine(id);
-      const second = await basketLine(id);
-      await origin(first, flat, milk, 2);
-      await origin(first, parents, eggs, 1);
-      await origin(second, flat, bread, 1);
+      await asked(id, flat, milk, 2);
+      await asked(id, parents, eggs, 1);
+      await asked(id, flat, bread, 1);
       await settled(flat, milk, '2026-01-10T11:00:00Z', {
-        basketLineId: first,
+        basketId: id,
         quantity: 2,
       });
 
@@ -454,28 +421,28 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       ]);
     });
 
-    it('answers one row a zone line, over two origins and two sibling basket lines', async () => {
+    it('answers one row a zone line, however many asks reached it', async () => {
       const flat = await list('Siblings');
       const milk = await line(flat, 'Milk');
 
       const id = await basket();
-      // Plan 0094: two basket lines, each naming one product, fed by one zone
-      // line. What the trip asked of the line is both origins together.
-      const whole = await basketLine(id);
-      const skimmed = await basketLine(id);
-      await origin(whole, flat, milk, 2);
-      await origin(skimmed, flat, milk, 3);
+      // Plan 0094 split one zone line's ask across two basket lines, each
+      // naming one product, and the trip asked for both together. There are no
+      // basket lines now, and the sum survived them: one frozen row a zone line
+      // (`uq_basket_trip_rows_line`), whatever it was assembled from.
+      await asked(id, flat, milk, 2);
+      await asked(id, flat, milk, 3);
       await settled(flat, milk, '2026-01-10T11:00:00Z', {
-        basketLineId: whole,
+        basketId: id,
         quantity: 2,
       });
       await settled(flat, milk, '2026-01-10T11:05:00Z', {
-        basketLineId: skimmed,
+        basketId: id,
         quantity: 1,
       });
       // Taken back on a reopen, so it counts for nothing.
       await settled(flat, milk, '2026-01-10T11:10:00Z', {
-        basketLineId: skimmed,
+        basketId: id,
         quantity: 3,
         reverted: true,
       });
@@ -509,23 +476,22 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const ranOut = await line(flat, 'Ran out');
 
       const id = await basket();
-      const carrier = await basketLine(id);
-      await origin(carrier, flat, bought, 2);
-      await origin(carrier, flat, partly, 3);
-      await origin(carrier, flat, none, 1);
-      await origin(carrier, flat, untouched, 1);
-      await origin(carrier, flat, ranOut, 3);
+      await asked(id, flat, bought, 2);
+      await asked(id, flat, partly, 3);
+      await asked(id, flat, none, 1);
+      await asked(id, flat, untouched, 1);
+      await asked(id, flat, ranOut, 3);
 
       const at = '2026-01-10T11:00:00Z';
-      await settled(flat, bought, at, { basketLineId: carrier, quantity: 2 });
-      await settled(flat, partly, at, { basketLineId: carrier, quantity: 1 });
+      await settled(flat, bought, at, { basketId: id, quantity: 2 });
+      await settled(flat, partly, at, { basketId: id, quantity: 1 });
       await settled(flat, none, at, {
-        basketLineId: carrier,
+        basketId: id,
         outcome: SettlementOutcome.NOT_AVAILABLE,
       });
-      await settled(flat, ranOut, at, { basketLineId: carrier, quantity: 1 });
+      await settled(flat, ranOut, at, { basketId: id, quantity: 1 });
       await settled(flat, ranOut, '2026-01-10T12:00:00Z', {
-        basketLineId: carrier,
+        basketId: id,
         outcome: SettlementOutcome.NOT_AVAILABLE,
       });
 
@@ -558,12 +524,11 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
     it('pages the rows of a trip by the zone line’s position', async () => {
       const flat = await list('Long trip');
       const id = await basket();
-      const carrier = await basketLine(id);
       const lineIds: string[] = [];
       for (let i = 0; i < 5; i += 1) {
         const lineId = await line(flat, `Line ${i}`);
         lineIds.push(lineId);
-        await origin(carrier, flat, lineId, 1);
+        await asked(id, flat, lineId, 1);
       }
 
       const first = await trips.rows({
@@ -600,19 +565,15 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
   });
 
   describe('where an ask is read from (plan 0135, tests 11 and 12)', () => {
-    it('reads a finished trip’s ask after its origins are deleted by hand', async () => {
-      // The proof that the read is off the origins table. Nothing deletes a
-      // finished basket's origins in the product, and plan 0136 deletes the
-      // whole table; until then this is what says the trips no longer need it.
+    it('reads a finished trip’s ask off its frozen rows, and not off its lists', async () => {
+      // This used to delete the trip's origin rows by hand and read again, to
+      // prove the read was off that table. Plan 0136 dropped it, so the proof is
+      // structural instead and the assertion is what is left: the frozen four
+      // stand although the zone line now asks for five.
       const flat = await list('Origins taken away');
-      const milk = await line(flat, 'Milk');
+      const milk = await line(flat, 'Milk', 5);
       const id = await basket({ name: 'Frozen' });
-      const carrier = await basketLine(id);
-      await origin(carrier, flat, milk, 4);
-
-      await dataSource
-        .getRepository(GeneratedListLineOrigin)
-        .delete({ generatedListLineId: carrier });
+      await asked(id, flat, milk, 4);
 
       const page = await trips.rows({
         userId: ids.shopper,
@@ -633,14 +594,16 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       ]);
     });
 
-    it('answers a finished trip once while its origins still stand', async () => {
-      // Both halves of `basket_asked` can see a finished basket until plan 0136
-      // drops the origins, so the `status = 'OPEN'` on the open half is what
-      // keeps every finished row from being counted twice.
+    it('answers a finished trip once, although its lists still cover it', async () => {
+      // A finished basket still covers the same lists, so the open half of
+      // `basket_asked` would answer for it a second time from the list as it
+      // stands now. `gl."status" = 'OPEN'` on that half is what keeps every
+      // finished row from being counted twice, and it is not redundant with the
+      // invariant: both halves can see the same basket.
       const flat = await list('Counted once');
       const milk = await line(flat, 'Milk');
       const id = await basket({ name: 'Once' });
-      await origin(await basketLine(id), flat, milk, 3);
+      await asked(id, flat, milk, 3);
 
       const page = await trips.rows({
         userId: ids.shopper,
@@ -658,18 +621,22 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       ]);
     });
 
-    it('reads an open basket from its origins and a finished one from its rows', async () => {
+    it('reads an open basket from its lists and a finished one from its rows', async () => {
+      // Plan 0136, section 7.2 re-points the open half and leaves the split
+      // alone. An open trip no longer has origins to be summed from: its ask is
+      // `bought + left` over the lists it covers, so milk at zero with nothing
+      // bought is not a row of it, and bread at five is.
       const flat = await list('One of each');
-      const milk = await line(flat, 'Milk');
+      const milk = await line(flat, 'Milk', 0);
       const bread = await line(flat, 'Bread');
       const ended = await basket({ name: 'Ended' });
-      await origin(await basketLine(ended), flat, milk, 2);
+      await asked(ended, flat, milk, 2);
       const open = await basket({
         name: 'Open',
         status: GeneratedListStatus.OPEN,
         generatedAt: new Date('2026-01-11T10:00:00Z'),
       });
-      await origin(await basketLine(open), flat, bread, 5);
+      await asked(open, flat, bread, 5);
 
       const endedRows = await trips.rows({
         userId: ids.shopper,
@@ -684,8 +651,8 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         tripId: open,
       });
 
-      // The ended one has rows and no longer needs its origins; the open one
-      // has none and is still summed from them.
+      // The ended one has rows and reads nothing else; the open one has none
+      // and is read from the list.
       expect(endedRows.items.map((row) => [row.lineId, row.asked])).toEqual([
         [milk, 2],
       ]);
@@ -701,29 +668,37 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
   });
 
   describe('a purchase belongs to the basket, not to its line (plan 0134)', () => {
-    it('keeps a purchase in the basket’s trip after the basket line is deleted', async () => {
-      // The consequence section 4.1 calls new and wanted. Taking a line out of a
-      // basket that still exists used to drop its purchases into a session,
-      // because the test was "the basket line exists". They stay where they were
-      // made, as a row that was bought and is no longer asked.
+    it('keeps a purchase in the basket’s trip after the list stops asking', async () => {
+      // The consequence section 4.1 calls new and wanted. A purchase used to
+      // drop into a session as soon as the basket line behind it went, because
+      // the test was "the basket line exists". It is stamped with the basket
+      // itself now, so it stays where it was made.
+      //
+      // What takes the ask away is the list rather than the basket, since plan
+      // 0136: the household buys the two and the line falls to zero. The trip
+      // does **not** end up having asked for nothing, which is the reversal of
+      // what this test asserted: the freeze writes `bought + left`, so the two
+      // that were bought are still two that were asked for (section 7.2).
       const flat = await list('Line taken out');
       const milk = await line(flat, 'Milk');
 
-      // Open while the line is taken out, because a finished basket refuses
-      // every write (plan 0059) and the freeze happens at the finish: the trip
-      // therefore ends having asked for nothing, and plan 0135 writes that down.
+      // Open while the purchase is made, because a finished basket refuses
+      // every write (plan 0059) and the freeze happens at the finish.
       const id = await basket({
         name: 'Saturday',
         status: GeneratedListStatus.OPEN,
       });
-      const carrier = await basketLine(id);
-      await origin(carrier, flat, milk, 2);
+      await asked(id, flat, milk, 2);
       await settled(flat, milk, '2026-01-10T11:00:00Z', {
-        basketLineId: carrier,
+        basketId: id,
         quantity: 2,
       });
 
-      await dataSource.getRepository(GeneratedListLine).delete({ id: carrier });
+      // What the settle itself would have written: the line has nothing left to
+      // ask for.
+      await dataSource
+        .getRepository(ListLine)
+        .update({ id: milk }, { quantity: 0 });
       await finish(id);
 
       const heads = await trips.list({ userId: ids.shopper, listId: flat });
@@ -742,11 +717,11 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         kind: TripKind.BASKET,
         tripId: id,
       });
-      // Nothing asked, because the origins went with the line, and two bought.
+      // Two asked and two bought: `bought + left` is what the finish froze.
       expect(page.items).toEqual([
         {
           lineId: milk,
-          asked: 0,
+          asked: 2,
           bought: 2,
           left: 0,
           outcome: TripRowOutcome.BOUGHT,
@@ -756,24 +731,22 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
     });
 
     it('reads one basket’s purchases where two bought the same zone line', async () => {
-      // The `bought` half is narrowed by the settlement's own `basketId` now and
-      // no longer by a join through the basket line (section 4.2), so the
-      // parameter has to reach the right half of the statement.
+      // The `bought` half is narrowed by the settlement's own `basketId`
+      // (section 4.2), so the parameter has to reach the right half of the
+      // statement.
       const flat = await list('Two baskets');
       const milk = await line(flat, 'Milk');
 
       const mine = await basket({ name: 'Mine' });
       const theirs = await basket({ name: 'Theirs' });
-      const myLine = await basketLine(mine);
-      const theirLine = await basketLine(theirs);
-      await origin(myLine, flat, milk, 2);
-      await origin(theirLine, flat, milk, 5);
+      await asked(mine, flat, milk, 2);
+      await asked(theirs, flat, milk, 5);
       await settled(flat, milk, '2026-01-10T11:00:00Z', {
-        basketLineId: myLine,
+        basketId: mine,
         quantity: 2,
       });
       await settled(flat, milk, '2026-01-10T11:30:00Z', {
-        basketLineId: theirLine,
+        basketId: theirs,
         quantity: 4,
       });
 
@@ -931,10 +904,9 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const flat = await list('Deleted basket');
       const milk = await line(flat, 'Milk');
       const id = await basket();
-      const carrier = await basketLine(id);
-      await origin(carrier, flat, milk, 4);
+      await asked(id, flat, milk, 4);
       const purchase = await settled(flat, milk, '2026-01-10T11:00:00Z', {
-        basketLineId: carrier,
+        basketId: id,
         quantity: 2,
       });
 
@@ -1060,13 +1032,11 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const alone = await line(flat, 'Alone');
 
       const two = await basket({ name: 'Two lines' });
-      const carrier = await basketLine(two);
-      await origin(carrier, flat, kept, 1);
-      await origin(carrier, flat, gone, 1);
+      await asked(two, flat, kept, 1);
+      await asked(two, flat, gone, 1);
 
       const one = await basket({ name: 'One line' });
-      const lonely = await basketLine(one);
-      await origin(lonely, flat, alone, 1);
+      await asked(one, flat, alone, 1);
 
       await dataSource.getRepository(ListLine).delete({ id: gone });
       await dataSource.getRepository(ListLine).delete({ id: alone });
@@ -1106,17 +1076,15 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const alone = await line(flat, 'Alone');
 
       const two = await basket({ name: 'Two lines' });
-      const carrier = await basketLine(two);
-      await origin(carrier, flat, kept, 1);
-      await origin(carrier, flat, gone, 1);
+      await asked(two, flat, kept, 1);
+      await asked(two, flat, gone, 1);
       await settled(flat, gone, '2026-01-10T11:00:00Z', {
-        basketLineId: carrier,
+        basketId: two,
         quantity: 1,
       });
 
       const one = await basket({ name: 'One line' });
-      const lonely = await basketLine(one);
-      await origin(lonely, flat, alone, 1);
+      await asked(one, flat, alone, 1);
 
       const repo = dataSource.getRepository(ListLine);
       await repo.softDelete({ id: gone });
@@ -1151,12 +1119,11 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       // could not give one up would restart the page from the top.
       const flat = await list('Cursor over a tombstone');
       const id = await basket();
-      const carrier = await basketLine(id);
       const lineIds: string[] = [];
       for (let i = 0; i < 4; i += 1) {
         const lineId = await line(flat, `Line ${i}`);
         lineIds.push(lineId);
-        await origin(carrier, flat, lineId, 1);
+        await asked(id, flat, lineId, 1);
       }
 
       const first = await trips.rows({
@@ -1229,7 +1196,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         generatedAt: new Date(now.getTime() - 60_000),
       });
       for (const id of [inside, outside, finished]) {
-        await origin(await basketLine(id), flat, milk, 1);
+        await asked(id, flat, milk, 1);
       }
 
       const first = await trips.list({
@@ -1266,13 +1233,13 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
 
       const older = await settled(flat, milk, '2026-02-01T08:00:00Z');
       const tiedBasket = await basket({ name: 'Tied' });
-      await origin(await basketLine(tiedBasket), flat, milk, 1);
+      await asked(tiedBasket, flat, milk, 1);
       const tiedSession = await settled(flat, milk, '2026-02-10T08:00:00Z');
       const newerBasket = await basket({
         name: 'Newer',
         generatedAt: new Date('2026-02-20T08:00:00Z'),
       });
-      await origin(await basketLine(newerBasket), flat, milk, 1);
+      await asked(newerBasket, flat, milk, 1);
 
       // The same moment to the microsecond, and one a millisecond token would
       // round: a cursor carrying an ISO `startedAt` sits below the boundary row
@@ -1342,10 +1309,6 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       generated = new GeneratedListService(
         dataSource,
         dataSource.getRepository(GeneratedList),
-        dataSource.getRepository(GeneratedListLine),
-        dataSource.getRepository(GeneratedListLineOrigin),
-        dataSource.getRepository(GeneratedListLineOption),
-        dataSource.getRepository(LineSettlement),
         // The run's profile resolution and walk order, which no write here asks.
         undefined as never,
         fakeLineClaims({}).service,
@@ -1353,13 +1316,15 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         undefined as never,
         { liveRegistered: async () => [] } as never,
         dataSource.getRepository(BasketSource),
-        tripRows
+        tripRows,
+        // The history counts of an open basket, which no write here reads.
+        undefined as never
       );
     });
 
     beforeEach(() => emitTo.mockClear());
 
-    /** A basket with two lines from one list and one from another. */
+    /** A basket covering two lists, with two lines on one of them. */
     async function basketOverTwoLists(): Promise<{
       id: string;
       flat: string;
@@ -1367,19 +1332,17 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
     }> {
       const flat = await list('Event flat');
       const parents = await list('Event parents');
-      const id = await basket({ status: GeneratedListStatus.OPEN });
-      await origin(await basketLine(id), flat, await line(flat, 'Milk'), 1);
-      await origin(await basketLine(id), flat, await line(flat, 'Bread'), 1);
-      await origin(
-        await basketLine(id),
-        parents,
-        await line(parents, 'Eggs'),
-        1
-      );
+      const id = await basket({
+        name: 'Saturday',
+        status: GeneratedListStatus.OPEN,
+      });
+      await asked(id, flat, await line(flat, 'Milk'), 1);
+      await asked(id, flat, await line(flat, 'Bread'), 1);
+      await asked(id, parents, await line(parents, 'Eggs'), 1);
       return { id, flat, parents };
     }
 
-    it('names each origin list once, however many lines came from it', async () => {
+    it('names each covered list once, however many lines it holds', async () => {
       const { id, flat, parents } = await basketOverTwoLists();
 
       const lists = await tripListsOfBasket(
@@ -1410,12 +1373,15 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
     });
 
     it('says nothing when neither the name nor the status moved', async () => {
-      const { id, flat } = await basketOverTwoLists();
+      const { id } = await basketOverTwoLists();
 
+      // The name it already holds. There is no third field to write since plan
+      // 0136 took `defaultTargetListId` away, so a write that moves nothing is
+      // a write of the value that is already there.
       await generated.update({
         userId: ids.shopper,
         generatedListId: id,
-        defaultTargetListId: flat,
+        name: 'Saturday',
       });
 
       expect(announcedLists()).toEqual([]);
@@ -1427,7 +1393,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       await generated.delete({ userId: ids.shopper, generatedListId: id });
 
       expect(announcedLists().sort()).toEqual([flat, parents].sort());
-      // The origins went with it, which is why they were read first.
+      // The sources went with it, which is why they were read first.
       expect(
         await tripListsOfBasket(
           (sql, parameters) => dataSource.query(sql, parameters),

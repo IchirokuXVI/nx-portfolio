@@ -6,16 +6,15 @@ import { instant } from './people-format';
 import type { BasketRow } from './people-seed';
 
 /**
- * One shopping list, and its lines (plan 0007, section 2).
+ * One basket, and the rows it is showing (plan 0136).
  *
- * Read only, like the standing list it was generated from, and for the same
- * reason: a basket line is bound to the list line it came from and to whatever
- * settlement the trip produced, and none of that is reachable by writing the
- * row.
+ * Read only, and more so than before: a basket stores no rows at all. What is
+ * drawn is computed from the lists the basket covers, for an open basket, and
+ * from `basket_trip_rows` for a finished one, so there is nothing here an
+ * operator could write even if the screen offered it.
  *
- * A basket belongs to a **person**, and the zones on it are the ones its lines
- * were drawn from, which is why there can be more than one and why none of them
- * owns it.
+ * A basket belongs to a **person**, and the zones on it are the ones its sources
+ * name, which is why there can be more than one and why none of them owns it.
  */
 @Component({
   selector: 'lib-basket-detail-page',
@@ -38,13 +37,18 @@ import type { BasketRow } from './people-seed';
             <p class="muted">{{ 'people.baskets.noLines' | rokuT }}</p>
           } @else {
             <ul class="rows">
-              @for (line of basket.lines; track line.id) {
+              @for (row of basket.lines; track row.rowKey) {
                 <li>
                   <div class="what">
-                    <span class="content">{{ line.content }}</span>
-                    <span class="muted">{{ createdAt(line.createdAt) }}</span>
+                    <span class="content">{{ row.content }}</span>
+                    <span class="muted">
+                      {{
+                        'people.baskets.bought'
+                          | rokuT: { bought: row.bought, asked: row.asked }
+                      }}
+                    </span>
                   </div>
-                  <span class="quantity">{{ line.quantity }}</span>
+                  <span class="quantity">{{ row.left }}</span>
                 </li>
               }
             </ul>
@@ -156,7 +160,4 @@ export class BasketDetailPage extends DetailPage<BasketRow> {
     void this.load();
   }
 
-  createdAt(value: string): string {
-    return instant(value, this.locale);
-  }
 }

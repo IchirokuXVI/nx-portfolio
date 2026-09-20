@@ -12,10 +12,9 @@ import { randomUUID } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
 import { CORE_MIGRATIONS } from '../db/migrations';
 import {
+  BasketSource,
   CORE_ENTITIES,
   GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOrigin,
   ListLine,
   ShoppingList,
   Zone,
@@ -125,9 +124,12 @@ describeIntegration('the admin collections that read across a parent', () => {
       lists,
       lines,
       dataSource.getRepository(GeneratedList),
-      dataSource.getRepository(GeneratedListLine),
-      dataSource.getRepository(GeneratedListLineOrigin),
+      dataSource.getRepository(BasketSource),
       gate,
+      {} as never,
+      {} as never,
+      // The basket reads of plan 0136, section 7.5. Nothing in this file is
+      // about a basket, so neither is reached.
       {} as never,
       {} as never
     );

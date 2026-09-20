@@ -2,22 +2,16 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   GENERATED_LIST_PATTERNS,
-  type AddGeneratedListLineRequest,
   type CreateGeneratedListRequest,
   type GeneratedListIdRequest,
-  type GeneratedListLineIdRequest,
-  type GeneratedListLineView,
   type GeneratedListPage,
   type GeneratedListRunResult,
   type GeneratedListView,
   type ListGeneratedListsRequest,
   type ListSharedGeneratedListsRequest,
-  type ReorderGeneratedListLinesRequest,
   type SharedGeneratedListCorePage,
-  type UpdateGeneratedListLineRequest,
   type UpdateGeneratedListRequest,
 } from '@portfolio/luna-shopper/contracts';
-import { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListService } from './generated-list.service';
 
 /**
@@ -28,10 +22,7 @@ import { GeneratedListService } from './generated-list.service';
  */
 @Controller()
 export class GeneratedListController {
-  constructor(
-    private readonly lists: GeneratedListService,
-    private readonly lines: GeneratedListLineService
-  ) {}
+  constructor(private readonly lists: GeneratedListService) {}
 
   @MessagePattern(GENERATED_LIST_PATTERNS.create)
   create(
@@ -72,31 +63,4 @@ export class GeneratedListController {
     return this.lists.delete(req);
   }
 
-  @MessagePattern(GENERATED_LIST_PATTERNS.addLine)
-  addLine(
-    @Payload() req: AddGeneratedListLineRequest
-  ): Promise<GeneratedListLineView> {
-    return this.lines.addLine(req);
-  }
-
-  @MessagePattern(GENERATED_LIST_PATTERNS.updateLine)
-  updateLine(
-    @Payload() req: UpdateGeneratedListLineRequest
-  ): Promise<GeneratedListLineView> {
-    return this.lines.updateLine(req);
-  }
-
-  @MessagePattern(GENERATED_LIST_PATTERNS.deleteLine)
-  deleteLine(
-    @Payload() req: GeneratedListLineIdRequest
-  ): Promise<{ id: string }> {
-    return this.lines.deleteLine(req);
-  }
-
-  @MessagePattern(GENERATED_LIST_PATTERNS.reorderLines)
-  reorderLines(
-    @Payload() req: ReorderGeneratedListLinesRequest
-  ): Promise<GeneratedListView> {
-    return this.lines.reorderLines(req);
-  }
 }

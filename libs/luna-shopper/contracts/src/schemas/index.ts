@@ -15,6 +15,7 @@ export { ADMIN_CORE_SCHEMA_IDS } from './messages/admin-core.schemas';
 export { ADMIN_DASHBOARD_SCHEMA_IDS } from './messages/admin-dashboard.schemas';
 export { ADMIN_USERS_SCHEMA_IDS } from './messages/admin-users.schemas';
 export { AUTH_SCHEMA_IDS } from './messages/auth.schemas';
+export { BASKET_SCHEMA_IDS } from './messages/basket.schemas';
 export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';
 export { GENERATED_LIST_SHARING_SCHEMA_IDS } from './messages/generated-list-sharing.schemas';
 export { GENERATED_LIST_SCHEMA_IDS } from './messages/generated-list.schemas';
