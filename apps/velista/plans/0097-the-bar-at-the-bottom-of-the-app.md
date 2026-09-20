@@ -1,3 +1,5 @@
+> **PR:** [#422](https://github.com/IchirokuXVI/nx-portfolio/pull/422)
+
 # 0097: the bar at the bottom of the app
 
 > Mock: `mocks/nav/`, published at https://claude.ai/artifact/HSJYUM3oq8srUafnH76P81.
