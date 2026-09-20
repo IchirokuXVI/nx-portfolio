@@ -44,6 +44,10 @@ import {
 } from './messages/assistant.schemas';
 import { authMessageContracts, authSchemas } from './messages/auth.schemas';
 import {
+  basketMessageContracts,
+  basketSchemas,
+} from './messages/basket.schemas';
+import {
   catalogMessageContracts,
   catalogSchemas,
 } from './messages/catalog.schemas';
@@ -96,6 +100,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...assistantMessageContracts,
   ...generatedListMessageContracts,
   ...generatedListSharingMessageContracts,
+  ...basketMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -127,6 +132,7 @@ export const allSchemas: JsonSchema[] = [
   ...assistantSchemas,
   ...generatedListSchemas,
   ...generatedListSharingSchemas,
+  ...basketSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
   ...postalCodeEventSchemas,

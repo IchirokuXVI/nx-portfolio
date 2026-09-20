@@ -74,7 +74,7 @@ import {
   type WritableListRow,
 } from './generated-list.sql';
 import { LineClaimService } from './line-claim.service';
-import { mergeKey } from './line-dedup';
+import { mergeKey } from '../baskets/line-dedup';
 
 /** Postgres unique-violation, raised by the partial index on the idempotency key. */
 const PG_UNIQUE_VIOLATION = '23505';

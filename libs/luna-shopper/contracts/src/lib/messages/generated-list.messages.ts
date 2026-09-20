@@ -1,5 +1,5 @@
+import type { BasketKind } from '../enums/basket.enums';
 import type {
-  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
 } from '../enums/generated-list.enums';

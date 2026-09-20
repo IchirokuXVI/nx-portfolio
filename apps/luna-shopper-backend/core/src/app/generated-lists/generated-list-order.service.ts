@@ -4,7 +4,7 @@ import { GeneratedListStatus } from '@portfolio/luna-shopper/contracts';
 import { Repository } from 'typeorm';
 import { GeneratedList } from '../entities';
 import { ORDER_HISTORY_SQL, type OrderHistoryRow } from './generated-list.sql';
-import { normalizeContent } from './line-dedup';
+import { normalizeContent } from '../baskets/line-dedup';
 
 /**
  * What counts as a trip that already happened (plan 0110, section 2).

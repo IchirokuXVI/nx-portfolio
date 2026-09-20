@@ -57,7 +57,7 @@ import {
   type WritableListRow,
 } from './generated-list.sql';
 import { LineClaimService } from './line-claim.service';
-import { mergeKey } from './line-dedup';
+import { mergeKey } from '../baskets/line-dedup';
 import { namesOfLists, type NamedList } from './list-names';
 import {
   WaitingSettlementService,

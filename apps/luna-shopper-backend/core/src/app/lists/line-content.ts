@@ -6,7 +6,7 @@
  * The add merges "Jamón" into the "jamon" line already on the list, and a
  * generation run composes a basket line from both; a run that folded differently
  * from the add would compose a line that no longer matches the list line it came
- * from. `generated-lists/line-dedup.ts` re-exports it for that reason and states
+ * from. `baskets/line-dedup.ts` re-exports it for that reason and states
  * what the run does with it.
  */
 

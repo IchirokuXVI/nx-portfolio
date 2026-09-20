@@ -1,5 +1,5 @@
+import type { BasketKind } from '../enums/basket.enums';
 import type {
-  BasketKind,
   GeneratedListStatus,
 } from '../enums/generated-list.enums';
 import type { LineApprovalStatus } from '../enums/list.enums';

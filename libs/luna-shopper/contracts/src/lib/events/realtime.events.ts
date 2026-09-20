@@ -272,6 +272,42 @@ export enum RealtimeEvent {
    * bought but not what basket it came from.
    */
   LineClaimChanged = 'line.claimChanged',
+
+  /**
+   * Rows of a basket moved, because somebody settled, reverted, changed a
+   * demand, added a line or renamed a row (plan 0136, section 8).
+   *
+   * One event for all five writes, addressed to the acting basket's room and to
+   * its owner's own sessions. A client that receives it reads the basket again,
+   * debounced, rather than patching a row out of the payload.
+   *
+   * ## Why it carries line ids and nothing else
+   *
+   * A basket room holds guests, and a basket row names how much each household
+   * asks for. A broadcast cannot be projected per socket, so it carries the
+   * least privileged view there is (plan 0130, section 6): the ids of the list
+   * lines that moved, which name no household and no quantity.
+   *
+   * ## Why the basket is on the envelope and not in the payload
+   *
+   * Plan 0139 widens the audience to **every** basket that covers the line and
+   * adds `basketIds` to the envelope. One envelope will then address several
+   * rooms, and a `basketId` in the payload could name only one of them. This
+   * plan emits to one room so that four people in one shop stay in step between
+   * the two plans.
+   */
+  BasketLinesChanged = 'basket.linesChanged',
+}
+
+/**
+ * What {@link RealtimeEvent.BasketLinesChanged} carries (plan 0136, section 8).
+ *
+ * Ids only, on purpose. See the event's own comment for why a basket room may
+ * not be told more than this.
+ */
+export interface BasketLinesChangedEvent {
+  /** The list lines that moved. */
+  lineIds: string[];
 }
 
 /**
@@ -326,6 +362,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.GeneratedListShared,
   RealtimeEvent.GeneratedListUnshared,
   RealtimeEvent.LineClaimChanged,
+  RealtimeEvent.BasketLinesChanged,
 ] as const;
 
 /**

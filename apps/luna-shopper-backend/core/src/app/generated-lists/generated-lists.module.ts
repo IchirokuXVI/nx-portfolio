@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BasketCoverageModule } from '../baskets/basket-coverage.module';
+import { BasketLiveService } from '../baskets/basket-live.service';
+import { BasketReadService } from '../baskets/basket-read.service';
+import { BasketController } from '../baskets/basket.controller';
 import {
   BasketSource,
   BasketTripRow,
@@ -92,9 +95,21 @@ import { WaitingSettlementService } from './waiting-settlement.service';
     // 0139 and already points the other way.
     BasketCoverageModule,
   ],
-  controllers: [GeneratedListController, GeneratedListSharingController],
+  controllers: [
+    GeneratedListController,
+    GeneratedListSharingController,
+    // The basket's own reads (plan 0136). Its files live in `baskets/` and its
+    // providers are declared here rather than in a module of their own, because
+    // the finish freezes a trip's rows from `BasketReadService` and the history
+    // counts an open basket through it: a `BasketsModule` would have to import
+    // this one and be imported by it.
+    BasketController,
+  ],
   providers: [
     GeneratedListService,
+    // The basket read, and the basket that is always there (plan 0136).
+    BasketReadService,
+    BasketLiveService,
     // The freeze and the thaw of a trip's ask (plan 0135). A provider of its
     // own rather than two private methods, because it is the seam plan 0136
     // replaces: the statement changes and its caller does not.
@@ -154,6 +169,12 @@ import { WaitingSettlementService } from './waiting-settlement.service';
   // without reaching into the repositories itself. The sharing service is
   // exported for the same reason plus one more: a settle (plan 0051, section 6)
   // has to resolve the acting participant before it may write anything.
-  exports: [GeneratedListService, GeneratedListSharingService],
+  exports: [
+    GeneratedListService,
+    GeneratedListSharingService,
+    // The admin back office counts an open basket's rows through it (plan 0136,
+    // section 7.5), and so does the history.
+    BasketReadService,
+  ],
 })
 export class GeneratedListsModule {}

@@ -1,5 +1,5 @@
+import type { BasketKind } from '../enums/basket.enums';
 import type {
-  BasketKind,
   GeneratedLineOrigin,
   GeneratedListStatus,
   OriginUnavailableReason,
@@ -9,6 +9,10 @@ import type {
   LineApprovalStatus,
   SettlementOutcome,
 } from '../enums/list.enums';
+import type {
+  BasketPriceScopeView,
+  BasketScopeLocationView,
+} from './basket.messages';
 import type { ItemView, LocalizedText } from './catalog.messages';
 import type {
   BasketSourceView,
@@ -1273,37 +1277,6 @@ export interface GeneratedListBasketResult extends GeneratedListBasketView {
    * answer, and the client draws it as one.
    */
   scopes: BasketPriceScopeView[];
-}
-
-/**
- * One price scope, described for a person (plan 0066, section 4).
- *
- * The chain reaches every participant, guests included, because a chain's name
- * is a product fact of the same class as the price it explains. The **shops**
- * reach only a reader who passes the all or nothing rule (section 5): a street
- * address is the owner's geography, and it is an empty array for everybody
- * else, which is the same shape a scope whose stores we cannot place answers
- * with. There is deliberately no third state for the client to branch on.
- */
-export interface BasketPriceScopeView {
-  priceScopeId: string;
-  supermarketId: string;
-  /** The chain, both locales, resolved by the client. */
-  supermarketName: LocalizedText;
-  /**
-   * The shops of this scope. Empty for a reader the server withheld them from,
-   * and empty for a scope catalog cannot place; both draw the chain alone.
-   */
-  locations: BasketScopeLocationView[];
-}
-
-/** One shop of a scope, as much of it as the pick sheet draws. */
-export interface BasketScopeLocationView {
-  supermarketLocationId: string;
-  label: LocalizedText | null;
-  address: string | null;
-  city: string | null;
-  postalCode: string | null;
 }
 
 /**

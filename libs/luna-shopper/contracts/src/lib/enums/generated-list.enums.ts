@@ -5,22 +5,6 @@
  */
 
 /**
- * What a basket is (plan 0133, section 2).
- *
- * The two kinds are not two flavours of one row: they answer differently to
- * every "is somebody still shopping this" question in core. A `GENERATED`
- * basket is a trip, so it claims lines, the sweep finishes it, and it appears in
- * the history. A `LIVE` one is a door onto the lists its owner can write, so it
- * never ends and none of those questions is about it.
- */
-export enum BasketKind {
-  /** One per person, covering every list they can write. Never finished (plan 0136). */
-  LIVE = 'LIVE',
-  /** Made on purpose, with a name, sources and people. Finished by its owner. */
-  GENERATED = 'GENERATED',
-}
-
-/**
  * Where a basket has got to (plan 0133, section 3).
  *
  * Three values, where there were four and two of them were one state with two
