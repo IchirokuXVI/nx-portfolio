@@ -1,6 +1,6 @@
+import { continuesPurchaseSession } from '@portfolio/luna-shopper/contracts';
 import {
   DAY_MS,
-  PURCHASE_MERGE_MS,
   STAPLE_MIN_TRIPS,
   STAPLE_TRIPS,
   SUGGESTION_MIN_PURCHASES,
@@ -49,27 +49,35 @@ export interface LinePeriod {
 /**
  * Step 1 of section 3: a trip is one purchase however many rows it wrote.
  *
- * Sorted by time, then every purchase closer than {@link PURCHASE_MERGE_MS} to
- * the one before it is folded into that one. "The one before it" is the previous
- * settlement and not the first of the group, so a slow partial settle that writes
- * a row every few hours stays one purchase.
+ * Sorted by time, then every purchase that `continuesPurchaseSession` says is
+ * still the same session as the one before it is folded into that one. "The one
+ * before it" is the previous settlement and not the first of the group, so a slow
+ * partial settle that writes a row every few hours stays one purchase.
+ *
+ * The session is the trips read's own session (plan 0134, section 7), so a line's
+ * estimate counts the trips the list shows and not a different number of them.
+ * Two shops nine hours apart on one day used to fold and now do not, which
+ * shortens that line's median a little, and the floor of
+ * {@link SUGGESTION_MIN_PURCHASES} still refuses a period below three purchases.
  */
 export function mergePurchases(
   purchases: readonly Purchase[]
 ): MergedPurchase[] {
   const sorted = [...purchases].sort((a, b) => a.at.getTime() - b.at.getTime());
   const merged: MergedPurchase[] = [];
-  let previous: number | null = null;
+  let previous: Date | null = null;
 
   for (const purchase of sorted) {
-    const at = purchase.at.getTime();
     const last = merged[merged.length - 1];
-    if (last && previous !== null && at - previous < PURCHASE_MERGE_MS) {
+    if (last && previous && continuesPurchaseSession(previous, purchase.at)) {
       last.quantity += purchase.quantity;
     } else {
-      merged.push({ at: new Date(at), quantity: purchase.quantity });
+      merged.push({
+        at: new Date(purchase.at.getTime()),
+        quantity: purchase.quantity,
+      });
     }
-    previous = at;
+    previous = purchase.at;
   }
   return merged;
 }

@@ -179,6 +179,9 @@ function build(
       revertedAt: null,
       revertedByParticipantId: null,
       generatedListLineId: BASKET_LINE,
+      // Every basket settle writes both (plan 0134, section 3), so a seeded row
+      // carries both and a split can be seen to copy them.
+      basketId: BASKET,
       pricePaidCents: null,
       supermarketLocationId: null,
     }))
@@ -590,6 +593,10 @@ describe('a take back that lands inside a purchase splits it (section 3.2)', () 
         settledByParticipantId: ACTOR,
         settledAt: original?.settledAt,
         revertedAt: null,
+        // The basket of the row it came out of, copied and never looked up
+        // again (plan 0134, section 3): a split is two parts of one purchase.
+        generatedListLineId: BASKET_LINE,
+        basketId: BASKET,
       })
     );
     expect(standing[0].id).not.toBe('s-1');

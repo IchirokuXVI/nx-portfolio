@@ -13,13 +13,15 @@
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Two purchases closer than this are one purchase: twelve hours.
+ * How long two purchases may be apart and still be one purchase is **not** here.
+ * It is `PURCHASE_SESSION_GAP_MS` in contracts, six hours, and `mergePurchases`
+ * folds on `continuesPurchaseSession` (plan 0134, section 7).
  *
- * One trip writes several settlements for one line seconds apart (one per
- * origin, one per sibling basket line, one per partial settle), and read as they
- * are they put gaps of zero into the median.
+ * It used to be a twelve hour `PURCHASE_MERGE_MS` here, beside a six hour gap in
+ * the trips read, so one shopping trip read as one trip on the list and two
+ * purchases in the estimate. A session is one thing, so it is one number, and
+ * that number is not a suggestions threshold.
  */
-export const PURCHASE_MERGE_MS = 12 * 60 * 60 * 1000;
 
 /** Fewer merged purchases than this have no period. Two define one interval. */
 export const SUGGESTION_MIN_PURCHASES = 3;

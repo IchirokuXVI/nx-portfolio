@@ -639,6 +639,7 @@ describe('a share for a product that already has a row (section 5)', () => {
     harness.store.settlements.push({
       id: 'ls-1',
       generatedListLineId: 'gll-whole',
+      basketId: BASKET,
       lineId: FLAT.lineId,
       listId: FLAT.listId,
       outcome: SettlementOutcome.BOUGHT,
@@ -658,6 +659,9 @@ describe('a share for a product that already has a row (section 5)', () => {
     expect(harness.lineOf(LINE)).toMatchObject({ quantity: 5 });
     expect(harness.originsOf(LINE).map((row) => row.quantity)).toEqual([5]);
     expect(harness.store.settlements[0].generatedListLineId).toBe(LINE);
+    // And the basket is untouched (plan 0134, section 3): a fold moves a
+    // purchase between two lines of one basket, so it was bought where it says.
+    expect(harness.store.settlements[0].basketId).toBe(BASKET);
   });
 });
 

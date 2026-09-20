@@ -261,9 +261,9 @@ export class WaitingSettlementService {
    * The row fits partly, so it becomes two (section 3, rule 5).
    *
    * A new row carries the units that fit and is home; the original keeps the
-   * rest and is still waiting. Both keep the original's time, participant and
-   * product, because they are two parts of one purchase rather than two
-   * purchases.
+   * rest and is still waiting. Both keep the original's time, participant,
+   * product and basket, because they are two parts of one purchase rather than
+   * two purchases.
    */
   private async split(
     settlements: Repository<LineSettlement>,
@@ -286,6 +286,9 @@ export class WaitingSettlementService {
         revertedAt: null,
         revertedByParticipantId: null,
         generatedListLineId: row.generatedListLineId,
+        // Copied from the row it splits (plan 0134, section 3). The two parts
+        // were bought through the same basket, on the same trip.
+        basketId: row.basketId,
         pricePaidCents: row.pricePaidCents,
         supermarketLocationId: row.supermarketLocationId,
       })

@@ -428,6 +428,19 @@ describe('settling from the basket (section 6)', () => {
     await settle(harness);
     expect(harness.settlements[0].generatedListLineId).toBe(BASKET_LINE);
   });
+
+  it('records the basket beside the basket line (plan 0134, section 3)', async () => {
+    // Both columns, together. The basket is what every read asking "which trip
+    // was this bought on" uses, and it keeps answering once plan 0136 deletes
+    // the basket line above it.
+    const harness = build({});
+    await settle(harness);
+
+    expect(harness.settlements[0]).toMatchObject({
+      generatedListLineId: BASKET_LINE,
+      basketId: BASKET,
+    });
+  });
 });
 
 describe('a line with no origins can still finish (plan 0055, section 6)', () => {
@@ -462,6 +475,9 @@ describe('a line with no origins can still finish (plan 0055, section 6)', () =>
       listId: null,
       // And everything that makes it a purchase: what, how many, who, and when.
       generatedListLineId: BASKET_LINE,
+      // The basket it was bought through, beside the line (plan 0134). A
+      // waiting row has no household yet and it still has a trip.
+      basketId: BASKET,
       outcome: SettlementOutcome.BOUGHT,
       quantity: 2,
       settledByParticipantId: GUEST_PARTICIPANT,

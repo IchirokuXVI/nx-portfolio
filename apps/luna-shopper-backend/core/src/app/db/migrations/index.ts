@@ -18,6 +18,7 @@ import { WaitingSettlements1756001900000 } from './1756001900000-WaitingSettleme
 import { ParticipantInvitesAndEndings1756002000000 } from './1756002000000-ParticipantInvitesAndEndings';
 import { SoftDeletedLines1756002100000 } from './1756002100000-SoftDeletedLines';
 import { BasketKindStatusAndSources1756002200000 } from './1756002200000-BasketKindStatusAndSources';
+import { SettlementBasket1756002300000 } from './1756002300000-SettlementBasket';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -83,4 +84,8 @@ export const CORE_MIGRATIONS = [
   // are read by every migration that touched the table before it and by none
   // after, so it follows all of them and nothing else (plan 0133, section 8).
   BasketKindStatusAndSources1756002200000,
+  // Alters the table `LineSettlements1756000800000` created, which plan 0093's
+  // migration last touched, and reads `generated_lists.kind`, which plan 0133's
+  // creates. It follows all three and nothing else (plan 0134, section 6).
+  SettlementBasket1756002300000,
 ];

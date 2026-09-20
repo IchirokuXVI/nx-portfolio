@@ -34,6 +34,7 @@ export interface FakeLineSettlements {
     find(options: {
       where: {
         generatedListLineId?: string;
+        basketId?: string;
         lineId?: string;
         outcome?: SettlementOutcome;
         revertedAt?: unknown;
@@ -132,6 +133,10 @@ export function fakeLineSettlements(
                 entry.row.lineId === where.lineId) &&
               (where.generatedListLineId === undefined ||
                 entry.row.generatedListLineId === where.generatedListLineId) &&
+              // The basket beside the basket line (plan 0134), so a spec can
+              // filter by either one the way the services write both.
+              (where.basketId === undefined ||
+                entry.row.basketId === where.basketId) &&
               (where.outcome === undefined ||
                 entry.row.outcome === where.outcome) &&
               standing(entry.row, where)

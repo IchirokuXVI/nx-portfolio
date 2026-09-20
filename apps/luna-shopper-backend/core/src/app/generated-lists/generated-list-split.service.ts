@@ -388,6 +388,9 @@ export class GeneratedListSplitService {
     )[0];
     if (survivor) {
       const lines = manager.getRepository(GeneratedListLine);
+      // `basketId` is deliberately not in the update (plan 0134, section 3). A
+      // fold moves a purchase between two lines of one basket, so the basket it
+      // was bought through has not changed.
       await manager
         .getRepository(LineSettlement)
         .update(

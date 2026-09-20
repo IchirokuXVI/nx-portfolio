@@ -38,20 +38,38 @@ describe('merging settlements into purchases (section 3, step 1)', () => {
   });
 
   it('chains a fold to the previous settlement, not to the first of the group', () => {
+    // A slow partial settle: five rows five hours apart over a day. Each is
+    // within the session of the one before it, and the last is twenty hours
+    // from the first, so a fold measured from the first would answer five
+    // purchases (plan 0134, section 7).
     const merged = mergePurchases([
       { at: ago(2), quantity: 1 },
+      { at: ago(2, 5), quantity: 1 },
       { at: ago(2, 10), quantity: 1 },
+      { at: ago(2, 15), quantity: 1 },
       { at: ago(2, 20), quantity: 1 },
     ]);
 
-    expect(merged).toEqual([{ at: ago(2), quantity: 3 }]);
+    expect(merged).toEqual([{ at: ago(2), quantity: 5 }]);
   });
 
-  it('keeps purchases twelve hours apart as two', () => {
+  it('folds purchases exactly the session apart into one', () => {
+    // The boundary, stated once in `continuesPurchaseSession` and asserted here
+    // in both directions: exactly six hours continues, a millisecond more does
+    // not (plan 0134, section 7).
     expect(
       mergePurchases([
-        { at: ago(1, 12), quantity: 1 },
         { at: ago(2), quantity: 1 },
+        { at: ago(2, 6), quantity: 1 },
+      ])
+    ).toEqual([{ at: ago(2), quantity: 2 }]);
+  });
+
+  it('keeps purchases a millisecond past the session as two', () => {
+    expect(
+      mergePurchases([
+        { at: ago(2), quantity: 1 },
+        { at: new Date(ago(2, 6).getTime() + 1), quantity: 1 },
       ])
     ).toHaveLength(2);
   });
