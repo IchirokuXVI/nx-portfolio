@@ -9,10 +9,12 @@ import { BasketRevertService } from '../baskets/basket-revert.service';
 import { BasketRowRenameService } from '../baskets/basket-row-rename.service';
 import { BasketRowResolver } from '../baskets/basket-row-resolver';
 import { BasketSettleService } from '../baskets/basket-settle.service';
+import { BasketSkipService } from '../baskets/basket-skip.service';
 import { BasketWriteContext } from '../baskets/basket-write.context';
 import { BasketWriteController } from '../baskets/basket-write.controller';
 import { BasketController } from '../baskets/basket.controller';
 import {
+  BasketLineSkip,
   BasketSource,
   BasketTripRow,
   GeneratedList,
@@ -65,6 +67,10 @@ import { LineClaimModule } from './line-claim.module';
       // so the entity is part of the data source; the freeze and the thaw are
       // raw statements on the caller's manager.
       BasketTripRow,
+      // One basket's "not today" on one covered line (plan 0137). Registered so
+      // the entity is part of the data source and the `PUT` can insert through
+      // it; every read of the table is a raw statement.
+      BasketLineSkip,
       // Sharing (plan 0051): the link and the people who arrived by it.
       GeneratedListShareLink,
       GeneratedListParticipant,
@@ -113,6 +119,10 @@ import { LineClaimModule } from './line-claim.module';
     BasketDemandService,
     BasketLineAddService,
     BasketRowRenameService,
+    // "Not today" on a row, and taking it back (plan 0137). A provider of its
+    // own like the others, and the one that writes no settlement: a purchase
+    // through this basket ends a skip through a `WHERE` rather than a write.
+    BasketSkipService,
     // The freeze and the thaw of a trip's ask (plan 0135). A provider of its
     // own rather than two private methods, because it is the seam plan 0136
     // replaces: the statement changes and its caller does not.

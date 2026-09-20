@@ -22,6 +22,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource, In } from 'typeorm';
 import { BasketCoverageService } from '../baskets/basket-coverage.service';
+import { fakeCoreConfig } from '../baskets/basket-config.fake';
 import { BasketReadService } from '../baskets/basket-read.service';
 import {
   BasketSource,
@@ -199,7 +200,9 @@ describeIntegration(
           dataSource.getRepository(ListLine),
           new ZoneAuthzService(dataSource.getRepository(ZoneMembership))
         ),
-        new GeneratedListOrderService(dataSource.getRepository(GeneratedList))
+        new GeneratedListOrderService(dataSource.getRepository(GeneratedList)),
+        // The skip window (plan 0137). Nothing here skips anything.
+        fakeCoreConfig()
       );
       // The two refer to each other: the history counts of an **open** basket
       // are `BasketReadService.progressOf` (plan 0136, section 7.4), and the

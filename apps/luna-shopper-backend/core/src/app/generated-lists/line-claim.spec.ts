@@ -51,7 +51,13 @@ function build(rows: unknown[] = [], basketRefs: unknown[] = []) {
   } as unknown as CoreEventsPublisher;
 
   const config = {
-    getOrThrow: () => ({ generatedList: { claimWindowMs: WINDOW_MS } }),
+    getOrThrow: () => ({
+      generatedList: { claimWindowMs: WINDOW_MS },
+      // The window a skip keeps a line free for (plan 0137, section 5.4). It
+      // travels into the statement as a parameter, and nothing under test here
+      // is about its value.
+      basket: { skipWindowMs: 12 * 60 * 60 * 1000 },
+    }),
   } as unknown as ConfigService;
 
   return {

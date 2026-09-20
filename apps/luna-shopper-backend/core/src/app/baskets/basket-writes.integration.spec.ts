@@ -27,6 +27,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
+import { fakeCoreConfig } from './basket-config.fake';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketReadService } from './basket-read.service';
 import { BasketRevertService } from './basket-revert.service';
@@ -85,7 +86,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
 
     const baskets = dataSource.getRepository(GeneratedList);
     const coverage = new BasketCoverageService(baskets);
-    const resolver = new BasketRowResolver(baskets);
+    const resolver = new BasketRowResolver(baskets, fakeCoreConfig());
 
     // The three methods the context and the read ask of it. A real one needs a
     // share link table and a members service, and none of the rules under test
@@ -141,7 +142,10 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       coverage,
       sharing,
       listAccess,
-      { order: async <T,>(_userId: string, rows: T[]) => rows } as never
+      { order: async <T,>(_userId: string, rows: T[]) => rows } as never,
+      // The skip window (plan 0137). Nothing here skips anything, and the two
+      // that do have their own file.
+      fakeCoreConfig()
     );
     const context = new BasketWriteContext(
       baskets,

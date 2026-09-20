@@ -65,6 +65,8 @@ describeIntegration('core schema (real Postgres)', () => {
       'list_line_items',
       // Plan 0047: what happened to a line on a trip.
       'line_settlements',
+      // Plan 0137: one basket's "not today" on one covered line.
+      'basket_line_skips',
     ]) {
       expect(names.has(table)).toBe(true);
     }

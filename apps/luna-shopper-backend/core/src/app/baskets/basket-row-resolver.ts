@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   BasketKind,
@@ -7,6 +8,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { Repository, type EntityManager } from 'typeorm';
+import type { CoreConfig } from '../config/app-config';
 import { GeneratedList, ListLine } from '../entities';
 import { toEntries } from './basket-read.service';
 import { type BasketEntry } from './basket-rows';
@@ -50,10 +52,17 @@ import { mergeKey, normalizeContent } from './line-dedup';
  */
 @Injectable()
 export class BasketRowResolver {
+  /** Passed to {@link BASKET_SETTLEMENTS_SQL}, which computes `fresh` with it. */
+  private readonly skipWindowMs: number;
+
   constructor(
     @InjectRepository(GeneratedList)
-    private readonly baskets: Repository<GeneratedList>
-  ) {}
+    private readonly baskets: Repository<GeneratedList>,
+    @Inject(ConfigService) configService: ConfigService
+  ) {
+    this.skipWindowMs =
+      configService.getOrThrow<CoreConfig>('core').basket.skipWindowMs;
+  }
 
   /**
    * The entries of the row `rowKey` names, oldest first.
@@ -119,6 +128,7 @@ export class BasketRowResolver {
             basket.id,
             lineIds,
             scope.startedAt,
+            this.skipWindowMs,
           ])
         : Promise.resolve([]),
     ]);

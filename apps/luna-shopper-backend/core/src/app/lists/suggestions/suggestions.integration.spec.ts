@@ -227,6 +227,10 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
     );
     suggestions = new SuggestionsService(dataSource, listAccess, {
       since: () => new Date(Date.now() - WINDOW_MS),
+      // The candidates read shares the claim's coverage fragment, which carries
+      // the skip window since plan 0137. Nothing here skips anything, so the
+      // default is the only value it has to be.
+      skipWindow: () => 12 * 60 * 60 * 1000,
     } as never);
 
     const zones = dataSource.getRepository(Zone);

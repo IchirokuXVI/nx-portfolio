@@ -94,6 +94,21 @@ export const coreValidationSchema = Joi.object({
    */
   GENERATED_LIST_CLAIM_WINDOW: Joi.string().default('60h'),
 
+  /**
+   * How long a skip, and a `LIVE` basket's "the shop had none", keep a row
+   * marked (plan 0137, section 8).
+   *
+   * Twelve hours, which is the length of the day a shopper said "not today"
+   * about: long enough that the mark is still there when they come back in the
+   * evening, short enough that tomorrow's trip starts clean.
+   *
+   * It has a default, so the Helm chart, `compose.apps.yml` and `luna-slot.sh`
+   * need no entry. Every comparison against it happens in SQL against the
+   * database's `now()`, so no application server and no device clock decides
+   * whether a row is still skipped.
+   */
+  BASKET_SKIP_WINDOW: Joi.string().default('12h'),
+
   // The sweep (plan 0059, section 4): finishes live baskets older than the claim
   // window, one `update` each so the household hears the release. Switched the
   // same way the zone reaper above is, and on by default like it.
@@ -181,6 +196,14 @@ export interface CoreConfig {
       batchSize: number;
     };
   };
+  /**
+   * The basket, as new names say it (plan 0130, section 3): `basket` rather
+   * than `generatedList`, because the thing this describes is the basket.
+   */
+  basket: {
+    /** How long a skip, and a `LIVE` basket's close, keep a row marked. */
+    skipWindowMs: number;
+  };
   voiceComment: {
     maxBytes: number;
     /** Base types, lowercased, with no parameters. */
@@ -240,6 +263,9 @@ export const coreConfiguration = registerAs(
         ),
         batchSize: Number(process.env.GENERATED_LIST_SWEEP_BATCH),
       },
+    },
+    basket: {
+      skipWindowMs: parseDurationMs(process.env.BASKET_SKIP_WINDOW as string),
     },
     voiceComment: {
       maxBytes: Number(

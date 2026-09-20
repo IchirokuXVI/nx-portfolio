@@ -1,3 +1,4 @@
+import { BasketLineSkip } from './basket-line-skip.entity';
 import { BasketSource } from './basket-source.entity';
 import { BasketTripRow } from './basket-trip-row.entity';
 import { CommentAudio } from './comment-audio.entity';
@@ -23,6 +24,7 @@ import { ZoneMembership } from './zone-membership.entity';
 import { Zone } from './zone.entity';
 
 export { BaseEntity } from './base.entity';
+export { BasketLineSkip } from './basket-line-skip.entity';
 export { BasketSource } from './basket-source.entity';
 export { BasketTripRow } from './basket-trip-row.entity';
 export { CommentAudio } from './comment-audio.entity';
@@ -90,6 +92,9 @@ export const CORE_ENTITIES = [
   // What each finished trip asked of each zone line (plan 0135). After the
   // basket and the zone line it hangs off, since it references both.
   BasketTripRow,
+  // One basket's "not today" on one covered line (plan 0137). Beside the
+  // trip rows, for the same reason: it references the basket and the zone line.
+  BasketLineSkip,
   // The audit trail (plan 0077, section 8). Last, because it references
   // nothing and nothing references it: the actor lives in auth's database and
   // the row it describes is named by table and id rather than by a foreign key.
