@@ -1,3 +1,5 @@
+import { WRITABLE_LIST } from './generated-list.sql';
+
 /**
  * The two statements that freeze and thaw a trip's ask (plan 0135, section 3).
  *
@@ -6,9 +8,11 @@
  * `alias.property` inside a raw select expression, and an insert from a select
  * is not something a repository can state at all.
  *
- * **A file of its own, because the `SELECT` is the seam.** Plan 0136 replaces it
- * with `bought + left` over the basket's coverage and changes nothing else in
- * this plan.
+ * **A file of its own, because the `SELECT` is the seam.** Plan 0135 wrote it
+ * over `generated_list_line_origins` and said plan 0136 would replace it with
+ * `bought + left` over the basket's coverage, changing nothing else. That is
+ * exactly what happened, and the two callers, the finish and the reopen, are
+ * untouched.
  */
 
 /**
@@ -19,32 +23,65 @@
  * change, and a status set to the value it already holds must not be a second
  * write.
  *
- * **The list comes from the line, not from the origin's copy.** The two agree in
- * every row that exists, and reading it from `list_lines` is what makes the
- * unique key safe to group under: one line is in one list.
+ * ## `asked` is `bought + left`, computed here and stored once
  *
- * **The inner join to `list_lines` drops an origin whose line is gone**, which
- * the foreign key requires and which loses nothing: `basket_rows` drops the same
- * origin on every read today. A soft deleted line (plan 0132) is still a row, so
- * it is frozen like any other, and the trips read decides whether to draw it, as
- * it does for an open basket.
+ * That is the whole of plan 0136's arithmetic (section 4 of plan 0130): while a
+ * basket is open nothing about a row is stored, and the finish is the moment the
+ * numbers stop moving. `left` is the zone line's own `quantity` and `bought` is
+ * the sum over this basket's standing purchases of that line, so a line bought
+ * to zero freezes at what it asked for rather than at nothing.
  *
- * **One row per zone line, however many sibling basket lines or origins fed it**
- * (plan 0094), which is the grouping `basketRowsCte` already applies on read.
- * Zero is a value: an origin taken back to zero is a trip that stopped asking,
- * and it is still a row of that trip.
+ * ## It reads the coverage, and the coverage is read **at this moment**
+ *
+ * The predicates are `basketAskedCte`'s open half, word for word, so the number
+ * the finish writes is the number the trips read a moment before it. A list the
+ * owner had lost by then is not covered, contributes no row, and its household
+ * sees no trip: the same answer the open basket was already giving.
+ *
+ * It asks the **kind** and not the status, which is the one place it departs
+ * from `basketAskedCte`. The caller saves the new status and freezes inside one
+ * transaction, so by the time this runs the row already reads `FINISHED` and a
+ * status test would match nothing. The kind is kept and is load bearing: the
+ * permanent basket never finishes and must never freeze.
+ *
+ * **One row per zone line**, which is the grouping the trips read applies, and a
+ * line every covered list shares still belongs to exactly one list.
+ *
+ * **A soft deleted line is not frozen** (plan 0132). It is not covered, so it is
+ * not a row of the open basket either, and the trips read drops it on both
+ * sides.
  */
 export const BASKET_TRIP_ROWS_FREEZE_SQL = `
   INSERT INTO "basket_trip_rows" ("basketId", "listId", "lineId", "asked")
-  SELECT gll."generatedListId",
-         ll."listId",
+  SELECT gl.id,
+         sl.id,
          ll.id,
-         SUM(o."quantity")::int
-  FROM "generated_list_line_origins" o
-  JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
-  JOIN "list_lines" ll ON ll.id = o."lineId"
-  WHERE gll."generatedListId" = $1::uuid
-  GROUP BY gll."generatedListId", ll."listId", ll.id
+         (ll.quantity + b."bought")::int
+  FROM "generated_lists" gl
+  JOIN "zone_memberships" m ON m."userId" = gl."ownerUserId"
+  JOIN "shopping_lists" sl ON sl."zoneId" = m."zoneId"
+  JOIN "list_lines" ll ON ll."listId" = sl.id
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(
+             SUM(s."quantity") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
+           )::int AS "bought"
+    FROM "line_settlements" s
+    WHERE s."basketId" = gl.id
+      AND s."lineId" = ll.id
+      AND s."revertedAt" IS NULL
+  ) b ON TRUE
+  WHERE gl.id = $1::uuid
+    AND gl."kind" = 'GENERATED'
+    AND EXISTS (
+      SELECT 1 FROM "basket_sources" bs
+      WHERE bs."basketId" = gl.id
+        AND bs."zoneId" = sl."zoneId"
+        AND (bs."listId" IS NULL OR bs."listId" = sl.id)
+    )
+    AND ${WRITABLE_LIST}
+    AND ll."deletedAt" IS NULL
+    AND ll."approvalStatus" IN ('APPROVED', 'PENDING')
+    AND (ll.quantity > 0 OR b."bought" > 0)
   ON CONFLICT ON CONSTRAINT "uq_basket_trip_rows_line" DO NOTHING
 `;
 

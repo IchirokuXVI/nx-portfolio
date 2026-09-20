@@ -10,7 +10,6 @@ import { LineMergeTooManyProductsException } from '@portfolio/luna-shopper/platf
 import { In, type EntityManager } from 'typeorm';
 import {
   BasketTripRow,
-  GeneratedListLineOrigin,
   LineComment,
   LineSettlement,
   ListLine,
@@ -151,10 +150,12 @@ export class LineMergeService {
       .update({ lineId: absorbed.id }, { lineId: survivor.id });
 
     const version = survivor.version + 1;
-    await this.moveOrigins(manager, survivor.id, absorbed.id, version);
-    // Beside the origins, and before the delete below: `basket_trip_rows` names
-    // the line by a foreign key, so a row still pointing at the absorbed line
-    // would go with it (plan 0135, section 5).
+    // Before the delete below: `basket_trip_rows` names the line by a foreign
+    // key, so a row still pointing at the absorbed line would go with it (plan
+    // 0135, section 5). It used to be done beside the basket origins, and there
+    // are none since plan 0136: an open basket reads the list, so a merged line
+    // is one row on its next read with both lines' purchases, with nothing to
+    // move.
     await this.moveTripRows(manager, survivor.id, absorbed.id);
 
     survivor.quantity = Math.min(
@@ -252,59 +253,12 @@ export class LineMergeService {
   }
 
   /**
-   * The basket origins that point at the absorbed line (section 4).
-   *
-   * A basket line that has an origin on both lines ends with one row, the
-   * survivor's, holding both contributions, because
-   * `uq_generated_list_line_origin` allows one row per basket line and zone line.
-   * Every row the merge touches takes the survivor's new version, so a reader
-   * sees that the origin moved. That is information and not a conflict (plan
-   * 0050), which is why no basket room hears about it.
-   */
-  private async moveOrigins(
-    manager: EntityManager,
-    survivorId: string,
-    absorbedId: string,
-    version: number
-  ): Promise<void> {
-    const origins = manager.getRepository(GeneratedListLineOrigin);
-    const moving = await origins.find({
-      where: { lineId: absorbedId },
-      order: { id: 'ASC' },
-    });
-    if (moving.length === 0) {
-      return;
-    }
-    const staying = await origins.find({ where: { lineId: survivorId } });
-    const byBasketLine = new Map(
-      staying.map((origin) => [origin.generatedListLineId, origin])
-    );
-    for (const origin of moving) {
-      const shared = byBasketLine.get(origin.generatedListLineId);
-      if (shared) {
-        // Deleted first, so the pair never exists twice under the unique key.
-        await origins.delete({ id: origin.id });
-        await origins.update(
-          { id: shared.id },
-          { quantity: shared.quantity + origin.quantity, lineVersion: version }
-        );
-      } else {
-        await origins.update(
-          { id: origin.id },
-          { lineId: survivorId, lineVersion: version }
-        );
-      }
-    }
-  }
-
-  /**
    * The trip rows that point at the absorbed line (plan 0135, section 5).
    *
    * A finished basket that asked for both lines ends with one row, the
    * survivor's, holding both asks, because `uq_basket_trip_rows_line` allows one
-   * row per basket and zone line. The twin of {@link moveOrigins}, and the
-   * reason is the same: the two lines are one line now, and the trip asked for
-   * it.
+   * row per basket and zone line. The two lines are one line now, and the trip
+   * asked for it.
    *
    * It carries no version, because a trip row has none: it is written once and
    * this is the one edit it ever takes. `listId` does not move either, since

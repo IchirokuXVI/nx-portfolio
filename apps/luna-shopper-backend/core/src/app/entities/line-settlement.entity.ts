@@ -55,38 +55,30 @@ export class LineSettlement {
   createdAt!: Date;
 
   /**
-   * The zone line this purchase is a fact about, or null while it waits for one
-   * (plan 0093, section 2).
+   * The zone line this purchase is a fact about (plan 0047, section 3).
    *
-   * A row with both this and {@link listId} null is a **waiting settlement**: a
-   * purchase made on a basket line before that line reached any list. It belongs
-   * to the basket line through {@link generatedListLineId} and to no household
-   * yet, and it comes home the moment the line reaches a list.
-   *
-   * Nullable since plan 0093, which reversed plan 0058 section 4.1. Before it, a
-   * settle on a line with no origins wrote no row at all, so a shopper who
-   * bought four batteries and then sent the line to the flat's list gave the flat
-   * a line asking for nothing and a history saying batteries were never bought.
-   *
-   * The two columns are null **together**, which is `ck_line_settlements_home`
-   * rather than a service rule: a row naming a line and no list, or a list and no
-   * line, would be a purchase nobody could read by either key.
+   * **Not nullable again since plan 0136.** Plan 0093 made it nullable for the
+   * waiting settlement: a purchase made on a basket line before that line
+   * reached any list, belonging to the basket line and to no household yet. A
+   * basket holds no lines now, so there is nowhere for such a purchase to wait
+   * and nothing for it to belong to. The migration deletes the rows that were
+   * waiting and says why.
    */
-  @Column({ type: 'uuid', nullable: true })
-  lineId!: string | null;
+  @Column({ type: 'uuid' })
+  lineId!: string;
 
-  @ManyToOne(() => ListLine, { onDelete: 'CASCADE', nullable: true })
+  @ManyToOne(() => ListLine, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'lineId' })
-  line!: ListLine | null;
+  line!: ListLine;
 
   /**
    * The line's list, copied so a list scoped read needs no join (section 3).
    *
    * A line never moves between lists, so this cannot drift from what the join
-   * would say. Null exactly when {@link lineId} is, and for the same reason.
+   * would say. Not nullable again since plan 0136, with {@link lineId}.
    */
-  @Column({ type: 'uuid', nullable: true })
-  listId!: string | null;
+  @Column({ type: 'uuid' })
+  listId!: string;
 
   /**
    * **The exact product that was bought**, copied at settle time (section 3.2).
@@ -182,33 +174,20 @@ export class LineSettlement {
   revertedByParticipantId!: string | null;
 
   /**
-   * The basket line this came off, when it came off one (plan 0051).
-   *
-   * Written by nothing in plan 0047, where every settle comes straight from the
-   * list page and this is null. It is stored and **never served**: the basket is
-   * private and the purchase is not, so a reader learns that something was bought
-   * and never which basket it came out of (section 3.1).
-   */
-  @Column({ type: 'uuid', nullable: true })
-  generatedListLineId!: string | null;
-
-  /**
    * The basket this purchase was made through, or null when it was made on the
    * list page (plan 0134).
    *
    * The basket and not a line of it, because an open basket stores no lines
-   * (plan 0130, section 2). Stored and **never served**, for the reason
-   * {@link generatedListLineId} gives: the purchase is a zone fact and the
-   * basket is private.
+   * (plan 0130, section 2). Stored and **never served**: the purchase is a zone
+   * fact and the basket is private, so a reader learns that something was bought
+   * and never which basket it came out of (plan 0051, section 3.1).
    *
    * No foreign key, for the reason {@link settledByParticipantId} gives. A
    * settlement outlives the basket it came off, and a basket id that names no row
    * is how a read learns the basket was deleted.
    *
-   * It is written beside {@link generatedListLineId} by every path that settles
-   * through a basket, and that is a service rule rather than a check constraint:
-   * a row whose basket line was deleted before plan 0134 legitimately has one and
-   * not the other.
+   * Null on every purchase made from the list page, which is what tells the
+   * trips read that it belongs to a session rather than to a trip.
    */
   @Column({ type: 'uuid', nullable: true })
   basketId!: string | null;

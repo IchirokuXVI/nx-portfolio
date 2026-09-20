@@ -2,6 +2,7 @@ import {
   GENERATED_BASKET,
   OPEN_GENERATED_BASKET,
 } from '../../baskets/open-basket.sql';
+import { WRITABLE_LIST } from '../../generated-lists/generated-list.sql';
 import { basketAskedCte } from './basket-asked.sql';
 
 /**
@@ -16,12 +17,13 @@ import { basketAskedCte } from './basket-asked.sql';
  * and from `line_settlements`, which says what was bought and when. Since plan
  * 0135 the first of those has two sources rather than one: a finished basket's
  * ask was written into `basket_trip_rows` by its finish, and an open basket's is
- * still summed from its origins. `basketAskedCte` is the one place that chooses
- * between them, and nothing here needs to know which half answered.
+ * recomputed from the lines it covers (plan 0136, section 7.2).
+ * `basketAskedCte` is the one place that chooses between them, and nothing here
+ * needs to know which half answered.
  *
  * Plan 0122 section 4 is reversed in one sentence. A finished trip's rows no
- * longer freeze because nothing writes its origins; they freeze because the
- * finish wrote them down. Everything else that section says still holds: one row
+ * longer freeze because nothing writes a copy of the list; they freeze because
+ * the finish wrote them down. Everything else that section says still holds: one row
  * per zone line, `left` is `max(0, asked - bought)`, and no name and no current
  * quantity on the row.
  *
@@ -58,11 +60,11 @@ import { basketAskedCte } from './basket-asked.sql';
  *
  * The `asked` half is a plain read of that relation (plan 0135, section 4.1),
  * which already chose between a finished basket's frozen rows and an open
- * basket's origins.
+ * basket's coverage.
  *
- * **One row per zone line, however many sibling basket lines or origins fed it**
- * (plan 0094): both halves group by the basket and the zone line, never by the
- * basket line.
+ * **One row per zone line** (plan 0094): a basket has no lines of its own to
+ * group away any more, and both halves are keyed on the basket and the zone
+ * line.
  *
  * **Both halves ask `GENERATED_BASKET`** (plan 0133, section 6). A trip is
  * something somebody composed, and the permanent basket is not one: it holds
@@ -71,14 +73,13 @@ import { basketAskedCte } from './basket-asked.sql';
  * `basketAskedCte`, which every reader of that relation needs it to.
  *
  * A `FULL JOIN`, because either half can stand alone. Asked and never bought is
- * the ordinary unfinished line. Bought and no longer asked is a purchase whose
- * origin was taken back to zero afterwards, or one whose basket line was taken
- * out of the basket, and dropping it would make a standing purchase belong to no
- * trip at all.
+ * the ordinary unfinished line. Bought and no longer asked is a purchase on a
+ * line the basket stopped covering afterwards, and dropping it would make a
+ * standing purchase belong to no trip at all.
  *
  * The join to `list_lines` is what skips a line that was deleted or merged away,
- * and what drops one the household deleted (plan 0132): an origin's `lineId` has
- * no foreign key and may name no row at all.
+ * and what drops one the household deleted (plan 0132): a settlement's `lineId`
+ * has no foreign key and may name no row at all.
  */
 function basketRowsCte(basketParam: string | null): string {
   const boughtFilter = basketParam
@@ -399,25 +400,50 @@ export const LOOSE_TRIP_ROWS_SQL = `
 `;
 
 /**
- * The lists one basket has an origin in. `$1` is the basket.
+ * The lists one basket is a trip of. `$1` is the basket.
  *
- * Asked **before** a delete, because the origins cascade away with the basket
+ * `basket_sources` narrowed by coverage (plan 0136, section 7.2), where it used
+ * to be the basket's origin rows. The narrowing is the same three predicates
+ * `basketAskedCte` asks, so a list this answers is one whose trips really did
+ * change rather than one its owner can no longer read.
+ *
+ * Asked **before** a delete, because the sources cascade away with the basket
  * and there would be nothing left to ask afterwards.
+ *
+ * **It answers nothing for a `LIVE` basket**, which has no source rows and is
+ * not a trip of anything (plan 0133, section 6).
  */
-export const BASKET_ORIGIN_LISTS_SQL = `
-  SELECT DISTINCT o."listId" AS "listId"
-  FROM "generated_list_line_origins" o
-  JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
-  WHERE gll."generatedListId" = $1::uuid
+export const BASKET_TRIP_LISTS_SQL = `
+  SELECT DISTINCT sl.id AS "listId"
+  FROM "generated_lists" gl
+  JOIN "zone_memberships" m ON m."userId" = gl."ownerUserId"
+  JOIN "shopping_lists" sl ON sl."zoneId" = m."zoneId"
+  WHERE gl.id = $1::uuid
+    AND ${GENERATED_BASKET}
+    AND EXISTS (
+      SELECT 1 FROM "basket_sources" bs
+      WHERE bs."basketId" = gl.id
+        AND bs."zoneId" = sl."zoneId"
+        AND (bs."listId" IS NULL OR bs."listId" = sl.id)
+    )
+    AND ${WRITABLE_LIST}
 `;
 
-/** The lists any basket of one owner has an origin in. `$1` is the owner. */
-export const OWNER_ORIGIN_LISTS_SQL = `
-  SELECT DISTINCT o."listId" AS "listId"
-  FROM "generated_list_line_origins" o
-  JOIN "generated_list_lines" gll ON gll.id = o."generatedListLineId"
-  JOIN "generated_lists" gl ON gl.id = gll."generatedListId"
+/** The lists any basket of one owner is a trip of. `$1` is the owner. */
+export const OWNER_TRIP_LISTS_SQL = `
+  SELECT DISTINCT sl.id AS "listId"
+  FROM "generated_lists" gl
+  JOIN "zone_memberships" m ON m."userId" = gl."ownerUserId"
+  JOIN "shopping_lists" sl ON sl."zoneId" = m."zoneId"
   WHERE gl."ownerUserId" = $1::uuid
+    AND ${GENERATED_BASKET}
+    AND EXISTS (
+      SELECT 1 FROM "basket_sources" bs
+      WHERE bs."basketId" = gl.id
+        AND bs."zoneId" = sl."zoneId"
+        AND (bs."listId" IS NULL OR bs."listId" = sl.id)
+    )
+    AND ${WRITABLE_LIST}
 `;
 
 /** One row of {@link LIVE_TRIPS_SQL} and {@link ENDED_TRIPS_SQL}. */

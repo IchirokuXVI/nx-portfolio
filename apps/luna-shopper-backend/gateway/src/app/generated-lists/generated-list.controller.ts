@@ -14,13 +14,11 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   GENERATED_LIST_PATTERNS,
   GENERATED_LIST_SCHEMA_IDS,
-  type GeneratedListLineView,
   type GeneratedListPage,
   type GeneratedListRunResult,
   type GeneratedListView,
   type SharedGeneratedListCorePage,
   type SharedGeneratedListPage,
-  type UpdateGeneratedListLineResult,
 } from '@portfolio/luna-shopper/contracts';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -34,13 +32,10 @@ import { NatsClient } from '../messaging/nats-client';
 import { BasketPresenceService } from './basket-presence.service';
 import { resolveUsernames } from './generated-list-sharing.controller';
 import {
-  AddGeneratedListLineDto,
   CreateGeneratedListDto,
   ListGeneratedListsQueryDto,
   ListSharedGeneratedListsQueryDto,
-  ReorderGeneratedListLinesDto,
   UpdateGeneratedListDto,
-  UpdateGeneratedListLineDto,
 } from './generated-list.dto';
 
 /**
@@ -235,100 +230,5 @@ export class GeneratedListController {
     });
   }
 
-  /**
-   * Type a line into a basket.
-   *
-   * With a target list it is **also** created there through the ordinary add
-   * path, so the caller must hold write access at that moment and the new line
-   * starts pending approval like any other. Without one it lives in the basket
-   * alone.
-   */
-  @Post(':id/lines')
-  @ApiContractResponse(GENERATED_LIST_PATTERNS.addLine, {
-    status: HttpStatus.CREATED,
-  })
-  @ApiProblemResponses({
-    auth: true,
-    body: true,
-    membership: true,
-    notFound: true,
-  })
-  addLine(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Body() dto: AddGeneratedListLineDto
-  ): Promise<GeneratedListLineView> {
-    return this.nats.send<GeneratedListLineView>(
-      GENERATED_LIST_PATTERNS.addLine,
-      { userId: user.userId, generatedListId: id, ...dto }
-    );
-  }
-
-  /**
-   * Edit one line: its text, its quantity, its pick, or its target list.
-   *
-   * The quantity and the pick are local to the basket. A new text renames every
-   * zone line this line came from as well (plan 0113), through the same rule the
-   * participant rename has, so the owner needs write access to each of those
-   * lists, and a name already taken is refused until the request carries
-   * `confirmMerge`. After a merge in the basket the answer is the surviving line
-   * and names the one that went away.
-   */
-  @Patch(':id/lines/:lineId')
-  @ApiContractResponse(GENERATED_LIST_PATTERNS.updateLine)
-  @ApiProblemResponses({
-    auth: true,
-    body: true,
-    membership: true,
-    notFound: true,
-    finishedBasket: true,
-    lineMerge: true,
-  })
-  updateLine(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Param('lineId') lineId: string,
-    @Body() dto: UpdateGeneratedListLineDto
-  ): Promise<UpdateGeneratedListLineResult> {
-    return this.nats.send<UpdateGeneratedListLineResult>(
-      GENERATED_LIST_PATTERNS.updateLine,
-      { userId: user.userId, generatedListId: id, lineId, ...dto }
-    );
-  }
-
-  /**
-   * Take a line out of the basket, leaving every zone line it came from exactly
-   * as it was. "I decided not to buy this today" is not "somebody bought it".
-   */
-  @Delete(':id/lines/:lineId')
-  @ApiContractResponse(GENERATED_LIST_PATTERNS.deleteLine)
-  @ApiProblemResponses({ auth: true, notFound: true })
-  deleteLine(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Param('lineId') lineId: string
-  ): Promise<{ id: string }> {
-    return this.nats.send<{ id: string }>(GENERATED_LIST_PATTERNS.deleteLine, {
-      userId: user.userId,
-      generatedListId: id,
-      lineId,
-    });
-  }
-
   /** Reorder the basket into the order this person walks the shop in. */
-  @Post(':id/lines/order')
-  @ApiContractResponse(GENERATED_LIST_PATTERNS.reorderLines, {
-    status: HttpStatus.CREATED,
-  })
-  @ApiProblemResponses({ auth: true, body: true, notFound: true })
-  reorderLines(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Body() dto: ReorderGeneratedListLinesDto
-  ): Promise<GeneratedListView> {
-    return this.nats.send<GeneratedListView>(
-      GENERATED_LIST_PATTERNS.reorderLines,
-      { userId: user.userId, generatedListId: id, ...dto }
-    );
-  }
 }

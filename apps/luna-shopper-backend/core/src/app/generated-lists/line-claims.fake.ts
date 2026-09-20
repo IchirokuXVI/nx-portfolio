@@ -77,9 +77,6 @@ export function fakeLineClaims(
     async refsOf(generatedListId: string) {
       return refsOf(generatedListId);
     },
-    async refsOfBasketLine(generatedListLineId: string) {
-      return refsOf(generatedListLineId);
-    },
     async announceReleased(entries: readonly ZoneLineClaimRef[]) {
       if (entries.length === 0) {
         return;

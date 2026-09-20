@@ -405,7 +405,6 @@ describe('contract schemas', () => {
             { zoneId: 'z', listId: 'l' },
             { zoneId: 'z2', listId: null },
           ],
-          lines: [],
         }).valid
       ).toBe(true);
     });
@@ -442,40 +441,6 @@ describe('contract schemas', () => {
               shareLinkId: 'sl',
             },
           ],
-        }).valid
-      ).toBe(true);
-    });
-
-    it('generatedList.reopenLine answers a line and a count and nothing else (plan 0054, section 3.5)', () => {
-      expect(
-        validateMessageRequest('generatedList.reopenLine', {
-          generatedListId: 'gl',
-          lineId: 'gll',
-          participantId: 'p',
-        }).valid
-      ).toBe(true);
-      expect(
-        validateMessageResponse('generatedList.reopenLine', {
-          line: {
-            id: 'gll',
-            content: 'milk',
-            quantity: 2,
-            // Back to outstanding, which is the whole of the act.
-            settledQuantity: 0,
-            itemId: null,
-            options: [],
-            position: 0,
-            // Null because the run composed this line, which is what null in
-            // that column means (plan 0055, section 4). Reopening does not
-            // touch it: who put a line here is written once.
-            createdByParticipantId: null,
-            lastEditedByParticipantId: 'p',
-            lastEditedAt: '2026-01-01T00:00:00.000Z',
-            // The settle that said so has been taken back, so the row stops
-            // captioning it (plan 0054, section 3.3).
-            lastOutcome: null,
-          },
-          skippedCount: 0,
         }).valid
       ).toBe(true);
     });

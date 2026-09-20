@@ -41,23 +41,6 @@ export function isOpenBasket(status: GeneratedListStatus): boolean {
 }
 
 /**
- * How a line got into a generated list (plan 0050, section 1).
- *
- * `DERIVED` came from zone lines and carries a provenance row per contributing
- * line. `ADDED` was typed into the basket, and **exists nowhere else** until the
- * user names a target list for it (section 5), which is the distinction the write
- * back rule turns on.
- *
- * The value survives that promotion: a line typed here and then pushed into a
- * shared list keeps `ADDED`, because what is worth recording is where it came
- * from rather than where it ended up.
- */
-export enum GeneratedLineOrigin {
-  DERIVED = 'DERIVED',
-  ADDED = 'ADDED',
-}
-
-/**
  * What kind of person is acting on a shared basket (plan 0051, section 3).
  *
  * The split that makes the whole feature safe: **a link is an invitation and a

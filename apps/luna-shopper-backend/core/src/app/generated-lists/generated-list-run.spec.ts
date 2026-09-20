@@ -14,7 +14,7 @@ import {
   GeneratedListLineOrigin,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { BASKET_ORIGIN_LISTS_SQL } from '../lists/trips/trips.sql';
+import { BASKET_TRIP_LISTS_SQL } from '../lists/trips/trips.sql';
 import type { ProfileService } from '../profiles/profile.service';
 import { fakeBasketTripRows } from './basket-trip-rows.fake';
 import type { GeneratedListMembersService } from './generated-list-members.service';
@@ -162,7 +162,7 @@ function build(options: {
         (line.itemIds ?? []).map((itemId) => ({ lineId: line.id, itemId }))
       );
     }
-    if (sql === BASKET_ORIGIN_LISTS_SQL) {
+    if (sql === BASKET_TRIP_LISTS_SQL) {
       // `DISTINCT`, as the real read is. What the run wrote when there was a
       // run, and what the basket is said to be claiming when there was not.
       const rows = written.origins.length

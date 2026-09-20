@@ -131,10 +131,8 @@ export function fakeLineSettlements(
             (entry) =>
               (where.lineId === undefined ||
                 entry.row.lineId === where.lineId) &&
-              (where.generatedListLineId === undefined ||
-                entry.row.generatedListLineId === where.generatedListLineId) &&
-              // The basket beside the basket line (plan 0134), so a spec can
-              // filter by either one the way the services write both.
+              // The basket, which is the only way to ask "was this bought on
+              // that trip" since plan 0136 deleted the basket line.
               (where.basketId === undefined ||
                 entry.row.basketId === where.basketId) &&
               (where.outcome === undefined ||

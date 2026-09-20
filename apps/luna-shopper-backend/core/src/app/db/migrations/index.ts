@@ -20,6 +20,7 @@ import { SoftDeletedLines1756002100000 } from './1756002100000-SoftDeletedLines'
 import { BasketKindStatusAndSources1756002200000 } from './1756002200000-BasketKindStatusAndSources';
 import { SettlementBasket1756002300000 } from './1756002300000-SettlementBasket';
 import { BasketTripRows1756002400000 } from './1756002400000-BasketTripRows';
+import { BasketsBecomeViews1756002500000 } from './1756002500000-BasketsBecomeViews';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -95,4 +96,11 @@ export const CORE_MIGRATIONS = [
   // that migration, plan 0132's and plan 0134's, and nothing else (plan 0135,
   // section 6).
   BasketTripRows1756002400000,
+  // The centre of the plan 0130 series (plan 0136, section 9). It drops the
+  // three tables `GeneratedLists1756001000000` created, the column plan 0134's
+  // migration added and the two constraints plan 0093's did, and it asserts
+  // plan 0134's and plan 0135's backfills before it drops anything. So it
+  // follows every migration that touched `generated_list_lines`,
+  // `line_settlements` or `basket_trip_rows`, and nothing else.
+  BasketsBecomeViews1756002500000,
 ];

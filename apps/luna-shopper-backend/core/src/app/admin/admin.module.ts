@@ -3,15 +3,15 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccountModule } from '../account/account.module';
 import {
+  BasketSource,
   GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOrigin,
   ListLine,
   ProfilePostalCode,
   ShoppingList,
   Zone,
   ZoneMembership,
 } from '../entities';
+import { GeneratedListsModule } from '../generated-lists/generated-lists.module';
 import { ListsModule } from '../lists/lists.module';
 import { ZonesModule } from '../zones/zones.module';
 import { AdminListService } from './admin-list.service';
@@ -44,8 +44,9 @@ import { CorePlatformAdminService } from './platform-admin.service';
       ShoppingList,
       ListLine,
       GeneratedList,
-      GeneratedListLine,
-      GeneratedListLineOrigin,
+      // What a basket was asked to draw from (plan 0133), which is what puts a
+      // basket in a zone now that it holds no lines of its own (plan 0136).
+      BasketSource,
       // Read only, and for counts alone: the demand behind a postal code (plan
       // 0097, section 5).
       ProfilePostalCode,
@@ -54,6 +55,11 @@ import { CorePlatformAdminService } from './platform-admin.service';
     ZonesModule,
     ListsModule,
     AccountModule,
+    // For the two reads a basket's numbers now come from (plan 0136, section
+    // 7.5): `GeneratedListService.countsFor` and `BasketReadService.openRows`.
+    // A basket is a view of its lists, so the back office cannot count one by
+    // reading rows of its own any more.
+    GeneratedListsModule,
   ],
   controllers: [CoreAdminController],
   providers: [

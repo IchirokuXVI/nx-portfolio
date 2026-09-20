@@ -1,8 +1,5 @@
 import { BasketKind } from '../../lib/enums/basket.enums';
-import {
-  GeneratedLineOrigin,
-  GeneratedListStatus,
-} from '../../lib/enums/generated-list.enums';
+import { GeneratedListStatus } from '../../lib/enums/generated-list.enums';
 import { GENERATED_LIST_SHARING_LIMITS } from '../../lib/messages/generated-list-sharing.messages';
 import {
   GENERATED_LIST_LIMITS,
@@ -38,9 +35,6 @@ import { AUTH_SCHEMA_IDS } from './auth.schemas';
 export const GENERATED_LIST_SCHEMA_IDS = {
   basketKind: schemaId('enums/BasketKind'),
   generatedListStatus: schemaId('enums/GeneratedListStatus'),
-  generatedLineOrigin: schemaId('enums/GeneratedLineOrigin'),
-  lineOriginView: schemaId('generated-list/GeneratedListLineOriginView'),
-  lineView: schemaId('generated-list/GeneratedListLineView'),
   basketSourceView: schemaId('generated-list/BasketSourceView'),
   listView: schemaId('generated-list/GeneratedListView'),
   summaryView: schemaId('generated-list/GeneratedListSummaryView'),
@@ -51,12 +45,6 @@ export const GENERATED_LIST_SCHEMA_IDS = {
   idRequest: schemaId('msg/generatedList.id/request'),
   listMineRequest: schemaId('msg/generatedList.listMine/request'),
   updateRequest: schemaId('msg/generatedList.update/request'),
-  addLineRequest: schemaId('msg/generatedList.addLine/request'),
-  updateLineRequest: schemaId('msg/generatedList.updateLine/request'),
-  /** The line, and the basket line a rename merged away (plan 0113). */
-  updateLineResult: schemaId('generated-list/UpdateGeneratedListLineResult'),
-  lineIdRequest: schemaId('msg/generatedList.lineId/request'),
-  reorderRequest: schemaId('msg/generatedList.reorderLines/request'),
   // The baskets shared with the caller (plan 0114, section 8).
   listSharedRequest: schemaId('msg/generatedList.listShared/request'),
   sharedCoreView: schemaId('generated-list/SharedGeneratedListCoreView'),
@@ -67,62 +55,8 @@ export const GENERATED_LIST_SCHEMA_IDS = {
   sharedPage: schemaId('generated-list/SharedGeneratedListPage'),
 } as const;
 
-const lineOriginView = object(
-  GENERATED_LIST_SCHEMA_IDS.lineOriginView,
-  {
-    id: nonEmptyString(),
-    zoneId: nonEmptyString(),
-    listId: nonEmptyString(),
-    lineId: nonEmptyString(),
-    quantity: integer({ minimum: 0 }),
-    settled: integer({ minimum: 0 }),
-    lineVersion: integer({ minimum: 1 }),
-  },
-  ['id', 'zoneId', 'listId', 'lineId', 'quantity', 'settled', 'lineVersion']
-);
-
-const lineViewProperties = {
-  id: nonEmptyString(),
-  content: string(),
-  quantity: integer({ minimum: 0 }),
-  settledQuantity: integer({ minimum: 0 }),
-  // Nullable rather than absent: a free text line has no product identity, so
-  // it has no pick to make (plan 0050, section 1).
-  itemId: nullableString(),
-  options: array(nonEmptyString()),
-  origin: ref(GENERATED_LIST_SCHEMA_IDS.generatedLineOrigin),
-  targetListId: nullableString(),
-  position: integer({ minimum: 0 }),
-  origins: array(ref(GENERATED_LIST_SCHEMA_IDS.lineOriginView)),
-};
-
-const lineViewRequired = [
-  'id',
-  'content',
-  'quantity',
-  'settledQuantity',
-  'itemId',
-  'options',
-  'origin',
-  'targetListId',
-  'position',
-  'origins',
-];
-
-const lineView = object(
-  GENERATED_LIST_SCHEMA_IDS.lineView,
-  lineViewProperties,
-  lineViewRequired
-);
-
 // What an owner's line edit answers: the surviving line, and the basket line a
 // rename merged away when there was one (plan 0113). Absent when nothing merged.
-const updateLineResult = object(
-  GENERATED_LIST_SCHEMA_IDS.updateLineResult,
-  { ...lineViewProperties, absorbedLineId: nonEmptyString() },
-  lineViewRequired
-);
-
 /**
  * One source of a basket, as it was named (plan 0133, section 4).
  *
@@ -153,9 +87,8 @@ const listView = object(
     status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
     generatedAt: nonEmptyString(),
     sources: array(ref(GENERATED_LIST_SCHEMA_IDS.basketSourceView)),
-    lines: array(ref(GENERATED_LIST_SCHEMA_IDS.lineView)),
   },
-  ['id', 'kind', 'name', 'status', 'generatedAt', 'sources', 'lines']
+  ['id', 'kind', 'name', 'status', 'generatedAt', 'sources']
 );
 
 const summaryViewProperties = {
@@ -301,79 +234,12 @@ const updateRequest = object(
   ['userId', 'generatedListId']
 );
 
-const addLineRequest = object(
-  GENERATED_LIST_SCHEMA_IDS.addLineRequest,
-  {
-    userId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
-    content: nonEmptyString({
-      maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
-    }),
-    quantity: integer({
-      minimum: 1,
-      maximum: GENERATED_LIST_LIMITS.maxQuantity,
-    }),
-    itemId: nullableString(),
-    options: array(nonEmptyString()),
-    targetListId: nullableString(),
-  },
-  ['userId', 'generatedListId', 'content']
-);
-
-const updateLineRequest = object(
-  GENERATED_LIST_SCHEMA_IDS.updateLineRequest,
-  {
-    userId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
-    lineId: nonEmptyString(),
-    content: nonEmptyString({
-      maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
-    }),
-    quantity: integer({
-      minimum: 0,
-      maximum: GENERATED_LIST_LIMITS.maxQuantity,
-    }),
-    itemId: nullableString(),
-    targetListId: nullableString(),
-    // A new content renames the zone lines too (plan 0113). Anything but `true`
-    // refuses such a rename where the name is taken, and writes nothing.
-    confirmMerge: boolean(),
-  },
-  ['userId', 'generatedListId', 'lineId']
-);
-
-const lineIdRequest = object(
-  GENERATED_LIST_SCHEMA_IDS.lineIdRequest,
-  {
-    userId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
-    lineId: nonEmptyString(),
-  },
-  ['userId', 'generatedListId', 'lineId']
-);
-
-const reorderRequest = object(
-  GENERATED_LIST_SCHEMA_IDS.reorderRequest,
-  {
-    userId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
-    lineIds: array(nonEmptyString()),
-  },
-  ['userId', 'generatedListId', 'lineIds']
-);
-
 export const generatedListSchemas: JsonSchema[] = [
   enumOf(GENERATED_LIST_SCHEMA_IDS.basketKind, Object.values(BasketKind)),
   enumOf(
     GENERATED_LIST_SCHEMA_IDS.generatedListStatus,
     Object.values(GeneratedListStatus)
   ),
-  enumOf(
-    GENERATED_LIST_SCHEMA_IDS.generatedLineOrigin,
-    Object.values(GeneratedLineOrigin)
-  ),
-  lineOriginView,
-  lineView,
   basketSourceView,
   listView,
   summaryView,
@@ -399,11 +265,6 @@ export const generatedListSchemas: JsonSchema[] = [
   listMineRequest,
   listSharedRequest,
   updateRequest,
-  addLineRequest,
-  updateLineRequest,
-  updateLineResult,
-  lineIdRequest,
-  reorderRequest,
 ];
 
 export const generatedListMessageContracts: Record<
@@ -435,21 +296,5 @@ export const generatedListMessageContracts: Record<
   [GENERATED_LIST_PATTERNS.delete]: {
     request: GENERATED_LIST_SCHEMA_IDS.idRequest,
     response: COMMON_IDS.idResult,
-  },
-  [GENERATED_LIST_PATTERNS.addLine]: {
-    request: GENERATED_LIST_SCHEMA_IDS.addLineRequest,
-    response: GENERATED_LIST_SCHEMA_IDS.lineView,
-  },
-  [GENERATED_LIST_PATTERNS.updateLine]: {
-    request: GENERATED_LIST_SCHEMA_IDS.updateLineRequest,
-    response: GENERATED_LIST_SCHEMA_IDS.updateLineResult,
-  },
-  [GENERATED_LIST_PATTERNS.deleteLine]: {
-    request: GENERATED_LIST_SCHEMA_IDS.lineIdRequest,
-    response: COMMON_IDS.idResult,
-  },
-  [GENERATED_LIST_PATTERNS.reorderLines]: {
-    request: GENERATED_LIST_SCHEMA_IDS.reorderRequest,
-    response: GENERATED_LIST_SCHEMA_IDS.listView,
   },
 };

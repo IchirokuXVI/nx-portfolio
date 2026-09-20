@@ -579,7 +579,7 @@ export interface AdminBasketView {
   /** Null is not missing: an unnamed basket displays as its generation date. */
   name: string | null;
   status: GeneratedListStatus;
-  /** The distinct zones this basket's lines were drawn from. May be empty. */
+  /** The distinct zones this basket covers (plan 0136). May be empty. */
   zoneIds: string[];
   lineCount: number;
   /** ISO 8601 UTC. */
@@ -590,23 +590,32 @@ export interface AdminBasketView {
   updatedAt: string;
 }
 
-/** One basket line, on the detail read only. */
-export interface AdminBasketLineView {
-  id: string;
+/**
+ * One row of a basket, on the detail read only (plan 0136, section 7.5).
+ *
+ * A basket has no lines of its own any more, so an operator is shown what a
+ * shopper is shown: the row, what is left of it and what has been bought of it.
+ * It carries no timestamp, because a row is not a record and has none: the
+ * anchor's own line was created on a list, not here.
+ */
+export interface AdminBasketRowView {
+  /** The anchor's list line id, as `BasketRowView.rowKey` is. */
+  rowKey: string;
   content: string;
-  quantity: number;
-  /** ISO 8601 UTC. */
-  createdAt: string;
+  left: number;
+  bought: number;
+  /** `bought + left`, computed, never stored. */
+  asked: number;
 }
 
 export interface AdminBasketDetailView extends AdminBasketView {
-  lines: AdminBasketLineView[];
+  lines: AdminBasketRowView[];
 }
 
-/** Baskets, by owner or by a zone their lines came from. */
+/** Baskets, by owner or by a zone they cover. */
 export interface ListAdminBasketsRequest extends AdminCredential, PageQuery {
   ownerUserId?: string;
-  /** Baskets with at least one line origin in this zone. */
+  /** Baskets with at least one source in this zone (plan 0136). */
   zoneId?: string;
 }
 

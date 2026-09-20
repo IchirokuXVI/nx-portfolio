@@ -179,31 +179,6 @@ export enum RealtimeEvent {
    */
   GeneratedListCreated = 'generatedList.created',
   GeneratedListUpdated = 'generatedList.updated',
-  /** One line of a basket moved: an edit, a pick switch, or a settle. */
-  GeneratedListLineUpdated = 'generatedList.lineUpdated',
-  /**
-   * A line was **added** to a shared basket (plan 0055, section 8), on the
-   * basket's own room.
-   *
-   * Its own name rather than a second {@link GeneratedListLineUpdated}, because
-   * a client receiving that one has to decide whether to replace a row or append
-   * one, and that decision is exactly what an event name is for.
-   *
-   * **No zone event goes with it.** An `ADDED` line names no zone and claims no
-   * zone line, which is the whole reason plan 0055 section 3.1 can hand this
-   * write to a guest.
-   */
-  GeneratedListLineAdded = 'generatedList.lineAdded',
-  /**
-   * A line left a basket because a rename merged it into another line of the
-   * same basket (plan 0113, section 6), on the basket's own room and to the
-   * owner's own sessions.
-   *
-   * Its own name rather than a whole `generatedList.updated`, because the basket
-   * room holds guests and a basket view names zone data. The payload is the
-   * basket and the id of the line that went away, and nothing else.
-   */
-  GeneratedListLineRemoved = 'generatedList.lineRemoved',
   /**
    * A basket was deleted. Addressed to the owner's own sessions **and** to the
    * basket's room since plan 0114 (section 10), so every participant hears it
@@ -212,18 +187,6 @@ export enum RealtimeEvent {
    */
   GeneratedListDeleted = 'generatedList.deleted',
 
-  /**
-   * A basket line was settled (plan 0051, section 6), on the basket's own room so
-   * that four people working through one list in a shop agree without a refetch.
-   *
-   * Distinct from plan 0047's `line.settled`, which carries the **zone** line and
-   * goes to the list room. One settling act emits both: this one tells the people
-   * holding the basket that the bread is done, and that one tells the household
-   * that the bread was got. Neither payload tells the zone which basket it came
-   * from, which is the disclosure plan 0050 section 8 refused and this plan still
-   * refuses.
-   */
-  GeneratedListLineSettled = 'generatedList.lineSettled',
 
   /**
    * Somebody joined or left a shared basket (plan 0051, section 3), on the
@@ -352,11 +315,7 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.ProfilesChanged,
   RealtimeEvent.GeneratedListCreated,
   RealtimeEvent.GeneratedListUpdated,
-  RealtimeEvent.GeneratedListLineUpdated,
-  RealtimeEvent.GeneratedListLineAdded,
-  RealtimeEvent.GeneratedListLineRemoved,
   RealtimeEvent.GeneratedListDeleted,
-  RealtimeEvent.GeneratedListLineSettled,
   RealtimeEvent.GeneratedListParticipantJoined,
   RealtimeEvent.GeneratedListParticipantLeft,
   RealtimeEvent.GeneratedListShared,

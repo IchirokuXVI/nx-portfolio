@@ -70,16 +70,12 @@ export const ERROR_CATALOG: Record<
     en: 'This basket is finished, so it cannot be changed.',
     es: 'Esta cesta está terminada, así que no se puede modificar.',
   },
-  // Both carry their number in the message rather than only in a code, because
+  // It carries its number in the message rather than only in a code, because
   // the client's job is to say it: "somebody else moved this, it is 3 now" is
-  // actionable and "that failed" is not (plan 0057, sections 5 and 5.2).
+  // actionable and "that failed" is not (plan 0057, section 5).
   [ERROR_CODES.STALE_QUANTITY]: {
     en: 'Somebody else changed this while you were looking at it. It is {current} now.',
     es: 'Alguien más cambió esto mientras lo mirabas. Ahora es {current}.',
-  },
-  [ERROR_CODES.BELOW_SETTLED]: {
-    en: 'This basket has already bought {floor}, so it cannot go below that.',
-    es: 'Esta cesta ya ha comprado {floor}, así que no puede bajar de ahí.',
   },
   // Phrased about the account rather than about the request, and it says how the
   // state ends, because the two things an operator needs are "waiting is what

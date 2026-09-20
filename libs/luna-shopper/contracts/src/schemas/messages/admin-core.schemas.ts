@@ -55,7 +55,7 @@ export const ADMIN_CORE_SCHEMA_IDS = {
   listDetailView: schemaId('admin-core/AdminListDetailView'),
   listPage: schemaId('admin-core/AdminListPage'),
   basketView: schemaId('admin-core/AdminBasketView'),
-  basketLineView: schemaId('admin-core/AdminBasketLineView'),
+  basketRowView: schemaId('admin-core/AdminBasketRowView'),
   basketDetailView: schemaId('admin-core/AdminBasketDetailView'),
   basketPage: schemaId('admin-core/AdminBasketPage'),
   membershipPage: schemaId('admin-core/AdminMembershipPage'),
@@ -268,20 +268,21 @@ const basketView = object(
   basketKeys
 );
 
-const basketLineView = object(
-  ADMIN_CORE_SCHEMA_IDS.basketLineView,
+const basketRowView = object(
+  ADMIN_CORE_SCHEMA_IDS.basketRowView,
   {
-    id: nonEmptyString(),
+    rowKey: nonEmptyString(),
     content: string(),
-    quantity: integer(),
-    createdAt: string({ format: 'date-time' }),
+    left: integer({ minimum: 0 }),
+    bought: integer({ minimum: 0 }),
+    asked: integer({ minimum: 0 }),
   },
-  ['id', 'content', 'quantity', 'createdAt']
+  ['rowKey', 'content', 'left', 'bought', 'asked']
 );
 
 const basketDetailView = object(
   ADMIN_CORE_SCHEMA_IDS.basketDetailView,
-  { ...basketFields, lines: array(ref(ADMIN_CORE_SCHEMA_IDS.basketLineView)) },
+  { ...basketFields, lines: array(ref(ADMIN_CORE_SCHEMA_IDS.basketRowView)) },
   [...basketKeys, 'lines']
 );
 
@@ -555,7 +556,7 @@ export const adminCoreSchemas: JsonSchema[] = [
   listDetailView,
   listPage,
   basketView,
-  basketLineView,
+  basketRowView,
   basketDetailView,
   basketPage,
   listZonesRequest,
