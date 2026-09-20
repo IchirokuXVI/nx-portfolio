@@ -43,13 +43,10 @@ import {
   toShareLinkView,
 } from './generated-list-sharing.mappers';
 import {
-  BASKET_SOURCE_LISTS_SQL,
   NEXT_GUEST_NUMBER_SQL,
   WRITABLE_AMONG_SQL,
-  type BasketSourceListRow,
   type WritableAmongRow,
 } from './generated-list-sharing.sql';
-import { WRITABLE_LISTS_SQL, type WritableListRow } from './generated-list.sql';
 
 /**
  * Sharing a basket with people who have no account (plan 0051, sections 3, 4, 5

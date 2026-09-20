@@ -96,13 +96,11 @@ function build(options: {
   const service = new GeneratedListService(
     { transaction: async () => undefined } as unknown as DataSource,
     lists,
-    lines,
-    {} as never,
-    {} as never,
-    {} as never,
     {} as unknown as ProfileService,
     fakeLineClaims({}).service,
     { emitToUsers: () => undefined } as unknown as CoreEventsPublisher,
+    // The order, the members and the trip rows: none of them is on the history
+    // path, which reads the page and then counts it two ways.
     {} as never,
     {} as never,
     { find: async () => [] } as never,

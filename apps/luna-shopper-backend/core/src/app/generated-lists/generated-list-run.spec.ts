@@ -1,28 +1,23 @@
 import {
   BasketKind,
-  GeneratedLineOrigin,
   GeneratedListStatus,
   RealtimeEvent,
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, type DataSource } from 'typeorm';
-import {
-  BasketSource,
-  GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOption,
-  GeneratedListLineOrigin,
-} from '../entities';
+import type { BasketReadService } from '../baskets/basket-read.service';
+import { BasketSource, GeneratedList } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { BASKET_TRIP_LISTS_SQL } from '../lists/trips/trips.sql';
 import type { ProfileService } from '../profiles/profile.service';
-import { fakeBasketTripRows } from './basket-trip-rows.fake';
+import {
+  fakeBasketTripRows,
+  type FakeBasketTripRows,
+} from './basket-trip-rows.fake';
 import type { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListService } from './generated-list.service';
 import {
-  CANDIDATE_LINES_SQL,
-  CANDIDATE_LINE_ITEMS_SQL,
   ORDER_HISTORY_SQL,
   WRITABLE_LISTS_SQL,
   type OrderHistoryRow,
@@ -30,13 +25,20 @@ import {
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
 
 /**
- * The generation run (plan 0050, sections 2, 3 and 4).
+ * The generation run (plan 0050, sections 2, 3 and 4; plan 0136, section 1).
  *
- * Everything here is about **what a basket ends up holding**, which is the only
- * part of the feature a person can be surprised by. The three reads the run makes
- * are faked by matching on the SQL constants themselves rather than on a string,
- * so a change to a query that this file was pinning shows up as an unmocked read
- * rather than as a silently passing test.
+ * **The run composes nothing since plan 0136.** It writes a `generated_lists`
+ * header, the `basket_sources` rows saying which lists the basket covers, and
+ * the people it is shared with, and that is all: the rows are read from
+ * `list_lines` on every request. So this file is about **what a basket ends up
+ * covering**, where it used to be about what a basket ends up holding, and the
+ * assertions that pinned composed lines are kept here as assertions that nothing
+ * was composed.
+ *
+ * The reads the run makes are faked by matching on the SQL constants themselves
+ * rather than on a string, and every other query throws. That is load bearing
+ * now: a run that started reading candidate lines again would fail here as an
+ * unmocked read rather than pass silently.
  *
  * The one thing this file cannot prove is the idempotency index, which is what
  * makes a double tap return the first basket rather than usually returning it. A
@@ -50,16 +52,6 @@ const ZONE_A = 'z-flat';
 const ZONE_B = 'z-parents';
 const LIST_A = 'l-flat';
 const LIST_B = 'l-parents';
-
-interface CandidateSeed {
-  id: string;
-  listId: string;
-  content: string;
-  quantity: number;
-  version?: number;
-  itemSetHash?: string | null;
-  itemIds?: string[];
-}
 
 /**
  * The source rows a run wrote, as (zone, list) pairs, so an assertion reads like
@@ -75,9 +67,6 @@ interface Harness {
     lists: Partial<GeneratedList>[];
     /** What the run recorded it was asked to draw from (plan 0133, section 4). */
     sources: Partial<BasketSource>[];
-    lines: Partial<GeneratedListLine>[];
-    origins: Partial<GeneratedListLineOrigin>[];
-    options: Partial<GeneratedListLineOption>[];
   };
   events: { event: RealtimeEvent; userIds: readonly string[] }[];
   /**
@@ -87,13 +76,19 @@ interface Harness {
    */
   tripsChanged: (string | undefined)[];
   claims: FakeLineClaims;
-  /** How many times the run asked for the owner's past trips (plan 0110). */
+  tripRows: FakeBasketTripRows;
+  /**
+   * How many times the run asked for the owner's past trips (plan 0110). Zero
+   * since plan 0136 section 3.5: a view has no `position`, so the order is asked
+   * on every read of the basket instead of once here.
+   */
   orderReads: () => number;
+  /** Every entity the run's transaction asked for a repository of. */
+  repositoriesTouched: () => string[];
 }
 
 function build(options: {
   writable?: { listId: string; zoneId: string }[];
-  candidates?: CandidateSeed[];
   profileSources?: { zoneId: string; listId: string | null }[];
   profileId?: string;
   /**
@@ -112,15 +107,17 @@ function build(options: {
    */
   loseTheRace?: Partial<GeneratedList>;
   /**
-   * What the basket is claiming, for the transitions in plan 0052 section 3.
+   * The lines this basket covers, for the transitions in plan 0052 section 3 and
+   * for the trips of plan 0122 section 6.
    *
-   * The run itself writes the provenance rows the real query reads, so a spec
-   * about generation states them here rather than reaching into the write.
+   * Stated here rather than derived from the write, because since plan 0136 the
+   * run writes no row a query could derive them from: both reads stand on the
+   * coverage, which is a join through `basket_sources` to `list_lines`.
    */
-  claiming?: { zoneId: string; listId: string; lineId: string }[];
+  covering?: { zoneId: string; listId: string; lineId: string }[];
   /**
-   * The owner's past trips, which decide the order the basket is written in
-   * (plan 0110). Empty by default, so a basket here comes out alphabetically.
+   * The owner's past trips. The run reads none of them any more, and this is
+   * kept so that a run made with a history still asks nothing.
    */
   history?: OrderHistoryRow[];
 }): Harness {
@@ -128,14 +125,10 @@ function build(options: {
     { listId: LIST_A, zoneId: ZONE_A },
     { listId: LIST_B, zoneId: ZONE_B },
   ];
-  const candidates = options.candidates ?? [];
 
   const written: Harness['written'] = {
     lists: [],
     sources: [],
-    lines: [],
-    origins: [],
-    options: [],
   };
   const events: Harness['events'] = [];
   const tripsChanged: Harness['tripsChanged'] = [];
@@ -147,36 +140,18 @@ function build(options: {
     if (sql === WRITABLE_LISTS_SQL) {
       return writable;
     }
-    if (sql === CANDIDATE_LINES_SQL) {
-      return candidates.map((line) => ({
-        id: line.id,
-        listId: line.listId,
-        content: line.content,
-        quantity: line.quantity,
-        version: line.version ?? 1,
-        itemSetHash: line.itemSetHash ?? null,
-      }));
-    }
-    if (sql === CANDIDATE_LINE_ITEMS_SQL) {
-      return candidates.flatMap((line) =>
-        (line.itemIds ?? []).map((itemId) => ({ lineId: line.id, itemId }))
-      );
-    }
     if (sql === BASKET_TRIP_LISTS_SQL) {
-      // `DISTINCT`, as the real read is. What the run wrote when there was a
-      // run, and what the basket is said to be claiming when there was not.
-      const rows = written.origins.length
-        ? written.origins
-        : (options.claiming ?? []);
-      return [...new Set(rows.map((row) => row.listId))].map((listId) => ({
-        listId,
-      }));
+      // `DISTINCT`, as the real read is, and answered from the coverage rather
+      // than from anything the run wrote (plan 0136, section 7.2).
+      return [
+        ...new Set((options.covering ?? []).map((row) => row.listId)),
+      ].map((listId) => ({ listId }));
     }
     throw new Error(`unmocked query: ${sql.slice(0, 60)}`);
   };
 
-  // The order's own read (plan 0110), counted, because the run may make it once
-  // and only once: it is a query per create and the plan says so.
+  // The order's own read (plan 0110), counted, because the run must **not** make
+  // it any more: plan 0136 section 3.5 moves it onto every read of the basket.
   let orderReads = 0;
   const orderRepo = {
     query: async (sql: string): Promise<unknown[]> => {
@@ -208,22 +183,7 @@ function build(options: {
     },
   };
 
-  const lineRepo = {
-    find: async () =>
-      written.lines.map((line) => ({
-        ...line,
-        settledQuantity: line.settledQuantity ?? 0,
-      })),
-    createQueryBuilder: () => {
-      throw new Error('the run does not count');
-    },
-  };
-  const originRepo = {
-    find: async () => written.origins,
-  };
-  const optionRepo = {
-    find: async () => written.options,
-  };
+  const repositoriesTouched: string[] = [];
 
   const manager = {
     // The basket `update` locks and re-reads inside its transaction (plan 0135,
@@ -232,6 +192,7 @@ function build(options: {
     findOne: async () => options.existing ?? null,
     getRepository: (entity: unknown) => {
       if (entity === GeneratedList) {
+        repositoriesTouched.push('GeneratedList');
         return {
           create: (data: Partial<GeneratedList>) => ({ ...data }),
           // A row that already has an id is an update rather than the run's
@@ -250,6 +211,7 @@ function build(options: {
         };
       }
       if (entity === BasketSource) {
+        repositoriesTouched.push('BasketSource');
         return {
           insert: async (rows: Partial<BasketSource>[]) => {
             written.sources.push(
@@ -258,32 +220,12 @@ function build(options: {
           },
         };
       }
-      if (entity === GeneratedListLine) {
-        return {
-          create: (data: Partial<GeneratedListLine>) => ({ ...data }),
-          save: async (row: Partial<GeneratedListLine>) => {
-            const stored = { ...row, id: id('gll') };
-            written.lines.push(stored);
-            return stored;
-          },
-        };
-      }
-      if (entity === GeneratedListLineOrigin) {
-        return {
-          insert: async (rows: Partial<GeneratedListLineOrigin>[]) => {
-            written.origins.push(
-              ...rows.map((row) => ({ ...row, id: id('o') }))
-            );
-          },
-        };
-      }
-      return {
-        insert: async (rows: Partial<GeneratedListLineOption>[]) => {
-          written.options.push(
-            ...rows.map((row) => ({ ...row, id: id('op') }))
-          );
-        },
-      };
+      // The whole of plan 0136 section 10, stated as a failure rather than as a
+      // comment: there is no third table for the run to reach for. A run that
+      // asked for one would land here.
+      throw new Error(
+        'the run writes a header, its sources and its people, and nothing else'
+      );
     },
   };
 
@@ -336,19 +278,24 @@ function build(options: {
     liveRegistered: async () => [],
   } as unknown as GeneratedListMembersService;
 
-  const claims = fakeLineClaims({}, () => options.claiming ?? []);
+  const claims = fakeLineClaims({}, () => options.covering ?? []);
 
   const tripRows = fakeBasketTripRows();
+  // The history counts an open basket through this (plan 0136, section 7.4), and
+  // nothing in this file lists a page, so an empty progress is the whole of what
+  // the run needs it for.
+  const basketRead = {
+    progressOf: async () => ({
+      done: 0,
+      unavailable: 0,
+      total: 0,
+      pending: 0,
+    }),
+  } as unknown as BasketReadService;
+
   const service = new GeneratedListService(
     dataSource,
     listRepo as never,
-    lineRepo as never,
-    originRepo as never,
-    optionRepo as never,
-    // The settlements repository, read only, for the basket line view's
-    // `lastOutcome` (velista 0044). The run itself never touches it, so an empty
-    // find is the whole of what this needs to answer.
-    { find: async () => [] } as never,
     profiles,
     claims.service,
     publisher,
@@ -356,7 +303,8 @@ function build(options: {
     members,
     // The source rows the run wrote, read back by every view of the basket.
     { find: async () => written.sources } as never,
-    tripRows.service
+    tripRows.service,
+    basketRead
   );
 
   return {
@@ -367,6 +315,7 @@ function build(options: {
     claims,
     tripRows,
     orderReads: () => orderReads,
+    repositoriesTouched: () => repositoriesTouched,
   };
 }
 
@@ -386,36 +335,32 @@ function uniqueViolation(): QueryFailedError {
 }
 
 describe('the generation run', () => {
-  it('composes one line per qualifying zone line', async () => {
-    const { service, written } = build({
-      candidates: [
-        { id: 'a1', listId: LIST_A, content: 'Milk', quantity: 2 },
-        { id: 'a2', listId: LIST_A, content: 'Bread', quantity: 1 },
-      ],
-    });
+  it('composes no line at all, because a basket is a view of its lists', async () => {
+    // The reversal of "composes one line per qualifying zone line" (plan 0136,
+    // section 1). The run reads no candidate line and writes no row to a line
+    // table: the harness's transaction hands out two repositories and throws for
+    // anything else, so this assertion is made by the run completing.
+    const { service, written, repositoriesTouched } = build({});
 
     const result = await service.create({ userId: OWNER });
 
-    expect(written.lines).toHaveLength(2);
-    // Alphabetically, not in list order, because this owner has walked no trip
-    // the order could be read from (plan 0110, section 3).
-    expect(written.lines.map((line) => line.content)).toEqual([
-      'Bread',
-      'Milk',
-    ]);
-    expect(written.lines.map((line) => line.position)).toEqual([1, 2]);
+    expect(written.lists).toHaveLength(1);
+    expect(new Set(repositoriesTouched())).toEqual(
+      new Set(['GeneratedList', 'BasketSource'])
+    );
     // The result is the basket and nothing else since plan 0133 section 7: the
     // run refuses no line, so there is nothing left behind to report.
     expect(Object.keys(result)).toEqual(['list']);
+    expect(result.list).not.toHaveProperty('lines');
   });
 
-  it('writes the positions of the order the owner walks, once', async () => {
-    const { service, written, orderReads } = build({
-      candidates: [
-        { id: 'a1', listId: LIST_A, content: 'Juice', quantity: 1 },
-        { id: 'a2', listId: LIST_A, content: 'Milk', quantity: 1 },
-        { id: 'a3', listId: LIST_A, content: 'Anchovies', quantity: 1 },
-      ],
+  it('asks the order nothing, because a view has no position', async () => {
+    // The reversal of "writes the positions of the order the owner walks, once".
+    // Plan 0110 section 2 said the order was computed once at creation and never
+    // recomputed; plan 0136 section 3.5 reverses that by necessity and keeps the
+    // reason it gave another way: the order learns from **finished** trips only,
+    // so it still cannot move under a thumb while somebody shops.
+    const { service, orderReads } = build({
       history: [
         {
           tripId: 't1',
@@ -436,157 +381,87 @@ describe('the generation run', () => {
 
     await service.create({ userId: OWNER });
 
-    // The two the owner has walked, in the order they walked them, and then the
-    // one they never have.
-    expect(written.lines.map((line) => [line.content, line.position])).toEqual([
-      ['Milk', 1],
-      ['Juice', 2],
-      ['Anchovies', 3],
+    expect(orderReads()).toBe(0);
+  });
+
+  it('merges nothing, because there is no row to merge into', async () => {
+    // The reversal of "merges lines carrying the same product set and sums their
+    // quantities". Milk in the flat list and in the parents' list is still one
+    // line to buy once, and it is one **row** now, grouped on `mergeKey` by
+    // `baskets/line-dedup.ts` on every read. The run records that it covers both
+    // lists and stops there.
+    const { service, written } = build({});
+
+    await service.create({
+      userId: OWNER,
+      sources: [
+        { zoneId: ZONE_A, listId: LIST_A },
+        { zoneId: ZONE_B, listId: LIST_B },
+      ],
+    });
+
+    expect(sourcesOf(written)).toEqual([
+      { zoneId: ZONE_A, listId: LIST_A },
+      { zoneId: ZONE_B, listId: LIST_B },
     ]);
-    // One query per create, which is the whole cost the plan budgets for.
-    expect(orderReads()).toBe(1);
   });
 
-  it('merges lines carrying the same product set and sums their quantities', async () => {
-    // The case the feature exists for: milk in the flat list and in the
-    // parents' list is one line to buy once (section 3).
-    const { service, written } = build({
-      candidates: [
-        {
-          id: 'a1',
-          listId: LIST_A,
-          content: 'Milk',
-          quantity: 2,
-          itemSetHash: 'milk-hash',
-          itemIds: ['item-pascual'],
-        },
-        {
-          id: 'b1',
-          listId: LIST_B,
-          content: 'Leche',
-          quantity: 1,
-          itemSetHash: 'milk-hash',
-          itemIds: ['item-asturiana'],
-        },
-      ],
-    });
+  it('stores no product set and no pick, which the read composes instead', async () => {
+    // The reversal of "unions the options of the lines it merged" and of "leaves
+    // a free text line with no pick and no options". `generated_list_line_options`
+    // is dropped (plan 0136, section 9), and a row's `optionIds` are the union of
+    // its entries' `list_line_items`, read per request. Nothing the run writes
+    // carries either, so the header is asserted whole.
+    const { service, written } = build({});
 
     await service.create({ userId: OWNER });
 
-    expect(written.lines).toHaveLength(1);
-    expect(written.lines[0].quantity).toBe(3);
-    // Every contributing line gets its provenance row, which is what lets a
-    // settle later know how many units each list was asking for.
-    expect(written.origins).toHaveLength(2);
-    expect(written.origins.map((row) => row.lineId).sort()).toEqual([
-      'a1',
-      'b1',
+    const row = written.lists[0];
+    expect(row).not.toHaveProperty('itemId');
+    expect(Object.keys(row).sort()).toEqual([
+      'generatedAt',
+      'id',
+      'idempotencyKey',
+      'kind',
+      'name',
+      'ownerUserId',
+      'pricingProfileId',
+      'status',
     ]);
-    expect(written.origins.map((row) => row.quantity)).toEqual([2, 1]);
   });
 
-  it('unions the options of the lines it merged, so either brand can be picked', async () => {
-    const { service, written } = build({
-      candidates: [
-        {
-          id: 'a1',
-          listId: LIST_A,
-          content: 'Milk',
-          quantity: 1,
-          itemSetHash: 'milk-hash',
-          itemIds: ['item-pascual'],
-        },
-        {
-          id: 'b1',
-          listId: LIST_B,
-          content: 'Milk',
-          quantity: 1,
-          itemSetHash: 'milk-hash',
-          itemIds: ['item-asturiana', 'item-pascual'],
-        },
-      ],
-    });
+  it('keeps no text of its own, so a rename of a zone line needs no copy', async () => {
+    // The reversal of "merges free text lines on normalized text and keeps
+    // different words apart". The normalization is still the rule and still
+    // conservative, and it lives in `baskets/line-dedup.ts` with its own spec;
+    // what changed is that it decides a grouping at read time rather than a
+    // stored `content`, so a run writes no text at all.
+    const { service, written } = build({});
 
-    await service.create({ userId: OWNER });
+    await service.create({ userId: OWNER, name: 'Saturday' });
 
-    expect(written.options.map((row) => row.itemId)).toEqual([
-      'item-pascual',
-      'item-asturiana',
-    ]);
-    // The pick is the first option added, which is section 4's stated fallback
-    // for a line whose options carry no price.
-    expect(written.lines[0].itemId).toBe('item-pascual');
+    // The basket's own name, which is the only text a run writes.
+    expect(written.lists[0].name).toBe('Saturday');
   });
 
-  it('merges free text lines on normalized text and keeps different words apart', async () => {
-    const { service, written } = build({
-      candidates: [
-        { id: 'a1', listId: LIST_A, content: 'Café', quantity: 1 },
-        { id: 'b1', listId: LIST_B, content: '  cafe ', quantity: 2 },
-        { id: 'b2', listId: LIST_B, content: 'whole milk', quantity: 1 },
-        { id: 'b3', listId: LIST_B, content: 'milk', quantity: 1 },
-      ],
-    });
-
-    await service.create({ userId: OWNER });
-
-    const byContent = new Map(
-      written.lines.map((line) => [line.content, line.quantity])
-    );
-    expect(byContent.get('Café')).toBe(3);
-    // Conservative on purpose: two things a person meant separately stay
-    // separate, because merging them loses a purchase silently.
-    expect(byContent.get('whole milk')).toBe(1);
-    expect(byContent.get('milk')).toBe(1);
-  });
-
-  it('leaves a free text line with no pick and no options', async () => {
-    const { service, written } = build({
-      candidates: [
-        {
-          id: 'a1',
-          listId: LIST_A,
-          content: 'Ask about the cake',
-          quantity: 1,
-        },
-      ],
-    });
-
-    await service.create({ userId: OWNER });
-
-    expect(written.lines[0].itemId).toBeNull();
-    expect(written.options).toEqual([]);
-  });
-
-  it('takes a line another basket of the owner\u2019s is carrying (plan 0133)', async () => {
+  it('takes a line another basket of the owner’s is carrying (plan 0133)', async () => {
     // Plan 0050 section 3 refused it and plan 0133 section 7 reversed that. The
     // rule was true of two frozen copies of one line and false of two views of
     // it, and with a permanent basket over every list it would refuse
-    // everything.
+    // everything. Since plan 0136 both baskets are views, so there is nothing
+    // left that could refuse.
     const { service, written } = build({
-      candidates: [
-        { id: 'a1', listId: LIST_A, content: 'Milk', quantity: 2 },
-        { id: 'a2', listId: LIST_A, content: 'Bread', quantity: 1 },
-      ],
-      claiming: [{ zoneId: ZONE_A, listId: LIST_A, lineId: 'a1' }],
+      covering: [{ zoneId: ZONE_A, listId: LIST_A, lineId: 'a1' }],
     });
 
     const result = await service.create({ userId: OWNER });
 
-    expect(written.lines.map((line) => line.content)).toEqual([
-      'Bread',
-      'Milk',
-    ]);
+    expect(written.lists).toHaveLength(1);
     expect(result).toEqual({ list: expect.objectContaining({ id: 'gl-1' }) });
   });
 
   it('draws from every writable list when nothing narrows it', async () => {
-    const { service, written } = build({
-      candidates: [
-        { id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 },
-        { id: 'b1', listId: LIST_B, content: 'Bread', quantity: 1 },
-      ],
-    });
+    const { service, written } = build({});
 
     await service.create({ userId: OWNER });
 
@@ -600,12 +475,7 @@ describe('the generation run', () => {
   });
 
   it('narrows to the sources the request names, and never widens past access', async () => {
-    const { service, written } = build({
-      candidates: [
-        { id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 },
-        { id: 'b1', listId: LIST_B, content: 'Bread', quantity: 1 },
-      ],
-    });
+    const { service, written } = build({});
 
     await service.create({
       userId: OWNER,
@@ -623,9 +493,7 @@ describe('the generation run', () => {
   });
 
   it('narrows to a named list inside a zone', async () => {
-    const { service, written } = build({
-      candidates: [{ id: 'b1', listId: LIST_B, content: 'Bread', quantity: 1 }],
-    });
+    const { service, written } = build({});
 
     await service.create({
       userId: OWNER,
@@ -643,7 +511,6 @@ describe('the generation run', () => {
         { listId: LIST_A, zoneId: ZONE_A },
         { listId: 'l-second', zoneId: ZONE_A },
       ],
-      candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
     });
 
     await service.create({
@@ -657,9 +524,7 @@ describe('the generation run', () => {
   it('writes no row for a source that narrows to nothing', async () => {
     // Plan 0050 section 2's rule kept: a source is only ever a narrowing, and
     // one that names nothing is silently nothing.
-    const { service, written } = build({
-      candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
-    });
+    const { service, written } = build({});
 
     await service.create({
       userId: OWNER,
@@ -674,7 +539,6 @@ describe('the generation run', () => {
 
   it('falls back to the profile sources when the request names none', async () => {
     const { service, written } = build({
-      candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
       profileSources: [{ zoneId: ZONE_A, listId: null }],
       profileId: 'p-weekly',
     });
@@ -691,11 +555,7 @@ describe('the generation run', () => {
     it('records the named profile for pricing while the sources stay the caller’s own', async () => {
       // The shape every run velista creates takes: the sheet always sends
       // `sources`, and sends `profileId` beside them whenever one is chosen.
-      const { service, written } = build({
-        candidates: [
-          { id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 },
-        ],
-      });
+      const { service, written } = build({});
 
       await service.create({
         userId: OWNER,
@@ -709,9 +569,6 @@ describe('the generation run', () => {
 
     it('refuses a profile the caller does not own before writing anything', async () => {
       const { service, written } = build({
-        candidates: [
-          { id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 },
-        ],
         unownedProfileId: 'p-stranger',
       });
 
@@ -728,16 +585,17 @@ describe('the generation run', () => {
     });
   });
 
-  it('starts a basket as a DRAFT of DERIVED lines and tells only the owner', async () => {
-    const { service, written, events } = build({
-      candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
-    });
+  it('starts a basket OPEN and GENERATED, and tells only the owner', async () => {
+    // Was "starts a basket as a DRAFT of DERIVED lines". `GeneratedLineOrigin`
+    // and `settledQuantity` went with the line table (plan 0136, section 10), so
+    // what a run decides about the thing it made is its kind and its status: a
+    // run composes a **trip**, and the permanent basket is made by nothing here.
+    const { service, written, events } = build({});
 
     await service.create({ userId: OWNER });
 
     expect(written.lists[0].status).toBe(GeneratedListStatus.OPEN);
-    expect(written.lines[0].origin).toBe(GeneratedLineOrigin.DERIVED);
-    expect(written.lines[0].settledQuantity).toBe(0);
+    expect(written.lists[0].kind).toBe(BasketKind.GENERATED);
     // A basket is private, so the owner's own sessions are the only audience an
     // event about it can have (section 8).
     expect(events).toEqual([
@@ -759,7 +617,6 @@ describe('the generation run', () => {
         kind: BasketKind.GENERATED,
         pricingProfileId: null,
       },
-      candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
     });
 
     const result = await service.create({
@@ -768,14 +625,14 @@ describe('the generation run', () => {
     });
 
     expect(result.list.id).toBe('gl-first');
-    // Nothing was composed a second time, which is the whole point of the key.
+    // Nothing was written a second time, which is the whole point of the key.
     expect(written.lists).toEqual([]);
-    expect(written.lines).toEqual([]);
+    expect(written.sources).toEqual([]);
   });
 
   it('hands back the winner when two taps race past the up front check', async () => {
     // The half a repeated key cannot cover: both taps read no existing basket,
-    // both compose, and the index refuses the second. The loser must answer with
+    // both write, and the index refuses the second. The loser must answer with
     // the winner's basket rather than with a 500.
     const { service } = build({
       loseTheRace: {
@@ -787,7 +644,6 @@ describe('the generation run', () => {
         kind: BasketKind.GENERATED,
         pricingProfileId: null,
       },
-      candidates: [{ id: 'a1', listId: LIST_A, content: 'Milk', quantity: 1 }],
     });
 
     const result = await service.create({
@@ -798,13 +654,16 @@ describe('the generation run', () => {
     expect(result.list.id).toBe('gl-winner');
   });
 
-  it('composes nothing when no list qualifies, rather than failing', async () => {
-    const { service, written } = build({ writable: [], candidates: [] });
+  it('covers nothing when no list qualifies, rather than failing', async () => {
+    // Was "composes nothing when no list qualifies". A basket over no list is
+    // still a basket, and reading it answers no rows rather than an error (plan
+    // 0136, section 3.1): a person in no zone has one too.
+    const { service, written } = build({ writable: [] });
 
     const result = await service.create({ userId: OWNER });
 
-    expect(result.list.lines).toEqual([]);
-    expect(written.lines).toEqual([]);
+    expect(result.list.sources).toEqual([]);
+    expect(written.sources).toEqual([]);
   });
 });
 
@@ -814,25 +673,23 @@ describe('the generation run', () => {
  * Plan 0050 section 8 said generated lists never emit zone events, and this is
  * the declared exception rather than a contradiction to be discovered later: a
  * household has to be able to see that somebody is already out buying the milk.
+ *
+ * What a basket claims is its **coverage** since plan 0136 section 7.1, where it
+ * used to be its provenance rows. The refs are stated by the harness for exactly
+ * that reason: there is no written row left to derive them from.
  */
-describe('a basket claims the lines it took (plan 0052, section 3)', () => {
-  const CLAIMING = [
+describe('a basket claims the lines it covers (plan 0052, section 3)', () => {
+  const COVERING = [
     { zoneId: ZONE_A, listId: LIST_A, lineId: 'li-1' },
     { zoneId: ZONE_A, listId: LIST_A, lineId: 'li-2' },
   ];
 
-  it('claims every origin the run took, naming the owner', async () => {
-    const w = build({
-      candidates: [
-        { id: 'li-1', listId: LIST_A, content: 'Milk', quantity: 1 },
-        { id: 'li-2', listId: LIST_A, content: 'Bread', quantity: 1 },
-      ],
-      claiming: CLAIMING,
-    });
+  it('claims every covered line, naming the owner', async () => {
+    const w = build({ covering: COVERING });
 
     await w.service.create({ userId: OWNER });
 
-    // One call carrying both lines, not one call each: a run takes every wanted
+    // One call carrying both lines, not one call each: a run covers every wanted
     // line of every list it drew from, and a per line fan out into a household
     // room is a self inflicted problem (section 3.1).
     expect(w.claims.calls).toEqual([
@@ -851,7 +708,7 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
         kind: BasketKind.GENERATED,
         pricingProfileId: null,
       },
-      claiming: CLAIMING,
+      covering: COVERING,
     });
 
     await w.service.update({
@@ -876,7 +733,7 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
         kind: BasketKind.GENERATED,
         pricingProfileId: null,
       },
-      claiming: CLAIMING,
+      covering: COVERING,
     });
 
     await w.service.update({
@@ -897,7 +754,7 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
         name: null,
         generatedAt: new Date('2026-03-01T00:00:00.000Z'),
       },
-      claiming: CLAIMING,
+      covering: COVERING,
     });
 
     await w.service.delete({ userId: OWNER, generatedListId: 'gl-old' });
@@ -916,7 +773,7 @@ describe('a basket claims the lines it took (plan 0052, section 3)', () => {
         name: null,
         generatedAt: new Date('2026-03-01T00:00:00.000Z'),
       },
-      claiming: CLAIMING,
+      covering: COVERING,
     });
 
     await w.service.delete({ userId: OWNER, generatedListId: 'gl-old' });
@@ -940,28 +797,22 @@ describe('a basket tells the lists it touches (plan 0122, section 6)', () => {
     kind: BasketKind.GENERATED,
     pricingProfileId: null,
   };
-  const CLAIMING = [
+  const COVERING = [
     { zoneId: ZONE_A, listId: LIST_A, lineId: 'li-1' },
     { zoneId: ZONE_A, listId: LIST_A, lineId: 'li-2' },
     { zoneId: ZONE_B, listId: LIST_B, lineId: 'li-3' },
   ];
 
-  it('tells each list the run drew from once, however many lines it took', async () => {
-    const w = build({
-      candidates: [
-        { id: 'li-1', listId: LIST_A, content: 'Milk', quantity: 1 },
-        { id: 'li-2', listId: LIST_A, content: 'Bread', quantity: 1 },
-        { id: 'li-3', listId: LIST_B, content: 'Eggs', quantity: 1 },
-      ],
-    });
+  it('tells each list the run covers once, however many lines it holds', async () => {
+    const w = build({ covering: COVERING });
 
     await w.service.create({ userId: OWNER });
 
     expect(w.tripsChanged).toEqual([LIST_A, LIST_B]);
   });
 
-  it('tells nobody when the run composed nothing', async () => {
-    const w = build({ candidates: [] });
+  it('tells nobody when the run covers no list', async () => {
+    const w = build({ covering: [] });
 
     await w.service.create({ userId: OWNER });
 
@@ -969,7 +820,7 @@ describe('a basket tells the lists it touches (plan 0122, section 6)', () => {
   });
 
   it('tells them on a rename, which the claim has nothing to say about', async () => {
-    const w = build({ existing, claiming: CLAIMING });
+    const w = build({ existing, covering: COVERING });
 
     await w.service.update({
       userId: OWNER,
@@ -980,13 +831,21 @@ describe('a basket tells the lists it touches (plan 0122, section 6)', () => {
     expect(w.tripsChanged).toEqual([LIST_A, LIST_B]);
   });
 
-  it('says nothing when only the default target list moved', async () => {
-    const w = build({ existing, claiming: CLAIMING });
+  it('says nothing when a write moves neither the name nor the status', async () => {
+    // Was "says nothing when only the default target list moved".
+    // `defaultTargetListId` is deleted from the request and from the column
+    // (plan 0136, sections 9 and 10), because there is no line for it to target
+    // any more: the add names its list outright. What is left of the rule is the
+    // one it always stated, that a trip's head is the basket's name and whether
+    // it is live, so a write moving neither tells nobody.
+    // Its own copy of the row, because the rename above writes through the one
+    // the harness was handed.
+    const w = build({ existing: { ...existing }, covering: COVERING });
 
     await w.service.update({
       userId: OWNER,
       generatedListId: 'gl-old',
-      defaultTargetListId: LIST_A,
+      status: GeneratedListStatus.OPEN,
     });
 
     expect(w.tripsChanged).toEqual([]);
@@ -995,7 +854,7 @@ describe('a basket tells the lists it touches (plan 0122, section 6)', () => {
   it('tells them when the basket is deleted, finished or not', async () => {
     const w = build({
       existing: { ...existing, status: GeneratedListStatus.FINISHED },
-      claiming: CLAIMING,
+      covering: COVERING,
     });
 
     await w.service.delete({ userId: OWNER, generatedListId: 'gl-old' });

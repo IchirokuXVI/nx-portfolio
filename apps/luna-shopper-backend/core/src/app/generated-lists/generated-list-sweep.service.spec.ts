@@ -29,9 +29,12 @@ import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
  * plan is written against. So the exit criterion is met the way it is stated:
  * the events are asserted, not only the rows.
  *
- * The harness has no zone line repository, no settlement repository and a line
- * repository that throws on any write, so a sweep that settled anything or
- * touched a zone list (section 4.5) would fail here rather than pass quietly.
+ * The harness has no zone line repository and no settlement repository, and its
+ * transaction hands out a repository for `generated_lists` alone
+ * (`fakeUpdateDataSource`), so a sweep that settled anything or touched a zone
+ * list (section 4.5) would fail here rather than pass quietly. Since plan 0136
+ * there is no basket line table for it to write to either, which is why the line
+ * repository that used to stand in that sentence is gone.
  */
 
 const OWNER = 'u-owner';
@@ -82,7 +85,6 @@ function build(options: {
         status: seed.status,
         generatedAt: new Date(NOW - seed.ageMs),
         pricingProfileId: null,
-        defaultTargetListId: null,
         idempotencyKey: null,
       }) as GeneratedList
   );
@@ -141,13 +143,6 @@ function build(options: {
       ].map((listId) => ({ listId })),
   };
 
-  const lines = {
-    find: async () => [],
-    save: () => {
-      throw new Error('the sweep wrote a basket line');
-    },
-  };
-
   const publisher = {
     emitToUsers: (
       event: RealtimeEvent,
@@ -169,17 +164,16 @@ function build(options: {
   const generated = new GeneratedListService(
     fakeUpdateDataSource(lists),
     lists as never,
-    lines as never,
-    {} as never,
-    {} as never,
-    {} as never,
     {} as unknown as ProfileService,
     claims.service,
     publisher,
+    // The order, the members and the basket read: the sweep finishes a basket
+    // and never composes, counts or shares one.
     {} as never,
     {} as never,
     { find: async () => [] } as never,
-    tripRows.service
+    tripRows.service,
+    {} as never
   );
 
   const logger = { log: jest.fn(), error: jest.fn() };

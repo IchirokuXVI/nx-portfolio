@@ -64,92 +64,6 @@ export const WRITABLE_LISTS_SQL = `
 `;
 
 /**
- * The lines that qualify for a basket (plan 0050, section 3). `$1` is the list
- * ids the run resolved.
- *
- * Two predicates, and both are worth stating loudly:
- *
- * - **`approvalStatus = 'APPROVED'`.** A `PENDING` line is a request nobody has
- *   agreed to yet and a `REJECTED` one is a decision. Neither belongs in a
- *   basket, and this is the rule that makes zone approval mean something.
- * - **`quantity > 0`.** Plan 0050 asked for `status = 'PENDING'` here, on a
- *   column plan 0047 deleted. Wanting a thing is what that column was standing in
- *   for: quantity is now the only thing that says whether the household wants it,
- *   and a line at zero is one they know about and do not currently need.
- *
- * Ordered by list and then position so a basket composed from one list comes out
- * in the order that list is written in, which is the order the person who wrote
- * it walks the shop in.
- */
-export const CANDIDATE_LINES_SQL = `
-  SELECT
-    ll.id AS "id",
-    ll."listId" AS "listId",
-    ll.content AS "content",
-    ll.quantity AS "quantity",
-    ll.version AS "version",
-    ll."itemSetHash" AS "itemSetHash"
-  FROM "list_lines" ll
-  WHERE ll."listId" = ANY($1)
-    AND ll."deletedAt" IS NULL
-    AND ll."approvalStatus" = 'APPROVED'
-    AND ll.quantity > 0
-  ORDER BY ll."listId", ll.position ASC, ll.id ASC
-`;
-
-/**
- * The same lines {@link CANDIDATE_LINES_SQL} reads, with its two predicates
- * lifted out into columns (plan 0057, section 3.2). `$1` is the list ids.
- *
- * The origins sheet **shows** what the run silently dropped, which is the one
- * place this codebase deliberately serves something the caller cannot act on. A
- * line the run would not have taken is a fact worth knowing while standing in a
- * dairy aisle: "the parents' house also wants milk and it has not been approved
- * yet" is actionable in a way that its absence is not. So the two predicates
- * become `approvalStatus` and the quantity, and the service turns them into
- * `NOT_APPROVED` and `SETTLED` reasons beside the row.
- *
- * A deleted line is the one thing this read drops rather than explains (plan
- * 0132). The reasons beside a row say why a run left a line the household can
- * still see alone, and a deleted line is not on anybody's list to see.
- *
- * A separate constant rather than a parameterised one, because the two reads
- * want opposite things and a flag that flips a `WHERE` clause reads as an
- * accident at every call site. The **projection** is deliberately identical to
- * {@link CANDIDATE_LINES_SQL}'s plus the one column, so the same
- * {@link CandidateLineRow} shape describes both and `mergeKey` sees exactly what
- * a run would have seen.
- */
-export const SHEET_CANDIDATE_LINES_SQL = `
-  SELECT
-    ll.id AS "id",
-    ll."listId" AS "listId",
-    ll.content AS "content",
-    ll.quantity AS "quantity",
-    ll.version AS "version",
-    ll."itemSetHash" AS "itemSetHash",
-    ll."approvalStatus" AS "approvalStatus"
-  FROM "list_lines" ll
-  WHERE ll."listId" = ANY($1)
-    AND ll."deletedAt" IS NULL
-  ORDER BY ll."listId", ll.position ASC, ll.id ASC
-`;
-
-/**
- * The product sets of the candidate lines, in attachment order (plan 0048,
- * section 1.1). `$1` is the line ids.
- *
- * One query for every line rather than a relation load per line: a run reads a
- * few hundred lines and the N+1 would be the whole cost of the feature.
- */
-export const CANDIDATE_LINE_ITEMS_SQL = `
-  SELECT lli."lineId" AS "lineId", lli."itemId" AS "itemId"
-  FROM "list_line_items" lli
-  WHERE lli."lineId" = ANY($1)
-  ORDER BY lli."lineId", lli.position ASC, lli."createdAt" ASC
-`;
-
-/**
  * The four numbers a **finished** basket's history row shows, for a whole page
  * (plan 0136, section 7.4). `$1` is the basket ids.
  *
@@ -270,6 +184,23 @@ export interface WritableListRow {
  *
  * A line settled twice, in two shops, counts from the first: `min(settledAt)`
  * per line, and the trip's own start is the earliest of those.
+ *
+ * ## It reads the zone line, because plan 0136 deleted the basket line
+ *
+ * A visit is a standing settlement of a finished trip joined to `list_lines`
+ * for the text and to `list_line_items` for the products.
+ *
+ * `pickItemId` is **always null** now: it was the basket line's stored pick, and
+ * a basket stores none. The column stays on the row so
+ * {@link GeneratedListOrderService} keeps one shape to match on, and what it
+ * held moves into `settledItemIds`, which is the union of what the shopper said
+ * they got and what the line itself names. Both belong there: the order matches
+ * a composed row by **any** product that identifies it, and a line whose only
+ * settle recorded no product would otherwise be matchable by its text alone.
+ *
+ * The grouping is by `(basket, zone line)` rather than by basket line, which is
+ * the same grouping the trips read applies and for the same reason (plan 0094):
+ * one zone line is one shelf, however many baskets or rows reached it.
  */
 export const ORDER_HISTORY_SQL = `
   WITH "trips" AS (
@@ -289,16 +220,20 @@ export const ORDER_HISTORY_SQL = `
   ),
   "visits" AS (
     SELECT
-      gll."generatedListId" AS "tripId",
-      gll.content AS "content",
-      gll."itemId" AS "pickItemId",
-      array_remove(array_agg(DISTINCT ls."itemId"), NULL) AS "settledItemIds",
+      ls."basketId" AS "tripId",
+      ll.content AS "content",
+      NULL::uuid AS "pickItemId",
+      array_remove(
+        array_agg(DISTINCT ls."itemId") || array_agg(DISTINCT lli."itemId"),
+        NULL
+      ) AS "settledItemIds",
       min(ls."settledAt") AS "settledAt"
-    FROM "generated_list_lines" gll
-    JOIN "line_settlements" ls ON ls."generatedListLineId" = gll.id
-    WHERE gll."generatedListId" IN (SELECT id FROM "trips")
+    FROM "line_settlements" ls
+    JOIN "list_lines" ll ON ll.id = ls."lineId"
+    LEFT JOIN "list_line_items" lli ON lli."lineId" = ll.id
+    WHERE ls."basketId" IN (SELECT id FROM "trips")
       AND ls."revertedAt" IS NULL
-    GROUP BY gll."generatedListId", gll.id, gll.content, gll."itemId"
+    GROUP BY ls."basketId", ll.id, ll.content
   ),
   "starts" AS (
     SELECT "tripId", min("settledAt") AS "startedAt"
@@ -332,20 +267,3 @@ export interface OrderHistoryRow {
   offsetSeconds: number;
 }
 
-/** One row of {@link CANDIDATE_LINES_SQL}. */
-export interface CandidateLineRow {
-  id: string;
-  listId: string;
-  content: string;
-  quantity: number;
-  version: number;
-  itemSetHash: string | null;
-}
-
-/**
- * One row of {@link SHEET_CANDIDATE_LINES_SQL}: a candidate line plus the
- * approval the run would have filtered on.
- */
-export interface SheetCandidateLineRow extends CandidateLineRow {
-  approvalStatus: LineApprovalStatus;
-}

@@ -1,3 +1,4 @@
+import { COVERED_LINES_SQL } from '../baskets/basket.sql';
 import {
   LineApprovalStatus,
   ListPermission,
@@ -30,8 +31,6 @@ import {
   ZoneMembership,
 } from '../entities';
 import {
-  CANDIDATE_LINES_SQL,
-  SHEET_CANDIDATE_LINES_SQL,
 } from '../generated-lists/generated-list.sql';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { MergeService } from '../merge/merge.service';
@@ -434,24 +433,24 @@ describeIntegration(
         expect(standing.id).toBeDefined();
       });
 
-      it('never composes it into a run, and never offers it on the origins sheet', async () => {
+      it('is never a row of a basket that covers its list', async () => {
         const standing = await seedLine('Bread');
         const going = await seedLine('Milk');
         await lines.delete({ userId: ids.owner, lineId: going.id });
 
-        const composed = await dataSource.query(CANDIDATE_LINES_SQL, [
+        // The run composed candidate lines until plan 0136 and composes none
+        // now, so the question moved with it: a deleted line is not **covered**,
+        // which is the one predicate every basket read shares. `deletedAt IS
+        // NULL` sits in `COVERED_LINES_SQL` for exactly this.
+        const covered = await dataSource.query(COVERED_LINES_SQL, [
           [ids.list],
+          // No basket, so no purchase is in scope and the second half of the
+          // predicate cannot put a line back on the screen.
+          randomUUID(),
+          null,
+          false,
         ]);
-        expect(composed.map((row: { id: string }) => row.id)).toEqual([
-          standing.id,
-        ]);
-
-        // The sheet shows what a run dropped and why, and a deleted line is the
-        // one thing it drops rather than explains (section 4.2).
-        const offered = await dataSource.query(SHEET_CANDIDATE_LINES_SQL, [
-          [ids.list],
-        ]);
-        expect(offered.map((row: { id: string }) => row.id)).toEqual([
+        expect(covered.map((row: { id: string }) => row.id)).toEqual([
           standing.id,
         ]);
       });

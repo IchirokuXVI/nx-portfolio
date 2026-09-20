@@ -195,7 +195,6 @@ describeIntegration('core’s dashboard block (real Postgres)', () => {
         status,
         generatedAt: at(MIDDLE_DAY),
         kind,
-        defaultTargetListId: null,
         idempotencyKey: null,
       })
     );

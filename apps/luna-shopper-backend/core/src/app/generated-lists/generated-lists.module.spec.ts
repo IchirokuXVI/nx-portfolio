@@ -1,3 +1,12 @@
+import { BasketDemandService } from '../baskets/basket-demand.service';
+import { BasketLineAddService } from '../baskets/basket-line-add.service';
+import { BasketLiveService } from '../baskets/basket-live.service';
+import { BasketReadService } from '../baskets/basket-read.service';
+import { BasketRevertService } from '../baskets/basket-revert.service';
+import { BasketRowRenameService } from '../baskets/basket-row-rename.service';
+import { BasketRowResolver } from '../baskets/basket-row-resolver';
+import { BasketSettleService } from '../baskets/basket-settle.service';
+import { BasketWriteContext } from '../baskets/basket-write.context';
 import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { ListsModule } from '../lists/lists.module';
@@ -7,7 +16,6 @@ import { ZonesModule } from '../zones/zones.module';
 import { GeneratedListSweepService } from './generated-list-sweep.service';
 import { GeneratedListService } from './generated-list.service';
 import { GeneratedListsModule } from './generated-lists.module';
-import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * The wiring, which is the one thing about this module that nothing else here
@@ -40,14 +48,15 @@ describe('GeneratedListsModule wiring', () => {
     expect(imports).toContain(ZonesModule);
   });
 
-  it('can reach LineService, which the write back goes through', () => {
-    // The export this file exists for. Without it a basket line with a target
-    // list could not be created through the ordinary add path, and core refuses
-    // to start rather than failing at the first write.
+  it('can reach LineService, which every basket write goes through', () => {
+    // The export this file exists for. Since plan 0136 a basket writes no row
+    // of its own: the add, the demand and the rename all act on a list line
+    // through this service, so without the export core refuses to start rather
+    // than failing at the first write.
     expect(exportsOf(ListsModule)).toContain(LineService);
   });
 
-  it('can reach ListAccessService, which resolves a target list to its zone', () => {
+  it('can reach ListAccessService, which resolves a covered list to its zone', () => {
     expect(exportsOf(ListsModule)).toContain(ListAccessService);
   });
 
@@ -55,15 +64,31 @@ describe('GeneratedListsModule wiring', () => {
     expect(exportsOf(ProfilesModule)).toContain(ProfileService);
   });
 
-  it('provides the waiting settlements, which two origin inserts inject', () => {
-    // Plan 0092 section 4.3's seam. It does nothing until plan 0093 fills it,
-    // and it is injected by the two services that insert an origin row, so a
-    // missing provider is core refusing to start rather than a route that
-    // answers wrongly. That is the right failure and it is still one worth
-    // catching in a second rather than in CI's stack.
-    expect(providersOf(GeneratedListsModule)).toContain(
-      WaitingSettlementService
-    );
+  it('provides the read and the five writes on a row', () => {
+    // Plan 0136, section 10. The waiting settlements, the origins, the split,
+    // the outstanding, the stored basket line and its rename went with the
+    // three tables, and what stands in their place is a read of `list_lines`
+    // and five writes on a row of it. They live in `baskets/` and are declared
+    // here on purpose (the module's own comment says why), so this is the one
+    // spec that can see the move.
+    const providers = providersOf(GeneratedListsModule);
+    expect(providers).toContain(BasketReadService);
+    expect(providers).toContain(BasketLiveService);
+    expect(providers).toContain(BasketRowResolver);
+    expect(providers).toContain(BasketWriteContext);
+    expect(providers).toContain(BasketSettleService);
+    expect(providers).toContain(BasketRevertService);
+    expect(providers).toContain(BasketDemandService);
+    expect(providers).toContain(BasketLineAddService);
+    expect(providers).toContain(BasketRowRenameService);
+  });
+
+  it('exports the basket read, which the history and the back office count through', () => {
+    // Plan 0136, section 7.4 and 7.5: an open basket has no stored rows to
+    // count, so both callers compose them. An export rather than a second
+    // definition of a basket row in SQL, which would be free to disagree with
+    // the screen.
+    expect(exportsOf(GeneratedListsModule)).toContain(BasketReadService);
   });
 
   it('provides the sweep, which nothing injects and Nest alone would start', () => {

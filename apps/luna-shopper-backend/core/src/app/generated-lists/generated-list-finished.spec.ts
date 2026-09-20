@@ -1,6 +1,5 @@
 import {
   BasketKind,
-  GeneratedLineOrigin,
   GeneratedListStatus,
   ParticipantKind,
   RealtimeEvent,
@@ -12,7 +11,15 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import type { DataSource } from 'typeorm';
-import type { GeneratedList, GeneratedListLine } from '../entities';
+import { BasketDemandService } from '../baskets/basket-demand.service';
+import { BasketLineAddService } from '../baskets/basket-line-add.service';
+import type { BasketReadService } from '../baskets/basket-read.service';
+import { BasketRevertService } from '../baskets/basket-revert.service';
+import { BasketRowRenameService } from '../baskets/basket-row-rename.service';
+import type { BasketRowResolver } from '../baskets/basket-row-resolver';
+import { BasketSettleService } from '../baskets/basket-settle.service';
+import { BasketWriteContext } from '../baskets/basket-write.context';
+import type { GeneratedList } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { LineService } from '../lists/line.service';
 import type { ListAccessService } from '../lists/list-access.service';
@@ -21,19 +28,10 @@ import {
   fakeBasketTripRows,
   fakeUpdateDataSource,
 } from './basket-trip-rows.fake';
-import { GeneratedListBasketService } from './generated-list-basket.service';
-import { GeneratedListLineService } from './generated-list-line.service';
-import { GeneratedListOriginSettledService } from './generated-list-origin-settled.service';
-import { GeneratedListOriginsService } from './generated-list-origins.service';
-import { GeneratedListOutstandingService } from './generated-list-outstanding.service';
-import { GeneratedListReopenService } from './generated-list-reopen.service';
-import { GeneratedListSettleService } from './generated-list-settle.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
-import { GeneratedListSplitService } from './generated-list-split.service';
 import { GeneratedListService } from './generated-list.service';
 import type { ZoneLineClaimRef } from './line-claim.sql';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
-import { WaitingSettlementService } from './waiting-settlement.service';
 
 /**
  * A finished basket refuses every write (plan 0059, section 3).
@@ -44,21 +42,29 @@ import { WaitingSettlementService } from './waiting-settlement.service';
  * never revisited. The next write path to land goes in {@link WRITES} or this
  * file is the wrong shape.
  *
+ * **There are five write paths since plan 0136**, not twelve. The stored basket
+ * line is gone and with it the line add, the line edit, the delete, the reorder,
+ * the split, the outstanding move, both origin writes and the guest composer
+ * (section 10). Settle, revert, demand, add and rename act on a **row of list
+ * lines** instead, and each of them asks the status the same way, immediately
+ * after {@link BasketWriteContext.open} and before it resolves a row. The table
+ * below is that list, and it shrinking is the point rather than a loss of
+ * coverage: there are fewer places for the gap to reopen in.
+ *
  * It asserts the **code**, `generated_list_finished`, and never the message. The
  * messages differ per path, and the code is what a client branches on (plan
  * 0054, section 4).
  *
  * Every service is constructed with the thinnest fakes that reach the guard, and
- * every write repository throws, so "writes nothing when it refuses" is a fact
+ * every write collaborator throws, so "writes nothing when it refuses" is a fact
  * about the harness surviving rather than about a spy that was not called. The
- * same table is run once more against an `ACTIVE` basket to prove each refusal
+ * same table is run once more against an `OPEN` basket to prove each refusal
  * came from the status rather than from an earlier check the thin fakes tripped.
  */
 
 const OWNER = 'u-owner';
 const ACTOR = 'p-actor';
 const BASKET = 'gl-1';
-const LINE = 'gll-1';
 const ZONE = 'z-flat';
 const LIST = 'l-flat';
 const ZONE_LINE = 'zl-1';
@@ -87,70 +93,29 @@ function basketWith(status: GeneratedListStatus): GeneratedList {
     status,
     generatedAt: new Date('2026-08-28T10:00:00.000Z'),
     pricingProfileId: null,
-    defaultTargetListId: null,
     idempotencyKey: null,
   } as GeneratedList;
 }
 
-function lineOf(basket: GeneratedList): GeneratedListLine {
-  return {
-    id: LINE,
-    generatedListId: basket.id,
-    content: 'Milk',
-    quantity: 2,
-    settledQuantity: 1,
-    itemId: null,
-    origin: GeneratedLineOrigin.ADDED,
-    targetListId: null,
-    position: 1,
-  } as GeneratedListLine;
-}
-
 interface Harness {
-  /** Every write of section 3.1's table, plus the two the table omits. */
+  /** Every write of section 3.1's table, as plan 0136 section 5 leaves it. */
   writes: Record<string, () => Promise<unknown>>;
   /** Everything that was said out loud, which on a refusal must be nothing. */
   events: RealtimeEvent[];
   claims: FakeLineClaims;
+  /** The write context every one of the five opens the basket through. */
+  context: BasketWriteContext;
 }
 
 function build(status: GeneratedListStatus): Harness {
   const basket = basketWith(status);
-  const line = lineOf(basket);
   const events: RealtimeEvent[] = [];
 
   const refuse = (what: string) => () => {
     throw new Error(`a finished basket ${what}`);
   };
 
-  const lists = { findOne: async () => basket };
-  const lines = {
-    findOne: async () => line,
-    find: async () => [line],
-    count: async () => 1,
-    save: refuse('saved a line'),
-    delete: refuse('deleted a line'),
-  };
-  const options = {
-    findOne: async () => ({ generatedListLineId: LINE, itemId: ITEM }),
-    find: async () => [],
-    insert: refuse('inserted an option'),
-  };
-  const origins = {
-    findOne: async () => ({
-      generatedListLineId: LINE,
-      lineId: ZONE_LINE,
-      listId: LIST,
-      quantity: 2,
-    }),
-    find: async () => [],
-  };
-  const zoneLines = {
-    findOne: async () => ({ id: ZONE_LINE, listId: LIST, quantity: 2 }),
-    find: async () => [],
-    save: refuse('saved a zone line'),
-  };
-  const noRows = { find: async () => [], findOne: async () => null };
+  const baskets = { findOne: async () => basket };
   const dataSource = {
     transaction: refuse('opened a transaction'),
   } as unknown as DataSource;
@@ -174,6 +139,7 @@ function build(status: GeneratedListStatus): Harness {
     userId: OWNER,
     kind: ParticipantKind.REGISTERED,
     generatedListId: BASKET,
+    invitedAt: new Date('2026-08-28T10:00:00.000Z'),
   };
   const sharing = {
     liveParticipantById: async () => participant,
@@ -184,230 +150,144 @@ function build(status: GeneratedListStatus): Harness {
       guestNumber: null,
       userId: OWNER,
     }),
-    seesZoneData: async () => true,
     ensureOwnerParticipant: async () => ({ id: ACTOR }),
-    writableAmong: async (listIds: string[]) => listIds,
-    writableIntersection: async (listIds: string[]) => listIds,
+    // The redaction, per list since plan 0136 section 3.4: this actor writes
+    // the one list the basket covers, so nothing below is refused for want of
+    // access and the status is left as the only reason a write can fail.
+    writableAmong: async (_userId: string, listIds: string[]) =>
+      new Set(listIds),
   } as unknown as GeneratedListSharingService;
 
-  const generated = {
-    load: async () => basket,
-    viewFor: async () => ({ id: BASKET }),
-    lineViewFor: async () => ({ id: LINE }),
-    basketLineViewFor: async () => ({ id: LINE }),
-    basketLineViewsFor: async () => [],
-  } as unknown as GeneratedListService;
+  // The coverage, stated rather than queried: one list in one zone.
+  const coverage = {
+    listsOf: async () => [{ listId: LIST, zoneId: ZONE }],
+  };
 
-  // Plan 0092's seam, filled by plan 0093. Real rather than stubbed, because a
-  // finished basket must keep its waiting units rather than place them.
-  const waiting = new WaitingSettlementService(claims.service, publisher);
-  const lineWrites = new GeneratedListLineService(
-    lines as never,
-    options as never,
-    generated,
-    {} as unknown as ListAccessService,
-    {} as unknown as LineService,
-    claims.service,
+  // The resolver refuses every key, which is what lets the `OPEN` run below
+  // prove the refusal it got was the status: a basket that is open gets past
+  // the status check and fails here instead, with a different code.
+  const resolver = {
+    resolve: async () => {
+      throw new NotFoundException('Row not found');
+    },
+  } as unknown as BasketRowResolver;
+
+  const read = {
+    view: refuse('read itself back'),
+    progressOf: refuse('counted itself'),
+  } as unknown as BasketReadService;
+
+  const context = new BasketWriteContext(
+    baskets as never,
+    coverage as never,
     sharing,
-    waiting,
-    publisher,
-    // The rename (plan 0113). No test here renames, because a finished basket
-    // is refused before the line service reaches it.
-    {} as never
+    resolver,
+    read
   );
-  const settle = new GeneratedListSettleService(
+
+  const zoneLines = {
+    add: refuse('added a zone line'),
+    addQuantity: refuse('changed what a list asks for'),
+    rename: refuse('renamed a zone line'),
+  } as unknown as LineService;
+  const listAccess = {
+    requireWrite: refuse('checked write access'),
+    requireDecide: refuse('checked the demand rule'),
+  } as unknown as ListAccessService;
+  const profiles = {
+    pricingProfileId: refuse('priced anything'),
+  } as unknown as ProfileService;
+
+  const settle = new BasketSettleService(
     dataSource,
-    lists as never,
-    lines as never,
-    origins as never,
-    options as never,
-    noRows as never,
-    sharing,
-    generated,
+    baskets as never,
+    context,
     claims.service,
     publisher
   );
-  const reopen = new GeneratedListReopenService(
+  const revert = new BasketRevertService(
     dataSource,
-    lists as never,
-    lines as never,
-    sharing,
-    generated,
+    context,
     claims.service,
     publisher
   );
-  const outstanding = new GeneratedListOutstandingService(
-    lists as never,
-    lines as never,
-    sharing,
-    generated,
-    settle,
-    reopen
-  );
-  const basketWrites = new GeneratedListBasketService(
-    lists as never,
-    lines as never,
-    options as never,
-    noRows as never,
-    generated,
-    sharing,
-    lineWrites,
-    publisher,
-    { listsOf: async () => [] } as never
-  );
-  const splitWrites = new GeneratedListSplitService(
-    dataSource,
-    lists as never,
-    lines as never,
-    options as never,
-    noRows as never,
-    sharing,
-    generated,
+  const demand = new BasketDemandService(
+    context,
+    zoneLines,
+    listAccess,
     publisher
   );
-  const originWrites = new GeneratedListOriginsService(
+  const add = new BasketLineAddService(context, zoneLines, profiles, publisher);
+  const rename = new BasketRowRenameService(
     dataSource,
-    lists as never,
-    lines as never,
-    origins as never,
-    zoneLines as never,
-    noRows as never,
-    noRows as never,
+    context,
+    zoneLines,
+    listAccess,
     sharing,
-    generated,
-    lineWrites,
-    claims.service,
-    waiting,
-    publisher,
-    { listsOf: async () => [] } as never
-  );
-  const settledWrites = new GeneratedListOriginSettledService(
-    lists as never,
-    lines as never,
-    origins as never,
-    zoneLines as never,
-    noRows as never,
-    sharing,
-    generated,
-    originWrites,
-    settle,
-    reopen
+    publisher
   );
 
   const writes: Harness['writes'] = {
-    'settle a line': () =>
+    'settle a row': () =>
       settle.settle({
-        generatedListId: BASKET,
-        lineId: LINE,
+        basketId: BASKET,
         participantId: ACTOR,
+        rowKey: ZONE_LINE,
         outcome: SettlementOutcome.BOUGHT,
-      }),
-    'reopen a settled line': () =>
-      reopen.reopen({
-        generatedListId: BASKET,
-        lineId: LINE,
-        participantId: ACTOR,
-      }),
-    'owner adds a line': () =>
-      lineWrites.addLine({
-        userId: OWNER,
-        generatedListId: BASKET,
-        content: 'Bread',
-      }),
-    'owner edits a line': () =>
-      lineWrites.updateLine({
-        userId: OWNER,
-        generatedListId: BASKET,
-        lineId: LINE,
-        quantity: 3,
-      }),
-    'owner deletes a line': () =>
-      lineWrites.deleteLine({
-        userId: OWNER,
-        generatedListId: BASKET,
-        lineId: LINE,
-      }),
-    'owner reorders the lines': () =>
-      lineWrites.reorderLines({
-        userId: OWNER,
-        generatedListId: BASKET,
-        lineIds: [LINE],
-      }),
-    'split a line by the product that was got': () =>
-      splitWrites.split({
-        generatedListId: BASKET,
-        lineId: LINE,
-        participantId: ACTOR,
-        // The line asks for two and one is settled, so this is the outstanding
-        // amount and the stale guard is not what refuses the request.
-        from: 1,
-        shares: [{ itemId: ITEM, quantity: 1 }],
-      }),
-    'participant adds a line': () =>
-      basketWrites.addLine({
-        generatedListId: BASKET,
-        participantId: ACTOR,
-        content: 'Batteries',
-      }),
-    'move what is outstanding': () =>
-      outstanding.setOutstanding({
-        generatedListId: BASKET,
-        lineId: LINE,
-        participantId: ACTOR,
-        outstanding: 0,
-        from: 1,
-      }),
-    // Plan 0092's replacement for plan 0058's bind: raising a list that holds
-    // no matching line is what sends the line there, so it is the same write as
-    // the row below with no zone line named.
-    'send a line to a list that does not hold it': () =>
-      originWrites.setOriginQuantity({
-        generatedListId: BASKET,
-        lineId: LINE,
-        participantId: ACTOR,
-        sourceListId: LIST,
-        quantity: 1,
-        from: 0,
-      }),
-    'change what a household asked for': () =>
-      originWrites.setOriginQuantity({
-        generatedListId: BASKET,
-        lineId: LINE,
-        participantId: ACTOR,
-        sourceListId: LIST,
-        sourceLineId: ZONE_LINE,
         quantity: 1,
         from: 2,
       }),
-    // Plan 0104 section 4's other reel on the same row: what one list **got**,
-    // which writes settlements and so is refused for the reason the settle is.
-    'change what a household got': () =>
-      settledWrites.setOriginSettled({
-        generatedListId: BASKET,
-        lineId: LINE,
+    'take units back': () =>
+      revert.revert({
+        basketId: BASKET,
         participantId: ACTOR,
-        sourceLineId: ZONE_LINE,
-        settled: 2,
-        from: 0,
+        rowKey: ZONE_LINE,
+        target: 'UNITS',
+        units: 1,
+        from: 1,
+      }),
+    'change what a household asks for': () =>
+      demand.setDemand({
+        basketId: BASKET,
+        participantId: ACTOR,
+        rowKey: ZONE_LINE,
+        quantity: 1,
+        from: 2,
+      }),
+    'put a line on one of the basket’s lists': () =>
+      add.add({
+        basketId: BASKET,
+        participantId: ACTOR,
+        userId: OWNER,
+        targetListId: LIST,
+        content: 'Batteries',
+        itemIds: [ITEM],
+      }),
+    'rename a row': () =>
+      rename.rename({
+        basketId: BASKET,
+        participantId: ACTOR,
+        userId: OWNER,
+        rowKey: ZONE_LINE,
+        content: 'Semi skimmed milk',
       }),
   };
 
-  return { writes, events, claims };
+  return { writes, events, claims, context };
 }
 
 const WRITES = Object.keys(build(GeneratedListStatus.FINISHED).writes);
 
 describe('a finished basket refuses every write (section 3)', () => {
-  it('covers every row of the table, and the two rows it omits', () => {
-    // Nine rows in section 3.1, plus reorder (which saves every line of the
-    // basket), the origin quantity edit (which saves the basket line as well as
-    // the zone line) and plan 0104's origin settled write. Section 3.2's one
-    // rule covers all three.
-    expect(WRITES).toHaveLength(12);
+  it('covers every write a basket still has', () => {
+    // Five, and the number is the plan's: settle, revert, demand, add and
+    // rename (plan 0136, section 5). Twelve rows became five because eleven of
+    // the old ones wrote to a table that no longer exists.
+    expect(WRITES).toHaveLength(5);
   });
 
   describe.each(WRITES)('%s', (name) => {
-    it('is refused on a COMPLETED basket with the code the client branches on', async () => {
+    it('is refused on a FINISHED basket with the code the client branches on', async () => {
       const harness = build(GeneratedListStatus.FINISHED);
       expect(await codeOf(harness.writes[name]())).toBe(FINISHED);
     });
@@ -424,22 +304,19 @@ describe('a finished basket refuses every write (section 3)', () => {
       expect(harness.claims.calls).toEqual([]);
     });
 
-    it('leaves a purchase with no list where it is (plan 0093, section 3.3)', async () => {
-      // A basket that finishes with waiting units keeps them, attached to no
-      // list. Every write that could create an origin is refused here, and
-      // re-homing happens only inside one of those, so the units stay basket
-      // history: the shopper bought them, nobody was ever told for whom, and the
-      // record says exactly that. Putting them on the last list as extra was the
-      // alternative, and the last list is whichever the shopper happened to
-      // raise last, which is not a fact about who wanted the units.
+    it('asks the status before it resolves a row, so nothing is read first', async () => {
+      // Was "leaves a purchase with no list where it is (plan 0093,
+      // section 3.3)". Waiting settlements are deleted (plan 0136, section 9),
+      // so the rule that replaces it is the one that made them unnecessary:
+      // every one of the five asks the status immediately after
+      // `BasketWriteContext.open` and before `opened.row(...)`. The harness's
+      // resolver throws `not_found`, so a path that resolved first would answer
+      // with that code instead of this one.
       const harness = build(GeneratedListStatus.FINISHED);
-      await codeOf(harness.writes[name]());
-      // The harness's write repositories throw, so a settlement that moved would
-      // have surfaced as a `threw:` code above rather than as this refusal.
       expect(await codeOf(harness.writes[name]())).toBe(FINISHED);
     });
 
-    it('gets past the status on an ACTIVE basket, so the refusal above was the status', async () => {
+    it('gets past the status on an OPEN basket, so the refusal above was the status', async () => {
       const harness = build(GeneratedListStatus.OPEN);
       expect(await codeOf(harness.writes[name]())).not.toBe(FINISHED);
     });
@@ -451,48 +328,26 @@ describe('a finished basket refuses every write (section 3)', () => {
  * trip is a receipt somebody will want to look at.
  */
 describe('what a finished basket still does (section 3.4)', () => {
-  it('still answers the basket to a guest who was already in it', async () => {
-    const basket = basketWith(GeneratedListStatus.FINISHED);
-    const guest = {
-      id: 'p-guest',
-      userId: null,
-      kind: ParticipantKind.GUEST,
-      generatedListId: BASKET,
-    };
-    const sharing = {
-      // The participant row is still live: finishing revokes nobody.
-      liveParticipantById: async () => guest,
-      seesZoneData: async () => false,
-      listParticipants: async () => ({
-        participants: [{ id: 'p-guest', kind: ParticipantKind.GUEST }],
-      }),
-    } as unknown as GeneratedListSharingService;
-    const generated = {
-      basketLineViewsFor: async () => [{ id: LINE }],
-    } as unknown as GeneratedListService;
+  it('still opens for a guest who was already in it', async () => {
+    // Was "still answers the basket to a guest who was already in it", which
+    // read through `GeneratedListBasketService.getBasket`. That service is
+    // deleted (plan 0136, section 10) and the read is `BasketReadService`, which
+    // has its own specs in `baskets/`. What this file can still say, and what
+    // the test was always about, is that **the status gates the writes and
+    // nothing else**: finishing revokes no participant, so the context every
+    // write opens through resolves one on a finished basket and hands back the
+    // basket, the coverage and the redaction. Each of the five then refuses on
+    // its own, which is the table above.
+    const harness = build(GeneratedListStatus.FINISHED);
 
-    const service = new GeneratedListBasketService(
-      { findOne: async () => basket } as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      generated,
-      sharing,
-      {} as unknown as GeneratedListLineService,
-      {} as unknown as CoreEventsPublisher,
-      { listsOf: async () => [] } as never
-    );
-
-    const view = await service.getBasket({
-      generatedListId: BASKET,
-      participantId: 'p-guest',
+    const opened = await harness.context.open({
+      basketId: BASKET,
+      participantId: ACTOR,
     });
 
-    // The read carries the status rather than hiding the basket, which is what
-    // lets the screen draw the trip as over instead of drawing a 404.
-    expect(view.status).toBe(GeneratedListStatus.FINISHED);
-    expect(view.me.id).toBe('p-guest');
-    expect(view.lines).toEqual([{ id: LINE }]);
+    expect(opened.basket.status).toBe(GeneratedListStatus.FINISHED);
+    expect(opened.participant.id).toBe(ACTOR);
+    expect(opened.coveredListIds).toEqual([LIST]);
   });
 
   it('lists trips, and hides ARCHIVED among them', async () => {
@@ -511,16 +366,14 @@ describe('what a finished basket still does (section 3.4)', () => {
     const service = new GeneratedListService(
       {} as DataSource,
       { createQueryBuilder: () => qb } as never,
-      { query: async () => [] } as never,
-      {} as never,
-      {} as never,
-      {} as never,
       {} as unknown as ProfileService,
       fakeLineClaims().service,
       {} as unknown as CoreEventsPublisher,
       {} as never,
       {} as never,
-      { find: async () => [] } as never
+      { find: async () => [] } as never,
+      {} as never,
+      {} as never
     );
 
     await service.listMine({ userId: OWNER });
@@ -555,8 +408,8 @@ describe('finishing and unfinishing (section 2)', () => {
     const tripsChanged: (string | undefined)[] = [];
     const tripRows = fakeBasketTripRows();
     const lists = {
-      // The one raw read an update makes: which lists the basket draws from.
-      // Two origins in one list, so the answer has to come back once.
+      // The one raw read an update makes: which lists the basket covers. Two
+      // lines in one list, so the answer has to come back once.
       query: async () => [{ listId: LIST }],
       // The owner's `where`, honoured: anybody else gets not found.
       findOne: async ({
@@ -575,10 +428,6 @@ describe('finishing and unfinishing (section 2)', () => {
     const service = new GeneratedListService(
       fakeUpdateDataSource(lists),
       lists as never,
-      { find: async () => [] } as never,
-      {} as never,
-      {} as never,
-      {} as never,
       {} as unknown as ProfileService,
       claims.service,
       {
@@ -598,7 +447,8 @@ describe('finishing and unfinishing (section 2)', () => {
       {} as never,
       {} as never,
       { find: async () => [] } as never,
-      tripRows.service
+      tripRows.service,
+      {} as never
     );
     return { service, saved, events, claims, tripsChanged, tripRows };
   }
@@ -629,8 +479,12 @@ describe('finishing and unfinishing (section 2)', () => {
         lineIds: [ZONE_LINE, 'zl-2'],
       },
     ]);
-    // And the list it draws from reads its trips again (plan 0122, section 6):
-    // a trip's head says whether it is live, and that has just changed.
+    // And the trip rows frozen at the finish are thawed in the same transaction
+    // (plan 0136, section 6): a basket has rows in `basket_trip_rows` exactly
+    // while it is not `OPEN`.
+    expect(w.tripRows.calls).toEqual([{ call: 'thaw', basketId: BASKET }]);
+    // And the list it covers reads its trips again (plan 0122, section 6): a
+    // trip's head says whether it is live, and that has just changed.
     expect(w.tripsChanged).toEqual([LIST]);
   });
 
@@ -648,6 +502,7 @@ describe('finishing and unfinishing (section 2)', () => {
     expect(w.saved).toEqual([]);
     expect(w.events).toEqual([]);
     expect(w.claims.calls).toEqual([]);
+    expect(w.tripRows.calls).toEqual([]);
     expect(w.tripsChanged).toEqual([]);
   });
 });

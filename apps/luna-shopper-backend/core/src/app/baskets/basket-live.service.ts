@@ -97,12 +97,11 @@ export class BasketLiveService {
             // here so the message comes from the service before the constraint
             // has to refuse it: no name, open, no run behind it, and no profile
             // frozen, because a basket that never ends cannot freeze a profile
-            // its owner goes on editing.
+            // its owner goes on editing (plan 0136, section 4).
             name: null,
             status: GeneratedListStatus.OPEN,
             generatedAt: new Date(),
             pricingProfileId: null,
-            defaultTargetListId: null,
             idempotencyKey: null,
           })
         );

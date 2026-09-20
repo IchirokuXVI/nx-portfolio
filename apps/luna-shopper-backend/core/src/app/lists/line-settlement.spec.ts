@@ -196,9 +196,13 @@ describe('line.settle (plan 0047, section 4)', () => {
     expect(w.written).toHaveLength(1);
   });
 
-  it('came through no basket, so both basket columns are null', async () => {
-    // Plan 0134, section 2: null `basketId` is the list page, and it is null
-    // together with the basket line, which this path has never had.
+  it('came through no basket, and still names the line it bought', async () => {
+    // Plan 0134, section 2: null `basketId` is the list page. It used to be
+    // null together with `generatedListLineId`, and that column is deleted with
+    // the table it pointed at (plan 0136, section 9), so what is left to assert
+    // is the other half of the same migration: `lineId` and `listId` are `NOT
+    // NULL` again, because there is no waiting settlement any more. Every
+    // purchase belongs to a line of a list, whichever screen it came from.
     const w = build({ quantity: 2 });
 
     await w.service.settle({
@@ -208,9 +212,11 @@ describe('line.settle (plan 0047, section 4)', () => {
       quantity: 2,
     });
 
+    expect(w.written[0]).not.toHaveProperty('generatedListLineId');
     expect(w.written[0]).toMatchObject({
-      generatedListLineId: null,
       basketId: null,
+      lineId: 'li1',
+      listId: LIST_ID,
     });
   });
 

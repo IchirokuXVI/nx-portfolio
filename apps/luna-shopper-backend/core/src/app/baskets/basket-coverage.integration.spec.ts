@@ -109,7 +109,6 @@ describeIntegration('what a basket covers (real Postgres)', () => {
         status: options.status ?? GeneratedListStatus.OPEN,
         generatedAt: new Date(),
         pricingProfileId: null,
-        defaultTargetListId: null,
         idempotencyKey: null,
       })
     );

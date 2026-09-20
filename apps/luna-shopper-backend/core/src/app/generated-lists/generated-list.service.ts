@@ -7,7 +7,6 @@ import {
   GeneratedListStatus,
   isOpenBasket,
   RealtimeEvent,
-  SettlementOutcome,
   type BasketSourceView,
   type CreateGeneratedListRequest,
   type GeneratedListIdRequest,
@@ -887,32 +886,7 @@ export class GeneratedListService {
     return rows.map(toBasketSourceView);
   }
 
-  /** Every line of a basket, with its origins and options attached. */
-  /** One line's view, for the endpoints that answer with a single line. */
-  /** One line, projected, for the routes that answer with a single line. */
 }
-
-/** What a basket line's own settlements say about it, for its view. */
-interface BasketLineSettlementFacts {
-  lastOutcome: SettlementOutcome | null;
-  waitingSettled: number;
-  /**
-   * How many units each of the line's origins got, keyed on its zone line (plan
-   * 0109, section 4).
-   *
-   * Read off the rows this query already loads rather than by a second, grouped
-   * one: the basket's live settlements are all here, and asking the database
-   * twice for two sums over one set of rows would be a second definition of
-   * "reverted" free to drift from the first.
-   */
-  settledPerOrigin: Map<string, number>;
-}
-
-/** A line nobody has settled: no last outcome, and nothing against any origin. */
-const NO_SETTLED_ORIGINS: ReadonlyMap<string, number> = new Map<
-  string,
-  number
->();
 
 /** One person a run shares its basket with, and the name their row carries. */
 interface InvitedMember {

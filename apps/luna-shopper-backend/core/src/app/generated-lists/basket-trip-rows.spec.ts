@@ -23,6 +23,11 @@ import { fakeLineClaims } from './line-claims.fake';
  * is the decision: which transition calls which of the two, that a rename and a
  * status set to itself call neither, and that the write happens before the
  * announcements rather than beside them.
+ *
+ * Plan 0136 section 6 changes **where the freeze reads from** and nothing about
+ * that decision: `BASKET_TRIP_ROWS_FREEZE_SQL` composes each trip's ask from the
+ * covered lines instead of from the deleted origin rows. That is the seam the
+ * fake stands in for, which is why this file did not have to move with it.
  */
 
 const OWNER = 'u-owner';
@@ -40,7 +45,6 @@ function basketWith(status: GeneratedListStatus): GeneratedList {
     status,
     generatedAt: new Date('2026-03-01T10:00:00.000Z'),
     pricingProfileId: null,
-    defaultTargetListId: null,
     idempotencyKey: null,
   } as GeneratedList;
 }
@@ -68,17 +72,13 @@ function build(
     findOne: async ({ where }: { where: { id: string } }) =>
       where.id === row.id ? row : null,
     save: async (list: GeneratedList) => list,
-    // The one raw read an update makes: which lists the basket draws from.
+    // The one raw read an update makes: which lists the basket covers.
     query: async () => [{ listId: LIST }],
   };
 
   const service = new GeneratedListService(
     fakeUpdateDataSource(lists),
     lists as never,
-    { find: async () => [] } as never,
-    {} as never,
-    {} as never,
-    {} as never,
     {} as unknown as ProfileService,
     claims.service,
     {
@@ -88,7 +88,8 @@ function build(
     {} as never,
     { liveRegistered: async () => [] } as never,
     { find: async () => [] } as never,
-    tripRows.service
+    tripRows.service,
+    {} as never
   );
 
   return { service, row, tripRows, events, claims };
@@ -149,14 +150,14 @@ describe('which transition freezes and which thaws (section 3.1)', () => {
     expect(w.tripRows.calls).toEqual([]);
   });
 
-  it('says nothing when only the default target list moved', async () => {
+  it('says nothing on a write that carries neither field', async () => {
+    // Was "says nothing when only the default target list moved".
+    // `defaultTargetListId` is deleted (plan 0136, sections 9 and 10), and what
+    // it stood for here is any write that moves no status: the ask is
+    // unchanged, so the rows it already has are the rows it keeps.
     const w = build(OPEN);
 
-    await w.service.update({
-      userId: OWNER,
-      generatedListId: BASKET,
-      defaultTargetListId: LIST,
-    });
+    await w.service.update({ userId: OWNER, generatedListId: BASKET });
 
     expect(w.tripRows.calls).toEqual([]);
   });
