@@ -70,7 +70,7 @@ export class SettlementService {
   ) {}
 
   /**
-   * Say what happened to one line on a trip (plan 0047, section 4). `DECIDE`.
+   * Say what happened to one line on a trip (plan 0047, section 4). `WRITE`.
    *
    * | Outcome | Writes a settlement | Moves the quantity |
    * | --- | --- | --- |
@@ -82,10 +82,22 @@ export class SettlementService {
    * leave the line exactly as it was and must not look like it was dealt with, so
    * it is the absence of a call rather than a third outcome.
    *
-   * `DECIDE` and not `WRITE`, because this is what `setStatus` was: the flatmate
-   * who walks the aisle and says what went in the trolley is exactly the person
-   * plan 0036 separated that permission out for, and the same call already moves
-   * an approved line's quantity, which nothing below `DECIDE` may do.
+   * ## `WRITE`, which this asked `DECIDE` for until plan 0131
+   *
+   * {@link canSettle} is the rule and this is one of its two callers, the other
+   * being the basket. They used to disagree: this asked `DECIDE` on the ground
+   * that the flatmate who walks the aisle is exactly the person plan 0036
+   * section 1.2 separated that permission out for, while plan 0051 section 2 let
+   * anybody holding `WRITE` take a line into a basket and settle it there. So a
+   * `WRITE` holder already recorded purchases on every list they can write, from
+   * the other screen, and the basket that is always there (plan 0136) makes that
+   * screen the default one. The reversal is for the settle and for nothing else:
+   * `setApproval` and an approved line's quantity keep `DECIDE`.
+   *
+   * What a settle does to the line is unchanged, which is why the looser
+   * permission costs nothing: it decrements, it never reopens an approval and it
+   * never splits, so a `WRITE` holder who settles an approved line does not put
+   * it back to `PENDING`.
    *
    * ## Nothing about it is terminal
    *
@@ -116,7 +128,7 @@ export class SettlementService {
     this.validateItemId(req.itemId);
 
     const found = await this.listAccess.getLine(req.lineId);
-    const list = await this.listAccess.requireDecide(found.listId, req.userId);
+    const list = await this.listAccess.requireSettle(found.listId, req.userId);
 
     const result = await this.dataSource.transaction(async (manager) => {
       const lines = manager.getRepository(ListLine);

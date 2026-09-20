@@ -238,6 +238,10 @@ function build(
   const dataSource = {
     transaction: async (fn: (m: typeof manager) => Promise<unknown>) =>
       fn(manager),
+    // The revert reads the standing settlements once outside its transaction,
+    // to ask the owner's standing on the lists they name (plan 0131, section
+    // 5). Same rows, a pooled connection rather than a held one.
+    getRepository: (entity: unknown) => manager.getRepository(entity),
   } as unknown as DataSource;
 
   const seesZoneData = options.actorSeesZoneData ?? true;

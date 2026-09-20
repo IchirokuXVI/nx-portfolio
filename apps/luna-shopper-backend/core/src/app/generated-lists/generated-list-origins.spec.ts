@@ -1,6 +1,7 @@
 import {
   GeneratedListStatus,
   LineApprovalStatus,
+  ListPermission,
   OriginUnavailableReason,
   ParticipantKind,
   RealtimeEvent,
@@ -16,6 +17,7 @@ import {
   ListLineItem,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import type { ListAccessService } from '../lists/list-access.service';
 import type { GeneratedListLineService } from './generated-list-line.service';
 import { GeneratedListOriginsService } from './generated-list-origins.service';
 import type { GeneratedListSharingService } from './generated-list-sharing.service';
@@ -140,6 +142,27 @@ function build(
     settlements?: SettlementSeed[];
     /** Which lists each user may write, at request time (section 4.1). */
     writable?: Record<string, string[]>;
+    /**
+     * What each user holds on a named list, where the default is not what the
+     * case is about (plan 0131, section 4).
+     *
+     * The default is `READ, WRITE, DECIDE` on every list {@link writable} names,
+     * because moving an approved quantity needs `DECIDE` since that plan and the
+     * cases here move approved quantities. A list absent from `writable` is
+     * absent from the answer whatever this says, which is what an account with no
+     * membership at all looks like.
+     */
+    permissions?: Record<string, Record<string, ListPermission[]>>;
+    /**
+     * A zone line that reads `PENDING` outside the lock and `APPROVED` inside it
+     * (plan 0131, section 4).
+     *
+     * The one row state the authorization branches on that can move between the
+     * two reads, so the service tests it again on the locked row. The map the
+     * transaction reads keeps the approval; the repository outside it answers a
+     * copy that does not.
+     */
+    approvedUnderLock?: string;
     /** Lines another live basket of the owner's is carrying (plan 0050, section 3). */
     carried?: string[];
     /** The same, naming the basket, so a seed can say "this one carries it". */
@@ -399,6 +422,27 @@ function build(
     },
   } as unknown as GeneratedListSharingService;
 
+  // The four permissions on several lists at once (plan 0131). Derived from the
+  // same `writable` fixture the sharing fake reads, so a case cannot set up an
+  // account that may write a list and holds nothing on it.
+  const listAccess = {
+    permissionsAmong: async (userId: string, listIds: readonly string[]) =>
+      new Map(
+        listIds
+          .filter((listId) => (writable[userId] ?? []).includes(listId))
+          .map((listId) => [
+            listId,
+            new Set(
+              options.permissions?.[userId]?.[listId] ?? [
+                ListPermission.READ,
+                ListPermission.WRITE,
+                ListPermission.DECIDE,
+              ]
+            ),
+          ])
+      ),
+  } as unknown as ListAccessService;
+
   const generated = {
     basketLineViewFor: async (
       _line: unknown,
@@ -516,8 +560,12 @@ function build(
     } as never,
     originRepo as never,
     {
-      findOne: async ({ where }: { where: { id: string } }) =>
-        zoneLines.get(where.id) ?? null,
+      findOne: async ({ where }: { where: { id: string } }) => {
+        const row = zoneLines.get(where.id) ?? null;
+        return row && options.approvedUnderLock === where.id
+          ? { ...row, approvalStatus: LineApprovalStatus.PENDING }
+          : row;
+      },
       find: async ({ where }: { where: { id: { _value: string[] } } }) =>
         [...zoneLines.values()].filter((row) =>
           where.id._value.includes(row.id)
@@ -543,7 +591,8 @@ function build(
     // shares the publisher, so a purchase it did announce would land in the same
     // list of events every other assertion here reads.
     new WaitingSettlementService(claims.service, publisher),
-    publisher
+    publisher,
+    listAccess
   );
 
   return {
@@ -1471,5 +1520,166 @@ describe('a list joining a line takes the units nobody asked for first', () => {
     });
 
     expect(harness.basketLine.quantity).toBe(5);
+  });
+});
+
+/**
+ * Who may move what a list asks for, through a basket (plan 0131, section 4).
+ *
+ * The rule is `canChangeDemand`, and this block is the half of it that is asked
+ * of two people at once: the basket's owner, because the owner is who delegated
+ * (plan 0051, section 6.4), and the actor, because an account holder does not
+ * gain through somebody else's basket a right they do not hold on the list page.
+ *
+ * A participant with no account never reaches this route at all: `lineOrigins`
+ * and `setOriginQuantity` both refuse anybody who fails the all or nothing rule,
+ * and a guest has no account to pass it with.
+ */
+describe('who may change what a list asks for (plan 0131, section 4)', () => {
+  /** The owner can write every list and approve on none of them. */
+  const WRITE_ONLY = {
+    [OWNER]: {
+      [LIST_A]: [ListPermission.READ, ListPermission.WRITE],
+      [LIST_B]: [ListPermission.READ, ListPermission.WRITE],
+    },
+  };
+
+  it('refuses an approved line to an owner who can write but not approve', async () => {
+    const harness = build({ permissions: WRITE_ONLY });
+
+    await expect(
+      set(harness, { listId: LIST_A, lineId: LINE_A, quantity: 4, from: 2 })
+    ).rejects.toThrow(/cannot change that quantity/);
+    // Nothing moved on either side, which is what makes the refusal safe to
+    // retry after somebody grants the permission.
+    expect(harness.zoneLines.get(LINE_A)?.quantity).toBe(5);
+    expect(harness.origins[0].quantity).toBe(2);
+  });
+
+  it('allows it when the owner can approve', async () => {
+    const harness = build();
+
+    await set(harness, {
+      listId: LIST_A,
+      lineId: LINE_A,
+      quantity: 4,
+      from: 2,
+    });
+
+    expect(harness.zoneLines.get(LINE_A)?.quantity).toBe(7);
+  });
+
+  it('needs WRITE alone on a line the household has not agreed to yet', async () => {
+    // An unapproved line is still somebody's request, so moving it is the write
+    // that made it. Plan 0076 section 4.1, unchanged by this plan.
+    const harness = build({
+      permissions: WRITE_ONLY,
+      zoneLines: [
+        {
+          id: LINE_A,
+          listId: LIST_A,
+          quantity: 5,
+          itemSetHash: MILK,
+          approvalStatus: LineApprovalStatus.PENDING,
+        },
+      ],
+    });
+
+    await set(harness, {
+      listId: LIST_A,
+      lineId: LINE_A,
+      quantity: 4,
+      from: 2,
+    });
+
+    expect(harness.zoneLines.get(LINE_A)?.quantity).toBe(7);
+  });
+
+  it('refuses a registered actor who can write but not approve, beside an owner who can', async () => {
+    const harness = build({
+      actorUserId: CO_SHOPPER,
+      actorKind: ParticipantKind.REGISTERED,
+      permissions: {
+        [CO_SHOPPER]: { [LIST_A]: [ListPermission.READ, ListPermission.WRITE] },
+      },
+    });
+
+    await expect(
+      set(harness, { listId: LIST_A, lineId: LINE_A, quantity: 4, from: 2 })
+    ).rejects.toThrow(/Only somebody who can approve lines/);
+    expect(harness.zoneLines.get(LINE_A)?.quantity).toBe(5);
+  });
+
+  it('needs WRITE alone for an adoption that moves the zone line by nothing', async () => {
+    // Section 4.1: the basket is taking over demand the list already has, and
+    // taking it over writes no demand. The parents asked for one and the
+    // adoption is at one, so nothing about what the household wants changed.
+    const harness = build({ permissions: WRITE_ONLY });
+
+    await set(harness, {
+      listId: LIST_B,
+      lineId: LINE_B,
+      quantity: 1,
+      from: 0,
+    });
+
+    expect(harness.zoneLines.get(LINE_B)?.quantity).toBe(1);
+    expect(harness.origins.map((row) => row.listId)).toContain(LIST_B);
+  });
+
+  it('lets a drag that landed where it started write nothing, as it always did', async () => {
+    // The demand rule is asked below the no-op return, not above it. A gesture
+    // that changes no demand is not a change of demand, whatever the person
+    // making it holds.
+    const harness = build({ permissions: WRITE_ONLY });
+
+    const result = await set(harness, {
+      listId: LIST_A,
+      lineId: LINE_A,
+      quantity: 2,
+      from: 2,
+    });
+
+    expect(result.listQuantity).toBe(5);
+    expect(harness.zoneLines.get(LINE_A)?.quantity).toBe(5);
+    expect(harness.events).toEqual([]);
+  });
+
+  it('re-tests the approval on the locked row, not on the one it read first', async () => {
+    // The row is read outside the lock to refuse early, and the approval is the
+    // one thing that check branches on which can move underneath it. A line
+    // approved between the two reads is refused by the second.
+    const harness = build({
+      permissions: WRITE_ONLY,
+      approvedUnderLock: LINE_A,
+    });
+
+    await expect(
+      set(harness, { listId: LIST_A, lineId: LINE_A, quantity: 4, from: 2 })
+    ).rejects.toThrow(/cannot change that quantity/);
+    expect(harness.zoneLines.get(LINE_A)?.quantity).toBe(5);
+  });
+
+  it('says on the row whether this reader can move the number', async () => {
+    const changeable = (await read(build())).origins[0];
+    const stuck = (await read(build({ permissions: WRITE_ONLY }))).origins[0];
+
+    expect(changeable.demandChangeable).toBe(true);
+    // Writable and still not movable, which is why they are two booleans: the
+    // owner covers the list and nobody here may move a number the household
+    // agreed to.
+    expect(stuck.writable).toBe(true);
+    expect(stuck.demandChangeable).toBe(false);
+  });
+
+  it('answers false on a row nobody can write', async () => {
+    const harness = build({
+      writable: { [OWNER]: [LIST_B], [CO_SHOPPER]: [LIST_A, LIST_B] },
+    });
+
+    const [origin] = (await read(harness)).origins;
+
+    expect(origin.writable).toBe(false);
+    expect(origin.demandChangeable).toBe(false);
   });
 });

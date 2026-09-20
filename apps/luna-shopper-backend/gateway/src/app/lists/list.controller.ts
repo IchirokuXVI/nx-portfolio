@@ -530,7 +530,11 @@ export class LinesController {
   }
 
   /**
-   * Say what happened to this line on a trip (plan 0047, section 4).
+   * Say what happened to this line on a trip (plan 0047, section 4). `WRITE`.
+   *
+   * `WRITE` and not `DECIDE` since plan 0131: the same person settles the same
+   * line from a basket, so one rule now answers for both surfaces. Approving a
+   * line and moving an approved quantity keep `DECIDE`.
    *
    * It replaced `POST :id/status`, which moved a line between trip states a zone
    * line no longer carries. Buying decrements the quantity by what was bought and

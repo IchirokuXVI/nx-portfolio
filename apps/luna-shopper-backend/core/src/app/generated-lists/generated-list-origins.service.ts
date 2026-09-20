@@ -4,6 +4,7 @@ import {
   GENERATED_LIST_LIMITS,
   isLiveGeneratedList,
   LineApprovalStatus,
+  ListPermission,
   LIVE_GENERATED_LIST_STATUSES,
   OriginUnavailableReason,
   RealtimeEvent,
@@ -43,6 +44,8 @@ import {
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
+import { ListAccessService } from '../lists/list-access.service';
+import { canChangeDemand } from '../lists/list-acts';
 import { toLineView } from '../lists/list.mappers';
 import { announceTripsChanged } from '../lists/trips/trips.announce';
 import { GeneratedListLineService } from './generated-list-line.service';
@@ -124,7 +127,12 @@ export class GeneratedListOriginsService {
     private readonly claims: LineClaimService,
     // The seam plan 0093 fills (section 4.3), called after every origin insert.
     private readonly waiting: WaitingSettlementService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // All four permissions on several lists at once (plan 0131), which
+    // `GeneratedListSharingService.writableAmong` cannot answer: the demand rule
+    // branches on `DECIDE` and `MANAGE` as well. Last in the list on purpose, so
+    // that adding it shifts no existing positional argument in the specs.
+    private readonly listAccess: ListAccessService
   ) {}
 
   // --- The read --------------------------------------------------------------
@@ -169,12 +177,20 @@ export class GeneratedListOriginsService {
     // moment anybody edits either side of the snapshot (section 3.1).
     const sourceLines = await this.zoneLinesById(rows.map((row) => row.lineId));
     const settledHere = await this.settledPerOrigin(line.id);
-    // The **owner's** standing and not the reader's, because plan 0051 section
-    // 6.4 makes the owner's access what authorizes every settle.
-    const ownerWritable = await this.sharing.writableAmong(
+    // The **owner's** standing, because plan 0051 section 6.4 makes the owner's
+    // access what authorizes every settle, and the **reader's** beside it,
+    // because plan 0131 asks both before a quantity moves. All four permissions
+    // rather than `WRITE` alone, and once each for the whole sheet rather than
+    // once per row.
+    const originListIds = rows.map((row) => row.listId);
+    const ownerHolds = await this.listAccess.permissionsAmong(
       list.ownerUserId,
-      rows.map((row) => row.listId)
+      originListIds
     );
+    const actorHolds =
+      actorUserId === list.ownerUserId
+        ? ownerHolds
+        : await this.listAccess.permissionsAmong(actorUserId, originListIds);
 
     // Read once and used twice: the candidates are drawn from it and the others
     // are what is left of it, so a list cannot be missing from both because two
@@ -206,26 +222,17 @@ export class GeneratedListOriginsService {
     return {
       generatedListId: list.id,
       lineId: line.id,
-      origins: rows.map((row) => ({
-        originId: row.id,
-        listId: row.listId,
-        lineId: row.lineId,
-        zoneId: row.zoneId,
-        ...named(names, row.listId),
-        contributed: row.quantity,
-        // Zero for an origin whose zone line has been deleted underneath the
-        // basket, which plan 0050 section 1 makes an ordinary thing to have in a
-        // history rather than an error.
-        listQuantity: sourceLines.get(row.lineId)?.quantity ?? 0,
-        settledHere: settledHere.get(row.lineId) ?? 0,
-        writable: ownerWritable.has(row.listId),
-        fromRun: fromRun.has(row.listId),
-        // `APPROVED` for a zone line that is gone, under the same rule as the
-        // zero above: a line nobody can find is not waiting for anybody.
-        approvalStatus:
-          sourceLines.get(row.lineId)?.approvalStatus ??
-          LineApprovalStatus.APPROVED,
-      })),
+      origins: rows.map((row) =>
+        this.originRow(
+          row,
+          names,
+          sourceLines,
+          settledHere,
+          fromRun,
+          ownerHolds,
+          actorHolds
+        )
+      ),
       candidates: candidates.map((row) => ({
         ...row,
         ...named(names, row.listId),
@@ -238,6 +245,55 @@ export class GeneratedListOriginsService {
           ...named(names, row.listId),
           fromRun: fromRun.has(row.listId),
         })),
+    };
+  }
+
+  /**
+   * One origin row, including what this reader may do to it.
+   *
+   * `writable` is coverage, which is the owner's `WRITE` (plan 0051, section
+   * 6.4), and `demandChangeable` is the demand rule of plan 0131 applied to the
+   * owner and to the reader against the line as it is approved now. The second
+   * is false on a row that is not the first, which is what makes the screen's
+   * two controls answerable from two booleans instead of from the permission
+   * sets the client never sees.
+   */
+  private originRow(
+    row: GeneratedListLineOrigin,
+    names: ReadonlyMap<string, NamedList>,
+    sourceLines: ReadonlyMap<string, ListLine>,
+    settledHere: ReadonlyMap<string, number>,
+    fromRun: ReadonlySet<string>,
+    ownerHolds: ReadonlyMap<string, Set<ListPermission>>,
+    actorHolds: ReadonlyMap<string, Set<ListPermission>>
+  ): GeneratedListLineOriginDetail {
+    const owner = ownerHolds.get(row.listId) ?? EMPTY_PERMISSIONS;
+    const actor = actorHolds.get(row.listId) ?? EMPTY_PERMISSIONS;
+    // `APPROVED` for a zone line that is gone, under the same rule as the zero
+    // below: a line nobody can find is not waiting for anybody.
+    const approvalStatus =
+      sourceLines.get(row.lineId)?.approvalStatus ??
+      LineApprovalStatus.APPROVED;
+    const writable = owner.has(ListPermission.WRITE);
+    return {
+      originId: row.id,
+      listId: row.listId,
+      lineId: row.lineId,
+      zoneId: row.zoneId,
+      ...named(names, row.listId),
+      contributed: row.quantity,
+      // Zero for an origin whose zone line has been deleted underneath the
+      // basket, which plan 0050 section 1 makes an ordinary thing to have in a
+      // history rather than an error.
+      listQuantity: sourceLines.get(row.lineId)?.quantity ?? 0,
+      settledHere: settledHere.get(row.lineId) ?? 0,
+      writable,
+      demandChangeable:
+        writable &&
+        canChangeDemand(owner, approvalStatus) &&
+        canChangeDemand(actor, approvalStatus),
+      fromRun: fromRun.has(row.listId),
+      approvalStatus,
     };
   }
 
@@ -523,8 +579,11 @@ export class GeneratedListOriginsService {
     if (!source || source.listId !== req.sourceListId) {
       throw new NotFoundException('Line not found');
     }
-    await this.requireWritable(list, actorUserId, req.sourceListId);
-
+    const access = await this.demandChangeAccess(
+      list,
+      actorUserId,
+      req.sourceListId
+    );
     const settledHere = (await this.settledPerOrigin(line.id)).get(
       sourceLineId
     );
@@ -544,9 +603,22 @@ export class GeneratedListOriginsService {
     if (delta === 0) {
       // A drag that landed where it started is not an error, and it writes
       // nothing rather than writing the same numbers again.
-      return this.unchanged(line, existing, source, seesZoneData);
+      return this.unchanged(line, existing, source, seesZoneData, actorUserId);
     }
-    if (!existing) {
+    if (existing) {
+      // An edit moves the zone line by the whole delta, and the delta is not
+      // zero here, so this gesture certainly changes what the list asks for and
+      // can be refused on the row read above rather than after a transaction is
+      // opened (plan 0131, section 4). **Below the no-op return**, because a
+      // drag that landed where it started changes no demand and must stay the
+      // write of nothing that it has always been.
+      //
+      // An adoption is not tested here at all: what it moves is
+      // `max(0, quantity - listQuantity)` against the **locked** row, and one
+      // that lands on zero writes no demand. Either way the rule runs again
+      // inside the lock, on the approval as it stands at the write.
+      this.requireDemandChange(access, source.approvalStatus);
+    } else {
       await this.checkAdoptable(list, line, source);
     }
 
@@ -557,11 +629,18 @@ export class GeneratedListOriginsService {
       throw new NotFoundException('List not found');
     }
 
-    const written = await this.write(line, existing, sourceLineId, req, {
-      zoneId: zone.zoneId,
-      quantity,
-      delta,
-    });
+    const written = await this.write(
+      line,
+      existing,
+      sourceLineId,
+      req,
+      {
+        zoneId: zone.zoneId,
+        quantity,
+        delta,
+      },
+      access
+    );
 
     // Every announcement waits for the commit, which is the convention
     // everywhere in core: an event for a write that then rolled back is a client
@@ -570,7 +649,9 @@ export class GeneratedListOriginsService {
     // `line.updated` and never `line.settled` (section 6). This is an ordinary
     // demand change: it re triggers no approval (plan 0047, section 7) and it
     // wrote no settlement, so the zone hears exactly what it hears when somebody
-    // edits the quantity on the list page.
+    // edits the quantity on the list page. Since plan 0131 the write is refused
+    // to anybody the list page refuses, which is why no approval has to be
+    // re-asked: nobody reaches this who could not have made the same edit there.
     //
     // **Nothing at all when the zone line did not move**, which is the adoption
     // of section 4.1 taking over demand the list already had: the household's
@@ -637,7 +718,13 @@ export class GeneratedListOriginsService {
     return {
       line: await this.generated.basketLineViewFor(line, seesZoneData),
       origin: written.origin
-        ? await this.detailOf(list, line, written.origin, written.source)
+        ? await this.detailOf(
+            list,
+            line,
+            written.origin,
+            written.source,
+            actorUserId
+          )
         : null,
       listQuantity: written.source.quantity,
     };
@@ -666,7 +753,8 @@ export class GeneratedListOriginsService {
     existing: GeneratedListLineOrigin | null,
     sourceLineId: string,
     req: SetGeneratedListOriginQuantityRequest,
-    move: { zoneId: string; quantity: number; delta: number }
+    move: { zoneId: string; quantity: number; delta: number },
+    access: DemandAccess
   ): Promise<WrittenOrigin> {
     return this.dataSource.transaction(async (manager) => {
       const zoneLines = manager.getRepository(ListLine);
@@ -703,6 +791,14 @@ export class GeneratedListOriginsService {
         ? move.delta
         : Math.max(0, move.quantity - source.quantity);
       if (zoneDelta !== 0) {
+        // The demand rule, on the row as it stands at the write (plan 0131,
+        // section 4). Here rather than only outside, because the approval is the
+        // one thing the authorization branches on that the lock can change
+        // underneath it, and here rather than unconditionally, because an
+        // adoption that takes over demand the list already has moves this line
+        // by nothing and is a `WRITE`.
+        this.requireDemandChange(access, source.approvalStatus);
+
         // Floored at zero, exactly as the signed delta path floors it. The zone
         // line may already be below what this origin contributed, because
         // somebody settled it from the list page, and it lands at zero rather
@@ -900,7 +996,12 @@ export class GeneratedListOriginsService {
         listQuantity: 0,
       };
     }
-    await this.requireWritable(list, reader.actorUserId, req.sourceListId);
+    // `WRITE` and nothing more, deliberately (plan 0131, section 4). This creates
+    // the line through `LineService.add`, and the add's own rules decide whether
+    // it starts `PENDING` and whether a merge onto an approved line is allowed
+    // (plans 0037 and 0091). Asking the demand rule here would be a second
+    // definition of them.
+    await this.demandChangeAccess(list, reader.actorUserId, req.sourceListId);
 
     const already = await this.origins.findOne({
       where: { generatedListLineId: line.id, listId: req.sourceListId },
@@ -987,44 +1088,89 @@ export class GeneratedListOriginsService {
       line: await this.generated.basketLineViewFor(line, reader.seesZoneData),
       origin:
         origin && source
-          ? await this.detailOf(list, line, origin, source)
+          ? await this.detailOf(list, line, origin, source, reader.actorUserId)
           : null,
       listQuantity: source?.quantity ?? quantity,
     };
   }
 
   /**
-   * Both accesses, intersected, on the one list being written (section 4.2).
+   * Both standings on the one list being written, and the coverage refusal
+   * (section 4.2).
    *
    * Section 6.4 answers "what authorizes an actor who has no access of their
    * own", and its answer is the owner's delegation. It does not say an actor with
    * access may not use it, and here the actor necessarily has one: they hold
    * `WRITE` on every source list, which is what passing the all or nothing rule
-   * means. So the write is checked against **both**, at request time, and it is
-   * cheap because it is the same `writableAmong` read the settle already makes.
+   * means. So the write is checked against **both**, at request time.
+   *
+   * It asks `permissionsAmong` rather than `writableAmong` since plan 0131, and
+   * hands both sets back: `WRITE` is coverage and is refused here, and whether
+   * either of them may move an **approved** quantity is
+   * {@link requireDemandChange}, which the caller applies where the zone line is
+   * actually decided. The `WRITE` half of the answer is identical either way, so
+   * a caller wanting coverage alone calls this and discards the sets.
    *
    * Resolved before the transaction opens, exactly as the settle does it: every
    * repository the access service holds draws its own connection from the pool,
    * so asking it a question from inside a transaction means one request holding
    * two, which deadlocks a pool under load rather than failing honestly.
    */
-  private async requireWritable(
+  private async demandChangeAccess(
     list: GeneratedList,
     actorUserId: string,
     listId: string
-  ): Promise<void> {
-    const owner = await this.sharing.writableAmong(list.ownerUserId, [listId]);
-    if (!owner.has(listId)) {
+  ): Promise<DemandAccess> {
+    const owner = (
+      await this.listAccess.permissionsAmong(list.ownerUserId, [listId])
+    ).get(listId);
+    if (owner === undefined || !owner.has(ListPermission.WRITE)) {
       throw new ForbiddenException(
         'The basket’s owner can no longer write that list'
       );
     }
     if (actorUserId === list.ownerUserId) {
-      return;
+      return { owner, actor: owner };
     }
-    const actor = await this.sharing.writableAmong(actorUserId, [listId]);
-    if (!actor.has(listId)) {
+    const actor = (
+      await this.listAccess.permissionsAmong(actorUserId, [listId])
+    ).get(listId);
+    if (actor === undefined || !actor.has(ListPermission.WRITE)) {
       throw new ForbiddenException('You need write access to that list');
+    }
+    return { owner, actor };
+  }
+
+  /**
+   * Whether these two may move what the list asks for (plan 0131, section 4).
+   *
+   * Pure, and applied twice: once on the row read outside the lock, so an
+   * impossible request is refused before anything is written, and again on the
+   * locked row inside {@link write}, because a line approved between the two
+   * reads changes the answer. The sets are resolved once, outside, because they
+   * are a property of the people and the list rather than of the row.
+   *
+   * **The owner is asked because the owner is who delegated** (plan 0051, section
+   * 6.4). **The actor is asked wherever they are asked today**: an account holder
+   * does not gain, through somebody else's basket, a right they do not hold on
+   * the list page.
+   */
+  private requireDemandChange(
+    access: DemandAccess,
+    approvalStatus: LineApprovalStatus
+  ): void {
+    if (!canChangeDemand(access.owner, approvalStatus)) {
+      throw new ForbiddenException(
+        'The owner of this shopping list cannot change that quantity. Somebody who can approve lines has to'
+      );
+    }
+    if (!canChangeDemand(access.actor, approvalStatus)) {
+      // Word for word the list page's own refusal (`line.service.ts`), because
+      // it is the same refusal: this person may not move an approved number,
+      // and which screen they asked from does not change that.
+      throw new ForbiddenException(
+        'Only somebody who can approve lines can change the quantity of an approved line. Change something else on it first, which puts it back to pending'
+      );
     }
   }
 
@@ -1197,13 +1343,22 @@ export class GeneratedListOriginsService {
     list: GeneratedList,
     line: GeneratedListLine,
     origin: GeneratedListLineOrigin,
-    source: ListLine
+    source: ListLine,
+    actorUserId: string
   ): Promise<GeneratedListLineOriginDetail> {
-    const [names, writable, settled] = await Promise.all([
+    const [names, ownerHolds, actorHolds, settled] = await Promise.all([
       namesOfLists(this.shoppingLists, [origin.listId]),
-      this.sharing.writableAmong(list.ownerUserId, [origin.listId]),
+      this.listAccess.permissionsAmong(list.ownerUserId, [origin.listId]),
+      actorUserId === list.ownerUserId
+        ? Promise.resolve(null)
+        : this.listAccess.permissionsAmong(actorUserId, [origin.listId]),
       this.settledPerOrigin(line.id),
     ]);
+    const owner = ownerHolds.get(origin.listId) ?? EMPTY_PERMISSIONS;
+    const actor = actorHolds
+      ? (actorHolds.get(origin.listId) ?? EMPTY_PERMISSIONS)
+      : owner;
+    const writable = owner.has(ListPermission.WRITE);
     return {
       originId: origin.id,
       listId: origin.listId,
@@ -1213,7 +1368,14 @@ export class GeneratedListOriginsService {
       contributed: origin.quantity,
       listQuantity: source.quantity,
       settledHere: settled.get(origin.lineId) ?? 0,
-      writable: writable.has(origin.listId),
+      writable,
+      // Plan 0131, section 4, and the same expression {@link originRow} uses:
+      // one row cannot say two things about who may move its number depending on
+      // which call produced it.
+      demandChangeable:
+        writable &&
+        canChangeDemand(owner, source.approvalStatus) &&
+        canChangeDemand(actor, source.approvalStatus),
       fromRun: this.runSources(list).has(origin.listId),
       // Read off the zone line rather than derived from the list's settings: a
       // created line is `PENDING` unless the list's own rules approved it (plan
@@ -1227,7 +1389,8 @@ export class GeneratedListOriginsService {
     line: GeneratedListLine,
     existing: GeneratedListLineOrigin | null,
     source: ListLine,
-    seesZoneData: boolean
+    seesZoneData: boolean,
+    actorUserId: string
   ): Promise<SetGeneratedListOriginQuantityResult> {
     const list = await this.lists.findOne({
       where: { id: line.generatedListId },
@@ -1236,7 +1399,7 @@ export class GeneratedListOriginsService {
       line: await this.generated.basketLineViewFor(line, seesZoneData),
       origin:
         existing && list
-          ? await this.detailOf(list, line, existing, source)
+          ? await this.detailOf(list, line, existing, source, actorUserId)
           : null,
       listQuantity: source.quantity,
     };
@@ -1261,6 +1424,28 @@ export class GeneratedListOriginsService {
 }
 
 /** What the transaction produced, held until it commits. */
+/**
+ * What an account holds on a list it has no approved membership for.
+ *
+ * `permissionsAmong` leaves such a list out of its map rather than answering an
+ * empty set, so every read of it defaults to this rather than to `undefined`.
+ */
+const EMPTY_PERMISSIONS: ReadonlySet<ListPermission> = new Set();
+
+/**
+ * The two standings a write of demand is judged against (plan 0131, section 4).
+ *
+ * Both are resolved once, outside any transaction, and carried into the write:
+ * they are a property of the people and the list, so reading them outside the
+ * lock changes no answer, while the row state the rule branches on is read again
+ * under it. `actor` is the same set as `owner` when the actor is the owner,
+ * which is the overwhelming case and saves the second query.
+ */
+interface DemandAccess {
+  owner: ReadonlySet<ListPermission>;
+  actor: ReadonlySet<ListPermission>;
+}
+
 interface WrittenOrigin {
   /** The zone line as this write left it. */
   source: ListLine;

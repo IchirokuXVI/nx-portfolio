@@ -1041,6 +1041,8 @@ export class GeneratedListParticipantController {
    * settlement records.
    */
   @Post(':id/lines/:lineId/products')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.splitLine, {
     status: HttpStatus.CREATED,
   })
@@ -1080,6 +1082,8 @@ export class GeneratedListParticipantController {
    * request asked for; core enforces the same rule on the values it is given.
    */
   @Post(':id/lines/:lineId/settle')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.settleLine, {
     status: HttpStatus.CREATED,
   })
@@ -1147,6 +1151,8 @@ export class GeneratedListParticipantController {
    * doubled: one sentence per state, wherever the state is met.
    */
   @Post(':id/lines/:lineId/outstanding')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setOutstanding, {
     status: HttpStatus.CREATED,
   })
@@ -1191,6 +1197,8 @@ export class GeneratedListParticipantController {
    * section 4 draws on the settle: a well formed request the state refuses.
    */
   @Post(':id/lines/:lineId/reopen')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.reopenLine, {
     status: HttpStatus.CREATED,
   })
@@ -1278,6 +1286,8 @@ export class GeneratedListParticipantController {
    * write, and a line reaches as many lists as are raised.
    */
   @Post(':id/lines/:lineId/origins')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setOriginQuantity, {
     status: HttpStatus.CREATED,
   })
@@ -1332,6 +1342,8 @@ export class GeneratedListParticipantController {
    * field of the answer.
    */
   @Post(':id/lines/:lineId/origins/settled')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.setOriginSettled, {
     status: HttpStatus.CREATED,
   })
@@ -1445,6 +1457,8 @@ export class GeneratedListParticipantController {
    * read that carries revocation.
    */
   @Post(':id/participant-token')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
   @ApiComposedResponse(
     GENERATED_LIST_SHARING_SCHEMA_IDS.participantTokenResult,
     { status: HttpStatus.CREATED }

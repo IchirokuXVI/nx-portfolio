@@ -98,7 +98,7 @@ export class GeneratedListOriginSettledService {
     const settled = this.checkQuantity(req.settled, 'settled');
     this.checkQuantity(req.from, 'from');
 
-    const { list, line } = await this.resolve(req);
+    const { list, line, actorUserId } = await this.resolve(req);
     const origin = await this.origins.findOne({
       where: { generatedListLineId: line.id, lineId: req.sourceLineId },
     });
@@ -138,10 +138,10 @@ export class GeneratedListOriginSettledService {
         ? []
         : settled > current
           ? await this.settleMore(list, req, origin, settled - current)
-          : await this.revert(list, line, req, current - settled);
+          : await this.revert(list, line, req, origin, current - settled);
 
     return {
-      ...(await this.answer(list, line, origin)),
+      ...(await this.answer(list, line, origin, actorUserId)),
       skippedCount: skipped.length,
       skipped,
     };
@@ -184,10 +184,13 @@ export class GeneratedListOriginSettledService {
       origin.listId,
     ]);
     if (!writable.has(origin.listId)) {
-      return this.name(
-        [{ lineId: origin.lineId, listId: origin.listId }],
-        'ACCESS_GONE'
-      );
+      return this.name([
+        {
+          lineId: origin.lineId,
+          listId: origin.listId,
+          reason: 'ACCESS_GONE',
+        },
+      ]);
     }
     const result = await this.settleService.settle({
       generatedListId: req.generatedListId,
@@ -214,13 +217,35 @@ export class GeneratedListOriginSettledService {
    * A close is not in this walk at all, and that is the definition of the number
    * rather than an omission: `NOT_AVAILABLE` bought nothing, so it is no part of
    * what any list got.
+   *
+   * ## Whether the owner may still write that list is asked first, as it is on a
+   * raise
+   *
+   * {@link settleMore} has asked it since plan 0053, and plan 0131 gives this
+   * direction the same question and the same answer: the named `ACCESS_GONE`
+   * skip, with nothing written. The revert refuses that origin for itself now,
+   * so this is the cheap answer rather than the only one, and it is here so that
+   * both directions of one control on one row agree about what they refuse.
    */
   private async revert(
     list: GeneratedList,
     line: GeneratedListLine,
     req: SetGeneratedListOriginSettledRequest,
+    origin: GeneratedListLineOrigin,
     units: number
   ): Promise<GeneratedListSettleSkip[]> {
+    const writable = await this.sharing.writableAmong(list.ownerUserId, [
+      origin.listId,
+    ]);
+    if (!writable.has(origin.listId)) {
+      return this.name([
+        {
+          lineId: origin.lineId,
+          listId: origin.listId,
+          reason: 'ACCESS_GONE',
+        },
+      ]);
+    }
     const reverted = await this.reopenService.revertUnits(list, line, {
       participantId: req.participantId,
       units,
@@ -230,7 +255,11 @@ export class GeneratedListOriginSettledService {
       // transaction.
       expectOriginSettled: req.from,
     });
-    return this.name(reverted.skipped, 'ORIGIN_DELETED');
+    // Each skip's own reason since plan 0131, where it was hard coded before:
+    // the revert can now skip an origin because the owner lost the list, and
+    // telling the shopper the household's line was deleted is a different thing
+    // to go and do something about.
+    return this.name(reverted.skipped);
   }
 
   /**
@@ -241,8 +270,11 @@ export class GeneratedListOriginSettledService {
    * for the names to survive.
    */
   private async name(
-    skipped: readonly { lineId: string; listId: string }[],
-    reason: GeneratedListSettleSkip['reason']
+    skipped: readonly {
+      lineId: string;
+      listId: string;
+      reason: GeneratedListSettleSkip['reason'];
+    }[]
   ): Promise<GeneratedListSettleSkip[]> {
     if (skipped.length === 0) {
       return [];
@@ -256,7 +288,7 @@ export class GeneratedListOriginSettledService {
       return {
         lineId: entry.lineId,
         listId: entry.listId,
-        reason,
+        reason: entry.reason,
         listName: named?.name ?? null,
         zoneName: named?.zoneName ?? null,
       };
@@ -275,7 +307,8 @@ export class GeneratedListOriginSettledService {
   private async answer(
     list: GeneratedList,
     line: GeneratedListLine,
-    origin: GeneratedListLineOrigin
+    origin: GeneratedListLineOrigin,
+    actorUserId: string
   ): Promise<{
     line: SetGeneratedListOriginSettledResult['line'];
     origin: GeneratedListLineOriginDetail | null;
@@ -300,7 +333,13 @@ export class GeneratedListOriginSettledService {
       line: view,
       origin:
         fresh && source
-          ? await this.originsService.detailOf(list, current, fresh, source)
+          ? await this.originsService.detailOf(
+              list,
+              current,
+              fresh,
+              source,
+              actorUserId
+            )
           : null,
     };
   }
@@ -312,9 +351,11 @@ export class GeneratedListOriginSettledService {
    * the same terms: outright rather than redacted, because the answer is an
    * origin and every field of one names a zone or a list.
    */
-  private async resolve(
-    req: SetGeneratedListOriginSettledRequest
-  ): Promise<{ list: GeneratedList; line: GeneratedListLine }> {
+  private async resolve(req: SetGeneratedListOriginSettledRequest): Promise<{
+    list: GeneratedList;
+    line: GeneratedListLine;
+    actorUserId: string;
+  }> {
     const list = await this.lists.findOne({
       where: { id: req.generatedListId },
     });
@@ -349,7 +390,12 @@ export class GeneratedListOriginSettledService {
       );
     }
 
-    return { list, line };
+    // A participant with no account of their own is judged by the owner's
+    // standing alone (plan 0051, section 6.4, and plan 0131 section 4): the
+    // owner's delegation is what authorizes them, and there is no second set to
+    // intersect with. Reachable only for a basket with no sources at all, which
+    // is the one shape `seesZoneData` lets a guest through.
+    return { list, line, actorUserId: participant.userId ?? list.ownerUserId };
   }
 
   /** A whole number of units, within the ceiling a line may hold. */

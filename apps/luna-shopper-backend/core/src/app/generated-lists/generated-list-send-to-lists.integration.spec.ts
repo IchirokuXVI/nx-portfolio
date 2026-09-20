@@ -219,7 +219,11 @@ describeIntegration(
           emit: jest.fn(),
           emitToGeneratedList: jest.fn(),
           emitTo,
-        } as never
+        } as never,
+        // The real one, against the real database, which is what makes the
+        // demand rule of plan 0131 answer here from the same rows the service
+        // under test writes.
+        listAccess
       );
 
       settles = new GeneratedListSettleService(
