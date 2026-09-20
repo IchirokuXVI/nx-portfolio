@@ -5,7 +5,6 @@ import {
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
-  ParticipantKind,
   PURCHASE_SESSION_GAP_MS,
   SettlementOutcome,
   ZoneRole,
@@ -21,9 +20,7 @@ import {
   BasketSource,
   CORE_ENTITIES,
   GeneratedList,
-  GeneratedListParticipant,
   LineSettlement,
-  ListAccess,
   ListLine,
   ShoppingList,
   Zone,
@@ -94,7 +91,7 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
       } as never,
       // The walk order learns from finished trips, and none of these tests has
       // one, so it answers what it was given.
-      { order: async <T,>(_userId: string, rows: T[]) => rows } as never
+      { order: async <T>(_userId: string, rows: T[]) => rows } as never
     );
 
     const zones = dataSource.getRepository(Zone);
@@ -228,11 +225,7 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
       dataSource.getRepository(GeneratedList)
     ).listsOf(basketRow);
     const listIds = covered.map((row) => row.listId);
-    return read.rowsOf(
-      basketRow,
-      listIds,
-      BasketRedaction.unredacted(listIds)
-    );
+    return read.rowsOf(basketRow, listIds, BasketRedaction.unredacted(listIds));
   }
 
   const ago = (ms: number) => new Date(Date.now() - ms);
@@ -339,7 +332,9 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
       // No `basket_sources` row exists for it at all, and it still reads the
       // list: that is the difference between the two kinds (plan 0133).
       expect(
-        await dataSource.getRepository(BasketSource).countBy({ basketId: held.id })
+        await dataSource
+          .getRepository(BasketSource)
+          .countBy({ basketId: held.id })
       ).toBe(0);
       const contents = (await rowsOf(held)).rows.map((row) => row.content);
       expect(contents).toContain('Rice');
@@ -505,13 +500,7 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
       const listId = await list('Missing');
       const held = await basket(BasketKind.GENERATED, listId);
       const row = await line(listId, 'Yeast', { quantity: 2 });
-      await settle(
-        held,
-        row,
-        0,
-        new Date(),
-        SettlementOutcome.NOT_AVAILABLE
-      );
+      await settle(held, row, 0, new Date(), SettlementOutcome.NOT_AVAILABLE);
 
       const [drawn] = (await rowsOf(held)).rows;
       expect(drawn.state).toBe(BasketRowState.NOT_AVAILABLE);

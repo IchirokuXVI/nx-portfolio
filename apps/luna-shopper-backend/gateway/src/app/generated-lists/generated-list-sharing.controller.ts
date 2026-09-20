@@ -11,10 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   AUTH_PATTERNS,
   GENERATED_LIST_SHARING_PATTERNS,
@@ -131,12 +128,6 @@ interface ShopRefusalIds {
   supermarketIds: readonly string[];
   supermarketLocationIds: readonly string[];
 }
-
-/** Refusing nothing, which is what every branch that cannot ask lands on. */
-const NO_REFUSALS: ShopRefusalIds = {
-  supermarketIds: [],
-  supermarketLocationIds: [],
-};
 
 /**
  * The owner's share sheet (plan 0051, section 3).

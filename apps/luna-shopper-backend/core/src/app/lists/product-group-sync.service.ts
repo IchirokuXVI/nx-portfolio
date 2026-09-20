@@ -56,13 +56,13 @@ import { readLineSettlementSummaries } from './settlement.sql';
  *
  * ## What it must not touch (section 8)
  *
- * **Baskets.** A `GeneratedListLine` is a snapshot taken at generation time, and
- * a shopping list that rewrites itself while you are in the shop is hostile. A
- * person editing a line's products mid trip already does not disturb an active
- * basket, so a sync must not either. That requirement is a **negative** one:
- * nothing here may grow a path into `generated_list_lines` or
- * `generated_list_line_options`, and the spec asserts it directly because nothing
- * else would catch its violation.
+ * **Baskets.** A shopping list that rewrites itself while you are in the shop is
+ * hostile, and a person editing a line's products mid trip must not disturb an
+ * open basket. Plan 0136 changed what protects that rather than whether it
+ * holds: a basket held a snapshot of its own and now holds none, so a sync
+ * cannot reach one by writing to it. What it must still not do is move the
+ * **zone line's** product set under a shopper's thumb, which is the rule the
+ * spec asserts directly because nothing else would catch its violation.
  *
  * **Settlements**, which hang off basket lines and are a record of what somebody
  * actually bought. **`quantity`**, never touched and in particular never

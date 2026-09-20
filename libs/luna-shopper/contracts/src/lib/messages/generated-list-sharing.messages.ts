@@ -1,6 +1,4 @@
-import type { BasketKind } from '../enums/basket.enums';
 import type { ParticipantKind } from '../enums/generated-list.enums';
-import type { ItemView, LocalizedText } from './catalog.messages';
 
 /**
  * Sharing a generated list with people who have no account (plan 0051).

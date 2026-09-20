@@ -1,6 +1,5 @@
 import {
   BasketKind,
-  GeneratedLineOrigin,
   GeneratedListStatus,
   MembershipStatus,
   SettlementOutcome,
@@ -15,9 +14,9 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
   BasketSource,
+  BasketTripRow,
   CORE_ENTITIES,
   GeneratedList,
-  GeneratedListLine,
   LineSettlement,
   ListLine,
   ShoppingList,
@@ -37,6 +36,20 @@ import { fakeLineClaims } from './line-claims.fake';
  * outcome counts can be taken from it. Which settlement is newest, and whether a
  * line with several of them is counted once, are Postgres's answers.
  *
+ * ## What it counts changed with plan 0136, section 7.4
+ *
+ * The counts used to be taken off `generated_list_lines`, where the basket kept
+ * a copy of every row with its own `settledQuantity`. There is no copy any more,
+ * so the counts are two reads split on the status: an **ended** trip counts its
+ * `basket_trip_rows` against the standing settlements that name the basket, and
+ * an open one is composed by `BasketReadService`. This file owns the first,
+ * because that is the one that is a query.
+ *
+ * So the fixture is an ended basket, a frozen row per zone line, and settlements
+ * carrying `basketId`. `left` is `asked - bought` and the outcome of the newest
+ * settlement decides a line the trip did not finish, which is where the lateral
+ * earns its place.
+ *
  * The invariant worth protecting is the one that costs nothing to break by
  * accident: `settledLineCount` still means every finished line, and it is still
  * the sum of the two outcomes, because `NOT_AVAILABLE` closes a line's
@@ -49,54 +62,68 @@ describeIntegration('a run history row (real Postgres)', () => {
   const ids = {
     zone: '',
     list: '',
-    zoneLine: '',
     basket: '',
     owner: randomUUID(),
   };
+  let position = 0;
 
-  /** A basket line wanting `quantity`, with `settledQuantity` already applied. */
-  async function seedLine(
-    quantity: number,
-    settledQuantity: number
-  ): Promise<string> {
-    const repo = dataSource.getRepository(GeneratedListLine);
-    const line = await repo.save(
-      repo.create({
-        generatedListId: ids.basket,
+  /**
+   * A zone line this trip asked `asked` of, frozen as its finish would have
+   * frozen it.
+   *
+   * One line per row, because `uq_basket_trip_rows_line` allows one row per
+   * basket and zone line: a trip has one ask of a line, however many purchases
+   * it made against it.
+   */
+  async function seedRow(asked: number): Promise<string> {
+    const lines = dataSource.getRepository(ListLine);
+    position += 1;
+    const line = await lines.save(
+      lines.create({
+        listId: ids.list,
         content: 'Milk',
-        quantity,
-        settledQuantity,
-        itemId: null,
-        origin: GeneratedLineOrigin.DERIVED,
-        targetListId: null,
-        position: 1,
+        quantity: 0,
+        position,
+        createdByUserId: ids.owner,
       })
     );
+    await dataSource.getRepository(BasketTripRow).insert({
+      basketId: ids.basket,
+      listId: ids.list,
+      lineId: line.id,
+      asked,
+    });
     return line.id;
   }
 
-  /** One settlement on a basket line, at a stated moment so order is not a race. */
+  /**
+   * One standing purchase of a zone line, made through this basket, at a stated
+   * moment so which one is newest is not a race.
+   *
+   * The lateral orders on `("settledAt", id)`, so no `createdAt` is written by
+   * hand: what decides the last act of a row is when it was settled.
+   */
   async function seedSettlement(
-    generatedListLineId: string,
+    lineId: string,
     outcome: SettlementOutcome,
-    createdAt: string
+    settledAt: string,
+    quantity = outcome === SettlementOutcome.BOUGHT ? 1 : 0
   ): Promise<void> {
     const repo = dataSource.getRepository(LineSettlement);
-    const row = await repo.save(
+    await repo.save(
       repo.create({
-        lineId: ids.zoneLine,
+        lineId,
         listId: ids.list,
         itemId: null,
         outcome,
-        quantity: outcome === SettlementOutcome.BOUGHT ? 1 : 0,
+        quantity,
         settledByUserId: ids.owner,
-        settledAt: new Date(createdAt),
-        generatedListLineId,
+        settledByParticipantId: null,
+        settledAt: new Date(settledAt),
+        revertedAt: null,
+        basketId: ids.basket,
       })
     );
-    // `createdAt` is what the lateral orders on and TypeORM fills it from the
-    // clock, so it is set explicitly rather than left to the insert order.
-    await repo.update({ id: row.id }, { createdAt: new Date(createdAt) });
   }
 
   beforeAll(async () => {
@@ -111,16 +138,16 @@ describeIntegration('a run history row (real Postgres)', () => {
     generated = new GeneratedListService(
       dataSource,
       dataSource.getRepository(GeneratedList),
-      dataSource.getRepository(GeneratedListLine),
-      {} as never,
-      {} as never,
-      dataSource.getRepository(LineSettlement),
       {} as never,
       fakeLineClaims({}).service,
       { emitToUsers: jest.fn() } as never,
       {} as never,
       {} as never,
-      dataSource.getRepository(BasketSource)
+      dataSource.getRepository(BasketSource),
+      {} as never,
+      // The open basket's counts, which this fixture never reaches: the basket
+      // below is `FINISHED`, so every number comes off its frozen rows.
+      {} as never
     );
 
     const zone = await dataSource.getRepository(Zone).save(
@@ -150,29 +177,29 @@ describeIntegration('a run history row (real Postgres)', () => {
       })
     );
     ids.list = list.id;
-    const zoneLine = await dataSource.getRepository(ListLine).save(
-      dataSource.getRepository(ListLine).create({
-        listId: list.id,
-        content: 'Milk',
-        quantity: 1,
-        position: 1,
-        createdByUserId: ids.owner,
-      })
-    );
-    ids.zoneLine = zoneLine.id;
 
+    // Ended, because an ended trip is what answers from its frozen rows. An
+    // open basket's four numbers are composed by `BasketReadService` and belong
+    // to that service's own specs.
     const basket = await dataSource.getRepository(GeneratedList).save(
       dataSource.getRepository(GeneratedList).create({
         ownerUserId: ids.owner,
         name: 'Saturday',
-        status: GeneratedListStatus.OPEN,
+        status: GeneratedListStatus.FINISHED,
         generatedAt: new Date('2026-02-01T10:00:00Z'),
         kind: BasketKind.GENERATED,
-        defaultTargetListId: null,
         idempotencyKey: null,
       })
     );
     ids.basket = basket.id;
+    const sources = dataSource.getRepository(BasketSource);
+    await sources.save(
+      sources.create({
+        basketId: basket.id,
+        zoneId: zone.id,
+        listId: list.id,
+      })
+    );
   });
 
   afterAll(async () => {
@@ -186,10 +213,13 @@ describeIntegration('a run history row (real Postgres)', () => {
   });
 
   beforeEach(async () => {
+    // The settlements go first: a line cascades them, and the trip rows carry a
+    // foreign key onto the line.
     await dataSource.getRepository(LineSettlement).delete({ listId: ids.list });
     await dataSource
-      .getRepository(GeneratedListLine)
-      .delete({ generatedListId: ids.basket });
+      .getRepository(BasketTripRow)
+      .delete({ basketId: ids.basket });
+    await dataSource.getRepository(ListLine).delete({ listId: ids.list });
   });
 
   async function row() {
@@ -202,8 +232,8 @@ describeIntegration('a run history row (real Postgres)', () => {
   }
 
   it('splits the finished lines into what was bought and what was not there', async () => {
-    const bought = await seedLine(1, 1);
-    const missing = await seedLine(1, 1);
+    const bought = await seedRow(1);
+    const missing = await seedRow(1);
     await seedSettlement(
       bought,
       SettlementOutcome.BOUGHT,
@@ -224,9 +254,9 @@ describeIntegration('a run history row (real Postgres)', () => {
   });
 
   it('keeps `settledLineCount` as the sum, so nothing reading it changes', async () => {
-    const bought = await seedLine(1, 1);
-    const missing = await seedLine(1, 1);
-    await seedLine(2, 0);
+    const bought = await seedRow(1);
+    const missing = await seedRow(1);
+    await seedRow(2);
     await seedSettlement(
       bought,
       SettlementOutcome.BOUGHT,
@@ -248,9 +278,15 @@ describeIntegration('a run history row (real Postgres)', () => {
   });
 
   it('reads the newest settlement, not the first one', async () => {
-    // Bought, then reported not available. The last act is what decided it,
-    // which is exactly what the basket screen's own `lastOutcome` says.
-    const line = await seedLine(1, 1);
+    // Bought once of two, then reported not available. The last act is what
+    // decided it, which is exactly what the basket screen's own state says.
+    //
+    // It takes a line the trip did **not** finish, which is plan 0136's
+    // reversal of the shape this test used to have: `left = asked - bought`
+    // decides first, so a line bought all the way through is counted as bought
+    // whatever was said about it afterwards. `NOT_AVAILABLE` answers for a row
+    // that still has something outstanding, and nothing else.
+    const line = await seedRow(2);
     await seedSettlement(
       line,
       SettlementOutcome.BOUGHT,
@@ -269,11 +305,11 @@ describeIntegration('a run history row (real Postgres)', () => {
     });
   });
 
-  it('counts a line once however many origins its settle wrote a row for', async () => {
-    // A settle writes one row per origin it touched, all carrying the same
-    // outcome. The lateral takes one row per line, so this stays a count of
-    // lines rather than becoming a count of settlements.
-    const line = await seedLine(1, 1);
+  it('counts a line once however many purchases the trip made against it', async () => {
+    // A trip buys three of a line in three taps, and the counts are a count of
+    // lines rather than of settlements: the lateral folds them into one `bought`
+    // and one last outcome per frozen row.
+    const line = await seedRow(3);
     await seedSettlement(
       line,
       SettlementOutcome.BOUGHT,
@@ -299,11 +335,12 @@ describeIntegration('a run history row (real Postgres)', () => {
 
   it('counts an unfinished line in neither outcome, even when it has been settled once', async () => {
     // Cumulative settling: two of three bought is progress, not a finished line.
-    const line = await seedLine(3, 2);
+    const line = await seedRow(3);
     await seedSettlement(
       line,
       SettlementOutcome.BOUGHT,
-      '2026-02-01T11:00:00Z'
+      '2026-02-01T11:00:00Z',
+      2
     );
 
     expect(await row()).toMatchObject({

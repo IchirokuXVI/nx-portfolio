@@ -1,6 +1,5 @@
 import {
   BasketKind,
-  GeneratedLineOrigin,
   GeneratedListStatus,
   LineApprovalStatus,
   MembershipStatus,
@@ -23,23 +22,23 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource, In } from 'typeorm';
 import { BasketCoverageService } from '../baskets/basket-coverage.service';
+import { BasketReadService } from '../baskets/basket-read.service';
 import {
   BasketSource,
   CORE_ENTITIES,
   GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOption,
-  GeneratedListLineOrigin,
   GeneratedListParticipant,
   GeneratedListShareLink,
-  LineSettlement,
+  ListAccess,
   ListLine,
   ShoppingList,
   Zone,
   ZoneMembership,
 } from '../entities';
-import { GeneratedListBasketService } from './generated-list-basket.service';
+import { ListAccessService } from '../lists/list-access.service';
+import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { GeneratedListMembersService } from './generated-list-members.service';
+import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
 import { fakeLineClaims } from './line-claims.fake';
@@ -65,7 +64,7 @@ describeIntegration(
     let dataSource: DataSource;
     let generated: GeneratedListService;
     let sharing: GeneratedListSharingService;
-    let baskets: GeneratedListBasketService;
+    let baskets: BasketReadService;
 
     const events = {
       emit: jest.fn(),
@@ -134,7 +133,6 @@ describeIntegration(
           status: GeneratedListStatus.OPEN,
           generatedAt: new Date(),
           kind: BasketKind.GENERATED,
-          defaultTargetListId: null,
           idempotencyKey: null,
           ...overrides,
         })
@@ -173,10 +171,6 @@ describeIntegration(
       generated = new GeneratedListService(
         dataSource,
         dataSource.getRepository(GeneratedList),
-        dataSource.getRepository(GeneratedListLine),
-        dataSource.getRepository(GeneratedListLineOrigin),
-        dataSource.getRepository(GeneratedListLineOption),
-        dataSource.getRepository(LineSettlement),
         // A run that names its own sources asks only for the pricing profile.
         { pricingProfileId: async () => null } as never,
         fakeLineClaims({}).service,
@@ -185,22 +179,35 @@ describeIntegration(
           order: async (_userId: string, composed: unknown[]) => composed,
         } as never,
         members,
-        dataSource.getRepository(BasketSource)
+        dataSource.getRepository(BasketSource),
+        // The freeze, which nothing here finishes a basket to reach.
+        { freeze: async () => undefined, thaw: async () => undefined } as never,
+        // Set below, once the read service exists: the two refer to each other
+        // through the history counts of an open basket alone.
+        undefined as never
       );
-      baskets = new GeneratedListBasketService(
+      baskets = new BasketReadService(
         dataSource.getRepository(GeneratedList),
-        dataSource.getRepository(GeneratedListLine),
-        dataSource.getRepository(GeneratedListLineOption),
-        dataSource.getRepository(ShoppingList),
-        generated,
+        // The real services: coverage is raw SQL over four tables and the
+        // access read mirrors `requireWrite`, and this file has the database to
+        // answer both (plan 0133, section 5).
+        new BasketCoverageService(dataSource.getRepository(GeneratedList)),
         sharing,
-        // The owner's default target, which no read reaches.
-        undefined as never,
-        events as never,
-        // The real service: coverage is raw SQL over four tables, and this file
-        // has the database to answer it (plan 0133, section 5).
-        new BasketCoverageService(dataSource.getRepository(GeneratedList))
+        new ListAccessService(
+          dataSource.getRepository(ShoppingList),
+          dataSource.getRepository(ListAccess),
+          dataSource.getRepository(ListLine),
+          new ZoneAuthzService(dataSource.getRepository(ZoneMembership))
+        ),
+        new GeneratedListOrderService(dataSource.getRepository(GeneratedList))
       );
+      // The two refer to each other: the history counts of an **open** basket
+      // are `BasketReadService.progressOf` (plan 0136, section 7.4), and the
+      // read needs the service that owns the basket table. Nest resolves the
+      // cycle through the module; here it is one assignment, made as soon as
+      // the second of the pair exists.
+      (generated as unknown as { basketRead: BasketReadService }).basketRead =
+        baskets;
 
       const zones = dataSource.getRepository(Zone);
       const memberships = dataSource.getRepository(ZoneMembership);
@@ -745,8 +752,8 @@ describeIntegration(
             kind: ParticipantKind.OWNER,
           });
 
-        const asGuest = await baskets.getBasket({
-          generatedListId: basket,
+        const asGuest = await baskets.read({
+          basketId: basket,
           participantId: guest.participant.id,
         });
         expect(asGuest.participants).toHaveLength(3);
@@ -756,8 +763,8 @@ describeIntegration(
           expect(person).not.toHaveProperty('userAgent');
         }
 
-        const asOwner = await baskets.getBasket({
-          generatedListId: basket,
+        const asOwner = await baskets.read({
+          basketId: basket,
           participantId: owner.id,
         });
         for (const person of asOwner.participants) {
@@ -766,12 +773,27 @@ describeIntegration(
         }
       });
 
-      it('names only the source lists the basket has an origin in', async () => {
+      /**
+       * Plan 0136, section 3.4 reverses this test, and the reversal is the
+       * point of the plan.
+       *
+       * The basket used to name the source lists it **had an origin in**: a run
+       * copied lines out of the zone, and a list it happened to copy nothing
+       * from was not named however plainly the sources covered it. So the names
+       * were a fact about what one run found at one moment. They are a fact
+       * about the reader now: `lists` is every covered list the **reader** holds
+       * `WRITE` on (`BasketRedaction.servedLists`), and the owner of a basket
+       * that covers a whole zone is served every list in it, empty or not.
+       *
+       * `seesZoneData` is gone with the old rule: it was one flag for the whole
+       * basket, and the question it answered is per list now.
+       */
+      it('names every covered list the reader writes, empty or not', async () => {
         const basket = await newBasket({
           kind: BasketKind.GENERATED,
         });
         const zoneLines = dataSource.getRepository(ListLine);
-        const zoneLine = await zoneLines.save(
+        await zoneLines.save(
           zoneLines.create({
             listId: ids.weekly,
             content: 'Milk',
@@ -783,30 +805,9 @@ describeIntegration(
             version: 1,
           })
         );
-        const lines = dataSource.getRepository(GeneratedListLine);
-        const line = await lines.save(
-          lines.create({
-            generatedListId: basket,
-            content: 'Milk',
-            quantity: 1,
-            settledQuantity: 0,
-            itemId: null,
-            origin: GeneratedLineOrigin.DERIVED,
-            targetListId: null,
-            position: 1,
-          })
-        );
-        await dataSource.getRepository(GeneratedListLineOrigin).insert({
-          generatedListLineId: line.id,
-          zoneId: ids.home,
-          listId: ids.weekly,
-          lineId: zoneLine.id,
-          quantity: 1,
-          lineVersion: 1,
-        });
-        // The basket's coverage, which is where the names come from since plan
-        // 0133 section 4.4: the whole zone, so the narrowing to the origins is
-        // what leaves one name rather than the source rows doing it.
+        // The basket's coverage (plan 0133, section 4.4): the whole zone, which
+        // holds the weekly shop and the party list. Nothing was ever asked of
+        // the second, and it is named all the same.
         await dataSource.getRepository(BasketSource).insert({
           basketId: basket,
           zoneId: ids.home,
@@ -823,17 +824,49 @@ describeIntegration(
             kind: ParticipantKind.OWNER,
           });
 
-        const read = await baskets.getBasket({
-          generatedListId: basket,
+        const read = await baskets.read({
+          basketId: basket,
           participantId: owner.id,
         });
-        expect(read.seesZoneData).toBe(true);
-        expect(read.sourceNames?.map((source) => source.listId)).toEqual([
-          ids.weekly,
-        ]);
-        // What the run was asked for travels beside the names, as it was named:
-        // a whole zone rather than the lists it resolved to today.
-        expect(read.sources).toEqual([{ zoneId: ids.home, listId: null }]);
+
+        expect(read.lists.map((source) => source.listId).sort()).toEqual(
+          [ids.weekly, ids.unused].sort()
+        );
+        // Each one carries its household, because the caption names both
+        // ("from Weekly shop, in Home").
+        expect(read.lists.every((source) => source.zoneId === ids.home)).toBe(
+          true
+        );
+      });
+
+      it('names a guest no list at all', async () => {
+        // The other end of the same rule: served means the **reader** writes
+        // it, and a link visitor with no account writes nothing. They still see
+        // the rows, and what they are not told is which household each came
+        // from (plan 0136, section 3.4).
+        const basket = await newBasket({ kind: BasketKind.GENERATED });
+        await dataSource.getRepository(BasketSource).insert({
+          basketId: basket,
+          zoneId: ids.home,
+          listId: null,
+        });
+        const link = await sharing.ensureLink({
+          userId: users.owner,
+          generatedListId: basket,
+        });
+        const guest = await sharing.join({ secret: link.secret });
+
+        const read = await baskets.read({
+          basketId: basket,
+          participantId: guest.participant.id,
+        });
+
+        expect(read.lists).toEqual([]);
+        for (const row of read.rows) {
+          for (const entry of row.entries) {
+            expect(entry.listId).toBeUndefined();
+          }
+        }
       });
     });
 

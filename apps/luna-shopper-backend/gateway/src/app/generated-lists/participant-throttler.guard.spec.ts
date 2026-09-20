@@ -10,6 +10,7 @@ import {
   RateLimitedException,
   retryAfterSecondsOf,
 } from '@portfolio/luna-shopper/platform';
+import { BasketController } from '../baskets/basket.controller';
 import { GeneratedListParticipantController } from './generated-list-sharing.controller';
 import {
   PARTICIPANT_THROTTLE,
@@ -220,11 +221,19 @@ describe('ParticipantThrottlerGuard', () => {
  * written out here, so a route added by a later plan is covered the day it is
  * added rather than the day somebody remembers this file.
  *
+ * **Both controllers**, since plan 0136 moved the basket's own writes onto
+ * `/v1/baskets`. Reading one alone would now pass while saying nothing: the
+ * participant surface kept three routes and the five writes this rule is about
+ * went to the other class.
+ *
  * Reads are left alone deliberately: what this bounds is how fast one person can
  * spoil a basket, and reading one spoils nothing.
  */
 describe('every participant write declares a limit (plan 0131, section 6)', () => {
-  const PROTO = GeneratedListParticipantController.prototype;
+  const PROTOS = [
+    GeneratedListParticipantController.prototype,
+    BasketController.prototype,
+  ];
 
   /** Nest stores the verb as a `RequestMethod` ordinal, mapped back to a word. */
   const VERBS = [
@@ -239,23 +248,28 @@ describe('every participant write declares a limit (plan 0131, section 6)', () =
   ];
   const WRITES = ['post', 'patch', 'put', 'delete'];
 
-  function handlerOf(name: string): object {
-    return PROTO[name as keyof typeof PROTO] as object;
-  }
-
-  /** Every routed handler of the controller, with the verb it answers. */
-  function routes(): { name: string; verb: string }[] {
-    return Object.getOwnPropertyNames(PROTO)
-      .filter((name) => name !== 'constructor')
-      .filter(
-        (name) => Reflect.getMetadata('path', handlerOf(name)) !== undefined
-      )
-      .map((name) => {
-        const ordinal = Reflect.getMetadata('method', handlerOf(name)) as
-          | number
-          | undefined;
-        return { name, verb: ordinal === undefined ? 'none' : VERBS[ordinal] };
-      });
+  /** Every routed handler of both controllers, with the verb it answers. */
+  function routes(): { name: string; verb: string; handler: object }[] {
+    return PROTOS.flatMap((proto) =>
+      Object.getOwnPropertyNames(proto)
+        .filter((name) => name !== 'constructor')
+        .map((name) => ({
+          name,
+          handler: proto[name as keyof typeof proto] as object,
+        }))
+        .filter(
+          (route) => Reflect.getMetadata('path', route.handler) !== undefined
+        )
+        .map((route) => {
+          const ordinal = Reflect.getMetadata('method', route.handler) as
+            | number
+            | undefined;
+          return {
+            ...route,
+            verb: ordinal === undefined ? 'none' : VERBS[ordinal],
+          };
+        })
+    );
   }
 
   it('finds the routes through reflection at all', () => {
@@ -271,8 +285,7 @@ describe('every participant write declares a limit (plan 0131, section 6)', () =
       .filter((route) => WRITES.includes(route.verb))
       .filter(
         (route) =>
-          Reflect.getMetadata(PARTICIPANT_THROTTLE, handlerOf(route.name)) ===
-          undefined
+          Reflect.getMetadata(PARTICIPANT_THROTTLE, route.handler) === undefined
       )
       .map((route) => route.name);
 

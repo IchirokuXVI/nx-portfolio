@@ -1,6 +1,4 @@
 import { GENERATED_LIST_SHARING_PATTERNS } from '../../lib/messages/generated-list-sharing.messages';
-import { GENERATED_LIST_LIMITS } from '../../lib/messages/generated-list.messages';
-import { LINE_QUANTITY_MAX } from '../../lib/messages/list.messages';
 import {
   array,
   boolean,
@@ -14,8 +12,6 @@ import {
   string,
 } from '../builders';
 import { ENUM_IDS } from '../enums.schemas';
-import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
-import { GENERATED_LIST_SCHEMA_IDS } from './generated-list.schemas';
 
 /**
  * Sharing a basket with people who have no account (plan 0051).

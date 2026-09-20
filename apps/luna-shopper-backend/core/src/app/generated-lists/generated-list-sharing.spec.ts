@@ -61,7 +61,6 @@ function build(
     links?: Partial<GeneratedListShareLink>[];
     participants?: Partial<GeneratedListParticipant>[];
     /** Source lists the basket's provenance rows point at. */
-    sourceLists?: { listId: string; zoneId: string }[];
     /** userId -> the lists that user may write, at request time. */
     writable?: Record<string, string[]>;
     /** Make the next link insert lose the partial unique index. */
@@ -71,7 +70,6 @@ function build(
   const links = [...(options.links ?? [])];
   const participants = [...(options.participants ?? [])];
   const events: Harness['events'] = [];
-  const sourceLists = options.sourceLists ?? [];
   const writable = options.writable ?? {};
 
   const list = {
@@ -870,7 +868,7 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
    */
 
   it('answers a guest no flag at all, because the question is per list now', async () => {
-    const harness = build({ sourceLists: sources, writable: {} });
+    const harness = build({ writable: {} });
     const link = await harness.service.ensureLink({
       userId: OWNER,
       generatedListId: BASKET,
@@ -891,7 +889,6 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
 
   it('answers the owner no flag either, writing every covered list by construction', async () => {
     const harness = build({
-      sourceLists: sources,
       writable: { [OWNER]: [LIST_A, LIST_B] },
     });
     await harness.service.ensureLink({
@@ -912,7 +909,6 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
 
   it('serves a registered reader every covered list they write themselves', async () => {
     const harness = build({
-      sourceLists: sources,
       writable: { [OTHER_USER]: [LIST_A, LIST_B] },
     });
     const link = await harness.service.ensureLink({
@@ -937,7 +933,6 @@ describe('what a participant may see (plan 0136, section 3.4)', () => {
     // failed in the safe direction. Per list, there is no cliff to accept: the
     // list they write is named and the other one is not, on the same read.
     const harness = build({
-      sourceLists: sources,
       writable: { [OTHER_USER]: [LIST_A] },
     });
     const link = await harness.service.ensureLink({
@@ -963,7 +958,7 @@ describe('the device string is not presence data (section 7)', () => {
   // answer: when somebody arrived and what device they are on is a fact about
   // **them** rather than about any list, so no list's permissions decide it.
   it('shows it to the owner and hides it from a link visitor', async () => {
-    const harness = build({ sourceLists: [], writable: {} });
+    const harness = build({ writable: {} });
     const link = await harness.service.ensureLink({
       userId: OWNER,
       generatedListId: BASKET,

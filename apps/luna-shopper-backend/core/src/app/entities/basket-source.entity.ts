@@ -21,7 +21,7 @@ import { Zone } from './zone.entity';
  * over a `jsonb` array of pairs makes that a lookup.
  *
  * It does not extend `BaseEntity`, on the same reasoning as
- * `GeneratedListLineOrigin`: a source is written once with its basket and never
+ * the deleted `GeneratedListLineOrigin`: a source is written once with its basket and never
  * edited, so it has no life of its own to audit.
  *
  * ## Why it carries foreign keys where the origins carry none

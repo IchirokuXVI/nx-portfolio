@@ -135,8 +135,8 @@ export function toLineView(
  * A settlement on the wire (plan 0047, section 3).
  *
  * Three stored columns do not appear, and their absence is the point.
- * `generatedListLineId` is the basket the purchase came out of, which is private
- * where the purchase itself is a zone fact (section 3.1); `pricePaidCents` and
+ * `basketId` is the basket the purchase came out of, which is private where the
+ * purchase itself is a zone fact (section 3.1); `pricePaidCents` and
  * `supermarketLocationId` are declared for backlog 0004 and written by nothing
  * yet, so serving them would promise a number this plan never fills in.
  */

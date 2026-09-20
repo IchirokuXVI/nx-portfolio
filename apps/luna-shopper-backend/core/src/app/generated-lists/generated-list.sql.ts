@@ -1,4 +1,3 @@
-import type { LineApprovalStatus } from '@portfolio/luna-shopper/contracts';
 import { GENERATED_BASKET } from '../baskets/open-basket.sql';
 
 /**
@@ -266,4 +265,3 @@ export interface OrderHistoryRow {
   settledItemIds: string[];
   offsetSeconds: number;
 }
-
