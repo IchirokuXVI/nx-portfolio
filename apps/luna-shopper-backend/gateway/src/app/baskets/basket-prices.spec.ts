@@ -1,32 +1,45 @@
 import {
-  GENERATED_LIST_SHARING_PATTERNS,
+  BASKET_PATTERNS,
+  BasketKind,
+  BasketRowState,
+  GeneratedListStatus,
   ITEM_PATTERNS,
   ItemCategory,
+  LineApprovalStatus,
   ParticipantKind,
   PriceSourceKind,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   UnitOfMeasure,
+  type BasketView,
   type CatalogScopeView,
-  type GeneratedListBasketView,
   type GeneratedListParticipantContext,
+  type GeneratedListParticipantView,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
 import type { ShopperSelection } from '../catalog/scope-resolution.service';
-import { GeneratedListParticipantController } from './generated-list-sharing.controller';
+import { BasketCatalogService } from './basket-catalog.service';
+import { BasketController } from './basket.controller';
 
 /**
- * What a basket line costs, and where (plan 0066, sections 3 to 5).
+ * What a basket row costs, and where (plan 0066, sections 3 to 5).
  *
- * The basket read gained two things a client may ignore entirely: a `bestOffer`
+ * The composition these tests drive is {@link BasketCatalogService}, which plan
+ * 0136 moved out of the participant controller with nothing about it changed
+ * except where it reads the rows from, and it is reached here through
+ * `BasketController.get`, the `GET /v1/baskets/:id` that replaced
+ * `GET /v1/generated-lists/:id/basket`. The spec moved with the composition it
+ * proves; the rules it proves are the same ones.
+ *
+ * The basket read carries two things a client may ignore entirely: a `bestOffer`
  * on every product, and a description of every scope those offers name. Every
- * test here is about the two rules that make that safe rather than about the
+ * test here is about the rules that make that safe rather than about the
  * numbers, which are catalog's and are proven there:
  *
- * - **the scope is the run's, never the reader's**, and failing to price is
+ * - **the scope is the basket's, never the reader's**, and failing to price is
  *   never failing to read (section 3);
- * - **the price reaches everybody and the shop reaches only a reader who passes
- *   the all or nothing rule** (section 5).
+ * - **the price reaches everybody and the shop reaches only a reader the basket
+ *   says may have it** (section 5, and plan 0136 section 2 for who that is).
  */
 
 const BASKET_ID = 'b4b1f0e2-1f5a-4c2e-9a4d-6f0e2b7c1d33';
@@ -42,31 +55,71 @@ const participant = (
   generatedListId: BASKET_ID,
   kind: ParticipantKind.GUEST,
   userId: null,
-  seesZoneData: false,
   ...overrides,
 });
 
-const basketView = (seesZoneData: boolean): GeneratedListBasketView =>
-  ({
-    id: BASKET_ID,
-    name: null,
-    status: 'ACTIVE',
-    generatedAt: '2026-09-01T08:00:00.000Z',
-    lines: [
-      {
-        id: 'l1',
-        content: 'Milk',
-        quantity: 2,
-        settledQuantity: 0,
-        itemId: 'i-hacendado',
-        options: ['i-hacendado', 'i-pascual', 'i-unpriced'],
-        position: 0,
-      },
-    ],
-    participants: [],
-    me: { id: 'p-1', kind: ParticipantKind.GUEST, displayName: null },
-    seesZoneData,
-  }) as unknown as GeneratedListBasketView;
+/** The reader's own participant row, as core hands it back on the view. */
+const me: GeneratedListParticipantView = {
+  id: 'p-1',
+  kind: ParticipantKind.GUEST,
+  displayName: null,
+  username: null,
+  guestNumber: 1,
+  userId: null,
+  shareLinkId: null,
+};
+
+/**
+ * The basket core answers with: one row naming three products.
+ *
+ * `optionIds` is the union of the products the row names (plan 0136, section 2),
+ * which is where the deleted line's `itemId` and `options` went. The composition
+ * reads exactly this array, so a row is all the fixture needs to be.
+ *
+ * `servesLocations` is the flag **core** decides and the gateway obeys: it is a
+ * fact about the reader that arrives on the view, not something the gateway can
+ * work out from the participant it was handed.
+ */
+const basketView = (servesLocations: boolean): BasketView => ({
+  id: BASKET_ID,
+  kind: BasketKind.GENERATED,
+  name: null,
+  status: GeneratedListStatus.OPEN,
+  createdAt: '2026-09-01T08:00:00.000Z',
+  rows: [
+    {
+      rowKey: 'l1',
+      content: 'Milk',
+      left: 2,
+      bought: 0,
+      asked: 2,
+      state: BasketRowState.WANTED,
+      note: null,
+      noteAt: null,
+      mark: null,
+      awaitingApproval: false,
+      optionIds: ['i-hacendado', 'i-pascual', 'i-unpriced'],
+      touchedBy: null,
+      touchedAt: null,
+      entries: [
+        {
+          lineId: 'l1',
+          left: 2,
+          bought: 0,
+          state: BasketRowState.WANTED,
+          approvalStatus: LineApprovalStatus.APPROVED,
+          demandEditable: true,
+        },
+      ],
+    },
+  ],
+  lists: [],
+  participants: [],
+  me,
+  progress: { done: 0, unavailable: 0, total: 1, pending: 1 },
+  truncated: false,
+  servesLocations,
+});
 
 const item = (id: string, offer: ItemView['bestOffer']): ItemView => ({
   id,
@@ -119,7 +172,7 @@ const named = (id: string, address: string) => ({
   postalCode: '14008',
 });
 
-/** The resolution the run's profile reaches: two scopes, one chain each. */
+/** The resolution the basket's profile reaches: two scopes, one chain each. */
 const resolution = (): CatalogScopeView => ({
   priceScopeIds: [SCOPE_A, SCOPE_B],
   scopes: [
@@ -145,21 +198,22 @@ const resolution = (): CatalogScopeView => ({
 });
 
 interface World {
-  readonly seesZoneData?: boolean;
+  /** What the basket says about this reader (plan 0136, section 2). */
+  readonly servesLocations?: boolean;
   /** What catalog answers the priced lookup with, or a throw. */
   readonly items?: ItemView[] | 'throws';
   /** What the resolver answers with. */
   readonly resolves?: CatalogScopeView;
   /**
-   * The profile core answers with, null for a run composed before plan 0078.
+   * The profile core answers with, null for a basket composed before plan 0078.
    *
    * A run scoped by hand used to answer null here, which is why no basket
    * velista created ever showed a price. Since plan 0078 core answers the
-   * snapshot's `pricingProfileId`, so only a run older than that plan is
+   * snapshot's `pricingProfileId`, so only a basket older than that plan is
    * unpriced.
    */
   readonly profileId?: string | null;
-  /** What the run's profile refuses (plan 0064), or a throw. */
+  /** What the basket's profile refuses (plan 0064), or a throw. */
   readonly refuses?: ShopperSelection | 'throws';
 }
 
@@ -176,9 +230,9 @@ function build(world: World = {}) {
   const send = jest.fn(async (subject: string, payload: unknown) => {
     calls.push({ subject, payload });
     switch (subject) {
-      case GENERATED_LIST_SHARING_PATTERNS.basketGet:
-        return basketView(world.seesZoneData ?? false);
-      case GENERATED_LIST_SHARING_PATTERNS.searchScope:
+      case BASKET_PATTERNS.get:
+        return basketView(world.servesLocations ?? false);
+      case BASKET_PATTERNS.searchScope:
         return {
           ownerUserId: OWNER,
           profileId: world.profileId === undefined ? PROFILE : world.profileId,
@@ -223,10 +277,17 @@ function build(world: World = {}) {
     return world.refuses ?? refusesNothing();
   });
 
-  const controller = new GeneratedListParticipantController(
+  // One NATS fake behind both: the controller reads the basket with it and the
+  // composition reads catalog with it, which is the whole of the wiring under
+  // test here.
+  const catalog = new BasketCatalogService(
     { send } as never,
-    { describe, forShops } as never
+    {
+      describe,
+      forShops,
+    } as never
   );
+  const controller = new BasketController({ send } as never, catalog);
 
   const lookups = () =>
     calls
@@ -247,13 +308,13 @@ function build(world: World = {}) {
   return { controller, send, describe, forShops, lookups, locationReads };
 }
 
-describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
-  it("prices against the run's profile, never the reader's (section 3)", async () => {
+describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
+  it("prices against the basket's profile, never the reader's (section 3)", async () => {
     const { controller, describe, lookups } = build();
 
     // A registered participant with an account and, presumably, a profile of
     // their own. Nothing about them reaches the resolver.
-    await controller.getBasket(
+    await controller.get(
       participant({ kind: ParticipantKind.REGISTERED, userId: 'u-stranger' }),
       BASKET_ID
     );
@@ -286,7 +347,7 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
       },
     });
 
-    const result = await controller.getBasket(participant(), BASKET_ID);
+    const result = await controller.get(participant(), BASKET_ID);
 
     // No scopes on the lookup, so catalog answers names with no `bestOffer`
     // key, exactly as before; and no scope descriptions, because there is
@@ -298,10 +359,10 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
     expect(result.scopes).toEqual([]);
   });
 
-  it('answers the basket unpriced for a run composed before plan 0078', async () => {
+  it('answers the basket unpriced for a basket composed before plan 0078', async () => {
     const { controller, describe, lookups } = build({ profileId: null });
 
-    const result = await controller.getBasket(participant(), BASKET_ID);
+    const result = await controller.get(participant(), BASKET_ID);
 
     expect(describe).not.toHaveBeenCalled();
     expect(lookups()[0]).not.toHaveProperty('priceScopeIds');
@@ -311,17 +372,19 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
   it('answers the basket with no products and no scopes when catalog throws', async () => {
     const { controller } = build({ items: 'throws' });
 
-    const result = await controller.getBasket(participant(), BASKET_ID);
+    const result = await controller.get(participant(), BASKET_ID);
 
+    // Failing to price, or to name, is never failing to read: the rows are the
+    // basket and a shopper in an aisle keeps them.
     expect(result.id).toBe(BASKET_ID);
     expect(result.products).toEqual([]);
     expect(result.scopes).toEqual([]);
   });
 
   it('gives a guest the chain and no shops (section 5)', async () => {
-    const { controller, locationReads } = build({ seesZoneData: false });
+    const { controller, locationReads } = build({ servesLocations: false });
 
-    const result = await controller.getBasket(
+    const result = await controller.get(
       participant({ kind: ParticipantKind.GUEST }),
       BASKET_ID
     );
@@ -339,15 +402,17 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
     expect(locationReads()).toEqual([]);
   });
 
-  it('gives a reader who passes the rule the chain and its shops', async () => {
-    const { controller, locationReads } = build({ seesZoneData: true });
+  it('gives a reader the basket serves locations to the chain and its shops', async () => {
+    const { controller, locationReads } = build({ servesLocations: true });
 
-    const result = await controller.getBasket(
-      participant({
-        kind: ParticipantKind.OWNER,
-        userId: OWNER,
-        seesZoneData: true,
-      }),
+    // Plan 0136, section 2: what decides is `BasketView.servesLocations`, which
+    // core answers for the owner and for every person the owner **named**. It
+    // is not a fact the gateway can derive from the participant it holds, and
+    // being `REGISTERED` and writing every covered list — which was the whole
+    // of the deleted `seesZoneData` — is no longer enough on its own. So this
+    // reader has an account and still gets shops only because the view says so.
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.REGISTERED, userId: 'u-named' }),
       BASKET_ID
     );
 
@@ -357,7 +422,8 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
       named('loc-tejares', 'Ronda de los Tejares 32'),
       named('loc-lagartijo', 'Avenida del Gran Capitán 5'),
     ]);
-    // The shops of the one scope the offers name, read as the owner.
+    // The shops of the one scope the offers name, read as the owner: the
+    // profile behind them is the owner's, whoever is looking.
     expect(locationReads()).toEqual([
       expect.objectContaining({ priceScopeId: SCOPE_A, userId: OWNER }),
     ]);
@@ -365,32 +431,32 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
 
   it('describes exactly the scopes the offers reference, with no extras (section 4)', async () => {
     // The profile resolves to two scopes; every offer came from the first.
-    const { controller } = build({ seesZoneData: true });
+    const { controller } = build({ servesLocations: true });
 
-    const result = await controller.getBasket(
-      participant({ kind: ParticipantKind.OWNER, seesZoneData: true }),
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
       BASKET_ID
     );
 
     expect(result.scopes.map((scope) => scope.priceScopeId)).toEqual([SCOPE_A]);
   });
 
-  it("never names a shop the run's profile switched off (section 4)", async () => {
+  it("never names a shop the basket's profile switched off (section 4)", async () => {
     const { controller, forShops } = build({
-      seesZoneData: true,
+      servesLocations: true,
       refuses: {
         ...refusesNothing(),
         excludedSupermarketLocationIds: ['loc-tejares'],
       },
     });
 
-    const result = await controller.getBasket(
-      participant({ kind: ParticipantKind.OWNER, seesZoneData: true }),
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
       BASKET_ID
     );
 
-    // The refusals are the run's, asked for by the run's profile, exactly as
-    // the prices are.
+    // The refusals are the basket's, asked for by the basket's profile, exactly
+    // as the prices are.
     expect(forShops).toHaveBeenCalledWith(OWNER, { profileId: PROFILE });
     expect(result.scopes[0].locations).toEqual([
       named('loc-lagartijo', 'Avenida del Gran Capitán 5'),
@@ -399,15 +465,15 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
 
   it('hides every shop of a chain refused whole (plan 0064, section 2.1)', async () => {
     const { controller, locationReads } = build({
-      seesZoneData: true,
+      servesLocations: true,
       refuses: {
         ...refusesNothing(),
         excludedSupermarketIds: ['mercadona'],
       },
     });
 
-    const result = await controller.getBasket(
-      participant({ kind: ParticipantKind.OWNER, seesZoneData: true }),
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
       BASKET_ID
     );
 
@@ -419,36 +485,49 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
     expect(locationReads()).toEqual([]);
   });
 
-  it('does not ask what a guest, who sees no shops, has refused', async () => {
-    const { controller, forShops } = build({ seesZoneData: false });
+  it('does not ask what a reader who sees no shops has refused', async () => {
+    const { controller, forShops, locationReads } = build({
+      servesLocations: false,
+    });
 
-    await controller.getBasket(participant(), BASKET_ID);
-
-    expect(forShops).not.toHaveBeenCalled();
-  });
-
-  it('keeps the shops when the refusals cannot be read', async () => {
-    const { controller } = build({ seesZoneData: true, refuses: 'throws' });
-
-    const result = await controller.getBasket(
-      participant({ kind: ParticipantKind.OWNER, seesZoneData: true }),
+    // A registered participant who arrived by a link. Plan 0136, section 2 is
+    // explicit that a link visitor is served the chain and the price scope and
+    // never a street address, guest **or** registered, so the refusals that
+    // only ever trim a shop list are a round trip nobody will read.
+    await controller.get(
+      participant({ kind: ParticipantKind.REGISTERED, userId: 'u-visitor' }),
       BASKET_ID
     );
 
-    // A preference that cannot be applied is not a disclosure: `seesZoneData`
+    expect(forShops).not.toHaveBeenCalled();
+    expect(locationReads()).toEqual([]);
+  });
+
+  it('keeps the shops when the refusals cannot be read', async () => {
+    const { controller } = build({
+      servesLocations: true,
+      refuses: 'throws',
+    });
+
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
+      BASKET_ID
+    );
+
+    // A preference that cannot be applied is not a disclosure: `servesLocations`
     // already decided this reader may see the shops, so core being slow costs
     // an excluded shop staying on the list rather than costing the address.
     expect(result.scopes[0].locations).toHaveLength(2);
   });
 
-  it('asks for no refusals for a run composed before plan 0078', async () => {
+  it('asks for no refusals for a basket composed before plan 0078', async () => {
     const { controller, forShops } = build({
-      seesZoneData: true,
+      servesLocations: true,
       profileId: null,
     });
 
-    const result = await controller.getBasket(
-      participant({ kind: ParticipantKind.OWNER, seesZoneData: true }),
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
       BASKET_ID
     );
 
@@ -464,10 +543,10 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
       if (subject === SUPERMARKET_PATTERNS.list) {
         throw new Error('catalog slow');
       }
-      if (subject === GENERATED_LIST_SHARING_PATTERNS.basketGet) {
+      if (subject === BASKET_PATTERNS.get) {
         return basketView(false);
       }
-      if (subject === GENERATED_LIST_SHARING_PATTERNS.searchScope) {
+      if (subject === BASKET_PATTERNS.searchScope) {
         return { ownerUserId: OWNER, profileId: PROFILE };
       }
       return {
@@ -475,7 +554,7 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
       };
     });
 
-    const result = await controller.getBasket(participant(), BASKET_ID);
+    const result = await controller.get(participant(), BASKET_ID);
 
     // A price with no place is a smaller answer and still the answer to "how
     // much". The client is written to resolve a scope id to nothing.
@@ -490,11 +569,11 @@ describe('GET /v1/generated-lists/:id/basket: prices (plan 0066)', () => {
  *
  * The cheapest offer answers "what will this cost" and cannot answer "what does
  * this shop charge", so a shop filter built on it drops every product a chain
- * stocks but is dearer at. The read now asks catalog for all of them, and the
- * two things that has to hold are that nothing else about the read moved, and
- * that a scope reaching the client on `offers` alone is still named.
+ * stocks but is dearer at. The read asks catalog for all of them, and the two
+ * things that have to hold are that nothing else about the read moved, and that
+ * a scope reaching the client on `offers` alone is still named.
  */
-describe('GET /v1/generated-lists/:id/basket: every shop (plan 0109)', () => {
+describe('GET /v1/baskets/:id: every shop (plan 0109)', () => {
   /** A product quoted by both scopes, cheaper at the first. */
   const quotedTwice = (): ItemView => ({
     ...item('i-hacendado', offer('i-hacendado', SCOPE_A, 0.95)),
@@ -509,7 +588,7 @@ describe('GET /v1/generated-lists/:id/basket: every shop (plan 0109)', () => {
       items: [quotedTwice(), { ...item('i-unpriced', null), offers: [] }],
     });
 
-    const result = await controller.getBasket(participant(), BASKET_ID);
+    const result = await controller.get(participant(), BASKET_ID);
 
     expect(result.products[0].offers?.map((row) => row.priceScopeId)).toEqual([
       SCOPE_A,
@@ -517,17 +596,17 @@ describe('GET /v1/generated-lists/:id/basket: every shop (plan 0109)', () => {
     ]);
     expect(result.products[0].bestOffer?.priceScopeId).toBe(SCOPE_A);
     // A product nothing quotes says so with an empty list rather than by being
-    // absent: the line still has a name to draw.
+    // absent: the row still has a name to draw.
     expect(result.products[1].offers).toEqual([]);
   });
 
   it('names a chain that quotes a product without ever being the cheapest', async () => {
     // The whole reason the read was widened. `i-pascual` is dearer at Carrefour
-    // than the Mercadona line beside it, so no `bestOffer` on this basket names
-    // Carrefour at all, and a scopes array read off `bestOffer` would leave the
-    // client a price with no shop behind it.
+    // than the Mercadona product beside it, so no `bestOffer` on this basket
+    // names Carrefour at all, and a scopes array read off `bestOffer` would
+    // leave the client a price with no shop behind it.
     const { controller } = build({
-      seesZoneData: false,
+      servesLocations: false,
       items: [
         quotedTwice(),
         {
@@ -540,7 +619,7 @@ describe('GET /v1/generated-lists/:id/basket: every shop (plan 0109)', () => {
       ],
     });
 
-    const result = await controller.getBasket(participant(), BASKET_ID);
+    const result = await controller.get(participant(), BASKET_ID);
 
     expect(result.scopes.map((scope) => scope.priceScopeId)).toEqual([
       SCOPE_A,
@@ -557,12 +636,12 @@ describe('GET /v1/generated-lists/:id/basket: every shop (plan 0109)', () => {
       items: [{ ...item('i-unpriced', null), offers: [] }],
     });
 
-    const result = await controller.getBasket(participant(), BASKET_ID);
+    const result = await controller.get(participant(), BASKET_ID);
 
     expect(result.scopes).toEqual([]);
   });
 
-  it('asks for the cheapest alone when the run resolves to no scopes', async () => {
+  it('asks for the cheapest alone when the basket resolves to no scopes', async () => {
     const { controller, lookups } = build({
       resolves: {
         priceScopeIds: [],
@@ -574,7 +653,7 @@ describe('GET /v1/generated-lists/:id/basket: every shop (plan 0109)', () => {
       },
     });
 
-    await controller.getBasket(participant(), BASKET_ID);
+    await controller.get(participant(), BASKET_ID);
 
     // A lookup that prices nothing has no offers to list, so the unpriced
     // request is exactly the one it always was.
