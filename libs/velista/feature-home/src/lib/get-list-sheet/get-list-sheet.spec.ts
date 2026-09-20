@@ -84,10 +84,11 @@ interface Options {
   /**
    * The page the sheet is declared over, as its route states it.
    *
-   * Left out it is the dashboard's copy, which is what an absent `returnTo` means and
-   * what the route table said before the history gained a copy of its own.
+   * Left out it is the history's copy, which is what an absent `returnTo` means since
+   * velista `0097` took the dashboard's copy away: home's button row was replaced by
+   * the app's own bar, so the two copies left are the history and the third tab.
    */
-  readonly returnTo?: 'home' | 'shopping-lists';
+  readonly returnTo?: 'shopping-lists' | 'shopping-lists/current';
   /** The profiles the chooser has to choose between. One unnamed default by default. */
   readonly profiles?: readonly ShoppingProfile[];
   /**
@@ -500,14 +501,14 @@ describe('GetListSheet', () => {
   });
 
   describe('the way to the history', () => {
-    it('offers it from the header, even with no active basket to have a card', async () => {
-      const fixture = await render();
+    it('offers it from the header over the third tab', async () => {
+      const fixture = await render({ returnTo: 'shopping-lists/current' });
 
       expect(query(fixture, '.history')).not.toBeNull();
     });
 
     it('is drawn beside the title rather than beside the submit', async () => {
-      const fixture = await render();
+      const fixture = await render({ returnTo: 'shopping-lists/current' });
 
       expect(query(fixture, '.head-row .history')).not.toBeNull();
     });
@@ -515,16 +516,18 @@ describe('GetListSheet', () => {
     it('is offered even when there is nowhere to draw from', async () => {
       // The one case where the sheet can do nothing else for you is exactly the case
       // where looking at what you already have is the useful thing left.
-      const fixture = await render({ zones: [] });
+      const fixture = await render({
+        zones: [],
+        returnTo: 'shopping-lists/current',
+      });
 
       expect(fixture.componentInstance.noSources()).toBe(true);
       expect(query(fixture, '.history')).not.toBeNull();
     });
 
     it('is absent over the history itself, which is where it would lead', async () => {
-      // The whole reason for the link is that somebody with no card has no other route
-      // to the history. Over the history that reason is gone, and a control leading to
-      // the screen it is on is worse than no control.
+      // A control leading to the screen it is already on is worse than no control. The
+      // third tab above is not that case: it is its own screen, with its own clock.
       const fixture = await render({ returnTo: 'shopping-lists' });
 
       expect(fixture.componentInstance.showHistory).toBe(false);
@@ -541,14 +544,33 @@ describe('GetListSheet', () => {
    * exactly when there is nothing to pop.
    */
   describe('the page it falls back to', () => {
-    it('is the dashboard for the dashboard copy', async () => {
+    it('is the third tab for the third tab copy', async () => {
+      const fixture = await render({ returnTo: 'shopping-lists/current' });
+      const sheet = TestBed.inject(SheetNavigation);
+      const dismiss = jest.spyOn(sheet, 'dismiss').mockResolvedValue(undefined);
+
+      await fixture.componentInstance.dismiss();
+
+      expect(dismiss).toHaveBeenCalledWith(
+        expect.stringContaining('/shopping-lists/current')
+      );
+    });
+
+    /**
+     * An unstated `returnTo` lands on the history rather than throwing, and the history
+     * is the right default: it is a real page that lists every basket, so a sheet route
+     * added without the data is merely blunt rather than broken.
+     */
+    it('is the history when the route says nothing', async () => {
       const fixture = await render();
       const sheet = TestBed.inject(SheetNavigation);
       const dismiss = jest.spyOn(sheet, 'dismiss').mockResolvedValue(undefined);
 
       await fixture.componentInstance.dismiss();
 
-      expect(dismiss).toHaveBeenCalledWith(expect.stringContaining('/home'));
+      expect(dismiss).toHaveBeenCalledWith(
+        expect.stringContaining('/shopping-lists')
+      );
     });
 
     it('is the history for the history copy', async () => {

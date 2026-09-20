@@ -106,6 +106,10 @@
 :host {
   @include tokens.app-root;
 
+  // How much room the page leaves at its foot. The safe area on its own while the app
+  // draws no bar, and the whole bar once it does (plan 0097).
+  --app-page-foot: var(--app-safe-bottom);
+
   display: block;
   flex: 1;
   // So a wide child cannot push the flex item past the viewport.
@@ -117,6 +121,19 @@
   font-family: var(--app-font-sans);
   font-size: var(--app-text-base);
   line-height: var(--app-leading-body);
+}
+
+// **The bar is the only element on a screen that may carry the bottom inset**
+// (plan 0097, section 5). While it is up, `--app-safe-bottom` is zero for everything
+// below this element, so a screen that draws its own dock keeps its padding and loses
+// its inset rather than clearing the home indicator twice over. The bar reads
+// `--app-nav-safe-bottom`, which is the same `env()` under a name nothing redefines.
+//
+// One declaration rather than an edit to every dock in the app, and that is the point:
+// a dock added later is covered by it without knowing this rule exists.
+:host(.nav-up) {
+  --app-safe-bottom: 0px;
+  --app-page-foot: var(--app-nav-height);
 }
 
 // A theme is a class on the app root that redefines the semantic colour layer,
@@ -142,7 +159,10 @@
   // action bar is not hidden behind the home indicator.
   padding-right: var(--app-safe-right);
   padding-left: var(--app-safe-left);
-  padding-bottom: var(--app-safe-bottom);
+  // The bar is fixed to the screen, so this is what keeps a page from ending
+  // underneath it: `box-sizing: border-box` is global, so a page sized `100%` of this
+  // element resolves against the content box and stops above the bar.
+  padding-bottom: var(--app-page-foot);
   height: 100%;
 
   // Section 8: wide screens are not designed, only kept from breaking. One

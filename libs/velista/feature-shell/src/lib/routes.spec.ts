@@ -1,5 +1,9 @@
 import type { Route } from '@angular/router';
-import { SHEET_SEGMENT } from '@portfolio/velista/platform';
+import {
+  NAV_CHROME,
+  NO_NAV_CHROME,
+  SHEET_SEGMENT,
+} from '@portfolio/velista/platform';
 import { AppShellRoutes } from './routes';
 
 /**
@@ -64,11 +68,15 @@ describe('AppShellRoutes', () => {
       ).toBe(true);
     });
 
-    it('offers the same two over the dashboard, beside its own', () => {
+    it('offers the same two over the dashboard, and nothing else', () => {
       // Both pages offer both entry actions, so those two copies come from one
       // function and cannot drift apart.
+      //
+      // Get shopping list is **not** among them any more (velista 0097, section 6):
+      // the button that opened it was in home's bottom row, and that row went when
+      // the app's own bar took its place. A sheet no control can open is a URL that
+      // draws a form over the wrong page.
       expect(sheetsOf('home').map((route) => route.path)).toEqual([
-        'sheet/get',
         'sheet/zones/new',
         'sheet/zones/join',
       ]);
@@ -82,10 +90,13 @@ describe('AppShellRoutes', () => {
      * person was dropped back on the history on the way out. A sheet has to cover the
      * page it was opened from, which means one child route per page that offers it.
      */
-    it('draws Get shopping list over the history as well as the dashboard', () => {
+    it('draws Get shopping list over the history and over the third tab', () => {
       expect(sheetsOf('shopping-lists').map((route) => route.path)).toEqual([
         'sheet/get',
       ]);
+      expect(
+        sheetsOf('shopping-lists/current').map((route) => route.path)
+      ).toEqual(['sheet/get']);
     });
 
     it('tells each sheet which page it is covering', () => {
@@ -96,11 +107,18 @@ describe('AppShellRoutes', () => {
         'landing',
       ]);
       expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual(
-        ['home', 'home', 'home']
+        ['home', 'home']
       );
       expect(
         sheetsOf('shopping-lists').map((route) => route.data?.['returnTo'])
       ).toEqual(['shopping-lists']);
+      // A path rather than a name, which is what lets the sheet's Cancel hand it
+      // straight to `appPath` (velista 0097, section 6).
+      expect(
+        sheetsOf('shopping-lists/current').map(
+          (route) => route.data?.['returnTo']
+        )
+      ).toEqual(['shopping-lists/current']);
     });
 
     /**
@@ -981,5 +999,83 @@ describe('the basket routes', () => {
     expect(
       pages.find((route) => route.path === 'shopping-lists')?.loadComponent
     ).toBeDefined();
+  });
+});
+
+/**
+ * The bar at the bottom of the app (velista `0097`).
+ *
+ * Two things about it are properties of this table rather than of a component: which
+ * screens ask for no chrome, and that the third tab's word is not read as a basket id.
+ */
+describe('the bottom bar', () => {
+  const paths = pages.map((route) => route.path);
+
+  /**
+   * Section 4. Each of these is one task with one way out, and two of the three tabs
+   * need an account.
+   */
+  const chromeless = [
+    '',
+    'auth/login',
+    'auth/register',
+    'auth/upgrade',
+    'auth/verify',
+    'auth/callback',
+    'join/:code',
+    's/:secret',
+  ];
+
+  it.each(chromeless)('draws no bar on "%s"', (path) => {
+    expect(pages.find((route) => route.path === path)?.data?.[NAV_CHROME]).toBe(
+      NO_NAV_CHROME
+    );
+  });
+
+  /**
+   * The other half, and the half that matters as the table grows: the bar is drawn
+   * **unless something says otherwise**, which is the opposite of a page opting in. A
+   * page added later carries no flag and therefore gets the bar, and a flag added by
+   * accident fails here.
+   */
+  it('draws it on every other page', () => {
+    const flagged = pages
+      .filter((route) => route.data?.[NAV_CHROME] === NO_NAV_CHROME)
+      .map((route) => route.path);
+
+    expect(flagged.sort()).toEqual([...chromeless].sort());
+  });
+
+  /**
+   * `current` is a word and `:generatedListId` is an id, so the word has to be offered
+   * first. This is the collision `SHEET_SEGMENT` exists to prevent one level down, and
+   * the basket's `canMatch` UUID guard is what keeps the pair unambiguous the other way
+   * round.
+   */
+  it('declares the third tab before the basket id it would be read as', () => {
+    expect(paths).toContain('shopping-lists/current');
+    expect(paths.indexOf('shopping-lists/current')).toBeLessThan(
+      paths.indexOf('shopping-lists/:generatedListId')
+    );
+  });
+
+  it('demands an account for the third tab, and keeps it lazy', () => {
+    const tab = pages.find((route) => route.path === 'shopping-lists/current');
+
+    expect(tab?.canActivate).toHaveLength(1);
+    expect(tab?.loadComponent).toBeDefined();
+  });
+
+  /**
+   * The catalog has no screen yet (`0100`), and the route still has to exist: a tab
+   * that leads to this app's 404 is worse than no tab, so it draws one line saying the
+   * screen is coming.
+   */
+  it('gives the catalog tab a route to open', () => {
+    const catalog = pages.find((route) => route.path === 'catalog');
+
+    expect(catalog?.loadComponent).toBeDefined();
+    expect(catalog?.canActivate).toHaveLength(1);
+    expect(paths.indexOf('catalog')).toBeLessThan(paths.indexOf(''));
   });
 });
