@@ -1,3 +1,5 @@
+> **PR:** [#427](https://github.com/IchirokuXVI/nx-portfolio/pull/427)
+
 # 0137: a line skipped for now
 
 > A shopper can no longer take a line out of a basket (`0130` section 5, `0136` section
