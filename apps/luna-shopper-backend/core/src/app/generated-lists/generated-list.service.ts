@@ -46,6 +46,9 @@ import {
   tripListsOfOwner,
 } from '../lists/trips/trips.announce';
 import { ProfileService } from '../profiles/profile.service';
+// A value import, never a `type` one: a `type` import on a constructor
+// dependency erases the token Nest resolves it by.
+import { BasketTripRowsService } from './basket-trip-rows.service';
 import { GeneratedListMembersService } from './generated-list-members.service';
 import {
   SHARED_BASKETS_SQL,
@@ -156,10 +159,14 @@ export class GeneratedListService {
     // deletion.
     private readonly members: GeneratedListMembersService,
     // What the run was asked to draw from (plan 0133, section 4), read back on
-    // every view of a basket. Last in the list on purpose, so that adding it
-    // shifts no existing positional argument in the specs.
+    // every view of a basket.
     @InjectRepository(BasketSource)
-    private readonly sources: Repository<BasketSource>
+    private readonly sources: Repository<BasketSource>,
+    // What a trip asked, frozen by its finish (plan 0135). Called from `update`
+    // alone, inside the transaction that moves the status. Last in the list on
+    // purpose, so that adding it shifts no existing positional argument in the
+    // specs.
+    private readonly tripRows: BasketTripRowsService
   ) {}
 
   /**
@@ -782,6 +789,33 @@ export class GeneratedListService {
    * it has no name and it never ends. Both are refused here, naming the field, so
    * the caller is told which write was wrong rather than meeting
    * `ck_generated_lists_live_shape` as a database error.
+   *
+   * ## The one place a basket's status is written (plan 0135, section 3.1)
+   *
+   * The sweep finishes a basket through here, the client finishes and reopens
+   * through here, and archiving comes through here as well. So this is where the
+   * trip's numbers are frozen and thawed, and the write is **in the transaction
+   * that changes the status**: a basket has rows in `basket_trip_rows` exactly
+   * while it is not `OPEN`, and every read of a finished trip's ask leans on
+   * that.
+   *
+   * `OPEN` to `FINISHED` or `ARCHIVED` freezes. Either of those back to `OPEN`
+   * thaws. `FINISHED` to `ARCHIVED` and back does nothing, because the rows
+   * already stand, and so does a rename or a status set to the value it already
+   * holds. Archiving says nothing about whether a basket was shopped (plan
+   * 0110), so archiving an open basket ends its trip exactly as finishing it
+   * does.
+   *
+   * The announcements stay **after** the commit, where they were before.
+   *
+   * ## The race that is accepted
+   *
+   * `GeneratedListOriginsService.setOriginQuantity` checks the status before its
+   * own transaction and does not lock the basket, so an origin edit that read
+   * `OPEN` a moment before the finish can commit after the freeze, and the trip
+   * then shows the number from before that edit. The window is one request wide,
+   * the edit is the shopper's own, and plan 0136 deletes the origin writes
+   * altogether. It is not worth a lock in a service this series removes.
    */
   async update(req: UpdateGeneratedListRequest): Promise<GeneratedListView> {
     const list = await this.load(req.userId, req.generatedListId);
@@ -800,20 +834,50 @@ export class GeneratedListService {
         { messageArgs: { field: 'status' } }
       );
     }
+    // Checked before the transaction opens, so a name a client cannot have is
+    // refused without taking a row lock for it.
+    const name = req.name === undefined ? undefined : checkName(req.name);
+
     // Open **and** a trip, in both directions (plan 0133, section 6), so the
-    // permanent basket never announces a claim and never releases one.
-    const wasLive = isTripInProgress(list);
-    const before = { name: list.name, status: list.status };
-    if (req.name !== undefined) {
-      list.name = checkName(req.name);
-    }
-    if (req.status !== undefined) {
-      list.status = req.status;
-    }
-    if (req.defaultTargetListId !== undefined) {
-      list.defaultTargetListId = req.defaultTargetListId;
-    }
-    const saved = await this.lists.save(list);
+    // permanent basket never announces a claim and never releases one. Read off
+    // the locked row rather than the one loaded above, so a second writer that
+    // moved the status between the two does not make this one announce a
+    // transition that already happened.
+    let wasLive = false;
+    let before = { name: list.name, status: list.status };
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const locked = await manager.findOne(GeneratedList, {
+        where: { id: list.id, ownerUserId: req.userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) {
+        // Deleted between the load and the lock.
+        throw new NotFoundException(NO_SUCH_GENERATED_LIST);
+      }
+      wasLive = isTripInProgress(locked);
+      before = { name: locked.name, status: locked.status };
+      const wasOpen = isOpenBasket(locked.status);
+      if (name !== undefined) {
+        locked.name = name;
+      }
+      if (req.status !== undefined) {
+        locked.status = req.status;
+      }
+      if (req.defaultTargetListId !== undefined) {
+        locked.defaultTargetListId = req.defaultTargetListId;
+      }
+      const row = await manager.getRepository(GeneratedList).save(locked);
+
+      // The two branches the claim announcement already has, asked of the
+      // status alone (plan 0135, section 3.1).
+      const isOpen = isOpenBasket(row.status);
+      if (wasOpen && !isOpen) {
+        await this.tripRows.freeze(manager, row.id);
+      } else if (!wasOpen && isOpen) {
+        await this.tripRows.thaw(manager, row.id);
+      }
+      return row;
+    });
     const view = await this.viewFor(saved);
     this.events.emitToUsers(
       RealtimeEvent.GeneratedListUpdated,

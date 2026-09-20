@@ -8,10 +8,14 @@ import {
   ConflictException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import type { DataSource } from 'typeorm';
 import type { GeneratedList } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ProfileService } from '../profiles/profile.service';
+import {
+  fakeBasketTripRows,
+  fakeUpdateDataSource,
+  type FakeBasketTripRows,
+} from './basket-trip-rows.fake';
 import { GeneratedListSweepService } from './generated-list-sweep.service';
 import { GeneratedListService } from './generated-list.service';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
@@ -55,6 +59,7 @@ interface Harness {
   rows: GeneratedList[];
   claims: FakeLineClaims;
   events: RealtimeEvent[];
+  tripRows: FakeBasketTripRows;
 }
 
 /** The claim refs a basket is said to hold, so a transition has one to release. */
@@ -79,8 +84,9 @@ function build(rows: GeneratedList[]): Harness {
     query: async () => [{ listId: 'l-flat' }],
   };
 
+  const tripRows = fakeBasketTripRows();
   const service = new GeneratedListService(
-    {} as DataSource,
+    fakeUpdateDataSource(lists),
     lists as never,
     { find: async () => [] } as never,
     {} as never,
@@ -94,10 +100,11 @@ function build(rows: GeneratedList[]): Harness {
     } as unknown as CoreEventsPublisher,
     {} as never,
     { liveRegistered: async () => [] } as never,
-    { find: async () => [] } as never
+    { find: async () => [] } as never,
+    tripRows.service
   );
 
-  return { service, rows, claims, events };
+  return { service, rows, claims, events, tripRows };
 }
 
 describe('whether a basket still takes writes (section 3)', () => {
@@ -167,9 +174,8 @@ describe('what the permanent basket refuses (section 2)', () => {
     // every basket it owns, and the permanent one is one of them.
     const { service } = build([liveBasket()]);
     const deleted = jest.fn(async () => ({ affected: 1 }));
-    (
-      service as unknown as { lists: { delete: unknown } }
-    ).lists.delete = deleted;
+    (service as unknown as { lists: { delete: unknown } }).lists.delete =
+      deleted;
 
     await service.deleteForUser(OWNER);
 
@@ -224,7 +230,8 @@ describe('the sweep leaves the permanent basket alone (section 6)', () => {
             (row) =>
               row.kind === query.where.kind &&
               row.status === query.where.status &&
-              row.generatedAt.getTime() < query.where.generatedAt.value.getTime()
+              row.generatedAt.getTime() <
+                query.where.generatedAt.value.getTime()
           )
           .slice(0, query.take),
     };

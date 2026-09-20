@@ -16,6 +16,7 @@ import {
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { BASKET_ORIGIN_LISTS_SQL } from '../lists/trips/trips.sql';
 import type { ProfileService } from '../profiles/profile.service';
+import { fakeBasketTripRows } from './basket-trip-rows.fake';
 import type { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListService } from './generated-list.service';
@@ -225,11 +226,20 @@ function build(options: {
   };
 
   const manager = {
+    // The basket `update` locks and re-reads inside its transaction (plan 0135,
+    // section 3.1). The same row the load above answered with, because this
+    // harness stores one.
+    findOne: async () => options.existing ?? null,
     getRepository: (entity: unknown) => {
       if (entity === GeneratedList) {
         return {
           create: (data: Partial<GeneratedList>) => ({ ...data }),
+          // A row that already has an id is an update rather than the run's
+          // insert, and it keeps the id it arrived with.
           save: async (row: Partial<GeneratedList>) => {
+            if (row.id) {
+              return row;
+            }
             if (options.loseTheRace) {
               throw uniqueViolation();
             }
@@ -328,6 +338,7 @@ function build(options: {
 
   const claims = fakeLineClaims({}, () => options.claiming ?? []);
 
+  const tripRows = fakeBasketTripRows();
   const service = new GeneratedListService(
     dataSource,
     listRepo as never,
@@ -344,7 +355,8 @@ function build(options: {
     new GeneratedListOrderService(orderRepo as never),
     members,
     // The source rows the run wrote, read back by every view of the basket.
-    { find: async () => written.sources } as never
+    { find: async () => written.sources } as never,
+    tripRows.service
   );
 
   return {
@@ -353,6 +365,7 @@ function build(options: {
     events,
     tripsChanged,
     claims,
+    tripRows,
     orderReads: () => orderReads,
   };
 }

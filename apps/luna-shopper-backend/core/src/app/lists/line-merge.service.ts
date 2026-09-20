@@ -9,6 +9,7 @@ import {
 import { LineMergeTooManyProductsException } from '@portfolio/luna-shopper/platform';
 import { In, type EntityManager } from 'typeorm';
 import {
+  BasketTripRow,
   GeneratedListLineOrigin,
   LineComment,
   LineSettlement,
@@ -151,6 +152,10 @@ export class LineMergeService {
 
     const version = survivor.version + 1;
     await this.moveOrigins(manager, survivor.id, absorbed.id, version);
+    // Beside the origins, and before the delete below: `basket_trip_rows` names
+    // the line by a foreign key, so a row still pointing at the absorbed line
+    // would go with it (plan 0135, section 5).
+    await this.moveTripRows(manager, survivor.id, absorbed.id);
 
     survivor.quantity = Math.min(
       survivor.quantity + absorbed.quantity,
@@ -288,6 +293,52 @@ export class LineMergeService {
           { id: origin.id },
           { lineId: survivorId, lineVersion: version }
         );
+      }
+    }
+  }
+
+  /**
+   * The trip rows that point at the absorbed line (plan 0135, section 5).
+   *
+   * A finished basket that asked for both lines ends with one row, the
+   * survivor's, holding both asks, because `uq_basket_trip_rows_line` allows one
+   * row per basket and zone line. The twin of {@link moveOrigins}, and the
+   * reason is the same: the two lines are one line now, and the trip asked for
+   * it.
+   *
+   * It carries no version, because a trip row has none: it is written once and
+   * this is the one edit it ever takes. `listId` does not move either, since
+   * both lines are on one list.
+   *
+   * It does not make a finished trip follow its list. A merge changes which line
+   * the household calls milk, not how much milk the trip asked for.
+   */
+  private async moveTripRows(
+    manager: EntityManager,
+    survivorId: string,
+    absorbedId: string
+  ): Promise<void> {
+    const rows = manager.getRepository(BasketTripRow);
+    const moving = await rows.find({
+      where: { lineId: absorbedId },
+      order: { id: 'ASC' },
+    });
+    if (moving.length === 0) {
+      return;
+    }
+    const staying = await rows.find({ where: { lineId: survivorId } });
+    const byBasket = new Map(staying.map((row) => [row.basketId, row]));
+    for (const row of moving) {
+      const shared = byBasket.get(row.basketId);
+      if (shared) {
+        // Deleted first, so the pair never exists twice under the unique key.
+        await rows.delete({ id: row.id });
+        await rows.update(
+          { id: shared.id },
+          { asked: shared.asked + row.asked }
+        );
+      } else {
+        await rows.update({ id: row.id }, { lineId: survivorId });
       }
     }
   }

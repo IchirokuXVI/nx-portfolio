@@ -30,10 +30,21 @@ import { SettlementBasket1756002300000 } from './migrations/1756002300000-Settle
  *   the backfill reads.
  */
 
-/** Everything before the one under test: the state the backfill starts in. */
-const BEFORE = CORE_MIGRATIONS.filter(
-  (migration) => migration !== SettlementBasket1756002300000
+/**
+ * The list up to and including the one under test, and the same list one short.
+ *
+ * Both are **prefixes** rather than the whole list with one entry taken out. A
+ * migration that follows the one under test may lean on it and would run here
+ * against a database held deliberately one step back. Stopping at the one under
+ * test is also the truer picture of a deployment, which has not applied anything
+ * after it either, and it is what leaves this migration the last applied, so
+ * `undoLastMigration` means this one.
+ */
+const THROUGH = CORE_MIGRATIONS.slice(
+  0,
+  CORE_MIGRATIONS.indexOf(SettlementBasket1756002300000) + 1
 );
+const BEFORE = THROUGH.slice(0, -1);
 
 const PROBE_DATABASE = 'luna_core_0134_probe';
 
@@ -168,7 +179,7 @@ describeIntegration('SettlementBasket1756002300000 (real Postgres)', () => {
 
     // The migration itself, as its own data source, so the migrations table
     // carries exactly the state a real deployment's does when this one runs.
-    await open(CORE_MIGRATIONS);
+    await open(THROUGH);
     await probe.runMigrations({ transaction: 'each' });
   }, 300_000);
 
