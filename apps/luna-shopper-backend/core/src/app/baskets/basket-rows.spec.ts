@@ -14,6 +14,7 @@ import {
   newestSettlement,
   noteOf,
   NO_BASKET_SKIPS,
+  NO_ROW_MARKS,
   optionIdsOf,
   progressOf,
   stateOf,
@@ -106,6 +107,9 @@ const OPEN_CONTEXT = {
   demandEditable: (row: BasketEntry) =>
     canChangeDemand(new Set([ListPermission.MANAGE]), row.approvalStatus),
   facts: NO_FACTS,
+  // Nothing has changed since this reader looked (plan 0138). The marks have
+  // their own file, where the fold that fills this map is stated as a table.
+  marks: NO_ROW_MARKS,
 };
 
 describe('grouping (section 3.1, step 5)', () => {
@@ -321,6 +325,7 @@ describe('redaction, per list (section 3.4)', () => {
       servedListIds: new Set(listIds),
       demandEditable: () => true,
       facts: NO_FACTS,
+      marks: NO_ROW_MARKS,
     });
   }
 
@@ -362,6 +367,7 @@ describe('demandEditable is the owner’s answer (plan 0131)', () => {
       demandEditable: (row: BasketEntry) =>
         canChangeDemand(new Set([ListPermission.WRITE]), row.approvalStatus),
       facts: NO_FACTS,
+      marks: NO_ROW_MARKS,
     };
     const group = groupEntries([
       entry({ content: 'Milk', approvalStatus: LineApprovalStatus.APPROVED }),

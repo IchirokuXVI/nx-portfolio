@@ -2,13 +2,18 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   BASKET_PATTERNS,
+  type AcknowledgeBasketChangesRequest,
+  type BasketChangePage,
+  type BasketChangesAcknowledged,
   type BasketSummaryView,
   type BasketView,
   type GetBasketRequest,
   type GetLiveBasketRequest,
+  type ListBasketChangesRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { BasketLiveService } from './basket-live.service';
 import { BasketReadService } from './basket-read.service';
+import { BasketChangesService } from './changes/basket-changes.service';
 
 /**
  * Core's basket surface (plan 0136).
@@ -30,7 +35,8 @@ import { BasketReadService } from './basket-read.service';
 export class BasketController {
   constructor(
     private readonly read: BasketReadService,
-    private readonly live: BasketLiveService
+    private readonly live: BasketLiveService,
+    private readonly changes: BasketChangesService
   ) {}
 
   @MessagePattern(BASKET_PATTERNS.get)
@@ -48,5 +54,32 @@ export class BasketController {
     @Payload() req: GetLiveBasketRequest
   ): Promise<BasketSummaryView> {
     return this.live.summary(req);
+  }
+
+  /**
+   * What changed on the covered lists, newest first (plan 0138, section 8).
+   *
+   * A read rather than a write, so it lives here beside the basket's own: what it
+   * answers is a history of the lists, drawn for one viewer.
+   */
+  @MessagePattern(BASKET_PATTERNS.changesList)
+  listChanges(
+    @Payload() req: ListBasketChangesRequest
+  ): Promise<BasketChangePage> {
+    return this.changes.list(req);
+  }
+
+  /**
+   * Say which changes this viewer has drawn (section 6).
+   *
+   * Here and not on {@link BasketWriteController} although it writes a row: what
+   * it moves is one viewer's own cursor, not the basket, and it answers a count
+   * rather than a row. Every write over there answers `BasketRowResult`.
+   */
+  @MessagePattern(BASKET_PATTERNS.changesAcknowledge)
+  acknowledgeChanges(
+    @Payload() req: AcknowledgeBasketChangesRequest
+  ): Promise<BasketChangesAcknowledged> {
+    return this.changes.acknowledge(req);
   }
 }

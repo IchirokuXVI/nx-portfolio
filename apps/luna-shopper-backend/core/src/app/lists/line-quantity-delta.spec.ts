@@ -17,6 +17,7 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
+import { fakeLineChanges } from './changes/line-change.fake';
 import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
@@ -198,6 +199,7 @@ function build(options: {
       events.push({ event, line: payload }),
   } as unknown as CoreEventsPublisher;
 
+  const changes = fakeLineChanges();
   const service = new LineService(
     dataSource,
     lineRepo as never,
@@ -211,10 +213,13 @@ function build(options: {
     publisher,
     // No operator write here, so nothing reaches the trail.
     {} as never,
-    new LineMergeService()
+    new LineMergeService(changes.recorder),
+    // A delta records a `QUANTITY_CHANGED` change (plan 0138). A stand in, since
+    // what this file asserts is the arithmetic and the lock.
+    changes.recorder
   );
 
-  return { service, saved, events };
+  return { service, saved, events, recorded: changes.recorded };
 }
 
 const WRITER = [ListPermission.READ, ListPermission.WRITE];

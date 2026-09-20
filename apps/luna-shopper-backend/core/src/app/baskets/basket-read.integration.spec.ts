@@ -27,6 +27,7 @@ import {
   ZoneMembership,
 } from '../entities';
 import { fakeCoreConfig } from './basket-config.fake';
+import { fakeBasketMarks } from './changes/basket-marks.fake';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketReadService } from './basket-read.service';
 import { BasketRedaction } from './basket-redaction';
@@ -93,6 +94,10 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
       // The walk order learns from finished trips, and none of these tests has
       // one, so it answers what it was given.
       { order: async <T>(_userId: string, rows: T[]) => rows } as never,
+      // What changed since somebody looked (plan 0138). Every read below passes
+      // no viewer, so the marks are never asked for; the reads that are about
+      // them have their own file.
+      fakeBasketMarks(),
       // The skip window (plan 0137). Nothing here skips anything, so the
       // default is the only value it has to be.
       fakeCoreConfig()

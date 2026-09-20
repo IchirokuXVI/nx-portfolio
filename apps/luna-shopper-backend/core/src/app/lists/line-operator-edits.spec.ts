@@ -21,6 +21,7 @@ import {
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { fakeLineChanges } from './changes/line-change.fake';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
@@ -239,6 +240,7 @@ function build(
     [LineComment, { name: 'line_comments', repository: commentRepo as never }],
   ]);
 
+  const changes = fakeLineChanges();
   return {
     service: new LineService(
       dataSource,
@@ -250,8 +252,13 @@ function build(
       fakeLineClaims().service,
       publisher,
       audit.service,
-      new LineMergeService()
+      new LineMergeService(changes.recorder),
+      // An operator's write records a change as well as its audit row (plan
+      // 0138, section 9). A stand in here, so the assertions below stay about the
+      // trail; that both rows are written is proven against Postgres.
+      changes.recorder
     ),
+    recorded: changes.recorded,
     saved,
     deleted,
     softDeleted,

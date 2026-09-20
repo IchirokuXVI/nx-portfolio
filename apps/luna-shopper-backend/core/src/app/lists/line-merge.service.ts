@@ -17,6 +17,13 @@ import {
   ListLineGroupRemoval,
   ListLineItem,
 } from '../entities';
+import {
+  LineChangeRecorder,
+  snapshotOf,
+  type LineChangeActor,
+  type LineSnapshot,
+  type ListRef,
+} from './changes/line-change.recorder';
 import { itemSetHash } from './item-set-hash';
 
 /**
@@ -79,6 +86,23 @@ export function isEarlierLine(
   return a.id < b.id;
 }
 
+/** What a merge needs in order to record itself (plan 0138, section 4). */
+export interface MergeRecord {
+  list: ListRef;
+  actor: LineChangeActor;
+  /**
+   * The absorbed line as it stood **before the edit that caused the merge**.
+   *
+   * Both callers rename a line and then merge, so by the time the two rows reach
+   * {@link LineMergeService.merge} the renamed one already carries its new
+   * spelling and, when the request named one, its new quantity. Only the caller
+   * knows what it was, so only the caller can say.
+   *
+   * Absent for a merge that no edit preceded, where the object is the answer.
+   */
+  absorbedBefore?: LineSnapshot;
+}
+
 /**
  * Two lines of one list become one (plan 0112).
  *
@@ -96,6 +120,8 @@ export function isEarlierLine(
  */
 @Injectable()
 export class LineMergeService {
+  constructor(private readonly changes: LineChangeRecorder) {}
+
   /**
    * Move everything `absorbed` owns onto `survivor`, delete `absorbed`, and
    * save `survivor` as the one line.
@@ -109,12 +135,32 @@ export class LineMergeService {
    * Returns the saved survivor. It is not a view: the caller reads the line again
    * before answering, since the product set, the settlements and the claim all
    * moved underneath it.
+   *
+   * ## It records the change itself (plan 0138, section 4)
+   *
+   * Both callers hand it the list and the actor, and it writes the one `MERGED`
+   * row. Here rather than in either caller, because the absorbed line's state has
+   * to be read while its row still exists and the survivor's after the sum, and
+   * this is the only method that sees both moments. There is **no second row for
+   * the survivor**: a rename that caused the merge rides in this row's
+   * `contentAfter`.
    */
   async merge(
     manager: EntityManager,
     survivor: ListLine,
-    absorbed: ListLine
+    absorbed: ListLine,
+    record: MergeRecord
   ): Promise<ListLine> {
+    // What the line that went away was, which the change is about.
+    //
+    // `absorbedBefore` is why this is not simply read off the object: a rename
+    // hands both lines over **already carrying the new spelling** (plan 0112,
+    // section 3), so a merge of "Leche" into "Milk" would otherwise record that
+    // Milk was folded into Milk and lose the name that disappeared.
+    const went = {
+      id: absorbed.id,
+      ...(record.absorbedBefore ?? snapshotOf(absorbed)),
+    };
     const items = manager.getRepository(ListLineItem);
     const order = { position: 'ASC', id: 'ASC' } as const;
     const survivorRows = await items.find({
@@ -176,6 +222,17 @@ export class LineMergeService {
     this.mergeApproval(survivor, absorbed);
     survivor.itemSetHash = itemSetHash(union);
     survivor.version = version;
+
+    // After the survivor holds its merged quantity and approval, and before the
+    // absorbed row goes: the change carries both sides as they finally stand, in
+    // this transaction, so it commits with the merge or not at all.
+    await this.changes.merged(
+      manager,
+      record.list,
+      went,
+      survivor,
+      record.actor
+    );
 
     // Last, once nothing the absorbed line owned still points at it. Most of
     // those tables cascade on this delete, which is why the order matters.

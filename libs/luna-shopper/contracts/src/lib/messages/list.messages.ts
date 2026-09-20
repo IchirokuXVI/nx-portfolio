@@ -579,11 +579,34 @@ export interface ListListsRequest extends PageQuery {
   zoneId: string;
 }
 
+/**
+ * The basket a write to a list came through (plan 0138, section 4).
+ *
+ * **Core internal, and it never crosses the broker.** The basket services of plan
+ * 0136 call `LineService` in process and set this so the change record says who
+ * acted and where; the gateway's list DTOs do not carry it, and
+ * `forbidNonWhitelisted` refuses it from a client.
+ *
+ * It is the **actor's** identity and not the account the write was authorized
+ * against. Those differ on every delegated write: changing what a household asks
+ * for is checked against the basket's owner (plan 0131) while the person doing it
+ * may be a guest, so `userId` here is the participant's own account and is null
+ * for a guest.
+ */
+export interface LineWriteVia {
+  participantId: string;
+  basketId: string;
+  /** The participant's own account, null for a guest. */
+  userId: string | null;
+}
+
 export interface AddLineRequest {
   userId: string;
   listId: string;
   content: string;
   quantity?: number;
+  /** Set by a basket write alone (plan 0138). Never sent by a client. */
+  via?: LineWriteVia;
   /**
    * The products this line stands for (plan 0048, section 1.1). Opaque references
    * into the catalog, validated as UUIDs in application code and never a database
@@ -666,6 +689,8 @@ export interface AddLinesRequest {
 export interface UpdateLineRequest {
   userId: string;
   lineId: string;
+  /** Set by a basket write alone (plan 0138). Never sent by a client. */
+  via?: LineWriteVia;
   content?: string;
   quantity?: number;
   /**
@@ -763,6 +788,8 @@ export interface AddLineQuantityRequest {
   userId: string;
   lineId: string;
   delta: number;
+  /** Set by a basket write alone (plan 0138). Never sent by a client. */
+  via?: LineWriteVia;
   /**
    * What the caller believed the line's quantity was, checked against the row
    * the lock reads and refused with `stale_quantity` on a mismatch (plan 0136,

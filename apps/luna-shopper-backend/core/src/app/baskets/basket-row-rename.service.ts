@@ -5,6 +5,7 @@ import {
   ParticipantKind,
   type BasketLineMergeRequiredDetails,
   type BasketRowResult,
+  type LineWriteVia,
   type RenameBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -84,7 +85,7 @@ export class BasketRowRenameService {
     );
 
     const outcomes = await this.dataSource.transaction((manager) =>
-      this.write(manager, row, req, permissions)
+      this.write(manager, row, req, permissions, opened.via())
     );
 
     for (const outcome of outcomes) {
@@ -125,7 +126,8 @@ export class BasketRowRenameService {
     manager: EntityManager,
     row: BasketRow,
     req: RenameBasketRowRequest,
-    permissions: ReadonlyMap<string, ReadonlySet<ListPermission>>
+    permissions: ReadonlyMap<string, ReadonlySet<ListPermission>>,
+    via: LineWriteVia
   ): Promise<ListRenameOutcome[]> {
     const listIds = [...permissions.keys()].sort();
     // Ascending id order, one order for every caller, so two renames over two
@@ -143,7 +145,14 @@ export class BasketRowRenameService {
           shoppingList,
           lineIds,
           req.content,
-          permissions.get(listId) as ReadonlySet<ListPermission>
+          permissions.get(listId) as ReadonlySet<ListPermission>,
+          // Carried on the plan, so every step of every list records the one
+          // person who renamed the row (plan 0138, section 4).
+          {
+            userId: via.userId,
+            participantId: via.participantId,
+            basketId: via.basketId,
+          }
         )
       );
     }

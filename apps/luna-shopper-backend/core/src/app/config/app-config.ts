@@ -109,6 +109,39 @@ export const coreValidationSchema = Joi.object({
    */
   BASKET_SKIP_WINDOW: Joi.string().default('12h'),
 
+  /**
+   * How long a change stays marked **after the viewer acknowledged it** (plan
+   * 0138, section 5).
+   *
+   * Ten minutes, measured from the acknowledgement rather than from the change,
+   * which is what makes the mark useful to somebody who was away: a phone in a
+   * pocket for three hours acknowledges nothing, so the mark is there when it
+   * comes out, and then lasts ten minutes from the moment it was actually seen.
+   *
+   * Every comparison against it happens in SQL against the database's `now()`,
+   * so no device clock decides whether a row is still marked. The client is told
+   * the window as a **duration** and never as a moment.
+   */
+  BASKET_CHANGE_MARK_WINDOW: Joi.string().default('10m'),
+
+  /**
+   * How long a change is kept, and the sweep that deletes the rest (plan 0138,
+   * section 10).
+   *
+   * Thirty days. It is the one number the reads do **not** trust the sweep for:
+   * both of them filter `"createdAt" >= now() - retention` themselves, so a row
+   * the sweep has not reached yet is already invisible, and lowering the
+   * retention takes effect on the next read rather than on the next tick.
+   *
+   * Every key has a default, so the Helm config map, `compose.apps.yml` and
+   * `luna-slot.sh` need no entry: the tier 2 compose rule is about a **required**
+   * key.
+   */
+  LIST_LINE_CHANGE_RETENTION: Joi.string().default('30d'),
+  LIST_LINE_CHANGE_SWEEP_ENABLED: Joi.boolean().default(true),
+  LIST_LINE_CHANGE_SWEEP_INTERVAL: Joi.string().default('1h'),
+  LIST_LINE_CHANGE_SWEEP_BATCH: Joi.number().integer().min(1).default(5000),
+
   // The sweep (plan 0059, section 4): finishes live baskets older than the claim
   // window, one `update` each so the household hears the release. Switched the
   // same way the zone reaper above is, and on by default like it.
@@ -203,6 +236,21 @@ export interface CoreConfig {
   basket: {
     /** How long a skip, and a `LIVE` basket's close, keep a row marked. */
     skipWindowMs: number;
+    /**
+     * How long a change stays marked after **this viewer** acknowledged it (plan
+     * 0138). Measured from the acknowledgement, by the database's clock.
+     */
+    changeMarkWindowMs: number;
+  };
+  /** What changed on a list, and how long it is kept (plan 0138). */
+  listLineChange: {
+    retentionMs: number;
+    sweep: {
+      enabled: boolean;
+      intervalMs: number;
+      /** A cap per tick, not per run: whatever is left waits for the next one. */
+      batchSize: number;
+    };
   };
   voiceComment: {
     maxBytes: number;
@@ -266,6 +314,21 @@ export const coreConfiguration = registerAs(
     },
     basket: {
       skipWindowMs: parseDurationMs(process.env.BASKET_SKIP_WINDOW as string),
+      changeMarkWindowMs: parseDurationMs(
+        process.env.BASKET_CHANGE_MARK_WINDOW as string
+      ),
+    },
+    listLineChange: {
+      retentionMs: parseDurationMs(
+        process.env.LIST_LINE_CHANGE_RETENTION as string
+      ),
+      sweep: {
+        enabled: process.env.LIST_LINE_CHANGE_SWEEP_ENABLED !== 'false',
+        intervalMs: parseDurationMs(
+          process.env.LIST_LINE_CHANGE_SWEEP_INTERVAL as string
+        ),
+        batchSize: Number(process.env.LIST_LINE_CHANGE_SWEEP_BATCH),
+      },
     },
     voiceComment: {
       maxBytes: Number(

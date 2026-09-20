@@ -152,6 +152,20 @@ export interface BasketView {
   /** The read hit {@link BASKET_LIMITS.maxRows} and the rows were cut. */
   truncated: boolean;
   /**
+   * How many changes to the covered lists this **viewer** has not seen (plan
+   * 0138, section 7).
+   *
+   * Capped at `BASKET_CHANGE_LIMITS.countCap`, so a person back from three weeks
+   * away costs a bounded read; at the cap it means "this many or more" and the
+   * client draws "99+". A viewer's own changes are never counted.
+   */
+  unseenChangeCount: number;
+  /**
+   * The newest unseen change's id, which is what an acknowledgement sends as
+   * `through`. Null when there is nothing unseen.
+   */
+  newestUnseenChangeId: string | null;
+  /**
    * Whether this reader is served shop addresses (section 2).
    *
    * The owner and every named person are; a link visitor, guest or registered,
@@ -439,4 +453,7 @@ export const BASKET_PATTERNS = {
   rowUnskip: 'basket.row.unskip',
   lineAdd: 'basket.line.add',
   searchScope: 'basket.searchScope',
+  /** What changed on the covered lists, and saying it was drawn (plan 0138). */
+  changesList: 'basket.changes.list',
+  changesAcknowledge: 'basket.changes.acknowledge',
 } as const;

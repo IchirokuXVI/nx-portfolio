@@ -153,6 +153,10 @@ const viewProperties = {
   progress: ref(BASKET_SCHEMA_IDS.progress),
   truncated: boolean(),
   servesLocations: boolean(),
+  // What this viewer has not seen (plan 0138, section 7). Both are required, so
+  // a client can draw the banner without asking whether the server told it.
+  unseenChangeCount: integer({ minimum: 0 }),
+  newestUnseenChangeId: nullableString(),
 };
 
 const viewRequired = [
@@ -168,6 +172,8 @@ const viewRequired = [
   'progress',
   'truncated',
   'servesLocations',
+  'unseenChangeCount',
+  'newestUnseenChangeId',
 ];
 
 const view = object(BASKET_SCHEMA_IDS.view, viewProperties, viewRequired);

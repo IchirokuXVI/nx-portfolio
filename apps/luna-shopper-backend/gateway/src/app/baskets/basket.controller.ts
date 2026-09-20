@@ -16,7 +16,10 @@ import {
   BASKET_PATTERNS,
   BASKET_SCHEMA_IDS,
   ITEM_PATTERNS,
+  type AcknowledgeBasketChangesRequest,
   type AddBasketLineRequest,
+  type BasketChangePage,
+  type BasketChangesAcknowledged,
   type BasketResult,
   type BasketRowResult,
   type BasketSearchScope,
@@ -27,6 +30,7 @@ import {
   type GetBasketRequest,
   type GetLiveBasketRequest,
   type ItemPage,
+  type ListBasketChangesRequest,
   type ProductGroupOfferPage,
   type RenameBasketRowRequest,
   type RevertBasketRowRequest,
@@ -61,7 +65,9 @@ import {
 import { NatsClient } from '../messaging/nats-client';
 import { BasketCatalogService } from './basket-catalog.service';
 import {
+  AcknowledgeBasketChangesDto,
   AddBasketLineDto,
+  BasketChangesQueryDto,
   RenameBasketRowDto,
   RevertBasketRowDto,
   SetBasketRowDemandDto,
@@ -448,6 +454,71 @@ export class BasketController {
       itemIds: dto.itemIds,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.lineAdd, req);
+  }
+
+  /**
+   * What changed on the lists this basket covers, newest first (plan 0138,
+   * section 8).
+   *
+   * A history rather than a nudge, so it includes the reader's own changes: the
+   * marks on the basket read are what leave those out. Unthrottled like the other
+   * reads on this surface.
+   */
+  @Get(':id/changes')
+  @ApiContractResponse(BASKET_PATTERNS.changesList)
+  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
+  changes(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Query() query: BasketChangesQueryDto
+  ): Promise<BasketChangePage> {
+    const req: ListBasketChangesRequest = {
+      basketId: id,
+      participantId: participant.participantId,
+      cursor: query.cursor,
+      limit: query.limit,
+    };
+    return this.nats.send<BasketChangePage>(BASKET_PATTERNS.changesList, req);
+  }
+
+  /**
+   * Say which changes this viewer has drawn (section 6).
+   *
+   * A `POST` rather than a `PUT`, because it moves a cursor forward rather than
+   * stating where the cursor is: a `through` at or before it writes nothing and
+   * answers the count as it stands, and a cursor can never move backwards.
+   *
+   * **The client sends it only while the marked rows, or the changes view, were on
+   * screen with the document visible.** A background refetch acknowledges nothing.
+   * This route cannot tell the difference and does not try to: the rule is the
+   * client's to keep, and velista 0093 says how.
+   */
+  @Post(':id/changes/seen')
+  @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
+  @UseGuards(ParticipantThrottlerGuard)
+  @ApiContractResponse(BASKET_PATTERNS.changesAcknowledge, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    body: true,
+    notFound: true,
+  })
+  acknowledgeChanges(
+    @Participant() participant: GeneratedListParticipantContext,
+    @Param('id') id: string,
+    @Body() dto: AcknowledgeBasketChangesDto
+  ): Promise<BasketChangesAcknowledged> {
+    const req: AcknowledgeBasketChangesRequest = {
+      basketId: id,
+      participantId: participant.participantId,
+      through: dto.through,
+    };
+    return this.nats.send<BasketChangesAcknowledged>(
+      BASKET_PATTERNS.changesAcknowledge,
+      req
+    );
   }
 
   /** The composer's dropdown, priced at the basket's own scopes. */

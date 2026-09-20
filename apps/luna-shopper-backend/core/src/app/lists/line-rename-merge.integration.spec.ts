@@ -35,6 +35,7 @@ import {
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { itemSetHash } from './item-set-hash';
+import { LineChangeRecorder } from './changes/line-change.recorder';
 import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
@@ -89,7 +90,10 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
       fakeLineClaims().service,
       { emit } as never,
       new CoreAuditService(dataSource),
-      new LineMergeService()
+      new LineMergeService(new LineChangeRecorder()),
+      // The **real** recorder: what a merge writes down is a fact about a
+      // database, and this suite has one (plan 0138, section 13, test 4).
+      new LineChangeRecorder()
     );
 
     const zone = await dataSource.getRepository(Zone).save(

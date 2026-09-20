@@ -11,13 +11,17 @@ import { BasketRowResolver } from '../baskets/basket-row-resolver';
 import { BasketSettleService } from '../baskets/basket-settle.service';
 import { BasketSkipService } from '../baskets/basket-skip.service';
 import { BasketWriteContext } from '../baskets/basket-write.context';
+import { BasketChangesService } from '../baskets/changes/basket-changes.service';
+import { BasketMarksReader } from '../baskets/changes/basket-marks.reader';
 import { BasketWriteController } from '../baskets/basket-write.controller';
 import { BasketController } from '../baskets/basket.controller';
 import {
+  BasketChangeCursor,
   BasketLineSkip,
   BasketSource,
   BasketTripRow,
   GeneratedList,
+  ListLineChange,
   GeneratedListParticipant,
   GeneratedListShareLink,
   LineSettlement,
@@ -71,6 +75,12 @@ import { LineClaimModule } from './line-claim.module';
       // the entity is part of the data source and the `PUT` can insert through
       // it; every read of the table is a raw statement.
       BasketLineSkip,
+      // What changed on a covered list, and what each viewer has seen of it
+      // (plan 0138). Registered so the two reads have a repository to ask
+      // through; every statement over them is raw, and the writes are the
+      // recorder's, through the manager of whatever transaction changed a line.
+      ListLineChange,
+      BasketChangeCursor,
       // Sharing (plan 0051): the link and the people who arrived by it.
       GeneratedListShareLink,
       GeneratedListParticipant,
@@ -123,6 +133,12 @@ import { LineClaimModule } from './line-claim.module';
     // own like the others, and the one that writes no settlement: a purchase
     // through this basket ends a skip through a `WHERE` rather than a write.
     BasketSkipService,
+    // What changed since this viewer last looked (plan 0138). The reader is what
+    // the basket read folds into its rows, and the service is the two routes:
+    // both are here rather than in `lists/`, because what they answer is a
+    // basket's question about lists it covers.
+    BasketMarksReader,
+    BasketChangesService,
     // The freeze and the thaw of a trip's ask (plan 0135). A provider of its
     // own rather than two private methods, because it is the seam plan 0136
     // replaces: the statement changes and its caller does not.

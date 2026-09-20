@@ -23,6 +23,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource, In } from 'typeorm';
 import { BasketCoverageService } from '../baskets/basket-coverage.service';
 import { fakeCoreConfig } from '../baskets/basket-config.fake';
+import { fakeBasketMarks } from '../baskets/changes/basket-marks.fake';
 import { BasketReadService } from '../baskets/basket-read.service';
 import {
   BasketSource,
@@ -201,6 +202,9 @@ describeIntegration(
           new ZoneAuthzService(dataSource.getRepository(ZoneMembership))
         ),
         new GeneratedListOrderService(dataSource.getRepository(GeneratedList)),
+        // What changed since somebody looked (plan 0138). Nothing here changes a
+        // list, and the reads below pass no viewer.
+        fakeBasketMarks(),
         // The skip window (plan 0137). Nothing here skips anything.
         fakeCoreConfig()
       );
