@@ -23,8 +23,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * which is every status in date order. The two questions want different rows, so
  * one index answering both would answer neither well.
  */
-export class OpenBasketsByOwner1756002800000 implements MigrationInterface {
-  name = 'OpenBasketsByOwner1756002800000';
+export class OpenBasketsByOwner1756002900000 implements MigrationInterface {
+  name = 'OpenBasketsByOwner1756002900000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
