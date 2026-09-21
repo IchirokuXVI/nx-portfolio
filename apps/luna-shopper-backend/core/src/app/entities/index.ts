@@ -22,6 +22,7 @@ import { ProfilePostalCode } from './profile-postal-code.entity';
 import { ProfileSupermarketPreference } from './profile-supermarket-preference.entity';
 import { ShoppingList } from './shopping-list.entity';
 import { ShoppingProfile } from './shopping-profile.entity';
+import { UserAppState } from './user-app-state.entity';
 import { ZoneMembership } from './zone-membership.entity';
 import { Zone } from './zone.entity';
 
@@ -54,6 +55,7 @@ export { ProfilePostalCode } from './profile-postal-code.entity';
 export { ProfileSupermarketPreference } from './profile-supermarket-preference.entity';
 export { ShoppingList } from './shopping-list.entity';
 export { ShoppingProfile } from './shopping-profile.entity';
+export { UserAppState } from './user-app-state.entity';
 export { ZoneMembership } from './zone-membership.entity';
 export { Zone } from './zone.entity';
 
@@ -106,6 +108,10 @@ export const CORE_ENTITIES = [
   // What one viewer has seen of those changes (plan 0138). After the
   // participants it cascades with.
   BasketChangeCursor,
+  // What this account has been shown (plan 0145). It references nothing and
+  // nothing references it: the account lives in auth's database and is named
+  // here by the opaque `userId` that is also this table's primary key.
+  UserAppState,
   // The audit trail (plan 0077, section 8). Last, because it references
   // nothing and nothing references it: the actor lives in auth's database and
   // the row it describes is named by table and id rather than by a foreign key.

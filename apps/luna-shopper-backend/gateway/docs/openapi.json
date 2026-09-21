@@ -18175,11 +18175,11 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The `auth.getProfile` contract response.",
+            "description": "Composed by the gateway from more than one service.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/auth.UserProfileView"
+                  "$ref": "#/components/schemas/gateway.AccountMeView"
                 }
               }
             }
@@ -18254,6 +18254,138 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
+    "/v1/account/app-state": {
+      "patch": {
+        "operationId": "AccountController_setAppState_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAppStateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `appState.set` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/core.UserAppStateView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
+    "/v1/account/username-suggestions": {
+      "get": {
+        "operationId": "AccountController_suggestUsername_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `auth.suggestUsername` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.SuggestUsernameResult"
                 }
               }
             }
@@ -25001,6 +25133,25 @@
           "targetUserId"
         ]
       },
+      "UpdateAppStateDto": {
+        "type": "object",
+        "properties": {
+          "setupCompleted": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Set when the setup is finished or dismissed. Left out, or true. Stamping is idempotent: a second call does not move the timestamp."
+          },
+          "tourSeen": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Set when the tour is finished or skipped. Left out, or true. Stamping is idempotent."
+          }
+        }
+      },
       "UpdateProfileDto": {
         "type": "object",
         "properties": {
@@ -27739,6 +27890,19 @@
         "additionalProperties": false,
         "description": "The request was accepted. `retryAfterSeconds` is how long before another is accepted; a refusal returns the same field on the error envelope with what is actually left. Count down the number you were given rather than assuming a fixed wait."
       },
+      "auth.SuggestUsernameResult": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "additionalProperties": false
+      },
       "auth.UserProfileView": {
         "type": "object",
         "properties": {
@@ -30400,6 +30564,28 @@
         ],
         "additionalProperties": false
       },
+      "core.UserAppStateView": {
+        "type": "object",
+        "properties": {
+          "setupCompletedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tourSeenAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "setupCompletedAt",
+          "tourSeenAt"
+        ],
+        "additionalProperties": false
+      },
       "enums.AdapterKey": {
         "type": "string",
         "enum": [
@@ -30767,6 +30953,50 @@
           "ACTIVE",
           "MARKED_FOR_DELETION"
         ]
+      },
+      "gateway.AccountMeView": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.UserKind"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 1
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "appState": {
+            "$ref": "#/components/schemas/core.UserAppStateView"
+          }
+        },
+        "required": [
+          "userId",
+          "kind",
+          "username",
+          "email",
+          "emailVerified",
+          "displayName",
+          "appState"
+        ],
+        "additionalProperties": false
       },
       "generated-list-sharing.JoinResult": {
         "type": "object",
