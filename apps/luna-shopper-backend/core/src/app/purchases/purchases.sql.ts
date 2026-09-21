@@ -38,9 +38,9 @@ import { READABLE_LIST } from '../zones/zone-summary.sql';
  *    afterwards does not unbuy the bread.
  *
  * **A `UNION` of three indexed reads, and never one `WHERE` with two `OR`s**,
- * which no index serves. The arms ride `ix_generated_lists_owner` then
+ * which no index serves. The arms ride `ix_baskets_owner` then
  * `ix_settlements_basket_live`; `ix_settlements_user`; and
- * `ix_generated_list_participants_user` (section 9) then
+ * `ix_basket_participants_user` (section 9) then
  * `ix_settlements_participant`. `UNION` rather than `UNION ALL`, because a
  * purchase reachable by two routes is one purchase.
  *
@@ -52,7 +52,7 @@ export const PERSON_PURCHASES_CTE = `
     SELECT s.id, s."lineId", s."listId", s."itemId", s."basketId", s."outcome",
            s."quantity", s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
            s."priceScopeId", s."supermarketLocationId"
-    FROM "generated_lists" gl
+    FROM "baskets" gl
     JOIN "line_settlements" s ON s."basketId" = gl.id
     WHERE gl."ownerUserId" = $1::uuid
       AND s."revertedAt" IS NULL
@@ -67,7 +67,7 @@ export const PERSON_PURCHASES_CTE = `
     SELECT s.id, s."lineId", s."listId", s."itemId", s."basketId", s."outcome",
            s."quantity", s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
            s."priceScopeId", s."supermarketLocationId"
-    FROM "generated_list_participants" p
+    FROM "basket_participants" p
     JOIN "line_settlements" s ON s."settledByParticipantId" = p.id
     WHERE p."userId" = $1::uuid
       AND s."revertedAt" IS NULL
@@ -92,7 +92,7 @@ const TAGGED_CTE = `
   "tagged" AS (
     SELECT m.*, gl.id AS "ownBasketId"
     FROM "mine" m
-    LEFT JOIN "generated_lists" gl
+    LEFT JOIN "baskets" gl
       ON gl.id = m."basketId"
      AND ${GENERATED_BASKET}
      AND gl."ownerUserId" = $1::uuid
@@ -213,7 +213,7 @@ export function purchaseEntriesSql(narrow = true): string {
     SELECT b."at", b."id"
     FROM (
       SELECT gl."generatedAt" AS "at", gl.id AS "id"
-      FROM "generated_lists" gl
+      FROM "baskets" gl
       WHERE $4::text = 'BASKET' AND gl.id = $3::uuid
       UNION ALL
       SELECT s."settledAt" AS "at", s.id AS "id"
@@ -292,7 +292,7 @@ export function purchaseEntriesSql(narrow = true): string {
            COALESCE(gl."status"::text = 'OPEN', false) AS "open",
            COALESCE(gl."generatedAt", e."firstAt") AS "startedAt"
     FROM "entries" e
-    LEFT JOIN "generated_lists" gl ON e."kind" = 'BASKET' AND gl.id = e."id"
+    LEFT JOIN "baskets" gl ON e."kind" = 'BASKET' AND gl.id = e."id"
   )
   SELECT d."id", d."kind", d."name", d."open", d."startedAt", d."endedAt",
          d."lineCount", d."boughtLineCount", d."spentCents", d."currencies",
@@ -446,7 +446,7 @@ export const PURCHASE_BASKET_ROWS_SQL = `
            s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
            s."priceScopeId", s."supermarketLocationId"
     FROM "line_settlements" s
-    JOIN "generated_lists" gl ON gl.id = s."basketId"
+    JOIN "baskets" gl ON gl.id = s."basketId"
     WHERE s."basketId" = $2::uuid
       AND s."revertedAt" IS NULL
       AND ${GENERATED_BASKET}

@@ -9,7 +9,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
-  GeneratedListFinishedException,
+  BasketFinishedException,
 } from '@portfolio/luna-shopper/platform';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
@@ -60,7 +60,7 @@ export class BasketLineAddService {
   async add(req: AddBasketLineRequest): Promise<BasketRowResult> {
     const opened = await this.context.open(req);
     if (!isOpenBasket(opened.basket.status)) {
-      throw new GeneratedListFinishedException(
+      throw new BasketFinishedException(
         'This basket is finished, so nothing more can be added to it'
       );
     }

@@ -1,7 +1,7 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import {
-  generatedListPresenceRoom,
-  generatedListRoom,
+  basketPresenceRoom,
+  basketRoom,
   listPresenceRoom,
   listRoom,
   parseRoom,
@@ -255,21 +255,21 @@ export class RoomSyncService implements OnModuleInit {
     // (plan 0051, section 7), and they are the only rooms a participant socket
     // can hold. A socket carrying neither identity for the room in front of it
     // answers no, which evicts it: that is the safe direction, and it is the
-    // answer for an account socket that somehow reached a `generated:` room.
+    // answer for an account socket that somehow reached a `basket:` room.
     if (
-      parsed.kind === 'generatedList' ||
-      parsed.kind === 'generatedListPresence'
+      parsed.kind === 'basket' ||
+      parsed.kind === 'basketPresence'
     ) {
       if (!participantId) {
         return Promise.resolve(false);
       }
       return this.memo(
         answers,
-        `${participantId}|participant|${parsed.generatedListId}`,
+        `${participantId}|participant|${parsed.basketId}`,
         async () =>
           (await this.coreAccess.checkParticipant(
             participantId,
-            parsed.generatedListId
+            parsed.basketId
           )) !== undefined
       );
     }
@@ -305,7 +305,7 @@ export class RoomSyncService implements OnModuleInit {
     userId: string,
     parsed: Exclude<
       ParsedRoom,
-      { kind: 'generatedList' } | { kind: 'generatedListPresence' }
+      { kind: 'basket' } | { kind: 'basketPresence' }
     >
   ): Promise<boolean> {
     switch (parsed.kind) {
@@ -343,20 +343,20 @@ export class RoomSyncService implements OnModuleInit {
         // subscription itself (plan 0032, section 3).
         await socket.leave(listPresenceRoom(parsed.listId));
         return;
-      case 'generatedList':
-        await socket.leave(generatedListRoom(parsed.generatedListId));
+      case 'basket':
+        await socket.leave(basketRoom(parsed.basketId));
         // Drops the participant's presence entry and rebroadcasts, so a revoked
         // guest stops appearing in the shop as well as stopping receiving it.
-        await this.presence.leaveGeneratedList(
+        await this.presence.leaveBasket(
           socket.id,
-          parsed.generatedListId
+          parsed.basketId
         );
         return;
-      case 'generatedListPresence':
+      case 'basketPresence':
         // The same distinction the list pair draws: hearing about who is there
         // is not being there, so there is only the subscription to drop.
         await socket.leave(
-          generatedListPresenceRoom(parsed.generatedListId)
+          basketPresenceRoom(parsed.basketId)
         );
         return;
     }

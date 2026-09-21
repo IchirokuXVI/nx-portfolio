@@ -74,7 +74,7 @@ import {
  */
 
 /**
- * From `GeneratedListParticipantView`.
+ * From `BasketParticipantView`.
  *
  * `userAgent` becomes `device`, which is what the sheet calls it, and stays
  * absent when the wire omits it. That is the difference between "guests do not
@@ -147,7 +147,7 @@ export function toBasketPresenceEntry(
 }
 
 /**
- * From `GeneratedListLineOriginView`.
+ * From `BasketLineOriginView`.
  *
  * Every id is required rather than defaulted: an origin exists to caption a row
  * with the household it came from, and half of one renders as "from " with
@@ -370,7 +370,7 @@ function toBasketListRef(raw: unknown): BasketListRef | null {
 }
 
 /**
- * From `msg.generatedList.lineOrigins.response` (`GET .../lines/:lineId/origins`).
+ * From `msg.basket.lineOrigins.response` (`GET .../lines/:lineId/origins`).
  *
  * Null only when the line id is unreadable, because the sheet is about one line and
  * a report that cannot say which is not one. All three arrays degrade to empty, which
@@ -399,7 +399,7 @@ export function toBasketLineOrigins(raw: unknown): BasketLineOrigins | null {
 }
 
 /**
- * From `msg.generatedList.setOriginQuantity.response` (`POST .../origins`).
+ * From `msg.basket.setOriginQuantity.response` (`POST .../origins`).
  *
  * `origin` is **null on purpose** rather than dropped: a contribution set to zero
  * takes the list off the line, and the sheet has to remove the row rather than leave
@@ -424,7 +424,7 @@ export function toBasketOriginQuantityResult(
 }
 
 /**
- * From `msg.generatedList.splitLine.response` (`POST .../products`), velista
+ * From `msg.basket.splitLine.response` (`POST .../products`), velista
  * `0069` section 5.
  *
  * The three collections are mapped with {@link mapArray}, which drops a row it
@@ -622,7 +622,7 @@ function toBasketPriceScope(raw: unknown): BasketPriceScope | null {
 }
 
 /**
- * From the gateway's `GET /v1/generated-lists/:id/basket`.
+ * From the gateway's `GET /v1/baskets/:id/basket`.
  *
  * Null only when there is no reader: `me` is what every attribution on the screen
  * resolves against, and a basket that cannot say who is holding it cannot be
@@ -712,7 +712,7 @@ export function toBasketView(raw: unknown): BasketView | null {
 }
 
 /**
- * From `GeneratedListLinkPreview` (`GET /v1/share-links/:secret`).
+ * From `BasketLinkPreview` (`GET /v1/share-links/:secret`).
  *
  * **Never null**, because the route never fails by design: a link that never
  * existed, one revoked, one expired and one whose basket is finished all answer
@@ -736,7 +736,7 @@ export function toBasketLinkPreview(raw: unknown): BasketLinkPreview {
 }
 
 /**
- * From `GeneratedListJoinResult` (`POST /v1/share-links/:secret/join`).
+ * From `BasketJoinResult` (`POST /v1/share-links/:secret/join`).
  *
  * All three of the basket id, the participant and the socket token are required.
  * Without the first there is nowhere to store the credential, without the second
@@ -748,12 +748,12 @@ export function toBasketSession(raw: unknown): BasketSession | null {
     return null;
   }
 
-  const generatedListId = str(raw['generatedListId']);
+  const basketId = str(raw['basketId']);
   const participant = toBasketParticipant(raw['participant']);
   const socketToken = str(raw['socketToken']);
 
   if (
-    generatedListId === null ||
+    basketId === null ||
     participant === null ||
     socketToken === null
   ) {
@@ -761,7 +761,7 @@ export function toBasketSession(raw: unknown): BasketSession | null {
   }
 
   return {
-    generatedListId,
+    basketId,
     participantId: participant.id,
     // Null for a registered participant and for the owner, who authenticate with
     // their account token and are given no second credential.
@@ -772,7 +772,7 @@ export function toBasketSession(raw: unknown): BasketSession | null {
 }
 
 /**
- * From `GeneratedListShareLinkResult` or `GeneratedListShareLinkView`.
+ * From `BasketShareLinkResult` or `BasketShareLinkView`.
  *
  * The `GET` wraps an optional link and the `PUT` answers the view itself, so the
  * wrapper is unwrapped here rather than at both call sites. Null means the basket
@@ -800,7 +800,7 @@ export function toBasketShareLink(raw: unknown): BasketShareLink | null {
 }
 
 /**
- * From `SetGeneratedListOriginSettledResult` (`POST .../lines/:lineId/origins/settled`),
+ * From `SetBasketOriginSettledResult` (`POST .../lines/:lineId/origins/settled`),
  * velista `0073`, backend `0104` section 4.
  *
  * `skipped` is read unconditionally where {@link toBasketSettleResult} reads it only
@@ -832,7 +832,7 @@ export function toBasketOriginSettledResult(
 }
 
 /**
- * From `GeneratedListSettleResult` (`POST .../lines/:lineId/settle`).
+ * From `BasketSettleResult` (`POST .../lines/:lineId/settle`).
  *
  * `skippedCount` is always a number and `skipped` stays absent for a reader who
  * may not have it, which is how backend `0051` sections 6.4 and 5.2 both hold:

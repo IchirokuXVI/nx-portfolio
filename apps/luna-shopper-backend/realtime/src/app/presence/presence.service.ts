@@ -4,13 +4,13 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import {
-  generatedListPresenceRoom,
-  generatedListRoom,
+  basketPresenceRoom,
+  basketRoom,
   listPresenceRoom,
   listRoom,
   RealtimeEvent,
   zoneRoom,
-  type GeneratedListPresence,
+  type BasketPresence,
   type ListPresence,
   type ParticipantPresenceEntry,
   type PresenceEditor,
@@ -23,7 +23,7 @@ import {
   PRESENCE_HEARTBEAT_MS,
   PRESENCE_KEY_TTL_SECONDS,
   PRESENCE_TTL_MS,
-  generatedListPresenceKey,
+  basketPresenceKey,
   listEditorsKey,
   listViewersKey,
   zonePresenceKey,
@@ -193,34 +193,34 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
   }
 
   /** Enter a shared basket, and tell the room (plan 0051, section 7). */
-  async joinGeneratedList(
+  async joinBasket(
     socketId: string,
-    generatedListId: string
+    basketId: string
   ): Promise<void> {
     const socket = this.sockets.get(socketId);
     if (!socket?.participant) {
       return;
     }
-    socket.baskets.add(generatedListId);
-    await this.writeParticipant(generatedListId, socketId, {
+    socket.baskets.add(basketId);
+    await this.writeParticipant(basketId, socketId, {
       ...socket.participant,
       seenAt: Date.now(),
     });
-    await this.broadcastGeneratedList(generatedListId);
+    await this.broadcastBasket(basketId);
   }
 
   /** Leave one, on an unsubscribe or on a revocation sweep. */
-  async leaveGeneratedList(
+  async leaveBasket(
     socketId: string,
-    generatedListId: string
+    basketId: string
   ): Promise<void> {
     const socket = this.sockets.get(socketId);
     if (!socket) {
       return;
     }
-    socket.baskets.delete(generatedListId);
-    await this.removeParticipant(generatedListId, socketId);
-    await this.broadcastGeneratedList(generatedListId);
+    socket.baskets.delete(basketId);
+    await this.removeParticipant(basketId, socketId);
+    await this.broadcastBasket(basketId);
   }
 
   async joinZone(socketId: string, zoneId: string): Promise<void> {
@@ -327,9 +327,9 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
       await this.removeEditor(listId, socketId);
       await this.broadcastList(listId);
     }
-    for (const generatedListId of socket.baskets) {
-      await this.removeParticipant(generatedListId, socketId);
-      await this.broadcastGeneratedList(generatedListId);
+    for (const basketId of socket.baskets) {
+      await this.removeParticipant(basketId, socketId);
+      await this.broadcastBasket(basketId);
     }
   }
 
@@ -372,12 +372,12 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
             seenAt: Date.now(),
           });
         }
-        for (const generatedListId of socket.baskets) {
+        for (const basketId of socket.baskets) {
           if (!socket.participant) {
             continue;
           }
-          baskets.add(generatedListId);
-          await this.writeParticipant(generatedListId, socketId, {
+          baskets.add(basketId);
+          await this.writeParticipant(basketId, socketId, {
             ...socket.participant,
             seenAt: Date.now(),
           });
@@ -394,9 +394,9 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
           await this.broadcastList(listId);
         }
       }
-      for (const generatedListId of baskets) {
-        if (await this.pruneGeneratedList(generatedListId)) {
-          await this.broadcastGeneratedList(generatedListId);
+      for (const basketId of baskets) {
+        if (await this.pruneBasket(basketId)) {
+          await this.broadcastBasket(basketId);
         }
       }
     } catch (err) {
@@ -441,33 +441,33 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
   }
 
   private async writeParticipant(
-    generatedListId: string,
+    basketId: string,
     socketId: string,
     entry: StoredParticipant
   ): Promise<void> {
     await this.redis.tryCommand(async (client) => {
-      const key = generatedListPresenceKey(generatedListId);
+      const key = basketPresenceKey(basketId);
       await client.hset(key, socketId, JSON.stringify(entry));
       await client.expire(key, PRESENCE_KEY_TTL_SECONDS);
-    }, `presence basket ${generatedListId}`);
+    }, `presence basket ${basketId}`);
   }
 
   private async removeParticipant(
-    generatedListId: string,
+    basketId: string,
     socketId: string
   ): Promise<void> {
     await this.redis.tryCommand(
       (client) =>
-        client.hdel(generatedListPresenceKey(generatedListId), socketId),
-      `presence unbasket ${generatedListId}`
+        client.hdel(basketPresenceKey(basketId), socketId),
+      `presence unbasket ${basketId}`
     );
   }
 
   /** Drop entries last seen before the window. True when something was dropped. */
-  private async pruneGeneratedList(generatedListId: string): Promise<boolean> {
+  private async pruneBasket(basketId: string): Promise<boolean> {
     const cutoff = Date.now() - PRESENCE_TTL_MS;
     const stale = await this.redis.tryCommand(async (client) => {
-      const key = generatedListPresenceKey(generatedListId);
+      const key = basketPresenceKey(basketId);
       const entries = await client.hgetall(key);
       const expired = Object.entries(entries)
         .filter(([, raw]) => {
@@ -479,7 +479,7 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
         await client.hdel(key, ...expired);
       }
       return expired.length;
-    }, `presence prune basket ${generatedListId}`);
+    }, `presence prune basket ${basketId}`);
     return (stale ?? 0) > 0;
   }
 
@@ -492,16 +492,16 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
    * is truthful, since it is two sessions, and deduplicating by typed name would
    * be exactly the mistake section 3.5 warns about.
    */
-  private async broadcastGeneratedList(
-    generatedListId: string
+  private async broadcastBasket(
+    basketId: string
   ): Promise<void> {
-    await this.pruneGeneratedList(generatedListId);
+    await this.pruneBasket(basketId);
 
     const entries =
       (await this.redis.tryCommand(
         (client) =>
-          client.hgetall(generatedListPresenceKey(generatedListId)),
-        `presence read basket ${generatedListId}`
+          client.hgetall(basketPresenceKey(basketId)),
+        `presence read basket ${basketId}`
       )) ?? {};
 
     const present: ParticipantPresenceEntry[] = Object.values(entries)
@@ -509,17 +509,17 @@ export class PresenceService implements OnModuleInit, OnApplicationShutdown {
       .filter((entry): entry is StoredParticipant => entry !== undefined)
       .map(({ seenAt: _seenAt, ...entry }) => entry);
 
-    const payload: GeneratedListPresence = { generatedListId, present };
+    const payload: BasketPresence = { basketId, present };
     this.relay.publish({
       // Both rooms, for the reason the list pair splits: the basket room is where
       // somebody working the list is, and the presence room is where a client
       // that only wants to know who else is there subscribes without taking every
       // line edit with it.
       rooms: [
-        generatedListRoom(generatedListId),
-        generatedListPresenceRoom(generatedListId),
+        basketRoom(basketId),
+        basketPresenceRoom(basketId),
       ],
-      event: RealtimeEvent.PresenceGeneratedListUpdated,
+      event: RealtimeEvent.PresenceBasketUpdated,
       payload,
     });
   }

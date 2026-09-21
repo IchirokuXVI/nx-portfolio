@@ -140,8 +140,8 @@ export class ClientTooOldException extends DomainException {
  * bug it cannot will show the wrong sentence for both, and "this basket is
  * finished" is a sentence the shopper can act on.
  */
-export class GeneratedListFinishedException extends DomainException {
-  readonly code = ERROR_CODES.GENERATED_LIST_FINISHED;
+export class BasketFinishedException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_FINISHED;
 }
 
 /**

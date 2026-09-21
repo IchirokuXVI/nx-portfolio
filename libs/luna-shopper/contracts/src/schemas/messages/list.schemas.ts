@@ -253,7 +253,7 @@ const settlementPaid = object(
 );
 
 // One origin line touched by one settling act (plan 0047, section 3).
-// `generatedListLineId` is deliberately absent: it is stored and never served, so
+// `basketLineId` is deliberately absent: it is stored and never served, so
 // a reader learns that something was bought and not which basket it came out of
 // (section 3.1). `supermarketLocationId` is absent for the same reason since plan
 // 0143: the price of a tin at a chain is a product fact, and a street and a time
@@ -320,7 +320,7 @@ const lineClaimRef = object(
 );
 
 // The zone room's claim event (plan 0052, section 2), and the whole of what it
-// may say: that these lines are claimed, and whose. No generated list id, ever;
+// may say: that these lines are claimed, and whose. No basket id, ever;
 // an id in a payload is an invitation to fetch it, and the refusal would then be
 // the only thing between a zone member and somebody else's basket.
 //

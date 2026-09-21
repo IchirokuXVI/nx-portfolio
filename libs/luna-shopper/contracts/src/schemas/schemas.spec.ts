@@ -405,11 +405,16 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    it('generatedList.get names its kind and its sources (plan 0133)', () => {
+    it('the basket header names its kind and its sources (plan 0133)', () => {
       // A source is what the run was asked for, so a null `listId` is a value
       // rather than an absence: it says every list of that zone.
+      //
+      // Asked of `basket.update`, which answers the header. The subject that
+      // used to be asked here was the owner's own read, and plan 0144 removed
+      // it: renaming it landed it on `basket.get`, which plan 0136 had already
+      // given to the participant read of the whole basket.
       expect(
-        validateMessageResponse('generatedList.get', {
+        validateMessageResponse('basket.update', {
           id: 'gl',
           kind: 'GENERATED',
           name: null,
@@ -423,12 +428,12 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    it('generatedList.participant.list response names an account (plan 0054, section 2)', () => {
+    it('basket.participant.list response names an account (plan 0054, section 2)', () => {
       // The two names are separate fields, and both are required: a registered
       // participant who typed nothing on the join screen still has an account
       // name, which is what stops a screen drawing a role where a name belongs.
       expect(
-        validateMessageResponse('generatedList.participant.list', {
+        validateMessageResponse('basket.participant.list', {
           participants: [
             {
               id: 'p',
@@ -1109,7 +1114,7 @@ describe('contract schemas', () => {
       // basket whose kind nothing states is one seven queries would each answer
       // differently about.
       expect(
-        validateMessageResponse('generatedList.get', {
+        validateMessageResponse('basket.get', {
           id: 'gl',
           name: null,
           status: 'OPEN',

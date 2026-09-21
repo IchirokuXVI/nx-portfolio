@@ -28,7 +28,7 @@ type OriginsLoad = 'loading' | 'loaded' | 'failed';
 
 /**
  * The bound the two contribution fields carry on the wire
- * (`SetGeneratedListOriginQuantityDto.quantity`).
+ * (`SetBasketOriginQuantityDto.quantity`).
  *
  * Stated here rather than reached for from the line's own limits, because it is a
  * different number for a different reason: `LINE_QUANTITY_MAX` is what a zone line

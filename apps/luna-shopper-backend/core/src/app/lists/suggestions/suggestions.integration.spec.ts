@@ -1,6 +1,6 @@
 import {
   BasketKind,
-  GeneratedListStatus,
+  BasketStatus,
   LineApprovalStatus,
   LineSuggestionReason,
   MembershipStatus,
@@ -18,7 +18,7 @@ import {
   BasketSource,
   BasketTripRow,
   CORE_ENTITIES,
-  GeneratedList,
+  Basket,
   LineSettlement,
   ListAccess,
   ListLine,
@@ -26,7 +26,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../../entities';
-import { BasketTripRowsService } from '../../generated-lists/basket-trip-rows.service';
+import { BasketTripRowsService } from '../../baskets/basket-trip-rows.service';
 import { ZoneAuthzService } from '../../zones/zone-authz.service';
 import { ListAccessService } from '../list-access.service';
 import { DAY_MS } from './suggestions.constants';
@@ -94,10 +94,10 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
   }
 
   async function basket(
-    status: GeneratedListStatus,
+    status: BasketStatus,
     generatedAt: Date
   ): Promise<string> {
-    const repo = dataSource.getRepository(GeneratedList);
+    const repo = dataSource.getRepository(Basket);
     const saved = await repo.save(
       repo.create({
         ownerUserId: ids.shopper,
@@ -148,7 +148,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
     lines: readonly string[],
     quantity = 1
   ): Promise<string> {
-    const id = await basket(GeneratedListStatus.FINISHED, at);
+    const id = await basket(BasketStatus.FINISHED, at);
     await source(id, listId);
     const rows = dataSource.getRepository(BasketTripRow);
     for (const lineId of lines) {
@@ -263,7 +263,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
   afterAll(async () => {
     if (dataSource?.isInitialized) {
       await dataSource
-        .getRepository(GeneratedList)
+        .getRepository(Basket)
         .delete({ ownerUserId: ids.shopper });
       if (ids.zone) {
         await dataSource.getRepository(Zone).delete({ id: ids.zone });
@@ -319,7 +319,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       await weekly(flat, bought, 6);
       await weekly(flat, waiting, 6);
 
-      const live = await basket(GeneratedListStatus.OPEN, daysAgo(0, -1));
+      const live = await basket(BasketStatus.OPEN, daysAgo(0, -1));
       await source(live, flat);
       // Bought through the basket a moment ago, so this line's own claim has
       // already ended. The coverage holds it regardless, which is the wider
@@ -329,8 +329,8 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       expect(await read(flat)).toEqual([]);
 
       await dataSource
-        .getRepository(GeneratedList)
-        .update({ id: live }, { status: GeneratedListStatus.FINISHED });
+        .getRepository(Basket)
+        .update({ id: live }, { status: BasketStatus.FINISHED });
       // The status moved by hand here rather than through the service, so the
       // freeze that ends a trip has to be applied by hand too (plan 0135).
       await freeze(live);
@@ -344,7 +344,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       const flat = await list('Flat');
       const milk = await line(flat, 'Milk');
       await weekly(flat, milk, 6);
-      const stale = await basket(GeneratedListStatus.OPEN, daysAgo(4));
+      const stale = await basket(BasketStatus.OPEN, daysAgo(4));
       await source(stale, flat);
 
       expect((await read(flat)).map((row) => row.lineId)).toEqual([milk]);
@@ -357,12 +357,12 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       const flat = await list('Flat');
       const milk = await line(flat, 'Milk');
       await weekly(flat, milk, 6);
-      const repo = dataSource.getRepository(GeneratedList);
+      const repo = dataSource.getRepository(Basket);
       await repo.save(
         repo.create({
           ownerUserId: ids.shopper,
           name: null,
-          status: GeneratedListStatus.OPEN,
+          status: BasketStatus.OPEN,
           generatedAt: daysAgo(0, -1),
           kind: BasketKind.LIVE,
           idempotencyKey: null,
@@ -468,7 +468,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       // rather than at nothing, and it is still one row per zone line.
       const flat = await list('Flat');
       const milk = await line(flat, 'Milk');
-      const id = await basket(GeneratedListStatus.FINISHED, daysAgo(6));
+      const id = await basket(BasketStatus.FINISHED, daysAgo(6));
       await source(id, flat);
       // Three purchases a week apart, so the period is 7 and the line is due.
       // The last one is the trip's, and it took the line to zero. It is the
@@ -578,7 +578,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       // A deleted basket takes its trip rows with it, so it is not a trip at
       // all and cannot count as an absence.
       const deleted = await endedTrip(flat, daysAgo(3), [bread]);
-      await dataSource.getRepository(GeneratedList).delete({ id: deleted });
+      await dataSource.getRepository(Basket).delete({ id: deleted });
 
       expect(await read(flat)).toEqual([
         {

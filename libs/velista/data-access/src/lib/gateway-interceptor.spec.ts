@@ -412,11 +412,11 @@ describe('gatewayInterceptor', () => {
       tokens.set(held);
 
       const failure = expectFailure(
-        http.get(`${GATEWAY}/v1/generated-lists/g1/basket`)
+        http.get(`${GATEWAY}/v1/baskets/g1/basket`)
       );
 
       httpMock
-        .expectOne(`${GATEWAY}/v1/generated-lists/g1/basket`)
+        .expectOne(`${GATEWAY}/v1/baskets/g1/basket`)
         .flush(
           { code: 'not_a_participant' },
           { status: 401, statusText: 'Unauthorized' }

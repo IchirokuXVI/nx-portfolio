@@ -13,7 +13,7 @@ import {
   type ShoppingList,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { itemSetHash } from './item-set-hash';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { ProductGroupSyncService } from './product-group-sync.service';
@@ -34,7 +34,7 @@ const announcer = fakeBasketAnnouncer();
  * decides; there is no SQL here worth pinning.
  *
  * One thing is asserted negatively and deliberately (section 8, and case 13): the
- * sync must never write into a basket. A `GeneratedListLine` is a snapshot taken
+ * sync must never write into a basket. A `BasketLine` is a snapshot taken
  * at generation time, a shopping list that rewrites itself while you are in the
  * shop is hostile, and the requirement is that a path into those tables does not
  * exist. Nothing else would catch its violation, so the manager itself refuses

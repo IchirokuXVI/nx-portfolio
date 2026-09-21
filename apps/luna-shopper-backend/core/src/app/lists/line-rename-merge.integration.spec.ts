@@ -1,6 +1,6 @@
 import {
   BasketKind,
-  GeneratedListStatus,
+  BasketStatus,
   LINE_ITEM_SET_MAX,
   LineApprovalStatus,
   LineItemSource,
@@ -22,7 +22,7 @@ import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   BasketTripRow,
   CORE_ENTITIES,
-  GeneratedList,
+  Basket,
   LineComment,
   LineSettlement,
   ListAccess,
@@ -33,7 +33,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { LineChangeRecorder } from './changes/line-change.recorder';
 import { itemSetHash } from './item-set-hash';
@@ -181,7 +181,7 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
   afterAll(async () => {
     if (ids.zone) {
       await dataSource
-        .getRepository(GeneratedList)
+        .getRepository(Basket)
         .delete({ ownerUserId: ids.owner });
       // Memberships, lists, access rows and lines all cascade from the zone.
       await dataSource.getRepository(Zone).delete({ id: ids.zone });
@@ -195,7 +195,7 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     // makes (plan 0139, section 3).
     announcer.reset();
     await dataSource
-      .getRepository(GeneratedList)
+      .getRepository(Basket)
       .delete({ ownerUserId: ids.owner });
     await dataSource.getRepository(ListLine).delete({ listId: ids.list });
     await dataSource.getRepository(ListLine).delete({ listId: ids.autoList });
@@ -482,7 +482,7 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
 
   it('moves comments and settlements, and the purchases keep the basket they were made on (case 9)', async () => {
     // Plan 0136, section 7.6 reverses half of this test. The merge used to move
-    // `generated_list_line_origins` to the survivor and sum an origin both lines
+    // `basket_line_origins` to the survivor and sum an origin both lines
     // had; there are no origins any more, because an open basket holds no copy
     // of a line. What is left is the half that always did the work: the
     // settlements move, carrying the `basketId` they were made on, so the basket
@@ -491,11 +491,11 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     const milk = await seedLine({ content: 'Milk', position: 1, quantity: 2 });
     const bread = await seedLine({ content: 'Bread', position: 2 });
 
-    const basket = await dataSource.getRepository(GeneratedList).save(
-      dataSource.getRepository(GeneratedList).create({
+    const basket = await dataSource.getRepository(Basket).save(
+      dataSource.getRepository(Basket).create({
         ownerUserId: ids.owner,
         name: 'Saturday',
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
         generatedAt: new Date(),
         kind: BasketKind.GENERATED,
         idempotencyKey: null,
@@ -567,13 +567,13 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     const milk = await seedLine({ content: 'Milk', position: 1, quantity: 2 });
     const bread = await seedLine({ content: 'Bread', position: 2 });
 
-    const baskets = dataSource.getRepository(GeneratedList);
+    const baskets = dataSource.getRepository(Basket);
     const ended = (name: string) =>
       baskets.save(
         baskets.create({
           ownerUserId: ids.owner,
           name,
-          status: GeneratedListStatus.FINISHED,
+          status: BasketStatus.FINISHED,
           generatedAt: new Date(),
           kind: BasketKind.GENERATED,
           idempotencyKey: null,

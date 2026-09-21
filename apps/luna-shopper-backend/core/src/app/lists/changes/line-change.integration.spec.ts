@@ -27,7 +27,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../../entities';
-import { fakeLineClaims } from '../../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../../zones/zone-authz.service';
 import { LineMergeService } from '../line-merge.service';
 import { LineService } from '../line.service';

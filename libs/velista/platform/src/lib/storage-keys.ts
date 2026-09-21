@@ -94,6 +94,6 @@ export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];
  * way: it is scoped to one basket, it expires with the trip, and the owner can
  * revoke the participant it names at any time.
  */
-export function basketSessionKey(generatedListId: string): string {
-  return `basket-session:${APP_KEY}:${generatedListId}`;
+export function basketSessionKey(basketId: string): string {
+  return `basket-session:${APP_KEY}:${basketId}`;
 }

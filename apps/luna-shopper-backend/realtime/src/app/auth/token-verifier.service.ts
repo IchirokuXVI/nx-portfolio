@@ -32,7 +32,7 @@ export type SocketIdentity =
   | {
       kind: 'participant';
       participantId: string;
-      generatedListId: string;
+      basketId: string;
       participantKind: ParticipantKind;
     };
 
@@ -111,7 +111,7 @@ export class TokenVerifierService {
       return {
         kind: 'participant',
         participantId: claims.participantId,
-        generatedListId: claims.aud,
+        basketId: claims.aud,
         participantKind: claims.kind as ParticipantKind,
       };
     }

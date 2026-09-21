@@ -161,29 +161,29 @@ export class RealtimeGateway
         // where presence gets its name, fresh rather than from the token.
         const admission = await this.coreAccess.checkParticipant(
           identity.participantId,
-          identity.generatedListId
+          identity.basketId
         );
         if (!admission) {
           client.disconnect(true);
           return;
         }
         client.data.participantId = identity.participantId;
-        client.data.generatedListId = identity.generatedListId;
+        client.data.basketId = identity.basketId;
         // Kept on the socket so the disconnect path does not try to leave a
         // presence this connection never entered.
         client.data.basketKind = admission.basketKind;
-        await client.join(basketRoom(identity.generatedListId));
+        await client.join(basketRoom(identity.basketId));
         // **Presence only on a `GENERATED` basket** (plan 0139, section 6). The
         // room above carries the basket's own traffic and every socket gets it.
         // Presence is the one that is meaningless on a `LIVE` basket: it is the
         // basket everybody holds all the time, so "X is here" says nothing, and
         // a presence room per person is a Redis key that never expires.
         if (admission.basketKind === BasketKind.GENERATED) {
-          await client.join(basketPresenceRoom(identity.generatedListId));
+          await client.join(basketPresenceRoom(identity.basketId));
           this.presence.registerParticipant(client.id, admission.entry);
-          await this.presence.joinGeneratedList(
+          await this.presence.joinBasket(
             client.id,
-            identity.generatedListId
+            identity.basketId
           );
         }
         return;

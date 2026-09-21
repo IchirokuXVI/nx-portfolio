@@ -1,7 +1,7 @@
 import {
   BasketKind,
   BasketRowState,
-  GeneratedListStatus,
+  BasketStatus,
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
@@ -19,7 +19,7 @@ import { DataSource } from 'typeorm';
 import {
   BasketSource,
   CORE_ENTITIES,
-  GeneratedList,
+  Basket,
   LineSettlement,
   ListLine,
   ShoppingList,
@@ -64,7 +64,7 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
     });
     await dataSource.initialize();
 
-    const baskets = dataSource.getRepository(GeneratedList);
+    const baskets = dataSource.getRepository(Basket);
     read = new BasketReadService(
       baskets,
       new BasketCoverageService(baskets),
@@ -179,14 +179,14 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
   async function basket(
     kind = BasketKind.GENERATED,
     ...listIds: string[]
-  ): Promise<GeneratedList> {
-    const repo = dataSource.getRepository(GeneratedList);
+  ): Promise<Basket> {
+    const repo = dataSource.getRepository(Basket);
     const saved = await repo.save(
       repo.create({
         ownerUserId: ids.shopper,
         kind,
         name: kind === BasketKind.LIVE ? null : 'Saturday',
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
         generatedAt: new Date(),
         idempotencyKey: null,
       })
@@ -203,7 +203,7 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
   }
 
   async function settle(
-    basketRow: GeneratedList,
+    basketRow: Basket,
     lineRow: ListLine,
     quantity: number,
     at: Date,
@@ -230,9 +230,9 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
   }
 
   /** The rows as the owner reads them, unredacted. */
-  async function rowsOf(basketRow: GeneratedList) {
+  async function rowsOf(basketRow: Basket) {
     const covered = await new BasketCoverageService(
-      dataSource.getRepository(GeneratedList)
+      dataSource.getRepository(Basket)
     ).listsOf(basketRow);
     const listIds = covered.map((row) => row.listId);
     return read.rowsOf(basketRow, listIds, BasketRedaction.unredacted(listIds));
@@ -244,7 +244,7 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
    * A whole world for one `LIVE` basket: its own owner, its own zone and one
    * list in it.
    *
-   * Its own owner because `uq_generated_lists_live_owner` allows exactly one
+   * Its own owner because `uq_baskets_live_owner` allows exactly one
    * `LIVE` row per person, which is the invariant plan 0133 declared and plan
    * 0136 leans on: "one permanent basket a person" is a fact of the database
    * rather than a convention of the service. Its own **zone** because a `LIVE`
@@ -253,7 +253,7 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
    */
   async function liveWorld(
     name: string
-  ): Promise<{ basket: GeneratedList; listId: string; zoneId: string }> {
+  ): Promise<{ basket: Basket; listId: string; zoneId: string }> {
     const owner = randomUUID();
     const zones = dataSource.getRepository(Zone);
     const zone = await zones.save(
@@ -282,13 +282,13 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
     const saved = await lists.save(
       lists.create({ zoneId: zone.id, name, createdByUserId: owner })
     );
-    const baskets = dataSource.getRepository(GeneratedList);
+    const baskets = dataSource.getRepository(Basket);
     const held = await baskets.save(
       baskets.create({
         ownerUserId: owner,
         kind: BasketKind.LIVE,
         name: null,
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
         generatedAt: new Date(),
         idempotencyKey: null,
       })
@@ -529,7 +529,7 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
       await line(parents, 'milk');
 
       const covered = await new BasketCoverageService(
-        dataSource.getRepository(GeneratedList)
+        dataSource.getRepository(Basket)
       ).listsOf(held);
       const { rows } = await read.rowsOf(
         held,

@@ -2,7 +2,7 @@ import {
   GENERATED_BASKET,
   OPEN_GENERATED_BASKET,
 } from '../../baskets/open-basket.sql';
-import { WRITABLE_LIST } from '../../generated-lists/generated-list.sql';
+import { WRITABLE_LIST } from '../../baskets/basket.sql';
 
 /**
  * One definition of what a basket asks, or asked, of the lines of one list
@@ -25,7 +25,7 @@ import { WRITABLE_LIST } from '../../generated-lists/generated-list.sql';
  * **Both halves ask `GENERATED_BASKET`** (plan 0133, section 6). A trip is
  * something somebody composed, and the permanent basket is not one: it holds
  * every line its owner can write, so counting it would give every list one
- * endless trip. The first half joins `generated_lists` for that alone, since a
+ * endless trip. The first half joins `baskets` for that alone, since a
  * trip row carries no kind of its own; the second gets it from
  * {@link OPEN_GENERATED_BASKET} and from the `basket_sources` the permanent
  * basket has none of.
@@ -54,7 +54,7 @@ export function basketAskedCte(basketParam: string | null): string {
            r."lineId" AS "lineId",
            r."asked" AS "asked"
     FROM "basket_trip_rows" r
-    JOIN "generated_lists" gl ON gl.id = r."basketId"
+    JOIN "baskets" gl ON gl.id = r."basketId"
     WHERE r."listId" = $1::uuid AND ${GENERATED_BASKET} ${frozen}
     UNION ALL
     SELECT gl.id AS "basketId",
@@ -62,7 +62,7 @@ export function basketAskedCte(basketParam: string | null): string {
            (ll.quantity + b."bought")::int AS "asked"
     FROM "shopping_lists" sl
     JOIN "zone_memberships" m ON m."zoneId" = sl."zoneId"
-    JOIN "generated_lists" gl ON gl."ownerUserId" = m."userId"
+    JOIN "baskets" gl ON gl."ownerUserId" = m."userId"
     JOIN "list_lines" ll ON ll."listId" = sl.id
     LEFT JOIN LATERAL (
       SELECT COALESCE(

@@ -1,6 +1,6 @@
 import {
   outcomeBreakdown,
-  type GeneratedListSummary,
+  type BasketSummary,
   type HomeState,
   type Identity,
   type ListRowVm,
@@ -41,7 +41,7 @@ export function selectHomeState(input: {
    * belongs on the dashboard" is a question about the data and this function's job is
    * choosing what to draw. Empty is the ordinary answer and the section is absent.
    */
-  activeShoppingLists: readonly GeneratedListSummary[];
+  activeShoppingLists: readonly BasketSummary[];
   /**
    * The display name per basket id, from `displayNames`.
    *
@@ -133,7 +133,7 @@ export function selectHomeState(input: {
  * one at a time.
  */
 function selectShoppingList(
-  active: readonly GeneratedListSummary[],
+  active: readonly BasketSummary[],
   names: ReadonlyMap<string, string>
 ): ShoppingListCardVm | null {
   const newest = active[0];

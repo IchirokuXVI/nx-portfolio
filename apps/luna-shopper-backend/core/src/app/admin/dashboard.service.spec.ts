@@ -7,7 +7,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import type { Repository } from 'typeorm';
 import type { CoreAuditService } from '../audit/core-audit.service';
 import type {
-  GeneratedList,
+  Basket,
   ShoppingList,
   Zone,
   ZoneMembership,
@@ -80,7 +80,7 @@ function build() {
   const zones = emptyRepository<Zone>();
   const memberships = emptyRepository<ZoneMembership>();
   const lists = emptyRepository<ShoppingList>();
-  const baskets = emptyRepository<GeneratedList>();
+  const baskets = emptyRepository<Basket>();
   const recent = jest.fn(async () => []);
   const audit = { recent } as unknown as CoreAuditService;
 

@@ -4,7 +4,7 @@ import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   AccountNotice,
-  fakeGeneratedListStore,
+  fakeBasketListStore,
   fakeMemberNames,
   fakePresenceStore,
   fakeProfileStore,
@@ -12,7 +12,7 @@ import {
   profileFor,
   provideAccountNotice,
   provideFakeAuthService,
-  provideFakeGeneratedListStore,
+  provideFakeBasketListStore,
   provideFakeMemberNames,
   provideFakePresenceStore,
   provideFakeProfileStore,
@@ -20,14 +20,14 @@ import {
   provideFakeZoneStore,
   VERIFY_RESEND_AVAILABLE,
   ZoneStore,
-  type FakeGeneratedListStore,
+  type FakeBasketListStore,
   type FakeIdentity,
   type FakePresenceOptions,
   type FakeProfileStore,
   type FakeZoneStore,
   type ZoneEntry,
 } from '@portfolio/velista/data-access';
-import type { GeneratedListSummary, MyZone } from '@portfolio/velista/models';
+import type { BasketSummary, MyZone } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -73,7 +73,7 @@ interface Options {
   /** Who the server says is present, which the zone cards render (plan 0017). */
   presence?: FakePresenceOptions;
   /** The caller's generated shopping lists, for the dashboard card (plan 0045). */
-  generated?: FakeGeneratedListStore;
+  generated?: FakeBasketListStore;
   /** User id to the name they go by in the zone, since presence carries ids alone. */
   names?: Readonly<Record<string, string>>;
   /** Where this tab is, and what the browser can do, for the invite link tests. */
@@ -130,8 +130,8 @@ async function render(
       provideFakeZoneStore(store),
       // Plan 0045: the dashboard's shopping list card reads the listing. A double, so
       // a spec states "there is one active basket" rather than driving a request.
-      provideFakeGeneratedListStore(
-        options.generated ?? fakeGeneratedListStore()
+      provideFakeBasketListStore(
+        options.generated ?? fakeBasketListStore()
       ),
       provideFakeSessionStore(options.identity ?? 'REGISTERED'),
       // Both arrived with plan 0009: the page reports what just happened to the
@@ -579,13 +579,13 @@ describe('HomePage', () => {
   // slot and it now comes from the server rather than from what the device remembered.
   //
   // The old block's whole "who is shopping it" section is gone with it and has no
-  // replacement here: `generatedList.listMine` answers summaries, which carry no
+  // replacement here: `basket.listMine` answers summaries, which carry no
   // participants, so there is no presence on this card to test. `0044`'s basket screen
   // is where the people on a basket are drawn.
   describe('the shopping list card', () => {
     const basket = (
-      overrides: Partial<GeneratedListSummary> = {}
-    ): GeneratedListSummary => ({
+      overrides: Partial<BasketSummary> = {}
+    ): BasketSummary => ({
       id: 'gl1',
       kind: 'GENERATED',
       name: 'Saturday big shop',
@@ -598,7 +598,7 @@ describe('HomePage', () => {
 
     it('appears for an open basket, and names it', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket()]),
+        generated: fakeBasketListStore([basket()]),
       });
 
       expect(query(fixture, 'lib-shopping-list-card')).not.toBeNull();
@@ -618,7 +618,7 @@ describe('HomePage', () => {
      */
     it('stays away for a status it cannot read, which is the safe direction', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket({ status: 'UNKNOWN' })]),
+        generated: fakeBasketListStore([basket({ status: 'UNKNOWN' })]),
       });
 
       expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
@@ -636,7 +636,7 @@ describe('HomePage', () => {
      */
     it('docks the strip at the foot rather than leaving it in the scroll', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket()]),
+        generated: fakeBasketListStore([basket()]),
       });
 
       const card = query(fixture, 'lib-shopping-list-card');
@@ -660,14 +660,14 @@ describe('HomePage', () => {
     // history page and not on the dashboard.
     it('stays away for a basket that is no longer active', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket({ status: 'FINISHED' })]),
+        generated: fakeBasketListStore([basket({ status: 'FINISHED' })]),
       });
 
       expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
     });
 
     it('asks the store for the listing when the page is created', async () => {
-      const store = fakeGeneratedListStore([basket()]);
+      const store = fakeBasketListStore([basket()]);
 
       await render({ generated: store });
 
@@ -678,7 +678,7 @@ describe('HomePage', () => {
     // the owner's own realtime room is for. Driven through the store here, since the
     // container's job is to render whatever the store holds at the time.
     it('appears without a reload when one arrives while the page is open', async () => {
-      const store = fakeGeneratedListStore([]);
+      const store = fakeBasketListStore([]);
       const fixture = await render({ generated: store });
 
       expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
@@ -701,7 +701,7 @@ describe('HomePage', () => {
 
     it('shows the newest and counts the others rather than guessing between them', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([
+        generated: fakeBasketListStore([
           basket({ id: 'gl1' }),
           basket({ id: 'gl2', name: 'Corner shop' }),
         ]),
@@ -715,7 +715,7 @@ describe('HomePage', () => {
     // needs a locale and cannot be computed from one basket in isolation.
     it('titles an unnamed basket with its generation date', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket({ name: null })]),
+        generated: fakeBasketListStore([basket({ name: null })]),
       });
 
       expect(card(fixture).list().name).not.toBe('');

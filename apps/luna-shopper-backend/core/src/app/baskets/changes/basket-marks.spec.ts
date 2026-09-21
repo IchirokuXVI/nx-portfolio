@@ -5,7 +5,7 @@ import {
   LineChangeKind,
   SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
-import type { BasketSettlementRow } from '../basket.sql';
+import type { BasketSettlementRow } from '../basket-read.sql';
 import { mergeKey } from '../line-dedup';
 import type { ChangeLineRow, ChangeRow } from './basket-changes.sql';
 import { foldMarks } from './basket-marks.reader';

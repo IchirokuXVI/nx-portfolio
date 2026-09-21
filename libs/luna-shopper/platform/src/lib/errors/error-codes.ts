@@ -70,7 +70,7 @@ export const ERROR_CODES = {
    * it cannot will show the wrong sentence for both. Nothing about the request
    * was malformed, and no field of it is at fault; the trip is over.
    */
-  GENERATED_LIST_FINISHED: 'generated_list_finished',
+  BASKET_FINISHED: 'basket_finished',
   /**
    * The number this write was moving is not where the caller believed it started
    * (plan 0057, section 5; plan 0056, section 3.2).
@@ -262,7 +262,7 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // to make it; what refuses it is the state of the basket, which is what a
   // conflict is. It stays distinguishable from a plain `conflict` by its code,
   // which is what lets velista say "this basket is finished".
-  [ERROR_CODES.GENERATED_LIST_FINISHED]: HttpStatus.CONFLICT,
+  [ERROR_CODES.BASKET_FINISHED]: HttpStatus.CONFLICT,
   // 409 for the same reason and apart from it by code: the request was well
   // formed, and what it conflicts with is state that moved underneath it.
   [ERROR_CODES.STALE_QUANTITY]: HttpStatus.CONFLICT,

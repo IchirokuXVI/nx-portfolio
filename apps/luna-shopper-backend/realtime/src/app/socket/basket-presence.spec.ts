@@ -41,14 +41,14 @@ function build(admission: unknown) {
   const presence = {
     register: jest.fn(),
     registerParticipant: jest.fn(),
-    joinGeneratedList: jest.fn(async () => undefined),
+    joinBasket: jest.fn(async () => undefined),
     disconnect: jest.fn(async () => undefined),
   };
   const tokenVerifier = {
     verifyIdentity: jest.fn(async () => ({
       kind: 'participant',
       participantId: PARTICIPANT,
-      generatedListId: BASKET,
+      basketId: BASKET,
     })),
   };
 
@@ -82,7 +82,7 @@ describe('a participant socket on a GENERATED basket', () => {
       basketPresenceRoom(BASKET),
     ]);
     expect(w.presence.registerParticipant).toHaveBeenCalledWith('s1', ENTRY);
-    expect(w.presence.joinGeneratedList).toHaveBeenCalledWith('s1', BASKET);
+    expect(w.presence.joinBasket).toHaveBeenCalledWith('s1', BASKET);
   });
 });
 
@@ -96,7 +96,7 @@ describe('a participant socket on a LIVE basket', () => {
     // it does not get is a presence entry nobody would read.
     expect(joined(w.client)).toEqual([basketRoom(BASKET)]);
     expect(w.presence.registerParticipant).not.toHaveBeenCalled();
-    expect(w.presence.joinGeneratedList).not.toHaveBeenCalled();
+    expect(w.presence.joinBasket).not.toHaveBeenCalled();
   });
 
   it('keeps the kind on the socket, so the disconnect path knows', async () => {

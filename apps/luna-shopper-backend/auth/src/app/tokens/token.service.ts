@@ -73,7 +73,7 @@ export class TokenService {
    */
   async signParticipantToken(req: {
     participantId: string;
-    generatedListId: string;
+    basketId: string;
     kind: string;
   }): Promise<{ socketToken: string; socketTokenExpiresAt: string }> {
     const ttl = this.config.jwt.participantTokenTtl;
@@ -86,7 +86,7 @@ export class TokenService {
         privateKey: this.config.jwt.privateKey,
         algorithm: 'RS256',
         keyid: this.config.jwt.kid,
-        audience: req.generatedListId,
+        audience: req.basketId,
         expiresIn: ttl as JwtSignOptions['expiresIn'],
       }
     );

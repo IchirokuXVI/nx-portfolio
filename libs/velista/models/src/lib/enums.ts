@@ -257,19 +257,19 @@ export const BASKET_KIND_FALLBACK: BasketKind = 'UNKNOWN';
  * `ZONE_STATUSES`: an unrecognised value must not read as open, because that would put
  * a basket the server considers finished back on the dashboard.
  */
-export const GENERATED_LIST_STATUSES = [
+export const BASKET_STATUSES = [
   'OPEN',
   'FINISHED',
   'ARCHIVED',
   'UNKNOWN',
 ] as const;
-export type GeneratedListStatus = (typeof GENERATED_LIST_STATUSES)[number];
-export const GENERATED_LIST_STATUS_FALLBACK: GeneratedListStatus = 'UNKNOWN';
+export type BasketStatus = (typeof BASKET_STATUSES)[number];
+export const BASKET_STATUS_FALLBACK: BasketStatus = 'UNKNOWN';
 
 /**
  * Whether this basket still takes writes.
  *
- * Takes a `string` rather than a {@link GeneratedListStatus} so a caller holding a raw
+ * Takes a `string` rather than a {@link BasketStatus} so a caller holding a raw
  * status off the wire can ask without a cast, which is the shape {@link basketTakesLines}
  * already had and the reason it can delegate here.
  *
@@ -286,12 +286,12 @@ export function isOpenBasket(status: string): boolean {
  *
  * Two of the four, because there are two gestures: Finish ends the trip and Reopen
  * takes it back, and nothing in velista archives a basket. Narrower than
- * {@link GeneratedListStatus} on purpose, and `UNKNOWN` is why: it is this build's
+ * {@link BasketStatus} on purpose, and `UNKNOWN` is why: it is this build's
  * fallback for a status it does not recognise, not a value the server has ever heard
  * of, so a write signature that accepted it would let a round trip turn "I could not
  * read this" into a request the gateway refuses.
  */
-export type WritableGeneratedListStatus = 'OPEN' | 'FINISHED';
+export type WritableBasketStatus = 'OPEN' | 'FINISHED';
 
 /**
  * Where a basket line came from (backend `0055`, section 3; velista `0056`).

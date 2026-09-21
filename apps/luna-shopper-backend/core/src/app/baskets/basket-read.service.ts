@@ -19,8 +19,8 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import type { CoreConfig } from '../config/app-config';
-import { GeneratedList, GeneratedListParticipant } from '../entities';
-import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
+import { Basket, BasketParticipant } from '../entities';
+import { BasketSharingService } from '../baskets/basket-sharing.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { canChangeDemand } from '../lists/list-acts';
 import { BasketCoverageService } from './basket-coverage.service';
@@ -49,7 +49,7 @@ import {
   type BasketSettlementRow,
   type CoveredLineItemRow,
   type CoveredLineRow,
-} from './basket.sql';
+} from './basket-read.sql';
 import { CHANGE_LINES_SQL } from './changes/basket-changes.sql';
 import {
   BasketMarksReader,
@@ -90,10 +90,10 @@ export class BasketReadService {
   private readonly skipWindowMs: number;
 
   constructor(
-    @InjectRepository(GeneratedList)
-    private readonly baskets: Repository<GeneratedList>,
+    @InjectRepository(Basket)
+    private readonly baskets: Repository<Basket>,
     private readonly coverage: BasketCoverageService,
-    private readonly sharing: GeneratedListSharingService,
+    private readonly sharing: BasketSharingService,
     // For the **owner's** permissions on each covered list, which is what
     // `demandEditable` answers (plan 0131). Never the actor's.
     private readonly listAccess: ListAccessService,
@@ -123,7 +123,7 @@ export class BasketReadService {
    * would hand a client a key the write routes refuse.
    */
   async coveredLinesOf(
-    basket: GeneratedList,
+    basket: Basket,
     coveredListIds: readonly string[]
   ): Promise<CoveredLineRow[]> {
     if (coveredListIds.length === 0) {
@@ -163,8 +163,8 @@ export class BasketReadService {
    * its header would make the same read one round trip later.
    */
   async view(
-    basket: GeneratedList,
-    participant: GeneratedListParticipant
+    basket: Basket,
+    participant: BasketParticipant
   ): Promise<BasketView> {
     const covered = await this.coverage.listsOf(basket);
     const coveredListIds = covered.map((row) => row.listId);
@@ -184,7 +184,7 @@ export class BasketReadService {
       // section 7).
       this.rowsOf(basket, coveredListIds, redaction, participant.id),
       this.sharing.listParticipants({
-        generatedListId: basket.id,
+        basketId: basket.id,
         asParticipantId: participant.id,
       }),
       this.listRefs(redaction),
@@ -223,12 +223,12 @@ export class BasketReadService {
    * holds at most a few open baskets, because the sweep finishes them, so one
    * read each is acceptable.
    */
-  async progressOf(basket: GeneratedList): Promise<BasketProgress> {
+  async progressOf(basket: Basket): Promise<BasketProgress> {
     return progressOf(await this.openRows(basket));
   }
 
   /** The rows of an open basket, unredacted, for a caller that is not a reader. */
-  async openRows(basket: GeneratedList): Promise<BasketRowView[]> {
+  async openRows(basket: Basket): Promise<BasketRowView[]> {
     const covered = await this.coverage.listsOf(basket);
     const listIds = covered.map((row) => row.listId);
     const { rows } = await this.rowsOf(
@@ -246,7 +246,7 @@ export class BasketReadService {
    * view, and so that the finish can freeze the numbers it draws.
    */
   async rowsOf(
-    basket: GeneratedList,
+    basket: Basket,
     coveredListIds: readonly string[],
     redaction: BasketRedaction,
     /**
@@ -379,7 +379,7 @@ export class BasketReadService {
    * and a skip is an intention about a trip that is over.
    */
   private async skipsOf(
-    basket: GeneratedList
+    basket: Basket
   ): Promise<Map<string, BasketSkipFact>> {
     if (!isOpenBasket(basket.status)) {
       return new Map();
@@ -414,7 +414,7 @@ export class BasketReadService {
    * zero everywhere and yesterday's shop does not reappear as today's progress.
    */
   private async scopeOf(
-    basket: GeneratedList
+    basket: Basket
   ): Promise<{ startedAt: Date | null; enabled: boolean }> {
     if (basket.kind !== BasketKind.LIVE) {
       return { startedAt: null, enabled: true };
@@ -443,8 +443,8 @@ export class BasketReadService {
 
   /** The basket and the live participant asking for it. */
   async resolve(req: { basketId: string; participantId: string }): Promise<{
-    basket: GeneratedList;
-    participant: GeneratedListParticipant;
+    basket: Basket;
+    participant: BasketParticipant;
   }> {
     const basket = await this.baskets.findOne({ where: { id: req.basketId } });
     if (!basket) {

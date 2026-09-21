@@ -13,7 +13,7 @@ import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import { LineSettlement, ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineItems } from './line-items.fake';
 import { fakeLineSettlements } from './line-settlements.fake';
@@ -211,7 +211,7 @@ describe('line.settle (plan 0047, section 4)', () => {
 
   it('came through no basket, and still names the line it bought', async () => {
     // Plan 0134, section 2: null `basketId` is the list page. It used to be
-    // null together with `generatedListLineId`, and that column is deleted with
+    // null together with `basketLineId`, and that column is deleted with
     // the table it pointed at (plan 0136, section 9), so what is left to assert
     // is the other half of the same migration: `lineId` and `listId` are `NOT
     // NULL` again, because there is no waiting settlement any more. Every
@@ -225,7 +225,7 @@ describe('line.settle (plan 0047, section 4)', () => {
       quantity: 2,
     });
 
-    expect(w.written[0]).not.toHaveProperty('generatedListLineId');
+    expect(w.written[0]).not.toHaveProperty('basketLineId');
     expect(w.written[0]).toMatchObject({
       basketId: null,
       lineId: 'li1',

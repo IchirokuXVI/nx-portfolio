@@ -17,7 +17,7 @@ import type { LocalizedName } from './shopping-profile';
  * the boundary, never the gateway's DTOs passed through. The names are the app's
  * own — a `GeneratedListBasketLineView` on the wire is a {@link BasketLine} here,
  * because the screen is called the basket and nothing in the interface says
- * "generated list".
+ * "basket".
  *
  * ## The one idea the whole file turns on
  *
@@ -758,7 +758,7 @@ export interface BasketLinkPreview {
  * who authenticate with their account token instead and need no second credential.
  */
 export interface BasketSession {
-  generatedListId: string;
+  basketId: string;
   participantId: string;
   /** Returned exactly once, at join. Null when an account token stands in for it. */
   secret: string | null;

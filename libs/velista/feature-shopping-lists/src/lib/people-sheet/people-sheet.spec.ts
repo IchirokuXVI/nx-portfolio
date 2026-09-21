@@ -69,7 +69,7 @@ async function render(
   };
   const leaveBasket = jest.fn().mockResolvedValue(leaves);
 
-  const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const paramMap = convertToParamMap({ basketId: BASKET_ID });
 
   await TestBed.configureTestingModule({
     imports: [PeopleSheet, RokuTranslatorTestingModule.forTesting()],

@@ -111,7 +111,7 @@ Words the series uses with one meaning each. A plan that needs a new one adds it
 
 | Word          | Meaning                                                                                                                                                                                                                  |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| basket        | a row of `generated_lists`. The code says `GeneratedList` until plan `0144`. New tables, columns, contracts, routes and files say `basket` from the day they are created.                                                |
+| basket        | a row of `baskets`. The code said `GeneratedList` until plan `0144` renamed it. New tables, columns, contracts, routes and files say `basket` from the day they are created.                                                |
 | kind          | `LIVE` or `GENERATED`. A `LIVE` basket is created for its owner on first read, is never finished and has no name. A `GENERATED` basket is created on purpose, with a name, sources and people.                             |
 | open          | `status = 'OPEN'`. **The word "live" no longer means this.** `isLiveGeneratedList` becomes `isOpenBasket` in plan `0133`, because "the live basket" now names a kind.                                                     |
 | coverage      | the lists a basket reads, computed at request time and never stored. `LIVE`: every list its owner holds `WRITE` on. `GENERATED`: the owner's writable lists narrowed by `basket_sources`, which is `narrow()` of today. |

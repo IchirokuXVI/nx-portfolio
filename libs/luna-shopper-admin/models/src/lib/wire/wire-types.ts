@@ -33,17 +33,17 @@ export type AddBasketLineDto = {
 };
 
 /**
+ * `AddBasketParticipantDto` in the gateway's OpenAPI document.
+ */
+export type AddBasketParticipantDto = {
+  userId: string;
+};
+
+/**
  * `AddCommentDto` in the gateway's OpenAPI document.
  */
 export type AddCommentDto = {
   body: string;
-};
-
-/**
- * `AddGeneratedListParticipantDto` in the gateway's OpenAPI document.
- */
-export type AddGeneratedListParticipantDto = {
-  userId: string;
 };
 
 /**
@@ -178,23 +178,31 @@ export type BasketAllocationDto = {
 };
 
 /**
+ * `BasketSourceDto` in the gateway's OpenAPI document.
+ */
+export type BasketSourceDto = {
+  zoneId: string;
+  listId?: string | null;
+};
+
+/**
+ * `CreateBasketDto` in the gateway's OpenAPI document.
+ */
+export type CreateBasketDto = {
+  sources?: BasketSourceDto[];
+  profileId?: string;
+  name?: string | null;
+  idempotencyKey?: string;
+  memberUserIds?: string[];
+};
+
+/**
  * `CreateBrandDto` in the gateway's OpenAPI document.
  */
 export type CreateBrandDto = {
   label: string;
   privateLabelSupermarketId?: string | null;
   canonicalBrandId?: string | null;
-};
-
-/**
- * `CreateGeneratedListDto` in the gateway's OpenAPI document.
- */
-export type CreateGeneratedListDto = {
-  sources?: GeneratedListSourceDto[];
-  profileId?: string;
-  name?: string | null;
-  idempotencyKey?: string;
-  memberUserIds?: string[];
 };
 
 /**
@@ -350,14 +358,6 @@ export type ForgotPasswordDto = {
 };
 
 /**
- * `GeneratedListSourceDto` in the gateway's OpenAPI document.
- */
-export type GeneratedListSourceDto = {
-  zoneId: string;
-  listId?: string | null;
-};
-
-/**
  * `HarvestRunPresetInputDto` in the gateway's OpenAPI document.
  */
 export type HarvestRunPresetInputDto = {
@@ -398,9 +398,9 @@ export type ImportHarvestDocumentDto = {
 };
 
 /**
- * `JoinGeneratedListDto` in the gateway's OpenAPI document.
+ * `JoinBasketDto` in the gateway's OpenAPI document.
  */
-export type JoinGeneratedListDto = {
+export type JoinBasketDto = {
   displayName?: string;
 };
 
@@ -488,7 +488,7 @@ export type ProblemDetails = {
     | 'rate_limited'
     | 'not_configured'
     | 'client_too_old'
-    | 'generated_list_finished'
+    | 'basket_finished'
     | 'stale_quantity'
     | 'account_locked'
     | 'postal_code_unknown'
@@ -875,11 +875,11 @@ export type UpdateAdminZoneDto = {
 };
 
 /**
- * `UpdateAppStateDto` in the gateway's OpenAPI document.
+ * `UpdateBasketDto` in the gateway's OpenAPI document.
  */
-export type UpdateAppStateDto = {
-  setupCompleted?: true;
-  tourSeen?: true;
+export type UpdateBasketDto = {
+  name?: string | null;
+  status?: 'OPEN' | 'FINISHED' | 'ARCHIVED';
 };
 
 /**
@@ -889,14 +889,6 @@ export type UpdateBrandDto = {
   label?: string;
   privateLabelSupermarketId?: string | null;
   canonicalBrandId?: string | null;
-};
-
-/**
- * `UpdateGeneratedListDto` in the gateway's OpenAPI document.
- */
-export type UpdateGeneratedListDto = {
-  name?: string | null;
-  status?: 'OPEN' | 'FINISHED' | 'ARCHIVED';
 };
 
 /**
@@ -1136,7 +1128,7 @@ export type AdminCoreAdminBasketDetailView = {
   ownerUserId: string;
   kind: EnumsBasketKind;
   name: string | null;
-  status: EnumsGeneratedListStatus;
+  status: EnumsBasketStatus;
   zoneIds: string[];
   lineCount: number;
   generatedAt: string;
@@ -1174,7 +1166,7 @@ export type AdminCoreAdminBasketView = {
   ownerUserId: string;
   kind: EnumsBasketKind;
   name: string | null;
-  status: EnumsGeneratedListStatus;
+  status: EnumsBasketStatus;
   zoneIds: string[];
   lineCount: number;
   generatedAt: string;
@@ -1640,13 +1632,6 @@ export type AuthRetryAfterResult = {
 };
 
 /**
- * `auth.SuggestUsernameResult` in the gateway's OpenAPI document.
- */
-export type AuthSuggestUsernameResult = {
-  username: string;
-};
-
-/**
  * `auth.UserProfileView` in the gateway's OpenAPI document.
  */
 export type AuthUserProfileView = {
@@ -1656,6 +1641,79 @@ export type AuthUserProfileView = {
   email: string | null;
   emailVerified: boolean;
   displayName: string | null;
+};
+
+/**
+ * `basket-sharing.JoinResult` in the gateway's OpenAPI document.
+ */
+export type BasketSharingJoinResult = {
+  basketId: string;
+  participant: BasketSharingParticipantView;
+  sessionSecret: string | null;
+  socketToken: string;
+  socketTokenExpiresAt: string;
+};
+
+/**
+ * `basket-sharing.LinkPreview` in the gateway's OpenAPI document.
+ */
+export type BasketSharingLinkPreview = {
+  joinable: boolean;
+  name?: string | null;
+  participantCount?: number;
+};
+
+/**
+ * `basket-sharing.ParticipantListResult` in the gateway's OpenAPI document.
+ */
+export type BasketSharingParticipantListResult = {
+  participants: BasketSharingParticipantView[];
+};
+
+/**
+ * `basket-sharing.ParticipantTokenResult` in the gateway's OpenAPI document.
+ */
+export type BasketSharingParticipantTokenResult = {
+  socketToken: string;
+  socketTokenExpiresAt: string;
+  participant: BasketSharingParticipantView;
+};
+
+/**
+ * `basket-sharing.ParticipantView` in the gateway's OpenAPI document.
+ */
+export type BasketSharingParticipantView = {
+  id: string;
+  kind: EnumsParticipantKind;
+  displayName: string | null;
+  username: string | null;
+  guestNumber: number | null;
+  userId: string | null;
+  joinedAt?: string;
+  lastSeenAt?: string;
+  shareLinkId: string | null;
+  userAgent?: string | null;
+  expiresAt: string | null;
+};
+
+/**
+ * `basket-sharing.ShareLinkResult` in the gateway's OpenAPI document.
+ */
+export type BasketSharingShareLinkResult = {
+  link?: BasketSharingShareLinkView;
+};
+
+/**
+ * `basket-sharing.ShareLinkView` in the gateway's OpenAPI document.
+ */
+export type BasketSharingShareLinkView = {
+  id: string;
+  basketId: string;
+  secret: string;
+  createdByParticipantId: string;
+  createdAt: string;
+  expiresAt: string;
+  participantCount: number;
 };
 
 /**
@@ -1707,6 +1765,34 @@ export type BasketBasketChangesAcknowledged = {
 };
 
 /**
+ * `basket.BasketHeaderView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketHeaderView = {
+  id: string;
+  kind: EnumsBasketKind;
+  name: string | null;
+  status: EnumsBasketStatus;
+  generatedAt: string;
+  sources: BasketBasketSourceView[];
+};
+
+/**
+ * `basket.BasketHistoryView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketHistoryView = {
+  id: string;
+  kind: EnumsBasketKind;
+  name: string | null;
+  status: EnumsBasketStatus;
+  generatedAt: string;
+  lineCount: number;
+  settledLineCount: number;
+  boughtLineCount: number;
+  notAvailableLineCount: number;
+  presentCount: number;
+};
+
+/**
  * `basket.BasketListRef` in the gateway's OpenAPI document.
  */
 export type BasketBasketListRef = {
@@ -1714,6 +1800,24 @@ export type BasketBasketListRef = {
   name: string;
   zoneId: string;
   zoneName: string;
+};
+
+/**
+ * `basket.BasketOwnerView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketOwnerView = {
+  userId: string;
+  name: string;
+};
+
+/**
+ * `basket.BasketPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type BasketBasketPage = {
+  items: BasketBasketHistoryView[];
+  nextCursor: string | null;
 };
 
 /**
@@ -1743,12 +1847,12 @@ export type BasketBasketResult = {
   id: string;
   kind: EnumsBasketKind;
   name: string | null;
-  status: EnumsGeneratedListStatus;
+  status: EnumsBasketStatus;
   createdAt: string;
   rows: BasketBasketRowView[];
   lists: BasketBasketListRef[];
-  participants: GeneratedListSharingParticipantView[];
-  me: GeneratedListSharingParticipantView;
+  participants: BasketSharingParticipantView[];
+  me: BasketSharingParticipantView;
   progress: BasketBasketProgress;
   truncated: boolean;
   servesLocations: boolean;
@@ -1802,6 +1906,13 @@ export type BasketBasketRowView = {
 };
 
 /**
+ * `basket.BasketRunResult` in the gateway's OpenAPI document.
+ */
+export type BasketBasketRunResult = {
+  list: BasketBasketHeaderView;
+};
+
+/**
  * `basket.BasketScopeLocationView` in the gateway's OpenAPI document.
  */
 export type BasketBasketScopeLocationView = {
@@ -1813,12 +1924,48 @@ export type BasketBasketScopeLocationView = {
 };
 
 /**
+ * `basket.BasketSourceView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketSourceView = {
+  zoneId: string;
+  listId: string | null;
+};
+
+/**
  * `basket.BasketSummaryView` in the gateway's OpenAPI document.
  */
 export type BasketBasketSummaryView = {
   id: string;
   kind: EnumsBasketKind;
   progress: BasketBasketProgress;
+};
+
+/**
+ * `basket.SharedBasketPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type BasketSharedBasketPage = {
+  items: BasketSharedBasketView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `basket.SharedBasketView` in the gateway's OpenAPI document.
+ */
+export type BasketSharedBasketView = {
+  id: string;
+  kind: EnumsBasketKind;
+  name: string | null;
+  status: EnumsBasketStatus;
+  generatedAt: string;
+  lineCount: number;
+  settledLineCount: number;
+  boughtLineCount: number;
+  notAvailableLineCount: number;
+  presentCount: number;
+  owner: BasketBasketOwnerView;
+  sharedAt: string;
 };
 
 /**
@@ -2436,14 +2583,6 @@ export type CommonUserIdResult = {
 };
 
 /**
- * `core.UserAppStateView` in the gateway's OpenAPI document.
- */
-export type CoreUserAppStateView = {
-  setupCompletedAt: string | null;
-  tourSeenAt: string | null;
-};
-
-/**
  * `enums.AdapterKey` in the gateway's OpenAPI document.
  */
 export type EnumsAdapterKey =
@@ -2486,6 +2625,11 @@ export type EnumsBasketRowState =
   | 'REMOVED';
 
 /**
+ * `enums.BasketStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsBasketStatus = 'OPEN' | 'FINISHED' | 'ARCHIVED';
+
+/**
  * `enums.BulkOperationErrorCode` in the gateway's OpenAPI document.
  */
 export type EnumsBulkOperationErrorCode =
@@ -2510,11 +2654,6 @@ export type EnumsCommentTranscription =
  * `enums.DiscoveredPlaceStatus` in the gateway's OpenAPI document.
  */
 export type EnumsDiscoveredPlaceStatus = 'NEW' | 'IMPORTED' | 'REJECTED';
-
-/**
- * `enums.GeneratedListStatus` in the gateway's OpenAPI document.
- */
-export type EnumsGeneratedListStatus = 'OPEN' | 'FINISHED' | 'ARCHIVED';
 
 /**
  * `enums.GenerationScope` in the gateway's OpenAPI document.
@@ -2757,181 +2896,6 @@ export type EnumsZoneRole = 'OWNER' | 'ADMIN' | 'MEMBER';
  * `enums.ZoneStatus` in the gateway's OpenAPI document.
  */
 export type EnumsZoneStatus = 'ACTIVE' | 'MARKED_FOR_DELETION';
-
-/**
- * `gateway.AccountMeView` in the gateway's OpenAPI document.
- */
-export type GatewayAccountMeView = {
-  userId: string;
-  kind: EnumsUserKind;
-  username: string;
-  email: string | null;
-  emailVerified: boolean;
-  displayName: string | null;
-  appState: CoreUserAppStateView;
-};
-
-/**
- * `generated-list-sharing.JoinResult` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingJoinResult = {
-  generatedListId: string;
-  participant: GeneratedListSharingParticipantView;
-  sessionSecret: string | null;
-  socketToken: string;
-  socketTokenExpiresAt: string;
-};
-
-/**
- * `generated-list-sharing.LinkPreview` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingLinkPreview = {
-  joinable: boolean;
-  name?: string | null;
-  participantCount?: number;
-};
-
-/**
- * `generated-list-sharing.ParticipantListResult` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingParticipantListResult = {
-  participants: GeneratedListSharingParticipantView[];
-};
-
-/**
- * `generated-list-sharing.ParticipantTokenResult` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingParticipantTokenResult = {
-  socketToken: string;
-  socketTokenExpiresAt: string;
-  participant: GeneratedListSharingParticipantView;
-};
-
-/**
- * `generated-list-sharing.ParticipantView` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingParticipantView = {
-  id: string;
-  kind: EnumsParticipantKind;
-  displayName: string | null;
-  username: string | null;
-  guestNumber: number | null;
-  userId: string | null;
-  joinedAt?: string;
-  lastSeenAt?: string;
-  shareLinkId: string | null;
-  userAgent?: string | null;
-  expiresAt: string | null;
-};
-
-/**
- * `generated-list-sharing.ShareLinkResult` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingShareLinkResult = {
-  link?: GeneratedListSharingShareLinkView;
-};
-
-/**
- * `generated-list-sharing.ShareLinkView` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharingShareLinkView = {
-  id: string;
-  generatedListId: string;
-  secret: string;
-  createdByParticipantId: string;
-  createdAt: string;
-  expiresAt: string;
-  participantCount: number;
-};
-
-/**
- * `generated-list.BasketSourceView` in the gateway's OpenAPI document.
- */
-export type GeneratedListBasketSourceView = {
-  zoneId: string;
-  listId: string | null;
-};
-
-/**
- * `generated-list.GeneratedListOwnerView` in the gateway's OpenAPI document.
- */
-export type GeneratedListGeneratedListOwnerView = {
-  userId: string;
-  name: string;
-};
-
-/**
- * `generated-list.GeneratedListPage` in the gateway's OpenAPI document.
- *
- * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
- */
-export type GeneratedListGeneratedListPage = {
-  items: GeneratedListGeneratedListSummaryView[];
-  nextCursor: string | null;
-};
-
-/**
- * `generated-list.GeneratedListRunResult` in the gateway's OpenAPI document.
- */
-export type GeneratedListGeneratedListRunResult = {
-  list: GeneratedListGeneratedListView;
-};
-
-/**
- * `generated-list.GeneratedListSummaryView` in the gateway's OpenAPI document.
- */
-export type GeneratedListGeneratedListSummaryView = {
-  id: string;
-  kind: EnumsBasketKind;
-  name: string | null;
-  status: EnumsGeneratedListStatus;
-  generatedAt: string;
-  lineCount: number;
-  settledLineCount: number;
-  boughtLineCount: number;
-  notAvailableLineCount: number;
-  presentCount: number;
-};
-
-/**
- * `generated-list.GeneratedListView` in the gateway's OpenAPI document.
- */
-export type GeneratedListGeneratedListView = {
-  id: string;
-  kind: EnumsBasketKind;
-  name: string | null;
-  status: EnumsGeneratedListStatus;
-  generatedAt: string;
-  sources: GeneratedListBasketSourceView[];
-};
-
-/**
- * `generated-list.SharedGeneratedListPage` in the gateway's OpenAPI document.
- *
- * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
- */
-export type GeneratedListSharedGeneratedListPage = {
-  items: GeneratedListSharedGeneratedListView[];
-  nextCursor: string | null;
-};
-
-/**
- * `generated-list.SharedGeneratedListView` in the gateway's OpenAPI document.
- */
-export type GeneratedListSharedGeneratedListView = {
-  id: string;
-  kind: EnumsBasketKind;
-  name: string | null;
-  status: EnumsGeneratedListStatus;
-  generatedAt: string;
-  lineCount: number;
-  settledLineCount: number;
-  boughtLineCount: number;
-  notAvailableLineCount: number;
-  presentCount: number;
-  owner: GeneratedListGeneratedListOwnerView;
-  sharedAt: string;
-};
 
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
@@ -3736,16 +3700,16 @@ export type MsgAssistantTurnResponse = {
 };
 
 /**
- * `msg.generatedList.participant.revoke.response` in the gateway's OpenAPI document.
+ * `msg.basket.participant.revoke.response` in the gateway's OpenAPI document.
  */
-export type MsgGeneratedListParticipantRevokeResponse = {
+export type MsgBasketParticipantRevokeResponse = {
   id: string;
 };
 
 /**
- * `msg.generatedList.shareLink.revoke.response` in the gateway's OpenAPI document.
+ * `msg.basket.shareLink.revoke.response` in the gateway's OpenAPI document.
  */
-export type MsgGeneratedListShareLinkRevokeResponse = {
+export type MsgBasketShareLinkRevokeResponse = {
   revoked: number;
 };
 

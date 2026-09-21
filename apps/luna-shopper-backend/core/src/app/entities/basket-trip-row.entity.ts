@@ -8,7 +8,7 @@ import {
   PrimaryGeneratedColumn,
   Unique,
 } from 'typeorm';
-import { GeneratedList } from './generated-list.entity';
+import { Basket } from './basket.entity';
 import { ListLine } from './list-line.entity';
 
 /**
@@ -16,7 +16,7 @@ import { ListLine } from './list-line.entity';
  * 0135).
  *
  * A finished basket used to answer "what did you ask for" from
- * `generated_list_line_origins`, and that answer stayed true only because a
+ * `basket_line_origins`, and that answer stayed true only because a
  * finished basket refuses every write, so its origins happened to stop moving.
  * Plan 0136 deletes that table and makes an open basket's ask a view of its
  * lists, which never stop moving. So the freeze becomes an act: when a basket
@@ -60,7 +60,7 @@ import { ListLine } from './list-line.entity';
  * of open baskets and never a trip row, and no read of a finished trip asks for
  * a zone.
  *
- * It does not extend `BaseEntity`, for the reason `GeneratedListLineOrigin` does
+ * It does not extend `BaseEntity`, for the reason `BasketLineOrigin` does
  * not: it is written once and has no life of its own to audit.
  */
 @Entity({ name: 'basket_trip_rows' })
@@ -76,9 +76,9 @@ export class BasketTripRow {
   @Column({ type: 'uuid' })
   basketId!: string;
 
-  @ManyToOne(() => GeneratedList, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Basket, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'basketId' })
-  basket!: GeneratedList;
+  basket!: Basket;
 
   /** The list the line is on, copied as it is onto a settlement. */
   @Column({ type: 'uuid' })

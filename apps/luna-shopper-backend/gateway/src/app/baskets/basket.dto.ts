@@ -1,15 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   BASKET_CHANGE_LIMITS,
-  GENERATED_LIST_LIMITS,
+  BASKET_LIMITS,
+  BASKET_SHARING_LIMITS,
+  BasketStatus,
   LINE_QUANTITY_MAX,
   SettlementOutcome,
 } from '@portfolio/luna-shopper/contracts';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsIn,
   IsInt,
   IsOptional,
@@ -106,7 +110,7 @@ export class SettleBasketRowDto {
   })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(GENERATED_LIST_LIMITS.maxSources)
+  @ArrayMaxSize(BASKET_LIMITS.maxSources)
   @ValidateNested({ each: true })
   @Type(() => BasketAllocationDto)
   allocations?: BasketAllocationDto[];
@@ -194,11 +198,11 @@ export class AddBasketLineDto {
 
   @ApiProperty({
     minLength: 1,
-    maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
+    maxLength: BASKET_LIMITS.contentMaxLength,
   })
   @IsString()
   @MinLength(1)
-  @MaxLength(GENERATED_LIST_LIMITS.contentMaxLength)
+  @MaxLength(BASKET_LIMITS.contentMaxLength)
   content!: string;
 
   @ApiPropertyOptional({ minimum: 1, maximum: LINE_QUANTITY_MAX })
@@ -215,7 +219,7 @@ export class AddBasketLineDto {
   })
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(GENERATED_LIST_LIMITS.maxOptions)
+  @ArrayMaxSize(BASKET_LIMITS.maxOptions)
   @IsUUID('4', { each: true })
   itemIds?: string[];
 }
@@ -223,11 +227,11 @@ export class AddBasketLineDto {
 export class RenameBasketRowDto {
   @ApiProperty({
     minLength: 1,
-    maxLength: GENERATED_LIST_LIMITS.contentMaxLength,
+    maxLength: BASKET_LIMITS.contentMaxLength,
   })
   @IsString()
   @MinLength(1)
-  @MaxLength(GENERATED_LIST_LIMITS.contentMaxLength)
+  @MaxLength(BASKET_LIMITS.contentMaxLength)
   content!: string;
 
   @ApiPropertyOptional({
@@ -291,3 +295,153 @@ export class AcknowledgeBasketChangesDto {
 
 /** The longest search term the composer may send (plan 0055, section 5). */
 export const BASKET_SUGGEST_QUERY_MAX_LENGTH = 120;
+
+// --- The collection routes' bodies and queries (plan 0050) -------------------
+
+/**
+ * The generated shopping list request bodies (plan 0050, section 9).
+ *
+ * The caps come from `BASKET_LIMITS` rather than from numbers written
+ * here, so the DTO, the JSON Schema and the service enforce the same five hundred
+ * and the same one hundred. What the DTO cannot express is checked in core
+ * anyway: a request that slips past validation still meets the service's own
+ * rules, chiefly that a source the caller cannot draw from contributes nothing.
+ */
+
+export class BasketSourceDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  zoneId!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Null means every list in the zone the caller may draw from, rather than one list within it.',
+  })
+  @IsOptional()
+  @IsUUID()
+  listId?: string | null;
+}
+
+export class CreateBasketDto {
+  @ApiPropertyOptional({
+    type: [BasketSourceDto],
+    maxItems: BASKET_LIMITS.maxSources,
+    description:
+      'The zones and lists to draw from. Omitted falls back to the profile named below, then to the caller default profile, which draws from everything they may write to.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(BASKET_LIMITS.maxSources)
+  @ValidateNested({ each: true })
+  @Type(() => BasketSourceDto)
+  sources?: BasketSourceDto[];
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The shopping profile whose stored generation sources the run should use. Only consulted when no sources are given.',
+  })
+  @IsOptional()
+  @IsUUID()
+  profileId?: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    maxLength: BASKET_LIMITS.nameMaxLength,
+    description:
+      'Null renders as the generation date on the client. The default is never stored, because the server does not know the reader locale.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(BASKET_LIMITS.nameMaxLength)
+  name?: string | null;
+
+  @ApiPropertyOptional({
+    maxLength: 200,
+    description:
+      'Repeat the same key to get the basket the first call produced, rather than a second basket.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  idempotencyKey?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: BASKET_SHARING_LIMITS.maxParticipants - 1,
+    uniqueItems: true,
+    description:
+      'People to share the basket with as it is created, chosen from GET /v1/contacts. Each must share an approved group with the caller at this moment, or the whole request is refused with validation_failed naming the ids that are not.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(BASKET_SHARING_LIMITS.maxParticipants - 1)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  memberUserIds?: string[];
+}
+
+export class UpdateBasketDto {
+  @ApiPropertyOptional({
+    nullable: true,
+    maxLength: BASKET_LIMITS.nameMaxLength,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(BASKET_LIMITS.nameMaxLength)
+  name?: string | null;
+
+  @ApiPropertyOptional({ enum: BasketStatus })
+  @IsOptional()
+  @IsEnum(BasketStatus)
+  status?: BasketStatus;
+}
+
+/** The query half of the history listing (plan 0050, section 7). */
+export class ListBasketsQueryDto {
+  @ApiPropertyOptional({
+    description: 'The `nextCursor` of the previous page. Opaque.',
+  })
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Include archived baskets, which the default listing leaves out without deleting them.',
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  includeArchived?: boolean;
+}
+
+/** The query half of the shared baskets listing (plan 0114, section 8). */
+export class ListSharedBasketsQueryDto {
+  @ApiPropertyOptional({
+    description: 'The `nextCursor` of the previous page. Opaque.',
+  })
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}

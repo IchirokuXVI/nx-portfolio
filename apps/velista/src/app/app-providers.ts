@@ -31,8 +31,8 @@ import {
   DUE_LINE_SERVICE,
   DueLineApi,
   gatewayInterceptor,
-  GENERATED_LIST_SERVICE,
-  GeneratedListApi,
+  BASKET_LIST_SERVICE,
+  BasketListApi,
   LINE_SERVICE,
   LineApi,
   LIST_SERVICE,
@@ -246,7 +246,7 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // Those are authenticated by a participant session rather than by this account token,
   // so they are a different service on a different credential and not a wider version
   // of this one.
-  provideService(GENERATED_LIST_SERVICE, GeneratedListApi),
+  provideService(BASKET_LIST_SERVICE, BasketListApi),
   provideService(BASKET_SERVICE, BasketApi),
   // The people the reader shares a group with (velista `0085`), for the picker that
   // shares a basket with them.

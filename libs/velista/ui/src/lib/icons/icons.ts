@@ -874,7 +874,7 @@ export class TrashIcon {
  * appears: the dashboard's primary action, the card above it, the history page's empty
  * state. `ListLinesIcon` is the *zone* list's glyph and stays that, because the two are
  * different objects and drawing them alike is exactly the confusion the naming note in
- * `generated-list-view` is about: a zone list is a standing collection, a basket is one
+ * `basket-summary` is about: a zone list is a standing collection, a basket is one
  * trip composed out of several of them.
  *
  * One component for both, because it is one picture of one idea. Splitting it would

@@ -1,4 +1,4 @@
-import type { GeneratedListSummary } from './generated-list-view';
+import type { BasketSummary } from './basket-summary';
 
 /**
  * What a finished trip actually came to: bought, and not available (plan 0049,
@@ -34,7 +34,7 @@ export interface OutcomeBreakdownVm {
  */
 export function outcomeBreakdown(
   summary: Pick<
-    GeneratedListSummary,
+    BasketSummary,
     'settledLineCount' | 'boughtLineCount' | 'notAvailableLineCount'
   >
 ): OutcomeBreakdownVm | null {
@@ -48,7 +48,7 @@ export function outcomeBreakdown(
 /**
  * The view models for the shopping list card and the history page (plan 0045).
  *
- * Separate from `generated-list-view.ts`, which holds what a generated list **is**:
+ * Separate from `basket-summary.ts`, which holds what a basket **is**:
  * these are what two particular screens draw. Plan 0004 rule D1 is the reason the split
  * is worth a file, since a container assembles one object shaped like the page rather
  * than handing a component eight inputs shaped like the API. Keeping them apart also
@@ -221,7 +221,7 @@ export type ShoppingListsState =
  * @returns The display name per trip id.
  */
 export function displayNames(
-  summaries: readonly GeneratedListSummary[],
+  summaries: readonly BasketSummary[],
   formatDate: (date: Date) => string
 ): ReadonlyMap<string, string> {
   const names = new Map<string, string>();

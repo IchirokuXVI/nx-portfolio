@@ -117,7 +117,7 @@ function render(options: {
     ),
   };
 
-  const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const paramMap = convertToParamMap({ basketId: BASKET_ID });
   TestBed.configureTestingModule({
     imports: [FilterSheet, RokuTranslatorTestingModule.forTesting()],
     providers: [

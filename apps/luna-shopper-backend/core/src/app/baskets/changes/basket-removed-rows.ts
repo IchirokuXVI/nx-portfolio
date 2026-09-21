@@ -4,7 +4,7 @@ import {
   SettlementOutcome,
   type BasketRowView,
 } from '@portfolio/luna-shopper/contracts';
-import type { BasketSettlementRow } from '../basket.sql';
+import type { BasketSettlementRow } from '../basket-read.sql';
 import type { RemovedGroup } from './basket-marks.reader';
 
 /**

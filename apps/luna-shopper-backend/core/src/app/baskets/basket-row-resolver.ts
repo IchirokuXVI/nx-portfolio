@@ -9,7 +9,7 @@ import {
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { Repository, type EntityManager } from 'typeorm';
 import type { CoreConfig } from '../config/app-config';
-import { GeneratedList, ListLine } from '../entities';
+import { Basket, ListLine } from '../entities';
 import { toEntries } from './basket-read.service';
 import { type BasketEntry } from './basket-rows';
 import {
@@ -22,7 +22,7 @@ import {
   type BasketSettlementRow,
   type CoveredLineItemRow,
   type CoveredLineRow,
-} from './basket.sql';
+} from './basket-read.sql';
 import { mergeKey, normalizeContent } from './line-dedup';
 
 /**
@@ -56,8 +56,8 @@ export class BasketRowResolver {
   private readonly skipWindowMs: number;
 
   constructor(
-    @InjectRepository(GeneratedList)
-    private readonly baskets: Repository<GeneratedList>,
+    @InjectRepository(Basket)
+    private readonly baskets: Repository<Basket>,
     @Inject(ConfigService) configService: ConfigService
   ) {
     this.skipWindowMs =
@@ -72,7 +72,7 @@ export class BasketRowResolver {
    * used to probe which lists an owner covers.
    */
   async resolve(
-    basket: GeneratedList,
+    basket: Basket,
     coveredListIds: readonly string[],
     rowKey: string
   ): Promise<BasketRow> {
@@ -144,7 +144,7 @@ export class BasketRowResolver {
   }
 
   /** Which of this basket's purchases count. {@link BasketReadService.scopeOf}'s twin. */
-  private async scopeOf(basket: GeneratedList): Promise<BasketScope> {
+  private async scopeOf(basket: Basket): Promise<BasketScope> {
     if (basket.kind !== BasketKind.LIVE) {
       return { startedAt: null, enabled: true };
     }
