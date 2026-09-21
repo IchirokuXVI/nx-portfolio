@@ -1,5 +1,5 @@
 import {
-  generatedListPresenceKey,
+  basketPresenceKey,
   PRESENCE_TTL_MS,
   type RedisService,
 } from '@portfolio/luna-shopper/platform';
@@ -85,7 +85,7 @@ describe('how many people are in a basket (plan 0053, section 2)', () => {
   it('counts one entry per socket in the room', async () => {
     const now = Date.now();
     const { service } = build({
-      [generatedListPresenceKey(BASKET_A)]: {
+      [basketPresenceKey(BASKET_A)]: {
         's-1': entry(now, 'p-1'),
         's-2': entry(now, 'p-2'),
       },
@@ -111,7 +111,7 @@ describe('how many people are in a basket (plan 0053, section 2)', () => {
   it('does not count an entry that has stopped heartbeating', async () => {
     const now = Date.now();
     const { service } = build({
-      [generatedListPresenceKey(BASKET_A)]: {
+      [basketPresenceKey(BASKET_A)]: {
         's-live': entry(now, 'p-1'),
         // The socket of a pod that was killed without running a disconnect
         // handler. The key's own TTL cannot say anything about one member, so
@@ -127,7 +127,7 @@ describe('how many people are in a basket (plan 0053, section 2)', () => {
 
   it('treats an unreadable entry as gone rather than as a shopper', async () => {
     const { service } = build({
-      [generatedListPresenceKey(BASKET_A)]: {
+      [basketPresenceKey(BASKET_A)]: {
         's-1': entry(Date.now(), 'p-1'),
         's-bad': 'not json',
       },
@@ -138,7 +138,7 @@ describe('how many people are in a basket (plan 0053, section 2)', () => {
 
   it('answers nobody, not an error, when Redis is unreachable', async () => {
     const { service, redis } = build({
-      [generatedListPresenceKey(BASKET_A)]: { 's-1': entry(Date.now(), 'p-1') },
+      [basketPresenceKey(BASKET_A)]: { 's-1': entry(Date.now(), 'p-1') },
     });
     redis.failing = true;
 
@@ -151,10 +151,10 @@ describe('how many people are in a basket (plan 0053, section 2)', () => {
   it('loses one basket rather than the page when one command fails', async () => {
     const now = Date.now();
     const { service, redis } = build({
-      [generatedListPresenceKey(BASKET_A)]: { 's-1': entry(now, 'p-1') },
-      [generatedListPresenceKey(BASKET_B)]: { 's-2': entry(now, 'p-2') },
+      [basketPresenceKey(BASKET_A)]: { 's-1': entry(now, 'p-1') },
+      [basketPresenceKey(BASKET_B)]: { 's-2': entry(now, 'p-2') },
     });
-    redis.broken.add(generatedListPresenceKey(BASKET_A));
+    redis.broken.add(basketPresenceKey(BASKET_A));
 
     const counts = await service.countsFor([BASKET_A, BASKET_B]);
 

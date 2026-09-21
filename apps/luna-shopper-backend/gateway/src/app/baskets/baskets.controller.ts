@@ -12,13 +12,13 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
-  GENERATED_LIST_PATTERNS,
-  GENERATED_LIST_SCHEMA_IDS,
-  type GeneratedListPage,
-  type GeneratedListRunResult,
-  type GeneratedListView,
-  type SharedGeneratedListCorePage,
-  type SharedGeneratedListPage,
+  BASKET_PATTERNS,
+  BASKET_SCHEMA_IDS,
+  type BasketPage,
+  type BasketRunResult,
+  type BasketHeaderView,
+  type SharedBasketCorePage,
+  type SharedBasketPage,
 } from '@portfolio/luna-shopper/contracts';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -30,13 +30,13 @@ import {
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { BasketPresenceService } from './basket-presence.service';
-import { resolveUsernames } from './generated-list-sharing.controller';
+import { resolveUsernames } from './basket-sharing.controller';
 import {
-  CreateGeneratedListDto,
-  ListGeneratedListsQueryDto,
-  ListSharedGeneratedListsQueryDto,
-  UpdateGeneratedListDto,
-} from './generated-list.dto';
+  CreateBasketDto,
+  ListBasketsQueryDto,
+  ListSharedBasketsQueryDto,
+  UpdateBasketDto,
+} from './basket.dto';
 
 /**
  * The basket a person carries around the shop (plan 0050).
@@ -53,11 +53,11 @@ import {
  * basket id that is not yours, and answering 401 would sign the user out for
  * asking about somebody else's shopping list.
  */
-@ApiTags('generated-lists')
+@ApiTags('baskets')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
-@Controller({ path: 'generated-lists', version: '1' })
-export class GeneratedListController {
+@Controller({ path: 'baskets', version: '1' })
+export class BasketsController {
   constructor(
     private readonly nats: NatsClient,
     private readonly presence: BasketPresenceService
@@ -75,14 +75,14 @@ export class GeneratedListController {
    * refuses the whole run.
    */
   @Post()
-  @ApiContractResponse(GENERATED_LIST_PATTERNS.create, {
+  @ApiContractResponse(BASKET_PATTERNS.create, {
     status: HttpStatus.CREATED,
   })
   @ApiProblemResponses({ auth: true, body: true, notFound: true })
   async create(
     @AuthUser() user: CurrentUser,
-    @Body() dto: CreateGeneratedListDto
-  ): Promise<GeneratedListRunResult> {
+    @Body() dto: CreateBasketDto
+  ): Promise<BasketRunResult> {
     // Core names each person from their groups, and auth names the ones the
     // owner shares no group with, or several (plan 0114, section 9). Always
     // written after the body, so a body cannot supply names of its own.
@@ -90,8 +90,8 @@ export class GeneratedListController {
       this.nats,
       dto.memberUserIds ?? []
     );
-    return this.nats.send<GeneratedListRunResult>(
-      GENERATED_LIST_PATTERNS.create,
+    return this.nats.send<BasketRunResult>(
+      BASKET_PATTERNS.create,
       { userId: user.userId, ...dto, globalUsernames }
     );
   }
@@ -109,14 +109,14 @@ export class GeneratedListController {
    * rather than the page when Redis is unreachable.
    */
   @Get()
-  @ApiContractResponse(GENERATED_LIST_PATTERNS.listMine)
+  @ApiContractResponse(BASKET_PATTERNS.listMine)
   @ApiProblemResponses({ auth: true })
   async listMine(
     @AuthUser() user: CurrentUser,
-    @Query() query: ListGeneratedListsQueryDto
-  ): Promise<GeneratedListPage> {
-    const page = await this.nats.send<GeneratedListPage>(
-      GENERATED_LIST_PATTERNS.listMine,
+    @Query() query: ListBasketsQueryDto
+  ): Promise<BasketPage> {
+    const page = await this.nats.send<BasketPage>(
+      BASKET_PATTERNS.listMine,
       { userId: user.userId, ...query }
     );
     const present = await this.presence.countsFor(
@@ -149,14 +149,14 @@ export class GeneratedListController {
    * rather than a failed page.
    */
   @Get('shared')
-  @ApiComposedResponse(GENERATED_LIST_SCHEMA_IDS.sharedPage)
+  @ApiComposedResponse(BASKET_SCHEMA_IDS.sharedPage)
   @ApiProblemResponses({ auth: true, body: true })
   async listShared(
     @AuthUser() user: CurrentUser,
-    @Query() query: ListSharedGeneratedListsQueryDto
-  ): Promise<SharedGeneratedListPage> {
-    const page = await this.nats.send<SharedGeneratedListCorePage>(
-      GENERATED_LIST_PATTERNS.listShared,
+    @Query() query: ListSharedBasketsQueryDto
+  ): Promise<SharedBasketPage> {
+    const page = await this.nats.send<SharedBasketCorePage>(
+      BASKET_PATTERNS.listShared,
       { userId: user.userId, ...query }
     );
     const [present, named] = await Promise.all([
@@ -184,31 +184,30 @@ export class GeneratedListController {
     };
   }
 
-  @Get(':id')
-  @ApiContractResponse(GENERATED_LIST_PATTERNS.get)
-  @ApiProblemResponses({ auth: true, notFound: true })
-  get(
-    @AuthUser() user: CurrentUser,
-    @Param('id') id: string
-  ): Promise<GeneratedListView> {
-    return this.nats.send<GeneratedListView>(GENERATED_LIST_PATTERNS.get, {
-      userId: user.userId,
-      generatedListId: id,
-    });
-  }
+  // REMOVED-BY-0144: the owner's header read, `GET /v1/generated-lists/:id`.
+  //
+  // Renaming it landed it on `GET /v1/baskets/:id`, which plan 0136 had already
+  // given to the participant read of the whole basket. The two are one read by
+  // that plan's rule, so the older one went with its NATS subject and both its
+  // handlers. Nothing called it: not velista, not the back office, not the e2e.
+  // `sources`, the one field the participant read does not carry, still reaches
+  // the wire through `POST /v1/baskets`, which answers the same header shape.
+  //
+  // Search `REMOVED-BY-0144` to delete this note once a release has shipped
+  // without anybody missing the read.
 
   /** Rename it, archive it, or move it between the four statuses. */
   @Patch(':id')
-  @ApiContractResponse(GENERATED_LIST_PATTERNS.update)
+  @ApiContractResponse(BASKET_PATTERNS.update)
   @ApiProblemResponses({ auth: true, body: true, notFound: true })
   update(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
-    @Body() dto: UpdateGeneratedListDto
-  ): Promise<GeneratedListView> {
-    return this.nats.send<GeneratedListView>(GENERATED_LIST_PATTERNS.update, {
+    @Body() dto: UpdateBasketDto
+  ): Promise<BasketHeaderView> {
+    return this.nats.send<BasketHeaderView>(BASKET_PATTERNS.update, {
       userId: user.userId,
-      generatedListId: id,
+      basketId: id,
       ...dto,
     });
   }
@@ -218,15 +217,15 @@ export class GeneratedListController {
    * a zone list, whose lines are the originals this one only ever copied.
    */
   @Delete(':id')
-  @ApiContractResponse(GENERATED_LIST_PATTERNS.delete)
+  @ApiContractResponse(BASKET_PATTERNS.delete)
   @ApiProblemResponses({ auth: true, notFound: true })
   remove(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
   ): Promise<{ id: string }> {
-    return this.nats.send<{ id: string }>(GENERATED_LIST_PATTERNS.delete, {
+    return this.nats.send<{ id: string }>(BASKET_PATTERNS.delete, {
       userId: user.userId,
-      generatedListId: id,
+      basketId: id,
     });
   }
 

@@ -1,16 +1,16 @@
 import {
   AUTH_PATTERNS,
-  GENERATED_LIST_PATTERNS,
-  GeneratedListStatus,
-  type SharedGeneratedListCoreView,
+  BASKET_PATTERNS,
+  BasketStatus,
+  type SharedBasketCoreView,
 } from '@portfolio/luna-shopper/contracts';
 import type { CurrentUser } from '../auth/jwt.strategy';
 import {
-  GENERATED_LIST_SHARING_CONTROLLERS,
-  GeneratedListParticipantController,
-  GeneratedListShareController,
-} from './generated-list-sharing.controller';
-import { GeneratedListController } from './generated-list.controller';
+  BASKET_SHARING_CONTROLLERS,
+  BasketParticipantController,
+  BasketShareController,
+} from './basket-sharing.controller';
+import { BasketsController } from './baskets.controller';
 
 /**
  * The gateway half of sharing a basket with people you know (plan 0114).
@@ -28,11 +28,11 @@ function coreRow(
   id: string,
   ownerUserId: string,
   ownerZoneUsername: string | null
-): SharedGeneratedListCoreView {
+): SharedBasketCoreView {
   return {
     id,
     name: null,
-    status: GeneratedListStatus.OPEN,
+    status: BasketStatus.OPEN,
     generatedAt: '2026-09-01T08:00:00.000Z',
     lineCount: 3,
     settledLineCount: 1,
@@ -46,18 +46,18 @@ function coreRow(
 }
 
 function harness(answers: {
-  items: SharedGeneratedListCoreView[];
+  items: SharedBasketCoreView[];
   usernames?: () => Promise<unknown>;
 }) {
   const nats = {
     send: jest.fn(async (pattern: string, payload: unknown) => {
-      if (pattern === GENERATED_LIST_PATTERNS.listShared) {
+      if (pattern === BASKET_PATTERNS.listShared) {
         return { items: answers.items, nextCursor: 'next' };
       }
       if (pattern === AUTH_PATTERNS.getUsernames) {
         return answers.usernames ? answers.usernames() : [];
       }
-      if (pattern === GENERATED_LIST_PATTERNS.create) {
+      if (pattern === BASKET_PATTERNS.create) {
         return { list: { id: 'gl-new' }, skipped: [], sent: payload };
       }
       throw new Error(`unexpected pattern ${pattern}`);
@@ -66,7 +66,7 @@ function harness(answers: {
   const presence = {
     countsFor: jest.fn(async () => new Map([['gl-1', 2]])),
   };
-  const controller = new GeneratedListController(
+  const controller = new BasketsController(
     nats as never,
     presence as never
   );
@@ -113,7 +113,7 @@ describe('the shared baskets read names every owner (plan 0114, sections 8 and 9
     expect(row).toEqual({
       id: 'gl-1',
       name: null,
-      status: GeneratedListStatus.OPEN,
+      status: BasketStatus.OPEN,
       generatedAt: '2026-09-01T08:00:00.000Z',
       lineCount: 3,
       settledLineCount: 1,
@@ -167,7 +167,7 @@ describe('creating a basket shared with people (plan 0114, section 4)', () => {
     expect(nats.send).toHaveBeenCalledWith(AUTH_PATTERNS.getUsernames, {
       userIds: ['u-friend'],
     });
-    expect(nats.send).toHaveBeenCalledWith(GENERATED_LIST_PATTERNS.create, {
+    expect(nats.send).toHaveBeenCalledWith(BASKET_PATTERNS.create, {
       userId: READER.userId,
       memberUserIds: ['u-friend'],
       globalUsernames: [{ userId: 'u-friend', username: 'Friend' }],
@@ -181,7 +181,7 @@ describe('creating a basket shared with people (plan 0114, section 4)', () => {
       globalUsernames: [{ userId: 'u-friend', username: 'Anything I like' }],
     } as never);
 
-    expect(nats.send).toHaveBeenCalledWith(GENERATED_LIST_PATTERNS.create, {
+    expect(nats.send).toHaveBeenCalledWith(BASKET_PATTERNS.create, {
       userId: READER.userId,
       globalUsernames: [],
     });
@@ -198,11 +198,11 @@ describe('leaving is reachable (plan 0114, section 6)', () => {
     // `DELETE :id/participants/:participantId` on the owner's sheet matches
     // `mine`, and the first route registered is the one that runs.
     expect(
-      GENERATED_LIST_SHARING_CONTROLLERS.indexOf(
-        GeneratedListParticipantController
+      BASKET_SHARING_CONTROLLERS.indexOf(
+        BasketParticipantController
       )
     ).toBeLessThan(
-      GENERATED_LIST_SHARING_CONTROLLERS.indexOf(GeneratedListShareController)
+      BASKET_SHARING_CONTROLLERS.indexOf(BasketShareController)
     );
   });
 });

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   countLivePresence,
-  generatedListPresenceKey,
+  basketPresenceKey,
   RedisService,
 } from '@portfolio/luna-shopper/platform';
 
@@ -10,7 +10,7 @@ import {
  *
  * ## Why the gateway, and why at read time
  *
- * The count belongs on `GeneratedListSummaryView`, which core projects, and core
+ * The count belongs on `BasketHistoryView`, which core projects, and core
  * cannot answer it: presence is a Redis room the realtime service writes, and
  * core holds no Redis. The gateway holds one already, for the throttler and for
  * the scope cache, so it is the only service that both answers the history read
@@ -44,19 +44,19 @@ export class BasketPresenceService {
    * eventually need fixing. Twenty small hashes in one pipeline is one.
    */
   async countsFor(
-    generatedListIds: readonly string[]
+    basketIds: readonly string[]
   ): Promise<Map<string, number>> {
     const counts = new Map<string, number>(
-      generatedListIds.map((id) => [id, 0])
+      basketIds.map((id) => [id, 0])
     );
-    if (generatedListIds.length === 0) {
+    if (basketIds.length === 0) {
       return counts;
     }
 
     const rooms = await this.redis.tryCommand(async (client) => {
       const pipeline = client.pipeline();
-      for (const id of generatedListIds) {
-        pipeline.hgetall(generatedListPresenceKey(id));
+      for (const id of basketIds) {
+        pipeline.hgetall(basketPresenceKey(id));
       }
       return pipeline.exec();
     }, 'basket presence counts');
@@ -70,7 +70,7 @@ export class BasketPresenceService {
     // rather than the whole page losing its captions.
     const now = Date.now();
     rooms.forEach(([err, entries], index) => {
-      const id = generatedListIds[index];
+      const id = basketIds[index];
       if (err || !entries || id === undefined) {
         return;
       }

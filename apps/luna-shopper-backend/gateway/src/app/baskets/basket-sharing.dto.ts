@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  GENERATED_LIST_SHARING_LIMITS,
+  BASKET_SHARING_LIMITS,
 } from '@portfolio/luna-shopper/contracts';
 import { MAX_PAGE_SIZE } from '@portfolio/luna-shopper/platform';
 import { Type } from 'class-transformer';
@@ -27,7 +27,7 @@ export const BASKET_SUGGEST_QUERY_MAX_LENGTH = 120;
 /**
  * Request bodies for sharing a basket (plan 0051).
  *
- * The caps come from `GENERATED_LIST_SHARING_LIMITS` rather than from numbers
+ * The caps come from `BASKET_SHARING_LIMITS` rather than from numbers
  * written here, so the DTO, the JSON Schema and the service enforce the same
  * forty characters and the same fifty people.
  */
@@ -51,7 +51,7 @@ export class RevokeShareLinkDto {
 }
 
 /** Add one of the caller's contacts to a basket (plan 0114, section 4). */
-export class AddGeneratedListParticipantDto {
+export class AddBasketParticipantDto {
   @ApiProperty({
     format: 'uuid',
     description:
@@ -61,15 +61,15 @@ export class AddGeneratedListParticipantDto {
   userId!: string;
 }
 
-export class JoinGeneratedListDto {
+export class JoinBasketDto {
   @ApiPropertyOptional({
-    maxLength: GENERATED_LIST_SHARING_LIMITS.displayNameMaxLength,
+    maxLength: BASKET_SHARING_LIMITS.displayNameMaxLength,
     description:
       'What to call this person on the screen. Unverified text on an unauthenticated link, so it is never treated as identity; skipping it gets them "Guest N".',
   })
   @IsOptional()
   @IsString()
-  @MaxLength(GENERATED_LIST_SHARING_LIMITS.displayNameMaxLength)
+  @MaxLength(BASKET_SHARING_LIMITS.displayNameMaxLength)
   displayName?: string;
 }
 

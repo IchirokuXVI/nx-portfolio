@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { ThrottlerStorageService } from '@nestjs/throttler';
 import {
   ParticipantKind,
-  type GeneratedListParticipantContext,
+  type BasketParticipantContext,
 } from '@portfolio/luna-shopper/contracts';
 import {
   createThrottlerOptions,
@@ -11,7 +11,7 @@ import {
   retryAfterSecondsOf,
 } from '@portfolio/luna-shopper/platform';
 import { BasketController } from '../baskets/basket.controller';
-import { GeneratedListParticipantController } from './generated-list-sharing.controller';
+import { BasketParticipantController } from './basket-sharing.controller';
 import {
   PARTICIPANT_THROTTLE,
   PARTICIPANT_THROTTLE_LIMITS,
@@ -52,10 +52,10 @@ class UnlimitedRoute {
   }
 }
 
-function participant(id: string): GeneratedListParticipantContext {
+function participant(id: string): BasketParticipantContext {
   return {
     participantId: id,
-    generatedListId: 'gl-1',
+    basketId: 'gl-1',
     kind: ParticipantKind.GUEST,
     userId: null,
     seesZoneData: false,
@@ -231,7 +231,7 @@ describe('ParticipantThrottlerGuard', () => {
  */
 describe('every participant write declares a limit (plan 0131, section 6)', () => {
   const PROTOS = [
-    GeneratedListParticipantController.prototype,
+    BasketParticipantController.prototype,
     BasketController.prototype,
   ];
 

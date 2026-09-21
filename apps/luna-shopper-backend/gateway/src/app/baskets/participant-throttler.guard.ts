@@ -1,6 +1,6 @@
 import { Injectable, SetMetadata, type ExecutionContext } from '@nestjs/common';
 import { minutes, type ThrottlerOptions } from '@nestjs/throttler';
-import type { GeneratedListParticipantContext } from '@portfolio/luna-shopper/contracts';
+import type { BasketParticipantContext } from '@portfolio/luna-shopper/contracts';
 import {
   ProblemThrottlerGuard,
   scaleThrottleLimit,
@@ -105,7 +105,7 @@ export class ParticipantThrottlerGuard extends ProblemThrottlerGuard {
 
     const { req } = this.getRequestResponse(context);
     const participant = req['participant'] as
-      | GeneratedListParticipantContext
+      | BasketParticipantContext
       | undefined;
     if (!participant) {
       // Only reachable if this guard is ever placed before the one that resolves

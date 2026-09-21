@@ -14,21 +14,21 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   AUTH_PATTERNS,
-  GENERATED_LIST_SHARING_PATTERNS,
-  GENERATED_LIST_SHARING_SCHEMA_IDS,
-  type AddGeneratedListParticipantRequest,
+  BASKET_SHARING_PATTERNS,
+  BASKET_SHARING_SCHEMA_IDS,
+  type AddBasketParticipantRequest,
   type EnsureShareLinkRequest,
-  type GeneratedListJoinCoreResult,
-  type GeneratedListJoinResult,
-  type GeneratedListLinkPreview,
-  type GeneratedListParticipantContext,
-  type GeneratedListParticipantListResult,
-  type GeneratedListParticipantView,
-  type GeneratedListShareLinkResult,
-  type GeneratedListShareLinkView,
+  type BasketJoinCoreResult,
+  type BasketJoinResult,
+  type BasketLinkPreview,
+  type BasketParticipantContext,
+  type BasketParticipantListResult,
+  type BasketParticipantView,
+  type BasketShareLinkResult,
+  type BasketShareLinkView,
   type GetUsernamesRequest,
-  type JoinGeneratedListRequest,
-  type LeaveGeneratedListRequest,
+  type JoinBasketRequest,
+  type LeaveBasketRequest,
   type MintParticipantTokenRequest,
   type MintParticipantTokenResult,
   type ParticipantTokenResult,
@@ -46,10 +46,10 @@ import {
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
-  AddGeneratedListParticipantDto,
-  JoinGeneratedListDto,
+  AddBasketParticipantDto,
+  JoinBasketDto,
   RevokeShareLinkDto,
-} from './generated-list-sharing.dto';
+} from './basket-sharing.dto';
 import {
   PARTICIPANT_THROTTLE_LIMITS,
   ParticipantThrottle,
@@ -135,11 +135,11 @@ interface ShopRefusalIds {
  * caller's own id, so a basket that is not theirs is **not found** rather than
  * forbidden, exactly as plan 0050's routes answer.
  */
-@ApiTags('generated-lists')
+@ApiTags('baskets')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
-@Controller({ path: 'generated-lists', version: '1' })
-export class GeneratedListShareController {
+@Controller({ path: 'baskets', version: '1' })
+export class BasketShareController {
   constructor(private readonly nats: NatsClient) {}
 
   /**
@@ -157,37 +157,37 @@ export class GeneratedListShareController {
    * handing back a dead link.
    */
   @Put(':id/share-link')
-  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.linkEnsure)
+  @ApiContractResponse(BASKET_SHARING_PATTERNS.linkEnsure)
   @ApiProblemResponses({ auth: true, notFound: true })
   async ensureLink(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
-  ): Promise<GeneratedListShareLinkView> {
+  ): Promise<BasketShareLinkView> {
     const req: EnsureShareLinkRequest = {
       userId: user.userId,
-      generatedListId: id,
+      basketId: id,
       // Sharing mints the owner's participant row, so this is where their name
       // reaches it (plan 0054, section 2.3). Core is told the name and never
       // asks for it, which is plan 0018 section 9's rule unchanged.
       username: await resolveUsername(this.nats, user.userId),
     };
-    return this.nats.send<GeneratedListShareLinkView>(
-      GENERATED_LIST_SHARING_PATTERNS.linkEnsure,
+    return this.nats.send<BasketShareLinkView>(
+      BASKET_SHARING_PATTERNS.linkEnsure,
       req
     );
   }
 
   /** The live link if there is one, without minting. Absent when there is none. */
   @Get(':id/share-link')
-  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.linkGet)
+  @ApiContractResponse(BASKET_SHARING_PATTERNS.linkGet)
   @ApiProblemResponses({ auth: true, notFound: true })
   getLink(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
-  ): Promise<GeneratedListShareLinkResult> {
-    return this.nats.send<GeneratedListShareLinkResult>(
-      GENERATED_LIST_SHARING_PATTERNS.linkGet,
-      { userId: user.userId, generatedListId: id }
+  ): Promise<BasketShareLinkResult> {
+    return this.nats.send<BasketShareLinkResult>(
+      BASKET_SHARING_PATTERNS.linkGet,
+      { userId: user.userId, basketId: id }
     );
   }
 
@@ -199,7 +199,7 @@ export class GeneratedListShareController {
    * is what authorizes them and the link is only an invitation they accepted.
    */
   @Delete(':id/share-link')
-  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.linkRevoke)
+  @ApiContractResponse(BASKET_SHARING_PATTERNS.linkRevoke)
   @ApiProblemResponses({ auth: true, notFound: true })
   revokeLink(
     @AuthUser() user: CurrentUser,
@@ -207,10 +207,10 @@ export class GeneratedListShareController {
     @Query() query: RevokeShareLinkDto
   ): Promise<{ revoked: number }> {
     return this.nats.send<{ revoked: number }>(
-      GENERATED_LIST_SHARING_PATTERNS.linkRevoke,
+      BASKET_SHARING_PATTERNS.linkRevoke,
       {
         userId: user.userId,
-        generatedListId: id,
+        basketId: id,
         revokeParticipants: query.revokeParticipants,
       }
     );
@@ -218,18 +218,18 @@ export class GeneratedListShareController {
 
   /** Everybody on the basket, for the share sheet. */
   @Get(':id/participants')
-  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantList)
+  @ApiContractResponse(BASKET_SHARING_PATTERNS.participantList)
   @ApiProblemResponses({ auth: true, notFound: true })
   async listParticipants(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string
-  ): Promise<GeneratedListParticipantListResult> {
+  ): Promise<BasketParticipantListResult> {
     // No `asParticipantId`: the owner passes section 5.2 by construction, so the
     // device strings are theirs to see.
-    return this.nats.send<GeneratedListParticipantListResult>(
-      GENERATED_LIST_SHARING_PATTERNS.participantList,
+    return this.nats.send<BasketParticipantListResult>(
+      BASKET_SHARING_PATTERNS.participantList,
       {
-        generatedListId: id,
+        basketId: id,
         userId: user.userId,
         // The second place the owner's row can be named (plan 0054,
         // section 2.3): this sheet is read whether or not anybody has pressed
@@ -252,7 +252,7 @@ export class GeneratedListShareController {
    * when the two people share no group or several (section 9).
    */
   @Post(':id/participants')
-  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantAdd, {
+  @ApiContractResponse(BASKET_SHARING_PATTERNS.participantAdd, {
     status: HttpStatus.CREATED,
   })
   @ApiProblemResponses({
@@ -264,24 +264,24 @@ export class GeneratedListShareController {
   async addParticipant(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
-    @Body() dto: AddGeneratedListParticipantDto
-  ): Promise<GeneratedListParticipantView> {
+    @Body() dto: AddBasketParticipantDto
+  ): Promise<BasketParticipantView> {
     const [named] = await resolveUsernames(this.nats, [dto.userId]);
-    const req: AddGeneratedListParticipantRequest = {
+    const req: AddBasketParticipantRequest = {
       userId: user.userId,
-      generatedListId: id,
+      basketId: id,
       memberUserId: dto.userId,
       globalUsername: named?.username ?? null,
     };
-    return this.nats.send<GeneratedListParticipantView>(
-      GENERATED_LIST_SHARING_PATTERNS.participantAdd,
+    return this.nats.send<BasketParticipantView>(
+      BASKET_SHARING_PATTERNS.participantAdd,
       req
     );
   }
 
   /** Revoke one participant and nobody else: the lost phone (section 3.4). */
   @Delete(':id/participants/:participantId')
-  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantRevoke)
+  @ApiContractResponse(BASKET_SHARING_PATTERNS.participantRevoke)
   @ApiProblemResponses({ auth: true, notFound: true })
   revokeParticipant(
     @AuthUser() user: CurrentUser,
@@ -289,8 +289,8 @@ export class GeneratedListShareController {
     @Param('participantId') participantId: string
   ): Promise<{ id: string }> {
     return this.nats.send<{ id: string }>(
-      GENERATED_LIST_SHARING_PATTERNS.participantRevoke,
-      { userId: user.userId, generatedListId: id, participantId }
+      BASKET_SHARING_PATTERNS.participantRevoke,
+      { userId: user.userId, basketId: id, participantId }
     );
   }
 }
@@ -303,7 +303,7 @@ export class GeneratedListShareController {
  * beside the owner's routes would mean exempting two handlers from a guard that
  * protects the rest, which is the shape a mistake hides in.
  */
-@ApiTags('generated-lists')
+@ApiTags('baskets')
 @Controller({ path: 'share-links', version: '1' })
 export class ShareLinkController {
   constructor(private readonly nats: NatsClient) {}
@@ -319,11 +319,11 @@ export class ShareLinkController {
    * quietly break the first.
    */
   @Get(':secret')
-  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.linkPreview)
+  @ApiContractResponse(BASKET_SHARING_PATTERNS.linkPreview)
   @ApiProblemResponses({})
-  preview(@Param('secret') secret: string): Promise<GeneratedListLinkPreview> {
-    return this.nats.send<GeneratedListLinkPreview>(
-      GENERATED_LIST_SHARING_PATTERNS.linkPreview,
+  preview(@Param('secret') secret: string): Promise<BasketLinkPreview> {
+    return this.nats.send<BasketLinkPreview>(
+      BASKET_SHARING_PATTERNS.linkPreview,
       { secret }
     );
   }
@@ -342,17 +342,17 @@ export class ShareLinkController {
    */
   @Post(':secret/join')
   @UseGuards(OptionalJwtAuthGuard)
-  @ApiComposedResponse(GENERATED_LIST_SHARING_SCHEMA_IDS.joinResult, {
+  @ApiComposedResponse(BASKET_SHARING_SCHEMA_IDS.joinResult, {
     status: HttpStatus.CREATED,
   })
   @ApiProblemResponses({ body: true, participant: true, notFound: true })
   async join(
     @Param('secret') secret: string,
-    @Body() dto: JoinGeneratedListDto,
+    @Body() dto: JoinBasketDto,
     @AuthUser() user: CurrentUser | undefined,
     @Headers('user-agent') userAgent?: string
-  ): Promise<GeneratedListJoinResult> {
-    const req: JoinGeneratedListRequest = {
+  ): Promise<BasketJoinResult> {
+    const req: JoinBasketRequest = {
       secret,
       displayName: dto.displayName,
       userId: user?.userId,
@@ -363,8 +363,8 @@ export class ShareLinkController {
       username: user ? await resolveUsername(this.nats, user.userId) : null,
       userAgent,
     };
-    const joined = await this.nats.send<GeneratedListJoinCoreResult>(
-      GENERATED_LIST_SHARING_PATTERNS.join,
+    const joined = await this.nats.send<BasketJoinCoreResult>(
+      BASKET_SHARING_PATTERNS.join,
       req
     );
     const token = await this.mintToken(joined);
@@ -372,11 +372,11 @@ export class ShareLinkController {
   }
 
   private mintToken(
-    joined: GeneratedListJoinCoreResult
+    joined: BasketJoinCoreResult
   ): Promise<MintParticipantTokenResult> {
     const req: MintParticipantTokenRequest = {
       participantId: joined.participant.id,
-      generatedListId: joined.generatedListId,
+      basketId: joined.basketId,
       kind: joined.participant.kind,
     };
     return this.nats.send<MintParticipantTokenResult>(
@@ -393,10 +393,10 @@ export class ShareLinkController {
  * every handler the same resolved participant, so nothing below knows or cares
  * whether a guest or the owner is holding the phone.
  */
-@ApiTags('generated-lists')
+@ApiTags('baskets')
 @UseGuards(ParticipantGuard)
-@Controller({ path: 'generated-lists', version: '1' })
-export class GeneratedListParticipantController {
+@Controller({ path: 'baskets', version: '1' })
+export class BasketParticipantController {
   constructor(
     private readonly nats: NatsClient,
     // Plan 0055, section 5.1: the run's profile turned into scope ids, through
@@ -406,17 +406,17 @@ export class GeneratedListParticipantController {
 
   /** Who else is on this basket, for the shop screen. */
   @Get(':id/participants/mine')
-  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantList)
+  @ApiContractResponse(BASKET_SHARING_PATTERNS.participantList)
   @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   listParticipants(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string
-  ): Promise<GeneratedListParticipantListResult> {
+  ): Promise<BasketParticipantListResult> {
     // The asker is named, so core decides whether the device strings are theirs
     // to see rather than the gateway guessing (section 7).
-    return this.nats.send<GeneratedListParticipantListResult>(
-      GENERATED_LIST_SHARING_PATTERNS.participantList,
-      { generatedListId: id, asParticipantId: participant.participantId }
+    return this.nats.send<BasketParticipantListResult>(
+      BASKET_SHARING_PATTERNS.participantList,
+      { basketId: id, asParticipantId: participant.participantId }
     );
   }
 
@@ -431,12 +431,12 @@ export class GeneratedListParticipantController {
    * sheet. `DELETE :id/participants/:participantId` there matches `mine` as a
    * participant id, and the first matching route is the one that runs, so the
    * other order would send every leave to the account guard and to a core lookup
-   * for a participant called `mine`. See {@link GENERATED_LIST_SHARING_CONTROLLERS}.
+   * for a participant called `mine`. See {@link BASKET_SHARING_CONTROLLERS}.
    */
   @Delete(':id/participants/mine')
   @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
   @UseGuards(ParticipantThrottlerGuard)
-  @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.participantLeave)
+  @ApiContractResponse(BASKET_SHARING_PATTERNS.participantLeave)
   @ApiProblemResponses({
     auth: true,
     participant: true,
@@ -445,15 +445,15 @@ export class GeneratedListParticipantController {
     notFound: true,
   })
   leave(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string
   ): Promise<{ id: string }> {
-    const req: LeaveGeneratedListRequest = {
-      generatedListId: id,
+    const req: LeaveBasketRequest = {
+      basketId: id,
       participantId: participant.participantId,
     };
     return this.nats.send<{ id: string }>(
-      GENERATED_LIST_SHARING_PATTERNS.participantLeave,
+      BASKET_SHARING_PATTERNS.participantLeave,
       req
     );
   }
@@ -469,26 +469,26 @@ export class GeneratedListParticipantController {
   @ParticipantThrottle(PARTICIPANT_THROTTLE_LIMITS.write)
   @UseGuards(ParticipantThrottlerGuard)
   @ApiComposedResponse(
-    GENERATED_LIST_SHARING_SCHEMA_IDS.participantTokenResult,
+    BASKET_SHARING_SCHEMA_IDS.participantTokenResult,
     { status: HttpStatus.CREATED }
   )
   @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async refreshToken(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string
   ): Promise<ParticipantTokenResult> {
     const req: MintParticipantTokenRequest = {
       participantId: participant.participantId,
-      generatedListId: id,
+      basketId: id,
       kind: participant.kind,
     };
     const token = await this.nats.send<MintParticipantTokenResult>(
       AUTH_PATTERNS.mintParticipantToken,
       req
     );
-    const people = await this.nats.send<GeneratedListParticipantListResult>(
-      GENERATED_LIST_SHARING_PATTERNS.participantList,
-      { generatedListId: id, asParticipantId: participant.participantId }
+    const people = await this.nats.send<BasketParticipantListResult>(
+      BASKET_SHARING_PATTERNS.participantList,
+      { basketId: id, asParticipantId: participant.participantId }
     );
     const mine = people.participants.find(
       (row) => row.id === participant.participantId
@@ -513,8 +513,8 @@ export class GeneratedListParticipantController {
  * of the owner's, which is what makes the move safe. The owner's account
  * authenticated sheet and the unauthenticated pair follow.
  */
-export const GENERATED_LIST_SHARING_CONTROLLERS = [
-  GeneratedListParticipantController,
-  GeneratedListShareController,
+export const BASKET_SHARING_CONTROLLERS = [
+  BasketParticipantController,
+  BasketShareController,
   ShareLinkController,
 ];

@@ -6,9 +6,9 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
-  GENERATED_LIST_SHARING_PATTERNS,
+  BASKET_SHARING_PATTERNS,
   type AccessTokenClaims,
-  type GeneratedListParticipantContext,
+  type BasketParticipantContext,
   type ResolveParticipantRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -30,7 +30,7 @@ export const PARTICIPANT_SECRET_HEADER = 'x-participant-secret';
  * {@link PARTICIPANT_SECRET_HEADER}. A registered participant or the owner
  * presents an ordinary account token, because they have one and section 3
  * therefore gives them no second credential. Either way core answers with the
- * same {@link GeneratedListParticipantContext}, so nothing downstream has to know
+ * same {@link BasketParticipantContext}, so nothing downstream has to know
  * which arrived.
  *
  * ## Why the resolution happens in core and not here
@@ -59,15 +59,15 @@ export class ParticipantGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const generatedListId = request.params?.id;
-    if (!generatedListId) {
+    const basketId = request.params?.id;
+    if (!basketId) {
       throw new NotAParticipantException('Not a participant of this basket');
     }
 
     const secret = request.headers?.[PARTICIPANT_SECRET_HEADER];
     const authorization = request.headers?.authorization;
 
-    const req: ResolveParticipantRequest = { generatedListId };
+    const req: ResolveParticipantRequest = { basketId };
     if (typeof secret === 'string' && secret) {
       req.sessionSecret = secret;
     } else if (authorization !== undefined) {
@@ -78,8 +78,8 @@ export class ParticipantGuard implements CanActivate {
 
     // Core throws when the credential names no live participant, which the
     // global filter turns into the house 401 envelope.
-    const participant = await this.nats.send<GeneratedListParticipantContext>(
-      GENERATED_LIST_SHARING_PATTERNS.participantResolve,
+    const participant = await this.nats.send<BasketParticipantContext>(
+      BASKET_SHARING_PATTERNS.participantResolve,
       req
     );
     request.participant = participant;
@@ -116,8 +116,8 @@ export const Participant = createParamDecorator(
   (
     _data: unknown,
     context: ExecutionContext
-  ): GeneratedListParticipantContext => {
+  ): BasketParticipantContext => {
     const request = context.switchToHttp().getRequest();
-    return request.participant as GeneratedListParticipantContext;
+    return request.participant as BasketParticipantContext;
   }
 );
