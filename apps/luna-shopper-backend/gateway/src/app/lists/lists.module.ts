@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { GatewayBasketsModule } from '../baskets/baskets.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { CommentTranscriptionService } from './comment-transcription.service';
 import {
@@ -19,7 +20,10 @@ import { VoiceRecordingInterceptor } from './voice-recording.interceptor';
  * a file or talks to two services in one request.
  */
 @Module({
-  imports: [MessagingModule],
+  // The baskets module for `SettlePriceService` alone (plan 0143): a settle
+  // from the list page records what was paid exactly as a settle from a basket
+  // does, and the one service is where that rule lives.
+  imports: [MessagingModule, GatewayBasketsModule],
   controllers: [
     ZoneListsController,
     ListsController,

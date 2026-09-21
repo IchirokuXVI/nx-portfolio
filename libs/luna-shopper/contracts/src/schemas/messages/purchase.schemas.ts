@@ -16,10 +16,11 @@ import { ENUM_IDS } from '../enums.schemas';
 /**
  * What one person bought, as a language neutral contract (plan 0142).
  *
- * `spentCents` and `pricePaidCents` are nullable integers rather than a money
- * shape. Plan 0143 adds the currency beside the amount and changes both, and
- * this plan does not wait for it: before 0143 nothing writes a price, so both
- * read null everywhere and that is the honest answer.
+ * `spent` and `pricePaid` are a money shape since plan 0143: an amount with no
+ * currency is a number, and every sum over it is only honest while every row
+ * happens to be in euros. Both are null when nothing recorded a price, and
+ * `spent` is null as well when the entry's priced rows carry two currencies,
+ * which has no total (plan 0143, section 7).
  *
  * The five location fields of a row are nullable rather than optional, and they
  * are null **together**: a reader who no longer holds `READ` on the line's list
@@ -28,6 +29,7 @@ import { ENUM_IDS } from '../enums.schemas';
  * hide here: the reader already knows they bought it.
  */
 export const PURCHASE_SCHEMA_IDS = {
+  moneyView: schemaId('purchase/MoneyView'),
   entryView: schemaId('purchase/PurchaseEntryView'),
   entryPage: schemaId('purchase/PurchaseEntryPage'),
   rowView: schemaId('purchase/PurchaseRowView'),
@@ -35,6 +37,27 @@ export const PURCHASE_SCHEMA_IDS = {
   listSessionsRequest: schemaId('msg/purchase.listSessions/request'),
   listSessionRowsRequest: schemaId('msg/purchase.listSessionRows/request'),
 } as const;
+
+// An amount of money and the currency it is in. Nullable wherever it appears,
+// and the two halves are never apart: an amount with no currency is a number.
+//
+// The currency is bounded by its length and not by a regex, which is how
+// `countryCode` already states the same kind of field: the three upper case
+// letters are checked where a settle is written (`paidColumns` in core), and a
+// pattern here would be a second statement of one rule in a document nothing
+// validates against.
+const moneyView = object(
+  PURCHASE_SCHEMA_IDS.moneyView,
+  {
+    cents: integer(),
+    currency: nonEmptyString({ maxLength: 3 }),
+  },
+  ['cents', 'currency']
+);
+
+const nullableMoney = (): JsonSchema => ({
+  anyOf: [ref(PURCHASE_SCHEMA_IDS.moneyView), { type: 'null' }],
+});
 
 const entryView = object(
   PURCHASE_SCHEMA_IDS.entryView,
@@ -47,8 +70,9 @@ const entryView = object(
     endedAt: string({ format: 'date-time' }),
     lineCount: integer({ minimum: 0 }),
     boughtLineCount: integer({ minimum: 0 }),
-    // Null, never zero, when nothing in the entry carries a price.
-    spentCents: { type: ['integer', 'null'] },
+    // Null, never zero, when nothing in the entry carries a price, and null
+    // again when its priced rows carry two currencies (plan 0143, section 7).
+    spent: nullableMoney(),
     unpricedCount: integer({ minimum: 0 }),
   },
   [
@@ -60,7 +84,7 @@ const entryView = object(
     'endedAt',
     'lineCount',
     'boughtLineCount',
-    'spentCents',
+    'spent',
     'unpricedCount',
   ]
 );
@@ -81,7 +105,11 @@ const rowView = object(
     itemId: nullableString(),
     outcome: ref(ENUM_IDS.settlementOutcome),
     quantity: integer({ minimum: 0 }),
-    pricePaidCents: { type: ['integer', 'null'] },
+    pricePaid: nullableMoney(),
+    // The one read that serves a shop: the reader is the person the purchase is
+    // about (plan 0143, section 6).
+    priceScopeId: nullableString(),
+    supermarketLocationId: nullableString(),
     settledAt: string({ format: 'date-time' }),
     lineId: nullableString(),
     listId: nullableString(),
@@ -94,7 +122,9 @@ const rowView = object(
     'itemId',
     'outcome',
     'quantity',
-    'pricePaidCents',
+    'pricePaid',
+    'priceScopeId',
+    'supermarketLocationId',
     'settledAt',
     'lineId',
     'listId',
@@ -132,6 +162,7 @@ const listSessionRowsRequest = object(
 );
 
 export const purchaseSchemas: JsonSchema[] = [
+  moneyView,
   entryView,
   entryPage,
   rowView,

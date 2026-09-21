@@ -9,12 +9,20 @@ import type { PurchaseEntryRow, PurchaseLineRow } from './purchases.sql';
 /**
  * One raw history entry, with its dates serialized and its kind typed.
  *
- * `spentCents` arrives as a `bigint`, which the driver hands back as a string
- * so no precision is lost on the way out of Postgres, and as null when nothing
- * in the entry carried a price. **Null stays null**: a history that answered 0
- * would say the shopping was free (plan 0142, section 3.3).
+ * The sum arrives as a `bigint`, which the driver hands back as a string so no
+ * precision is lost on the way out of Postgres, and as null when nothing in the
+ * entry carried a price. **Null stays null**: a history that answered 0 would
+ * say the shopping was free (plan 0142, section 3.3).
+ *
+ * It is also null when the entry's priced rows carry **two currencies** (plan
+ * 0143, section 7). The statement counts them and the decision is made here,
+ * because it is a decision about what may be shown rather than about what the
+ * database holds: two shops in two currencies in one session have no total,
+ * every row still says what it cost, and `unpricedCount` is unchanged, since it
+ * counts rows with no price and not rows that refuse to add up.
  */
 export function toPurchaseEntryView(row: PurchaseEntryRow): PurchaseEntryView {
+  const cents = row.spentCents === null ? null : Number(row.spentCents);
   return {
     id: row.id,
     kind: row.kind === TripKind.BASKET ? TripKind.BASKET : TripKind.SESSION,
@@ -24,7 +32,10 @@ export function toPurchaseEntryView(row: PurchaseEntryRow): PurchaseEntryView {
     endedAt: new Date(row.endedAt).toISOString(),
     lineCount: Number(row.lineCount),
     boughtLineCount: Number(row.boughtLineCount),
-    spentCents: row.spentCents === null ? null : Number(row.spentCents),
+    spent:
+      cents === null || row.currency === null || Number(row.currencies) !== 1
+        ? null
+        : { cents, currency: row.currency },
     unpricedCount: Number(row.unpricedCount),
   };
 }
@@ -45,8 +56,17 @@ export function toPurchaseRowView(row: PurchaseLineRow): PurchaseRowView {
         ? SettlementOutcome.BOUGHT
         : SettlementOutcome.NOT_AVAILABLE,
     quantity: Number(row.quantity),
-    pricePaidCents:
-      row.pricePaidCents === null ? null : Number(row.pricePaidCents),
+    // The amount and its currency travel together or neither is served: an
+    // amount with no currency is a number (plan 0143, section 2).
+    pricePaid:
+      row.pricePaidCents === null || row.pricePaidCurrency === null
+        ? null
+        : {
+            cents: Number(row.pricePaidCents),
+            currency: row.pricePaidCurrency,
+          },
+    priceScopeId: row.priceScopeId,
+    supermarketLocationId: row.supermarketLocationId,
     settledAt: new Date(row.settledAt).toISOString(),
     lineId: row.lineId,
     listId: row.listId,

@@ -4,6 +4,7 @@ import { GatewayGeneratedListsModule } from '../generated-lists/generated-lists.
 import { MessagingModule } from '../messaging/messaging.module';
 import { BasketCatalogService } from './basket-catalog.service';
 import { BasketController, BasketLiveController } from './basket.controller';
+import { SettlePriceService } from './settle-price.service';
 
 /**
  * The gateway's basket surface (plan 0136), proxying to core over NATS.
@@ -34,6 +35,10 @@ import { BasketController, BasketLiveController } from './basket.controller';
 @Module({
   imports: [MessagingModule, GatewayCatalogModule, GatewayGeneratedListsModule],
   controllers: [BasketLiveController, BasketController],
-  providers: [BasketCatalogService],
+  providers: [BasketCatalogService, SettlePriceService],
+  // The list page settles too, and a settle from either screen records what was
+  // paid (plan 0143). It is exported rather than provided twice, because two
+  // instances would be two of everything it caches through.
+  exports: [SettlePriceService],
 })
 export class GatewayBasketsModule {}

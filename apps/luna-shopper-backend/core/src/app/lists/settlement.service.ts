@@ -26,6 +26,7 @@ import { LineClaimService } from '../generated-lists/line-claim.service';
 import { toLineItemSet, type LineItemSet } from './line-item-set';
 import { ListAccessService } from './list-access.service';
 import { toLineSettlementView, toLineView } from './list.mappers';
+import { paidColumns } from './settlement-paid';
 import { ITEM_SETTLEMENTS_SQL } from './settlement.sql';
 
 /**
@@ -131,6 +132,9 @@ export class SettlementService {
   async settle(req: SettleLineRequest): Promise<LineSettlementResult> {
     const quantity = this.validateSettleQuantity(req);
     this.validateItemId(req.itemId);
+    // Before the transaction, beside the other two shape checks: a malformed
+    // message must be refused without a row locked (plan 0143, section 4.3).
+    const paid = paidColumns(req.paid, req.outcome);
 
     const found = await this.listAccess.getLine(req.lineId);
     const list = await this.listAccess.requireSettle(found.listId, req.userId);
@@ -190,8 +194,10 @@ export class SettlementService {
           // the list and through no basket, which is what the trips read calls
           // a session purchase.
           basketId: null,
-          pricePaidCents: null,
-          supermarketLocationId: null,
+          // What the screen said one of it costs, and where, as the gateway
+          // read it (plan 0143). Core stores it and never reads a price: it has
+          // no catalog client and this plan does not give it one.
+          ...paid,
         })
       );
 

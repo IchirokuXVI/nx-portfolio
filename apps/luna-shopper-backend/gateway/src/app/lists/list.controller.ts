@@ -47,6 +47,7 @@ import {
   type ListTripRowsRequest,
   type ListTripsRequest,
   type ListView,
+  type SettleLineRequest,
   type TripKind,
   type TripPage,
   type TripRowPage,
@@ -60,6 +61,7 @@ import type { Request, Response } from 'express';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { SettlePriceService } from '../baskets/settle-price.service';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { CommentTranscriptionService } from './comment-transcription.service';
@@ -447,7 +449,9 @@ export class ListsController {
 export class LinesController {
   constructor(
     private readonly nats: NatsClient,
-    private readonly transcription: CommentTranscriptionService
+    private readonly transcription: CommentTranscriptionService,
+    /** What a settle cost, read here and never sent by a client (plan 0143). */
+    private readonly prices: SettlePriceService
   ) {}
 
   /**
@@ -550,18 +554,33 @@ export class LinesController {
   @Post(':id/settle')
   @ApiContractResponse(LINE_PATTERNS.settle, { status: HttpStatus.CREATED })
   @ApiProblemResponses({ body: true })
-  settle(
+  async settle(
     @AuthUser() user: CurrentUser,
     @Param('id') id: string,
     @Body() dto: SettleLineDto
   ): Promise<LineSettlementResult> {
-    return this.nats.send<LineSettlementResult>(LINE_PATTERNS.settle, {
+    // What the screen said one of it costs (plan 0143). Here the caller is the
+    // account the price is read as, their own default profile supplies the
+    // scopes, and `servedLocations` is true: they are the caller's own shops.
+    const paid = dto.priceScopeId
+      ? await this.prices.read({
+          userId: user.userId,
+          profileId: undefined,
+          itemId: dto.itemId,
+          priceScopeId: dto.priceScopeId,
+          supermarketLocationId: dto.supermarketLocationId,
+          servedLocations: true,
+        })
+      : null;
+    const req: SettleLineRequest = {
       userId: user.userId,
       lineId: id,
       outcome: dto.outcome,
       quantity: dto.quantity,
       itemId: dto.itemId,
-    });
+      paid: paid ?? undefined,
+    };
+    return this.nats.send<LineSettlementResult>(LINE_PATTERNS.settle, req);
   }
 
   /**

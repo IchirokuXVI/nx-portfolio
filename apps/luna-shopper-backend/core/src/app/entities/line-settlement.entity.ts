@@ -193,16 +193,59 @@ export class LineSettlement {
   basketId!: string | null;
 
   /**
-   * What was actually paid, and where (section 3.4).
+   * What one unit cost when this was settled, in the minor unit of
+   * {@link pricePaidCurrency} (plan 0143, section 2).
    *
-   * Declared and written by nothing here. They are what "the price you actually
-   * paid" and "where you got it" will fill in once backlog 0004 exists, and both
-   * are cheap to declare now and a migration each to add later on a table that
-   * will by then be the largest in core.
+   * **One unit, never the row.** It is catalog's `price` of {@link itemId} at
+   * {@link priceScopeId}, read by the gateway as the basket's owner at the
+   * moment of the settle. It is not catalog's `unitPrice`, which is a per
+   * kilogram number this product never derives. A row's cost is this times
+   * {@link quantity}.
+   *
+   * It is a price per unit and not a total for two reasons the structure gives.
+   * A settle writes one row per entry of the row it settled, so a total would
+   * have to be divided between them; and a revert smaller than the row it lands
+   * in splits that row (plan 0104, section 3.2), which a per unit price survives
+   * by being copied and a total does not.
+   *
+   * Null whenever nobody knew: free text, no scope named, a product that scope
+   * does not price, a catalog that did not answer in time, every settlement
+   * written before plan 0143, and every `NOT_AVAILABLE`
+   * (`ck_line_settlements_price_bought`).
    */
   @Column({ type: 'int', nullable: true })
   pricePaidCents!: number | null;
 
+  /**
+   * ISO 4217, null exactly when {@link pricePaidCents} is
+   * (`ck_line_settlements_price`).
+   *
+   * An amount of money with no currency is a number, and every sum over it
+   * (plan 0142) is only honest while every row happens to be in euros.
+   */
+  @Column({ type: 'varchar', length: 3, nullable: true })
+  pricePaidCurrency!: string | null;
+
+  /**
+   * The price scope the shopper was looking at, which is a chain's catchment
+   * and not a shop. Opaque: a catalog id with no foreign key, like
+   * {@link itemId}.
+   *
+   * Recorded for `NOT_AVAILABLE` too, because "which chain had none" is the
+   * half of that outcome worth keeping.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  priceScopeId!: string | null;
+
+  /**
+   * The one shop, when the shopper had picked one and is allowed to be told
+   * shops at all (`BasketView.servesLocations`, plan 0136 section 2).
+   *
+   * Never stored without a scope (`ck_line_settlements_location_scope`), and
+   * served back in exactly one place: a person's own history (plan 0143,
+   * section 6). A shop and a time say where a named member of the household was
+   * standing at 18:40, which is not a fact about the milk.
+   */
   @Column({ type: 'uuid', nullable: true })
   supermarketLocationId!: string | null;
 }

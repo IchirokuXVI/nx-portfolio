@@ -87,7 +87,9 @@ export class BasketRedaction {
  * permissions can decide who reads them. Plan 0143 reads the same flag for the
  * price a settlement was paid at.
  */
-function servesLocations(participant: GeneratedListParticipant): boolean {
+export function servesLocations(
+  participant: GeneratedListParticipant
+): boolean {
   return (
     participant.kind === ParticipantKind.OWNER || participant.invitedAt !== null
   );

@@ -26,6 +26,7 @@ import { ListLineChangesAndCursors1756002700000 } from './1756002700000-ListLine
 import { BasketLinkAndAccessExpiry1756002800000 } from './1756002800000-BasketLinkAndAccessExpiry';
 import { OpenBasketsByOwner1756002900000 } from './1756002900000-OpenBasketsByOwner';
 import { PersonPurchases1756003000000 } from './1756003000000-PersonPurchases';
+import { SettlementPricePaid1756003100000 } from './1756003100000-SettlementPricePaid';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -137,4 +138,10 @@ export const CORE_MIGRATIONS = [
   // row and reads nothing, so it follows every migration that touched that
   // table and nothing else (plan 0142, section 9).
   PersonPurchases1756003000000,
+  // Two columns and four constraints on `line_settlements`, which plan 0047's
+  // migration created and plan 0136's last reshaped. It writes no row and
+  // reads none, and every constraint it adds holds over a table whose four
+  // price columns are null on every existing row, so it follows every
+  // migration that touched that table and nothing else (plan 0143, section 5).
+  SettlementPricePaid1756003100000,
 ];

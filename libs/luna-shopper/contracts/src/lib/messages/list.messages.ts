@@ -811,6 +811,38 @@ export interface SetLineApprovalRequest {
 }
 
 /**
+ * What a settle cost, as the **gateway** read it (plan 0143, section 4.2).
+ *
+ * **It is on the NATS messages only and never on a DTO.** A client names a
+ * place and the gateway reads the price, because the actor at the shelf can be
+ * a guest and a guest writing money into a household's history is exactly the
+ * write plan 0130 section 5 exists to refuse. `forbidNonWhitelisted` on both
+ * settle DTOs is what makes that true rather than merely intended: there is no
+ * field on either body to put an amount in.
+ *
+ * Core validates the shape and stores the four values on every row the settle
+ * writes. It never reads a price of its own and has no catalog client (section
+ * 4.3).
+ */
+export interface SettlementPaid {
+  /** A chain's catchment and not a shop. Recorded even when no price was known. */
+  priceScopeId: string;
+  /** The one shop, or null: a reader not served shops never records one. */
+  supermarketLocationId: string | null;
+  /**
+   * What **one unit** cost at {@link priceScopeId}, in the minor unit of
+   * {@link pricePaidCurrency}. Never the row's total, and never catalog's
+   * `unitPrice`, which is a per kilogram number.
+   */
+  pricePaidCents: number | null;
+  /**
+   * ISO 4217. Null together with {@link pricePaidCents}: the scope was real and
+   * the price was not known.
+   */
+  pricePaidCurrency: string | null;
+}
+
+/**
  * Say what happened to one line on a trip (plan 0047, section 4).
  *
  * `BOUGHT` writes a settlement for the units bought and decrements the line by
@@ -827,6 +859,14 @@ export interface SettleLineRequest {
   userId: string;
   lineId: string;
   outcome: SettlementOutcome;
+  /**
+   * What the screen said one of it costs, and where (plan 0143).
+   *
+   * Written by the **gateway** and never by a client. Absent is an ordinary
+   * settle that records no money, which is every settle made from a client that
+   * showed no price.
+   */
+  paid?: SettlementPaid;
   /**
    * The units bought. Required for `BOUGHT`, and refused for `NOT_AVAILABLE`,
    * whose settlement is always zero.
@@ -901,6 +941,33 @@ export interface LineSettlementView {
    * reader who cannot resolve it.
    */
   revertedAt: string | null;
+  /**
+   * What **one unit** cost when this was settled, in the minor unit of
+   * {@link pricePaidCurrency} (plan 0143, section 6). A row's cost is this
+   * times {@link quantity}.
+   *
+   * Served to a reader of the list, because a reader already learns what the
+   * household bought, how many, when and who settled it, and what the milk cost
+   * at that chain is the same kind of fact. Plan 0066 section 5 already calls a
+   * chain's price a product fact rather than a fact about anybody's household.
+   *
+   * Null whenever nobody knew: every settlement written before plan 0143, every
+   * `NOT_AVAILABLE`, and every settle whose client named no scope.
+   */
+  pricePaidCents: number | null;
+  /** ISO 4217, null exactly when {@link pricePaidCents} is. */
+  pricePaidCurrency: string | null;
+  /**
+   * The price scope the shopper was looking at: a chain's catchment, not a
+   * shop.
+   *
+   * **`supermarketLocationId` is deliberately absent**, and its absence is the
+   * point (plan 0143, section 6). A shop and a time say where a named member of
+   * the household was standing at 18:40, which is not a fact about the milk. It
+   * is stored, and it is served in exactly one place: a person's own history,
+   * where the reader is the person it is about.
+   */
+  priceScopeId: string | null;
 }
 
 /**

@@ -175,7 +175,15 @@ export class BasketRevertService {
                 revertedAt: null,
                 revertedByParticipantId: null,
                 basketId: candidate.basketId,
+                // All four price columns, copied (plan 0143, section 4.3). A
+                // reverted row keeps its price because it is history, and the
+                // half that still stands keeps it because it is still the price
+                // that was paid for those units. This is the second reason the
+                // column is a price per unit: a total would have to be split
+                // here, and a split total is a price nobody paid.
                 pricePaidCents: candidate.pricePaidCents,
+                pricePaidCurrency: candidate.pricePaidCurrency,
+                priceScopeId: candidate.priceScopeId,
                 supermarketLocationId: candidate.supermarketLocationId,
               })
             );

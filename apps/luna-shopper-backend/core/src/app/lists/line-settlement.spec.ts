@@ -7,6 +7,7 @@ import {
   ZoneRole,
   type LineSettlementResult,
 } from '@portfolio/luna-shopper/contracts';
+import { ValidationException } from '@portfolio/luna-shopper/platform';
 import type { DataSource, EntityManager } from 'typeorm';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
@@ -48,6 +49,9 @@ const SHOPPER = 'u-shopper';
 const AUTHOR = 'u-author';
 const MILK_ITEM = '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13';
 const BREAD_ITEM = '7c2b9d41-5e6a-4f38-9b02-1a4c7e8d5f62';
+/** A chain's catchment and one of its shops, both opaque here (plan 0143). */
+const SCOPE = 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73';
+const SHOP = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
 
 interface Harness {
   service: SettlementService;
@@ -588,6 +592,106 @@ describe('line.settle (plan 0047, section 4)', () => {
       ).rejects.toThrow(/write access to this list/);
       expect(w.written).toHaveLength(0);
       expect(w.events).toHaveLength(0);
+    });
+  });
+
+  /**
+   * What was paid, recorded at the shelf (plan 0143, section 4.3).
+   *
+   * Core stores what the gateway said and reads no price of its own: it has no
+   * catalog client, so every case here is about the shape of the message and
+   * about which of its four values survive the outcome.
+   */
+  describe('the price it records (plan 0143)', () => {
+    const PAID = {
+      priceScopeId: SCOPE,
+      supermarketLocationId: SHOP,
+      pricePaidCents: 129,
+      pricePaidCurrency: 'EUR',
+    };
+
+    it('writes all four columns on the settlement', async () => {
+      const w = build({ quantity: 2 });
+
+      const { settlement } = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 2,
+        paid: PAID,
+      });
+
+      expect(w.written[0]).toMatchObject(PAID);
+      // Three of them are served to a reader of the list, and the shop is not
+      // (section 6).
+      expect(settlement).toMatchObject({
+        pricePaidCents: 129,
+        pricePaidCurrency: 'EUR',
+        priceScopeId: SCOPE,
+      });
+      expect(settlement).not.toHaveProperty('supermarketLocationId');
+    });
+
+    it('records nothing at all when the message carried no price', async () => {
+      const w = build({ quantity: 2 });
+
+      await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 2,
+      });
+
+      expect(w.written[0]).toMatchObject({
+        pricePaidCents: null,
+        pricePaidCurrency: null,
+        priceScopeId: null,
+        supermarketLocationId: null,
+      });
+    });
+
+    // Which chain had none is the half of that outcome worth keeping, and
+    // nothing was paid for a thing nobody got.
+    it('keeps the place and drops the price on NOT_AVAILABLE', async () => {
+      const w = build({ quantity: 2 });
+
+      await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.NOT_AVAILABLE,
+        paid: PAID,
+      });
+
+      expect(w.written[0]).toMatchObject({
+        pricePaidCents: null,
+        pricePaidCurrency: null,
+        priceScopeId: SCOPE,
+        supermarketLocationId: SHOP,
+      });
+    });
+
+    it.each([
+      ['a negative amount', { ...PAID, pricePaidCents: -1 }],
+      ['a fractional amount', { ...PAID, pricePaidCents: 12.5 }],
+      ['a two letter currency', { ...PAID, pricePaidCurrency: 'EU' }],
+      ['an amount with no currency', { ...PAID, pricePaidCurrency: null }],
+      ['a currency with no amount', { ...PAID, pricePaidCents: null }],
+      ['a scope that is not a uuid', { ...PAID, priceScopeId: 'nope' }],
+      ['a shop that is not a uuid', { ...PAID, supermarketLocationId: 'no' }],
+    ])('refuses %s, before anything is written', async (_name, paid) => {
+      const w = build({ quantity: 2 });
+
+      await expect(
+        w.service.settle({
+          userId: SHOPPER,
+          lineId: 'li1',
+          outcome: SettlementOutcome.BOUGHT,
+          quantity: 2,
+          paid,
+        })
+      ).rejects.toBeInstanceOf(ValidationException);
+      expect(w.written).toHaveLength(0);
+      expect(w.saved).toHaveLength(0);
     });
   });
 });

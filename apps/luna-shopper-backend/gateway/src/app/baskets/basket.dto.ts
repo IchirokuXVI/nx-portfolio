@@ -82,6 +82,24 @@ export class SettleBasketRowDto {
   itemId?: string;
 
   @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The price scope the row’s price was read at on your screen: the scope of the shop you picked, or of the offer the screen showed. There is no field for an amount, and there will not be: the gateway reads the price itself, as the basket’s owner.',
+  })
+  @IsOptional()
+  @IsUUID()
+  priceScopeId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The one shop you are standing in. Sent only by a client that was served shops, and ignored from any other.',
+  })
+  @IsOptional()
+  @IsUUID()
+  supermarketLocationId?: string;
+
+  @ApiPropertyOptional({
     type: [BasketAllocationDto],
     description:
       'Which household got what. Derived oldest first when absent. Every `lineId` must belong to a list you were served a ref for.',

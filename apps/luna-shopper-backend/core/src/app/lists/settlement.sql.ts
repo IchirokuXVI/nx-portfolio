@@ -31,6 +31,10 @@ import { READABLE_LIST } from '../zones/zone-summary.sql';
  * `timestamptz` is microseconds, so a token carrying the value skips or repeats
  * the boundary row; this shape cannot, and it costs one primary key lookup.
  *
+ * The three price columns are selected and `supermarketLocationId` is not, which
+ * is the served shape of plan 0143 section 6 written out: what one unit cost and
+ * the chain catchment it was read at are a product fact, and the shop is not.
+ *
  * `$1` is the item, `$2` the caller, `$3` the cursor row's id or null, `$4` the
  * limit.
  */
@@ -43,7 +47,10 @@ export const ITEM_SETTLEMENTS_SQL = `
          s."quantity",
          s."settledByUserId",
          s."settledAt",
-         s."revertedAt"
+         s."revertedAt",
+         s."pricePaidCents",
+         s."pricePaidCurrency",
+         s."priceScopeId"
   FROM "line_settlements" s
   WHERE s."itemId" = $1
     AND EXISTS (

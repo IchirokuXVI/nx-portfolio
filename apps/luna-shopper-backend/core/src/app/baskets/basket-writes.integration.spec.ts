@@ -48,6 +48,10 @@ import { fakeBasketMarks } from './changes/basket-marks.fake';
  */
 let announcer: BasketAnnouncer;
 
+/** A chain's catchment and one of its shops, both opaque to core (plan 0143). */
+const SCOPE = 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73';
+const SHOP = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
+
 /**
  * The writes on a basket row (plan 0136, section 13, tests 8 to 10).
  *
@@ -505,6 +509,148 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       // A `BOUGHT` with a zero allocation writes nothing at all.
       expect(await standingOf(newer.id)).toHaveLength(0);
     });
+
+    /**
+     * What was paid, recorded at the shelf (plan 0143).
+     *
+     * Against Postgres, because three of the four rules here are check
+     * constraints: a price with no currency, a negative price and a price on a
+     * close are refused by the table and not by the service.
+     */
+    describe('the price it records (plan 0143)', () => {
+      const PAID = {
+        priceScopeId: SCOPE,
+        supermarketLocationId: SHOP,
+        pricePaidCents: 129,
+        pricePaidCurrency: 'EUR',
+      };
+
+      it('writes the same four values on every row of a settle over two entries', async () => {
+        const flat = await list('Flat priced');
+        const parents = await list('Parents priced');
+        const { basket: held, participantId } = await basket(flat, parents);
+        const older = await line(flat, 'Milk', 2);
+        const newer = await line(parents, 'milk', 2);
+
+        await settleService.settle({
+          basketId: held.id,
+          participantId,
+          rowKey: older.id,
+          outcome: SettlementOutcome.BOUGHT,
+          quantity: 4,
+          from: 4,
+          paid: PAID,
+        });
+
+        // A price per unit needs no dividing between the households, which is
+        // the first of the two reasons section 2 gives for the column being one
+        // unit rather than a total.
+        for (const lineId of [older.id, newer.id]) {
+          const [written] = await standingOf(lineId);
+          expect(written).toMatchObject(PAID);
+        }
+      });
+
+      it('keeps the place and writes no price on a close', async () => {
+        const listId = await list('Closed priced');
+        const { basket: held, participantId } = await basket(listId);
+        const row = await line(listId, 'Yeast', 1);
+
+        await settleService.settle({
+          basketId: held.id,
+          participantId,
+          rowKey: row.id,
+          outcome: SettlementOutcome.NOT_AVAILABLE,
+          from: 1,
+          paid: PAID,
+        });
+
+        // `ck_line_settlements_price_bought` holds the same rule, so a caller
+        // that reached the insert another way is refused rather than stored.
+        const [written] = await standingOf(row.id);
+        expect(written).toMatchObject({
+          pricePaidCents: null,
+          pricePaidCurrency: null,
+          priceScopeId: SCOPE,
+          supermarketLocationId: SHOP,
+        });
+      });
+
+      it.each([
+        [
+          'a price with no currency',
+          { pricePaidCents: 100, pricePaidCurrency: null },
+        ],
+        [
+          'a currency with no price',
+          { pricePaidCents: null, pricePaidCurrency: 'EUR' },
+        ],
+        ['a negative price', { pricePaidCents: -1, pricePaidCurrency: 'EUR' }],
+      ])('refuses %s by constraint', async (_name, price) => {
+        const listId = await list(`Constraint ${_name}`);
+        const row = await line(listId, 'Salt', 1);
+
+        await expect(
+          dataSource.getRepository(LineSettlement).insert({
+            lineId: row.id,
+            listId,
+            itemId: null,
+            outcome: SettlementOutcome.BOUGHT,
+            quantity: 1,
+            settledByUserId: ids.shopper,
+            settledByParticipantId: null,
+            settledAt: new Date(),
+            priceScopeId: SCOPE,
+            supermarketLocationId: null,
+            ...price,
+          })
+        ).rejects.toThrow();
+      });
+
+      it('refuses a price on a close by constraint', async () => {
+        const listId = await list('Constraint close');
+        const row = await line(listId, 'Pepper', 1);
+
+        await expect(
+          dataSource.getRepository(LineSettlement).insert({
+            lineId: row.id,
+            listId,
+            itemId: null,
+            outcome: SettlementOutcome.NOT_AVAILABLE,
+            quantity: 0,
+            settledByUserId: ids.shopper,
+            settledByParticipantId: null,
+            settledAt: new Date(),
+            priceScopeId: SCOPE,
+            supermarketLocationId: null,
+            pricePaidCents: 100,
+            pricePaidCurrency: 'EUR',
+          })
+        ).rejects.toThrow();
+      });
+
+      it('refuses a shop with no scope by constraint', async () => {
+        const listId = await list('Constraint shop');
+        const row = await line(listId, 'Oil', 1);
+
+        await expect(
+          dataSource.getRepository(LineSettlement).insert({
+            lineId: row.id,
+            listId,
+            itemId: null,
+            outcome: SettlementOutcome.BOUGHT,
+            quantity: 1,
+            settledByUserId: ids.shopper,
+            settledByParticipantId: null,
+            settledAt: new Date(),
+            priceScopeId: null,
+            supermarketLocationId: SHOP,
+            pricePaidCents: null,
+            pricePaidCurrency: null,
+          })
+        ).rejects.toThrow();
+      });
+    });
   });
 
   // --- 9. two settles that share a line -----------------------------------
@@ -625,6 +771,44 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         original.settledAt.getTime()
       );
       expect(await quantityOf(row.id)).toBe(2);
+    });
+
+    it('carries all four price columns onto the half that still stands', async () => {
+      const listId = await list('Split priced');
+      const { basket: held, participantId } = await basket(listId);
+      const row = await line(listId, 'Flour', 6);
+      const paid = {
+        priceScopeId: SCOPE,
+        supermarketLocationId: SHOP,
+        pricePaidCents: 89,
+        pricePaidCurrency: 'EUR',
+      };
+
+      await settleService.settle({
+        basketId: held.id,
+        participantId,
+        rowKey: row.id,
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 6,
+        from: 6,
+        paid,
+      });
+      await revertService.revert({
+        basketId: held.id,
+        participantId,
+        rowKey: row.id,
+        target: 'UNITS',
+        units: 2,
+        from: 6,
+      });
+
+      // Plan 0143, section 4.3: a reverted row keeps its price because it is
+      // history, and the remainder keeps it because it is still what was paid
+      // for those units. This is the second reason the column is a price per
+      // unit: a total would have to be divided here.
+      const standing = await standingOf(row.id);
+      expect(standing).toHaveLength(1);
+      expect(standing[0]).toMatchObject({ ...paid, quantity: 4 });
     });
 
     it('takes a whole close back, and the close held no units', async () => {
