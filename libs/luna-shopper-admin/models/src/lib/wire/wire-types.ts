@@ -16,6 +16,13 @@ export type AcceptSourceEntryDto = {
 };
 
 /**
+ * `AcknowledgeBasketChangesDto` in the gateway's OpenAPI document.
+ */
+export type AcknowledgeBasketChangesDto = {
+  through: string;
+};
+
+/**
  * `AddBasketLineDto` in the gateway's OpenAPI document.
  */
 export type AddBasketLineDto = {
@@ -1639,6 +1646,54 @@ export type AuthUserProfileView = {
 };
 
 /**
+ * `basket.BasketChangeActorView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketChangeActorView =
+  | {
+      participantId: string;
+    }
+  | {
+      userId: string;
+    };
+
+/**
+ * `basket.BasketChangePage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type BasketBasketChangePage = {
+  items: BasketBasketChangeView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `basket.BasketChangeView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketChangeView = {
+  id: string;
+  kind: EnumsLineChangeKind;
+  at: string;
+  unseen: boolean;
+  rowKey: string | null;
+  contentBefore: string | null;
+  contentAfter: string | null;
+  quantityBefore: number | null;
+  quantityAfter: number | null;
+  approvalBefore: EnumsLineApprovalStatus | null;
+  approvalAfter: EnumsLineApprovalStatus | null;
+  listId?: string;
+  actor: BasketBasketChangeActorView | null;
+};
+
+/**
+ * `basket.BasketChangesAcknowledged` in the gateway's OpenAPI document.
+ */
+export type BasketBasketChangesAcknowledged = {
+  unseenChangeCount: number;
+  marksLapseInMs: number;
+};
+
+/**
  * `basket.BasketListRef` in the gateway's OpenAPI document.
  */
 export type BasketBasketListRef = {
@@ -1684,6 +1739,8 @@ export type BasketBasketResult = {
   progress: BasketBasketProgress;
   truncated: boolean;
   servesLocations: boolean;
+  unseenChangeCount: number;
+  newestUnseenChangeId: string | null;
   products: CatalogItemView[];
   scopes: BasketBasketPriceScopeView[];
 };
@@ -2527,6 +2584,17 @@ export type EnumsItemSourceMatch =
  * `enums.LineApprovalStatus` in the gateway's OpenAPI document.
  */
 export type EnumsLineApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+/**
+ * `enums.LineChangeKind` in the gateway's OpenAPI document.
+ */
+export type EnumsLineChangeKind =
+  | 'ADDED'
+  | 'QUANTITY_CHANGED'
+  | 'RENAMED'
+  | 'MERGED'
+  | 'DELETED'
+  | 'APPROVAL_CHANGED';
 
 /**
  * `enums.LineSuggestionReason` in the gateway's OpenAPI document.

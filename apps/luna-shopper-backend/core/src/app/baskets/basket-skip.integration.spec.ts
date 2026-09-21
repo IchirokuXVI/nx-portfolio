@@ -30,8 +30,10 @@ import {
   ZoneMembership,
 } from '../entities';
 import { LineClaimService } from '../generated-lists/line-claim.service';
+import { LineChangeRecorder } from '../lists/changes/line-change.recorder';
 import { LineMergeService } from '../lists/line-merge.service';
 import { fakeCoreConfig } from './basket-config.fake';
+import { fakeBasketMarks } from './changes/basket-marks.fake';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketReadService } from './basket-read.service';
 import { BasketRedaction } from './basket-redaction';
@@ -140,6 +142,9 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
       sharing,
       listAccess,
       { order: async <T>(_userId: string, rows: T[]) => rows } as never,
+      // Nothing here is about what changed since somebody looked (plan 0138),
+      // and every read below passes no viewer, so the marks are never asked for.
+      fakeBasketMarks(),
       fakeCoreConfig()
     );
     const context = new BasketWriteContext(
@@ -175,7 +180,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
       claims,
       events as never
     );
-    merges = new LineMergeService();
+    merges = new LineMergeService(new LineChangeRecorder());
 
     const zones = dataSource.getRepository(Zone);
     const zone = await zones.save(
@@ -630,6 +635,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
             new Map(ids.map((id) => [id, new Set([ListPermission.MANAGE])])),
         } as never,
         { order: async <T>(_u: string, rows: T[]) => rows } as never,
+        fakeBasketMarks(),
         fakeCoreConfig(14 * 60 * 60 * 1000)
       );
       const { rows } = await wider.rowsOf(
@@ -739,7 +745,13 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         await merges.merge(
           manager,
           await repo.findOneByOrFail({ id: survivor.id }),
-          await repo.findOneByOrFail({ id: absorbed.id })
+          await repo.findOneByOrFail({ id: absorbed.id }),
+          // The merge records its own change (plan 0138, section 4). Written
+          // here for real, since there is a database; nothing below reads it.
+          {
+            list: { id: listId, zoneId: ids.zone },
+            actor: { userId: ids.shopper, participantId: null, basketId: null },
+          }
         );
       });
 

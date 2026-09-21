@@ -29,6 +29,7 @@ export * from './lib/messages/admin-dashboard.messages';
 export * from './lib/messages/admin-users.messages';
 export * from './lib/messages/assistant.messages';
 export * from './lib/messages/auth.messages';
+export * from './lib/messages/basket-changes.messages';
 export * from './lib/messages/basket.messages';
 export * from './lib/messages/catalog.messages';
 export * from './lib/messages/generated-list-sharing.messages';

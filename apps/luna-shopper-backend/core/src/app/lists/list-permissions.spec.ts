@@ -21,6 +21,7 @@ import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { CommentService } from './comment.service';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
+import { fakeLineChanges } from './changes/line-change.fake';
 import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
@@ -234,6 +235,7 @@ function world(options: {
       events.push({ event, payload }),
   } as unknown as CoreEventsPublisher;
 
+  const changes = fakeLineChanges();
   const lines = new LineService(
     dataSource,
     lineRepo as never,
@@ -245,7 +247,10 @@ function world(options: {
     publisher,
     // No operator write here, so nothing reaches the trail.
     {} as never,
-    new LineMergeService()
+    new LineMergeService(changes.recorder),
+    // Every write records a change (plan 0138). A stand in, because this file is
+    // about who may make each write rather than about what it wrote down.
+    changes.recorder
   );
 
   const settlements = new SettlementService(

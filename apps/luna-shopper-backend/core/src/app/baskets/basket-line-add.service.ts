@@ -91,6 +91,12 @@ export class BasketLineAddService {
       content: req.content,
       quantity: req.quantity,
       itemIds: req.itemIds,
+      // The basket the line arrived through, on the change record (plan 0138,
+      // section 4). Here the actor and the authorized account are the same
+      // person, because adding is the one gesture that is not delegated, and the
+      // participant is still carried: it is how the change is recognized as this
+      // reader's own on their own basket.
+      via: opened.via(),
     });
 
     opened.announceLinesChanged([added.line.id], this.events);

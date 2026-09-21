@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  BASKET_CHANGE_LIMITS,
   GENERATED_LIST_LIMITS,
   LINE_QUANTITY_MAX,
   SettlementOutcome,
@@ -218,6 +219,56 @@ export class RenameBasketRowDto {
   @IsOptional()
   @IsBoolean()
   confirmMerge?: boolean;
+}
+
+/**
+ * The query half of the changes view (plan 0138, section 8).
+ *
+ * **Every value lives on this DTO**, including the ones a route might otherwise
+ * take as a second `@Query()`: a `@Query('x')` beside a `@Query()` object makes
+ * the whole route answer 400, so the object is the only shape a query ever has
+ * here.
+ *
+ * Its own class rather than `PageQueryDto`, because the bounds are this route's:
+ * the page is twenty by default and a hundred at most, stated in the contract so
+ * core and the gateway cannot name different numbers.
+ */
+export class BasketChangesQueryDto {
+  @ApiPropertyOptional({
+    description: 'The `nextCursor` of the previous page. Opaque.',
+  })
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: BASKET_CHANGE_LIMITS.maxPageSize,
+    description: `Changes per page. ${BASKET_CHANGE_LIMITS.pageSize} when absent.`,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(BASKET_CHANGE_LIMITS.maxPageSize)
+  limit?: number;
+}
+
+/**
+ * Say which changes were drawn (plan 0138, section 6).
+ *
+ * The id of the newest change the client **drew**, never "everything up to now"
+ * and never a timestamp: a change that arrived between the read and this call
+ * stays unseen, and no client clock is ever compared to a server one.
+ */
+export class AcknowledgeBasketChangesDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The newest change you drew, from `newestUnseenChangeId` on the basket or from the changes view. One older than the cursor writes nothing and answers the count as it stands.',
+  })
+  @IsUUID()
+  through!: string;
 }
 
 /** The longest search term the composer may send (plan 0055, section 5). */

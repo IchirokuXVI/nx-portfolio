@@ -22,6 +22,7 @@ import { SettlementBasket1756002300000 } from './1756002300000-SettlementBasket'
 import { BasketTripRows1756002400000 } from './1756002400000-BasketTripRows';
 import { BasketsBecomeViews1756002500000 } from './1756002500000-BasketsBecomeViews';
 import { BasketLineSkips1756002600000 } from './1756002600000-BasketLineSkips';
+import { ListLineChangesAndCursors1756002700000 } from './1756002700000-ListLineChangesAndCursors';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -110,4 +111,10 @@ export const CORE_MIGRATIONS = [
   // nothing anything before it needs, so it follows that one and nothing else
   // (plan 0137, section 2).
   BasketLineSkips1756002600000,
+  // Two new tables. The first references `shopping_lists`, which plan 0007's
+  // migration created, and the second `generated_list_participants`, which plan
+  // 0051's created and plan 0114's last touched. It reads nothing any earlier
+  // migration wrote and adds nothing any of them needs, so it follows all of
+  // them and nothing else (plan 0138, section 11).
+  ListLineChangesAndCursors1756002700000,
 ];

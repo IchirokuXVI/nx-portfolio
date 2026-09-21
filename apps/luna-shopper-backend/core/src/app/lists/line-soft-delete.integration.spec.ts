@@ -36,6 +36,7 @@ import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { MergeService } from '../merge/merge.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { LIST_COUNTS_SQL } from '../zones/zone-summary.sql';
+import { LineChangeRecorder } from './changes/line-change.recorder';
 import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
@@ -212,7 +213,11 @@ describeIntegration(
         fakeLineClaims().service,
         { emit } as never,
         new CoreAuditService(dataSource),
-        new LineMergeService()
+        new LineMergeService(new LineChangeRecorder()),
+        // The **real** recorder: the soft delete and the change that says the
+        // line went commit together, which only a database can show (plan 0138,
+        // section 4).
+        new LineChangeRecorder()
       );
       settlements = new SettlementService(
         dataSource,

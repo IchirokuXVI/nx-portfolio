@@ -24,6 +24,7 @@ import {
 } from '../entities';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { LineChangeRecorder } from './changes/line-change.recorder';
 import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
@@ -87,7 +88,11 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
       fakeLineClaims().service,
       { emit: jest.fn() } as never,
       new CoreAuditService(dataSource),
-      new LineMergeService()
+      new LineMergeService(new LineChangeRecorder()),
+      // The **real** recorder, because this suite has a database: a delta writes
+      // its change row through the manager of the transaction that moved the
+      // quantity (plan 0138, section 4).
+      new LineChangeRecorder()
     );
 
     const zone = await dataSource.getRepository(Zone).save(

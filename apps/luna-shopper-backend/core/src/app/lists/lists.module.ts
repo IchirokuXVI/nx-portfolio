@@ -6,6 +6,7 @@ import {
   LineSettlement,
   ListAccess,
   ListLine,
+  ListLineChange,
   ListLineGroupRemoval,
   ListLineItem,
   ShoppingList,
@@ -14,6 +15,8 @@ import {
 import { IdempotencyModule } from '../events/idempotency.module';
 import { LineClaimModule } from '../generated-lists/line-claim.module';
 import { ZonesModule } from '../zones/zones.module';
+import { LineChangeRecorder } from './changes/line-change.recorder';
+import { ListLineChangeSweepService } from './changes/list-line-change-sweep.service';
 import { CommentService } from './comment.service';
 import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
@@ -47,6 +50,10 @@ import { TripsService } from './trips/trips.service';
       LineSettlement,
       CommentAudio,
       ZoneMembership,
+      // What changed on a list (plan 0138). Registered so the sweep has a
+      // repository; the recorder holds none and writes through its caller's
+      // manager, and the two reads are raw statements in `baskets/changes`.
+      ListLineChange,
     ]),
     ZonesModule,
     SharedListGrantModule,
@@ -70,6 +77,14 @@ import { TripsService } from './trips/trips.service';
     // Two lines becoming one on a rename (plan 0112). A provider of its own
     // because a basket rename merges list lines too (plan 0113).
     LineMergeService,
+    // What changed on a list, written in the transaction of the write that
+    // changed it (plan 0138). It holds no repository, so it is a provider here
+    // rather than a module: every insert goes through its caller's manager.
+    LineChangeRecorder,
+    // ...and the sweep that deletes a change nobody may read any more. Here
+    // rather than beside the basket reads, because the record belongs to the
+    // list: a change outlives every basket that covered it.
+    ListLineChangeSweepService,
     CommentService,
     SettlementService,
     // The shopping trips that touched a list, derived on read (plan 0122).

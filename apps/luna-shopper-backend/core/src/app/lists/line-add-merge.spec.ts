@@ -20,6 +20,7 @@ import {
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { fakeLineChanges } from './changes/line-change.fake';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
@@ -229,6 +230,7 @@ function build(options: {
       events.push({ event, line: payload }),
   } as unknown as CoreEventsPublisher;
 
+  const changes = fakeLineChanges();
   const service = new LineService(
     dataSource,
     lineRepo as never,
@@ -239,10 +241,13 @@ function build(options: {
     fakeLineClaims().service,
     publisher,
     {} as never,
-    new LineMergeService()
+    new LineMergeService(changes.recorder),
+    // What the add records (plan 0138). A stand in, because this file is about
+    // which line an add lands on; the rows it writes are proven against Postgres.
+    changes.recorder
   );
 
-  return { service, saved, events, items };
+  return { service, saved, events, items, recorded: changes.recorded };
 }
 
 function add(

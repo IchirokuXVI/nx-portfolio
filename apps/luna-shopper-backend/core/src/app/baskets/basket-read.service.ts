@@ -35,6 +35,13 @@ import {
   type BasketSettlementFact,
   type BasketSkipFact,
 } from './basket-rows';
+import { CHANGE_LINES_SQL } from './changes/basket-changes.sql';
+import {
+  BasketMarksReader,
+  NO_BASKET_MARKS,
+  type BasketMarks,
+} from './changes/basket-marks.reader';
+import { removedRows } from './changes/basket-removed-rows';
 import {
   BASKET_LIST_REFS_SQL,
   BASKET_SESSION_LOOKBACK_MS,
@@ -90,6 +97,10 @@ export class BasketReadService {
     // `demandEditable` answers (plan 0131). Never the actor's.
     private readonly listAccess: ListAccessService,
     private readonly order: GeneratedListOrderService,
+    // What changed since this viewer last looked (plan 0138). Last but for the
+    // configuration, so no positional construction in a spec has to shift an
+    // argument to take it.
+    private readonly marks: BasketMarksReader,
     @Inject(ConfigService) configService: ConfigService
   ) {
     this.skipWindowMs =
@@ -100,6 +111,45 @@ export class BasketReadService {
   async read(req: GetBasketRequest): Promise<BasketView> {
     const { basket, participant } = await this.resolve(req);
     return this.view(basket, participant);
+  }
+
+  /**
+   * The covered lines of a basket, in the order a row's anchor is chosen in.
+   *
+   * Public since plan 0138, so the changes view can name a `rowKey` the basket
+   * read would draw. It is the same statement with the same four parameters, which
+   * is the property that matters: an anchor computed from a different set of lines
+   * would hand a client a key the write routes refuse.
+   */
+  async coveredLinesOf(
+    basket: GeneratedList,
+    coveredListIds: readonly string[]
+  ): Promise<CoveredLineRow[]> {
+    if (coveredListIds.length === 0) {
+      return [];
+    }
+    const scope = await this.scopeOf(basket);
+    return this.baskets.query<CoveredLineRow[]>(COVERED_LINES_SQL, [
+      [...coveredListIds],
+      basket.id,
+      scope.startedAt,
+      scope.enabled,
+    ]);
+  }
+
+  /**
+   * The lines a set of ids names, **soft deleted ones included** (plan 0138).
+   *
+   * The one read in the basket that serves a line no other read will: a change
+   * about a line that was taken off the list still has to say what it was called.
+   */
+  async changeLinesOf(lineIds: readonly string[]): Promise<CoveredLineRow[]> {
+    if (lineIds.length === 0) {
+      return [];
+    }
+    return this.baskets.query<CoveredLineRow[]>(CHANGE_LINES_SQL, [
+      [...lineIds],
+    ]);
   }
 
   /**
@@ -127,8 +177,11 @@ export class BasketReadService {
         )
       : BasketRedaction.none(participant);
 
-    const [{ rows, truncated }, people, lists] = await Promise.all([
-      this.rowsOf(basket, coveredListIds, redaction),
+    const [{ rows, truncated, marks }, people, lists] = await Promise.all([
+      // The marks are read for **this** viewer, which is why they are asked for
+      // here and not by the callers that have no reader to measure (plan 0138,
+      // section 7).
+      this.rowsOf(basket, coveredListIds, redaction, participant.id),
       this.sharing.listParticipants({
         generatedListId: basket.id,
         asParticipantId: participant.id,
@@ -156,6 +209,8 @@ export class BasketReadService {
       progress: progressOf(rows),
       truncated,
       servesLocations: redaction.servesLocations,
+      unseenChangeCount: marks.unseenChangeCount,
+      newestUnseenChangeId: marks.newestUnseenChangeId,
     };
   }
 
@@ -192,12 +247,23 @@ export class BasketReadService {
   async rowsOf(
     basket: GeneratedList,
     coveredListIds: readonly string[],
-    redaction: BasketRedaction
-  ): Promise<{ rows: BasketRowView[]; groups: BasketGroup[]; truncated: boolean }> {
+    redaction: BasketRedaction,
+    /**
+     * The viewer, for the marks (plan 0138, section 7). Absent for a caller that
+     * is not a reader: the history counts, the admin detail and the finish read
+     * the rows to count or freeze them, and a mark belongs to somebody looking.
+     */
+    participantId?: string
+  ): Promise<{
+    rows: BasketRowView[];
+    groups: BasketGroup[];
+    truncated: boolean;
+    marks: BasketMarks;
+  }> {
     if (coveredListIds.length === 0) {
       // A person in no zone has a basket with nothing in it. An answer, never
       // an error: a caller asking what a basket holds is drawing a screen.
-      return { rows: [], groups: [], truncated: false };
+      return { rows: [], groups: [], truncated: false, marks: NO_BASKET_MARKS };
     }
 
     const scope = await this.scopeOf(basket);
@@ -207,8 +273,17 @@ export class BasketReadService {
       scope.startedAt,
       scope.enabled,
     ]);
-    if (lines.length === 0) {
-      return { rows: [], groups: [], truncated: false };
+
+    // Before the settlements, because a removed row shows what this basket bought
+    // of a line the coverage no longer holds, and those purchases have to be in
+    // the same read (plan 0138, section 7).
+    const marks = participantId
+      ? await this.marks.marksFor(participantId, coveredListIds, lines)
+      : NO_BASKET_MARKS;
+    const removedLineIds = marks.removed.flatMap((group) => group.lineIds);
+
+    if (lines.length === 0 && marks.removed.length === 0) {
+      return { rows: [], groups: [], truncated: false, marks };
     }
 
     const lineIds = lines.map((line) => line.id);
@@ -219,7 +294,7 @@ export class BasketReadService {
       scope.enabled
         ? this.baskets.query<BasketSettlementRow[]>(BASKET_SETTLEMENTS_SQL, [
             basket.id,
-            lineIds,
+            [...lineIds, ...removedLineIds],
             scope.startedAt,
             this.skipWindowMs,
           ])
@@ -266,11 +341,22 @@ export class BasketReadService {
           entry.approvalStatus
         ),
       facts: { skips, kind: basket.kind },
+      // What changed about each row since this viewer last looked, by the row's
+      // merge key (plan 0138, section 7). Empty for a caller with no viewer.
+      marks: marks.byKey,
     };
     return {
-      rows: kept.map((group) => toRowView(group, context)),
+      rows: [
+        ...kept.map((group) => toRowView(group, context)),
+        // **After** the rows and after the cap, which is the honest place for
+        // them: a removed row is not a thing to buy, it counts toward neither
+        // `progress` nor `pending`, and the walk order has nothing to say about
+        // something that is no longer on the shelf list.
+        ...removedRows(marks.removed, settlements),
+      ],
       groups: kept,
       truncated,
+      marks,
     };
   }
 

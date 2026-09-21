@@ -6,6 +6,7 @@ import {
   type BasketLinesChangedEvent,
   type BasketRowResult,
   type BasketRowView,
+  type LineWriteVia,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
@@ -104,6 +105,23 @@ export class OpenBasketWrite {
   /** The entries of one row, refusing anything outside the coverage. */
   row(rowKey: string): Promise<BasketRow> {
     return this.resolver.resolve(this.basket, this.coveredListIds, rowKey);
+  }
+
+  /**
+   * Who this write is, as the change record names them (plan 0138, section 4).
+   *
+   * The **actor's** identity and not the account the write was authorized
+   * against. Those differ on every delegated write: changing what a household
+   * asks for is checked against the basket's owner (plan 0131) while the person
+   * doing it may be a guest, so `userId` here is the participant's own account
+   * and is null for a guest.
+   */
+  via(): LineWriteVia {
+    return {
+      participantId: this.participant.id,
+      basketId: this.basket.id,
+      userId: this.participant.userId,
+    };
   }
 
   /**

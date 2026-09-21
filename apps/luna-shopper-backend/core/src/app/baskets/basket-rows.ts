@@ -1,5 +1,6 @@
 import {
   BasketKind,
+  BasketRowMark,
   BasketRowNote,
   BasketRowState,
   LineApprovalStatus,
@@ -63,6 +64,9 @@ export interface BasketFacts {
 
 /** A basket with no skips of any kind, which is what a finished one reads as. */
 export const NO_BASKET_SKIPS: ReadonlyMap<string, BasketSkipFact> = new Map();
+
+/** No row marked, which is what a read with no viewer answers (plan 0138). */
+export const NO_ROW_MARKS: ReadonlyMap<string, BasketRowMark> = new Map();
 
 /** One covered list line, with everything this file needs about it. */
 export interface BasketEntry {
@@ -306,6 +310,16 @@ export interface EntryContext {
   demandEditable: (entry: BasketEntry) => boolean;
   /** What the read knows and the entries do not (plan 0137, section 4). */
   facts: BasketFacts;
+  /**
+   * What changed about each row since **this viewer** last looked, by merge key
+   * (plan 0138, section 7).
+   *
+   * By key rather than by line, because a mark belongs to the row: a line deleted
+   * from one household marks the row its name is still on in another, and there is
+   * no line id both of those share. Empty for a caller with no viewer to measure,
+   * which is what the admin and history reads are.
+   */
+  marks: ReadonlyMap<string, BasketRowMark>;
 }
 
 /** One entry, as the wire carries it. */
@@ -362,9 +376,10 @@ export function toRowView(
     state,
     note: note?.note ?? null,
     noteAt: note ? note.noteAt.toISOString() : null,
-    // Arrives with plan 0138. Until then a row carries no mark, and the field
-    // exists so that plan changes a value rather than the shape.
-    mark: null,
+    // One mark per row, decided by the fold in `changes/basket-marks.reader.ts`
+    // (plan 0138, section 7). Null when nothing about this row has moved since
+    // this viewer last looked, and null for every row of a read with no viewer.
+    mark: context.marks.get(group.key) ?? null,
     awaitingApproval: group.entries.some(
       (entry) => entry.approvalStatus === LineApprovalStatus.PENDING
     ),

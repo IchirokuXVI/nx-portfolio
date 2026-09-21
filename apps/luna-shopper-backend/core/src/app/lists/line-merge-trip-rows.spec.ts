@@ -8,6 +8,7 @@ import {
   ListLineGroupRemoval,
   ListLineItem,
 } from '../entities';
+import { fakeLineChanges } from './changes/line-change.fake';
 import { LineMergeService } from './line-merge.service';
 
 /**
@@ -24,6 +25,8 @@ import { LineMergeService } from './line-merge.service';
 const LIST = 'l-flat';
 const SURVIVOR = 'll-survivor';
 const ABSORBED = 'll-absorbed';
+/** Whoever renamed. The merge carries it onto the change and reads none of it. */
+const ACTOR = { userId: 'u-1', participantId: null, basketId: null };
 
 function lineFor(id: string, position: number): ListLine {
   return {
@@ -123,10 +126,13 @@ function tripRow(
 }
 
 async function mergeOver(rows: BasketTripRow[]): Promise<BasketTripRow[]> {
-  await new LineMergeService().merge(
+  await new LineMergeService(fakeLineChanges().recorder).merge(
     managerOver(rows),
     lineFor(SURVIVOR, 1),
-    lineFor(ABSORBED, 2)
+    lineFor(ABSORBED, 2),
+    // The merge records the one `MERGED` change itself (plan 0138, section 4). A
+    // stand in, because this file is about the trip rows the merge moves.
+    { list: { id: LIST, zoneId: 'z-1' }, actor: ACTOR }
   );
   return rows;
 }

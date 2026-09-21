@@ -28,6 +28,7 @@ import {
   ZoneMembership,
 } from '../entities';
 import { fakeCoreConfig } from './basket-config.fake';
+import { fakeBasketMarks } from './changes/basket-marks.fake';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketReadService } from './basket-read.service';
 import { BasketRevertService } from './basket-revert.service';
@@ -143,6 +144,9 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       sharing,
       listAccess,
       { order: async <T,>(_userId: string, rows: T[]) => rows } as never,
+      // What changed since somebody looked (plan 0138). The writes here answer a
+      // row rather than a banner, and the marks have their own file.
+      fakeBasketMarks(),
       // The skip window (plan 0137). Nothing here skips anything, and the two
       // that do have their own file.
       fakeCoreConfig()

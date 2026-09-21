@@ -101,6 +101,11 @@ export class BasketDemandService {
       lineId: entry.lineId,
       delta,
       expect: req.from,
+      // The change record names the person who moved it and the basket they
+      // moved it from, which is **not** the owner above (plan 0138, section 4):
+      // a guest shopping somebody else's list leaves a change with a participant
+      // and no account.
+      via: opened.via(),
     });
 
     opened.announceLinesChanged([entry.lineId], this.events);

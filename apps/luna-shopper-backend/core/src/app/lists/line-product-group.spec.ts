@@ -25,6 +25,7 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
+import { fakeLineChanges } from './changes/line-change.fake';
 import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
@@ -189,6 +190,7 @@ function build(options: Options = {}) {
       } as unknown as EntityManager),
   } as unknown as DataSource;
 
+  const changes = fakeLineChanges();
   const service = new LineService(
     dataSource,
     lineRepo as never,
@@ -203,10 +205,22 @@ function build(options: Options = {}) {
     } as unknown as CoreEventsPublisher,
     // No operator write here, so nothing reaches the trail.
     {} as never,
-    new LineMergeService()
+    new LineMergeService(changes.recorder),
+    // A product only edit records **no** change (plan 0138, section 2): it moves
+    // a row's options rather than what the list asks for. The stand in is what
+    // lets this file assert that.
+    changes.recorder
   );
 
-  return { service, lineItems, groupRemovals, saved, events, line };
+  return {
+    service,
+    lineItems,
+    groupRemovals,
+    saved,
+    events,
+    line,
+    recorded: changes.recorded,
+  };
 }
 
 /** What the line holds, and who each product belongs to. */
