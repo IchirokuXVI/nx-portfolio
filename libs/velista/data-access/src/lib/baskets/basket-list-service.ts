@@ -1,14 +1,14 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
-  CreateGeneratedListRequest,
-  GeneratedListRun,
-  GeneratedListSummary,
+  CreateBasketRequest,
+  BasketRun,
+  BasketSummary,
   Page,
-  SharedGeneratedListSummary,
-  WritableGeneratedListStatus,
+  SharedBasketSummary,
+  WritableBasketStatus,
 } from '@portfolio/velista/models';
-import { GeneratedListApi } from './generated-list-api';
+import { BasketListApi } from './basket-list-api';
 
 /**
  * The caller's generated shopping lists: making one, and reading the ones already made
@@ -32,16 +32,16 @@ import { GeneratedListApi } from './generated-list-api';
  * authenticated, and a guest holding a participant session cannot reach it with any
  * token they have (velista `0057`, section 2).
  */
-export interface GeneratedListServiceI {
+export interface BasketListServiceI {
   /**
    * The caller's baskets, newest first, cursor paginated
-   * (`GET /v1/generated-lists`, backend `0050` section 7).
+   * (`GET /v1/baskets`, backend `0050` section 7).
    *
    * `ARCHIVED` ones are left out by the server unless asked for, and nothing in this
    * app asks: no screen archives a basket, so a listing that included them would show
    * rows that this build cannot explain the state of.
    */
-  listMine(cursor?: string): Promise<Page<GeneratedListSummary>>;
+  listMine(cursor?: string): Promise<Page<BasketSummary>>;
 
   /**
    * The baskets other people shared with the caller, most recently shared first
@@ -50,16 +50,16 @@ export interface GeneratedListServiceI {
    * Still "mine" in this interface's sense: the caller is resolved from their own
    * token, and the rows are the ones they are a live registered participant of.
    */
-  listShared(cursor?: string): Promise<Page<SharedGeneratedListSummary>>;
+  listShared(cursor?: string): Promise<Page<SharedBasketSummary>>;
 
   /**
-   * Compose a basket (`POST /v1/generated-lists`, backend `0050` section 4).
+   * Compose a basket (`POST /v1/baskets`, backend `0050` section 4).
    *
    * Answers the run rather than the basket: what a run **skipped** is part of the
    * answer to "why is this basket what it is", and a caller that discarded it would
    * have nothing to show somebody asking where the milk went.
    */
-  create(request: CreateGeneratedListRequest): Promise<GeneratedListRun>;
+  create(request: CreateBasketRequest): Promise<BasketRun>;
 
   /**
    * Move a basket between statuses (`PATCH /v1/baskets/:id`, backend `0059`).
@@ -70,15 +70,15 @@ export interface GeneratedListServiceI {
    * are the same write in opposite directions.
    *
    * **It answers nothing**, and that is a decision rather than an omission. The
-   * server replies with a whole `GeneratedListView`, lines included, which is a
+   * server replies with a whole `BasketHeaderView`, lines included, which is a
    * different shape from the summaries this surface deals in and would have to be
    * counted down into one. The two readers of the change both learn it another way:
-   * `GeneratedListStore` flips the status it already holds, and every open basket,
+   * `BasketListStore` flips the status it already holds, and every open basket,
    * this caller's included, is told over the socket by `basket.updated`.
    */
   setStatus(
     basketId: string,
-    status: WritableGeneratedListStatus
+    status: WritableBasketStatus
   ): Promise<void>;
 }
 
@@ -89,7 +89,7 @@ export interface GeneratedListServiceI {
  * `ZONE_SERVICE` for the reason recorded there: a wrong default that quietly works is
  * worse than one that fails loudly.
  */
-export const GENERATED_LIST_SERVICE = serviceToken<GeneratedListServiceI>(
-  'GENERATED_LIST_SERVICE',
-  () => inject(GeneratedListApi)
+export const BASKET_LIST_SERVICE = serviceToken<BasketListServiceI>(
+  'BASKET_LIST_SERVICE',
+  () => inject(BasketListApi)
 );

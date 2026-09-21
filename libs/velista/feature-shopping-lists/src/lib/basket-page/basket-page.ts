@@ -19,7 +19,7 @@ import {
   BASKET_REOPEN_AVAILABLE,
   BasketStore,
   BasketViewStore,
-  GeneratedListStore,
+  BasketListStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
 import {
@@ -173,7 +173,7 @@ export class BasketPage {
    * app scoped and already constructed by the dashboard, and nothing here calls it
    * unless the control that reaches it was drawn, which is the owner's alone.
    */
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
 
   private readonly _id =
     this._route.snapshot.paramMap.get('basketId') ?? '';

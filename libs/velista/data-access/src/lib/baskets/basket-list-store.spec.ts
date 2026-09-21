@@ -1,20 +1,20 @@
 import { TestBed } from '@angular/core/testing';
 import type {
-  CreateGeneratedListRequest,
-  GeneratedListRun,
-  GeneratedListSummary,
+  CreateBasketRequest,
+  BasketRun,
+  BasketSummary,
   Page,
-  WritableGeneratedListStatus,
+  WritableBasketStatus,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { GatewayError } from '../errors';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import { RealtimeMemory } from '../realtime/realtime-memory';
 import {
-  GENERATED_LIST_SERVICE,
-  type GeneratedListServiceI,
-} from './generated-list-service';
-import { GeneratedListStore } from './generated-list-store';
+  BASKET_LIST_SERVICE,
+  type BasketListServiceI,
+} from './basket-list-service';
+import { BasketListStore } from './basket-list-store';
 
 /**
  * The store behind the dashboard card and the history (plan 0045, section 5).
@@ -24,7 +24,7 @@ import { GeneratedListStore } from './generated-list-store';
  * upsert, and the two opposite failure policies.
  */
 
-function summary(overrides: Partial<GeneratedListSummary> = {}) {
+function summary(overrides: Partial<BasketSummary> = {}) {
   return {
     id: 'gl1',
     kind: 'GENERATED',
@@ -34,11 +34,11 @@ function summary(overrides: Partial<GeneratedListSummary> = {}) {
     lineCount: 12,
     settledLineCount: 4,
     ...overrides,
-  } as GeneratedListSummary;
+  } as BasketSummary;
 }
 
 interface FakeOptions {
-  readonly pages?: readonly Page<GeneratedListSummary>[];
+  readonly pages?: readonly Page<BasketSummary>[];
   readonly listRejectsWith?: unknown;
   /** Rejects only a **cursored** call, so the first page lands and the second fails. */
   readonly nextPageRejectsWith?: unknown;
@@ -47,13 +47,13 @@ interface FakeOptions {
    * makes. Separate from `pages` so a test can say "the listing changed under us"
    * without disturbing the cursor walk that `pages` describes.
    */
-  readonly refreshPage?: Page<GeneratedListSummary>;
+  readonly refreshPage?: Page<BasketSummary>;
   readonly createRejectsWith?: unknown;
   /** What a status write fails with, for the rollback (velista `0057`). */
   readonly setStatusRejectsWith?: unknown;
 }
 
-/** A `GeneratedListServiceI` recording what it was asked, with no transport. */
+/** A `BasketListServiceI` recording what it was asked, with no transport. */
 function fakeService(options: FakeOptions = {}) {
   const calls: {
     method: string;
@@ -65,7 +65,7 @@ function fakeService(options: FakeOptions = {}) {
   let served = 0;
   let firstReads = 0;
 
-  const service: GeneratedListServiceI = {
+  const service: BasketListServiceI = {
     listShared: async () => ({ items: [], nextCursor: null }),
     listMine: async (cursor?: string) => {
       calls.push({
@@ -91,14 +91,14 @@ function fakeService(options: FakeOptions = {}) {
     },
     setStatus: async (
       basketId: string,
-      status: WritableGeneratedListStatus
+      status: WritableBasketStatus
     ) => {
       calls.push({ method: 'setStatus', basketId, status });
       if (options.setStatusRejectsWith !== undefined) {
         throw options.setStatusRejectsWith;
       }
     },
-    create: async (request: CreateGeneratedListRequest) => {
+    create: async (request: CreateBasketRequest) => {
       calls.push({ method: 'create' });
       if (options.createRejectsWith !== undefined) {
         throw options.createRejectsWith;
@@ -106,7 +106,7 @@ function fakeService(options: FakeOptions = {}) {
       return {
         list: summary({ id: 'made', name: request.name ?? null }),
         skipped: [],
-      } satisfies GeneratedListRun;
+      } satisfies BasketRun;
     },
   };
 
@@ -120,20 +120,20 @@ function harness(options: FakeOptions = {}) {
   TestBed.configureTestingModule({
     providers: [
       provideVelistaTesting(),
-      GeneratedListStore,
-      { provide: GENERATED_LIST_SERVICE, useValue: fake.service },
+      BasketListStore,
+      { provide: BASKET_LIST_SERVICE, useValue: fake.service },
       { provide: REALTIME_CLIENT, useExisting: RealtimeMemory },
     ],
   });
 
   return {
-    store: TestBed.inject(GeneratedListStore),
+    store: TestBed.inject(BasketListStore),
     realtime: TestBed.inject(RealtimeMemory),
     calls: fake.calls,
   };
 }
 
-describe('GeneratedListStore', () => {
+describe('BasketListStore', () => {
   describe('the first read', () => {
     it('holds what the listing answered, newest first as it arrived', async () => {
       const { store } = harness({

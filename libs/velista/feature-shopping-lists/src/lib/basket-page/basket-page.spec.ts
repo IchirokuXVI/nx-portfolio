@@ -11,7 +11,7 @@ import {
   BasketStore,
   BasketViewStore,
   GatewayError,
-  GeneratedListStore,
+  BasketListStore,
   SessionStore,
   type BasketSplitSaid,
 } from '@portfolio/velista/data-access';
@@ -372,7 +372,7 @@ async function render(options: Options = {}): Promise<{
       // any token they hold. The page injects it for every reader and calls it only
       // through a control the owner alone is drawn.
       {
-        provide: GeneratedListStore,
+        provide: BasketListStore,
         useValue: { setStatus: store.setStatus },
       },
       // Listed after the testing module's own, which is what makes it win: a

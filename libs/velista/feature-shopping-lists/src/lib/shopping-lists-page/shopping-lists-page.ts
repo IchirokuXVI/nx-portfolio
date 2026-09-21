@@ -16,7 +16,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   GatewayError,
-  GeneratedListStore,
+  BasketListStore,
   NetworkError,
   SharedListStore,
 } from '@portfolio/velista/data-access';
@@ -25,7 +25,7 @@ import {
   formatGeneratedDate,
   isOpenBasket,
   outcomeBreakdown,
-  type GeneratedListSummary,
+  type BasketSummary,
   type SharedListRowVm,
   type ShoppingListRowVm,
   type ShoppingListsState,
@@ -76,7 +76,7 @@ export type SharedListsState =
  *
  * The container, and the only thing here that touches a store (rule D1). Its one piece
  * of presentation logic is choosing which state to render, and that is a `computed`
- * over `GeneratedListStore` rather than a pure function of its own: unlike the
+ * over `BasketListStore` rather than a pure function of its own: unlike the
  * dashboard, this page has exactly one source and four states, so a separate selector
  * would be a function that forwards four signals and tests nothing that the store's own
  * spec does not already cover.
@@ -123,7 +123,7 @@ export type SharedListsState =
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ShoppingListsPage {
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
   private readonly _shared = inject(SharedListStore);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
@@ -307,7 +307,7 @@ export class ShoppingListsPage {
   /**
    * Say how many there now are, once per page of results.
    *
-   * The read of {@link GeneratedListStore.pagesLoaded} is what makes this fire, and the
+   * The read of {@link BasketListStore.pagesLoaded} is what makes this fire, and the
    * count is read **untracked** so that a settle moving `settledLineCount`, or a
    * basket appearing on the quiet refresh, cannot re-trigger it. That asymmetry is the
    * whole behaviour: pages speak, everything else is silent.
@@ -417,7 +417,7 @@ function correlationIdOf(error: unknown): string | null {
 
 /** What every history row draws, the reader's own lists and shared ones alike. */
 function rowOf(
-  list: GeneratedListSummary,
+  list: BasketSummary,
   names: ReadonlyMap<string, string>
 ): ShoppingListRowVm {
   return {

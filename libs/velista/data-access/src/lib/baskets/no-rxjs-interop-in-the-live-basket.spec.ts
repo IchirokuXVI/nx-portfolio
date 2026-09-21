@@ -30,7 +30,7 @@ import { join } from 'node:path';
  * nothing to do with the basket.
  */
 
-/** `src/lib/generated-lists` up to `libs/`. */
+/** `src/lib/baskets` up to `libs/`. */
 const LIBS = join(__dirname, '..', '..', '..', '..', '..');
 
 /**
@@ -42,9 +42,9 @@ const LIBS = join(__dirname, '..', '..', '..', '..', '..');
  * silently exempting the file it renamed.
  */
 const THE_LIVE_BASKET: readonly string[] = [
-  'velista/data-access/src/lib/generated-lists/basket-socket.ts',
-  'velista/data-access/src/lib/generated-lists/basket-store.ts',
-  'velista/data-access/src/lib/generated-lists/basket-session-store.ts',
+  'velista/data-access/src/lib/baskets/basket-socket.ts',
+  'velista/data-access/src/lib/baskets/basket-store.ts',
+  'velista/data-access/src/lib/baskets/basket-session-store.ts',
   'velista/data-access/src/lib/realtime/realtime-event-mapper.ts',
   'velista/data-access/src/lib/realtime/realtime-events.ts',
   'velista/data-access/src/lib/mapping/basket-mappers.ts',

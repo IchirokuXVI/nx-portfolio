@@ -1,4 +1,4 @@
-import type { BasketKind, GeneratedListStatus } from './enums';
+import type { BasketKind, BasketStatus } from './enums';
 
 /**
  * A generated shopping list: the basket somebody carries around the shop (plan 0045;
@@ -7,7 +7,7 @@ import type { BasketKind, GeneratedListStatus } from './enums';
  * **Called generated, never shopping list, inside the code.** `ShoppingList` in this
  * library is already a *zone* list, which is the thing a household writes into over a
  * week, and the two are not the same object at all: a zone list is a standing
- * collection people edit, a generated list is one trip composed from several of them
+ * collection people edit, a basket is one trip composed from several of them
  * and finished. The interface calls this one "your shopping list" because that is what
  * a person carrying it calls it, and rule N2 is exactly this: the translation layer
  * renames the word, the code never does.
@@ -29,12 +29,12 @@ import type { BasketKind, GeneratedListStatus } from './enums';
  * does not know the reader's language, and a stored English date in a Spanish account
  * would be wrong forever. {@link displayNames} is where it is built.
  */
-export interface GeneratedListSummary {
+export interface BasketSummary {
   readonly id: string;
   /** What this basket is (backend `0133`, section 2). */
   readonly kind: BasketKind;
   readonly name: string | null;
-  readonly status: GeneratedListStatus;
+  readonly status: BasketStatus;
   /** When the run composed it. The history is ordered by this, newest first. */
   readonly generatedAt: Date;
   readonly lineCount: number;
@@ -80,7 +80,7 @@ export interface GeneratedListSummary {
  * moment the reader was added, or the moment they joined by link when nobody added
  * them, and it is what the shared listing is ordered by.
  */
-export interface SharedGeneratedListSummary extends GeneratedListSummary {
+export interface SharedBasketSummary extends BasketSummary {
   readonly owner: {
     readonly userId: string;
     /** Their name in the one group both people share, or their account name. */
@@ -97,8 +97,8 @@ export interface SharedGeneratedListSummary extends GeneratedListSummary {
  * carrying, and backend `0133` section 7 deleted that rule: it was true of two frozen
  * copies of one line and false of two views of it.
  */
-export interface GeneratedListRun {
-  readonly list: GeneratedListSummary;
+export interface BasketRun {
+  readonly list: BasketSummary;
 }
 
 /**
@@ -109,7 +109,7 @@ export interface GeneratedListRun {
  * section 1). That is a different thing from naming today's lists one by one, and the
  * sheet says so under the tree: a group checked whole keeps including new lists.
  */
-export interface GeneratedListSource {
+export interface BasketSource {
   readonly zoneId: string;
   readonly listId: string | null;
 }
@@ -123,10 +123,10 @@ export interface GeneratedListSource {
  * one **per opening** rather than per press, which is what makes the second press of a
  * double tap idempotent rather than merely fast.
  */
-export interface CreateGeneratedListRequest {
+export interface CreateBasketRequest {
   readonly name?: string | null;
   readonly profileId?: string;
-  readonly sources?: readonly GeneratedListSource[];
+  readonly sources?: readonly BasketSource[];
   readonly idempotencyKey?: string;
   /**
    * People to share the basket with as it is made (velista `0085`, section 3).

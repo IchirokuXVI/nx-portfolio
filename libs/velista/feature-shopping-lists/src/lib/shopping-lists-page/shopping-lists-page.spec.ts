@@ -3,18 +3,18 @@ import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
-  fakeGeneratedListStore,
+  fakeBasketListStore,
   fakeSharedListStore,
   GatewayError,
-  provideFakeGeneratedListStore,
+  provideFakeBasketListStore,
   provideFakeSharedListStore,
-  type FakeGeneratedListStore,
+  type FakeBasketListStore,
   type FakeSharedListStore,
 } from '@portfolio/velista/data-access';
 import {
   formatGeneratedDate,
-  type GeneratedListSummary,
-  type SharedGeneratedListSummary,
+  type BasketSummary,
+  type SharedBasketSummary,
 } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
@@ -32,7 +32,7 @@ import { ShoppingListsPage } from './shopping-lists-page';
  * changes one thing about the world and asserts on the DOM.
  */
 
-function basket(overrides: Partial<GeneratedListSummary> = {}) {
+function basket(overrides: Partial<BasketSummary> = {}) {
   return {
     id: 'gl1',
     kind: 'GENERATED',
@@ -47,11 +47,11 @@ function basket(overrides: Partial<GeneratedListSummary> = {}) {
     notAvailableLineCount: 1,
     presentCount: 0,
     ...overrides,
-  } as GeneratedListSummary;
+  } as BasketSummary;
 }
 
 async function render(
-  store: FakeGeneratedListStore = fakeGeneratedListStore(),
+  store: FakeBasketListStore = fakeBasketListStore(),
   shared: FakeSharedListStore = fakeSharedListStore(),
   /** The URL the page is opened at, which is where the tab is read from. */
   url = '/'
@@ -64,7 +64,7 @@ async function render(
       provideRouter([]),
       provideVelistaTesting(),
       provideFakeBrowserFacade(),
-      provideFakeGeneratedListStore(store),
+      provideFakeBasketListStore(store),
       provideFakeSharedListStore(shared),
     ],
   }).compileComponents();
@@ -90,7 +90,7 @@ describe('ShoppingListsPage', () => {
   describe('the states', () => {
     it('shows skeleton rows while the listing is on its way', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([], { state: 'loading' })
+        fakeBasketListStore([], { state: 'loading' })
       );
 
       expect(query(fixture, 'lib-row-skeleton')).not.toBeNull();
@@ -102,7 +102,7 @@ describe('ShoppingListsPage', () => {
     // shopping lists yet" at somebody who has a hundred.
     it('treats idle as loading rather than as empty', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([], { state: 'idle' })
+        fakeBasketListStore([], { state: 'idle' })
       );
 
       expect(query(fixture, 'lib-row-skeleton')).not.toBeNull();
@@ -120,7 +120,7 @@ describe('ShoppingListsPage', () => {
 
     it('offers a retry with the support reference when the read failed', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([], {
+        fakeBasketListStore([], {
           state: 'failed',
           error: new GatewayError({
             code: 'internal',
@@ -142,7 +142,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('asks the store for the listing when it is created', async () => {
-      const store = fakeGeneratedListStore();
+      const store = fakeBasketListStore();
 
       await render(store);
 
@@ -153,7 +153,7 @@ describe('ShoppingListsPage', () => {
   describe('the rows', () => {
     it('draws one per trip, in the order the listing gave them', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([
+        fakeBasketListStore([
           basket({ id: 'a', name: 'Newest' }),
           basket({ id: 'b', name: 'Older', status: 'FINISHED' }),
         ])
@@ -167,7 +167,7 @@ describe('ShoppingListsPage', () => {
 
     // Never colour alone (section 7): the word is what says it.
     it('marks an open trip with the word, not only a colour', async () => {
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
 
       expect(text(fixture)).toContain('history.status.active');
     });
@@ -178,7 +178,7 @@ describe('ShoppingListsPage', () => {
     // `isOpenBasket`, against the one value backend `0133` left.
     it('says nothing about being shopped now on a status it cannot read', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'UNKNOWN' })])
+        fakeBasketListStore([basket({ status: 'UNKNOWN' })])
       );
 
       expect(text(fixture)).not.toContain('history.status.active');
@@ -186,7 +186,7 @@ describe('ShoppingListsPage', () => {
 
     it('says nothing about being shopped now on a finished trip', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'FINISHED' })])
+        fakeBasketListStore([basket({ status: 'FINISHED' })])
       );
 
       expect(text(fixture)).not.toContain('history.status.active');
@@ -203,7 +203,7 @@ describe('ShoppingListsPage', () => {
      */
     it('marks a finished trip, and keeps it in the listing', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'FINISHED' })])
+        fakeBasketListStore([basket({ status: 'FINISHED' })])
       );
 
       expect(all(fixture, 'lib-shopping-list-row')).toHaveLength(1);
@@ -211,7 +211,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('says nothing about being finished on a trip that is still live', async () => {
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
 
       expect(text(fixture)).not.toContain('history.status.finished');
     });
@@ -224,7 +224,7 @@ describe('ShoppingListsPage', () => {
      */
     it('claims nothing at all about a status it cannot read', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'UNKNOWN' })])
+        fakeBasketListStore([basket({ status: 'UNKNOWN' })])
       );
 
       expect(text(fixture)).not.toContain('history.status.finished');
@@ -233,7 +233,7 @@ describe('ShoppingListsPage', () => {
 
     it('titles an unnamed trip with its date rather than leaving it blank', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ name: null })])
+        fakeBasketListStore([basket({ name: null })])
       );
 
       const row = query(fixture, 'lib-shopping-list-row');
@@ -251,7 +251,7 @@ describe('ShoppingListsPage', () => {
   describe('what it refuses to offer', () => {
     it('gives no way to delete or archive anything', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket(), basket({ id: 'b' })])
+        fakeBasketListStore([basket(), basket({ id: 'b' })])
       );
 
       const html = (fixture.nativeElement as HTMLElement).innerHTML;
@@ -261,7 +261,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('gives each row exactly one control, which is opening it', async () => {
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
 
       const row = query(fixture, 'lib-shopping-list-row');
       expect(row?.querySelectorAll('button')).toHaveLength(1);
@@ -270,7 +270,7 @@ describe('ShoppingListsPage', () => {
 
   describe('paging', () => {
     it('draws a skeleton at the bottom while a further page is on its way', async () => {
-      const store = fakeGeneratedListStore([basket()]);
+      const store = fakeBasketListStore([basket()]);
       store.setLoadingMore(true);
       const fixture = await render(store);
 
@@ -280,7 +280,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('asks for the next page when the scroller nears the bottom', async () => {
-      const store = fakeGeneratedListStore([basket()], { hasMore: true });
+      const store = fakeBasketListStore([basket()], { hasMore: true });
       const fixture = await render(store);
 
       const scroller = query(fixture, '.scroller') as HTMLElement;
@@ -296,7 +296,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('leaves it alone while there is still a screenful to read', async () => {
-      const store = fakeGeneratedListStore([basket()], { hasMore: true });
+      const store = fakeBasketListStore([basket()], { hasMore: true });
       const fixture = await render(store);
 
       const scroller = query(fixture, '.scroller') as HTMLElement;
@@ -314,7 +314,7 @@ describe('ShoppingListsPage', () => {
 
   describe('where it goes', () => {
     it('opens the basket a row names', async () => {
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
       const router = TestBed.inject(Router);
       const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
 
@@ -335,7 +335,7 @@ describe('ShoppingListsPage', () => {
      * is what keeps the history underneath and its scroll intact.
      */
     it('opens the generation sheet over the history, not over the dashboard', async () => {
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
       const router = TestBed.inject(Router);
       const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
 
@@ -348,7 +348,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('offers the same sheet from the empty state', async () => {
-      const fixture = await render(fakeGeneratedListStore([]));
+      const fixture = await render(fakeBasketListStore([]));
       const router = TestBed.inject(Router);
       const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
 
@@ -363,14 +363,14 @@ describe('ShoppingListsPage', () => {
     it('has an outlet for the sheet to render into', async () => {
       // Rule E1 makes the sheet a child route, and a child route with no outlet to
       // render into is a navigation that changes the URL and draws nothing.
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
 
       expect(query(fixture, 'router-outlet')).not.toBeNull();
     });
 
     it('announces how many rows there are, once, rather than one per row', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket(), basket({ id: 'b' })])
+        fakeBasketListStore([basket(), basket({ id: 'b' })])
       );
 
       const live = all(fixture, '[aria-live]');
@@ -391,7 +391,7 @@ describe('ShoppingListsPage', () => {
      * is a quiet refresh, rows plus `pagesLoaded` is a page arriving.
      */
     it('stays silent when a settle refresh changes the listing under it', async () => {
-      const store = fakeGeneratedListStore([basket(), basket({ id: 'b' })]);
+      const store = fakeBasketListStore([basket(), basket({ id: 'b' })]);
       const fixture = await render(store);
 
       const spoken = fixture.componentInstance.announced();
@@ -406,7 +406,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('speaks again when a further page lands', async () => {
-      const store = fakeGeneratedListStore([basket()]);
+      const store = fakeBasketListStore([basket()]);
       const fixture = await render(store);
 
       store.landPage([basket(), basket({ id: 'b' }), basket({ id: 'c' })]);
@@ -422,7 +422,7 @@ describe('ShoppingListsPage', () => {
 
     it('says nothing at all before any page has arrived', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([], { state: 'loading', pagesLoaded: 0 })
+        fakeBasketListStore([], { state: 'loading', pagesLoaded: 0 })
       );
 
       expect(fixture.componentInstance.announced()).toBe('');
@@ -441,7 +441,7 @@ describe('ShoppingListsPage', () => {
   describe('what the rows say happened', () => {
     it('says what was got and what was unavailable', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([
+        fakeBasketListStore([
           basket({
             lineCount: 4,
             settledLineCount: 4,
@@ -459,7 +459,7 @@ describe('ShoppingListsPage', () => {
     // "0 not available" is furniture on the ordinary trip where the shop had everything.
     it('drops the unavailable half when there was none', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([
+        fakeBasketListStore([
           basket({
             lineCount: 4,
             settledLineCount: 3,
@@ -481,7 +481,7 @@ describe('ShoppingListsPage', () => {
      */
     it('says finished where the breakdown cannot account for the finished lines', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([
+        fakeBasketListStore([
           basket({
             lineCount: 4,
             settledLineCount: 3,
@@ -499,8 +499,8 @@ describe('ShoppingListsPage', () => {
 
 /** A basket somebody else shared with the reader. */
 function sharedBasket(
-  overrides: Partial<SharedGeneratedListSummary> = {}
-): SharedGeneratedListSummary {
+  overrides: Partial<SharedBasketSummary> = {}
+): SharedBasketSummary {
   return {
     ...basket({ id: 'sh1', name: 'Marta s shop' }),
     owner: { userId: 'u-marta', name: 'Marta' },
@@ -515,7 +515,7 @@ describe('ShoppingListsPage: the two tabs', () => {
     fixture.debugElement.query(By.directive(Tabs))?.componentInstance as Tabs;
 
   it('opens on My lists and reads only its store', async () => {
-    const mine = fakeGeneratedListStore();
+    const mine = fakeBasketListStore();
     const shared = fakeSharedListStore();
 
     const fixture = await render(mine, shared);
@@ -529,7 +529,7 @@ describe('ShoppingListsPage: the two tabs', () => {
   });
 
   it('keeps tab=shared through a reload, reading only the shared store', async () => {
-    const mine = fakeGeneratedListStore();
+    const mine = fakeBasketListStore();
     const shared = fakeSharedListStore();
 
     const fixture = await render(mine, shared, '/?tab=shared');
@@ -540,7 +540,7 @@ describe('ShoppingListsPage: the two tabs', () => {
   });
 
   it('writes the chosen tab into the URL and loads each store once', async () => {
-    const mine = fakeGeneratedListStore();
+    const mine = fakeBasketListStore();
     const shared = fakeSharedListStore();
     const fixture = await render(mine, shared);
     const router = TestBed.inject(Router);
@@ -590,7 +590,7 @@ describe('ShoppingListsPage: the two tabs', () => {
   });
 
   it('draws no byline on the reader s own rows', async () => {
-    const fixture = await render(fakeGeneratedListStore([basket()]));
+    const fixture = await render(fakeBasketListStore([basket()]));
 
     const row = fixture.debugElement.query(By.directive(ShoppingListRow))
       ?.componentInstance as ShoppingListRow;

@@ -7,7 +7,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BasketStore,
-  GeneratedListStore,
+  BasketListStore,
 } from '@portfolio/velista/data-access';
 import {
   provideVelistaTesting,
@@ -28,7 +28,7 @@ import { FinishSheet } from './finish-sheet';
  * consequence to warn about.
  *
  * **The write goes to the owner's surface**, not to the participant one. The route
- * behind `GeneratedListStore` is account authenticated, which is what makes "the
+ * behind `BasketListStore` is account authenticated, which is what makes "the
  * owner and nobody else" a fact about the server rather than about a template.
  *
  * **The basket is re-read before the sheet closes.** The screen underneath is drawn
@@ -68,7 +68,7 @@ async function render(world: World = {}) {
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       { provide: BasketStore, useValue: basket },
-      { provide: GeneratedListStore, useValue: generated },
+      { provide: BasketListStore, useValue: generated },
       { provide: SheetNavigation, useValue: sheets },
       {
         provide: Router,

@@ -6,7 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import type {
-  SharedGeneratedListSummary,
+  SharedBasketSummary,
   ShoppingListsLoad,
 } from '@portfolio/velista/models';
 import {
@@ -14,14 +14,14 @@ import {
   type RealtimeClientI,
 } from '../realtime/realtime-client';
 import {
-  GENERATED_LIST_SERVICE,
-  type GeneratedListServiceI,
-} from './generated-list-service';
+  BASKET_LIST_SERVICE,
+  type BasketListServiceI,
+} from './basket-list-service';
 
 /**
  * How long a burst of access changes gathers before the listing is read again.
  *
- * The same window `GeneratedListStore` gives a burst of settles. An owner ticking four
+ * The same window `BasketListStore` gives a burst of settles. An owner ticking four
  * flatmates into a basket sends four events a second apart, and that is one read.
  */
 const ACCESS_REFRESH_MS = 1500;
@@ -30,7 +30,7 @@ const ACCESS_REFRESH_MS = 1500;
  * The baskets other people shared with the reader: the Shared lists tab of the
  * history (velista `0085`, section 5).
  *
- * `GeneratedListStore`'s shape exactly, over a different read: one array in the
+ * `BasketListStore`'s shape exactly, over a different read: one array in the
  * server's order, its own cursor, a load state for the skeleton and the error, and a
  * page counter the live region is keyed on. It is a second store rather than a second
  * array on that one because the two listings page independently, and a tab that is
@@ -47,12 +47,12 @@ const ACCESS_REFRESH_MS = 1500;
 // Provided by the app layer, never root: rule D5, plan 0004 section 9.
 @Injectable()
 export class SharedListStore {
-  private readonly _service = inject<GeneratedListServiceI>(
-    GENERATED_LIST_SERVICE
+  private readonly _service = inject<BasketListServiceI>(
+    BASKET_LIST_SERVICE
   );
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
 
-  private readonly _lists = signal<readonly SharedGeneratedListSummary[]>([]);
+  private readonly _lists = signal<readonly SharedBasketSummary[]>([]);
   private readonly _state = signal<ShoppingListsLoad>('idle');
   private readonly _error = signal<unknown>(null);
   private readonly _cursor = signal<string | null>(null);
@@ -74,7 +74,7 @@ export class SharedListStore {
 
   constructor() {
     // By hand, not `takeUntilDestroyed`: `@angular/core/rxjs-interop` is a secondary
-    // entry point module federation does not dedupe (see `GeneratedListStore`).
+    // entry point module federation does not dedupe (see `BasketListStore`).
     const subscription = this._realtime.events.subscribe((event) => {
       switch (event.type) {
         case 'basket.unshared':

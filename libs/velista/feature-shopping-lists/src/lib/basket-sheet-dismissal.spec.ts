@@ -11,7 +11,7 @@ import {
   BasketViewStore,
   ContactStore,
   fakeZoneStore,
-  GeneratedListStore,
+  BasketListStore,
   LINE_SERVICE,
   provideFakeZoneStore,
   SessionStore,
@@ -204,7 +204,7 @@ async function render(
       // to. These tests are about the URL a sheet leaves on and never press the
       // confirm, so what matters is that the injection resolves.
       {
-        provide: GeneratedListStore,
+        provide: BasketListStore,
         useValue: { setStatus: jest.fn().mockResolvedValue(true) },
       },
       // The share sheet's people (velista `0085`). Nobody to choose, since these

@@ -3,7 +3,7 @@ import type {
   BasketParticipant,
   BasketPresenceEntry,
   Comment,
-  GeneratedListSummary,
+  BasketSummary,
   Line,
   LineSettlement,
   ListPermission,
@@ -179,7 +179,7 @@ export type RealtimeEvent =
    * Some lines are, or are no longer, in somebody's live basket (backend plan
    * 0052), on the **zone** room.
    *
-   * The one zone event a generated list emits, so a line can show that somebody is out
+   * The one zone event a basket emits, so a line can show that somebody is out
    * buying it. The payload says **that** those lines are claimed and **whose**, and
    * nothing else: not what else is in the basket, not where they are shopping, not
    * what it costs, and never which basket.
@@ -264,7 +264,7 @@ export type RealtimeEvent =
        * two counts, and the screen that wants the lines fetches them itself.
        */
       readonly type: 'basket.created' | 'basket.updated';
-      readonly list: GeneratedListSummary;
+      readonly list: BasketSummary;
     }
   | {
       /**
@@ -289,7 +289,7 @@ export type RealtimeEvent =
        * The line that moved, or null when the payload did not carry a readable one.
        *
        * Kept since velista `0048`, and it used to be dropped here on the grounds that
-       * a **summary** cannot use it. That is true of `GeneratedListStore` and false of
+       * a **summary** cannot use it. That is true of `BasketListStore` and false of
        * the basket screen, which holds the lines themselves and wants exactly this: it
        * merges the line by id and one row moves, with no request at all.
        *
@@ -300,7 +300,7 @@ export type RealtimeEvent =
        * and keeps what it holds, which is what makes that safe.
        *
        * Null rather than dropping the whole event, because the id is the half
-       * `GeneratedListStore` needs and it is still readable when the line is not.
+       * `BasketListStore` needs and it is still readable when the line is not.
        */
       readonly line: BasketLine | null;
     }
@@ -324,7 +324,7 @@ export type RealtimeEvent =
        * the reason every broadcast on this room is.
        *
        * Required rather than nullable, unlike the moved event's: there the id alone
-       * is still worth something, because `GeneratedListStore` refetches a summary
+       * is still worth something, because `BasketListStore` refetches a summary
        * from it. Here the line is the entire content of the event, and appending a
        * row this build cannot read would put an empty line in a shop.
        */

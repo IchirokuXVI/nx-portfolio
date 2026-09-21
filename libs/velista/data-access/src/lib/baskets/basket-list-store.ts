@@ -7,21 +7,21 @@ import {
 } from '@angular/core';
 import {
   isOpenBasket,
-  type CreateGeneratedListRequest,
-  type GeneratedListRun,
-  type GeneratedListStatus,
-  type GeneratedListSummary,
+  type CreateBasketRequest,
+  type BasketRun,
+  type BasketStatus,
+  type BasketSummary,
   type ShoppingListsLoad,
-  type WritableGeneratedListStatus,
+  type WritableBasketStatus,
 } from '@portfolio/velista/models';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
 } from '../realtime/realtime-client';
 import {
-  GENERATED_LIST_SERVICE,
-  type GeneratedListServiceI,
-} from './generated-list-service';
+  BASKET_LIST_SERVICE,
+  type BasketListServiceI,
+} from './basket-list-service';
 
 /**
  * How long a burst of settles is allowed to gather before the listing is read again.
@@ -38,7 +38,7 @@ const SETTLE_REFRESH_MS = 1500;
  *
  * ## Why it lives in `data-access` and is provided by the app
  *
- * `ZoneStore`'s reason: it resolves `GENERATED_LIST_SERVICE`, so at the root it would
+ * `ZoneStore`'s reason: it resolves `BASKET_LIST_SERVICE`, so at the root it would
  * get that token's own default rather than whatever the app bound and would quietly
  * serve fixture baskets beside a real account (rule D5). And it is app scoped rather
  * than page scoped for a second reason, the one `ShoppingProfileStore` gives: two
@@ -71,13 +71,13 @@ const SETTLE_REFRESH_MS = 1500;
  */
 // Provided by the app layer, never root: rule D5, plan 0004 section 9.
 @Injectable()
-export class GeneratedListStore {
-  private readonly _service = inject<GeneratedListServiceI>(
-    GENERATED_LIST_SERVICE
+export class BasketListStore {
+  private readonly _service = inject<BasketListServiceI>(
+    BASKET_LIST_SERVICE
   );
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
 
-  private readonly _lists = signal<readonly GeneratedListSummary[]>([]);
+  private readonly _lists = signal<readonly BasketSummary[]>([]);
   private readonly _state = signal<ShoppingListsLoad>('idle');
   private readonly _error = signal<unknown>(null);
   private readonly _cursor = signal<string | null>(null);
@@ -143,7 +143,7 @@ export class GeneratedListStore {
    * the way back into it is the only reason this signal exists. Backend plan 0133
    * deleted the second spelling, so there is one value to ask about now.
    */
-  readonly active = computed<readonly GeneratedListSummary[]>(() =>
+  readonly active = computed<readonly BasketSummary[]>(() =>
     this._lists().filter((list) => isOpenBasket(list.status))
   );
 
@@ -268,7 +268,7 @@ export class GeneratedListStore {
    * failed. That is the opposite of {@link loadMore} and for the opposite reason: there
    * is nothing already on screen to protect, and the person is waiting on an answer.
    */
-  async create(request: CreateGeneratedListRequest): Promise<GeneratedListRun> {
+  async create(request: CreateBasketRequest): Promise<BasketRun> {
     const run = await this._service.create(request);
     this._upsert(run.list);
     return run;
@@ -296,7 +296,7 @@ export class GeneratedListStore {
    */
   async setStatus(
     basketId: string,
-    status: WritableGeneratedListStatus
+    status: WritableBasketStatus
   ): Promise<boolean> {
     const before = this._lists().find((list) => list.id === basketId);
     this._setStatusLocally(basketId, status);
@@ -371,7 +371,7 @@ export class GeneratedListStore {
    * settled a line. The page is authoritative for the rows it covers, including their
    * disappearance, and everything below it keeps its place.
    */
-  private _mergeFirstPage(items: readonly GeneratedListSummary[]): void {
+  private _mergeFirstPage(items: readonly BasketSummary[]): void {
     this._lists.update((held) => {
       const covered = new Set(items.map((item) => item.id));
       return [...items, ...held.filter((list) => !covered.has(list.id))];
@@ -395,7 +395,7 @@ export class GeneratedListStore {
    */
   private _setStatusLocally(
     basketId: string,
-    status: GeneratedListStatus
+    status: BasketStatus
   ): void {
     this._lists.update((lists) =>
       lists.map((list) =>
@@ -404,7 +404,7 @@ export class GeneratedListStore {
     );
   }
 
-  private _upsert(list: GeneratedListSummary): void {
+  private _upsert(list: BasketSummary): void {
     this._lists.update((lists) => {
       const at = lists.findIndex((candidate) => candidate.id === list.id);
       if (at < 0) {

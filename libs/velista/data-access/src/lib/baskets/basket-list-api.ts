@@ -1,24 +1,24 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
-  CreateGeneratedListRequest,
-  GeneratedListRun,
-  GeneratedListSummary,
+  CreateBasketRequest,
+  BasketRun,
+  BasketSummary,
   Page,
-  SharedGeneratedListSummary,
-  WritableGeneratedListStatus,
+  SharedBasketSummary,
+  WritableBasketStatus,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
 import {
-  toGeneratedListRun,
-  toGeneratedListSummary,
+  toBasketRun,
+  toBasketSummary,
   toPage,
-  toSharedGeneratedListSummary,
+  toSharedBasketSummary,
 } from '../mapping/mappers';
 import { required } from '../mapping/required';
-import type { GeneratedListServiceI } from './generated-list-service';
+import type { BasketListServiceI } from './basket-list-service';
 
 /**
  * How many trips a page of the history holds.
@@ -32,17 +32,17 @@ const HISTORY_PAGE_SIZE = 20;
 
 /**
  * The caller's generated shopping lists, over HTTP. The default behind
- * `GENERATED_LIST_SERVICE`.
+ * `BASKET_LIST_SERVICE`.
  *
  * Provided by the app layer and never at root (rule D5): it depends on the `HttpClient`
  * the app configures.
  */
 @Injectable()
-export class GeneratedListApi implements GeneratedListServiceI {
+export class BasketListApi implements BasketListServiceI {
   private readonly _http = inject(HttpClient);
   private readonly _urls = inject(ApiUrl);
 
-  async listMine(cursor?: string): Promise<Page<GeneratedListSummary>> {
+  async listMine(cursor?: string): Promise<Page<BasketSummary>> {
     let params = new HttpParams().set('limit', HISTORY_PAGE_SIZE);
     if (cursor !== undefined) {
       params = params.set('cursor', cursor);
@@ -55,10 +55,10 @@ export class GeneratedListApi implements GeneratedListServiceI {
       })
     );
 
-    return toPage(body, toGeneratedListSummary);
+    return toPage(body, toBasketSummary);
   }
 
-  async listShared(cursor?: string): Promise<Page<SharedGeneratedListSummary>> {
+  async listShared(cursor?: string): Promise<Page<SharedBasketSummary>> {
     let params = new HttpParams().set('limit', HISTORY_PAGE_SIZE);
     if (cursor !== undefined) {
       params = params.set('cursor', cursor);
@@ -71,7 +71,7 @@ export class GeneratedListApi implements GeneratedListServiceI {
       })
     );
 
-    return toPage(body, toSharedGeneratedListSummary);
+    return toPage(body, toSharedBasketSummary);
   }
 
   /**
@@ -83,7 +83,7 @@ export class GeneratedListApi implements GeneratedListServiceI {
    * `listId` is the meaningful value here: it is what stores "every list in this group,
    * including ones made later" rather than today's list ids frozen in.
    */
-  async create(request: CreateGeneratedListRequest): Promise<GeneratedListRun> {
+  async create(request: CreateBasketRequest): Promise<BasketRun> {
     const body = await firstValueFrom(
       this._http.post<unknown>(
         this._lists(),
@@ -114,7 +114,7 @@ export class GeneratedListApi implements GeneratedListServiceI {
       )
     );
 
-    return required(toGeneratedListRun(body), 'basket.create');
+    return required(toBasketRun(body), 'basket.create');
   }
 
   /**
@@ -125,12 +125,12 @@ export class GeneratedListApi implements GeneratedListServiceI {
    * takes a name and a default target list too, and a request that spread the whole
    * basket over them would write back whatever this client last read.
    *
-   * The answer is a `GeneratedListView` and is deliberately dropped. See
-   * `GeneratedListServiceI.setStatus` for who learns about the change instead.
+   * The answer is a `BasketHeaderView` and is deliberately dropped. See
+   * `BasketListServiceI.setStatus` for who learns about the change instead.
    */
   async setStatus(
     basketId: string,
-    status: WritableGeneratedListStatus
+    status: WritableBasketStatus
   ): Promise<void> {
     await firstValueFrom(
       this._http.patch<unknown>(

@@ -17,7 +17,7 @@ import {
   AccountNotice,
   AUTH_SERVICE,
   GatewayError,
-  GeneratedListStore,
+  BasketListStore,
   hasOthers,
   MemberNames,
   NetworkError,
@@ -106,7 +106,7 @@ import { selectHomeState } from './select-home-state';
 })
 export class HomePage {
   private readonly _zoneStore = inject(ZoneStore);
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
   private readonly _presence = inject(PresenceStore);
   private readonly _names = inject(MemberNames);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
@@ -146,7 +146,7 @@ export class HomePage {
   /**
    * The caller's `ACTIVE` baskets, newest first, and their resolved display names.
    *
-   * Both come off `GeneratedListStore`, which is app scoped, so moving between the
+   * Both come off `BasketListStore`, which is app scoped, so moving between the
    * dashboard and the history does not refetch the listing.
    *
    * The names are built here rather than in `selectHomeState` because naming an unnamed
@@ -394,7 +394,7 @@ export class HomePage {
     // No room is subscribed to for it. `basket.created` and `.updated` are
     // addressed to the owner's own sessions, which this client already holds, so unlike
     // the resume card this needs no `subscribeList` at all. The one thing that does not
-    // arrive is a settle, which core publishes to the basket's room; `GeneratedListStore`
+    // arrive is a settle, which core publishes to the basket's room; `BasketListStore`
     // documents that gap where it applies the events.
     void this._generated.load();
 

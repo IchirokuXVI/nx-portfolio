@@ -11,7 +11,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BasketStore,
-  GeneratedListStore,
+  BasketListStore,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
 import {
@@ -52,7 +52,7 @@ import { basketPath } from '../basket-paths';
  *
  * ## Two stores, and why
  *
- * The **write** is on `GeneratedListStore`, whose every method is the owner's and
+ * The **write** is on `BasketListStore`, whose every method is the owner's and
  * whose transport is account authenticated: a guest holding a participant session
  * cannot reach that route with any token they have, which is what makes section 2's
  * "the owner and nobody else" a fact about the server rather than about this
@@ -73,7 +73,7 @@ import { basketPath } from '../basket-paths';
 })
 export class FinishSheet {
   private readonly _basket = inject(BasketStore);
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);

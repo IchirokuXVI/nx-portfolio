@@ -1,14 +1,14 @@
 import { Injectable } from '@angular/core';
 import type {
-  CreateGeneratedListRequest,
-  GeneratedListRun,
-  GeneratedListSummary,
+  CreateBasketRequest,
+  BasketRun,
+  BasketSummary,
   Page,
-  SharedGeneratedListSummary,
-  WritableGeneratedListStatus,
+  SharedBasketSummary,
+  WritableBasketStatus,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
-import type { GeneratedListServiceI } from './generated-list-service';
+import type { BasketListServiceI } from './basket-list-service';
 
 /** A page of the fake history, matching the real one so pagination is exercised. */
 const PAGE_SIZE = 20;
@@ -30,22 +30,22 @@ const PAGE_SIZE = 20;
  *   by every backend-less run.
  */
 @Injectable()
-export class GeneratedListMemory implements GeneratedListServiceI {
+export class BasketListMemory implements BasketListServiceI {
   /** Newest first, which is the order the real listing answers in. */
-  private _lists: GeneratedListSummary[] = [];
+  private _lists: BasketSummary[] = [];
 
   /** What each idempotency key already produced, for the replay. */
-  private readonly _byKey = new Map<string, GeneratedListRun>();
+  private readonly _byKey = new Map<string, BasketRun>();
 
   private _nextId = 1;
 
   /** Baskets other people shared with the caller. Empty, like the history. */
-  shared: SharedGeneratedListSummary[] = [];
+  shared: SharedBasketSummary[] = [];
 
   /** What the last create asked to share with, for specs to read back. */
   lastMemberUserIds: readonly string[] | undefined;
 
-  async listMine(cursor?: string): Promise<Page<GeneratedListSummary>> {
+  async listMine(cursor?: string): Promise<Page<BasketSummary>> {
     // The cursor is the index, which is all a fake needs: the real one is opaque and
     // the client never reads into it, so anything the client round trips unchanged
     // exercises the same code path.
@@ -60,7 +60,7 @@ export class GeneratedListMemory implements GeneratedListServiceI {
     };
   }
 
-  async listShared(cursor?: string): Promise<Page<SharedGeneratedListSummary>> {
+  async listShared(cursor?: string): Promise<Page<SharedBasketSummary>> {
     const from = cursor === undefined ? 0 : Number.parseInt(cursor, 10);
     const start = Number.isNaN(from) ? 0 : from;
     const next = start + PAGE_SIZE;
@@ -71,7 +71,7 @@ export class GeneratedListMemory implements GeneratedListServiceI {
     };
   }
 
-  async create(request: CreateGeneratedListRequest): Promise<GeneratedListRun> {
+  async create(request: CreateBasketRequest): Promise<BasketRun> {
     this.lastMemberUserIds = request.memberUserIds;
     const key = request.idempotencyKey;
     if (key !== undefined) {
@@ -93,7 +93,7 @@ export class GeneratedListMemory implements GeneratedListServiceI {
       });
     }
 
-    const summary: GeneratedListSummary = {
+    const summary: BasketSummary = {
       id: `gl-${this._nextId++}`,
       // A run composes a trip, always. The permanent basket of backend `0136` is
       // not made by anything here.
@@ -121,7 +121,7 @@ export class GeneratedListMemory implements GeneratedListServiceI {
 
     this._lists = [summary, ...this._lists];
 
-    const run: GeneratedListRun = { list: summary };
+    const run: BasketRun = { list: summary };
     if (key !== undefined) {
       this._byKey.set(key, run);
     }
@@ -140,7 +140,7 @@ export class GeneratedListMemory implements GeneratedListServiceI {
    */
   async setStatus(
     basketId: string,
-    status: WritableGeneratedListStatus
+    status: WritableBasketStatus
   ): Promise<void> {
     const at = this._lists.findIndex((list) => list.id === basketId);
     if (at < 0) {

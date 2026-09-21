@@ -21,7 +21,7 @@ import {
 export const BASKET_PATHS = {
   /** The history listing (`0045`), and the prefix the basket sits under. */
   list: 'shopping-lists',
-  /** One basket, the screen `0044` is about. Takes a generated list id. */
+  /** One basket, the screen `0044` is about. Takes a basket id. */
   basket: 'shopping-lists/:basketId',
   /**
    * The guest join screen, on a short segment because it is the one path in this

@@ -1,6 +1,6 @@
 import {
   displayNames,
-  type GeneratedListSummary,
+  type BasketSummary,
   type Identity,
   type MyZone,
 } from '@portfolio/velista/models';
@@ -41,8 +41,8 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
 }
 
 function basket(
-  overrides: Partial<GeneratedListSummary> = {}
-): GeneratedListSummary {
+  overrides: Partial<BasketSummary> = {}
+): BasketSummary {
   return {
     id: 'gl1',
     kind: 'GENERATED',
@@ -59,7 +59,7 @@ function basket(
  * The container's own pairing of a listing with its names, so a spec cannot
  * accidentally test a card named from a different set than it was selected from.
  */
-function withNames(lists: readonly GeneratedListSummary[]) {
+function withNames(lists: readonly BasketSummary[]) {
   return {
     activeShoppingLists: lists,
     shoppingListNames: displayNames(lists, (date) =>

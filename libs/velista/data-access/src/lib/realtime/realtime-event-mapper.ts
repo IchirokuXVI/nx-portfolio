@@ -5,7 +5,7 @@ import {
 } from '../mapping/basket-mappers';
 import {
   toComment,
-  toGeneratedListFromView,
+  toBasketFromView,
   toLine,
   toLineSettlement,
   toListPermissions,
@@ -302,14 +302,14 @@ export function toRealtimeEvent(
       // build cannot read is dropped and counted rather than applied, which for these
       // two means the card keeps whatever the last read said instead of losing its
       // counts to an unreadable event.
-      const list = toGeneratedListFromView(payload);
+      const list = toBasketFromView(payload);
       return list === null ? null : { type: name, list };
     }
 
     case 'basket.lineSettled':
     case 'basket.lineUpdated': {
       // **Both halves, because there are two listeners with different needs.** The
-      // basket id is what `GeneratedListStore` wants: it holds summaries, and a
+      // basket id is what `BasketListStore` wants: it holds summaries, and a
       // settled line cannot say whether `settledLineCount` should move, so it refetches.
       // The line is what the basket screen wants: it holds the lines, so one merge by
       // id moves one row with no request at all.

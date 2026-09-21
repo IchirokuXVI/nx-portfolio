@@ -44,7 +44,7 @@ import { BasketSocket } from './basket-socket';
  *
  * Four people in a shop settling lines produce a stream of broadcasts, and the two
  * events that cannot be applied without asking (a participant moving, the basket
- * itself changing) would otherwise be one request each. `GeneratedListStore` coalesces
+ * itself changing) would otherwise be one request each. `BasketListStore` coalesces
  * on the same reasoning and the same order of delay.
  */
 const REFRESH_DEBOUNCE_MS = 1500;
@@ -492,7 +492,7 @@ export class BasketStore {
   /**
    * Lines whose newly raised zone line is waiting for its list to approve it.
    *
-   * **A stopgap for a backend gap, and session local.** `GeneratedListLineOriginView`
+   * **A stopgap for a backend gap, and session local.** `BasketLineOriginView`
    * carries no approval state, so after a reload the row cannot say a raised line is
    * waiting (velista `0056`, section 5.1). What this holds is what *this* session's
    * own write was told, through the origin the units sheet's write answers with

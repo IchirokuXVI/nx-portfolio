@@ -17,7 +17,7 @@ import type { LocalizedName } from './shopping-profile';
  * the boundary, never the gateway's DTOs passed through. The names are the app's
  * own — a `GeneratedListBasketLineView` on the wire is a {@link BasketLine} here,
  * because the screen is called the basket and nothing in the interface says
- * "generated list".
+ * "basket".
  *
  * ## The one idea the whole file turns on
  *

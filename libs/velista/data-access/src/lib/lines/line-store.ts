@@ -916,7 +916,7 @@ export class LineStore {
    * name is resolved by the page, because this store holds lines and not people.
    *
    * Fed by `line.claimChanged` on the zone room, which is the one zone event a
-   * generated list emits. A line this client has not loaded is skipped rather than
+   * basket emits. A line this client has not loaded is skipped rather than
    * remembered: there is no row to mark, and the read that eventually brings the line
    * in carries the claim with it.
    */

@@ -1,20 +1,20 @@
 import { TestBed } from '@angular/core/testing';
 import type {
   Page,
-  SharedGeneratedListSummary,
+  SharedBasketSummary,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import { RealtimeMemory } from '../realtime/realtime-memory';
 import {
-  GENERATED_LIST_SERVICE,
-  type GeneratedListServiceI,
-} from './generated-list-service';
+  BASKET_LIST_SERVICE,
+  type BasketListServiceI,
+} from './basket-list-service';
 import { SharedListStore } from './shared-list-store';
 
 /** The Shared lists tab's store (velista `0085`, section 5, test 7). */
 
-function shared(id: string): SharedGeneratedListSummary {
+function shared(id: string): SharedBasketSummary {
   return {
     id,
     kind: 'GENERATED',
@@ -31,12 +31,12 @@ function shared(id: string): SharedGeneratedListSummary {
   };
 }
 
-function harness(pages: readonly Page<SharedGeneratedListSummary>[]) {
+function harness(pages: readonly Page<SharedBasketSummary>[]) {
   TestBed.resetTestingModule();
   const reads: (string | undefined)[] = [];
   let firstReads = 0;
 
-  const service: Pick<GeneratedListServiceI, 'listShared'> = {
+  const service: Pick<BasketListServiceI, 'listShared'> = {
     listShared: async (cursor?: string) => {
       reads.push(cursor);
       if (cursor === undefined) {
@@ -53,7 +53,7 @@ function harness(pages: readonly Page<SharedGeneratedListSummary>[]) {
     providers: [
       provideVelistaTesting(),
       SharedListStore,
-      { provide: GENERATED_LIST_SERVICE, useValue: service },
+      { provide: BASKET_LIST_SERVICE, useValue: service },
       { provide: REALTIME_CLIENT, useExisting: RealtimeMemory },
     ],
   });

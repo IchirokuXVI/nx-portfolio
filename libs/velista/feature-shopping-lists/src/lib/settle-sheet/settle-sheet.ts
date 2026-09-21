@@ -354,7 +354,7 @@ export class SettleSheet {
    * every settle target on it was a control that could not work. The plural rule
    * picked `all_other` for a count of zero and the button read **"Got all 0"**, and
    * pressing either it or "They had none" sent a settle that core refuses, because
-   * `generated-list-settle.service.ts` throws when `outstanding === 0`.
+   * `basket-settle.service.ts` throws when `outstanding === 0`.
    *
    * **A control you may not use is not drawn** (`0030`), so this is what the settle
    * pane branches its targets on rather than a disabled state.

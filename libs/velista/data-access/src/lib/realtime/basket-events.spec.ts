@@ -10,8 +10,8 @@ import { toRealtimeEvent } from './realtime-event-mapper';
  * why every payload here is written the way core actually emits it.
  *
  * The names come from `RealtimeEvent` in `@portfolio/luna-shopper/contracts`, and the
- * shapes from `generated-list-basket.service.ts`, `generated-list-settle.service.ts`
- * and `generated-list-sharing.service.ts`. Written out rather than imported, because
+ * shapes from `basket-basket.service.ts`, `basket-settle.service.ts`
+ * and `basket-sharing.service.ts`. Written out rather than imported, because
  * rule D4 keeps every contracts import in this app type only: the barrel re-exports
  * ajv, and a string constant is not a type.
  */
@@ -22,7 +22,7 @@ describe('the basket room, off the wire', () => {
    * The names differ on purpose, which is rule D4's whole point and is also the thing
    * a hand written fixture gets wrong: `settledQuantity` becomes `settled` and
    * `lastEditedByParticipantId` becomes `touchedBy`, because the screen is called the
-   * basket and nothing in this app's interface says "generated list".
+   * basket and nothing in this app's interface says "basket".
    */
   const line = {
     id: 'line-1',
@@ -38,7 +38,7 @@ describe('the basket room, off the wire', () => {
   };
 
   it('keeps the line off a settle, not only the basket it happened in', () => {
-    // The half this used to throw away. `GeneratedListStore` wants the id, because a
+    // The half this used to throw away. `BasketListStore` wants the id, because a
     // summary cannot be recomputed from one line; the basket screen wants the line,
     // because it holds the lines and one merge moves one row with no request.
     const event = toRealtimeEvent('basket.lineSettled', {
@@ -173,7 +173,7 @@ describe('the basket room, off the wire', () => {
   });
 
   it('reads a line a rename took away as an id and a basket', () => {
-    // `GeneratedListLineRemovedEvent` (backend `0113`, section 6): ids only.
+    // `BasketLineRemovedEvent` (backend `0113`, section 6): ids only.
     expect(
       toRealtimeEvent('basket.lineRemoved', {
         basketId: 'gl-1',

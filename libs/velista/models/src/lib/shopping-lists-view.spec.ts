@@ -1,4 +1,4 @@
-import type { GeneratedListSummary } from './generated-list-view';
+import type { BasketSummary } from './basket-summary';
 import {
   displayNames,
   formatGeneratedDate,
@@ -15,7 +15,7 @@ import {
  * assert on the numbering rather than on how a runtime happens to spell August.
  */
 
-function summary(overrides: Partial<GeneratedListSummary> = {}) {
+function summary(overrides: Partial<BasketSummary> = {}) {
   return {
     id: 'gl1',
     name: null,
@@ -24,7 +24,7 @@ function summary(overrides: Partial<GeneratedListSummary> = {}) {
     lineCount: 4,
     settledLineCount: 0,
     ...overrides,
-  } as GeneratedListSummary;
+  } as BasketSummary;
 }
 
 /** Stable and boring, so the assertions are about the numbering and nothing else. */

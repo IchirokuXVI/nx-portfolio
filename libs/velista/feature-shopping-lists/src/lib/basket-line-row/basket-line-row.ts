@@ -282,7 +282,7 @@ export class BasketLineRow {
    * Whether this line was sent to a list that has not accepted it yet (`0056`).
    *
    * An input rather than something read off the line, because **no field of the line
-   * carries it**: `GeneratedListLineOriginView` holds no approval state, so after a
+   * carries it**: `BasketLineOriginView` holds no approval state, so after a
    * reload nothing can say a bound line is waiting. What fills it is
    * `BasketStore.pendingTargets`, which is what this session's own bind was told, and
    * that is the case where somebody is standing there waiting to be told something.
