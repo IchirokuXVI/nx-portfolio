@@ -11,7 +11,7 @@ import type { ListRow } from './people-seed';
  * section 4).
  *
  * **It reads, and it links to the two forms that write.** `0007` made it read
- * only on the grounds that a line participates in settlements, generated list
+ * only on the grounds that a line participates in settlements, basket
  * bindings, permission sets and realtime broadcasts other clients have already
  * applied. That is still true, which is why nothing is typed here: backend plan
  * 0077 put `ListService` and `LineService` behind the writes, and the forms are

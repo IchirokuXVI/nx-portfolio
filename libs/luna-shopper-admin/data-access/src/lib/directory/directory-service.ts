@@ -8,7 +8,7 @@ import { DirectoryMemory } from './directory-memory';
  *
  * **Named acts and not a row editor.** A catalog item's name is a name, and
  * writing it is safe and complete. A list line participates in settlements,
- * generated list bindings, permission sets and realtime broadcasts other
+ * basket bindings, permission sets and realtime broadcasts other
  * clients have already applied, and deleting a user runs
  * `account-deletion.service` across three databases. The invariants live in
  * services rather than in constraints, so each of these calls the same service
