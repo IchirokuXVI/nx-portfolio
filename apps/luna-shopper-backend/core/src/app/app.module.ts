@@ -13,6 +13,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { AccountModule } from './account/account.module';
 import { CoreAdminModule } from './admin/admin.module';
+import { AppStateModule } from './app-state/app-state.module';
 import { AuditModule } from './audit/audit.module';
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
@@ -61,6 +62,10 @@ import { ZonesModule } from './zones/zones.module';
     // Generated shopping lists: the basket you carry round the shop (plan 0050).
     BasketsModule,
     AccountModule,
+    // What this account has been shown: the setup, and the tour (plan 0145).
+    // It imports nothing and registers no repository: both operations are one
+    // statement each, and the row is the caller's own.
+    AppStateModule,
     // What one person bought, with or without a basket (plan 0142). It imports
     // nothing: both reads are raw statements whose own `WHERE` is the
     // authorization.

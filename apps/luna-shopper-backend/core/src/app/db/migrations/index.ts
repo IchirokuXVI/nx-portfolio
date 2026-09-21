@@ -28,6 +28,7 @@ import { OpenBasketsByOwner1756002900000 } from './1756002900000-OpenBasketsByOw
 import { PersonPurchases1756003000000 } from './1756003000000-PersonPurchases';
 import { SettlementPricePaid1756003100000 } from './1756003100000-SettlementPricePaid';
 import { GeneratedListsBecomeBaskets1756003200000 } from './1756003200000-GeneratedListsBecomeBaskets';
+import { UserAppState1756003300000 } from './1756003300000-UserAppState';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -151,4 +152,9 @@ export const CORE_MIGRATIONS = [
   // reads nothing, so it follows all of them and nothing else (plan 0144,
   // section 3).
   GeneratedListsBecomeBaskets1756003200000,
+  // One new table, `user_app_state`. It references nothing any earlier
+  // migration created, nothing references it, and it reads and writes no row,
+  // so it follows every migration and none of them in particular (plan 0145,
+  // section 1).
+  UserAppState1756003300000,
 ];

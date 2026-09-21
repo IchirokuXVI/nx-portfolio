@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpStatus,
+  Logger,
   Param,
   Patch,
   Post,
@@ -13,12 +14,17 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import {
+  APP_STATE_PATTERNS,
+  APP_STATE_SCHEMA_IDS,
   AUTH_PATTERNS,
   PROFILE_PATTERNS,
+  type AccountMeView,
   type DeleteAccountResult,
   type ResolvedPostalCodeView,
   type ShoppingProfileListResult,
   type ShoppingProfileView,
+  type SuggestUsernameResult,
+  type UserAppStateView,
   type UserProfileView,
 } from '@portfolio/luna-shopper/contracts';
 import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
@@ -27,9 +33,13 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
 import { asRejectedCredentials } from '../auth/remote-problem';
 import { ScopeResolutionService } from '../catalog/scope-resolution.service';
-import { ApiContractResponse, ApiProblemResponses } from '../docs';
+import {
+  ApiComposedResponse,
+  ApiContractResponse,
+  ApiProblemResponses,
+} from '../docs';
 import { NatsClient } from '../messaging/nats-client';
-import { UpdateProfileDto } from './account.dto';
+import { UpdateAppStateDto, UpdateProfileDto } from './account.dto';
 import {
   AddPostalCodeDto,
   CreateShoppingProfileDto,
@@ -60,6 +70,8 @@ import {
 @UseGuards(JwtAuthGuard)
 @Controller({ path: 'account', version: '1' })
 export class AccountController {
+  private readonly logger = new Logger(AccountController.name);
+
   constructor(
     private readonly nats: NatsClient,
     // Every profile edit passes through here, so this is where the gateway's
@@ -75,14 +87,97 @@ export class AccountController {
     });
   }
 
-  /** The caller's own profile, which is where the app bar gets a name to show. */
+  /**
+   * The caller's own profile, which is where the app bar gets a name to show,
+   * and what this account has already been shown (plan 0145, section 2).
+   *
+   * **It composes.** Auth answers the profile, core answers the state, and the
+   * two go out together, because the alternative is a second request on every
+   * cold start before velista can decide whether to draw the setup.
+   *
+   * The core call is deliberately **not** wrapped in {@link aboutTheCaller},
+   * for the reason that helper's comment gives: it turns a downstream "not
+   * found" into a 401, and an account with no state row is an ordinary answer.
+   *
+   * **If core cannot be reached, the route still answers.** The state falls
+   * back to two nulls and the profile is returned, because the app bar's name
+   * must not depend on a service that owns nothing on that screen. A null reads
+   * as "not set up", and the worst case is a setup offered twice, which is a
+   * screen somebody presses through.
+   */
   @Get('me')
-  @ApiContractResponse(AUTH_PATTERNS.getProfile)
+  @ApiComposedResponse(APP_STATE_SCHEMA_IDS.accountMeView)
   @ApiProblemResponses({ auth: true })
-  me(@AuthUser() user: CurrentUser): Promise<UserProfileView> {
-    return this.aboutTheCaller<UserProfileView>(AUTH_PATTERNS.getProfile, {
+  async me(@AuthUser() user: CurrentUser): Promise<AccountMeView> {
+    const [profile, appState] = await Promise.all([
+      this.aboutTheCaller<UserProfileView>(AUTH_PATTERNS.getProfile, {
+        userId: user.userId,
+      }),
+      this.appState(user.userId),
+    ]);
+    return { ...profile, appState };
+  }
+
+  /** Core's half of {@link me}, degrading to two nulls rather than failing. */
+  private appState(userId: string): Promise<UserAppStateView> {
+    return this.nats
+      .send<UserAppStateView>(APP_STATE_PATTERNS.get, { userId })
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `Could not read app state for ${userId}; answering as never set up: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+        return { setupCompletedAt: null, tourSeenAt: null };
+      });
+  }
+
+  /**
+   * Mark the setup finished, the tour seen, or both (plan 0145, section 3).
+   *
+   * Idempotent, so a client that presses Done and retries gets the same answer,
+   * and `false` is not accepted anywhere: unsetting is not a thing the app
+   * needs, and a route that can unset is a route that can unset by accident.
+   *
+   * Throttled modestly. This is two writes in an account's life.
+   */
+  @Patch('app-state')
+  @Throttle(THROTTLE_LIMITS.appState)
+  @ApiContractResponse(APP_STATE_PATTERNS.set)
+  @ApiProblemResponses({ auth: true, body: true })
+  setAppState(
+    @AuthUser() user: CurrentUser,
+    @Body() dto: UpdateAppStateDto
+  ): Promise<UserAppStateView> {
+    return this.nats.send<UserAppStateView>(APP_STATE_PATTERNS.set, {
       userId: user.userId,
+      ...dto,
     });
+  }
+
+  /**
+   * Another generated name, for the setup's first step (plan 0145, section 4).
+   *
+   * **It writes nothing.** The name becomes this account's name only when the
+   * client sends it to `PATCH me` above, which already owns that write and
+   * already carries the rename throttle.
+   *
+   * A `GET` rather than a `POST`, because nothing is created and nothing about
+   * the caller reaches the log: there is no body and no parameter. Throttled
+   * tightly, because it costs a round trip and a bored thumb can hold the
+   * button down.
+   */
+  @Get('username-suggestions')
+  @Throttle(THROTTLE_LIMITS.usernameSuggestion)
+  @ApiContractResponse(AUTH_PATTERNS.suggestUsername)
+  @ApiProblemResponses({ auth: true })
+  suggestUsername(): Promise<SuggestUsernameResult> {
+    // No `userId`: the caller is asking for a name, not about themselves. The
+    // locale rides on the request context, as every other localized read's does.
+    return this.nats.send<SuggestUsernameResult>(
+      AUTH_PATTERNS.suggestUsername,
+      {}
+    );
   }
 
   /**

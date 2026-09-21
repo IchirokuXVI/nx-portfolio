@@ -26,6 +26,7 @@ export * from './lib/messages/admin-auth.messages';
 export * from './lib/messages/admin-core.messages';
 export * from './lib/messages/admin-dashboard.messages';
 export * from './lib/messages/admin-users.messages';
+export * from './lib/messages/app-state.messages';
 export * from './lib/messages/assistant.messages';
 export * from './lib/messages/auth.messages';
 export * from './lib/messages/basket-changes.messages';

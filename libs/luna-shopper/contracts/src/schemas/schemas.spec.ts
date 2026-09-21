@@ -9,6 +9,7 @@ import {
   ADMIN_ZONE_PATTERNS,
 } from '../lib/messages/admin-core.messages';
 import { ADMIN_USER_PATTERNS } from '../lib/messages/admin-users.messages';
+import { APP_STATE_PATTERNS } from '../lib/messages/app-state.messages';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
@@ -95,6 +96,8 @@ describe('contract schemas', () => {
       ...Object.values(SUPERMARKET_SOURCE_PATTERNS),
       ...Object.values(POSTAL_CODE_DISCOVERY_PATTERNS),
       ...Object.values(STATS_PATTERNS),
+      // What an account has been shown (plan 0145).
+      ...Object.values(APP_STATE_PATTERNS),
     ];
 
     it.each(allMessageSubjects)(
