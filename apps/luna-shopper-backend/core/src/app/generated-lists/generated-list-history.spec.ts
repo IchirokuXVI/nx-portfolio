@@ -99,9 +99,8 @@ function build(options: {
     {} as unknown as ProfileService,
     fakeLineClaims({}).service,
     { emitToUsers: () => undefined } as unknown as CoreEventsPublisher,
-    // The order, the members and the trip rows: none of them is on the history
-    // path, which reads the page and then counts it two ways.
-    {} as never,
+    // The members and the trip rows: neither is on the history path, which
+    // reads the page and then counts it two ways.
     {} as never,
     { find: async () => [] } as never,
     {} as never,

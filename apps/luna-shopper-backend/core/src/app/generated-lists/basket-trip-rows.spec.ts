@@ -85,7 +85,6 @@ function build(
       emitToUsers: (event: RealtimeEvent) => events.push(event),
       emitTo: (event: RealtimeEvent) => events.push(event),
     } as unknown as CoreEventsPublisher,
-    {} as never,
     { liveRegistered: async () => [] } as never,
     { find: async () => [] } as never,
     tripRows.service,

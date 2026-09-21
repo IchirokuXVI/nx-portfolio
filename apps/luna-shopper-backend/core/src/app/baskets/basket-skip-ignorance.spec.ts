@@ -2,7 +2,6 @@ import {
   BASKET_TRIP_ROWS_FREEZE_SQL,
   BASKET_TRIP_ROWS_THAW_SQL,
 } from '../generated-lists/basket-trip-rows.sql';
-import { ORDER_HISTORY_SQL } from '../generated-lists/generated-list.sql';
 import {
   ITEM_SETTLEMENTS_SQL,
   LINE_SETTLEMENT_SUMMARY_SQL,
@@ -21,6 +20,7 @@ import {
   LOOSE_TRIP_ROWS_SQL,
   OWNER_TRIP_LISTS_SQL,
 } from '../lists/trips/trips.sql';
+import { WALK_HISTORY_SQL } from './basket-order.sql';
 
 /**
  * Who never sees a skip (plan 0137, section 6, test 16).
@@ -53,7 +53,7 @@ const IGNORANT: Record<string, string> = {
   BASKET_TRIP_ROWS_FREEZE_SQL,
   BASKET_TRIP_ROWS_THAW_SQL,
   // The walk order: a skipped shelf is a shelf nobody stood at.
-  ORDER_HISTORY_SQL,
+  WALK_HISTORY_SQL,
   // The settlement history, served to every reader of the list. A skip is not a
   // purchase and not an attempt.
   ITEM_SETTLEMENTS_SQL,

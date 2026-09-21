@@ -4,6 +4,7 @@ import { BasketCoverageModule } from '../baskets/basket-coverage.module';
 import { BasketDemandService } from '../baskets/basket-demand.service';
 import { BasketLineAddService } from '../baskets/basket-line-add.service';
 import { BasketLiveService } from '../baskets/basket-live.service';
+import { BasketOrderService } from '../baskets/basket-order.service';
 import { BasketReadService } from '../baskets/basket-read.service';
 import { BasketRevertService } from '../baskets/basket-revert.service';
 import { BasketRowRenameService } from '../baskets/basket-row-rename.service';
@@ -11,21 +12,21 @@ import { BasketRowResolver } from '../baskets/basket-row-resolver';
 import { BasketSettleService } from '../baskets/basket-settle.service';
 import { BasketSkipService } from '../baskets/basket-skip.service';
 import { BasketWriteContext } from '../baskets/basket-write.context';
-import { BasketChangesService } from '../baskets/changes/basket-changes.service';
-import { BasketMarksReader } from '../baskets/changes/basket-marks.reader';
 import { BasketWriteController } from '../baskets/basket-write.controller';
 import { BasketController } from '../baskets/basket.controller';
+import { BasketChangesService } from '../baskets/changes/basket-changes.service';
+import { BasketMarksReader } from '../baskets/changes/basket-marks.reader';
 import {
   BasketChangeCursor,
   BasketLineSkip,
   BasketSource,
   BasketTripRow,
   GeneratedList,
-  ListLineChange,
   GeneratedListParticipant,
   GeneratedListShareLink,
   LineSettlement,
   ListLine,
+  ListLineChange,
   ListLineItem,
   ShoppingList,
 } from '../entities';
@@ -35,7 +36,6 @@ import { ZonesModule } from '../zones/zones.module';
 import { BasketAccessSweepService } from './basket-access-sweep.service';
 import { BasketTripRowsService } from './basket-trip-rows.service';
 import { GeneratedListMembersService } from './generated-list-members.service';
-import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListSharingController } from './generated-list-sharing.controller';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListSweepService } from './generated-list-sweep.service';
@@ -120,6 +120,10 @@ import { LineClaimModule } from './line-claim.module';
     // The basket read, and the basket that is always there (plan 0136).
     BasketReadService,
     BasketLiveService,
+    // The order a shopper walks (plan 0110, learned from sessions by plan
+    // 0141). Beside the read because the read is its only caller: it is asked
+    // on every request, and a basket has no `position` to write it into.
+    BasketOrderService,
     // The five writes on a row, and the three things all of them need: a key
     // resolved back to list lines, the coverage and redaction they resolve
     // against, and the answer shape they share.
@@ -144,9 +148,6 @@ import { LineClaimModule } from './line-claim.module';
     // own rather than two private methods, because it is the seam plan 0136
     // replaces: the statement changes and its caller does not.
     BasketTripRowsService,
-    // The order a shopper walks (plan 0110). The run asks it once, between
-    // composing a basket and writing it, and nothing asks it again.
-    GeneratedListOrderService,
     GeneratedListSharingService,
     // The people an owner shares a basket with on purpose (plan 0114). The run
     // and the share sheet both add people, so the contact check, the name rule

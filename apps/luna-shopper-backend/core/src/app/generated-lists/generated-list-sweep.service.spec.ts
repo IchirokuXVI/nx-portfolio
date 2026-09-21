@@ -177,9 +177,8 @@ function build(options: {
     {} as unknown as ProfileService,
     claims.service,
     publisher,
-    // The order, the members and the basket read: the sweep finishes a basket
-    // and never composes, counts or shares one.
-    {} as never,
+    // The members and the basket read: the sweep finishes a basket and never
+    // counts or shares one.
     {} as never,
     { find: async () => [] } as never,
     tripRows.service,

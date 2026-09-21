@@ -1,6 +1,7 @@
 import { BasketDemandService } from '../baskets/basket-demand.service';
 import { BasketLineAddService } from '../baskets/basket-line-add.service';
 import { BasketLiveService } from '../baskets/basket-live.service';
+import { BasketOrderService } from '../baskets/basket-order.service';
 import { BasketReadService } from '../baskets/basket-read.service';
 import { BasketRevertService } from '../baskets/basket-revert.service';
 import { BasketRowRenameService } from '../baskets/basket-row-rename.service';
@@ -74,6 +75,10 @@ describe('GeneratedListsModule wiring', () => {
     const providers = providersOf(GeneratedListsModule);
     expect(providers).toContain(BasketReadService);
     expect(providers).toContain(BasketLiveService);
+    // The order the read asks on every request (plan 0141). Declared beside the
+    // read rather than in `generated-lists/`, where it used to be: the run asks
+    // it nothing any more.
+    expect(providers).toContain(BasketOrderService);
     expect(providers).toContain(BasketRowResolver);
     expect(providers).toContain(BasketWriteContext);
     expect(providers).toContain(BasketSettleService);

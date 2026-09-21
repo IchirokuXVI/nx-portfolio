@@ -1,3 +1,5 @@
+> **PR:** [#431](https://github.com/IchirokuXVI/nx-portfolio/pull/431)
+
 # 0141: the order a shopper walks, learned from sessions
 
 > Part of the series recorded in `0130`. Needs `0136` (the open basket is a view) and the

@@ -15,13 +15,8 @@ import {
   type FakeBasketTripRows,
 } from './basket-trip-rows.fake';
 import type { GeneratedListMembersService } from './generated-list-members.service';
-import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListService } from './generated-list.service';
-import {
-  ORDER_HISTORY_SQL,
-  WRITABLE_LISTS_SQL,
-  type OrderHistoryRow,
-} from './generated-list.sql';
+import { WRITABLE_LISTS_SQL } from './generated-list.sql';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
 
 /**
@@ -77,12 +72,6 @@ interface Harness {
   tripsChanged: (string | undefined)[];
   claims: FakeLineClaims;
   tripRows: FakeBasketTripRows;
-  /**
-   * How many times the run asked for the owner's past trips (plan 0110). Zero
-   * since plan 0136 section 3.5: a view has no `position`, so the order is asked
-   * on every read of the basket instead of once here.
-   */
-  orderReads: () => number;
   /** Every entity the run's transaction asked for a repository of. */
   repositoriesTouched: () => string[];
 }
@@ -115,11 +104,6 @@ function build(options: {
    * coverage, which is a join through `basket_sources` to `list_lines`.
    */
   covering?: { zoneId: string; listId: string; lineId: string }[];
-  /**
-   * The owner's past trips. The run reads none of them any more, and this is
-   * kept so that a run made with a history still asks nothing.
-   */
-  history?: OrderHistoryRow[];
 }): Harness {
   const writable = options.writable ?? [
     { listId: LIST_A, zoneId: ZONE_A },
@@ -148,19 +132,6 @@ function build(options: {
       ].map((listId) => ({ listId }));
     }
     throw new Error(`unmocked query: ${sql.slice(0, 60)}`);
-  };
-
-  // The order's own read (plan 0110), counted, because the run must **not** make
-  // it any more: plan 0136 section 3.5 moves it onto every read of the basket.
-  let orderReads = 0;
-  const orderRepo = {
-    query: async (sql: string): Promise<unknown[]> => {
-      if (sql !== ORDER_HISTORY_SQL) {
-        throw new Error(`unmocked query: ${sql.slice(0, 60)}`);
-      }
-      orderReads += 1;
-      return options.history ?? [];
-    },
   };
 
   let findOneCalls = 0;
@@ -299,7 +270,6 @@ function build(options: {
     profiles,
     claims.service,
     publisher,
-    new GeneratedListOrderService(orderRepo as never),
     members,
     // The source rows the run wrote, read back by every view of the basket.
     { find: async () => written.sources } as never,
@@ -314,7 +284,6 @@ function build(options: {
     tripsChanged,
     claims,
     tripRows,
-    orderReads: () => orderReads,
     repositoriesTouched: () => repositoriesTouched,
   };
 }
@@ -352,36 +321,6 @@ describe('the generation run', () => {
     // run refuses no line, so there is nothing left behind to report.
     expect(Object.keys(result)).toEqual(['list']);
     expect(result.list).not.toHaveProperty('lines');
-  });
-
-  it('asks the order nothing, because a view has no position', async () => {
-    // The reversal of "writes the positions of the order the owner walks, once".
-    // Plan 0110 section 2 said the order was computed once at creation and never
-    // recomputed; plan 0136 section 3.5 reverses that by necessity and keeps the
-    // reason it gave another way: the order learns from **finished** trips only,
-    // so it still cannot move under a thumb while somebody shops.
-    const { service, orderReads } = build({
-      history: [
-        {
-          tripId: 't1',
-          content: 'Milk',
-          pickItemId: null,
-          settledItemIds: [],
-          offsetSeconds: 0,
-        },
-        {
-          tripId: 't1',
-          content: 'Juice',
-          pickItemId: null,
-          settledItemIds: [],
-          offsetSeconds: 12,
-        },
-      ],
-    });
-
-    await service.create({ userId: OWNER });
-
-    expect(orderReads()).toBe(0);
   });
 
   it('merges nothing, because there is no row to merge into', async () => {

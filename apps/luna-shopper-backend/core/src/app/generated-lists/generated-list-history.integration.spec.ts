@@ -142,7 +142,6 @@ describeIntegration('a run history row (real Postgres)', () => {
       fakeLineClaims({}).service,
       { emitToUsers: jest.fn() } as never,
       {} as never,
-      {} as never,
       dataSource.getRepository(BasketSource),
       {} as never,
       // The open basket's counts, which this fixture never reaches: the basket

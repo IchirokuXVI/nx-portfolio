@@ -20,11 +20,11 @@ import {
 import { Repository } from 'typeorm';
 import type { CoreConfig } from '../config/app-config';
 import { GeneratedList, GeneratedListParticipant } from '../entities';
-import { GeneratedListOrderService } from '../generated-lists/generated-list-order.service';
 import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
-import { canChangeDemand } from '../lists/list-acts';
 import { ListAccessService } from '../lists/list-access.service';
+import { canChangeDemand } from '../lists/list-acts';
 import { BasketCoverageService } from './basket-coverage.service';
+import { BasketOrderService, type OrderableRow } from './basket-order.service';
 import { BasketRedaction } from './basket-redaction';
 import {
   groupEntries,
@@ -35,13 +35,6 @@ import {
   type BasketSettlementFact,
   type BasketSkipFact,
 } from './basket-rows';
-import { CHANGE_LINES_SQL } from './changes/basket-changes.sql';
-import {
-  BasketMarksReader,
-  NO_BASKET_MARKS,
-  type BasketMarks,
-} from './changes/basket-marks.reader';
-import { removedRows } from './changes/basket-removed-rows';
 import {
   BASKET_LIST_REFS_SQL,
   BASKET_SESSION_LOOKBACK_MS,
@@ -57,6 +50,13 @@ import {
   type CoveredLineItemRow,
   type CoveredLineRow,
 } from './basket.sql';
+import { CHANGE_LINES_SQL } from './changes/basket-changes.sql';
+import {
+  BasketMarksReader,
+  NO_BASKET_MARKS,
+  type BasketMarks,
+} from './changes/basket-marks.reader';
+import { removedRows } from './changes/basket-removed-rows';
 
 /**
  * The basket, read from the lists it covers (plan 0136, section 3).
@@ -74,12 +74,13 @@ import {
  *
  * ## What it costs
  *
- * Five queries for the rows, none of them per line: the session, the covered
- * lines, their product sets, the settlements in scope and the standing skips
- * (plan 0137). The settlements read rides `ix_settlements_basket_live` from plan
- * 0134 and the skips read rides `ix_basket_line_skips_standing`. The
- * participants and the list names are two more, and the access reads run
- * **before any transaction** (plan 0130, section 13).
+ * Six queries for the rows, none of them per line: the session, the covered
+ * lines, their product sets, the settlements in scope, the standing skips (plan
+ * 0137) and the owner's walk history (plan 0141). The settlements read rides
+ * `ix_settlements_basket_live` from plan 0134, the skips read rides
+ * `ix_basket_line_skips_standing` and the history rides both. The participants
+ * and the list names are two more, and the access reads run **before any
+ * transaction** (plan 0130, section 13).
  */
 @Injectable()
 export class BasketReadService {
@@ -96,7 +97,7 @@ export class BasketReadService {
     // For the **owner's** permissions on each covered list, which is what
     // `demandEditable` answers (plan 0131). Never the actor's.
     private readonly listAccess: ListAccessService,
-    private readonly order: GeneratedListOrderService,
+    private readonly order: BasketOrderService,
     // What changed since this viewer last looked (plan 0138). Last but for the
     // configuration, so no positional construction in a spec has to shift an
     // argument to take it.
@@ -267,12 +268,10 @@ export class BasketReadService {
     }
 
     const scope = await this.scopeOf(basket);
-    const lines = await this.baskets.query<CoveredLineRow[]>(COVERED_LINES_SQL, [
-      [...coveredListIds],
-      basket.id,
-      scope.startedAt,
-      scope.enabled,
-    ]);
+    const lines = await this.baskets.query<CoveredLineRow[]>(
+      COVERED_LINES_SQL,
+      [[...coveredListIds], basket.id, scope.startedAt, scope.enabled]
+    );
 
     // Before the settlements, because a removed row shows what this basket bought
     // of a line the coverage no longer holds, and those purchases have to be in
@@ -308,31 +307,6 @@ export class BasketReadService {
     const entries = toEntries(lines, items, settlements);
     const groups = groupEntries(entries);
 
-    // Asked on **every** read rather than once at creation, which reverses plan
-    // 0110 section 2 by necessity: a view has no `position` to write it into.
-    // The reason that rule gave is kept another way, and the order still cannot
-    // move under a thumb while somebody shops: it learns from **finished** trips
-    // only, never from the basket being shopped.
-    const ordered = await this.order.order(
-      basket.ownerUserId,
-      groups.map((group) => ({
-        content: group.anchor.content,
-        options: [...new Set(group.entries.flatMap((e) => e.itemIds))],
-        group,
-      }))
-    );
-
-    const truncated = ordered.length > BASKET_LIMITS.maxRows;
-    if (truncated) {
-      // A warning and not a failure: the guard is against a pathological
-      // account, and the shopper still gets the first thousand things to buy in
-      // the order they walk them.
-      this.logger.warn(
-        `Basket ${basket.id} has ${ordered.length} rows, cut to ${BASKET_LIMITS.maxRows}`
-      );
-    }
-    const kept = ordered.slice(0, BASKET_LIMITS.maxRows).map((e) => e.group);
-
     const context = {
       servedListIds: redaction.servedListIds,
       demandEditable: (entry: BasketEntry) =>
@@ -345,16 +319,49 @@ export class BasketReadService {
       // merge key (plan 0138, section 7). Empty for a caller with no viewer.
       marks: marks.byKey,
     };
+
+    // The covered rows and the ones that went (plan 0138) are ordered
+    // **together**, because a removed row's slot is computed from its text and
+    // its products like any other row's, so it stands where it stood instead of
+    // jumping to the end under the thumb that was about to tap it. It carries no
+    // products, so it falls back to the text key, which for a row that matched
+    // by product can move it: accepted for a disabled row that lives for
+    // minutes (plan 0141, section 4).
+    const orderable = [
+      ...groups.map((group) => orderableOf(toRowView(group, context), group)),
+      ...removedRows(marks.removed, settlements).map((row) =>
+        orderableOf(row, null)
+      ),
+    ];
+
+    // Asked on **every** read rather than once at creation, which reverses plan
+    // 0110's "written once" by necessity: a view has no `position` to write it
+    // into. The reason that rule gave is kept another way (plan 0141, section
+    // 2): the history leaves the **current** session out, so nothing a shopper
+    // does in the shop moves a row, and the answer is a pure function of the
+    // history and of each row's own text and products.
+    const ordered = await this.order.order(
+      basket.ownerUserId,
+      orderable,
+      new Date()
+    );
+
+    const truncated = ordered.length > BASKET_LIMITS.maxRows;
+    if (truncated) {
+      // A warning and not a failure: the guard is against a pathological
+      // account, and the shopper still gets the first thousand things to buy in
+      // the order they walk them.
+      this.logger.warn(
+        `Basket ${basket.id} has ${ordered.length} rows, cut to ${BASKET_LIMITS.maxRows}`
+      );
+    }
+    const kept = ordered.slice(0, BASKET_LIMITS.maxRows);
+
     return {
-      rows: [
-        ...kept.map((group) => toRowView(group, context)),
-        // **After** the rows and after the cap, which is the honest place for
-        // them: a removed row is not a thing to buy, it counts toward neither
-        // `progress` nor `pending`, and the walk order has nothing to say about
-        // something that is no longer on the shelf list.
-        ...removedRows(marks.removed, settlements),
-      ],
-      groups: kept,
+      rows: kept.map((entry) => entry.row),
+      groups: kept
+        .map((entry) => entry.group)
+        .filter((group): group is BasketGroup => group !== null),
       truncated,
       marks,
     };
@@ -435,10 +442,7 @@ export class BasketReadService {
   }
 
   /** The basket and the live participant asking for it. */
-  async resolve(req: {
-    basketId: string;
-    participantId: string;
-  }): Promise<{
+  async resolve(req: { basketId: string; participantId: string }): Promise<{
     basket: GeneratedList;
     participant: GeneratedListParticipant;
   }> {
@@ -459,6 +463,30 @@ export class BasketReadService {
     }
     return { basket, participant };
   }
+}
+
+/**
+ * A drawn row, with the three things the walk order decides its slot from.
+ *
+ * `BasketRowView` already carries all three, under `rowKey` rather than `key`.
+ * They are copied out rather than the view being handed over whole, so the order
+ * cannot read anything else about a row: the slot is a function of the history,
+ * the text and the products, and of nothing else (plan 0141, section 2, rule 2).
+ *
+ * The `group` travels with it so the caller can hand its own groups back after
+ * the cap. A removed row has none, because it is no longer covered.
+ */
+function orderableOf(
+  row: BasketRowView,
+  group: BasketGroup | null
+): OrderableRow & { row: BasketRowView; group: BasketGroup | null } {
+  return {
+    key: row.rowKey,
+    content: row.content,
+    optionIds: row.optionIds,
+    row,
+    group,
+  };
 }
 
 /**
@@ -490,7 +518,8 @@ export function toEntries(
       quantity: row.quantity,
       // `pg` hands a `timestamptz` back as a `Date`, but a driver that hands
       // back a string would otherwise reach `toISOString` and throw.
-      settledAt: row.settledAt instanceof Date ? row.settledAt : new Date(row.settledAt),
+      settledAt:
+        row.settledAt instanceof Date ? row.settledAt : new Date(row.settledAt),
       settledByParticipantId: row.settledByParticipantId,
       // Computed by the database against its own `now()` (plan 0137, section
       // 4), and read for a `LIVE` basket's close alone.
@@ -512,7 +541,9 @@ export function toEntries(
     itemSetHash: line.itemSetHash,
     approvalStatus: line.approvalStatus,
     createdAt:
-      line.createdAt instanceof Date ? line.createdAt : new Date(line.createdAt),
+      line.createdAt instanceof Date
+        ? line.createdAt
+        : new Date(line.createdAt),
     itemIds: itemsByLine.get(line.id) ?? [],
     settlements: settlementsByLine.get(line.id) ?? [],
   }));

@@ -23,6 +23,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource, In } from 'typeorm';
 import { fakeCoreConfig } from '../baskets/basket-config.fake';
 import { BasketCoverageService } from '../baskets/basket-coverage.service';
+import { BasketOrderService } from '../baskets/basket-order.service';
 import { BasketReadService } from '../baskets/basket-read.service';
 import { fakeBasketMarks } from '../baskets/changes/basket-marks.fake';
 import {
@@ -40,7 +41,6 @@ import {
 import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { GeneratedListMembersService } from './generated-list-members.service';
-import { GeneratedListOrderService } from './generated-list-order.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
 import { GeneratedListService } from './generated-list.service';
 import { fakeLineClaims } from './line-claims.fake';
@@ -182,9 +182,6 @@ describeIntegration(
         { pricingProfileId: async () => null } as never,
         fakeLineClaims({}).service,
         events as never,
-        {
-          order: async (_userId: string, composed: unknown[]) => composed,
-        } as never,
         members,
         dataSource.getRepository(BasketSource),
         // The freeze, which nothing here finishes a basket to reach.
@@ -206,7 +203,10 @@ describeIntegration(
           dataSource.getRepository(ListLine),
           new ZoneAuthzService(dataSource.getRepository(ZoneMembership))
         ),
-        new GeneratedListOrderService(dataSource.getRepository(GeneratedList)),
+        // The walk order (plan 0141). The real service, because the database is
+        // here: nothing below settles anything, so it finds no history and
+        // answers the rows A to Z.
+        new BasketOrderService(dataSource),
         // What changed since somebody looked (plan 0138). Nothing here changes a
         // list, and the reads below pass no viewer.
         fakeBasketMarks(),
