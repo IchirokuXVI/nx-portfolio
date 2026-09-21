@@ -110,6 +110,44 @@ export const coreValidationSchema = Joi.object({
   BASKET_SKIP_WINDOW: Joi.string().default('12h'),
 
   /**
+   * How long a share link accepts joins, counted from the moment it was minted
+   * (plan 0140, section 2).
+   *
+   * Twelve hours, decided by the product owner rather than asked for by a
+   * caller: the request carries no lifetime at all, because a field nobody sets
+   * is a field somebody sets to a year.
+   */
+  BASKET_LINK_TTL: Joi.string().default('12h'),
+
+  /**
+   * How long a link visitor's access lasts, counted from **their own** join
+   * (plan 0140, section 2).
+   *
+   * A second number rather than the one above, because they are two decisions.
+   * A link opened in its eleventh hour still buys a whole shop, and a link from
+   * yesterday opens nothing. A person reached at the worst moment has access for
+   * just under a day from the moment the owner pressed share, which is the
+   * bound.
+   *
+   * It reaches the row as a column at join, which is what keeps the hot path one
+   * indexed lookup that never reads the link.
+   */
+  BASKET_LINK_SESSION_TTL: Joi.string().default('12h'),
+
+  /**
+   * The sweep that ends expired access (plan 0140, section 7).
+   *
+   * **HTTP never waits for it.** The live participant predicate refuses an
+   * expired row at the instant of its expiry; the sweep exists for the two
+   * things a predicate cannot do, closing a socket that is already open and
+   * writing down why a row ended. A minute, so a connected socket outlives its
+   * access by one interval at most.
+   */
+  BASKET_ACCESS_SWEEP_ENABLED: Joi.boolean().default(true),
+  BASKET_ACCESS_SWEEP_INTERVAL: Joi.string().default('1m'),
+  BASKET_ACCESS_SWEEP_BATCH: Joi.number().integer().min(1).default(200),
+
+  /**
    * How long a change stays marked **after the viewer acknowledged it** (plan
    * 0138, section 5).
    *
@@ -241,6 +279,17 @@ export interface CoreConfig {
      * 0138). Measured from the acknowledgement, by the database's clock.
      */
     changeMarkWindowMs: number;
+    /** How long a link accepts joins, from its own creation (plan 0140). */
+    linkTtlMs: number;
+    /** How long a link visitor's access lasts, from their join (plan 0140). */
+    linkSessionTtlMs: number;
+    /** The sweep that ends expired access and revokes expired links. */
+    accessSweep: {
+      enabled: boolean;
+      intervalMs: number;
+      /** A cap per tick, not per run: whatever is left waits for the next one. */
+      batchSize: number;
+    };
   };
   /** What changed on a list, and how long it is kept (plan 0138). */
   listLineChange: {
@@ -317,6 +366,17 @@ export const coreConfiguration = registerAs(
       changeMarkWindowMs: parseDurationMs(
         process.env.BASKET_CHANGE_MARK_WINDOW as string
       ),
+      linkTtlMs: parseDurationMs(process.env.BASKET_LINK_TTL as string),
+      linkSessionTtlMs: parseDurationMs(
+        process.env.BASKET_LINK_SESSION_TTL as string
+      ),
+      accessSweep: {
+        enabled: process.env.BASKET_ACCESS_SWEEP_ENABLED !== 'false',
+        intervalMs: parseDurationMs(
+          process.env.BASKET_ACCESS_SWEEP_INTERVAL as string
+        ),
+        batchSize: Number(process.env.BASKET_ACCESS_SWEEP_BATCH),
+      },
     },
     listLineChange: {
       retentionMs: parseDurationMs(

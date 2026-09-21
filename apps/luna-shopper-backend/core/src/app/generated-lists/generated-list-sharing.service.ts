@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   BasketKind,
@@ -29,16 +30,23 @@ import {
   ForbiddenException,
   NotAParticipantException,
   NotFoundException,
+  ParticipantExpiredException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { createHash, randomBytes } from 'node:crypto';
-import { DataSource, IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
+import type { CoreConfig } from '../config/app-config';
 import {
   GeneratedList,
   GeneratedListParticipant,
   GeneratedListShareLink,
 } from '../entities';
 import { GeneratedListMembersService } from './generated-list-members.service';
+import {
+  hasEnded,
+  liveLinkWhere,
+  liveParticipantWhere,
+} from './live-participant';
 import {
   toParticipantView,
   toShareLinkView,
@@ -74,6 +82,8 @@ import {
  */
 @Injectable()
 export class GeneratedListSharingService {
+  private readonly cfg: CoreConfig['basket'];
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(GeneratedList)
@@ -84,19 +94,32 @@ export class GeneratedListSharingService {
     private readonly participants: Repository<GeneratedListParticipant>,
     // Adding people, the room check every door shares, and the announcements
     // every change of access makes (plan 0114).
-    private readonly members: GeneratedListMembersService
-  ) {}
+    private readonly members: GeneratedListMembersService,
+    configService: ConfigService
+  ) {
+    // The two lifetimes of plan 0140, section 2. Read once here and spent as an
+    // interval inside a statement, so the clock that decides them is the
+    // database's rather than this process's.
+    this.cfg = configService.getOrThrow<CoreConfig>('core').basket;
+  }
 
   // --- The owner's share sheet ---------------------------------------------
 
   /**
-   * The live link, minting one if there is none (plan 0051, section 3).
+   * The live link, minting one if there is none (plan 0051, section 3, as plan
+   * 0140 section 4 amended it).
    *
-   * Idempotent by the partial unique index rather than by a check: pressing share
-   * twice from two devices races, one insert loses on
-   * `uq_generated_list_share_links_live`, and the loser re reads instead of
-   * creating a second live link. A service level guard could not promise that
-   * without a lock.
+   * **A link that expired is replaced rather than handed back.** That is what
+   * this gained, and it is the failure plan 0140 opened on: the partial unique
+   * index `uq_generated_list_share_links_live` cannot read a clock, so an
+   * expired link still holds the one live slot, and freeing it is a write.
+   * Without it, pressing share on a basket whose link ran out would hand back a
+   * dead link.
+   *
+   * The write and the insert run in one transaction under the basket's lock,
+   * which is what keeps two devices pressing share at once from racing through
+   * the gap between them. The unique violation branch stays anyway, for the two
+   * that reach the insert by some path the lock did not serialize.
    */
   async ensureLink(
     req: EnsureShareLinkRequest
@@ -112,17 +135,28 @@ export class GeneratedListSharingService {
       return this.linkView(live);
     }
 
-    const expiresAt = this.resolveExpiry(req.expiresAt);
     try {
-      const link = await this.links.save(
-        this.links.create({
-          generatedListId: list.id,
-          secret: randomBytes(32).toString('base64url'),
-          createdByParticipantId: owner.id,
-          expiresAt,
-          revokedAt: null,
-        })
-      );
+      const link = await this.dataSource.transaction(async (manager) => {
+        await this.members.lock(manager, list.id);
+        // Read again under the lock: another device may have minted one in the
+        // gap, and that one is the live link.
+        const winner = await manager.findOne(GeneratedListShareLink, {
+          where: { generatedListId: list.id, ...liveLinkWhere() },
+        });
+        if (winner) {
+          return winner;
+        }
+        // Free the slot. Revoking an expired link **never cascades to its
+        // people**: they carry their own expiry, and `revokeLink` with the
+        // cascade is still the owner's gesture for throwing everybody out.
+        await manager.query(
+          `UPDATE "generated_list_share_links"
+             SET "revokedAt" = now()
+             WHERE "generatedListId" = $1 AND "revokedAt" IS NULL`,
+          [list.id]
+        );
+        return this.mintLink(manager, list.id, owner.id);
+      });
       return this.linkView(link);
     } catch (error) {
       // The index did its job: somebody else minted one between our read and our
@@ -138,11 +172,45 @@ export class GeneratedListSharingService {
   }
 
   /**
+   * Insert the link, with both of its moments from one clock (plan 0140,
+   * section 4).
+   *
+   * Raw, so that `expiresAt` is computed as `now() + interval` inside the same
+   * statement whose `createdAt` defaults to `now()`. Written through the entity
+   * the two would come from two clocks, and the check constraint
+   * `ck_generated_list_share_links_expiry` would be asserting something about a
+   * pair that never agreed in the first place.
+   */
+  private async mintLink(
+    manager: EntityManager,
+    generatedListId: string,
+    ownerParticipantId: string
+  ): Promise<GeneratedListShareLink> {
+    const answered = await manager.query(
+      `INSERT INTO "generated_list_share_links"
+         ("generatedListId", "secret", "createdByParticipantId", "expiresAt", "revokedAt")
+       VALUES ($1, $2, $3, now() + ($4::double precision * interval '1 millisecond'), NULL)
+       RETURNING *`,
+      [
+        generatedListId,
+        randomBytes(32).toString('base64url'),
+        ownerParticipantId,
+        this.cfg.linkTtlMs,
+      ]
+    );
+    return returnedRows<GeneratedListShareLink>(answered)[0];
+  }
+
+  /**
    * The live link if there is one, without minting.
    *
    * An absent `link` is the ordinary answer for a basket nobody has shared, not
    * an error: a basket has zero links or one (section 3), and both are states
    * rather than failures.
+   *
+   * A link whose twelve hours ran out is **no link** here (plan 0140,
+   * section 4), which is the state the share sheet draws "Share" in. This read
+   * does not revoke it: the write belongs to `ensureLink`, under the lock.
    */
   async getLink(
     req: GeneratedListShareRequest
@@ -187,7 +255,7 @@ export class GeneratedListSharingService {
       // owner added has no link on their row and stays (plan 0114, section 5),
       // including somebody who came by this link and was added afterwards.
       const minted = await manager.find(GeneratedListParticipant, {
-        where: { shareLinkId: live.id, revokedAt: IsNull() },
+        where: { shareLinkId: live.id, ...liveParticipantWhere() },
       });
       for (const participant of minted) {
         await manager.update(GeneratedListParticipant, participant.id, {
@@ -239,12 +307,26 @@ export class GeneratedListSharingService {
   }
 
   /**
-   * Add one of the owner's contacts to the basket (plan 0114, section 4).
+   * Add one of the owner's contacts to the basket (plan 0114, section 4), and
+   * keep a link visitor (plan 0140, section 6).
    *
    * Owner only and not found for anybody else, like every gesture on the share
-   * sheet. The person must share an approved group with the owner now, and what
-   * happens to a row they already have is the table on
+   * sheet. What happens to a row the person already has is the table on
    * {@link GeneratedListMembersService.invite}.
+   *
+   * ## The contact rule is waived for somebody already on the basket
+   *
+   * Plan 0114 section 4 refuses anybody who shares no approved group with the
+   * owner **now**, and the rule exists so that nobody is put on a basket by a
+   * stranger who guessed a user id. A live link visitor is not that case: the
+   * owner handed them the link, they are on the basket already, and since plan
+   * 0140 keeping their access means being added by name, which a friend outside
+   * every group of the owner's could otherwise never be.
+   *
+   * So the check runs on somebody with **no live row**, which is every case it
+   * was written for, and on the owner themselves, whose own row is live and is
+   * refused here rather than waived through. Their name is still resolved the
+   * same way, because dropping the refusal is the whole of the waiver.
    *
    * The answer is the owner's view of the row, device string and join time
    * included, because the owner passes section 5.2 by construction. The room
@@ -254,11 +336,21 @@ export class GeneratedListSharingService {
     req: AddGeneratedListParticipantRequest
   ): Promise<GeneratedListParticipantView> {
     const list = await this.loadOwned(req.userId, req.generatedListId);
-    const common = await this.members.requireContacts(
-      list.ownerUserId,
-      [req.memberUserId],
-      'userId'
-    );
+    const live = await this.participants.findOne({
+      where: {
+        generatedListId: list.id,
+        userId: req.memberUserId,
+        ...liveParticipantWhere(),
+      },
+    });
+    const waived = live !== null && live.kind !== ParticipantKind.OWNER;
+    const common = waived
+      ? await this.members.commonGroups(list.ownerUserId, [req.memberUserId])
+      : await this.members.requireContacts(
+          list.ownerUserId,
+          [req.memberUserId],
+          'userId'
+        );
     const username = this.members.nameFor(
       common.get(req.memberUserId),
       req.globalUsername
@@ -335,10 +427,8 @@ export class GeneratedListSharingService {
   async preview(
     req: PreviewShareLinkRequest
   ): Promise<GeneratedListLinkPreview> {
-    const link = await this.links.findOne({
-      where: { secret: req.secret },
-    });
-    if (!link || !this.linkAccepts(link)) {
+    const link = await this.acceptingLink(req.secret);
+    if (!link) {
       return { joinable: false };
     }
     const list = await this.lists.findOne({
@@ -349,9 +439,11 @@ export class GeneratedListSharingService {
     }
     return {
       joinable: true,
+      // Null for the permanent basket, which has no name (plan 0133). That
+      // leaks nothing, and the client is what words it.
       name: list.name,
       participantCount: await this.participants.count({
-        where: { generatedListId: list.id, revokedAt: IsNull() },
+        where: { generatedListId: list.id, ...liveParticipantWhere() },
       }),
     };
   }
@@ -365,14 +457,21 @@ export class GeneratedListSharingService {
    * account token is attached as `REGISTERED` instead, with no name prompt, and
    * the partial unique index over (`generatedListId`, `userId`) makes a second
    * link they open resolve to the row they already have.
+   *
+   * **Everybody a link lets in gets an expiry** (plan 0140, section 5), twelve
+   * hours from their own join, guest and signed in alike. "Never binds to an
+   * account" does not mean "writes no row": every settle and every change
+   * record names a participant, so the row is still written and still keyed by
+   * their user id. What changes is that it ends by itself, and only the owner
+   * adding them by name makes it stay.
    */
   async join(
     req: JoinGeneratedListRequest
   ): Promise<GeneratedListJoinCoreResult> {
-    const link = await this.links.findOne({ where: { secret: req.secret } });
-    if (!link || !this.linkAccepts(link)) {
-      // The same answer the preview gives, for the same reason: a revoked link
-      // and one that never existed must not be distinguishable.
+    const link = await this.acceptingLink(req.secret);
+    if (!link) {
+      // The same answer the preview gives, for the same reason: a revoked link,
+      // an expired one and one that never existed must not be distinguishable.
       throw new NotFoundException('This link is no longer accepting people');
     }
     const list = await this.lists.findOne({
@@ -400,6 +499,10 @@ export class GeneratedListSharingService {
         return this.rejoin(list, link, existing, req);
       }
     }
+    // A guest whose access expired is a **new guest** (plan 0140, section 5).
+    // A guest has no identity to find a row by, so there is no branch above
+    // this one for them: a fresh link mints a fresh row with the next guest
+    // number, and their old secret answers `participant_expired`.
 
     const displayName = normalizeDisplayName(req.displayName);
     const sessionSecret = req.userId
@@ -439,7 +542,16 @@ export class GeneratedListSharingService {
     };
   }
 
-  /** Write a new participant row from a link, under the basket's lock. */
+  /**
+   * Write a new participant row from a link, under the basket's lock.
+   *
+   * **The expiry is part of the insert and cannot be a second statement.**
+   * `ck_generated_list_participants_expiry` says a row that is neither the
+   * owner's nor invited always carries one, so a row written with a null and
+   * stamped afterwards is refused by the constraint that makes the rule true.
+   * The moment is read from the database inside this transaction, so the clock
+   * is still the database's (plan 0140, section 5).
+   */
   private mint(
     list: GeneratedList,
     link: GeneratedListShareLink,
@@ -462,6 +574,7 @@ export class GeneratedListSharingService {
         guestNumber = Number(row?.next ?? 1);
       }
 
+      const now = await this.databaseNow(manager);
       return manager.save(
         manager.create(GeneratedListParticipant, {
           generatedListId: list.id,
@@ -475,30 +588,80 @@ export class GeneratedListSharingService {
           guestNumber,
           sessionSecretHash: sessionSecret ? hashSecret(sessionSecret) : null,
           userAgent: normalizeUserAgent(req.userAgent),
-          joinedAt: new Date(),
-          lastSeenAt: new Date(),
+          joinedAt: now,
+          lastSeenAt: now,
           revokedAt: null,
           endedReason: null,
           invitedAt: null,
           invitedByUserId: null,
+          // Everybody a link lets in, guest and signed in alike (section 5).
+          // The owner never reaches here: `join` answers them before this.
+          expiresAt: this.sessionEnd(now),
         })
       );
     });
   }
 
+  /** Twelve hours after a moment the database gave us (section 2). */
+  private sessionEnd(now: Date): Date {
+    return new Date(now.getTime() + this.cfg.linkSessionTtlMs);
+  }
+
+  /**
+   * Push a **live** visitor's `expiresAt` out to `now() + the session ttl`, or
+   * leave it where it is if it is already further away (plan 0140, section 5).
+   *
+   * `GREATEST`, so a live visitor opening a second link never shortens their
+   * access: the link they already hold gave them a window, and a shorter one
+   * cannot take it back. One statement rather than a read and a write, so two
+   * links opened at once cannot both read the old value.
+   *
+   * Only for a row that already carries an expiry. A row being written or
+   * revived takes its expiry in the same statement as everything else, because
+   * the check constraint refuses a link visitor with a null one.
+   */
+  private async stampExpiry(
+    manager: EntityManager,
+    participant: GeneratedListParticipant
+  ): Promise<GeneratedListParticipant> {
+    const answered = await manager.query(
+      `UPDATE "generated_list_participants"
+         SET "expiresAt" = GREATEST(
+               COALESCE("expiresAt", now()),
+               now() + ($2::double precision * interval '1 millisecond')
+             )
+         WHERE id = $1
+       RETURNING *`,
+      [participant.id, this.cfg.linkSessionTtlMs]
+    );
+    return returnedRows<GeneratedListParticipant>(answered)[0];
+  }
+
   /**
    * A registered person opening a link while they already have a row on this
-   * basket (plan 0114, section 7).
+   * basket (plan 0114, section 7, as plan 0140 section 5 extended it).
    *
-   * | Their row                              | Result                   |
-   * | -------------------------------------- | ------------------------ |
-   * | live                                   | as before plan 0114      |
-   * | ended with `LEFT`                      | brought back by the link |
-   * | ended with `REMOVED` or `LINK_REVOKED` | refused with 401         |
+   * | Their row                                       | Result                                                |
+   * | ----------------------------------------------- | ----------------------------------------------------- |
+   * | live, a named person                            | unchanged, and `expiresAt` stays null                 |
+   * | live, a link visitor                            | their expiry is pushed out, this link holds them      |
+   * | ended with `LEFT`                               | brought back by the link, now with an expiry          |
+   * | ended with `EXPIRED`, or past its expiry        | brought back, same row, same id, a new expiry         |
+   * | ended with `REMOVED` or `LINK_REVOKED`          | refused with 401                                      |
    *
    * Leaving was the person's own choice, so the link they still hold may undo
-   * it. A removal and a revoked link were the owner's, and the link is not a way
-   * round either: section 3.4's revoke would mean nothing if it were.
+   * it, and **running out of time was nobody's choice at all**: `EXPIRED` joins
+   * `LEFT` as a reason the link can undo, because nobody refused them. A removal
+   * and a revoked link were the owner's, and the link is not a way round either:
+   * section 3.4's revoke would mean nothing if it were.
+   *
+   * **A link never turns a named person into a visitor.** The owner's gesture
+   * outranks the link, so a row with `invitedAt` set keeps its null expiry and
+   * keeps its null `shareLinkId`, however many links that person opens.
+   *
+   * The row is the same one throughout, which the unique index over
+   * (`generatedListId`, `userId`) makes true, and that is what keeps somebody's
+   * past purchases attributed to one participant across visits.
    */
   private async rejoin(
     list: GeneratedList,
@@ -506,22 +669,14 @@ export class GeneratedListSharingService {
     existing: GeneratedListParticipant,
     req: JoinGeneratedListRequest
   ): Promise<GeneratedListJoinCoreResult> {
-    if (!existing.revokedAt) {
-      existing.lastSeenAt = new Date();
-      // Filled in when it is missing and left alone when it is not (plan
-      // 0054, section 2.4). A name already on the row is a snapshot taken when
-      // they joined, and somebody who has since renamed their account keeps
-      // the old one on baskets they are already on; a null is a row from
-      // before the plan, which is repair rather than a rename.
-      existing.username ??= normalizeUsername(req.username);
-      await this.participants.save(existing);
-      return {
-        generatedListId: list.id,
-        participant: this.view(existing),
-        sessionSecret: null,
-      };
+    // Every branch below asks whether this row has ended, and an expiry the
+    // sweep has not reached yet is ended. One `now`, read from the database, so
+    // this process's clock decides nothing.
+    const now = await this.databaseNow();
+    if (!hasEnded(existing, now)) {
+      return this.refreshLiveRow(list, link, existing, req);
     }
-    if (existing.endedReason !== ParticipantEndedReason.LEFT) {
+    if (!canReturnByLink(existing, now)) {
       throw new NotAParticipantException(
         'This link is no longer available to you'
       );
@@ -537,17 +692,17 @@ export class GeneratedListSharingService {
       if (!row) {
         throw new NotFoundException('This link is no longer accepting people');
       }
-      if (!row.revokedAt) {
+      const inTx = await this.databaseNow(manager);
+      if (!hasEnded(row, inTx)) {
         return { row, becameLive: false };
       }
-      if (row.endedReason !== ParticipantEndedReason.LEFT) {
+      if (!canReturnByLink(row, inTx)) {
         throw new NotAParticipantException(
           'This link is no longer available to you'
         );
       }
       await this.members.checkRoom(manager, list.id);
 
-      const now = new Date();
       row.revokedAt = null;
       row.endedReason = null;
       // Back by the link, so the link holds them again: revoking it with its
@@ -555,10 +710,14 @@ export class GeneratedListSharingService {
       row.shareLinkId = link.id;
       row.invitedAt = null;
       row.invitedByUserId = null;
-      row.joinedAt = now;
-      row.lastSeenAt = now;
+      row.joinedAt = inTx;
+      row.lastSeenAt = inTx;
       row.userAgent = normalizeUserAgent(req.userAgent) ?? row.userAgent;
       row.username ??= normalizeUsername(req.username);
+      // A fresh window from this join. The old one is in the past by
+      // definition, since that is what brought them down this branch, and the
+      // constraint refuses the null a two step write would pass through.
+      row.expiresAt = this.sessionEnd(inTx);
       return { row: await manager.save(row), becameLive: true };
     });
 
@@ -568,6 +727,44 @@ export class GeneratedListSharingService {
     return {
       generatedListId: list.id,
       participant: this.view(outcome.row),
+      sessionSecret: null,
+    };
+  }
+
+  /**
+   * A live row opening a link again (plan 0140, section 5, the first two rows
+   * of the rejoin table).
+   *
+   * A named person is touched for their last seen time and nothing else: their
+   * expiry stays null and no link takes hold of them. A link visitor has their
+   * window pushed out and this link recorded, so revoking it with its people
+   * reaches them.
+   */
+  private async refreshLiveRow(
+    list: GeneratedList,
+    link: GeneratedListShareLink,
+    existing: GeneratedListParticipant,
+    req: JoinGeneratedListRequest
+  ): Promise<GeneratedListJoinCoreResult> {
+    existing.lastSeenAt = new Date();
+    // Filled in when it is missing and left alone when it is not (plan
+    // 0054, section 2.4). A name already on the row is a snapshot taken when
+    // they joined, and somebody who has since renamed their account keeps
+    // the old one on baskets they are already on; a null is a row from
+    // before the plan, which is repair rather than a rename.
+    existing.username ??= normalizeUsername(req.username);
+    const named =
+      existing.kind === ParticipantKind.OWNER || existing.invitedAt !== null;
+    if (!named) {
+      existing.shareLinkId = link.id;
+    }
+    let row = await this.participants.save(existing);
+    if (!named) {
+      row = await this.stampExpiry(this.dataSource.manager, row);
+    }
+    return {
+      generatedListId: list.id,
+      participant: this.view(row),
       sessionSecret: null,
     };
   }
@@ -587,13 +784,18 @@ export class GeneratedListSharingService {
    * every list its owner can write, so "every source list" is not a set a second
    * reader can be measured against at all. What replaced it is per list and is
    * answered by the basket read, which knows the coverage.
+   *
+   * Since plan 0140 the row's `expiresAt` is part of "live", and an expired
+   * caller is told so rather than told they are not a participant (section 8).
+   * The second lookup that decides which sentence they get runs **only** on the
+   * failure, so the successful path is still the one indexed read.
    */
   async resolveParticipant(
     req: ResolveParticipantRequest
   ): Promise<GeneratedListParticipantContext> {
     const participant = await this.findLiveParticipant(req);
     if (!participant) {
-      throw new NotAParticipantException('Not a participant of this basket');
+      throw await this.refusal(req);
     }
 
     // Cheap and useful: presence and the share sheet both show it, and it costs
@@ -622,7 +824,7 @@ export class GeneratedListSharingService {
     generatedListId: string
   ): Promise<boolean> {
     const count = await this.participants.count({
-      where: { id: participantId, generatedListId, revokedAt: IsNull() },
+      where: { id: participantId, generatedListId, ...liveParticipantWhere() },
     });
     return count > 0;
   }
@@ -654,7 +856,7 @@ export class GeneratedListSharingService {
     generatedListId: string
   ): Promise<LiveParticipantAdmission | null> {
     const participant = await this.participants.findOne({
-      where: { id: participantId, generatedListId, revokedAt: IsNull() },
+      where: { id: participantId, generatedListId, ...liveParticipantWhere() },
     });
     if (!participant) {
       return null;
@@ -700,7 +902,7 @@ export class GeneratedListSharingService {
     generatedListId: string
   ): Promise<GeneratedListParticipant | null> {
     return this.participants.findOne({
-      where: { id: participantId, generatedListId, revokedAt: IsNull() },
+      where: { id: participantId, generatedListId, ...liveParticipantWhere() },
     });
   }
 
@@ -712,7 +914,7 @@ export class GeneratedListSharingService {
       const participant = await this.participants.findOne({
         where: {
           sessionSecretHash: hashSecret(req.sessionSecret),
-          revokedAt: IsNull(),
+          ...liveParticipantWhere(),
         },
       });
       // The secret identifies the row on its own, so the basket it names is
@@ -727,7 +929,7 @@ export class GeneratedListSharingService {
         where: {
           generatedListId: req.generatedListId,
           userId: req.userId,
-          revokedAt: IsNull(),
+          ...liveParticipantWhere(),
         },
       });
       if (participant) {
@@ -787,7 +989,10 @@ export class GeneratedListSharingService {
     }
 
     const rows = await this.participants.find({
-      where: { generatedListId: req.generatedListId, revokedAt: IsNull() },
+      where: {
+        generatedListId: req.generatedListId,
+        ...liveParticipantWhere(),
+      },
       order: { joinedAt: 'ASC' },
     });
 
@@ -859,6 +1064,11 @@ export class GeneratedListSharingService {
           joinedAt: list.generatedAt ?? new Date(),
           lastSeenAt: new Date(),
           revokedAt: null,
+          // The owner never expires (plan 0140, section 2), which
+          // `ck_generated_list_participants_expiry` holds rather than merely
+          // hopes: their standing comes from owning the basket, and a clock
+          // cannot take that away.
+          expiresAt: null,
         })
       );
     } catch (error) {
@@ -901,20 +1111,96 @@ export class GeneratedListSharingService {
     return list;
   }
 
+  /**
+   * The basket's link, if it is still live: not revoked and not past its twelve
+   * hours (plan 0140, section 4).
+   *
+   * The expiry is read in SQL rather than compared here, so the database's clock
+   * decides it, and an expired link is simply absent to every reader. Revoking
+   * it, which is what frees the slot the partial unique index holds, is
+   * `ensureLink`'s write under the lock.
+   */
   private liveLink(
     generatedListId: string
   ): Promise<GeneratedListShareLink | null> {
     return this.links.findOne({
-      where: { generatedListId, revokedAt: IsNull() },
+      where: { generatedListId, ...liveLinkWhere() },
     });
   }
 
-  /** Whether a link may still mint participants. Revocation and expiry only. */
-  private linkAccepts(link: GeneratedListShareLink): boolean {
-    if (link.revokedAt) {
+  /**
+   * The link behind a presented secret, if it may still let somebody in.
+   *
+   * One lookup where plan 0051 had a lookup and an in memory comparison, which
+   * is what puts the expiry on the database's clock (plan 0140, the one clock
+   * constraint). A revoked link, an expired one and one that never existed are
+   * all **null** here, which is exactly what keeps them indistinguishable to
+   * the unauthenticated preview and join (plan 0051, section 3.1).
+   */
+  private acceptingLink(
+    secret: string
+  ): Promise<GeneratedListShareLink | null> {
+    return this.links.findOne({ where: { secret, ...liveLinkWhere() } });
+  }
+
+  /** The database's clock, which is the only one that decides an expiry. */
+  private async databaseNow(manager?: EntityManager): Promise<Date> {
+    const [row] = await (manager ?? this.dataSource.manager).query<
+      { now: Date }[]
+    >(`SELECT now() AS "now"`);
+    return row.now;
+  }
+
+  /**
+   * Which refusal a caller whose credential named no live participant gets
+   * (plan 0140, section 8).
+   *
+   * A second lookup, made **only** on the failure, so the hot path is untouched.
+   * A caller whose own row ended by the clock is told so; everybody else keeps
+   * `not_a_participant`, which is what a removal and a revoked link still say.
+   */
+  private async refusal(req: ResolveParticipantRequest): Promise<Error> {
+    const row = await this.endedRow(req);
+    if (row && (await this.expiredByClock(row))) {
+      return new ParticipantExpiredException(
+        'Your access to this basket has ended'
+      );
+    }
+    return new NotAParticipantException('Not a participant of this basket');
+  }
+
+  /** The caller's row on this basket whatever state it is in, or null. */
+  private async endedRow(
+    req: ResolveParticipantRequest
+  ): Promise<GeneratedListParticipant | null> {
+    if (req.sessionSecret) {
+      const row = await this.participants.findOne({
+        where: { sessionSecretHash: hashSecret(req.sessionSecret) },
+      });
+      return row && row.generatedListId === req.generatedListId ? row : null;
+    }
+    if (req.userId) {
+      return this.participants.findOne({
+        where: { generatedListId: req.generatedListId, userId: req.userId },
+      });
+    }
+    return null;
+  }
+
+  /** Ended by the clock rather than by a person, on the database's clock. */
+  private async expiredByClock(
+    row: GeneratedListParticipant
+  ): Promise<boolean> {
+    if (row.endedReason === ParticipantEndedReason.EXPIRED) {
+      return true;
+    }
+    if (row.revokedAt) {
+      // Removed, or revoked with the link. A person said so, and saying "your
+      // time ran out" would be a different sentence about a different thing.
       return false;
     }
-    return !link.expiresAt || link.expiresAt.getTime() > Date.now();
+    // Past its expiry and not yet swept, which HTTP already refuses.
+    return hasEnded(row, await this.databaseNow());
   }
 
   /**
@@ -934,30 +1220,11 @@ export class GeneratedListSharingService {
     return isOpenBasket(list.status);
   }
 
-  private resolveExpiry(requested: string | null | undefined): Date | null {
-    const cap = new Date(
-      Date.now() +
-        GENERATED_LIST_SHARING_LIMITS.defaultLinkTtlDays * 24 * 60 * 60 * 1000
-    );
-    if (requested === undefined || requested === null) {
-      return cap;
-    }
-    const asked = new Date(requested);
-    if (Number.isNaN(asked.getTime())) {
-      throw new ValidationException('expiresAt is not a date', {
-        messageArgs: { field: 'expiresAt' },
-      });
-    }
-    // The cap is a cap, not a default to be argued out of: a caller may ask for
-    // less than it and never for more.
-    return asked.getTime() < cap.getTime() ? asked : cap;
-  }
-
   private async linkView(
     link: GeneratedListShareLink
   ): Promise<GeneratedListShareLinkView> {
     const participantCount = await this.participants.count({
-      where: { shareLinkId: link.id, revokedAt: IsNull() },
+      where: { shareLinkId: link.id, ...liveParticipantWhere() },
     });
     return toShareLinkView(link, participantCount);
   }
@@ -967,6 +1234,45 @@ export class GeneratedListSharingService {
   ): GeneratedListParticipantView {
     return toParticipantView(participant, false);
   }
+}
+
+/**
+ * Whether an ended row may be brought back by a link (plan 0140, section 5).
+ *
+ * `LEFT` was the person's own choice and `EXPIRED` was nobody's, so a link may
+ * undo both. `REMOVED` and `LINK_REVOKED` were the owner's, and a link is not a
+ * way round either. A row past its expiry that the sweep has not reached yet
+ * carries no reason at all, and reads as expired.
+ */
+function canReturnByLink(
+  row: GeneratedListParticipant,
+  now: Date
+): boolean {
+  if (!row.revokedAt) {
+    // Ended only by the clock, so the sweep has simply not got to it.
+    return hasEnded(row, now);
+  }
+  return (
+    row.endedReason === ParticipantEndedReason.LEFT ||
+    row.endedReason === ParticipantEndedReason.EXPIRED
+  );
+}
+
+/**
+ * The rows of a `RETURNING`, whichever shape the driver hands them back in.
+ *
+ * The trap `basket.sql.ts` records: what TypeORM's `query` answers for an
+ * `UPDATE ... RETURNING` is not the plain row array a `SELECT` gives. This
+ * driver answers `[rows, rowCount]`, so reading the first element straight off
+ * it yields an array where a row was expected, every field reads `undefined`,
+ * and nothing fails. Measured rather than assumed, and unwrapped here rather
+ * than trusted.
+ */
+function returnedRows<T>(answered: unknown): T[] {
+  if (Array.isArray(answered) && Array.isArray(answered[0])) {
+    return answered[0] as T[];
+  }
+  return (Array.isArray(answered) ? answered : []) as T[];
 }
 
 /** Postgres unique-violation, raised by the two partial indexes above. */

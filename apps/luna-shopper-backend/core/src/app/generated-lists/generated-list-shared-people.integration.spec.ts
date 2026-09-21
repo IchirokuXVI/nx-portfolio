@@ -171,7 +171,9 @@ describeIntegration(
         dataSource.getRepository(GeneratedList),
         dataSource.getRepository(GeneratedListShareLink),
         dataSource.getRepository(GeneratedListParticipant),
-        members
+        members,
+        // The two lifetimes of plan 0140, at their shipped defaults.
+        fakeCoreConfig()
       );
       generated = new GeneratedListService(
         dataSource,
@@ -719,6 +721,38 @@ describeIntegration(
         await expect(
           generated.listShared({ userId: users.reader, cursor: 'nonsense' })
         ).rejects.toBeInstanceOf(ValidationException);
+      });
+
+      it('drops a basket at a link visitor’s expiry and keeps a named person’s', async () => {
+        // Plan 0140, section 3: the listing reads `LIVE_PARTICIPANT`, so a
+        // basket leaves it at the instant the twelve hours run out rather than
+        // at the next sweep. A person the owner added never expires and stays.
+        const visited = await newBasket({ name: 'By link, briefly' });
+        const named = await newBasket({ name: 'Added by name' });
+        const link = await sharing.ensureLink({
+          userId: users.owner,
+          generatedListId: visited,
+        });
+        await sharing.join({ secret: link.secret, userId: users.stranger });
+        await add(named, users.friend);
+
+        const before = await generated.listShared({
+          userId: users.stranger,
+        });
+        expect(before.items.map((item) => item.id)).toContain(visited);
+
+        await dataSource.query(
+          `UPDATE "generated_list_participants"
+             SET "expiresAt" = now() - interval '1 second'
+             WHERE "generatedListId" = $1 AND "userId" = $2`,
+          [visited, users.stranger]
+        );
+
+        const after = await generated.listShared({ userId: users.stranger });
+        expect(after.items.map((item) => item.id)).not.toContain(visited);
+
+        const theirs = await generated.listShared({ userId: users.friend });
+        expect(theirs.items.map((item) => item.id)).toContain(named);
       });
     });
 

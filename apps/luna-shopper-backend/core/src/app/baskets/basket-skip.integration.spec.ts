@@ -305,6 +305,11 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         joinedAt: new Date(),
         lastSeenAt: new Date(),
         revokedAt: null,
+        // A link visitor always carries one and the owner never does, which
+        // plan 0140's `ck_generated_list_participants_expiry` holds.
+        expiresAt: options.guest
+          ? new Date(Date.now() + 12 * 60 * 60 * 1000)
+          : null,
       })
     );
     return { basket: saved, participantId: participant.id };

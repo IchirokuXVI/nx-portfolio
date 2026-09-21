@@ -79,6 +79,18 @@ export class NotAParticipantException extends DomainException {
   readonly code = ERROR_CODES.NOT_A_PARTICIPANT;
 }
 
+/**
+ * The credential named a participant of this basket whose access ran out (plan
+ * 0140, section 8).
+ *
+ * Raised only after the ordinary lookup found nothing live, and only for a
+ * caller whose own row ended by the clock. Everybody else keeps
+ * {@link NotAParticipantException}. See `ERROR_CODES.PARTICIPANT_EXPIRED`.
+ */
+export class ParticipantExpiredException extends DomainException {
+  readonly code = ERROR_CODES.PARTICIPANT_EXPIRED;
+}
+
 /** Authenticated, but not allowed to perform this action (or on this zone). */
 export class ForbiddenException extends DomainException {
   readonly code = ERROR_CODES.FORBIDDEN;

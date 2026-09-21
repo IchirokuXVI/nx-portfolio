@@ -10,7 +10,7 @@ import {
   ConflictException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { DataSource, EntityManager, IsNull } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { GeneratedListParticipant } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
@@ -18,6 +18,7 @@ import {
   type CommonGroupsRow,
 } from './generated-list-members.sql';
 import { toParticipantView } from './generated-list-sharing.mappers';
+import { hasEnded, liveParticipantWhere } from './live-participant';
 
 /** What two people have in common, for the contact check and the name rule. */
 export interface CommonGroups {
@@ -149,13 +150,19 @@ export class GeneratedListMembersService {
     );
   }
 
-  /** Refuse a row becoming live on a basket that is already full. */
+  /**
+   * Refuse a row becoming live on a basket that is already full.
+   *
+   * It counts live rows by plan 0140 section 3's rule, so an expired visitor
+   * stops counting toward `maxParticipants` at their expiry rather than at the
+   * next sweep: the seat is free when the access is, not when a timer says so.
+   */
   async checkRoom(
     manager: EntityManager,
     generatedListId: string
   ): Promise<void> {
     const total = await manager.count(GeneratedListParticipant, {
-      where: { generatedListId, revokedAt: IsNull() },
+      where: { generatedListId, ...liveParticipantWhere() },
     });
     if (total >= GENERATED_LIST_SHARING_LIMITS.maxParticipants) {
       throw new ConflictException(BASKET_FULL);
@@ -166,15 +173,28 @@ export class GeneratedListMembersService {
    * Add one person to a basket, as section 4's table says, inside the caller's
    * transaction and under its lock.
    *
-   * | The person's row      | Result                                          |
-   * | --------------------- | ----------------------------------------------- |
-   * | none                  | a `REGISTERED` row, invited, joined now         |
-   * | live, joined by link  | becomes invited, and the link no longer holds it |
-   * | live, already invited | unchanged                                       |
-   * | ended, any reason     | brought back, invited, joined now               |
+   * | The person's row      | Result                                                        |
+   * | --------------------- | ------------------------------------------------------------- |
+   * | none                  | a `REGISTERED` row, invited, joined now, `expiresAt` null     |
+   * | live, joined by link  | becomes invited, the link releases it, **the expiry is gone** |
+   * | live, already invited | unchanged                                                     |
+   * | ended, any reason     | brought back, invited, joined now, `expiresAt` null           |
+   *
+   * **This is how somebody is kept** (plan 0140, section 6). A link visitor's
+   * access ends by itself twelve hours after they arrived, and the owner adding
+   * them by name is the one gesture that makes it stay: the row keeps its id, so
+   * every purchase already attributed to them stays attributed, and it loses the
+   * expiry, so nothing ends it but a person.
    *
    * The contact check and the owner check are the caller's, because the run
-   * checks every id before it writes anything.
+   * checks every id before it writes anything. Plan 0140 section 6 waives the
+   * contact rule for the second row of this table, and the caller is where that
+   * is decided: a row that is live and carries a `userId` is somebody the owner
+   * already handed a link to, not a stranger whose id was guessed.
+   *
+   * An expiry the sweep has not reached yet reads as ended, so such a person
+   * goes down the fourth row and comes back invited, which is the same answer
+   * by a different path.
    */
   async invite(
     manager: EntityManager,
@@ -185,18 +205,24 @@ export class GeneratedListMembersService {
       username: string | null;
     }
   ): Promise<InviteOutcome> {
-    const now = new Date();
+    // One `now`, from the database, because whether a row has ended is a
+    // question about its expiry as much as about its `revokedAt` (plan 0140).
+    const now = await this.now(manager);
     const existing = await manager.findOne(GeneratedListParticipant, {
       where: { generatedListId: args.generatedListId, userId: args.userId },
     });
 
-    if (existing && !existing.revokedAt) {
-      if (existing.shareLinkId === null) {
+    if (existing && !hasEnded(existing, now)) {
+      if (existing.shareLinkId === null && existing.expiresAt === null) {
         return { participant: existing, becameLive: false };
       }
       // Joined by link, and now added on purpose. Clearing the link is what
-      // keeps a later revoke with the cascade from reaching them (section 5).
+      // keeps a later revoke with the cascade from reaching them (section 5),
+      // and clearing the expiry is what keeps the clock from reaching them
+      // (plan 0140, section 6). The id does not move, so nothing they already
+      // bought is re-attributed.
       existing.shareLinkId = null;
+      existing.expiresAt = null;
       existing.invitedAt = now;
       existing.invitedByUserId = args.invitedByUserId;
       // A name already on the row is a snapshot taken when they joined, and it
@@ -208,11 +234,13 @@ export class GeneratedListMembersService {
     await this.checkRoom(manager, args.generatedListId);
 
     if (existing) {
-      // Removed, revoked with the link, or left: the owner adding them again is
-      // the one gesture that outranks every reason (section 4).
+      // Removed, revoked with the link, left, or simply out of time: the owner
+      // adding them again is the one gesture that outranks every reason
+      // (section 4, and plan 0140 section 6's last row).
       existing.revokedAt = null;
       existing.endedReason = null;
       existing.shareLinkId = null;
+      existing.expiresAt = null;
       existing.invitedAt = now;
       existing.invitedByUserId = args.invitedByUserId;
       existing.joinedAt = now;
@@ -238,6 +266,9 @@ export class GeneratedListMembersService {
         endedReason: null,
         invitedAt: now,
         invitedByUserId: args.invitedByUserId,
+        // A named person never expires (plan 0140, section 2), which
+        // `ck_generated_list_participants_expiry` holds against `invitedAt`.
+        expiresAt: null,
       })
     );
     return { participant: created, becameLive: true };
@@ -249,9 +280,17 @@ export class GeneratedListMembersService {
       where: {
         generatedListId,
         kind: ParticipantKind.REGISTERED,
-        revokedAt: IsNull(),
+        ...liveParticipantWhere(),
       },
     });
+  }
+
+  /** The database's clock, which is the only one that decides an expiry. */
+  private async now(manager: EntityManager): Promise<Date> {
+    const [row] = await manager.query<{ now: Date }[]>(
+      `SELECT now() AS "now"`
+    );
+    return row.now;
   }
 
   /**

@@ -78,7 +78,9 @@ const shareLinkView = object(
     secret: nonEmptyString(),
     createdByParticipantId: nonEmptyString(),
     createdAt: nonEmptyString(),
-    expiresAt: nullableString(),
+    // Twelve hours after `createdAt`, always (plan 0140, section 4), so no
+    // longer nullable: a link with no end was a standing key.
+    expiresAt: nonEmptyString(),
     participantCount: integer({ minimum: 0 }),
   },
   [
@@ -126,6 +128,10 @@ const participantView = object(
     // optional here rather than nullable: absent and null mean different things,
     // "you may not see this" against "there is nothing to see" (section 7).
     userAgent: nullableString(),
+    // When this person's access ends, null when it does not (plan 0140,
+    // section 8). Served to every reader, on every projection: the people sheet
+    // offers "keep" from it and the shopper needs the warning.
+    expiresAt: nullableString(),
   },
   // `joinedAt` and `lastSeenAt` are optional for the same reason, and travel with
   // `userAgent` since plan 0114 (section 11).
@@ -137,6 +143,7 @@ const participantView = object(
     'guestNumber',
     'userId',
     'shareLinkId',
+    'expiresAt',
   ]
 );
 
@@ -226,12 +233,13 @@ const shareRequest = object(
   ['userId', 'generatedListId']
 );
 
+// No lifetime field (plan 0140, section 2): every link lasts twelve hours and a
+// caller may not ask for another number.
 const ensureLinkRequest = object(
   GENERATED_LIST_SHARING_SCHEMA_IDS.ensureLinkRequest,
   {
     userId: nonEmptyString(),
     generatedListId: nonEmptyString(),
-    expiresAt: nullableString(),
     // Sharing mints the owner's participant row, so it is where their account
     // name has to arrive (plan 0054, section 2.3).
     username: nullableString(),

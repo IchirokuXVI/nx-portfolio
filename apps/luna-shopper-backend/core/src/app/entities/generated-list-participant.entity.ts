@@ -37,8 +37,17 @@ import { GeneratedList } from './generated-list.entity';
   where: '"userId" IS NOT NULL',
 })
 // The shared baskets read (plan 0114, section 8): one person's live rows.
+//
+// It keeps its predicate after plan 0140, which added an expiry to the live
+// rule: an index cannot read a clock, and this one still narrows the read to
+// rows that were never revoked, which is the whole job of an index here.
 @Index('ix_generated_list_participants_user_live', ['userId'], {
   where: '"userId" IS NOT NULL AND "revokedAt" IS NULL',
+})
+// The access sweep (plan 0140, section 7): the rows whose expiry has passed,
+// oldest first.
+@Index('ix_generated_list_participants_expiring', ['expiresAt'], {
+  where: '"revokedAt" IS NULL AND "expiresAt" IS NOT NULL',
 })
 export class GeneratedListParticipant extends BaseEntity {
   @Column({ type: 'uuid' })
@@ -168,4 +177,26 @@ export class GeneratedListParticipant extends BaseEntity {
   /** The owner who added this person. Set exactly when {@link invitedAt} is. */
   @Column({ type: 'uuid', nullable: true })
   invitedByUserId!: string | null;
+
+  /**
+   * When this person's access ends by itself (plan 0140, sections 2 and 3).
+   *
+   * Written at join as `now() + BASKET_LINK_SESSION_TTL`, for a guest and for a
+   * signed in link visitor alike. **Null exactly for the owner and for a person
+   * the owner added by name**, which `ck_generated_list_participants_expiry`
+   * holds: "keeping access means being added by name" is that constraint.
+   *
+   * ## Why it is a column here and not a lookup of the link's
+   *
+   * The hot path is one indexed lookup and never reads the link (plan 0051,
+   * section 3.3). Copying the expiry onto the row at join is what lets the live
+   * rule gain a clock without gaining a join.
+   *
+   * Every comparison against it is the database's `now()`, in
+   * `liveParticipantWhere()` and in the sweep, so no application clock decides
+   * the last second of somebody's access. The sweep only writes down what the
+   * predicate already believed, and closes the sockets a predicate cannot.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  expiresAt!: Date | null;
 }

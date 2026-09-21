@@ -34,9 +34,10 @@ import { GeneratedList } from './generated-list.entity';
  *
  * The cost is named rather than hidden: a database leak hands over working
  * invitations, which mint guests on baskets until revoked or expired. It hands
- * over no participant's session, and a basket lives about as long as a shopping
- * trip, which is why the trade is acceptable here and would not be for a
- * credential.
+ * over no participant's session, and since plan 0140 a link is dead twelve hours
+ * after it was minted, which narrows the window the trade is made over. Hashing
+ * it is still out, for the reason above: the owner has to be able to copy it
+ * again.
  */
 @Entity({ name: 'generated_list_share_links' })
 @Index('uq_generated_list_share_links_live', ['generatedListId'], {
@@ -74,12 +75,21 @@ export class GeneratedListShareLink extends BaseEntity {
   createdByParticipantId!: string;
 
   /**
-   * When the invitation lapses (section 11's leaning, implemented rather than
-   * settled): an unauthenticated read of somebody's shopping habits should not
-   * outlive the trip.
+   * When the invitation lapses: `createdAt` plus `BASKET_LINK_TTL`, twelve
+   * hours (plan 0140, section 4).
+   *
+   * **Not nullable**, and no caller may name it. Plan 0051 section 11 left this
+   * a leaning, "implemented rather than settled", with a thirty day cap and a
+   * null meaning for ever. Plan 0130 made a basket permanent, so a link with no
+   * end became a link to a household's whole shopping for ever, and the leaning
+   * became a rule with a number.
+   *
+   * Both columns come from one clock: the insert computes this as
+   * `now() + interval`, so `createdAt` and this can never disagree about when
+   * the twelve hours started.
    */
-  @Column({ type: 'timestamptz', nullable: true })
-  expiresAt!: Date | null;
+  @Column({ type: 'timestamptz' })
+  expiresAt!: Date;
 
   /**
    * Set when the owner revokes it. **Never consulted on the hot path**
