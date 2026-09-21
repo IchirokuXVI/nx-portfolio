@@ -318,7 +318,7 @@ export class ListsController {
    * not exist or touches no line of this list.
    */
   @Get(':id/trips/:kind/:tripId/rows')
-  @ApiParam({ name: 'kind', enum: ['basket', 'loose'] })
+  @ApiParam({ name: 'kind', enum: ['basket', 'session'] })
   @ApiContractResponse(LIST_PATTERNS.tripRows)
   @ApiProblemResponses({ body: true })
   listTripRows(

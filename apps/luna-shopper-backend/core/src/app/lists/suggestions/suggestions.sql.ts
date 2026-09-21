@@ -1,4 +1,5 @@
 import { openBasketCoversLine } from '../../baskets/basket.sql';
+import { GENERATED_BASKET } from '../../baskets/open-basket.sql';
 import { basketAskedCte } from '../trips/basket-asked.sql';
 
 /**
@@ -11,10 +12,17 @@ import { basketAskedCte } from '../trips/basket-asked.sql';
  * Four statements, each over a set of lines and never one per line. The service
  * runs them one after the other, so a request never holds two pooled connections.
  *
- * **A trip is a `GENERATED` basket, always** (plan 0133, section 6). The
+ * **A basket trip is a `GENERATED` basket, always** (plan 0133, section 6). The
  * permanent basket holds every line its owner can write, so counting it would
  * hold every candidate and suggest nothing, for ever. The two history reads ask
  * it inside {@link basketAskedCte}; the candidates read asks it itself.
+ *
+ * **A trip is not only a basket** (plan 0142, section 8). A run of purchases
+ * with no `GENERATED` basket behind it is a session, and a session that is over
+ * is a trip the staple rule learns from, so the household that never composes a
+ * basket is no longer silent to it. That widening lives in
+ * {@link SUGGESTION_RECENT_TRIPS_SQL} alone: the quantity of section 5 still
+ * reads what a basket asked, because a session asked for nothing.
  *
  * **What an ended trip asked is read from `basket_trip_rows`** (plan 0135). Its
  * finish wrote the numbers down, so the two history reads go through
@@ -87,11 +95,18 @@ export const SUGGESTION_CANDIDATES_SQL = `
  * reverted rows were taken back, so neither is a purchase. The rows come as they
  * are, one per settlement: folding the ones a single trip wrote is
  * `mergePurchases`, which is a pure function under a unit spec.
+ *
+ * `basketId` rides along for the quantity rule of plan 0142, section 8.2: the
+ * estimate uses what a basket trip asked only while that trip is where the line
+ * was last bought, or is newer than its last purchase. It is the raw column and
+ * not a trip: a purchase made through a deleted basket names a row that is gone
+ * and matches no trip, which is the right answer.
  */
 export const SUGGESTION_PURCHASES_SQL = `
   SELECT s."lineId" AS "lineId",
          s."settledAt" AS "settledAt",
-         s."quantity" AS "quantity"
+         s."quantity" AS "quantity",
+         s."basketId" AS "basketId"
   FROM "line_settlements" s
   WHERE s."lineId" = ANY($1::uuid[])
     AND s."outcome" = 'BOUGHT'
@@ -100,33 +115,61 @@ export const SUGGESTION_PURCHASES_SQL = `
 `;
 
 /**
- * The list's newest ended basket trips, newest first, each with the candidates it
- * asked for (section 4). `$1` is the list, `$2` the candidate line ids, `$3` how
- * many trips.
+ * The list's newest ended trips, newest first, each with the candidates it
+ * asked for (section 4, as plan 0142 section 8.1 widened it). `$1` is the list,
+ * `$2` the candidate line ids, `$3` how many trips, `$4`
+ * {@link PURCHASE_SESSION_GAP_MS}, `$5` now, `$6`
+ * {@link STAPLE_SESSION_MIN_LINES}.
  *
- * A basket trip of a list is a basket that asked something of it (plan 0122),
- * which since plan 0135 is a row of `basket_trip_rows` for an ended basket. A
- * line since deleted contributes no trip, as in `TRIPS_CTE`, and a deleted
- * basket took its rows with it, so it is not a trip at all and cannot count as
- * an absence.
+ * **A trip is not only a basket any more.** A household that shops from the
+ * permanent basket, or ticks the list off in the shop, makes no basket trips at
+ * all, so the staple rule never spoke to it however regular its shopping was.
+ * The ended trips of a list are the union plan 0122 already serves on the list
+ * page, read here in one statement.
  *
- * Only trips of **this list** are read, so a basket that drew from another list
- * says nothing about this one.
+ * ## An ended basket trip
  *
- * A line is present where the trip asked for more than zero of it. It was "an
- * origin with `quantity > 0`" before plan 0135 and is a frozen trip row now, and
- * the two differ only where sibling origins of one zone line (plan 0094) split a
- * positive ask with a zero. One row per zone line is the honest reading of "the
- * trip asked for it".
+ * A `GENERATED` basket that is no longer `OPEN`, read through
+ * {@link basketAskedCte} as before. A line is **present** where the trip asked
+ * for more than zero of it. An `OPEN` basket that outlived the claim window is
+ * finished by the sweep within its interval, and until then it is a trip in
+ * progress rather than a trip to learn from.
+ *
+ * ## An ended session of the list
+ *
+ * The list's standing purchases that belong to no `GENERATED` basket (plan
+ * 0134, section 4.1), windowed by the session gap the same way
+ * `LOOSE_ROWS_CTE` windows them, whose newest purchase is older than
+ * `now - gap`. **A session still running is a shop in progress**, and counting
+ * it would call every line not bought yet absent.
+ *
+ * A line is present where the session holds a standing settlement on it of
+ * **either** outcome: a household that tried to buy it wanted it.
+ *
+ * **A session counts only when it touched at least `$6` distinct lines of the
+ * list.** A basket trip states everything a household wanted, so a line missing
+ * from it was not wanted. A session states only what was bought, so somebody
+ * who went out for bread alone otherwise makes every other line absent, and two
+ * such errands in a row end every staple the list has ("never absent from two
+ * in a row", `suggestion-rules.ts`).
+ *
+ * The two halves cannot double count: a purchase belongs to a `GENERATED`
+ * basket or to a session and never to both, which is the one test plan 0134
+ * section 4.1 states.
  *
  * `lineIds` is cast to `text[]` so the driver hands back an array and not the
- * literal `{...}` it answers for a `uuid[]`.
+ * literal `{...}` it answers for a `uuid[]`, and a trip that asked for no
+ * candidate reads `{}` rather than dropping out: it is an absence, and the
+ * staple rule counts absences.
  */
 export const SUGGESTION_RECENT_TRIPS_SQL = `
   WITH ${basketAskedCte(null)},
-  "ended" AS (
-    SELECT gl.id AS "tripId",
-           gl."generatedAt" AS "generatedAt"
+  "basket_trips" AS (
+    SELECT a."basketId" AS "tripId",
+           gl."generatedAt" AS "startedAt",
+           ARRAY_AGG(DISTINCT a."lineId"::text)
+             FILTER (WHERE a."asked" > 0 AND a."lineId" = ANY($2::uuid[]))
+             AS "lineIds"
     FROM "basket_asked" a
     JOIN "list_lines" ll
       ON ll.id = a."lineId"
@@ -134,23 +177,53 @@ export const SUGGESTION_RECENT_TRIPS_SQL = `
      AND ll."deletedAt" IS NULL
     JOIN "generated_lists" gl ON gl.id = a."basketId"
     WHERE gl."status" <> 'OPEN'
-    GROUP BY gl.id
-    ORDER BY gl."generatedAt" DESC, gl.id DESC
-    LIMIT $3
+    GROUP BY a."basketId", gl."generatedAt"
+  ),
+  "loose" AS (
+    SELECT s.id AS "id", s."lineId" AS "lineId", s."settledAt" AS "settledAt"
+    FROM "line_settlements" s
+    JOIN "list_lines" ll ON ll.id = s."lineId" AND ll."listId" = $1::uuid
+    WHERE s."listId" = $1::uuid
+      AND s."revertedAt" IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "generated_lists" gl
+        WHERE gl.id = s."basketId" AND ${GENERATED_BASKET}
+      )
+  ),
+  "marked" AS (
+    SELECT l.*,
+           CASE
+             WHEN l."settledAt" - LAG(l."settledAt") OVER w
+                  > ($4::double precision * interval '1 millisecond')
+             THEN 1
+             ELSE 0
+           END AS "starts"
+    FROM "loose" l
+    WINDOW w AS (ORDER BY l."settledAt", l."id")
+  ),
+  "numbered" AS (
+    SELECT k.*, SUM(k."starts") OVER (ORDER BY k."settledAt", k."id") AS "session"
+    FROM "marked" k
+  ),
+  "session_trips" AS (
+    SELECT (ARRAY_AGG(n."id" ORDER BY n."settledAt", n."id"))[1] AS "tripId",
+           MIN(n."settledAt") AS "startedAt",
+           ARRAY_AGG(DISTINCT n."lineId"::text)
+             FILTER (WHERE n."lineId" = ANY($2::uuid[])) AS "lineIds"
+    FROM "numbered" n
+    GROUP BY n."session"
+    HAVING MAX(n."settledAt")
+             < $5::timestamptz - ($4::double precision * interval '1 millisecond')
+       AND COUNT(DISTINCT n."lineId") >= $6
   )
-  SELECT e."tripId" AS "tripId",
-         COALESCE(
-           ARRAY_AGG(DISTINCT a."lineId"::text)
-             FILTER (WHERE a."lineId" IS NOT NULL),
-           '{}'
-         ) AS "lineIds"
-  FROM "ended" e
-  LEFT JOIN "basket_asked" a
-    ON a."basketId" = e."tripId"
-   AND a."lineId" = ANY($2::uuid[])
-   AND a."asked" > 0
-  GROUP BY e."tripId", e."generatedAt"
-  ORDER BY e."generatedAt" DESC, e."tripId" DESC
+  SELECT t."tripId", COALESCE(t."lineIds", '{}') AS "lineIds"
+  FROM (
+    SELECT * FROM "basket_trips"
+    UNION ALL
+    SELECT * FROM "session_trips"
+  ) t
+  ORDER BY t."startedAt" DESC, t."tripId" DESC
+  LIMIT $3
 `;
 
 /**
@@ -166,12 +239,20 @@ export const SUGGESTION_RECENT_TRIPS_SQL = `
  * `DISTINCT ON` keeps the newest trip per line, by `generatedAt` and then by the
  * basket's id, so two baskets generated in the same microsecond still have one
  * answer.
+ *
+ * It answers **which** trip and **when** as well as how many (plan 0142,
+ * section 8.2). Without those two the estimate cannot tell a basket that is
+ * still the last word on the line from one last spring, and a household that
+ * has shopped from the permanent basket every week since would go on being
+ * offered what that old basket asked.
  */
 export const SUGGESTION_LAST_ASKED_SQL = `
   WITH ${basketAskedCte(null)}
   SELECT DISTINCT ON (a."lineId")
          a."lineId" AS "lineId",
-         a."asked" AS "asked"
+         a."asked" AS "asked",
+         a."basketId" AS "tripId",
+         gl."generatedAt" AS "startedAt"
   FROM "basket_asked" a
   JOIN "generated_lists" gl ON gl.id = a."basketId"
   WHERE a."lineId" = ANY($2::uuid[])
@@ -191,6 +272,8 @@ export interface PurchaseRow {
   lineId: string;
   settledAt: string | Date;
   quantity: number;
+  /** The basket it was bought through, or null off the list page. */
+  basketId: string | null;
 }
 
 /** One row of {@link SUGGESTION_RECENT_TRIPS_SQL}. */
@@ -203,4 +286,7 @@ export interface RecentTripRow {
 export interface LastAskedRow {
   lineId: string;
   asked: number;
+  /** The basket that asked, so the rule can ask whether it is still the newest. */
+  tripId: string;
+  startedAt: string | Date;
 }

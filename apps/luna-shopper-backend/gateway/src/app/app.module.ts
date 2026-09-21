@@ -33,6 +33,7 @@ import { GatewayGeneratedListsModule } from './generated-lists/generated-lists.m
 import { GatewayHarvestModule } from './harvest/harvest.module';
 import { GatewayListsModule } from './lists/lists.module';
 import { GatewayMergeModule } from './merge/merge.module';
+import { GatewayPurchasesModule } from './purchases/purchases.module';
 import { GatewayStatsModule } from './stats/stats.module';
 import { GatewayZonesModule } from './zones/zones.module';
 
@@ -118,6 +119,11 @@ import { GatewayZonesModule } from './zones/zones.module';
     // own because it is a different resource with a different path; it imports
     // the one above for the participant guard alone.
     GatewayBasketsModule,
+    // What one person bought, with or without a basket (plan 0142). Its own
+    // module because it is a different resource with a different path: the
+    // history is read from purchases and no longer from the baskets somebody
+    // made.
+    GatewayPurchasesModule,
     // Catalog endpoints — items, supermarkets, per scope prices (plan 0012, and
     // plan 0038 for the scopes).
     GatewayCatalogModule,

@@ -2694,7 +2694,7 @@ export type EnumsSourceLocationStatus = 'ACTIVE' | 'UNMAPPED' | 'IGNORED';
 /**
  * `enums.TripKind` in the gateway's OpenAPI document.
  */
-export type EnumsTripKind = 'BASKET' | 'LOOSE';
+export type EnumsTripKind = 'BASKET' | 'SESSION';
 
 /**
  * `enums.TripRowOutcome` in the gateway's OpenAPI document.
@@ -3825,6 +3825,57 @@ export type ProfileShoppingProfileView = {
   supermarkets: ProfileProfileSupermarketPreferenceView[];
   locations: ProfileProfileLocationPreferenceView[];
   generationSources: ProfileProfileGenerationSourceView[];
+};
+
+/**
+ * `purchase.PurchaseEntryPage` in the gateway's OpenAPI document.
+ */
+export type PurchasePurchaseEntryPage = {
+  items: PurchasePurchaseEntryView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `purchase.PurchaseEntryView` in the gateway's OpenAPI document.
+ */
+export type PurchasePurchaseEntryView = {
+  id: string;
+  kind: EnumsTripKind;
+  name: string | null;
+  open: boolean;
+  startedAt: string;
+  endedAt: string;
+  lineCount: number;
+  boughtLineCount: number;
+  spentCents: number | null;
+  unpricedCount: number;
+};
+
+/**
+ * `purchase.PurchaseRowPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type PurchasePurchaseRowPage = {
+  items: PurchasePurchaseRowView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `purchase.PurchaseRowView` in the gateway's OpenAPI document.
+ */
+export type PurchasePurchaseRowView = {
+  id: string;
+  itemId: string | null;
+  outcome: EnumsSettlementOutcome;
+  quantity: number;
+  pricePaidCents: number | null;
+  settledAt: string;
+  lineId: string | null;
+  listId: string | null;
+  listName: string | null;
+  zoneId: string | null;
+  content: string | null;
 };
 
 /**

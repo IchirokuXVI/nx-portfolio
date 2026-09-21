@@ -23,6 +23,7 @@ export { HARVEST_SCHEMA_IDS } from './messages/harvest.schemas';
 export { LIST_SCHEMA_IDS } from './messages/list.schemas';
 export { MERGE_SCHEMA_IDS } from './messages/merge.schemas';
 export { PROFILE_SCHEMA_IDS } from './messages/profile.schemas';
+export { PURCHASE_SCHEMA_IDS } from './messages/purchase.schemas';
 export { REALTIME_SCHEMA_IDS } from './messages/realtime.schemas';
 export { STATS_SCHEMA_IDS } from './messages/stats.schemas';
 export { ZONE_SCHEMA_IDS } from './messages/zone.schemas';

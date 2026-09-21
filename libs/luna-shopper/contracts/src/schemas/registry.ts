@@ -74,6 +74,10 @@ import {
   profileSchemas,
 } from './messages/profile.schemas';
 import {
+  purchaseMessageContracts,
+  purchaseSchemas,
+} from './messages/purchase.schemas';
+import {
   realtimeMessageContracts,
   realtimeSchemas,
 } from './messages/realtime.schemas';
@@ -106,6 +110,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...generatedListSharingMessageContracts,
   ...basketMessageContracts,
   ...basketChangeMessageContracts,
+  ...purchaseMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -139,6 +144,7 @@ export const allSchemas: JsonSchema[] = [
   ...generatedListSharingSchemas,
   ...basketSchemas,
   ...basketChangeSchemas,
+  ...purchaseSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
   ...postalCodeEventSchemas,

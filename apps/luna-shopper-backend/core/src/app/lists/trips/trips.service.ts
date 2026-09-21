@@ -148,7 +148,7 @@ export class TripsService {
     await this.listAccess.requireRead(req.listId, req.userId);
 
     if (!isTripKind(req.kind)) {
-      throw new ValidationException('kind must be BASKET or LOOSE', {
+      throw new ValidationException('kind must be BASKET or SESSION', {
         messageArgs: { field: 'kind' },
       });
     }
@@ -195,5 +195,5 @@ export class TripsService {
 }
 
 function isTripKind(value: unknown): value is TripKind {
-  return value === TripKind.BASKET || value === TripKind.LOOSE;
+  return value === TripKind.BASKET || value === TripKind.SESSION;
 }

@@ -98,7 +98,7 @@ describe('selectTripGroups (velista 0088)', () => {
     it('labels an unnamed basket by its date, and a loose trip with no name and a line count', () => {
       const [unnamed, loose] = select([
         group({ name: null }),
-        group({ id: 's-1', kind: 'LOOSE', name: 'ignored', lineCount: 2 }),
+        group({ id: 's-1', kind: 'SESSION', name: 'ignored', lineCount: 2 }),
       ]);
 
       expect(unnamed.name).toBeNull();
@@ -204,7 +204,7 @@ describe('selectTripGroups (velista 0088)', () => {
 
     it('names the buyer of a loose purchase, and leaves it off when unknown', () => {
       const [vm] = select([
-        group({ kind: 'LOOSE', id: 's-1' }, [
+        group({ kind: 'SESSION', id: 's-1' }, [
           {
             row: tripRow('bread', {
               asked: null,

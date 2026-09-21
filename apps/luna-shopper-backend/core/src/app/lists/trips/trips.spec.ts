@@ -78,7 +78,7 @@ describe('what a trip did to a line (section 4)', () => {
 
   it('reads a loose row as its latest settlement, with nothing asked', () => {
     expect(
-      toTripRowView(TripKind.LOOSE, {
+      toTripRowView(TripKind.SESSION, {
         lineId: LINE,
         bought: 3,
         lastOutcome: SettlementOutcome.BOUGHT,
@@ -93,7 +93,7 @@ describe('what a trip did to a line (section 4)', () => {
       settledByUserId: USER,
     });
     expect(
-      toTripRowView(TripKind.LOOSE, {
+      toTripRowView(TripKind.SESSION, {
         lineId: LINE,
         bought: 0,
         lastOutcome: SettlementOutcome.NOT_AVAILABLE,
@@ -205,7 +205,7 @@ describe('the two reads', () => {
 
   it('carries the kind and the id in the cursor, and skips live trips behind one', async () => {
     const first = build({
-      [ENDED_TRIPS_SQL]: [head(TRIP, 'LOOSE'), head(LINE, 'BASKET')],
+      [ENDED_TRIPS_SQL]: [head(TRIP, 'SESSION'), head(LINE, 'BASKET')],
     });
     const page = await first.service.list({
       userId: USER,
@@ -225,7 +225,7 @@ describe('the two reads', () => {
 
     expect(next.live).toEqual([]);
     expect(second.queries.map((query) => query.sql)).toEqual([ENDED_TRIPS_SQL]);
-    expect(second.queries[0].parameters.slice(3)).toEqual([TRIP, 'LOOSE', 2]);
+    expect(second.queries[0].parameters.slice(3)).toEqual([TRIP, 'SESSION', 2]);
   });
 
   it('starts from the beginning on a cursor it cannot read', async () => {
@@ -259,7 +259,7 @@ describe('the two reads', () => {
     await w.service.rows({
       userId: USER,
       listId: LIST,
-      kind: TripKind.LOOSE,
+      kind: TripKind.SESSION,
       tripId: TRIP,
       limit: 100,
     });
@@ -288,7 +288,7 @@ describe('the two reads', () => {
       w.service.rows({
         userId: USER,
         listId: LIST,
-        kind: TripKind.LOOSE,
+        kind: TripKind.SESSION,
         tripId: 'not-an-id',
       })
     ).rejects.toBeInstanceOf(NotFoundException);

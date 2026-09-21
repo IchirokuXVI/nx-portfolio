@@ -440,12 +440,19 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
     it('follows what the newest ended basket asked for the line', async () => {
       const flat = await list('Flat');
       const milk = await line(flat, 'Milk');
-      await weekly(flat, milk, 6);
+      // Three purchases a week apart, so the period is 7 and the line is due.
+      // The last of them came off the newest basket that asked for milk, which
+      // is what keeps that basket the last word on the line (plan 0142,
+      // section 8.2).
+      await settled(flat, milk, daysAgo(20));
+      await settled(flat, milk, daysAgo(13));
+      const newest = await endedTrip(flat, daysAgo(6), [milk], 3);
+      await settled(flat, milk, daysAgo(6), { basketId: newest });
+      // An older basket that asked for a different number is not the newest.
       await endedTrip(flat, daysAgo(20), [milk], 2);
-      await endedTrip(flat, daysAgo(13), [milk], 3);
       // A newer basket that asked for something else says nothing about milk.
       const bread = await line(flat, 'Bread', { quantity: 1 });
-      await endedTrip(flat, daysAgo(6), [bread], 5);
+      await endedTrip(flat, daysAgo(4), [bread], 5);
 
       expect(await read(flat)).toEqual([
         expect.objectContaining({ lineId: milk, quantity: 3 }),
@@ -461,13 +468,15 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       // rather than at nothing, and it is still one row per zone line.
       const flat = await list('Flat');
       const milk = await line(flat, 'Milk');
-      const id = await basket(GeneratedListStatus.FINISHED, daysAgo(13));
+      const id = await basket(GeneratedListStatus.FINISHED, daysAgo(6));
       await source(id, flat);
       // Three purchases a week apart, so the period is 7 and the line is due.
-      // The middle one is the trip's, and it took the line to zero.
+      // The last one is the trip's, and it took the line to zero. It is the
+      // last one so that the trip is still the last word on the line, which is
+      // what plan 0142 section 8.2 makes the estimate ask.
       await settled(flat, milk, daysAgo(20));
-      await settled(flat, milk, daysAgo(13), { quantity: 3, basketId: id });
-      await settled(flat, milk, daysAgo(6));
+      await settled(flat, milk, daysAgo(13));
+      await settled(flat, milk, daysAgo(6), { quantity: 3, basketId: id });
       await freeze(id);
 
       expect(await read(flat)).toEqual([
@@ -510,7 +519,10 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       const flat = await list('Origins taken away');
       const milk = await line(flat, 'Milk');
       await weekly(flat, milk, 6);
-      await endedTrip(flat, daysAgo(13), [milk], 4);
+      // Newer than the line's last purchase, which is the other half of plan
+      // 0142 section 8.2: a basket that asked after the last shop is still the
+      // last word on the line even though nothing was bought off it.
+      await endedTrip(flat, daysAgo(4), [milk], 4);
 
       expect(await read(flat)).toEqual([
         expect.objectContaining({ lineId: milk, quantity: 4 }),
@@ -609,6 +621,176 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
         [staple, LineSuggestionReason.STAPLE],
       ]);
       expect(rows[0]).toMatchObject({ tripsWith: null, tripsSeen: null });
+    });
+  });
+
+  /**
+   * Plan 0142, section 8: a household that shops without baskets has trips
+   * too, and they are its sessions.
+   *
+   * A session here is written as purchases with no `basketId`, which is what a
+   * settle off the list page writes, grouped by the same six hour gap the list
+   * page groups them by.
+   */
+  describe('a session is a trip (plan 0142, section 8.1)', () => {
+    /**
+     * One session: every line bought at one moment, `daysAgo` days back.
+     *
+     * The extra lines are what make it a trip at all: a session states only
+     * what was bought, so it has to have touched at least
+     * `STAPLE_SESSION_MIN_LINES` of the list before its silences mean
+     * anything.
+     */
+    async function session(
+      listId: string,
+      days: number,
+      lines: readonly string[],
+      hoursAgo = 0
+    ): Promise<void> {
+      for (const lineId of lines) {
+        await settled(listId, lineId, daysAgo(days, -hoursAgo));
+      }
+    }
+
+    it('makes a staple of a list whose household never composed a basket', async () => {
+      const flat = await list('No baskets at all');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      const eggs = await line(flat, 'Eggs', { quantity: 1 });
+      // Four weekly shops, each of three lines. The period is 7 and the last
+      // purchase is a day old, so the line is not due by the period: what
+      // answers here is the staple rule, over sessions alone.
+      for (const days of [22, 15, 8, 1]) {
+        await session(flat, days, [milk, bread, eggs]);
+      }
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({
+          lineId: milk,
+          reason: LineSuggestionReason.STAPLE,
+          tripsWith: 4,
+          tripsSeen: 4,
+        }),
+      ]);
+    });
+
+    it('says nothing when every session was an errand for one thing', async () => {
+      const flat = await list('Errands');
+      const milk = await line(flat, 'Milk');
+      for (const days of [22, 15, 8, 1]) {
+        await session(flat, days, [milk]);
+      }
+
+      // Four shops, and not one of them says what the household wanted: they
+      // say what was bought. Counting them would make every other line of the
+      // list absent from four trips running.
+      expect(await read(flat)).toEqual([]);
+    });
+
+    it('is not a trip while it is still inside the gap', async () => {
+      const flat = await list('Still shopping');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      const eggs = await line(flat, 'Eggs', { quantity: 1 });
+      for (const days of [22, 15, 8]) {
+        await session(flat, days, [milk, bread, eggs]);
+      }
+      // A fourth shop an hour ago. Somebody is in the shop, and the lines they
+      // have not reached yet are not absences.
+      await session(flat, 0, [milk, bread, eggs], 1);
+
+      expect(await read(flat)).toEqual([]);
+    });
+
+    it('counts it on the first read after it ends', async () => {
+      const flat = await list('Finished shopping');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      const eggs = await line(flat, 'Eggs', { quantity: 1 });
+      for (const days of [22, 15, 8]) {
+        await session(flat, days, [milk, bread, eggs]);
+      }
+      // The same shopping, seven hours ago instead of one: the silence since
+      // is longer than the gap, so the session is over and is the fourth trip.
+      await session(flat, 0, [milk, bread, eggs], 7);
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({
+          lineId: milk,
+          reason: LineSuggestionReason.STAPLE,
+          tripsWith: 4,
+          tripsSeen: 4,
+        }),
+      ]);
+    });
+
+    it('counts a session and a basket as trips of the same list', async () => {
+      const flat = await list('Both kinds');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      const eggs = await line(flat, 'Eggs', { quantity: 1 });
+      await endedTrip(flat, daysAgo(22), [milk]);
+      await endedTrip(flat, daysAgo(15), [milk]);
+      await session(flat, 8, [milk, bread, eggs]);
+      await session(flat, 1, [milk, bread, eggs]);
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({
+          lineId: milk,
+          reason: LineSuggestionReason.STAPLE,
+          tripsWith: 4,
+          tripsSeen: 4,
+        }),
+      ]);
+    });
+
+    // A purchase belongs to a `GENERATED` basket or to a session and never to
+    // both (plan 0134, section 4.1), so the union cannot count one shop twice.
+    it('does not count a basket’s own purchases as a session as well', async () => {
+      const flat = await list('No double counting');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      const eggs = await line(flat, 'Eggs', { quantity: 1 });
+      for (const days of [22, 15, 8, 1]) {
+        const trip = await endedTrip(flat, daysAgo(days), [milk]);
+        for (const lineId of [milk, bread, eggs]) {
+          await settled(flat, lineId, daysAgo(days), { basketId: trip });
+        }
+      }
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({ lineId: milk, tripsSeen: 4 }),
+      ]);
+    });
+  });
+
+  describe('the quantity when a session came later (plan 0142, section 8.2)', () => {
+    it('follows the basket trip when the line was last bought on it', async () => {
+      const flat = await list('Bought on the basket');
+      const milk = await line(flat, 'Milk');
+      await settled(flat, milk, daysAgo(20), { quantity: 1 });
+      await settled(flat, milk, daysAgo(13), { quantity: 1 });
+      const trip = await endedTrip(flat, daysAgo(6), [milk], 3);
+      await settled(flat, milk, daysAgo(6), { quantity: 1, basketId: trip });
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({ lineId: milk, quantity: 3 }),
+      ]);
+    });
+
+    // Without this the basket would decide the quantity for ever, because a
+    // session asks for nothing and so can never replace the number.
+    it('follows the last purchase when a newer session bought a different number', async () => {
+      const flat = await list('Bought off the list page since');
+      const milk = await line(flat, 'Milk');
+      const trip = await endedTrip(flat, daysAgo(20), [milk], 3);
+      await settled(flat, milk, daysAgo(20), { quantity: 3, basketId: trip });
+      await settled(flat, milk, daysAgo(13), { quantity: 2 });
+      await settled(flat, milk, daysAgo(6), { quantity: 2 });
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({ lineId: milk, quantity: 2 }),
+      ]);
     });
   });
 

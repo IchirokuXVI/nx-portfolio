@@ -795,7 +795,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       expect(heads.items).toEqual([
         {
           id: night,
-          kind: TripKind.LOOSE,
+          kind: TripKind.SESSION,
           name: null,
           live: false,
           startedAt: '2026-03-01T22:01:00.000Z',
@@ -804,7 +804,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         },
         {
           id: morning,
-          kind: TripKind.LOOSE,
+          kind: TripKind.SESSION,
           name: null,
           live: false,
           startedAt: '2026-03-01T10:00:00.000Z',
@@ -870,7 +870,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const page = await trips.rows({
         userId: ids.shopper,
         listId: flat,
-        kind: TripKind.LOOSE,
+        kind: TripKind.SESSION,
         tripId: first,
       });
 
@@ -919,7 +919,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       expect(heads.items).toEqual([
         expect.objectContaining({
           id: purchase,
-          kind: TripKind.LOOSE,
+          kind: TripKind.SESSION,
           name: null,
           lineCount: 1,
           boughtLineCount: 1,
@@ -929,7 +929,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const page = await trips.rows({
         userId: ids.shopper,
         listId: flat,
-        kind: TripKind.LOOSE,
+        kind: TripKind.SESSION,
         tripId: purchase,
       });
       expect(page.items).toEqual([
@@ -975,7 +975,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       expect(heads.items).toEqual([
         expect.objectContaining({
           id: first,
-          kind: TripKind.LOOSE,
+          kind: TripKind.SESSION,
           lineCount: 2,
         }),
       ]);
@@ -1011,7 +1011,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const page = await trips.rows({
         userId: ids.shopper,
         listId: flat,
-        kind: TripKind.LOOSE,
+        kind: TripKind.SESSION,
         tripId: first,
       });
 
@@ -1160,7 +1160,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         trips.rows({
           userId: ids.shopper,
           listId: flat,
-          kind: TripKind.LOOSE,
+          kind: TripKind.SESSION,
           tripId: randomUUID(),
         })
       ).rejects.toThrow('Trip not found');
@@ -1286,7 +1286,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         trips.rows({
           userId: ids.stranger,
           listId: flat,
-          kind: TripKind.LOOSE,
+          kind: TripKind.SESSION,
           tripId: purchase,
         })
       ).rejects.toThrow();

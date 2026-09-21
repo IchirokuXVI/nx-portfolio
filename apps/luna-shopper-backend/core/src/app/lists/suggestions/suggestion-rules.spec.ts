@@ -27,12 +27,17 @@ function trips(pattern: string): boolean[] {
   return [...pattern].map((c) => c === 'T');
 }
 
+/** One standing purchase, off the list page unless a basket is named. */
+function buy(at: Date, quantity: number, basketId: string | null = null) {
+  return { at, quantity, basketId };
+}
+
 describe('merging settlements into purchases (section 3, step 1)', () => {
   it('folds three settlements within an hour into one purchase with no period', () => {
     const times = [ago(3), ago(3, 0.25), ago(3, 0.9)];
 
-    expect(mergePurchases(times.map((at) => ({ at, quantity: 2 })))).toEqual([
-      { at: ago(3), quantity: 6 },
+    expect(mergePurchases(times.map((at) => buy(at, 2)))).toEqual([
+      buy(ago(3), 6),
     ]);
     expect(periodOf(times, now)).toBeNull();
   });
@@ -43,44 +48,60 @@ describe('merging settlements into purchases (section 3, step 1)', () => {
     // from the first, so a fold measured from the first would answer five
     // purchases (plan 0134, section 7).
     const merged = mergePurchases([
-      { at: ago(2), quantity: 1 },
-      { at: ago(2, 5), quantity: 1 },
-      { at: ago(2, 10), quantity: 1 },
-      { at: ago(2, 15), quantity: 1 },
-      { at: ago(2, 20), quantity: 1 },
+      buy(ago(2), 1),
+      buy(ago(2, 5), 1),
+      buy(ago(2, 10), 1),
+      buy(ago(2, 15), 1),
+      buy(ago(2, 20), 1),
     ]);
 
-    expect(merged).toEqual([{ at: ago(2), quantity: 5 }]);
+    expect(merged).toEqual([buy(ago(2), 5)]);
   });
 
   it('folds purchases exactly the session apart into one', () => {
     // The boundary, stated once in `continuesPurchaseSession` and asserted here
     // in both directions: exactly six hours continues, a millisecond more does
     // not (plan 0134, section 7).
-    expect(
-      mergePurchases([
-        { at: ago(2), quantity: 1 },
-        { at: ago(2, 6), quantity: 1 },
-      ])
-    ).toEqual([{ at: ago(2), quantity: 2 }]);
+    expect(mergePurchases([buy(ago(2), 1), buy(ago(2, 6), 1)])).toEqual([
+      buy(ago(2), 2),
+    ]);
   });
 
   it('keeps purchases a millisecond past the session as two', () => {
     expect(
       mergePurchases([
-        { at: ago(2), quantity: 1 },
-        { at: new Date(ago(2, 6).getTime() + 1), quantity: 1 },
+        buy(ago(2), 1),
+        buy(new Date(ago(2, 6).getTime() + 1), 1),
       ])
     ).toHaveLength(2);
   });
 
   it('sorts before folding, whatever order the rows arrive in', () => {
     expect(
-      mergePurchases([
-        { at: ago(1), quantity: 1 },
-        { at: ago(8), quantity: 4 },
-      ]).map((p) => p.quantity)
+      mergePurchases([buy(ago(1), 1), buy(ago(8), 4)]).map((p) => p.quantity)
     ).toEqual([4, 1]);
+  });
+
+  // Plan 0142, section 8.2: the fold answers where the purchase ended up, so a
+  // shopper who started on the list page and finished through a basket
+  // finished through the basket. The quantity rule asks that question of the
+  // last purchase alone, which is why it is the newest row that wins.
+  it('carries the basket of the newest folded row', () => {
+    expect(
+      mergePurchases([
+        buy(ago(2), 1, 'b-old'),
+        buy(ago(2, 1), 1),
+        buy(ago(2, 2), 1, 'b-new'),
+      ])
+    ).toEqual([buy(ago(2), 3, 'b-new')]);
+  });
+
+  it('keeps each purchase’s own basket when nothing folds', () => {
+    expect(
+      mergePurchases([buy(ago(9), 1, 'b-1'), buy(ago(2), 1, 'b-2')]).map(
+        (p) => p.basketId
+      )
+    ).toEqual(['b-1', 'b-2']);
   });
 });
 

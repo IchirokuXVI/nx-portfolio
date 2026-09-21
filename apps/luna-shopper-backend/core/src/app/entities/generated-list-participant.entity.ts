@@ -36,13 +36,15 @@ import { GeneratedList } from './generated-list.entity';
   unique: true,
   where: '"userId" IS NOT NULL',
 })
-// The shared baskets read (plan 0114, section 8): one person's live rows.
+// One person's participant rows, live or ended (plan 0142, section 9).
 //
-// It keeps its predicate after plan 0140, which added an expiry to the live
-// rule: an index cannot read a clock, and this one still narrows the read to
-// rows that were never revoked, which is the whole job of an index here.
-@Index('ix_generated_list_participants_user_live', ['userId'], {
-  where: '"userId" IS NOT NULL AND "revokedAt" IS NULL',
+// It carried `"revokedAt" IS NULL` until then, for the shared baskets read of
+// plan 0114 section 8. The third route of a person's history needs an **ended**
+// row too, because being removed from a basket afterwards does not unbuy the
+// bread, and a partial index cannot find one. The wider index still serves plan
+// 0114: that read filters the revoked ones out of one person's handful of rows.
+@Index('ix_generated_list_participants_user', ['userId'], {
+  where: '"userId" IS NOT NULL',
 })
 // The access sweep (plan 0140, section 7): the rows whose expiry has passed,
 // oldest first.

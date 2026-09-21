@@ -40,7 +40,7 @@ describe('trip mappers (velista 0088, test 1)', () => {
     expect(toTrip(null)).toBeNull();
   });
 
-  it('reads an unknown kind as a loose trip, and absent counts as zero', () => {
+  it('reads an unknown kind as a session, and absent counts as zero', () => {
     const trip = toTrip({
       ...TRIP,
       kind: 'SUBSCRIPTION',
@@ -49,7 +49,7 @@ describe('trip mappers (velista 0088, test 1)', () => {
       live: 'yes',
     });
 
-    expect(trip?.kind).toBe('LOOSE');
+    expect(trip?.kind).toBe('SESSION');
     expect(trip?.lineCount).toBe(0);
     expect(trip?.boughtLineCount).toBe(0);
     expect(trip?.live).toBe(false);

@@ -122,7 +122,7 @@ describe('TripGroup (velista 0088)', () => {
     it('draws a loose trip as Loose buys and its date', async () => {
       const fixture = await render(
         group({
-          kind: 'LOOSE',
+          kind: 'SESSION',
           name: null,
           countKey: 'list.trips.lines',
           countArgs: { count: 2 },
