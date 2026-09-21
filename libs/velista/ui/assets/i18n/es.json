@@ -286,6 +286,16 @@
       "restart": "Empezar de nuevo"
     }
   },
+  "nav": {
+    "home": "Inicio",
+    "catalog": "Catálogo",
+    "basket": "Lista de la compra",
+    "label": "Secciones principales",
+    "badge": "quedan {{count}}"
+  },
+  "catalog": {
+    "soon": "El catálogo está en camino."
+  },
   "home": {
     "loading": "Cargando tus grupos",
     "or": "O",
@@ -1372,6 +1382,14 @@
       "HOUSEHOLD": "Hogar",
       "PERSONAL_CARE": "Cuidado personal",
       "OTHER": "Otros"
+    },
+    "current": {
+      "empty": {
+        "title": "Nada que comprar todavía",
+        "body": "Velista reúne en una lista todo lo que tus grupos necesitan y te dice dónde sale más barato.",
+        "make": "Crear mi lista",
+        "older": "Ver listas anteriores"
+      }
     }
   },
   "getList": {

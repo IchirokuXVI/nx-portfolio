@@ -6,6 +6,8 @@ import { type AppBrand } from '@portfolio/velista/models';
 import {
   BackendReadiness,
   ConnectionState,
+  LiveBasketBadge,
+  NavChrome,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   RENDERS_WHILE_CONNECTING,
@@ -45,6 +47,10 @@ async function createFixture(
 
 function outletOf(fixture: ComponentFixture<AppLayout>): Element | null {
   return (fixture.nativeElement as HTMLElement).querySelector('router-outlet');
+}
+
+function navOf(fixture: ComponentFixture<AppLayout>): Element | null {
+  return (fixture.nativeElement as HTMLElement).querySelector('lib-app-nav');
 }
 
 describe('AppLayout', () => {
@@ -319,6 +325,85 @@ describe('AppLayout', () => {
       button?.click();
 
       expect(reload).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * The bar at the bottom of the app (plan 0097).
+   *
+   * It is rendered **inside the branch that renders the outlet**, which is what keeps
+   * it off the startup, connection and update screens by construction rather than by a
+   * rule somebody has to remember: those screens replace the outlet, so no page is
+   * drawn at all and there is nothing for a bar to sit under.
+   */
+  describe('the bottom bar', () => {
+    it('is absent while the startup gate holds the outlet', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(NavChrome).setUsable(true);
+      fixture.detectChanges();
+
+      expect(outletOf(fixture)).toBeNull();
+      expect(navOf(fixture)).toBeNull();
+    });
+
+    it('is present once the gate releases it', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(NavChrome).setUsable(true);
+      TestBed.inject(BackendReadiness).reportReady();
+      fixture.detectChanges();
+
+      expect(outletOf(fixture)).not.toBeNull();
+      expect(navOf(fixture)).not.toBeNull();
+    });
+
+    it('is absent on a screen that asks for no chrome', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(BackendReadiness).reportReady();
+      fixture.detectChanges();
+
+      // `usable` is false until the app layer says otherwise, which is the whole of
+      // the default: under-showing costs one navigation, over-showing hands an
+      // anonymous visitor two tabs that answer with a sign in screen.
+      expect(navOf(fixture)).toBeNull();
+    });
+
+    it('is absent behind the screen a refused build draws', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(NavChrome).setUsable(true);
+      TestBed.inject(BackendReadiness).reportTooOld();
+      fixture.detectChanges();
+
+      expect(navOf(fixture)).toBeNull();
+    });
+
+    it('carries the count the badge holds', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(NavChrome).setUsable(true);
+      TestBed.inject(BackendReadiness).reportReady();
+      TestBed.inject(LiveBasketBadge).set(8);
+      fixture.detectChanges();
+
+      expect(navOf(fixture)?.querySelector('.badge')?.textContent?.trim()).toBe(
+        '8'
+      );
+    });
+
+    // Section 5, and the rule the whole app reads through one token: while the bar
+    // belongs to the screen it carries the bottom inset and nothing inside the page
+    // does. It is bound to `reserved` rather than `visible`, so a sheet takes the bar
+    // away without reflowing the page underneath it.
+    it('says so on the host, so every dock below loses its inset', async () => {
+      const fixture = await createFixture();
+      const host: HTMLElement = fixture.nativeElement;
+      TestBed.inject(BackendReadiness).reportReady();
+      fixture.detectChanges();
+
+      expect(host.classList).not.toContain('nav-up');
+
+      TestBed.inject(NavChrome).setUsable(true);
+      fixture.detectChanges();
+
+      expect(host.classList).toContain('nav-up');
     });
   });
 

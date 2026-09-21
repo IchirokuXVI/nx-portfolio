@@ -1,0 +1,74 @@
+@let page = state();
+
+<div class="page">
+  <!--
+    The clock is in the header in **every** state, including while the listing is still
+    being read, because the history is the one screen that answers "what did I shop
+    before" and this tab is now the only way to it from the bar.
+  -->
+  <header class="bar">
+    <h1 class="title">{{ 'nav.basket' | rokuT }}</h1>
+
+    <button
+      (click)="openHistory()"
+      [attr.aria-label]="'home.action.history' | rokuT"
+      [attr.title]="'home.action.history' | rokuT"
+      class="history"
+      type="button"
+    >
+      <lib-clock-icon class="glyph" />
+    </button>
+  </header>
+
+  @switch (page.kind) {
+    @case ('loading') {
+      <!--
+        A row shaped placeholder rather than a spinner: with a live basket this screen
+        is about to become that basket, and a skeleton of its rows is the honest shape
+        of what is coming.
+      -->
+      <div class="content">
+        <lib-row-skeleton [count]="3" labelKey="history.row.loading" />
+      </div>
+    }
+
+    @case ('error') {
+      <div class="content">
+        <lib-error-state
+          (copyReference)="copyReference($event)"
+          (retry)="retry()"
+          [body]="'history.error.body' | rokuT"
+          [correlationId]="page.correlationId"
+          [title]="'history.error.title' | rokuT"
+        />
+      </div>
+    }
+
+    @case ('empty') {
+      <!--
+        Both halves of home's old button row. The glyph is the basket rather than the
+        brand mark, because this panel is about one thing and the mark is about the app.
+      -->
+      <div class="content empty">
+        <lib-basket-icon class="mark" />
+        <h2 class="empty-title">{{ 'basket.current.empty.title' | rokuT }}</h2>
+        <p class="empty-body">{{ 'basket.current.empty.body' | rokuT }}</p>
+
+        <div class="actions">
+          <button (click)="makeList()" class="primary" type="button">
+            {{ 'basket.current.empty.make' | rokuT }}
+          </button>
+          <button (click)="openHistory()" class="secondary" type="button">
+            {{ 'basket.current.empty.older' | rokuT }}
+          </button>
+        </div>
+      </div>
+    }
+  }
+</div>
+
+<!--
+  Where Get shopping list renders (rule E1, plan 0008). Outside `.page`, so the sheet
+  covers the header rather than being laid out under it.
+-->
+<router-outlet />

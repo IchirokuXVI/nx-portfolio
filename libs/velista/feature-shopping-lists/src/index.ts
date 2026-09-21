@@ -12,6 +12,7 @@
  * table lazy loads through this barrel, so a component that is not in it cannot
  * be a page.
  */
+export * from './lib/basket-current/basket-current';
 export * from './lib/basket-labels';
 export * from './lib/basket-line-row/basket-line-row';
 export * from './lib/basket-page/basket-page';

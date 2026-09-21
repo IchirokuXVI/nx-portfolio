@@ -1,6 +1,7 @@
 import {
   computed,
   DestroyRef,
+  effect,
   inject,
   Injectable,
   signal,
@@ -14,6 +15,7 @@ import {
   type ShoppingListsLoad,
   type WritableGeneratedListStatus,
 } from '@portfolio/velista/models';
+import { LiveBasketBadge } from '@portfolio/velista/platform';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -76,6 +78,7 @@ export class GeneratedListStore {
     GENERATED_LIST_SERVICE
   );
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
+  private readonly _badge = inject(LiveBasketBadge);
 
   private readonly _lists = signal<readonly GeneratedListSummary[]>([]);
   private readonly _state = signal<ShoppingListsLoad>('idle');
@@ -148,6 +151,28 @@ export class GeneratedListStore {
   );
 
   constructor() {
+    // The badge on the app's third tab (velista `0097`, section 7).
+    //
+    // Written from here because this is where the number already is: the listing holds
+    // every summary the account has, `active` filters the live ones for the dashboard
+    // card, and how many lines are left is `lineCount` minus `settledLineCount` on the
+    // newest of them. Anywhere else would be a second answer to one question.
+    //
+    // It is pushed into `platform` rather than read out of here, because the bar lives
+    // in `ui` and rule D1 forbids that library a store. `LiveBasketBadge` holds the
+    // signal and this writes it, which is the inversion `ConnectionState` already uses.
+    //
+    // **The newest live basket and not a sum over all of them**, so the badge counts
+    // the same trip the dashboard card shows: somebody who composed a second run before
+    // finishing the first has two, and adding them up would put a number on the tab that
+    // matches neither screen.
+    effect(() => {
+      const newest = this.active()[0];
+      this._badge.set(
+        newest === undefined ? null : newest.lineCount - newest.settledLineCount
+      );
+    });
+
     // By hand, not `takeUntilDestroyed`: `@angular/core/rxjs-interop` is a secondary
     // entry point module federation does not dedupe, and a service several remotes
     // provide throws `NG0203` from it with a perfectly correct DI graph. Every other

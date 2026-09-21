@@ -286,6 +286,16 @@
       "restart": "Start again"
     }
   },
+  "nav": {
+    "home": "Home",
+    "catalog": "Catalog",
+    "basket": "Shopping list",
+    "label": "Main sections",
+    "badge": "{{count}} still to get"
+  },
+  "catalog": {
+    "soon": "The catalog is on its way."
+  },
   "home": {
     "loading": "Loading your groups",
     "or": "OR",
@@ -1372,6 +1382,14 @@
       "HOUSEHOLD": "Household",
       "PERSONAL_CARE": "Personal care",
       "OTHER": "Other"
+    },
+    "current": {
+      "empty": {
+        "title": "Nothing to shop yet",
+        "body": "Velista makes one shopping list out of everything your groups still need. It tells you where each thing is cheapest.",
+        "make": "Make my shopping list",
+        "older": "See older lists"
+      }
     }
   },
   "getList": {
