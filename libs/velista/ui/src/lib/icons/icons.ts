@@ -936,3 +936,27 @@ export class FlagIcon {
       import('./flag-icon.svg?raw')
   );
 }
+
+/**
+ * The first tab of the bottom bar (velista `0097`, section 2).
+ *
+ * `@portfolio/shared/ui` has a `home-icon` already, and this is deliberately not it,
+ * for `TrashIcon`'s reason one file down: that one is the older four file pattern with
+ * an `@Input` for its colour, and velista imports none of the shared icons. Reaching
+ * for it would add this library's first cross library icon dependency and put two icon
+ * languages in one row, where the other two glyphs are this library's own. The note at
+ * the top of this file says when that changes: all of them move together, or none does.
+ */
+@Component({
+  selector: 'lib-home-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class HomeIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./home-icon.svg?raw')
+  );
+}

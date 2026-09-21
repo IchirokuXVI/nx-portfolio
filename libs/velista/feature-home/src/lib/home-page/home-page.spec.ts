@@ -216,10 +216,16 @@ describe('HomePage', () => {
       expect(text(fixture)).toContain('3');
     });
 
-    it('shows the bottom action bar', async () => {
+    /**
+     * Velista `0097`, section 6. Home's button row went when the app grew a bar of its
+     * own: the button that composed a basket is what the third tab offers, and the
+     * clock beside it is in that tab's header. Home would otherwise have a card, a
+     * button row and a tab row stacked at the same edge.
+     */
+    it('draws no button row of its own any more', async () => {
       const fixture = await render();
 
-      expect(query(fixture, 'lib-bottom-action-bar')).not.toBeNull();
+      expect(query(fixture, 'lib-bottom-action-bar')).toBeNull();
     });
 
     it('renders no card as a nested button, which would be invalid', async () => {
@@ -619,30 +625,25 @@ describe('HomePage', () => {
     });
 
     /**
-     * The dock (section 3.2 of this change): the strip sits directly on top of the
-     * action bar, on the same ground, so getting back into the basket you have and
-     * composing a new one are one object on the screen rather than two at opposite
-     * ends of it.
+     * The dock (section 3.2 of plan 0045, as velista `0097` left it): the strip is the
+     * last thing in the page's column, so it sits on the app's own bar. What it must
+     * not be is one more row inside the scrolling content, which is the half that
+     * regressed for a year: a couple of groups push the card off the screen there.
      *
-     * Asserted as **adjacency in the DOM** rather than by reading styles, because that
-     * is what the seam actually depends on: the strip draws the rule above itself and
-     * the bar's own rule becomes the divider between them, which only works while
-     * nothing is laid out in between. It also pins the half that regressed for a year,
-     * which is the card living up in the scrolling content where a couple of groups
-     * push it off the screen.
+     * Asserted as **position in the DOM** rather than by reading styles, because that
+     * is what the placement actually depends on: `.page` is a flex column whose
+     * `.content` takes the spare height, so anything after it is pinned to the foot.
      */
-    it('docks the strip on the action bar rather than leaving it in the scroll', async () => {
+    it('docks the strip at the foot rather than leaving it in the scroll', async () => {
       const fixture = await render({
         generated: fakeBasketListStore([basket()]),
       });
 
       const card = query(fixture, 'lib-shopping-list-card');
-      const bar = query(fixture, 'lib-bottom-action-bar');
 
       expect(card).not.toBeNull();
-      expect(bar).not.toBeNull();
-      expect(card?.nextElementSibling).toBe(bar);
       expect(query(fixture, '.content lib-shopping-list-card')).toBeNull();
+      expect(card?.parentElement?.lastElementChild).toBe(card);
     });
 
     // Absent entirely: no header, no empty card, no gap (section 3.1). A person who has
@@ -906,29 +907,17 @@ describe('HomePage', () => {
       ]);
     });
 
-    // The dock's second action, with no basket anywhere on the page: it is still
-    // drawn, still enabled, and it reaches the history. The strip that used to be the
-    // only other entry point needs a basket to exist, so this is the case that matters.
-    it('opens the history from the dock, with no basket in sight', async () => {
+    /**
+     * The way to the history from this page is the card's own, and with no basket there
+     * is no card. That is not a hole any more: the bar's third tab is on this screen,
+     * it opens a page whose header carries the clock, and velista `0097` moved the
+     * dock's second action there precisely so that one screen answers it.
+     */
+    it('leaves the history to the bar once its own card is gone', async () => {
       const fixture = await render();
-      const router = TestBed.inject(Router);
-      const navigate = jest
-        .spyOn(router, 'navigate')
-        .mockResolvedValue(true as never);
 
       expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
-
-      const history = query(
-        fixture,
-        'lib-bottom-action-bar .secondary'
-      ) as HTMLButtonElement;
-      expect(history.disabled).toBe(false);
-
-      history.click();
-
-      expect(navigate.mock.calls.map(([commands]) => commands)).toEqual([
-        ['..', 'shopping-lists'],
-      ]);
+      expect(query(fixture, 'lib-bottom-action-bar')).toBeNull();
     });
 
     it('has an outlet for the sheet to render into', async () => {

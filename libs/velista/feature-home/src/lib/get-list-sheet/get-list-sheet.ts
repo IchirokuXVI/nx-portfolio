@@ -157,29 +157,35 @@ export class GetListSheet {
    * The page this sheet is drawn over, named by the route rather than worked out from
    * the URL.
    *
-   * This sheet exists twice, once over the dashboard and once over the history, and
-   * after dismissal somebody belongs back on whichever they opened it from. Route data
-   * makes that a declaration in the one table instead of string surgery on a URL, and
-   * it is also right for a deep link, where there is no history entry to go back to.
-   * Read from the snapshot because a sheet is created when its route activates and
-   * destroyed when it deactivates, so there is no later value to miss.
+   * This sheet exists twice, once over the history and once over the third tab's own
+   * screen, and after dismissal somebody belongs back on whichever they opened it from.
+   * Route data makes that a declaration in the one table instead of string surgery on a
+   * URL, and it is also right for a deep link, where there is no history entry to go
+   * back to. Read from the snapshot because a sheet is created when its route activates
+   * and destroyed when it deactivates, so there is no later value to miss.
    *
-   * The default matches the route that has always existed, so a sheet route added
-   * without the data behaves as the dashboard's rather than throwing.
+   * **The dashboard's copy is gone** (velista `0097`, section 6): home's bottom row was
+   * replaced by the app's own bar, so nothing on that page opens this any more. The
+   * value is a **path**, which is what lets `dismiss` hand it straight to `appPath`,
+   * and the default is the history, so a sheet route added without the data lands on a
+   * real page rather than throwing.
    */
-  private readonly _returnTo: 'home' | 'shopping-lists' =
-    this._route.snapshot.data['returnTo'] === 'shopping-lists'
-      ? 'shopping-lists'
-      : 'home';
+  private readonly _returnTo: 'shopping-lists' | 'shopping-lists/current' =
+    this._route.snapshot.data['returnTo'] === 'shopping-lists/current'
+      ? 'shopping-lists/current'
+      : 'shopping-lists';
 
   /**
    * Whether to offer the way to the history.
    *
-   * Section 3.1 puts it here because the dashboard's own History link lives in the
-   * shopping list card, which goes away when every basket is finished; without this
-   * one such a person would have no route to their history at all. None of that
-   * applies when the history is the page underneath, and a control that leads to the
-   * screen it is already on is worse than no control.
+   * Section 3.1 puts it here because the dashboard's own History link lived in the
+   * shopping list card, which goes away when every basket is finished; without this one
+   * such a person would have had no route to their history at all. None of that applies
+   * when the history **is** the page underneath, and a control that leads to the screen
+   * it is already on is worse than no control.
+   *
+   * Over the third tab it stays, because that screen is not the history: it has its own
+   * clock in the header, and two ways to one screen is not the fault a missing way is.
    */
   readonly showHistory = this._returnTo !== 'shopping-lists';
 

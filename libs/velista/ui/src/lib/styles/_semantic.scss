@@ -289,6 +289,36 @@ $app-content-max: 480px;
   // the smallest space step because they read as one block.
   --app-space-hair: 3px;
 
+  // The bar at the bottom of the app (velista 0097). Its colours are a theme's job
+  // and come from the quiet action pair; its geometry is not, and is the same in
+  // both themes.
+  //
+  // A tab is 60 tall and a third of the row wide, which clears the 48 minimum on
+  // both axes with room to spare (plan 0002, section 8). The row is that plus 8
+  // above and 20 below, which is the 88 the mock draws, and the 20 gives way to a
+  // larger home indicator where the platform reports one.
+  --app-nav-tab-height: 60px;
+  --app-nav-tab-radius: var(--app-radius-lg);
+  // Between `--app-icon-md` and `--app-icon-lg`, and a knob of its own because it is
+  // the one glyph in the app that carries a tab rather than sitting beside a word.
+  --app-nav-icon: 24px;
+  // **The bar is the only element in the app that may carry the bottom inset**
+  // (section 5). While it is up, `--app-safe-bottom` is zero for everything inside
+  // the page, so a screen that draws its own dock keeps its padding and loses its
+  // inset. This is the value the bar itself reads, and it is never redefined.
+  --app-nav-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-nav-pad-block-end: max(var(--app-space-6), var(--app-nav-safe-bottom));
+  // What the page above has to reserve, written once so the bar's own height and the
+  // room made for it cannot drift apart.
+  --app-nav-height: calc(
+    var(--app-nav-tab-height) + var(--app-space-3) +
+      var(--app-nav-pad-block-end)
+  );
+  // Under the sheet, which is 10 (`sheet-shell.scss`), and over a page's own sticky
+  // rows, which are 1 and 2. The two numbers are recorded together on purpose: a
+  // sheet covers the bar, and the bar is not drawn while one is open anyway.
+  --app-nav-z: 5;
+
   // The bottom sheet (plan 0008, rule E1). Its colours are a theme's job and live
   // in `_themes.scss`; its geometry is not, and is the same in both.
   //

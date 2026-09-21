@@ -14,6 +14,8 @@ import {
   TripStore,
 } from '@portfolio/velista/data-access';
 import {
+  NAV_CHROME,
+  NO_NAV_CHROME,
   RENDERS_WHILE_CONNECTING,
   SHEET_SEGMENT,
   sheetFallGuard,
@@ -136,10 +138,10 @@ function entrySheetRoutes(returnTo: 'landing' | 'home'): Route[] {
  * without losing its scroll, and Android's back button dismisses it rather than
  * closing the app.
  *
- * It exists **twice**, once over the dashboard and once over the history, because both
- * screens offer the action and a sheet has to cover the page it was opened from. When
- * it lived only under `home`, pressing Get shopping list on the history swapped the
- * page underneath for the dashboard on the way in and dropped somebody back on the
+ * It exists **twice**, once over the history and once over the third tab's own screen,
+ * because both offer the action and a sheet has to cover the page it was opened from.
+ * When it lived only under `home`, pressing Get shopping list on the history swapped
+ * the page underneath for the dashboard on the way in and dropped somebody back on the
  * history on the way out, which reads as the app losing its place.
  *
  * One function called twice rather than two entries written out, for
@@ -149,8 +151,16 @@ function entrySheetRoutes(returnTo: 'landing' | 'home'): Route[] {
  * No guard beyond the page's own. Whether the caller may generate anything is decided
  * by what they hold `WRITE` on (backend `0051` section 2), which is not knowable
  * before the sources are read, so the sheet is where it is answered and not the route.
+ *
+ * **The dashboard's copy went with velista `0097`**, and the third tab's arrived in the
+ * same change: home's bottom row was replaced by the app's own bar, so no control on
+ * that page opens this any more, and the screen that offers Make my shopping list is
+ * the tab. `returnTo` is still the only thing that differs, and it is still a path
+ * rather than a name, so Cancel lands on the page the sheet was opened over.
  */
-function getListSheetRoutes(returnTo: 'home' | 'shopping-lists'): Route[] {
+function getListSheetRoutes(
+  returnTo: 'shopping-lists' | 'shopping-lists/current'
+): Route[] {
   return [
     sheet({
       path: 'get',
@@ -364,10 +374,13 @@ export const AppShellRoutes: Route[] = [
             canActivate: [authenticatedGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-home').then((m) => m.HomePage),
-            children: [
-              ...getListSheetRoutes('home'),
-              ...entrySheetRoutes('home'),
-            ],
+            // The two entry sheets, and **not** Get shopping list any more (velista
+            // `0097`, section 6). The button that opened it was in home's bottom row,
+            // and that row went when the app's own bar took its place; the sheet is
+            // offered by the third tab and by the history, which are the two screens
+            // that now have a control for it. A sheet nothing can open is a URL that
+            // draws a form over the wrong page.
+            children: [...entrySheetRoutes('home')],
           },
           // The credential flows (plan 0009). Routes and not sheets, because none of them
           // completes one field in place over a page that keeps its context: each has two
@@ -382,6 +395,8 @@ export const AppShellRoutes: Route[] = [
           {
             path: 'auth/login',
             canActivate: [anonymousOnlyGuard],
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.SignInPage
@@ -390,6 +405,8 @@ export const AppShellRoutes: Route[] = [
           {
             path: 'auth/register',
             canActivate: [anonymousOnlyGuard],
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.RegisterPage
@@ -398,6 +415,8 @@ export const AppShellRoutes: Route[] = [
           {
             path: 'auth/upgrade',
             canActivate: [guestOnlyGuard],
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.UpgradePage
@@ -407,6 +426,7 @@ export const AppShellRoutes: Route[] = [
             // Public, and it has to be: a confirmation link is opened wherever the mail
             // app happens to be, which is often a phone that has never signed in.
             path: 'auth/verify',
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.VerifyEmailPage
@@ -416,6 +436,7 @@ export const AppShellRoutes: Route[] = [
             // Public, and inert until the gateway redirects here with the pair in the URL
             // fragment instead of answering JSON (section 5.6).
             path: 'auth/callback',
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.AuthCallbackPage
@@ -725,6 +746,50 @@ export const AppShellRoutes: Route[] = [
           },
           {
             /**
+             * The second tab, which has no screen yet (velista `0097`, section 10).
+             *
+             * The tab ships with the bar, so the route has to exist from the same day:
+             * a bar with a tab that leads to this app's 404 is worse than no bar, and
+             * the honest thing for a screen that is coming is to say so. `0100` fills
+             * it, and the URL it fills is this one.
+             *
+             * `authenticatedGuard` because every catalog read the app makes is refused
+             * without an account, which is also why the bar is absent on the four
+             * screens of section 4.
+             */
+            path: 'catalog',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-catalog').then(
+                (m) => m.CatalogPage
+              ),
+          },
+          {
+            /**
+             * The third tab (velista `0097`, section 7).
+             *
+             * **Declared before `shopping-lists/:generatedListId`**, so the word is not
+             * read as an id. That is the collision `SHEET_SEGMENT` exists to prevent one
+             * level down, and `routes.spec.ts` asserts the order. The basket's
+             * `canMatch` UUID guard keeps the pair unambiguous the other way round, so
+             * neither route depends on the other's position alone.
+             *
+             * The screen it draws redirects to the live basket when there is one, and
+             * otherwise offers the two actions that used to sit in home's button row.
+             * It carries a copy of the Get shopping list sheet for the reason the
+             * dashboard and the history each carry one: a sheet covers the page it was
+             * opened from.
+             */
+            path: 'shopping-lists/current',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shopping-lists').then(
+                (m) => m.BasketCurrentPage
+              ),
+            children: [...getListSheetRoutes('shopping-lists/current')],
+          },
+          {
+            /**
              * The shared basket (plan 0044). The screen somebody carries around a
              * shop, which is very often not the person who wrote the list.
              *
@@ -909,6 +974,7 @@ export const AppShellRoutes: Route[] = [
              * sent to.
              */
             path: 's/:secret',
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
             loadComponent: () =>
               import('@portfolio/velista/feature-shopping-lists').then(
                 (m) => m.JoinPage
@@ -919,6 +985,7 @@ export const AppShellRoutes: Route[] = [
             // not a sheet: there is no page underneath to cover (plan 0008, section 4.1).
             // Public, because the whole point is that the recipient has no account.
             path: 'join/:code',
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
             loadComponent: () =>
               import('@portfolio/velista/feature-entry').then(
                 (m) => m.JoinLinkPage
@@ -952,7 +1019,10 @@ export const AppShellRoutes: Route[] = [
             // spreading downwards: the two entry sheets below carry their own `data`,
             // so neither inherits it and a deep link into one waits like anything else.
             // That is the behaviour we want, because those screens create a group.
-            data: { [RENDERS_WHILE_CONNECTING]: true },
+            data: {
+              [RENDERS_WHILE_CONNECTING]: true,
+              [NAV_CHROME]: NO_NAV_CHROME,
+            },
             loadComponent: () =>
               import('@portfolio/velista/feature-landing').then(
                 (m) => m.LandingPage

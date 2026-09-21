@@ -1,0 +1,57 @@
+<!--
+  Three links in the visual order, inside one landmark (section 9). Focus runs page
+  then bar, which is true because the bar sits after the outlet in the DOM rather than
+  because anything carries a `tabindex`.
+-->
+<nav [attr.aria-label]="'nav.label' | rokuT" class="bar">
+  <a
+    [attr.aria-current]="isActive('home') ? 'page' : null"
+    [class.active]="isActive('home')"
+    [routerLink]="homeUrl()"
+    class="tab"
+  >
+    <span class="mark">
+      <lib-home-icon class="glyph" />
+    </span>
+    <span class="word">{{ 'nav.home' | rokuT }}</span>
+  </a>
+
+  <a
+    [attr.aria-current]="isActive('catalog') ? 'page' : null"
+    [class.active]="isActive('catalog')"
+    [routerLink]="catalogUrl()"
+    class="tab"
+  >
+    <span class="mark">
+      <lib-product-icon class="glyph" />
+    </span>
+    <span class="word">{{ 'nav.catalog' | rokuT }}</span>
+  </a>
+
+  <a
+    [attr.aria-current]="isActive('basket') ? 'page' : null"
+    [class.active]="isActive('basket')"
+    [routerLink]="basketUrl()"
+    class="tab"
+  >
+    <span class="mark">
+      <lib-basket-icon class="glyph" />
+
+      <!--
+        The count is `aria-hidden` and the sentence below carries it instead, so the
+        number is in the link's accessible name rather than only in a coloured circle
+        (section 9).
+      -->
+      @if (badgeText(); as text) {
+        <span aria-hidden="true" class="badge">{{ text }}</span>
+      }
+    </span>
+    <span class="word">{{ 'nav.basket' | rokuT }}</span>
+
+    @if (badge(); as pending) {
+      <span class="visually-hidden">
+        {{ 'nav.badge' | rokuT: { count: pending } }}
+      </span>
+    }
+  </a>
+</nav>

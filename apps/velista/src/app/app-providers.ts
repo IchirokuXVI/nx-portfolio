@@ -4,6 +4,7 @@ import {
   withInterceptors,
 } from '@angular/common/http';
 import {
+  effect,
   inject,
   provideEnvironmentInitializer,
   type EnvironmentProviders,
@@ -40,6 +41,7 @@ import {
   MembershipApi,
   REALTIME_CLIENT,
   RealtimeSocket,
+  SessionStore,
   SessionValidation,
   SHOP_SERVICE,
   ShopApi,
@@ -64,6 +66,7 @@ import {
   AppHistory,
   AppUpdates,
   InstallStore,
+  NavChrome,
   VELISTA_PLATFORM_PROVIDERS,
 } from '@portfolio/velista/platform';
 import { environment } from '../environments/environment';
@@ -327,4 +330,25 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // Unstarted it reports no entry behind and each button walks to its own fallback,
   // which is safe but is not the behaviour these screens are written for.
   provideEnvironmentInitializer(() => inject(AppHistory).watch()),
+
+  // Tell the bottom bar whether this session can use its tabs (velista `0097`,
+  // section 3).
+  //
+  // **This file is the only place that may see both sides of it.** `NavChrome` lives in
+  // `platform`, which does not import `data-access`, and `SessionStore` is the answer;
+  // the signal therefore lives there and is written from here, which is the inversion
+  // `ConnectionState` and the gateway interceptor already use.
+  //
+  // An effect rather than a one time read, because the answer changes: signing in has
+  // to raise the bar without a reload, and signing out has to take it away before the
+  // next screen is drawn. `isAuthenticated` and nothing finer: a temporary user has
+  // groups, lists and baskets and all three tabs answer for them, while somebody
+  // holding only a shared basket's participant session is not authenticated at all,
+  // which is the guest case section 4 leaves to this signal rather than to route data.
+  provideEnvironmentInitializer(() => {
+    const session = inject(SessionStore);
+    const chrome = inject(NavChrome);
+
+    effect(() => chrome.setUsable(session.isAuthenticated()));
+  }),
 ];

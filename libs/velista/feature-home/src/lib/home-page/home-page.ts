@@ -49,7 +49,6 @@ import {
 import {
   AppBar,
   AskedNotice,
-  BottomActionBar,
   ConfirmEmailNudge,
   EmptyState,
   ErrorState,
@@ -89,7 +88,6 @@ import { selectHomeState } from './select-home-state';
     RouterOutlet,
     AppBar,
     AskedNotice,
-    BottomActionBar,
     ConfirmEmailNudge,
     EmptyState,
     ErrorState,
@@ -685,19 +683,6 @@ export class HomePage {
   /** The history (plan 0045, section 3.3). A sibling for `openShoppingList`'s reason. */
   openShoppingLists(): void {
     void this._router.navigate(['..', BASKET_PATHS.list], {
-      relativeTo: this._route,
-    });
-  }
-
-  /**
-   * The generation sheet (plan 0045, section 3.4).
-   *
-   * A **child** route and so a bare relative path, exactly as the two entry sheets are:
-   * it covers this page without losing it, and Android's back button dismisses it
-   * rather than closing the app (rule E1, plan 0008).
-   */
-  getShoppingList(): void {
-    void this._router.navigate(sheetSegments('get'), {
       relativeTo: this._route,
     });
   }

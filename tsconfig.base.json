@@ -137,6 +137,9 @@
       "@portfolio/velista/feature-entry": [
         "./libs/velista/feature-entry/src/index.ts"
       ],
+      "@portfolio/velista/feature-catalog": [
+        "./libs/velista/feature-catalog/src/index.ts"
+      ],
       "@portfolio/velista/feature-install": [
         "./libs/velista/feature-install/src/index.ts"
       ],
