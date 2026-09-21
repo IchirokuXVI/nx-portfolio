@@ -38,6 +38,7 @@ export * from './lib/messages/harvest.messages';
 export * from './lib/messages/list.messages';
 export * from './lib/messages/merge.messages';
 export * from './lib/messages/profile.messages';
+export * from './lib/messages/purchase.messages';
 export * from './lib/messages/realtime.messages';
 export * from './lib/messages/reconciliation.messages';
 export * from './lib/messages/stats.messages';

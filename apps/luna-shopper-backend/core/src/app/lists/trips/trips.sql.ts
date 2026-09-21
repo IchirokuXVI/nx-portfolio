@@ -259,7 +259,7 @@ const TRIPS_CTE = `
     GROUP BY gl.id
     UNION ALL
     SELECT r."tripId" AS "id",
-           'LOOSE'::text AS "kind",
+           'SESSION'::text AS "kind",
            NULL::text AS "name",
            MIN(r."firstSettledAt") AS "startedAt",
            false AS "live",
@@ -323,7 +323,7 @@ export const ENDED_TRIPS_SQL = `
           UNION ALL
           SELECT s."settledAt" AS "at", s.id AS "id"
           FROM "line_settlements" s
-          WHERE $5::text = 'LOOSE' AND s.id = $4::uuid
+          WHERE $5::text = 'SESSION' AND s.id = $4::uuid
         ) b
       )
     )

@@ -25,6 +25,7 @@ import { BasketLineSkips1756002600000 } from './1756002600000-BasketLineSkips';
 import { ListLineChangesAndCursors1756002700000 } from './1756002700000-ListLineChangesAndCursors';
 import { BasketLinkAndAccessExpiry1756002800000 } from './1756002800000-BasketLinkAndAccessExpiry';
 import { OpenBasketsByOwner1756002900000 } from './1756002900000-OpenBasketsByOwner';
+import { PersonPurchases1756003000000 } from './1756003000000-PersonPurchases';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -131,4 +132,9 @@ export const CORE_MIGRATIONS = [
   // nothing, so it follows that migration and nothing else (plan 0139, section
   // 9).
   OpenBasketsByOwner1756002900000,
+  // One index swapped on `generated_list_participants`, which plan 0051's
+  // migration created and plan 0140's last touched. It adds no column, moves no
+  // row and reads nothing, so it follows every migration that touched that
+  // table and nothing else (plan 0142, section 9).
+  PersonPurchases1756003000000,
 ];

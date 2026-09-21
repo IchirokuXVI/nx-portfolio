@@ -11,7 +11,7 @@ import type { TripLineRow, TripRow } from './trips.sql';
 export function toTripView(row: TripRow): TripView {
   return {
     id: row.id,
-    kind: row.kind === TripKind.BASKET ? TripKind.BASKET : TripKind.LOOSE,
+    kind: row.kind === TripKind.BASKET ? TripKind.BASKET : TripKind.SESSION,
     name: row.name,
     live: row.live,
     startedAt: new Date(row.startedAt).toISOString(),
@@ -40,7 +40,7 @@ export function toTripView(row: TripRow): TripView {
  * the newer and the more useful of the two facts, and a line bought all the way
  * through reads `BOUGHT` whatever was said before the last unit went in.
  *
- * ## A loose row
+ * ## A session row
  *
  * It asked for nothing, so `asked` and `left` are null and the outcome is the
  * latest settlement's own: `BOUGHT` or `NOT_AVAILABLE`.
@@ -52,7 +52,7 @@ export function toTripRowView(kind: TripKind, row: TripLineRow): TripRowView {
   const bought = Number(row.bought);
   const notAvailable = row.lastOutcome === SettlementOutcome.NOT_AVAILABLE;
 
-  if (kind === TripKind.LOOSE) {
+  if (kind === TripKind.SESSION) {
     return {
       lineId: row.lineId,
       asked: null,

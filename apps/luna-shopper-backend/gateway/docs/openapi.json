@@ -6685,7 +6685,7 @@
             "schema": {
               "enum": [
                 "basket",
-                "loose"
+                "session"
               ],
               "type": "string"
             }
@@ -19117,6 +19117,149 @@
         ]
       }
     },
+    "/v1/purchases/sessions": {
+      "get": {
+        "operationId": "PurchaseController_listSessions_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `purchase.listSessions` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/purchase.PurchaseEntryPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "purchases"
+        ]
+      }
+    },
+    "/v1/purchases/sessions/{kind}/{id}/rows": {
+      "get": {
+        "operationId": "PurchaseController_listSessionRows_v1",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "basket",
+                "session"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `purchase.listSessionRows` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/purchase.PurchaseRowPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "purchases"
+        ]
+      }
+    },
     "/v1/admin/harvest/runs": {
       "post": {
         "operationId": "AdminHarvestRunsController_spawn_v1",
@@ -30560,7 +30703,7 @@
         "type": "string",
         "enum": [
           "BASKET",
-          "LOOSE"
+          "SESSION"
         ]
       },
       "enums.TripRowOutcome": {
@@ -34109,6 +34252,187 @@
           "supermarkets",
           "locations",
           "generationSources"
+        ],
+        "additionalProperties": false
+      },
+      "purchase.PurchaseEntryPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/purchase.PurchaseEntryView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "purchase.PurchaseEntryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.TripKind"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "open": {
+            "type": "boolean"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "boughtLineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "spentCents": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "unpricedCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "open",
+          "startedAt",
+          "endedAt",
+          "lineCount",
+          "boughtLineCount",
+          "spentCents",
+          "unpricedCount"
+        ],
+        "additionalProperties": false
+      },
+      "purchase.PurchaseRowPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/purchase.PurchaseRowView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "purchase.PurchaseRowView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.SettlementOutcome"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pricePaidCents": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "settledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lineId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "listId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "listName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zoneId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "content": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "itemId",
+          "outcome",
+          "quantity",
+          "pricePaidCents",
+          "settledAt",
+          "lineId",
+          "listId",
+          "listName",
+          "zoneId",
+          "content"
         ],
         "additionalProperties": false
       },

@@ -211,11 +211,11 @@ describe('ListViewStore: open trips', () => {
 
   it('keeps what is open through a search, and forgets it when the list changes', () => {
     const view = harness(new Map());
-    view.toggleTrip('LOOSE:s-1');
+    view.toggleTrip('SESSION:s-1');
 
     view.search('leche');
     view.search('');
-    expect([...view.openTrips()]).toEqual(['LOOSE:s-1']);
+    expect([...view.openTrips()]).toEqual(['SESSION:s-1']);
 
     view.open('list-2');
     expect([...view.openTrips()]).toEqual([]);

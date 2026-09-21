@@ -7,14 +7,17 @@
  */
 
 /**
- * `BASKET` or `LOOSE`, upper case on the wire.
+ * `BASKET` or `SESSION`, upper case on the wire.
  *
- * Unknown falls back to `LOOSE`. A loose trip is labelled without a name, so a kind this
+ * Unknown falls back to `SESSION`. A session is labelled without a name, so a kind this
  * build has never heard of still draws a label that claims nothing about a basket.
+ *
+ * The wire said `LOOSE` until backend `0142`, section 7. The copy is velista `0095`'s and
+ * is not touched here: this file mirrors the wire.
  */
-export const TRIP_KINDS = ['BASKET', 'LOOSE'] as const;
+export const TRIP_KINDS = ['BASKET', 'SESSION'] as const;
 export type TripKind = (typeof TRIP_KINDS)[number];
-export const TRIP_KIND_FALLBACK: TripKind = 'LOOSE';
+export const TRIP_KIND_FALLBACK: TripKind = 'SESSION';
 
 /**
  * What one trip did to one line (backend `0122`, section 4).
@@ -134,6 +137,6 @@ export interface TripGroupVm {
 }
 
 /** The `:kind` segment of the rows route, which is lower case. */
-export function tripPathKind(kind: TripKind): 'basket' | 'loose' {
-  return kind === 'BASKET' ? 'basket' : 'loose';
+export function tripPathKind(kind: TripKind): 'basket' | 'session' {
+  return kind === 'BASKET' ? 'basket' : 'session';
 }

@@ -647,7 +647,7 @@ const tripPage = object(
 );
 
 // What one trip did to one zone line (section 4). `asked` and `left` are null
-// for a loose trip, which asked for nothing: it is a record of purchases alone.
+// for a session, which asked for nothing: it is a record of purchases alone.
 const tripRowView = object(
   LIST_SCHEMA_IDS.tripRowView,
   {

@@ -68,7 +68,7 @@ export function selectTripGroups(
                 mark,
                 claimedBy: mark === 'claimed' ? line.claimedBy : null,
                 buyer:
-                  trip.kind === 'LOOSE' && row.settledByUserId !== null
+                  trip.kind === 'SESSION' && row.settledByUserId !== null
                     ? input.nameOf(row.settledByUserId)
                     : null,
                 // The basket holds a copy taken when it was composed. On a live trip

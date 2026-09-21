@@ -1159,7 +1159,7 @@ export interface TripView {
   kind: TripKind;
   /** `BASKET` only. Null is "shown as its date". */
   name: string | null;
-  /** Whether the basket still claims its lines. Always false for `LOOSE`. */
+  /** Whether the basket still claims its lines. Always false for `SESSION`. */
   live: boolean;
   /** `generatedAt`, or the earliest `settledAt` of the session. */
   startedAt: string;
@@ -1192,14 +1192,14 @@ export interface TripPage {
  */
 export interface TripRowView {
   lineId: string;
-  /** `BASKET`: what this trip's origins asked of the line. `LOOSE`: null. */
+  /** `BASKET`: what this trip's origins asked of the line. `SESSION`: null. */
   asked: number | null;
   /** Units in this trip's standing `BOUGHT` settlements of the line. */
   bought: number;
-  /** `BASKET`: `max(0, asked - bought)`. `LOOSE`: null. */
+  /** `BASKET`: `max(0, asked - bought)`. `SESSION`: null. */
   left: number | null;
   outcome: TripRowOutcome;
-  /** `LOOSE` only: the latest buyer, or null if they have left the zone. */
+  /** `SESSION` only: the latest buyer, or null if they have left the zone. */
   settledByUserId: string | null;
 }
 
