@@ -46,7 +46,9 @@ describeIntegration('a link that lasts twelve hours (real Postgres)', () => {
     emit: jest.fn(),
     emitTo: jest.fn(),
     emitToUsers: jest.fn(),
-    emitToGeneratedList: jest.fn(),
+    // The basket audience is a list since plan 0139. These events still name
+    // exactly one basket; only the shape of the argument moved.
+    emitToBaskets: jest.fn(),
   };
 
   const owner = randomUUID();
@@ -105,7 +107,10 @@ describeIntegration('a link that lasts twelve hours (real Postgres)', () => {
     });
     await dataSource.initialize();
 
-    const members = new GeneratedListMembersService(dataSource, events as never);
+    const members = new GeneratedListMembersService(
+      dataSource,
+      events as never
+    );
     sharing = new GeneratedListSharingService(
       dataSource,
       dataSource.getRepository(GeneratedList),
@@ -141,8 +146,7 @@ describeIntegration('a link that lasts twelve hours (real Postgres)', () => {
       });
 
       const apart =
-        new Date(link.expiresAt).getTime() -
-        new Date(link.createdAt).getTime();
+        new Date(link.expiresAt).getTime() - new Date(link.createdAt).getTime();
       // Both moments come from one statement, so they cannot disagree.
       expect(apart).toBe(12 * 60 * 60 * 1000);
     });
@@ -283,9 +287,7 @@ describeIntegration('a link that lasts twelve hours (real Postgres)', () => {
       // The unique index over (basket, user) is what makes it the same row, and
       // that is what keeps everything they already bought attributed to them.
       expect(back.participant.id).toBe(joined.participant.id);
-      expect(back.participant.expiresAt).not.toBe(
-        joined.participant.expiresAt
-      );
+      expect(back.participant.expiresAt).not.toBe(joined.participant.expiresAt);
       expect((await row(back.participant.id)).revokedAt).toBeNull();
     });
 
@@ -423,18 +425,18 @@ describeIntegration('a link that lasts twelve hours (real Postgres)', () => {
       expect(ended.revokedAt).not.toBeNull();
       expect(ended.endedReason).toBe(ParticipantEndedReason.EXPIRED);
       expect(
-        events.emitToGeneratedList.mock.calls.filter(
-          ([name, id]) =>
+        events.emitToBaskets.mock.calls.filter(
+          ([name, ids]) =>
             name === RealtimeEvent.GeneratedListParticipantLeft &&
-            id === basket
+            (ids as readonly string[]).includes(basket)
         )
       ).toHaveLength(1);
 
       // A second tick finds nothing: the row is revoked, so the predicate skips
       // it, and nobody hears about them twice.
-      events.emitToGeneratedList.mockClear();
+      events.emitToBaskets.mockClear();
       await sweep.sweep();
-      expect(events.emitToGeneratedList).not.toHaveBeenCalled();
+      expect(events.emitToBaskets).not.toHaveBeenCalled();
     });
 
     it('announces no row twice when two sweeps run at once', async () => {
@@ -453,9 +455,10 @@ describeIntegration('a link that lasts twelve hours (real Postgres)', () => {
       const [a, b] = await Promise.all([sweep.sweep(), sweep.sweep()]);
       expect(a + b).toBe(2);
 
-      const told = events.emitToGeneratedList.mock.calls.filter(
-        ([name, id]) =>
-          name === RealtimeEvent.GeneratedListParticipantLeft && id === basket
+      const told = events.emitToBaskets.mock.calls.filter(
+        ([name, ids]) =>
+          name === RealtimeEvent.GeneratedListParticipantLeft &&
+          (ids as readonly string[]).includes(basket)
       );
       expect(told).toHaveLength(2);
     });

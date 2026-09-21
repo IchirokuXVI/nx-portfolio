@@ -193,7 +193,7 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     emit.mockReset();
     // Reset beside the emit, so a test can count the announcements one write
     // makes (plan 0139, section 3).
-    announcer.linesChanged.mockClear();
+    announcer.reset();
     await dataSource
       .getRepository(GeneratedList)
       .delete({ ownerUserId: ids.owner });
@@ -338,10 +338,8 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     // rather than the two the delete and the update would each have made. A
     // basket holding the absorbed line and the survivor draws one row either
     // way, and two nudges would make it read the basket twice for one write.
-    expect(announcer.linesChanged).toHaveBeenCalledTimes(1);
-    expect(announcer.linesChanged).toHaveBeenCalledWith(ids.list, [
-      bread.id,
-      milk.id,
+    expect(announcer.calls.linesChanged).toEqual([
+      { listId: ids.list, lineIds: [bread.id, milk.id] },
     ]);
   });
 

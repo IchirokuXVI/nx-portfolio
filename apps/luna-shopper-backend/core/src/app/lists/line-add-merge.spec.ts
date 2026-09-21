@@ -504,9 +504,8 @@ describe('what an add tells the baskets', () => {
 
     const result = await add(w, 'Milk');
 
-    expect(announcer.linesChanged).toHaveBeenCalledTimes(1);
-    expect(announcer.linesChanged).toHaveBeenCalledWith(LIST_ID, [
-      result.line.id,
+    expect(announcer.calls.linesChanged).toEqual([
+      { listId: LIST_ID, lineIds: [result.line.id] },
     ]);
   });
 
@@ -518,8 +517,9 @@ describe('what an add tells the baskets', () => {
     // A merge is an update of a line already on the screen, and the basket that
     // holds that row needs telling exactly once either way.
     expect(result.merged).toBe(true);
-    expect(announcer.linesChanged).toHaveBeenCalledTimes(1);
-    expect(announcer.linesChanged).toHaveBeenCalledWith(LIST_ID, ['li1']);
+    expect(announcer.calls.linesChanged).toEqual([
+      { listId: LIST_ID, lineIds: ['li1'] },
+    ]);
   });
 
   it('tells nobody when the write was refused', async () => {
@@ -529,7 +529,7 @@ describe('what an add tells the baskets', () => {
 
     // The announcement follows the commit, so a write that never happened
     // announces nothing.
-    expect(announcer.linesChanged).not.toHaveBeenCalled();
+    expect(announcer.calls.linesChanged).toEqual([]);
   });
 
   it('announces once for a whole batch, naming every line', async () => {
@@ -546,11 +546,9 @@ describe('what an add tells the baskets', () => {
     // reads again whatever it is told and three nudges would be three reads of
     // the same basket for one write.
     expect(w.events).toHaveLength(3);
-    expect(announcer.linesChanged).toHaveBeenCalledTimes(1);
-    expect(announcer.linesChanged).toHaveBeenCalledWith(
-      LIST_ID,
-      results.map((entry) => entry.line.id)
-    );
+    expect(announcer.calls.linesChanged).toEqual([
+      { listId: LIST_ID, lineIds: results.map((entry) => entry.line.id) },
+    ]);
   });
 
   it('announces nothing for a reorder', async () => {
@@ -569,6 +567,6 @@ describe('what an add tells the baskets', () => {
 
     // A basket computes its own order (plan 0141), so the order a list is drawn
     // in is not a fact any basket reads.
-    expect(announcer.linesChanged).not.toHaveBeenCalled();
+    expect(announcer.calls.linesChanged).toEqual([]);
   });
 });
