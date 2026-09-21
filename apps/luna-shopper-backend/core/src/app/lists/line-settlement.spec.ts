@@ -8,6 +8,7 @@ import {
   type LineSettlementResult,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import { LineSettlement, ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
@@ -17,6 +18,13 @@ import { fakeLineItems } from './line-items.fake';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { ListAccessService } from './list-access.service';
 import { SettlementService } from './settlement.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * Settling a line (plan 0047, section 4).
@@ -169,7 +177,8 @@ function build(options: {
     settlementRepo as never,
     listAccess,
     fakeLineClaims().service,
-    publisher
+    publisher,
+    announcer
   );
 
   return { service, saved, written, events, line };

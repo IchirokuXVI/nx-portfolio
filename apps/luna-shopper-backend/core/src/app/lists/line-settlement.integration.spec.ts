@@ -11,6 +11,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   CORE_ENTITIES,
   LineSettlement,
@@ -24,6 +25,13 @@ import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { ListAccessService } from './list-access.service';
 import { SettlementService } from './settlement.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * The two settlement reads, against real Postgres (plan 0047, section 6).
@@ -146,7 +154,8 @@ describeIntegration('the settlement history (real Postgres)', () => {
       dataSource.getRepository(LineSettlement),
       listAccess,
       fakeLineClaims().service,
-      { emit: jest.fn() } as never
+      { emit: jest.fn() } as never,
+      announcer
     );
 
     const home = await seedZone('Home', ids.shopper, 'Milk');

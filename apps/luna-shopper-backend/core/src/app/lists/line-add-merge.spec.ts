@@ -10,6 +10,7 @@ import {
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListAccess, ShoppingList } from '../entities';
 import {
   LineSettlement,
@@ -26,6 +27,16 @@ import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer, and the last describe in this
+ * file is what it announces. Fresh per test, because the assertions there are
+ * about how many announcements one write makes.
+ */
+let announcer = fakeBasketAnnouncer();
+beforeEach(() => {
+  announcer = fakeBasketAnnouncer();
+});
 
 /**
  * A zone list holds one line per normalized name (plan 0091).
@@ -244,7 +255,8 @@ function build(options: {
     new LineMergeService(changes.recorder),
     // What the add records (plan 0138). A stand in, because this file is about
     // which line an add lands on; the rows it writes are proven against Postgres.
-    changes.recorder
+    changes.recorder,
+    announcer
   );
 
   return { service, saved, events, items, recorded: changes.recorded };
@@ -474,5 +486,87 @@ describe('an add that creates still creates (plan 0091, section 4)', () => {
 
     await expect(add(w, 'milk')).rejects.toThrow(/write access/);
     expect(w.saved).toHaveLength(0);
+  });
+});
+
+/**
+ * Who hears an add, beyond the list room (plan 0139, section 3).
+ *
+ * Every write to a list line is a write to every basket that covers the list,
+ * because since plan 0136 a basket stores no lines and reads the lines of the
+ * lists it covers. Which baskets those are is `BasketAnnouncer`'s question and
+ * is proven in its own spec; what is asserted here is that this service asks it,
+ * once per write, naming the lines the write touched.
+ */
+describe('what an add tells the baskets', () => {
+  it('announces once, naming the list and the line it created', async () => {
+    const w = build({});
+
+    const result = await add(w, 'Milk');
+
+    expect(announcer.calls.linesChanged).toEqual([
+      { listId: LIST_ID, lineIds: [result.line.id] },
+    ]);
+  });
+
+  it('announces once for an add that folded into a line already there', async () => {
+    const w = build({ holds: [{ id: 'li1', content: 'milk', quantity: 1 }] });
+
+    const result = await add(w, 'Milk', { quantity: 2 });
+
+    // A merge is an update of a line already on the screen, and the basket that
+    // holds that row needs telling exactly once either way.
+    expect(result.merged).toBe(true);
+    expect(announcer.calls.linesChanged).toEqual([
+      { listId: LIST_ID, lineIds: ['li1'] },
+    ]);
+  });
+
+  it('tells nobody when the write was refused', async () => {
+    const w = build({ permissions: [ListPermission.READ] });
+
+    await expect(add(w, 'Milk')).rejects.toThrow(/write access/);
+
+    // The announcement follows the commit, so a write that never happened
+    // announces nothing.
+    expect(announcer.calls.linesChanged).toEqual([]);
+  });
+
+  it('announces once for a whole batch, naming every line', async () => {
+    const w = build({});
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [{ content: 'Milk' }, { content: 'Bread' }, { content: 'Eggs' }],
+    });
+
+    // Three `line.added` events, because each carries a whole line and a client
+    // applies them one at a time. One basket announcement, because a basket
+    // reads again whatever it is told and three nudges would be three reads of
+    // the same basket for one write.
+    expect(w.events).toHaveLength(3);
+    expect(announcer.calls.linesChanged).toEqual([
+      { listId: LIST_ID, lineIds: results.map((entry) => entry.line.id) },
+    ]);
+  });
+
+  it('announces nothing for a reorder', async () => {
+    const w = build({
+      holds: [
+        { id: 'li1', content: 'milk' },
+        { id: 'li2', content: 'bread' },
+      ],
+    });
+
+    await w.service.reorder({
+      userId: ADDER,
+      listId: LIST_ID,
+      orderedLineIds: ['li2', 'li1'],
+    });
+
+    // A basket computes its own order (plan 0141), so the order a list is drawn
+    // in is not a fact any basket reads.
+    expect(announcer.calls.linesChanged).toEqual([]);
   });
 });

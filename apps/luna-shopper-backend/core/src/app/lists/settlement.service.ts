@@ -19,11 +19,12 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, IsNull, Repository } from 'typeorm';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import { LineSettlement, ListLine, ListLineItem } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../generated-lists/line-claim.service';
-import { ListAccessService } from './list-access.service';
 import { toLineItemSet, type LineItemSet } from './line-item-set';
+import { ListAccessService } from './list-access.service';
 import { toLineSettlementView, toLineView } from './list.mappers';
 import { ITEM_SETTLEMENTS_SQL } from './settlement.sql';
 
@@ -66,7 +67,11 @@ export class SettlementService {
     private readonly settlements: Repository<LineSettlement>,
     private readonly listAccess: ListAccessService,
     private readonly claims: LineClaimService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // Every basket covering the list hears that this line moved (plan 0139,
+    // section 3). Buying from the list page is the case this fixes: it changes
+    // what is left on a row somebody else is standing in a shop looking at.
+    private readonly baskets: BasketAnnouncer
   ) {}
 
   /**
@@ -231,6 +236,7 @@ export class SettlementService {
     // After the commit, as everywhere else in core. It carries both halves so a
     // phone in the shop and a phone at home agree without a refetch (section 8).
     this.events.emit(RealtimeEvent.LineSettled, list.zoneId, result, list.id);
+    void this.baskets.linesChanged(list.id, [req.lineId]);
     return result;
   }
 

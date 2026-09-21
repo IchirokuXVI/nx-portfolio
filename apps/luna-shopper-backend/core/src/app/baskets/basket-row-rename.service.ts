@@ -17,14 +17,17 @@ import { DataSource, In, type EntityManager } from 'typeorm';
 import { Zone } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
-import { ListAccessService } from '../lists/list-access.service';
 import {
   LineService,
   type ListRenameOutcome,
   type ListRenamePlan,
 } from '../lists/line.service';
-import { BasketWriteContext, type OpenBasketWrite } from './basket-write.context';
+import { ListAccessService } from '../lists/list-access.service';
 import { type BasketRow } from './basket-row-resolver';
+import {
+  BasketWriteContext,
+  type OpenBasketWrite,
+} from './basket-write.context';
 
 /**
  * Renaming a row, and every list line it is made of (plan 0136, section 5.5).
@@ -91,8 +94,10 @@ export class BasketRowRenameService {
     for (const outcome of outcomes) {
       this.zoneLines.announceListRename(outcome);
     }
+    // No announcement of its own (plan 0139, section 3): `announceListRename`
+    // above makes one per list it renamed, naming the lines that went and the
+    // lines that stayed, which is more than this site could reconstruct.
     const lineIds = row.entries.map((entry) => entry.lineId);
-    opened.announceLinesChanged(lineIds, this.events);
     return this.answer(opened, lineIds, req.rowKey);
   }
 

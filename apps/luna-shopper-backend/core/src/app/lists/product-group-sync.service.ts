@@ -16,6 +16,7 @@ import { runOnce } from '@portfolio/luna-shopper/platform';
 // a type leaves index 0 undefined and the service unconstructable. It costs a
 // boot failure that no unit spec sees, because a spec passes its own double in.
 import { DataSource, In, Repository, type EntityManager } from 'typeorm';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import {
   ListLine,
   ListLineGroupRemoval,
@@ -82,7 +83,10 @@ export class ProductGroupSyncService {
     private readonly lists: Repository<ShoppingList>,
     private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher,
-    private readonly store: ProcessedEventStore
+    private readonly store: ProcessedEventStore,
+    // A row's options moved, so every basket covering the line reads it again
+    // (plan 0139, section 3).
+    private readonly baskets: BasketAnnouncer
   ) {}
 
   /**
@@ -374,5 +378,15 @@ export class ProductGroupSyncService {
         line.listId
       );
     }
+
+    // One announcement per list, naming that list's lines (plan 0139, section
+    // 3). One product joining a group touches lines in many households, so this
+    // is the site where a nudge per line would be the burst the read above was
+    // written to avoid.
+    await this.baskets.linesChangedAcross(
+      lines
+        .filter((line) => zoneOf.has(line.listId))
+        .map((line) => ({ listId: line.listId, lineId: line.id }))
+    );
   }
 }

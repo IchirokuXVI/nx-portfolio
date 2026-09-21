@@ -13,6 +13,7 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   LineSettlement,
   ListLineGroupRemoval,
@@ -24,12 +25,19 @@ import {
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
-import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { fakeLineChanges } from './changes/line-change.fake';
+import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * What a **person** may do to a subscribed line (plan 0070, sections 3, 7 and 9).
@@ -209,7 +217,8 @@ function build(options: Options = {}) {
     // A product only edit records **no** change (plan 0138, section 2): it moves
     // a row's options rather than what the list asks for. The stand in is what
     // lets this file assert that.
-    changes.recorder
+    changes.recorder,
+    announcer
   );
 
   return {

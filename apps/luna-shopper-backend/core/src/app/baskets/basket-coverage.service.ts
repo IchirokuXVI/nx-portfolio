@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { GeneratedList } from '../entities';
 import {
   BASKET_COVERAGE_SQL,
+  BASKETS_OF_ZONE_MEMBERS_SQL,
   COVERING_BASKETS_SQL,
   type CoveredList,
   type CoveringBasket,
@@ -51,11 +52,25 @@ export class BasketCoverageService {
   /**
    * The open baskets that cover this list, now, each with its owner.
    *
-   * The reverse of {@link listsOf}, and nothing in this plan calls it. Plan 0139
-   * is its caller: it is built here because it is the other half of one rule and
-   * is proven against the same fixtures.
+   * The reverse of {@link listsOf}. Plan 0139 is its caller: every write to a
+   * line of this list is a write to each of these baskets, and this is how they
+   * are told.
    */
   async coveringBaskets(listId: string): Promise<CoveringBasket[]> {
     return this.baskets.query(COVERING_BASKETS_SQL, [listId]);
+  }
+
+  /**
+   * Every open basket owned by an approved member of this zone (plan 0139,
+   * section 5).
+   *
+   * Asked when the **coverage** moved rather than a line, where naming the
+   * baskets that gained or lost a list would mean answering two questions, one
+   * about the state before the write and one about the state after it. This
+   * superset needs neither and the announcement it carries says nothing beyond
+   * "read again", so a basket that was unaffected pays one debounced read.
+   */
+  async basketsOfZoneMembers(zoneId: string): Promise<CoveringBasket[]> {
+    return this.baskets.query(BASKETS_OF_ZONE_MEMBERS_SQL, [zoneId]);
   }
 }

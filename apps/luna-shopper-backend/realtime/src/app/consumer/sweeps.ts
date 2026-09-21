@@ -1,6 +1,6 @@
 import {
-  generatedListPresenceRoom,
-  generatedListRoom,
+  basketPresenceRoom,
+  basketRoom,
   listPresenceRoom,
   listRoom,
   RealtimeEvent,
@@ -10,6 +10,26 @@ import {
   type MergeRequestView,
 } from '@portfolio/luna-shopper/contracts';
 import type { RelayDirective } from '../relay/event-relay.service';
+
+/**
+ * The baskets one envelope addresses, under either of the two names it can
+ * carry (plan 0139, section 1).
+ *
+ * Core writes `basketIds` and nothing else. `generatedListId` is what every
+ * envelope written before plan 0139 deployed carries, and both shapes can arrive
+ * here in the same minute: staging deploys only the affected services, so a new
+ * core can publish to an old realtime and the reverse, and the durable consumer
+ * replays what the stream still holds. Reading one name alone would make the
+ * other an envelope addressed to nobody, which is dropped as a fault.
+ *
+ * Plan 0144 deletes the second branch with the last of the old names.
+ */
+export function basketsOf(envelope: DomainEvent): readonly string[] {
+  return (
+    envelope.basketIds ??
+    (envelope.generatedListId ? [envelope.generatedListId] : [])
+  );
+}
 
 /**
  * Which sockets each event asks the pods to re-check (plan 0031, section 6).
@@ -31,7 +51,7 @@ import type { RelayDirective } from '../relay/event-relay.service';
  * in and therefore a sweep that reports success having checked nothing.
  */
 export function sweepsFor(envelope: DomainEvent): RelayDirective[] {
-  const { zoneId, listId, generatedListId, payload } = envelope;
+  const { zoneId, listId, payload } = envelope;
 
   switch (envelope.event) {
     // The member named in the payload lost the zone, and with it every list in
@@ -40,14 +60,19 @@ export function sweepsFor(envelope: DomainEvent): RelayDirective[] {
     case RealtimeEvent.MemberKicked:
     case RealtimeEvent.MemberBanned:
     case RealtimeEvent.MemberRoleChanged:
-      return [{ direction: 'evict', userIds: [(payload as MembershipView).userId] }];
+      return [
+        { direction: 'evict', userIds: [(payload as MembershipView).userId] },
+      ];
 
     // An approval implies a kick for the source membership (plan 0008), so it
     // moves access for two people at once and the payload names both.
     case RealtimeEvent.MergeApproved: {
       const merge = payload as MergeRequestView;
       return [
-        { direction: 'evict', userIds: [merge.sourceUserId, merge.targetUserId] },
+        {
+          direction: 'evict',
+          userIds: [merge.sourceUserId, merge.targetUserId],
+        },
       ];
     }
 
@@ -90,21 +115,18 @@ export function sweepsFor(envelope: DomainEvent): RelayDirective[] {
     // rather than a user, so both basket rooms are swept: every socket there
     // re-asks whether its participant is still live, and the ones that are not
     // leave at once rather than when their token lapses. Both events name the
-    // basket on the envelope, the deletion since plan 0114, and that is what this
-    // reads.
+    // basket on the envelope, the deletion since plan 0114, and that is what
+    // {@link basketsOf} reads, under either name.
+    //
+    // Both of these still name exactly one basket. The loop is here because the
+    // envelope field is a list since plan 0139, not because either event grew a
+    // second one.
     case RealtimeEvent.GeneratedListParticipantLeft:
     case RealtimeEvent.GeneratedListDeleted:
-      return generatedListId
-        ? [
-            {
-              direction: 'evict',
-              rooms: [
-                generatedListRoom(generatedListId),
-                generatedListPresenceRoom(generatedListId),
-              ],
-            },
-          ]
-        : [];
+      return basketsOf(envelope).map((basketId) => ({
+        direction: 'evict' as const,
+        rooms: [basketRoom(basketId), basketPresenceRoom(basketId)],
+      }));
 
     default:
       return [];

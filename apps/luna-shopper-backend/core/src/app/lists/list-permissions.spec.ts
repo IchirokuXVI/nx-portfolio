@@ -8,6 +8,7 @@ import {
   ZoneRole,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListAccess, ListLine } from '../entities';
 import {
   LineComment,
@@ -19,14 +20,21 @@ import {
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { fakeLineChanges } from './changes/line-change.fake';
 import { CommentService } from './comment.service';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
-import { fakeLineChanges } from './changes/line-change.fake';
 import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 import { SettlementService } from './settlement.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * The permission matrix (plan 0036, acceptance items 2 to 6).
@@ -250,7 +258,8 @@ function world(options: {
     new LineMergeService(changes.recorder),
     // Every write records a change (plan 0138). A stand in, because this file is
     // about who may make each write rather than about what it wrote down.
-    changes.recorder
+    changes.recorder,
+    announcer
   );
 
   const settlements = new SettlementService(
@@ -258,7 +267,8 @@ function world(options: {
     settlementRepo as never,
     listAccess,
     fakeLineClaims().service,
-    publisher
+    publisher,
+    announcer
   );
 
   const commentRepo = {

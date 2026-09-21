@@ -45,9 +45,10 @@ import { GeneratedListService } from './generated-list.service';
  * ## Through `update`, one basket at a time (section 4.4)
  *
  * Not a bulk `UPDATE`. The transition has to announce the released claims to
- * every zone room and emit `GeneratedListUpdated` to the owner, and
- * {@link GeneratedListService.update} is where that lives. A bulk update would be
- * one query and a household that never hears about it.
+ * every zone room and emit `basket.updated` to the owner **and to the basket's
+ * own room** since plan 0139, and {@link GeneratedListService.update} is where
+ * that lives. A bulk update would be one query and a household that never hears
+ * about it.
  *
  * ## What it never does (section 4.5)
  *

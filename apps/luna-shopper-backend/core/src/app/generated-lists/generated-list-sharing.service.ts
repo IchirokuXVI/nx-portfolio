@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  BasketKind,
   GENERATED_LIST_SHARING_LIMITS,
   isOpenBasket,
   ParticipantEndedReason,
@@ -841,23 +842,46 @@ export class GeneratedListSharingService {
    * device string is not presence data: it is shown on tap, from the participant
    * list, to readers who pass section 5.2, and a broadcast would hand it to every
    * guest in the shop.
+   *
+   * It answers the **basket's** kind beside the participant since plan 0139
+   * section 6, because that is what decides whether the socket enters presence at
+   * all: a `LIVE` basket is the one everybody holds all the time, so "somebody is
+   * here" on it says nothing and a presence room per person is a Redis key that
+   * never expires. It rides on this admission rather than on a call of its own,
+   * for the reason the entry itself does: admitting a socket is already a round
+   * trip and the answer is wanted in the same breath.
    */
   async livePresenceEntry(
     participantId: string,
     generatedListId: string
-  ): Promise<ParticipantPresenceEntry | null> {
+  ): Promise<LiveParticipantAdmission | null> {
     const participant = await this.participants.findOne({
       where: { id: participantId, generatedListId, ...liveParticipantWhere() },
     });
     if (!participant) {
       return null;
     }
+    // Read only once the participant is known live, so a socket with no business
+    // on the basket costs one query rather than two.
+    const basket = await this.lists.findOne({
+      where: { id: generatedListId },
+      select: { id: true, kind: true },
+    });
+    if (!basket) {
+      // The participant row cascades with its basket, so this is unreachable in
+      // one transaction's worth of time. Refusing beats admitting a socket to
+      // the room of a basket that is not there.
+      return null;
+    }
     return {
-      participantId: participant.id,
-      kind: participant.kind,
-      displayName: participant.displayName,
-      guestNumber: participant.guestNumber,
-      userId: participant.userId,
+      entry: {
+        participantId: participant.id,
+        kind: participant.kind,
+        displayName: participant.displayName,
+        guestNumber: participant.guestNumber,
+        userId: participant.userId,
+      },
+      basketKind: basket.kind,
     };
   }
 
@@ -1288,6 +1312,17 @@ function normalizeUsername(raw: string | null | undefined): string | null {
     return null;
   }
   return trimmed.slice(0, GENERATED_LIST_SHARING_LIMITS.displayNameMaxLength);
+}
+
+/**
+ * What one admission of a participant socket answers (plan 0139, section 6).
+ *
+ * Who they are, for the presence room, and what kind of basket it is, which
+ * decides whether there is a presence room for them to enter.
+ */
+export interface LiveParticipantAdmission {
+  entry: ParticipantPresenceEntry;
+  basketKind: BasketKind;
 }
 
 /** Capped to the column width; a header is attacker controlled and unbounded. */

@@ -5,6 +5,7 @@ import {
   type CreateListRequest,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import { ListAccess, ShoppingList, ZoneMembership } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ZoneAuthzService } from '../zones/zone-authz.service';
@@ -12,6 +13,13 @@ import type { ZoneCountsService } from '../zones/zone-counts.service';
 import type { ListAccessService } from './list-access.service';
 import { ListService } from './list.service';
 import { SharedListGrantService } from './shared-list-grant.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * Who a new list reaches (plan 0034).
@@ -114,7 +122,8 @@ function serviceWith(
     { emitZoneCounts: async () => undefined } as unknown as ZoneCountsService,
     { emit: () => undefined } as unknown as CoreEventsPublisher,
     // No operator write here, so nothing reaches the trail.
-    {} as never
+    {} as never,
+    announcer
   );
 
   return { service, written };

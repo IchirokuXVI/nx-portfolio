@@ -27,14 +27,26 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
+import type { CoreEventsPublisher } from '../events/core-events.publisher';
+import { BasketAnnouncer } from './basket-announcer.service';
 import { fakeCoreConfig } from './basket-config.fake';
-import { fakeBasketMarks } from './changes/basket-marks.fake';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketReadService } from './basket-read.service';
 import { BasketRevertService } from './basket-revert.service';
 import { BasketRowResolver } from './basket-row-resolver';
 import { BasketSettleService } from './basket-settle.service';
 import { BasketWriteContext } from './basket-write.context';
+import { fakeBasketMarks } from './changes/basket-marks.fake';
+
+/**
+ * The **real** announcer, wired to the same publisher fake the rest of this file
+ * asserts through (plan 0139, section 3).
+ *
+ * `basket.linesChanged` is one of the events this file exists to prove, so it is
+ * published here rather than stubbed. It is built in `beforeAll`, because it
+ * needs the coverage service and therefore the database.
+ */
+let announcer: BasketAnnouncer;
 
 /**
  * The writes on a basket row (plan 0136, section 13, tests 8 to 10).
@@ -87,6 +99,10 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
 
     const baskets = dataSource.getRepository(GeneratedList);
     const coverage = new BasketCoverageService(baskets);
+    announcer = new BasketAnnouncer(
+      coverage,
+      events as unknown as CoreEventsPublisher
+    );
     const resolver = new BasketRowResolver(baskets, fakeCoreConfig());
 
     // The three methods the context and the read ask of it. A real one needs a
@@ -143,7 +159,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       coverage,
       sharing,
       listAccess,
-      { order: async <T,>(_userId: string, rows: T[]) => rows } as never,
+      { order: async <T>(_userId: string, rows: T[]) => rows } as never,
       // What changed since somebody looked (plan 0138). The writes here answer a
       // row rather than a banner, and the marks have their own file.
       fakeBasketMarks(),
@@ -156,7 +172,8 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       coverage,
       sharing,
       resolver,
-      read
+      read,
+      announcer
     );
     settleService = new BasketSettleService(
       dataSource,

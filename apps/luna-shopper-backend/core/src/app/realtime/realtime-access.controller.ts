@@ -102,14 +102,23 @@ export class RealtimeAccessController {
   async checkParticipant(
     @Payload() req: CheckParticipantAccessRequest
   ): Promise<AccessCheckResult> {
-    const participant = await this.sharing.livePresenceEntry(
+    const admission = await this.sharing.livePresenceEntry(
       req.participantId,
       req.generatedListId
     );
     // The entry rides back with the answer so the realtime service can seed
     // presence without a second call, and without the display name having been
     // baked into a token minted before the guest renamed themselves.
-    return participant ? { allowed: true, participant } : { allowed: false };
+    //
+    // The basket's kind rides with it since plan 0139 section 6: a `LIVE` basket
+    // has a room and no presence, and only core can say which kind this is.
+    return admission
+      ? {
+          allowed: true,
+          participant: admission.entry,
+          basketKind: admission.basketKind,
+        }
+      : { allowed: false };
   }
 
   private async check(fn: () => Promise<unknown>): Promise<AccessCheckResult> {

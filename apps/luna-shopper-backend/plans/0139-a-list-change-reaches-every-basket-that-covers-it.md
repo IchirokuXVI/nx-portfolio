@@ -1,3 +1,5 @@
+> **PR:** [#430](https://github.com/IchirokuXVI/nx-portfolio/pull/430)
+
 # 0139: a list change reaches every basket that covers it
 
 > Client half: `apps/velista/plans/0093`. Series record: `0130`, section 7 above all.

@@ -24,6 +24,7 @@ import { BasketsBecomeViews1756002500000 } from './1756002500000-BasketsBecomeVi
 import { BasketLineSkips1756002600000 } from './1756002600000-BasketLineSkips';
 import { ListLineChangesAndCursors1756002700000 } from './1756002700000-ListLineChangesAndCursors';
 import { BasketLinkAndAccessExpiry1756002800000 } from './1756002800000-BasketLinkAndAccessExpiry';
+import { OpenBasketsByOwner1756002900000 } from './1756002900000-OpenBasketsByOwner';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -125,4 +126,9 @@ export const CORE_MIGRATIONS = [
   // any later migration wrote, so it follows every migration that touched
   // either table and nothing else (plan 0140, section 9).
   BasketLinkAndAccessExpiry1756002800000,
+  // One partial index on `generated_lists`, which plan 0050's migration created
+  // and plan 0133's last reshaped. It adds no column, moves no row and reads
+  // nothing, so it follows that migration and nothing else (plan 0139, section
+  // 9).
+  OpenBasketsByOwner1756002900000,
 ];

@@ -1,4 +1,3 @@
-import { COVERED_LINES_SQL } from '../baskets/basket.sql';
 import {
   LineApprovalStatus,
   ListPermission,
@@ -16,6 +15,8 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
+import { COVERED_LINES_SQL } from '../baskets/basket.sql';
 import {
   CommentAudio,
   CORE_ENTITIES,
@@ -30,8 +31,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
-import {
-} from '../generated-lists/generated-list.sql';
+import {} from '../generated-lists/generated-list.sql';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { MergeService } from '../merge/merge.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
@@ -43,6 +43,13 @@ import { ListAccessService } from './list-access.service';
 import { LISTS_HOLDING_ITEM_SQL } from './list-holding.sql';
 import { SettlementService } from './settlement.service';
 import { SUGGESTION_CANDIDATES_SQL } from './suggestions/suggestions.sql';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * A deleted line keeps its purchases, against real Postgres (plan 0132).
@@ -217,14 +224,16 @@ describeIntegration(
         // The **real** recorder: the soft delete and the change that says the
         // line went commit together, which only a database can show (plan 0138,
         // section 4).
-        new LineChangeRecorder()
+        new LineChangeRecorder(),
+        announcer
       );
       settlements = new SettlementService(
         dataSource,
         dataSource.getRepository(LineSettlement),
         listAccess,
         fakeLineClaims().service,
-        { emit } as never
+        { emit } as never,
+        announcer
       );
       merges = new MergeService(
         dataSource,
@@ -233,7 +242,8 @@ describeIntegration(
         new ZoneAuthzService(memberships),
         // An approved merge also tells the kicked member, through the audience
         // form of the publisher (plan 0111).
-        { emit, emitTo: emit } as never
+        { emit, emitTo: emit } as never,
+        announcer
       );
     });
 

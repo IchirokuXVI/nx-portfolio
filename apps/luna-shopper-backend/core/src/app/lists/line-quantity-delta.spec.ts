@@ -7,6 +7,7 @@ import {
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import {
   LineSettlement,
@@ -16,12 +17,19 @@ import {
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
-import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { fakeLineChanges } from './changes/line-change.fake';
+import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * Adding units to a line without reading it first (plan 0040, section 3).
@@ -216,7 +224,8 @@ function build(options: {
     new LineMergeService(changes.recorder),
     // A delta records a `QUANTITY_CHANGED` change (plan 0138). A stand in, since
     // what this file asserts is the arithmetic and the lock.
-    changes.recorder
+    changes.recorder,
+    announcer
   );
 
   return { service, saved, events, recorded: changes.recorded };

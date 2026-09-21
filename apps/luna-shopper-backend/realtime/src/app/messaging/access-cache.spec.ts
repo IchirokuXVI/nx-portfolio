@@ -1,4 +1,5 @@
 import {
+  BasketKind,
   REALTIME_ACCESS_PATTERNS,
   RealtimeEvent,
   type DomainEvent,
@@ -6,6 +7,7 @@ import {
 import type { RedisService } from '@portfolio/luna-shopper/platform';
 import { JSONCodec } from 'nats';
 import { of } from 'rxjs';
+import { JetStreamConsumer } from '../consumer/jetstream.consumer';
 import {
   ACCESS_CACHE_TTL_SECONDS,
   listAccessKey,
@@ -13,7 +15,6 @@ import {
   zoneListsAccessKey,
   zoneStaffAccessKey,
 } from '../realtime/constants';
-import { JetStreamConsumer } from '../consumer/jetstream.consumer';
 import { CoreAccessClient } from './core-access.client';
 
 /**
@@ -429,6 +430,76 @@ describe('the readable list set', () => {
 
     await access.checkZoneWithLists('u1', 'z1');
     expect(await access.recheckZoneLists('u1', 'z1')).toEqual(['l1', 'l2']);
+
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * What a participant admission answers (plan 0139, section 6).
+ *
+ * The kind of basket decides whether the socket enters presence at all, and only
+ * core can say which kind this is. The one rule with a deploy window in it is the
+ * default: a core that predates this field is one where every basket was a trip.
+ */
+describe('the kind of basket a participant is admitted to', () => {
+  const ENTRY = {
+    participantId: 'p1',
+    kind: 'GUEST',
+    displayName: null,
+    guestNumber: 2,
+    userId: null,
+  };
+
+  function participantClient(answer: object) {
+    const send = jest.fn().mockReturnValue(of(answer));
+    const access = new CoreAccessClient(
+      { send } as never,
+      new FakeRedis() as unknown as RedisService
+    );
+    return { access, send };
+  }
+
+  it('answers the kind core stated', async () => {
+    const { access } = participantClient({
+      allowed: true,
+      participant: ENTRY,
+      basketKind: BasketKind.LIVE,
+    });
+
+    expect(await access.checkParticipant('p1', 'gl-1')).toEqual({
+      entry: ENTRY,
+      basketKind: BasketKind.LIVE,
+    });
+  });
+
+  it('treats a missing kind as GENERATED', async () => {
+    const { access } = participantClient({ allowed: true, participant: ENTRY });
+
+    // An older core is one where every basket was a trip, which is what
+    // GENERATED means, so the old behaviour is the right answer for the window
+    // in which the two versions overlap.
+    expect(await access.checkParticipant('p1', 'gl-1')).toEqual({
+      entry: ENTRY,
+      basketKind: BasketKind.GENERATED,
+    });
+  });
+
+  it('answers nothing at all when core refuses', async () => {
+    const { access } = participantClient({ allowed: false });
+
+    expect(await access.checkParticipant('p1', 'gl-1')).toBeUndefined();
+  });
+
+  it('never caches it, because a participant can be revoked mid trip', async () => {
+    const { access, send } = participantClient({
+      allowed: true,
+      participant: ENTRY,
+      basketKind: BasketKind.GENERATED,
+    });
+
+    await access.checkParticipant('p1', 'gl-1');
+    await access.checkParticipant('p1', 'gl-1');
 
     expect(send).toHaveBeenCalledTimes(2);
   });

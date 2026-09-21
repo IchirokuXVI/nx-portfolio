@@ -12,6 +12,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   CORE_ENTITIES,
   ListAccess,
@@ -25,6 +26,13 @@ import { MemberListingService } from './member-listing.service';
 import { ZoneAuthzService } from './zone-authz.service';
 import { ZoneCountsService } from './zone-counts.service';
 import { ZoneService } from './zone.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * The zone summary against real Postgres (plan 0017, section 11).
@@ -81,7 +89,8 @@ describeIntegration('zone summary (real Postgres)', () => {
       authz,
       counts,
       events as never,
-      new CoreAuditService(dataSource)
+      new CoreAuditService(dataSource),
+      announcer
     );
     members = new MemberListingService(membershipRepo, authz);
 

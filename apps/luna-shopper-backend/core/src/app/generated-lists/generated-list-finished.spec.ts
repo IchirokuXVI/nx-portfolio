@@ -4,13 +4,13 @@ import {
   ParticipantKind,
   RealtimeEvent,
   SettlementOutcome,
-  type GeneratedListView,
 } from '@portfolio/luna-shopper/contracts';
 import {
   DomainException,
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import type { DataSource } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import { BasketDemandService } from '../baskets/basket-demand.service';
 import { BasketLineAddService } from '../baskets/basket-line-add.service';
 import type { BasketReadService } from '../baskets/basket-read.service';
@@ -32,6 +32,13 @@ import type { GeneratedListSharingService } from './generated-list-sharing.servi
 import { GeneratedListService } from './generated-list.service';
 import type { ZoneLineClaimRef } from './line-claim.sql';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * A finished basket refuses every write (plan 0059, section 3).
@@ -182,7 +189,8 @@ function build(status: GeneratedListStatus): Harness {
     coverage as never,
     sharing,
     resolver,
-    read
+    read,
+    announcer
   );
 
   const zoneLines = {
@@ -401,7 +409,8 @@ describe('finishing and unfinishing (section 2)', () => {
     const events: {
       event: RealtimeEvent;
       userIds: readonly string[];
-      view: GeneratedListView;
+      basketIds: readonly string[];
+      payload: unknown;
     }[] = [];
     const claims = fakeLineClaims({}, () => CLAIMING);
     // The lists told to read their trips again (plan 0122, section 6).
@@ -434,14 +443,31 @@ describe('finishing and unfinishing (section 2)', () => {
         emitToUsers: (
           event: RealtimeEvent,
           userIds: readonly string[],
-          view: GeneratedListView
+          payload: unknown
         ) => {
-          events.push({ event, userIds, view });
+          events.push({ event, userIds, basketIds: [], payload });
         },
-        emitTo: (event: RealtimeEvent, audience: { listId?: string }) => {
+        emitTo: (
+          event: RealtimeEvent,
+          audience: {
+            listId?: string;
+            userIds?: readonly string[];
+            basketIds?: readonly string[];
+          },
+          payload: unknown
+        ) => {
           if (event === RealtimeEvent.ListTripsChanged) {
             tripsChanged.push(audience.listId);
+            return;
           }
+          // `basket.updated` names two audiences since plan 0139: the owner's
+          // own sessions and the basket's room.
+          events.push({
+            event,
+            userIds: audience.userIds ?? [],
+            basketIds: audience.basketIds ?? [],
+            payload,
+          });
         },
       } as unknown as CoreEventsPublisher,
       {} as never,
@@ -463,11 +489,21 @@ describe('finishing and unfinishing (section 2)', () => {
     });
 
     expect(view.status).toBe(GeneratedListStatus.OPEN);
+    // Two audiences since plan 0139 section 4: the owner's own sessions, as
+    // before, and the basket's own room, where a reopen used to reach nobody.
+    // The payload is the four header fields rather than the whole view, which
+    // names the basket's sources and a guest is in the room.
     expect(w.events).toEqual([
       {
-        event: RealtimeEvent.GeneratedListUpdated,
+        event: RealtimeEvent.BasketUpdated,
         userIds: [OWNER],
-        view,
+        basketIds: [BASKET],
+        payload: {
+          basketId: BASKET,
+          kind: BasketKind.GENERATED,
+          name: view.name,
+          status: GeneratedListStatus.OPEN,
+        },
       },
     ]);
     // Re-announced as claimed by the owner, which is what a cold read would now

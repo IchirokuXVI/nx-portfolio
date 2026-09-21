@@ -18,6 +18,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   BasketTripRow,
   CORE_ENTITIES,
@@ -34,11 +35,18 @@ import {
 } from '../entities';
 import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
-import { itemSetHash } from './item-set-hash';
 import { LineChangeRecorder } from './changes/line-change.recorder';
+import { itemSetHash } from './item-set-hash';
 import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * A renamed line joins the line of that name (plan 0112, section 9).
@@ -93,7 +101,8 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
       new LineMergeService(new LineChangeRecorder()),
       // The **real** recorder: what a merge writes down is a fact about a
       // database, and this suite has one (plan 0138, section 13, test 4).
-      new LineChangeRecorder()
+      new LineChangeRecorder(),
+      announcer
     );
 
     const zone = await dataSource.getRepository(Zone).save(
@@ -182,6 +191,9 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
 
   beforeEach(async () => {
     emit.mockReset();
+    // Reset beside the emit, so a test can count the announcements one write
+    // makes (plan 0139, section 3).
+    announcer.reset();
     await dataSource
       .getRepository(GeneratedList)
       .delete({ ownerUserId: ids.owner });
@@ -321,6 +333,14 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     ]);
     expect(emit.mock.calls[0][2]).toEqual({ id: bread.id, listId: ids.list });
     expect(emit.mock.calls[1][2]).toMatchObject({ id: milk.id, quantity: 3 });
+
+    // **One** basket announcement naming both lines (plan 0139, section 3),
+    // rather than the two the delete and the update would each have made. A
+    // basket holding the absorbed line and the survivor draws one row either
+    // way, and two nudges would make it read the basket twice for one write.
+    expect(announcer.calls.linesChanged).toEqual([
+      { listId: ids.list, lineIds: [bread.id, milk.id] },
+    ]);
   });
 
   it('keeps the new spelling when the renamed line is the earlier one (case 4)', async () => {

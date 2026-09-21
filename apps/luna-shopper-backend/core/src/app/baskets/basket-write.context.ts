@@ -2,8 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   BasketRowState,
-  RealtimeEvent,
-  type BasketLinesChangedEvent,
   type BasketRowResult,
   type BasketRowView,
   type LineWriteVia,
@@ -14,8 +12,8 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { GeneratedList, GeneratedListParticipant } from '../entities';
-import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
+import { BasketAnnouncer, type ChangedLine } from './basket-announcer.service';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketReadService } from './basket-read.service';
 import { BasketRowResolver, type BasketRow } from './basket-row-resolver';
@@ -42,7 +40,11 @@ export class BasketWriteContext {
     private readonly coverage: BasketCoverageService,
     private readonly sharing: GeneratedListSharingService,
     private readonly resolver: BasketRowResolver,
-    private readonly read: BasketReadService
+    private readonly read: BasketReadService,
+    // Who tells the baskets a write reached them (plan 0139, section 3). Handed
+    // to the open write below, so that the five writes name what moved and never
+    // an audience.
+    private readonly announcer: BasketAnnouncer
   ) {}
 
   /** Load the basket, the actor, the coverage and the redaction. */
@@ -83,7 +85,8 @@ export class BasketWriteContext {
       new Map(covered.map((row) => [row.listId, row.zoneId])),
       servedListIds,
       this.resolver,
-      this.read
+      this.read,
+      this.announcer
     );
   }
 }
@@ -99,7 +102,8 @@ export class OpenBasketWrite {
     /** The covered lists this actor writes themselves (section 3.4). */
     readonly servedListIds: ReadonlySet<string>,
     private readonly resolver: BasketRowResolver,
-    private readonly read: BasketReadService
+    private readonly read: BasketReadService,
+    private readonly announcer: BasketAnnouncer
   ) {}
 
   /** The entries of one row, refusing anything outside the coverage. */
@@ -142,27 +146,35 @@ export class OpenBasketWrite {
   }
 
   /**
-   * Tell the basket that some of its rows moved (plan 0136, section 8).
+   * Tell every basket that covers these lines that they moved (plan 0136,
+   * section 8; plan 0139, section 3).
    *
-   * One envelope to the basket's room **and** the owner's own sessions. The
-   * owner is usually not in the room: they are at home looking at the dashboard
-   * while somebody else shops. An owner who is in both hears it twice, which
-   * costs nothing, because the client's reaction is to read the basket again,
-   * debounced.
+   * **Not just the basket that made the write.** Until plan 0139 this addressed
+   * one room, which was right while a basket was the only thing that could be
+   * looking at its own rows. A basket row is a list line now, so a settle here
+   * is a row moving in every other open basket that covers the same list, and
+   * the one in this shop is only the loudest of them.
+   *
+   * The entries carry their list because the coverage is per list: a row can
+   * span two households' lists, and two lists have two coverages and therefore
+   * two events.
    */
-  announceLinesChanged(
-    lineIds: readonly string[],
-    events: CoreEventsPublisher
-  ): void {
+  announceLinesChanged(entries: readonly ChangedLine[]): Promise<void> {
+    return this.announcer.linesChangedAcross(entries);
+  }
+
+  /**
+   * Tell **this** basket alone that some of its rows moved (plan 0139, section
+   * 3).
+   *
+   * For a write that belongs to one basket and to no list, which is a skip and
+   * taking one back. The line did not move, so no other basket's rows changed.
+   */
+  announceBasketChanged(lineIds: readonly string[]): void {
     if (lineIds.length === 0) {
       return;
     }
-    const payload: BasketLinesChangedEvent = { lineIds: [...new Set(lineIds)] };
-    events.emitTo(
-      RealtimeEvent.BasketLinesChanged,
-      { generatedListId: this.basket.id, userIds: [this.basket.ownerUserId] },
-      payload
-    );
+    this.announcer.basketChanged(this.basket, lineIds);
   }
 
   /**

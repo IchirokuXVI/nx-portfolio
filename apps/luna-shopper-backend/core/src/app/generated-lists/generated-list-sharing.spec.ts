@@ -319,8 +319,9 @@ function build(
   } as unknown as DataSource;
 
   const publisher = {
-    emitToGeneratedList: (event: RealtimeEvent, generatedListId: string) =>
-      events.push({ event, generatedListId }),
+    // One basket, named on the list the envelope carries since plan 0139.
+    emitToBaskets: (event: RealtimeEvent, basketIds: readonly string[]) =>
+      events.push({ event, generatedListId: basketIds[0] }),
     // A person's own sessions (plan 0114, section 10).
     emitToUsers: (event: RealtimeEvent, userIds: readonly string[]) =>
       events.push({ event, userIds: [...userIds] }),

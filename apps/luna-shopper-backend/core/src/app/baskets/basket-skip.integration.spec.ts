@@ -30,10 +30,11 @@ import {
   ZoneMembership,
 } from '../entities';
 import { LineClaimService } from '../generated-lists/line-claim.service';
+import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineChangeRecorder } from '../lists/changes/line-change.recorder';
 import { LineMergeService } from '../lists/line-merge.service';
+import { BasketAnnouncer } from './basket-announcer.service';
 import { fakeCoreConfig } from './basket-config.fake';
-import { fakeBasketMarks } from './changes/basket-marks.fake';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketReadService } from './basket-read.service';
 import { BasketRedaction } from './basket-redaction';
@@ -42,6 +43,18 @@ import { BasketRowResolver } from './basket-row-resolver';
 import { BasketSettleService } from './basket-settle.service';
 import { BasketSkipService } from './basket-skip.service';
 import { BasketWriteContext } from './basket-write.context';
+import { fakeBasketMarks } from './changes/basket-marks.fake';
+
+/**
+ * The **real** announcer, wired to the same publisher fake the rest of this file
+ * asserts through (plan 0139, section 3).
+ *
+ * A skip is the one write that announces to its own basket and to no other, so
+ * the event it publishes is part of what this file proves rather than a nudge to
+ * be stubbed out. It is built in `beforeAll`, because it needs the coverage
+ * service and therefore the database.
+ */
+let announcer: BasketAnnouncer;
 
 /**
  * A line skipped for now (plan 0137, section 10, tests 6 to 15).
@@ -91,6 +104,10 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
 
     const baskets = dataSource.getRepository(GeneratedList);
     const coverage = new BasketCoverageService(baskets);
+    announcer = new BasketAnnouncer(
+      coverage,
+      events as unknown as CoreEventsPublisher
+    );
     const resolver = new BasketRowResolver(baskets, fakeCoreConfig());
 
     const sharing = {
@@ -152,7 +169,8 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
       coverage,
       sharing,
       resolver,
-      read
+      read,
+      announcer
     );
     // The **real** claim service, which is the point of test 13: what the claim
     // says is a join over five tables and the fragment this plan added to it.

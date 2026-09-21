@@ -8,11 +8,19 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { EntityManager } from 'typeorm';
 import { fakeAudit, type RecordedChange } from '../audit/core-audit.testing';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import { Zone, ZoneMembership } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ZoneAuthzService } from './zone-authz.service';
 import type { ZoneCountsService } from './zone-counts.service';
 import { ZoneService } from './zone.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * An ownership transfer is two role changes (plan 0029). The transaction itself
@@ -157,7 +165,8 @@ function makeService(opts: {
       authz,
       {} as ZoneCountsService,
       events as unknown as CoreEventsPublisher,
-      audit.service
+      audit.service,
+      announcer
     ),
     events,
     zone: opts.zone,

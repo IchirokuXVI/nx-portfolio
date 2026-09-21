@@ -42,8 +42,9 @@ function build(expired: Partial<GeneratedListParticipant>[] = []): Harness {
   } as unknown as DataSource;
 
   const publisher = {
-    emitToGeneratedList: (event: RealtimeEvent, generatedListId: string) =>
-      events.push({ event, generatedListId }),
+    // One basket, named on the list the envelope carries since plan 0139.
+    emitToBaskets: (event: RealtimeEvent, basketIds: readonly string[]) =>
+      events.push({ event, generatedListId: basketIds[0] }),
     emitToUsers: (event: RealtimeEvent, userIds: readonly string[]) =>
       events.push({ event, userIds: [...userIds] }),
   } as unknown as CoreEventsPublisher;

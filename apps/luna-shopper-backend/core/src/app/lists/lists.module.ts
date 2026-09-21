@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BasketCoverageModule } from '../baskets/basket-coverage.module';
 import {
   CommentAudio,
   LineComment,
@@ -57,6 +58,10 @@ import { TripsService } from './trips/trips.service';
     ]),
     ZonesModule,
     SharedListGrantModule,
+    // Every write to a list line is a write to every basket that covers the list
+    // (plan 0139, section 3). The coverage module depends on nothing here, which
+    // is why `GeneratedListsModule` and this one can both import it.
+    BasketCoverageModule,
     // The third indicator on a line (plan 0052). A module of its own rather than
     // `GeneratedListsModule`, which imports this one, on exactly the reasoning
     // `SharedListGrantModule` above it exists for.

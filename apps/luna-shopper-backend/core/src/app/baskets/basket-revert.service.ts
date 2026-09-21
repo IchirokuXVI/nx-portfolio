@@ -18,8 +18,14 @@ import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../generated-lists/line-claim.service';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { boughtOfRow, lockEntries } from './basket-row-resolver';
-import { zoneLineItemSet, type ZoneAnnouncement } from './basket-settle.service';
-import { BasketWriteContext, type OpenBasketWrite } from './basket-write.context';
+import {
+  zoneLineItemSet,
+  type ZoneAnnouncement,
+} from './basket-settle.service';
+import {
+  BasketWriteContext,
+  type OpenBasketWrite,
+} from './basket-write.context';
 
 /**
  * Taking part of a row back (plan 0136, section 5.2).
@@ -271,7 +277,12 @@ export class BasketRevertService {
     skippedCount: number
   ): Promise<BasketRowResult> {
     const lineIds = announcements.map((entry) => entry.line.id);
-    opened.announceLinesChanged(lineIds, this.events);
+    await opened.announceLinesChanged(
+      announcements.map((entry) => ({
+        listId: entry.listId,
+        lineId: entry.line.id,
+      }))
+    );
     await this.claims.announceReleased(
       announcements.map((entry) => ({
         zoneId: entry.zoneId,
