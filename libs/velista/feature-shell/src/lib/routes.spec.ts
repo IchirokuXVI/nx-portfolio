@@ -1047,7 +1047,7 @@ describe('the bottom bar', () => {
   });
 
   /**
-   * `current` is a word and `:generatedListId` is an id, so the word has to be offered
+   * `current` is a word and `:basketId` is an id, so the word has to be offered
    * first. This is the collision `SHEET_SEGMENT` exists to prevent one level down, and
    * the basket's `canMatch` UUID guard is what keeps the pair unambiguous the other way
    * round.
@@ -1055,7 +1055,7 @@ describe('the bottom bar', () => {
   it('declares the third tab before the basket id it would be read as', () => {
     expect(paths).toContain('shopping-lists/current');
     expect(paths.indexOf('shopping-lists/current')).toBeLessThan(
-      paths.indexOf('shopping-lists/:generatedListId')
+      paths.indexOf('shopping-lists/:basketId')
     );
   });
 

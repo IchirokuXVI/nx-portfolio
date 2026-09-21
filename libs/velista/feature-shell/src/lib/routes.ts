@@ -768,7 +768,7 @@ export const AppShellRoutes: Route[] = [
             /**
              * The third tab (velista `0097`, section 7).
              *
-             * **Declared before `shopping-lists/:generatedListId`**, so the word is not
+             * **Declared before `shopping-lists/:basketId`**, so the word is not
              * read as an id. That is the collision `SHEET_SEGMENT` exists to prevent one
              * level down, and `routes.spec.ts` asserts the order. The basket's
              * `canMatch` UUID guard keeps the pair unambiguous the other way round, so

@@ -12,7 +12,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   GatewayError,
-  GeneratedListStore,
+  BasketListStore,
   NetworkError,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
@@ -79,7 +79,7 @@ export type BasketCurrentState =
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BasketCurrentPage {
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -89,7 +89,7 @@ export class BasketCurrentPage {
   /**
    * The newest basket being shopped, or null.
    *
-   * `GeneratedListStore.active` and not a status comparison, so this screen and the
+   * `BasketListStore.active` and not a status comparison, so this screen and the
    * dashboard card cannot disagree about what "being shopped" means: the server
    * composes a run as `DRAFT` and never promotes it, which is the whole reason that
    * signal reads the live pair.
