@@ -6,8 +6,16 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { ConflictException } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { Zone, ZoneMembership } from '../entities';
 import { ZoneService } from './zone.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * Creating a group announces it to the creator (plan 0030, section 4.2).
@@ -56,7 +64,8 @@ function makeService(failWith?: unknown) {
     {} as never,
     {} as never,
     events as never,
-    {} as never
+    {} as never,
+    announcer
   );
   return { svc, events, repository };
 }

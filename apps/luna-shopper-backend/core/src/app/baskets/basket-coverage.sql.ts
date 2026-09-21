@@ -82,6 +82,33 @@ export const COVERING_BASKETS_SQL = `
     AND (${COVERS})
 `;
 
+/**
+ * Every open basket owned by an approved member of one zone. `$1` is the zone.
+ *
+ * {@link COVERING_BASKETS_SQL} with the list taken out of it, which takes the
+ * `WRITE` grant and the `basket_sources` probe with it: neither question can be
+ * asked without a list to ask it about.
+ *
+ * That makes this answer a **superset** of the baskets any one of the zone's
+ * lists reaches, and plan 0139 section 5 wants exactly that. It is asked when
+ * the coverage itself moved rather than a line: a list was created or deleted,
+ * or somebody's standing in the zone changed. The set of covered lists before
+ * the write and the set after it differ, the superset needs neither, and the
+ * event it carries has an empty payload that costs a client one debounced read.
+ *
+ * `APPROVED` is stated here rather than borrowed from `WRITABLE_LIST`, because
+ * that fragment is written over the alias `sl` and there is no list here to bind
+ * it to. The membership half is the same comparison against the same column.
+ */
+export const BASKETS_OF_ZONE_MEMBERS_SQL = `
+  SELECT DISTINCT gl.id AS "basketId", gl."ownerUserId" AS "ownerUserId"
+  FROM "zone_memberships" m
+  JOIN "generated_lists" gl ON gl."ownerUserId" = m."userId"
+  WHERE m."zoneId" = $1::uuid
+    AND m.status = 'APPROVED'
+    AND gl."status" = 'OPEN'
+`;
+
 /** One row of {@link BASKET_COVERAGE_SQL}: a list this basket reads. */
 export interface CoveredList {
   listId: string;

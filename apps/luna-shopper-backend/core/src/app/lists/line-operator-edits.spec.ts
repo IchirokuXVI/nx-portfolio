@@ -9,6 +9,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import { fakeAudit, type RecordedChange } from '../audit/core-audit.testing';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListAccess } from '../entities';
 import {
   LineComment,
@@ -27,6 +28,13 @@ import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * An operator's edit of a line, and the two questions a caller with no
@@ -256,7 +264,8 @@ function build(
       // An operator's write records a change as well as its audit row (plan
       // 0138, section 9). A stand in here, so the assertions below stay about the
       // trail; that both rows are written is proven against Postgres.
-      changes.recorder
+      changes.recorder,
+      announcer
     ),
     recorded: changes.recorded,
     saved,

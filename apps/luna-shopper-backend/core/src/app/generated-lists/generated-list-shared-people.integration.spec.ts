@@ -21,10 +21,10 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource, In } from 'typeorm';
-import { BasketCoverageService } from '../baskets/basket-coverage.service';
 import { fakeCoreConfig } from '../baskets/basket-config.fake';
-import { fakeBasketMarks } from '../baskets/changes/basket-marks.fake';
+import { BasketCoverageService } from '../baskets/basket-coverage.service';
 import { BasketReadService } from '../baskets/basket-read.service';
+import { fakeBasketMarks } from '../baskets/changes/basket-marks.fake';
 import {
   BasketSource,
   CORE_ENTITIES,
@@ -72,7 +72,7 @@ describeIntegration(
       emit: jest.fn(),
       emitTo: jest.fn(),
       emitToUsers: jest.fn(),
-      emitToGeneratedList: jest.fn(),
+      emitToBaskets: jest.fn(),
     };
 
     const users = {
@@ -111,9 +111,12 @@ describeIntegration(
       event: RealtimeEvent,
       generatedListId: string
     ): unknown[] {
-      return events.emitToGeneratedList.mock.calls
+      // The audience is a list of baskets since plan 0139; these events name one.
+      return events.emitToBaskets.mock.calls
         .filter(
-          ([name, basket]) => name === event && basket === generatedListId
+          ([name, baskets]) =>
+            name === event &&
+            (baskets as readonly string[]).includes(generatedListId)
         )
         .map(([, , payload]) => payload);
     }
@@ -734,9 +737,11 @@ describeIntegration(
           generatedListId: basket,
         });
 
+        // The audience names the basket on `basketIds` since plan 0139, which
+        // is the field `sweepsFor` reads to evict both of its rooms.
         expect(events.emitTo).toHaveBeenCalledWith(
           RealtimeEvent.GeneratedListDeleted,
-          { userIds: [users.owner], generatedListId: basket },
+          { userIds: [users.owner], basketIds: [basket] },
           { id: basket }
         );
         expect(toldUnshared(basket)).toEqual([users.friend]);

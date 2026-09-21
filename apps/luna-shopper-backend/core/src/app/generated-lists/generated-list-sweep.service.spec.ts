@@ -2,7 +2,7 @@ import {
   BasketKind,
   GeneratedListStatus,
   RealtimeEvent,
-  type GeneratedListView,
+  type BasketUpdatedEvent,
 } from '@portfolio/luna-shopper/contracts';
 import type { FindOperator } from 'typeorm';
 import type { GeneratedList } from '../entities';
@@ -22,8 +22,8 @@ import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
  *
  * The service under test is wired to a **real** {@link GeneratedListService}
  * rather than a mock of it, because section 4.4's whole claim is that the sweep
- * goes through `update`: the same save, the same `GeneratedListUpdated` to the
- * owner, the same release announced to every zone room. A mock would assert that
+ * goes through `update`: the same save, the same `basket.updated` to the owner
+ * and to the basket's room, the same release announced to every zone room. A mock would assert that
  * a call was made and would keep passing on the day somebody replaced it with a
  * bulk `UPDATE` that a household never hears about, which is the failure the
  * plan is written against. So the exit criterion is met the way it is stated:
@@ -58,7 +58,9 @@ interface Harness {
   events: {
     event: RealtimeEvent;
     userIds: readonly string[];
-    view: GeneratedListView;
+    /** The basket's own room, which a finish reaches since plan 0139. */
+    basketIds: readonly string[];
+    payload: BasketUpdatedEvent;
   }[];
   claims: FakeLineClaims;
   /** The lists told to read their trips again (plan 0122), one entry an event. */
@@ -144,17 +146,25 @@ function build(options: {
   };
 
   const publisher = {
-    emitToUsers: (
+    emitTo: (
       event: RealtimeEvent,
-      userIds: readonly string[],
-      view: GeneratedListView
+      audience: {
+        listId?: string;
+        userIds?: readonly string[];
+        basketIds?: readonly string[];
+      },
+      payload: unknown
     ) => {
-      events.push({ event, userIds, view });
-    },
-    emitTo: (event: RealtimeEvent, audience: { listId?: string }) => {
       if (event === RealtimeEvent.ListTripsChanged) {
         tripsChanged.push(audience.listId);
+        return;
       }
+      events.push({
+        event,
+        userIds: audience.userIds ?? [],
+        basketIds: audience.basketIds ?? [],
+        payload: payload as BasketUpdatedEvent,
+      });
     },
   } as unknown as CoreEventsPublisher;
 
@@ -268,25 +278,30 @@ describe('GeneratedListSweepService.sweep', () => {
 
     await harness.service.sweep();
 
-    // One `GeneratedListUpdated` per basket, to its own owner, carrying the
-    // finished view: what a client holding the history screen redraws from.
+    // One `basket.updated` per basket, to its own owner **and** to its own room
+    // (plan 0139, section 4): a swept basket tells the people still standing in
+    // the shop, who used to hear nothing at all when their trip was finished
+    // out from under them.
     expect(
       harness.events.map((entry) => ({
         event: entry.event,
         userIds: entry.userIds,
-        id: entry.view.id,
-        status: entry.view.status,
+        basketIds: entry.basketIds,
+        id: entry.payload.basketId,
+        status: entry.payload.status,
       }))
     ).toEqual([
       {
-        event: RealtimeEvent.GeneratedListUpdated,
+        event: RealtimeEvent.BasketUpdated,
         userIds: ['u-other'],
+        basketIds: ['gl-b'],
         id: 'gl-b',
         status: GeneratedListStatus.FINISHED,
       },
       {
-        event: RealtimeEvent.GeneratedListUpdated,
+        event: RealtimeEvent.BasketUpdated,
         userIds: [OWNER],
+        basketIds: ['gl-a'],
         id: 'gl-a',
         status: GeneratedListStatus.FINISHED,
       },

@@ -1,5 +1,4 @@
 import { REALTIME_ACCESS_PATTERNS } from '../../lib/messages/realtime.messages';
-import { ENUM_IDS } from '../enums.schemas';
 import {
   array,
   boolean,
@@ -10,6 +9,8 @@ import {
   ref,
   schemaId,
 } from '../builders';
+import { ENUM_IDS } from '../enums.schemas';
+import { GENERATED_LIST_SCHEMA_IDS } from './generated-list.schemas';
 
 export const REALTIME_SCHEMA_IDS = {
   checkZoneAccessRequest: schemaId('msg/realtime.checkZoneAccess/request'),
@@ -51,6 +52,10 @@ const accessCheckResult = object(
     // have been rejected for carrying the very field plan 0032 added to it.
     listIds: array(nonEmptyString()),
     participant: ref(REALTIME_SCHEMA_IDS.participantPresenceEntry),
+    // What kind of basket the participant answer is about (plan 0139, section
+    // 6). Declared for the same reason the two above are: the field exists on
+    // the type, and `object` refuses what it has not been told about.
+    basketKind: ref(GENERATED_LIST_SCHEMA_IDS.basketKind),
   },
   ['allowed']
 );

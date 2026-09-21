@@ -16,6 +16,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, Repository, type EntityManager } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import { ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { SharedListGrantService } from '../lists/shared-list-grant.service';
@@ -40,7 +41,11 @@ export class MembershipService {
     private readonly events: CoreEventsPublisher,
     // `@Global()`, so every operator write here reaches the trail without any
     // caller having to hand it one (plan 0077, section 8).
-    private readonly audit: CoreAuditService
+    private readonly audit: CoreAuditService,
+    // The household's open baskets, when a change of membership moved what they
+    // cover (plan 0139, section 5). Last, so no positional construction in a
+    // spec has to shift an argument to take it.
+    private readonly baskets: BasketAnnouncer
   ) {}
 
   private async governable(
@@ -141,6 +146,9 @@ export class MembershipService {
     target.approvedByUserId = approvedByUserId;
     const saved = await persist(target);
     this.emit(RealtimeEvent.MemberApproved, saved);
+    // An approval grants the zone's shared lists, so it adds whole lists to the
+    // household's open baskets without writing to one (plan 0139, section 5).
+    await this.baskets.coverageMoved(saved.zoneId);
     // Approving the first requester makes the next one the answer to
     // `firstPendingRequesterName`, and no other event carries that name.
     await this.counts.emitZoneCounts(saved.zoneId);
@@ -331,6 +339,11 @@ export class MembershipService {
     target.status = status;
     const saved = await persist(target);
     this.emit(event, saved);
+    // A kick or a ban takes the zone's lists off one person's baskets and takes
+    // that person's lists off everybody else's (plan 0139, section 5). The one
+    // who left hears through their own room, which this event already names and
+    // which the eviction sweep follows.
+    await this.baskets.coverageMoved(zoneId);
     await this.counts.emitZoneCounts(zoneId);
     return toMembershipView(saved);
   }

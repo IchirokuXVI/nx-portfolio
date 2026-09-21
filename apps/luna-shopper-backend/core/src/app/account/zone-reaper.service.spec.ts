@@ -1,7 +1,15 @@
 import { RealtimeEvent, ZoneStatus } from '@portfolio/luna-shopper/contracts';
 import { fakeAudit } from '../audit/core-audit.testing';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import { Zone } from '../entities';
 import { ZoneReaperService } from './zone-reaper.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * `applicants` are the user ids holding a PENDING membership in the zone under
@@ -38,6 +46,7 @@ function build(zones: Partial<Zone>[], applicants: string[] = []) {
     events as never,
     logger as never,
     audit.service,
+    announcer,
     configService as never
   );
   return { svc, zonesRepo, membershipsRepo, events, audit };

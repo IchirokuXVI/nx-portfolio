@@ -50,6 +50,13 @@ import { BaseEntity } from './base.entity';
  */
 @Entity({ name: 'generated_lists' })
 @Index('ix_generated_lists_owner', ['ownerUserId', 'generatedAt'])
+// The open baskets of one owner (plan 0139, section 2). The index above orders
+// by date and serves the owner's listing, which is every status; this one serves
+// the coverage probe, which wants the handful that are still open and drags no
+// finished basket through a filter to find them.
+@Index('ix_generated_lists_owner_open', ['ownerUserId'], {
+  where: `"status" = 'OPEN'`,
+})
 @Index('uq_generated_lists_live_owner', ['ownerUserId'], {
   unique: true,
   where: `"kind" = 'LIVE'`,

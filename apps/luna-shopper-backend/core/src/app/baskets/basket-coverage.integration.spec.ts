@@ -315,6 +315,135 @@ describeIntegration('what a basket covers (real Postgres)', () => {
         ownerUserId: ids.owner,
       });
     });
+
+    it('holds the LIVE basket of an owner who writes the list', async () => {
+      expect(await covers(live.id, ids.listFlat)).toBe(true);
+    });
+
+    it('holds nothing for a list its owner only reads', async () => {
+      // `WRITABLE_LIST` is the single definition of what a basket may draw
+      // from, and `READ` is not it (plan 0051, section 2).
+      expect(await covers(live.id, ids.listReadOnly)).toBe(false);
+    });
+
+    it('holds a basket whose source names the list, and not one naming another list of the zone', async () => {
+      const named = await seedBasket({
+        sources: [{ zoneId: ids.zoneHome, listId: ids.listFlat }],
+      });
+
+      expect(await covers(named.id, ids.listFlat)).toBe(true);
+      expect(await covers(named.id, ids.listWeekly)).toBe(false);
+    });
+
+    it('holds a basket whose source names the whole zone', async () => {
+      const wholeZone = await seedBasket({
+        sources: [{ zoneId: ids.zoneHome, listId: null }],
+      });
+
+      expect(await covers(wholeZone.id, ids.listFlat)).toBe(true);
+      expect(await covers(wholeZone.id, ids.listWeekly)).toBe(true);
+    });
+
+    it('holds nothing for an owner who lost their membership', async () => {
+      // A user of this test's own, because a basket belongs to a person rather
+      // than to a zone: a shared one would appear in every other test's zone.
+      const leaver = randomUUID();
+      const zone = await seedZone('Leavers');
+      const membership = await seedMembership(zone, leaver, ZoneRole.OWNER);
+      const list = await seedList(zone, 'Leavers list');
+      const basket = await seedBasket({
+        ownerUserId: leaver,
+        sources: [{ zoneId: zone, listId: null }],
+      });
+      expect(await covers(basket.id, list)).toBe(true);
+
+      const memberships = dataSource.getRepository(ZoneMembership);
+      await memberships.update(
+        { id: membership },
+        { status: MembershipStatus.KICKED }
+      );
+
+      // Coverage is a rule, so losing the membership takes the list out of the
+      // basket with no write to the basket at all.
+      expect(await covers(basket.id, list)).toBe(false);
+    });
+  });
+
+  /**
+   * Every open basket of one household (plan 0139, section 5).
+   *
+   * {@link BasketCoverageService.coveringBaskets} with the list taken out of it,
+   * which takes the `WRITE` grant and the source rows with it. So this answers a
+   * superset on purpose: it is asked when the coverage itself moved and the sets
+   * before and after the write differ.
+   */
+  describe('basketsOfZoneMembers (section 5)', () => {
+    const openIn = async (zoneId: string): Promise<string[]> =>
+      (await coverage.basketsOfZoneMembers(zoneId))
+        .map((row) => row.basketId)
+        .sort();
+
+    // A user per test, because a basket belongs to a person rather than to a
+    // zone: every basket a member owns is answered for every zone they are in,
+    // so a shared user would leak one test's baskets into the next one's zone.
+
+    it('answers every open basket of an approved member, whatever it draws from', async () => {
+      const member = randomUUID();
+      const zone = await seedZone('Household');
+      await seedMembership(zone, member, ZoneRole.OWNER);
+      const drawing = await seedBasket({
+        ownerUserId: member,
+        sources: [{ zoneId: zone, listId: null }],
+      });
+      // Names another zone entirely, and is still answered: the question is
+      // whose baskets are open, not which of them read this zone today.
+      const elsewhere = await seedBasket({
+        ownerUserId: member,
+        sources: [{ zoneId: ids.zoneHome, listId: null }],
+      });
+
+      expect(await openIn(zone)).toEqual([drawing.id, elsewhere.id].sort());
+    });
+
+    it('leaves out a finished basket and an archived one', async () => {
+      const member = randomUUID();
+      const zone = await seedZone('Household with history');
+      await seedMembership(zone, member, ZoneRole.OWNER);
+      const open = await seedBasket({ ownerUserId: member, sources: [] });
+      await seedBasket({
+        ownerUserId: member,
+        status: GeneratedListStatus.FINISHED,
+      });
+      await seedBasket({
+        ownerUserId: member,
+        status: GeneratedListStatus.ARCHIVED,
+      });
+
+      expect(await openIn(zone)).toEqual([open.id]);
+    });
+
+    it('leaves out the baskets of a member who is not approved', async () => {
+      const zone = await seedZone('Household with an applicant');
+      await seedMembership(zone, randomUUID(), ZoneRole.OWNER);
+      const applicant = randomUUID();
+      const memberships = dataSource.getRepository(ZoneMembership);
+      await memberships.save(
+        memberships.create({
+          zoneId: zone,
+          userId: applicant,
+          username: 'Applicant',
+          role: ZoneRole.MEMBER,
+          status: MembershipStatus.PENDING,
+        })
+      );
+      const theirs = await seedBasket({ ownerUserId: applicant });
+
+      expect(await openIn(zone)).not.toContain(theirs.id);
+    });
+
+    it('answers nothing for a zone with no members at all', async () => {
+      expect(await openIn(await seedZone('Empty'))).toEqual([]);
+    });
   });
 
   describe('what a source row is (section 4.1)', () => {

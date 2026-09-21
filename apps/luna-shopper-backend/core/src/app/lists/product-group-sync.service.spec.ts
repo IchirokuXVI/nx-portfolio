@@ -5,6 +5,7 @@ import {
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   ListLine,
   ListLineGroupRemoval,
@@ -16,6 +17,13 @@ import { fakeLineClaims } from '../generated-lists/line-claims.fake';
 import { itemSetHash } from './item-set-hash';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { ProductGroupSyncService } from './product-group-sync.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * A line stays subscribed to its product group (plan 0070, sections 6 and 11).
@@ -148,7 +156,8 @@ function build(seeds: LineSeed[], options: { firstSeen?: boolean } = {}) {
     } as never,
     fakeLineClaims().service,
     publisher,
-    store as never
+    store as never,
+    announcer
   );
 
   return { service, items, removals, saved, events, store, lines };

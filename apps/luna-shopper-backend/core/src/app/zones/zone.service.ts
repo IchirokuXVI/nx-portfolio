@@ -42,6 +42,7 @@ import {
   CoreAuditService,
   type AuditedWrite,
 } from '../audit/core-audit.service';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import { Zone, ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { generateJoinCode } from './join-code';
@@ -109,7 +110,11 @@ export class ZoneService {
     private readonly events: CoreEventsPublisher,
     // Injected rather than passed in, because it is `@Global()` and every method
     // that writes on an operator's behalf needs it (plan 0077, section 8).
-    private readonly audit: CoreAuditService
+    private readonly audit: CoreAuditService,
+    // The household's open baskets, when a role, an ownership or the zone itself
+    // moved what they cover (plan 0139, section 5). Last, so no positional
+    // construction in a spec has to shift an argument to take it.
+    private readonly baskets: BasketAnnouncer
   ) {}
 
   private isUniqueViolation(error: unknown): boolean {
@@ -353,8 +358,14 @@ export class ZoneService {
   async delete(req: ZoneIdRequest): Promise<{ id: string }> {
     await this.authz.requireRole(req.zoneId, req.userId, [ZoneRole.OWNER]);
     const audience = await zoneDeletionAudience(this.memberships, req.zoneId);
+    // Read before the row goes, for the same reason the audience above is: the
+    // memberships cascade with the zone, so afterwards nothing can say whose
+    // baskets just lost every list in it (plan 0139, section 5). The baskets
+    // themselves survive, because they belong to the people rather than the zone.
+    const baskets = await this.baskets.openBaskets(req.zoneId);
     await this.zones.delete({ id: req.zoneId });
     this.events.emitTo(RealtimeEvent.ZoneDeleted, audience, { id: req.zoneId });
+    this.baskets.coverageMovedTo(baskets);
     return { id: req.zoneId };
   }
 
@@ -473,6 +484,10 @@ export class ZoneService {
     target.role = role;
     const saved = await persist(target);
     this.emitMember(RealtimeEvent.MemberRoleChanged, saved);
+    // A role is a permission, and staff hold `WRITE` on every list in the zone,
+    // so a promotion or a demotion adds or removes whole lists from this
+    // person's baskets (plan 0139, section 5).
+    await this.baskets.coverageMoved(saved.zoneId);
     return toMembershipView(saved);
   }
 
@@ -585,6 +600,10 @@ export class ZoneService {
     }
     this.emitMember(RealtimeEvent.MemberRoleChanged, incoming);
     this.events.emit(RealtimeEvent.ZoneOwnershipChanged, zoneId, view);
+    // Two roles moved, so what two people's baskets cover moved with them (plan
+    // 0139, section 5). Once for the zone, because the announcement names the
+    // household rather than either person.
+    await this.baskets.coverageMoved(zoneId);
     return view;
   }
 
@@ -621,6 +640,7 @@ export class ZoneService {
     // well (plan 0029), ahead of the ownership event and after the commit.
     this.emitMember(RealtimeEvent.MemberRoleChanged, claimant);
     this.events.emit(RealtimeEvent.ZoneOwnershipChanged, req.zoneId, view);
+    await this.baskets.coverageMoved(req.zoneId);
     return view;
   }
 

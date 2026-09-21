@@ -8,6 +8,7 @@ import {
   isOpenBasket,
   RealtimeEvent,
   type BasketSourceView,
+  type BasketUpdatedEvent,
   type CreateGeneratedListRequest,
   type GeneratedListIdRequest,
   type GeneratedListPage,
@@ -25,12 +26,7 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import {
-  DataSource,
-  In,
-  QueryFailedError,
-  Repository,
-} from 'typeorm';
+import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
 import {
   BasketSource,
   GeneratedList,
@@ -745,10 +741,24 @@ export class GeneratedListService {
       return row;
     });
     const view = await this.viewFor(saved);
-    this.events.emitToUsers(
-      RealtimeEvent.GeneratedListUpdated,
-      [req.userId],
-      view
+    // Two audiences, not one (plan 0139, section 4). The owner's dashboard hears
+    // it on their own sessions, as it always did, and the people in the shop
+    // hear it on the basket's room, where a rename and a finish used to reach
+    // nobody at all. The sweep finishes a basket through this method, so a swept
+    // basket tells its room too.
+    //
+    // The payload is the four fields a guest already reads on the basket itself,
+    // and deliberately not the `GeneratedListView` above: that view names the
+    // basket's sources, and a guest is in the room.
+    this.events.emitTo(
+      RealtimeEvent.BasketUpdated,
+      { userIds: [req.userId], basketIds: [saved.id] },
+      {
+        basketId: saved.id,
+        kind: saved.kind,
+        name: saved.name,
+        status: saved.status,
+      } satisfies BasketUpdatedEvent
     );
 
     // A basket leaving the live statuses unclaims every line it still holds
@@ -817,7 +827,7 @@ export class GeneratedListService {
     // both basket rooms by.
     this.events.emitTo(
       RealtimeEvent.GeneratedListDeleted,
-      { userIds: [req.userId], generatedListId: list.id },
+      { userIds: [req.userId], basketIds: [list.id] },
       { id: list.id }
     );
     for (const participant of shared) {
@@ -885,7 +895,6 @@ export class GeneratedListService {
     });
     return rows.map(toBasketSourceView);
   }
-
 }
 
 /** One person a run shares its basket with, and the name their row carries. */

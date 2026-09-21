@@ -3,9 +3,17 @@ import {
   RealtimeEvent,
   ZoneStatus,
 } from '@portfolio/luna-shopper/contracts';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { Zone, ZoneMembership } from '../entities';
 import { AccountDeletionService } from './account-deletion.service';
 import { ANONYMIZED_USERNAME_PREFIX } from './anonymize';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 type MembershipRepo = {
   find: jest.Mock;
@@ -54,7 +62,8 @@ function build(opts: {
     events as never,
     zoneCounts as never,
     store as never,
-    generatedLists as never
+    generatedLists as never,
+    announcer
   );
   return {
     svc,
@@ -213,7 +222,8 @@ describe('AccountDeletionService.usersWithoutMemberships', () => {
       { emit: jest.fn() } as never,
       { emitZoneCounts: jest.fn() } as never,
       { firstSeen: jest.fn() } as never,
-      { deleteForUser: jest.fn() } as never
+      { deleteForUser: jest.fn() } as never,
+      announcer
     );
     return svc;
   }

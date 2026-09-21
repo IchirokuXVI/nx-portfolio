@@ -29,13 +29,13 @@ import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../generated-lists/line-claim.service';
 import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
-import { BasketWriteContext } from './basket-write.context';
+import { leftOf, lockEntries, type BasketRow } from './basket-row-resolver';
 import {
   allocateOldestFirst,
   optionIdsOf,
   type BasketEntry,
 } from './basket-rows';
-import { leftOf, lockEntries, type BasketRow } from './basket-row-resolver';
+import { BasketWriteContext } from './basket-write.context';
 
 /**
  * Recording what happened to a row at the shelf (plan 0136, section 5.1).
@@ -249,9 +249,11 @@ export class BasketSettleService {
       );
     }
 
-    opened.announceLinesChanged(
-      announcements.map((entry) => entry.line.id),
-      this.events
+    await opened.announceLinesChanged(
+      announcements.map((entry) => ({
+        listId: entry.listId,
+        lineId: entry.line.id,
+      }))
     );
 
     // A line taken to zero, or closed, has left this basket in every sense that
@@ -329,10 +331,7 @@ export class BasketSettleService {
           { messageArgs: { field: 'allocations' } }
         );
       }
-      asked.set(
-        entry.lineId,
-        (asked.get(entry.lineId) ?? 0) + entry.quantity
-      );
+      asked.set(entry.lineId, (asked.get(entry.lineId) ?? 0) + entry.quantity);
     }
 
     const total = [...asked.values()].reduce((sum, n) => sum + n, 0);

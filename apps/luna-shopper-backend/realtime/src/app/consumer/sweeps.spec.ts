@@ -93,3 +93,70 @@ describe('sweepsFor, on a shared basket', () => {
     }
   });
 });
+
+/**
+ * The same table, read off the field core writes now (plan 0139, section 1).
+ *
+ * Both of these events still name exactly one basket. What changed is the
+ * envelope: the audience is a list, and the consumer has to read either name for
+ * one release, because a replayed envelope carries the old one.
+ */
+describe('sweepsFor, reading the basket audience either way', () => {
+  it('sweeps both rooms of a basket named on basketIds', () => {
+    for (const event of [
+      RealtimeEvent.GeneratedListParticipantLeft,
+      RealtimeEvent.GeneratedListDeleted,
+    ]) {
+      expect(
+        sweepsFor({
+          event,
+          eventId: 'e6',
+          basketIds: [BASKET],
+          payload: { id: BASKET },
+        })
+      ).toEqual(BOTH_BASKET_ROOMS);
+    }
+  });
+
+  it('sweeps both rooms of every basket named, if an event ever names two', () => {
+    expect(
+      sweepsFor({
+        event: RealtimeEvent.GeneratedListDeleted,
+        eventId: 'e7',
+        basketIds: [BASKET, 'gl-2'],
+        payload: { id: BASKET },
+      })
+    ).toEqual([
+      ...BOTH_BASKET_ROOMS,
+      {
+        direction: 'evict',
+        rooms: [generatedListRoom('gl-2'), generatedListPresenceRoom('gl-2')],
+      },
+    ]);
+  });
+
+  it('sweeps nothing for an empty basketIds', () => {
+    expect(
+      sweepsFor({
+        event: RealtimeEvent.GeneratedListDeleted,
+        eventId: 'e8',
+        basketIds: [],
+        payload: { id: BASKET },
+      })
+    ).toEqual([]);
+  });
+
+  it('asks for no sweep at all on a lines changed event', () => {
+    // Section 5: a socket is in a basket room because its participant is live on
+    // the basket, and that does not change when the rows move or when the owner
+    // loses a list. The room stays and the next read is smaller.
+    expect(
+      sweepsFor({
+        event: RealtimeEvent.BasketLinesChanged,
+        eventId: 'e9',
+        basketIds: [BASKET],
+        payload: { lineIds: [] },
+      })
+    ).toEqual([]);
+  });
+});

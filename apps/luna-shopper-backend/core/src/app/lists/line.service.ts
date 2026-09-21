@@ -52,6 +52,7 @@ import {
   type SelectQueryBuilder,
 } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import {
   LineComment,
   LineSettlement,
@@ -237,6 +238,17 @@ interface LineWriter {
 /** What a write inside a transaction leaves in the trail, or nothing. */
 type RecordLine = ((saved: ListLine) => Promise<void>) | undefined;
 
+/**
+ * Who tells the baskets, for one call of the private line event helper (plan
+ * 0139, section 3).
+ *
+ * `'here'` is every ordinary write: one line moved and the helper announces it.
+ * `'caller'` is the two writes whose announcement cannot be built from one line
+ * — a batch, which is one event for the whole write, and a merge, whose event
+ * names the line that went as well as the one that stayed.
+ */
+type Announcer = 'here' | 'caller';
+
 @Injectable()
 export class LineService {
   constructor(
@@ -272,7 +284,10 @@ export class LineService {
     // What changed on a list, written in the transaction of the write that
     // changed it (plan 0138). Last, so no positional construction in a spec has
     // to shift an argument to take it.
-    private readonly changes: LineChangeRecorder
+    private readonly changes: LineChangeRecorder,
+    // Every basket that covers the list hears that these lines moved (plan 0139,
+    // section 3). Last for the same reason `changes` was, one plan ago.
+    private readonly baskets: BasketAnnouncer
   ) {}
 
   /**
@@ -618,13 +633,26 @@ export class LineService {
    * a whole line on the wire, so an edit that announced an unclaimed one would
    * clear the indicator on every phone in the household over a rename.
    */
+  /**
+   * Every basket that covers the line hears it too (plan 0139, section 3).
+   *
+   * Here rather than at each of the five call sites, so that a write that goes
+   * through this helper cannot forget: it serves `add`, `addMany`, the plain
+   * edit, {@link announce} and {@link applyApproval}, which means an approval
+   * change is covered by construction.
+   *
+   * `announces` is how a caller takes the announcement over. Two do: a batch,
+   * which announces once for the whole write rather than once per line, and a
+   * merge, whose one event has to name both the absorbed line and the survivor.
+   */
   private emit(
     event: RealtimeEvent,
     zoneId: string,
     line: ListLine,
     items: LineItemSet,
     settlements: LineSettlementSummary,
-    claim: LineClaim
+    claim: LineClaim,
+    announces: Announcer = 'here'
   ): void {
     this.events.emit(
       event,
@@ -632,6 +660,9 @@ export class LineService {
       toLineView(line, items, settlements, claim),
       line.listId
     );
+    if (announces === 'here') {
+      void this.baskets.linesChanged(line.listId, [line.id]);
+    }
   }
 
   /**
@@ -956,7 +987,8 @@ export class LineService {
         row,
         items,
         NO_LINE_SETTLEMENTS,
-        NO_LINE_CLAIM
+        NO_LINE_CLAIM,
+        'caller'
       );
       views.set(
         row.id,
@@ -964,8 +996,14 @@ export class LineService {
       );
     }
     for (const [lineId, entry] of written.raised) {
-      views.set(lineId, this.announce(list, entry));
+      views.set(lineId, this.announce(list, entry, 'caller'));
     }
+    // One basket announcement for the whole batch, naming every line it touched
+    // (plan 0139, section 3). The list rooms take the burst above, because each
+    // of those events carries a whole line and a client applies them one by one.
+    // A basket reads again whatever it is told, so N nudges would be N reads of
+    // the same basket for one write.
+    void this.baskets.linesChanged(list.id, [...views.keys()]);
 
     // One result per item, in request order. Two items that folded into one line
     // answer with that same line twice, and the second of them says `merged`.
@@ -1653,17 +1691,23 @@ export class LineService {
     }
     // Section 5: the absorbed line goes first, so a client that applies events
     // in order never draws two lines of one name, then the survivor as it now
-    // stands. No basket room hears anything.
+    // stands.
     this.events.emit(
       RealtimeEvent.LineDeleted,
       list.zoneId,
       { id: outcome.absorbedLineId, listId: list.id },
       list.id
     );
-    return {
-      ...this.announce(list, outcome.written),
-      absorbedLineId: outcome.absorbedLineId,
-    };
+    const view = this.announce(list, outcome.written, 'caller');
+    // One announcement naming both lines (plan 0139, section 3), rather than the
+    // two single ones the delete and the helper would each have made. A basket
+    // holding the absorbed line and the survivor is one row either way, and two
+    // events would make it read the basket twice to draw the same row.
+    void this.baskets.linesChanged(list.id, [
+      outcome.absorbedLineId,
+      outcome.written.line.id,
+    ]);
+    return { ...view, absorbedLineId: outcome.absorbedLineId };
   }
 
   /**
@@ -2052,8 +2096,16 @@ export class LineService {
       );
     }
     for (const written of outcome.written) {
-      this.announce(outcome.list, written);
+      this.announce(outcome.list, written, 'caller');
     }
+    // Once for the list, naming every line the outcome names (plan 0139, section
+    // 3): the ones that went and the ones that stayed. A rename of a row that
+    // spans two lists produces one outcome per list, so each of them announces
+    // its own.
+    void this.baskets.linesChanged(outcome.list.id, [
+      ...outcome.absorbedLineIds,
+      ...outcome.written.map((written) => written.line.id),
+    ]);
   }
 
   /**
@@ -2338,14 +2390,19 @@ export class LineService {
   }
 
   /** Emits what a committed write produced, and answers with its view. */
-  private announce(list: ShoppingList, written: WrittenLine): LineView {
+  private announce(
+    list: ShoppingList,
+    written: WrittenLine,
+    announces: Announcer = 'here'
+  ): LineView {
     this.emit(
       RealtimeEvent.LineUpdated,
       list.zoneId,
       written.line,
       written.items,
       written.settlements,
-      written.claim
+      written.claim,
+      announces
     );
     return written.view;
   }
@@ -2739,6 +2796,9 @@ export class LineService {
       { id, listId },
       listId
     );
+    // A deleted line is a row that leaves every basket covering the list (plan
+    // 0139, section 3).
+    void this.baskets.linesChanged(listId, [id]);
     return { id };
   }
 

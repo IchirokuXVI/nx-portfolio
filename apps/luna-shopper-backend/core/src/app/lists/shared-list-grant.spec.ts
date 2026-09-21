@@ -5,6 +5,7 @@ import {
   ZoneRole,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   ListAccess,
   ShoppingList,
@@ -18,6 +19,13 @@ import type { ZoneCountsService } from '../zones/zone-counts.service';
 import { ListAccessService } from './list-access.service';
 import { ListService } from './list.service';
 import { SharedListGrantService } from './shared-list-grant.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * A list open to its group stays open to it (plan 0042, section 2).
@@ -262,7 +270,8 @@ describe('MembershipService.approve (plan 0042, section 2.3)', () => {
         emitTo: () => undefined,
       } as unknown as CoreEventsPublisher,
       // This is the member facing approval, which records nothing.
-      {} as never
+      {} as never,
+      announcer
     );
 
     await service.approve({
@@ -412,7 +421,8 @@ function listServiceFor(world: World) {
         emitted.push({ event, payload }),
     } as unknown as CoreEventsPublisher,
     // These are the member facing edits, which record nothing.
-    {} as never
+    {} as never,
+    announcer
   );
   return { service, emitted };
 }

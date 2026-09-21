@@ -14,6 +14,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../../audit/core-audit.service';
+import { fakeBasketAnnouncer } from '../../baskets/basket-announcer.fake';
 import {
   CORE_ENTITIES,
   LineSettlement,
@@ -33,6 +34,13 @@ import { LineService } from '../line.service';
 import { ListAccessService } from '../list-access.service';
 import { SettlementService } from '../settlement.service';
 import { LineChangeRecorder } from './line-change.recorder';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * Every record site, against real Postgres (plan 0138, section 13, tests 1 to 4).
@@ -87,14 +95,16 @@ describeIntegration('what every write records (real Postgres)', () => {
       { emit: jest.fn() } as never,
       new CoreAuditService(dataSource),
       new LineMergeService(recorder),
-      recorder
+      recorder,
+      announcer
     );
     settlements = new SettlementService(
       dataSource,
       dataSource.getRepository(LineSettlement),
       listAccess,
       fakeLineClaims().service,
-      { emit: jest.fn() } as never
+      { emit: jest.fn() } as never,
+      announcer
     );
 
     const zones = dataSource.getRepository(Zone);

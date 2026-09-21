@@ -10,11 +10,11 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
+import { LineService } from '../lists/line.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { canChangeDemand } from '../lists/list-acts';
-import { LineService } from '../lists/line.service';
-import { BasketWriteContext } from './basket-write.context';
 import { type BasketEntry } from './basket-rows';
+import { BasketWriteContext } from './basket-write.context';
 
 /**
  * Changing what one household asks for, from the basket (plan 0136, section
@@ -76,9 +76,7 @@ export class BasketDemandService {
 
     // Plan 0131's rule, asked of the owner. The read serves the same answer as
     // `demandEditable`, and this is the enforcement behind it.
-    if (
-      !(await this.ownerMayChange(opened.basket.ownerUserId, entry))
-    ) {
+    if (!(await this.ownerMayChange(opened.basket.ownerUserId, entry))) {
       throw new ForbiddenException(
         'This list does not allow its quantity to be changed from here'
       );
@@ -108,7 +106,9 @@ export class BasketDemandService {
       via: opened.via(),
     });
 
-    opened.announceLinesChanged([entry.lineId], this.events);
+    await opened.announceLinesChanged([
+      { listId: entry.listId, lineId: entry.lineId },
+    ]);
     return opened.result([entry.lineId], req.rowKey);
   }
 

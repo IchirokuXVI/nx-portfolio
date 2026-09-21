@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  BasketKind,
   isOpenBasket,
   type AddBasketLineRequest,
   type BasketRowResult,
@@ -10,7 +11,6 @@ import {
   ForbiddenException,
   GeneratedListFinishedException,
 } from '@portfolio/luna-shopper/platform';
-import { BasketKind } from '@portfolio/luna-shopper/contracts';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
 import { ProfileService } from '../profiles/profile.service';
@@ -99,7 +99,9 @@ export class BasketLineAddService {
       via: opened.via(),
     });
 
-    opened.announceLinesChanged([added.line.id], this.events);
+    // No announcement of its own (plan 0139, section 3). The add went through
+    // `LineService.add`, which announces to every basket covering the list, and
+    // this basket is one of them: it had to cover the list to add to it.
     return opened.result([added.line.id], added.line.id);
   }
 

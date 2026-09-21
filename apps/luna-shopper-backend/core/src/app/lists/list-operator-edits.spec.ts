@@ -5,6 +5,7 @@ import {
   ZoneRole,
 } from '@portfolio/luna-shopper/contracts';
 import { fakeAudit, type RecordedChange } from '../audit/core-audit.testing';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   ListAccess,
   ShoppingList,
@@ -17,6 +18,13 @@ import type { ZoneCountsService } from '../zones/zone-counts.service';
 import { ListAccessService } from './list-access.service';
 import { ListService } from './list.service';
 import { SharedListGrantService } from './shared-list-grant.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * An operator's edit of a list is the write its own admin makes (plan 0077,
@@ -225,7 +233,8 @@ function makeService(world: World): Harness {
         emitZoneCounts: jest.fn(async () => undefined),
       } as unknown as ZoneCountsService,
       publisher as unknown as CoreEventsPublisher,
-      audit.service
+      audit.service,
+      announcer
     ),
     world,
     events,

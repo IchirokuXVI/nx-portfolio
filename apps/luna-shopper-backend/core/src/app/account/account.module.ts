@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BasketCoverageModule } from '../baskets/basket-coverage.module';
 import { Zone, ZoneMembership } from '../entities';
 import { IdempotencyModule } from '../events/idempotency.module';
 import { GeneratedListsModule } from '../generated-lists/generated-lists.module';
@@ -27,6 +28,9 @@ import { ZoneReaperService } from './zone-reaper.service';
     // For the `user.deleted` saga alone: a departing account's baskets are
     // private to it and go with it (plan 0050, section 7).
     GeneratedListsModule,
+    // A deleted zone and a retired membership both move what the household's
+    // remaining open baskets cover (plan 0139, section 5).
+    BasketCoverageModule,
   ],
   controllers: [AccountController],
   providers: [

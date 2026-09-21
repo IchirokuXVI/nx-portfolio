@@ -3,8 +3,16 @@ import {
   RealtimeEvent,
   ZoneRole,
 } from '@portfolio/luna-shopper/contracts';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import { zoneDeletionAudience } from './zone-deletion-audience';
 import { ZoneService } from './zone.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * Deleting a group tells the people still waiting to join it (plan 0030,
@@ -36,7 +44,8 @@ function build(applicants: string[]) {
     authz as never,
     {} as never,
     events as never,
-    {} as never
+    {} as never,
+    announcer
   );
   return { svc, zones, memberships, events };
 }

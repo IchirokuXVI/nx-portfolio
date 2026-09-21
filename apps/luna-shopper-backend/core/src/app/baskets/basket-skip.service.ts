@@ -135,8 +135,11 @@ export class BasketSkipService {
       }
     });
 
+    // This basket alone (plan 0139, section 3). A skip is one trip's "not today"
+    // on a line the trip still covers, so the line did not move and no other
+    // basket's rows changed.
     const lineIds = inserted.map((entry) => entry.lineId);
-    opened.announceLinesChanged(lineIds, this.events);
+    opened.announceBasketChanged(lineIds);
     // A household is told "Marta is buying this" so that nobody buys it twice,
     // and Marta has said she is not buying it today, so the line is free while
     // the skip is fresh (section 5.4). Asked of the derivation rather than
@@ -181,10 +184,8 @@ export class BasketSkipService {
       }
     });
 
-    opened.announceLinesChanged(
-      reverted.map((entry) => entry.lineId),
-      this.events
-    );
+    // This basket alone, as the skip itself was.
+    opened.announceBasketChanged(reverted.map((entry) => entry.lineId));
     await this.announceClaimed(opened, reverted);
 
     return opened.result(touched, req.rowKey);

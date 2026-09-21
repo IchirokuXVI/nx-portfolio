@@ -12,9 +12,9 @@ import {
   boughtOf,
   groupEntries,
   newestSettlement,
-  noteOf,
   NO_BASKET_SKIPS,
   NO_ROW_MARKS,
+  noteOf,
   optionIdsOf,
   progressOf,
   stateOf,
@@ -171,9 +171,9 @@ describe('the states of a row (plan 0130, section 4)', () => {
   });
 
   it('is PARTLY with both above zero', () => {
-    expect(
-      stateOf([entry({ quantity: 1 })], 1, 1, bought(1), NO_FACTS)
-    ).toBe(BasketRowState.PARTLY);
+    expect(stateOf([entry({ quantity: 1 })], 1, 1, bought(1), NO_FACTS)).toBe(
+      BasketRowState.PARTLY
+    );
   });
 
   it('is DONE at zero left with something bought', () => {
@@ -239,7 +239,10 @@ describe('the arithmetic (plan 0130, section 4)', () => {
 
   it('counts a mixed basket', () => {
     const rows = [
-      toRowView(groupEntries([entry({ content: 'a', quantity: 2 })])[0], OPEN_CONTEXT),
+      toRowView(
+        groupEntries([entry({ content: 'a', quantity: 2 })])[0],
+        OPEN_CONTEXT
+      ),
       toRowView(
         groupEntries([
           entry({ content: 'b', quantity: 0, settlements: [bought(1)] }),
@@ -387,7 +390,10 @@ describe('what the row says about who touched it', () => {
       entry({
         content: 'Milk',
         settlements: [
-          bought(1, { settledByParticipantId: 'old', settledAt: new Date(2026, 0, 1, 9) }),
+          bought(1, {
+            settledByParticipantId: 'old',
+            settledAt: new Date(2026, 0, 1, 9),
+          }),
           bought(1, { settledByParticipantId: 'new', settledAt: at }),
         ],
       }),
@@ -409,7 +415,6 @@ describe('what the row says about who touched it', () => {
     expect(row.mark).toBeNull();
   });
 });
-
 
 describe('a line skipped for now (plan 0137, section 10)', () => {
   /** A row of one entry, skipped or not, as the read would hand it over. */
@@ -528,7 +533,10 @@ describe('a line skipped for now (plan 0137, section 10)', () => {
     const stale = closed({ fresh: false });
 
     expect(
-      stateOf([only], 2, 0, stale, { skips: NO_BASKET_SKIPS, kind: BasketKind.LIVE })
+      stateOf([only], 2, 0, stale, {
+        skips: NO_BASKET_SKIPS,
+        kind: BasketKind.LIVE,
+      })
     ).toBe(BasketRowState.WANTED);
     // A trip's close holds until the trip is finished (plan 0130, section 4).
     expect(stateOf([only], 2, 0, stale, NO_FACTS)).toBe(
@@ -539,7 +547,10 @@ describe('a line skipped for now (plan 0137, section 10)', () => {
   it('leaves a run out LIVE close with no note', () => {
     // Plan 0137 section 9: plan 0130 defines one note, and `touchedBy` already
     // says who looked and when.
-    const only = entry({ quantity: 2, settlements: [closed({ fresh: false })] });
+    const only = entry({
+      quantity: 2,
+      settlements: [closed({ fresh: false })],
+    });
     const view = toRowView(groupEntries([only])[0], {
       ...OPEN_CONTEXT,
       facts: { skips: NO_BASKET_SKIPS, kind: BasketKind.LIVE },

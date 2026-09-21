@@ -39,6 +39,13 @@ const domainEventEnvelope = object(
     zoneId: nonEmptyString(),
     listId: string(),
     userIds: array(nonEmptyString()),
+    // The basket audience, in both of its names (plan 0139, section 1). Core
+    // writes `basketIds` alone; `generatedListId` is declared because the
+    // consumer still reads it for one release and `object` defaults
+    // `additionalProperties` to false, so a replayed envelope validated strictly
+    // would be rejected for carrying the field it was written with.
+    basketIds: array(nonEmptyString()),
+    generatedListId: nonEmptyString(),
     payload: any(),
   },
   ['event', 'eventId', 'payload']

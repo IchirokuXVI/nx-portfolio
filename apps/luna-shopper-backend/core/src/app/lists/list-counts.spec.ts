@@ -7,15 +7,23 @@ import {
   ZoneRole,
   type ListCounts,
 } from '@portfolio/luna-shopper/contracts';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListLine, ShoppingList } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ZoneAuthzService } from '../zones/zone-authz.service';
 import { LIST_COUNTS_COLUMN, LIST_COUNTS_SQL } from '../zones/zone-summary.sql';
-import type { ListAccessService } from './list-access.service';
 import { EMPTY_LINE_ITEM_SET } from './line-item-set';
+import type { ListAccessService } from './list-access.service';
 import { EMPTY_LIST_COUNTS, toLineView, toListView } from './list.mappers';
 import { ListService } from './list.service';
 import { SharedListGrantService } from './shared-list-grant.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * List and line counts (plan 0017, sections 3.4 and 4.2), plus the timestamps
@@ -167,7 +175,8 @@ function build(rows: ShoppingList[], counts: ListCounts) {
     zoneCounts as never,
     events,
     // No operator write here, so nothing reaches the trail.
-    {} as never
+    {} as never,
+    announcer
   );
   return { svc, qb, lists, access, authz, zoneCounts, events };
 }

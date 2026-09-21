@@ -1,6 +1,7 @@
 import { LIST_HOLDING_ITEM_LIMITS } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 import type { DataSource } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ZoneAuthzService } from '../zones/zone-authz.service';
 import type { ZoneCountsService } from '../zones/zone-counts.service';
@@ -11,6 +12,13 @@ import {
 } from './list-holding.sql';
 import { ListService } from './list.service';
 import type { SharedListGrantService } from './shared-list-grant.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * Which of the caller's other lists still want this product (plan 0053,
@@ -69,7 +77,8 @@ function build(rows: ListHoldingItemRow[]) {
     {} as unknown as ZoneCountsService,
     { emit: () => undefined } as unknown as CoreEventsPublisher,
     // No operator write here, so nothing reaches the trail.
-    {} as never
+    {} as never,
+    announcer
   );
 
   return { service, calls };

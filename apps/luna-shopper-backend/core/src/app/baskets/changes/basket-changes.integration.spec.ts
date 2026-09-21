@@ -31,6 +31,7 @@ import {
   ZoneMembership,
 } from '../../entities';
 import { ListLineChangeSweepService } from '../../lists/changes/list-line-change-sweep.service';
+import { fakeBasketAnnouncer } from '../basket-announcer.fake';
 import { CHANGE_MARK_WINDOW_MS, fakeCoreConfig } from '../basket-config.fake';
 import { BasketCoverageService } from '../basket-coverage.service';
 import { BasketReadService } from '../basket-read.service';
@@ -42,6 +43,13 @@ import { BasketSkipService } from '../basket-skip.service';
 import { BasketWriteContext } from '../basket-write.context';
 import { BasketChangesService } from './basket-changes.service';
 import { BasketMarksReader } from './basket-marks.reader';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * What one viewer is told has changed, against real Postgres (plan 0138, section
@@ -151,7 +159,8 @@ describeIntegration(
         coverage,
         sharing,
         resolver,
-        read
+        read,
+        announcer
       );
       changes = new BasketChangesService(
         dataSource.getRepository(ListLineChange),

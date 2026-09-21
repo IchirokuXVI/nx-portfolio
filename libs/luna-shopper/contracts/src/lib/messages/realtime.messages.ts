@@ -1,3 +1,4 @@
+import type { BasketKind } from '../enums/basket.enums';
 import { RealtimeRoom } from '../enums/realtime.enums';
 import type { ParticipantPresenceEntry } from './generated-list-sharing.messages';
 
@@ -84,6 +85,26 @@ export function generatedListRoom(generatedListId: string): string {
  */
 export function generatedListPresenceRoom(generatedListId: string): string {
   return `${generatedListRoom(generatedListId)}:presence`;
+}
+
+/**
+ * The room of one basket, by the name a basket has now (plan 0139, section 1).
+ *
+ * The same string {@link generatedListRoom} returns, and deliberately so: the
+ * room name itself is plan 0144's to change, together with the enum values and
+ * the `generatedList.*` event names. No client ever sees it, because a
+ * participant socket is joined to it server side, so renaming it is a rename of
+ * one internal string and does not belong in the middle of a fan out change.
+ *
+ * New code calls this one. Nothing new calls {@link generatedListRoom}.
+ */
+export function basketRoom(basketId: string): string {
+  return generatedListRoom(basketId);
+}
+
+/** The presence room of one basket. See {@link basketRoom} for the two names. */
+export function basketPresenceRoom(basketId: string): string {
+  return generatedListPresenceRoom(basketId);
 }
 
 /**
@@ -229,6 +250,20 @@ export interface AccessCheckResult {
    * life of it. Read fresh on every admission, which is also every reconnection.
    */
   participant?: ParticipantPresenceEntry;
+  /**
+   * On a participant check only: what kind of basket this is (plan 0139, section
+   * 6).
+   *
+   * It decides whether the socket enters presence at all. A `LIVE` basket is the
+   * one everybody holds all the time, so "somebody is here" on it says nothing,
+   * and a presence room per person is a Redis key that never expires. It rides on
+   * the same answer for the reason {@link participant} does: the basket row is
+   * already read to check liveness.
+   *
+   * A realtime service that receives no kind treats the basket as `GENERATED`,
+   * which is what every basket was before plan 0136.
+   */
+  basketKind?: BasketKind;
 }
 
 /** A user present in a zone or on a list. */

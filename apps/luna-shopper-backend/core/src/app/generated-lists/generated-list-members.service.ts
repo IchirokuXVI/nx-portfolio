@@ -267,9 +267,9 @@ export class GeneratedListMembersService {
     generatedListId: string,
     participant: GeneratedListParticipant
   ): void {
-    this.events.emitToGeneratedList(
+    this.events.emitToBaskets(
       RealtimeEvent.GeneratedListParticipantJoined,
-      generatedListId,
+      [generatedListId],
       toParticipantView(participant, false)
     );
     if (participant.kind === ParticipantKind.REGISTERED && participant.userId) {
@@ -290,9 +290,9 @@ export class GeneratedListMembersService {
     generatedListId: string,
     participant: GeneratedListParticipant
   ): void {
-    this.events.emitToGeneratedList(
+    this.events.emitToBaskets(
       RealtimeEvent.GeneratedListParticipantLeft,
-      generatedListId,
+      [generatedListId],
       toParticipantView(participant, false)
     );
     if (participant.kind === ParticipantKind.REGISTERED && participant.userId) {
