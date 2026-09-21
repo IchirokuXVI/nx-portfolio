@@ -29,8 +29,32 @@ export const SUGGESTION_MIN_PURCHASES = 3;
 /** How early before the period ends a line is already due, as a share of it. */
 export const SUGGESTION_WINDOW_SHARE = 0.25;
 
-/** How many of the list's ended basket trips the staple rule looks at. */
+/**
+ * How many of the list's ended trips the staple rule looks at.
+ *
+ * A trip is an ended basket **or** an ended session since plan 0142, section 8,
+ * so the six are over the union and not over baskets alone. The number did not
+ * change: what changed is what gets counted.
+ */
 export const STAPLE_TRIPS = 6;
 
-/** Below this many ended basket trips, no line of the list is a staple. */
+/** Below this many ended trips, no line of the list is a staple. */
 export const STAPLE_MIN_TRIPS = 4;
+
+/**
+ * How many distinct lines of the list a session must touch to count as a trip
+ * (plan 0142, section 8.1).
+ *
+ * A basket trip states everything a household wanted, so a line missing from it
+ * was not wanted and the absence means something. A session states only what
+ * was bought. Somebody who went out for bread alone therefore reads as a trip
+ * that wanted bread and nothing else, and two such errands in a row end every
+ * staple the list has, because a staple may never be absent from two trips
+ * running.
+ *
+ * Three is the smallest number that makes an errand look like an errand. It is
+ * a floor on the evidence and not on the shopping: a real weekly shop touches
+ * far more, and a household whose every trip is under three lines has no
+ * pattern for this rule to find.
+ */
+export const STAPLE_SESSION_MIN_LINES = 3;

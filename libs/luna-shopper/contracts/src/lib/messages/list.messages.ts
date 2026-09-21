@@ -1249,11 +1249,12 @@ export interface LineSuggestionView {
   periodDays: number | null;
   /** Whole days since the line was last bought, for both reasons. */
   daysSinceBought: number;
-  /** `STAPLE` only: of the recent ended basket trips, how many asked for it. */
+  /** `STAPLE` only: of the recent ended trips, how many wanted it. */
   tripsWith: number | null;
-  /** `STAPLE` only: how many recent ended basket trips were looked at. */
+  /** `STAPLE` only: how many recent ended trips were looked at. */
   tripsSeen: number | null;
-  /** What to add: what the newest ended basket asked, else the last purchase. */
+  /** What to add: what the newest ended basket asked while it is still the
+   * last word on the line, else the units of the last purchase. */
   quantity: number;
 }
 
