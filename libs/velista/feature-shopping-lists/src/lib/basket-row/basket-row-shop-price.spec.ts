@@ -5,14 +5,14 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import type {
-  BasketLine,
   BasketParticipant,
   BasketProduct,
+  BasketRow,
   BasketRowMark,
   ProductOffer,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
-import { BasketLineRow } from './basket-line-row';
+import { BasketRow as BasketRowComponent } from './basket-row';
 
 /**
  * What a row says once the prices come from one shop (velista `0078`, section 5).
@@ -27,22 +27,38 @@ import { BasketLineRow } from './basket-line-row';
  * name both.
  */
 
-function line(overrides: Partial<BasketLine> = {}): BasketLine {
+function line(overrides: Partial<BasketRow> = {}): BasketRow {
   return {
-    id: 'line-1',
+    rowKey: 'zl-1',
     content: 'Milk',
-    quantity: 3,
-    settled: 0,
-    pickId: 'i-milk',
+    left: 3,
+    bought: 0,
+    asked: 3,
+    state: 'WANTED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
+    // The product this row means is the **first of its options**: a row has no
+    // `pickId` any more, because that was a column on the line the basket used
+    // to store (backend `0136`).
     optionIds: ['i-milk'],
-    position: 0,
-    createdBy: null,
     touchedBy: null,
     touchedAt: null,
-    lastOutcome: null,
-    kind: 'DERIVED',
+    entries: [
+      {
+        lineId: 'zl-1',
+        listId: null,
+        left: 3,
+        bought: 0,
+        asked: 3,
+        state: 'WANTED',
+        awaitingApproval: false,
+        demandEditable: true,
+      },
+    ],
     ...overrides,
-  } as BasketLine;
+  };
 }
 
 const offer = (priceScopeId: string, price: number): ProductOffer => ({
@@ -79,23 +95,23 @@ async function render(options: {
   TestBed.resetTestingModule();
 
   await TestBed.configureTestingModule({
-    imports: [BasketLineRow, RokuTranslatorTestingModule.forTesting()],
+    imports: [BasketRowComponent, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
     ],
   }).compileComponents();
 
-  const fixture = TestBed.createComponent(BasketLineRow);
-  fixture.componentRef.setInput('line', line());
+  const fixture = TestBed.createComponent(BasketRowComponent);
+  fixture.componentRef.setInput('row', line());
   fixture.componentRef.setInput('people', new Map<string, BasketParticipant>());
   fixture.componentRef.setInput(
     'products',
     new Map([['i-milk', options.product ?? MILK]])
   );
-  fixture.componentRef.setInput('listNames', new Map());
+  fixture.componentRef.setInput('lists', new Map());
   fixture.componentRef.setInput('shop', options.shop ?? null);
-  fixture.componentRef.setInput('mark', options.mark ?? null);
+  fixture.componentRef.setInput('priceMark', options.mark ?? null);
   fixture.detectChanges();
 
   return fixture;
@@ -111,7 +127,7 @@ const rowLabel = (fixture: Awaited<ReturnType<typeof render>>) =>
     .querySelector('.body')
     ?.getAttribute('aria-label') ?? '';
 
-describe('BasketLineRow: prices from one shop', () => {
+describe('BasketRowComponent: prices from one shop', () => {
   it('draws the cheapest anywhere when no shop is in use', async () => {
     const fixture = await render({ shop: null });
 

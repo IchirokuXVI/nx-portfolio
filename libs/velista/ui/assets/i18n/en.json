@@ -1056,14 +1056,11 @@
       "open": "Settle {{name}}",
       "outstanding_one": "{{count}} outstanding",
       "outstanding_other": "{{count}} outstanding",
-      "partly": "{{settled}} of {{total}} got",
       "wanted": "×{{count}}",
       "free": "No product chosen",
       "busy": "Saving",
       "takenBack_one": "1 taken back",
-      "takenBack_other": "{{count}} taken back",
-      "listShare": "this list asked for {{asked}} of the {{total}}",
-      "listPartly": "{{settled}} of {{asked}} got"
+      "takenBack_other": "{{count}} taken back"
     },
     "outstanding": {
       "label": "{{name}}, still to get",
@@ -1076,10 +1073,6 @@
       "gotSome": "{{name}} got {{count}}",
       "none": "{{name}} says they had none",
       "you": "you"
-    },
-    "added": {
-      "by": "Added by {{name}}",
-      "announced": "{{content}} added"
     },
     "from": {
       "one": "from {{first}}",
@@ -1154,15 +1147,14 @@
       "notListedAt": "not listed at {{chain}}"
     },
     "group": {
-      "noList": "On no list yet",
-      "noListHint": "added in the shop",
       "notListed": "Not listed at {{chain}}",
       "notListedHint": "still yours to get",
       "noCategory": "No category",
       "noCategoryHint": "lines with no product",
       "progress": "{{done}} of {{total}} got",
       "unavailable_one": "{{count}} not available",
-      "unavailable_other": "{{count}} not available"
+      "unavailable_other": "{{count}} not available",
+      "otherLists": "Other lists"
     },
     "settle": {
       "title": "{{name}}",
@@ -1186,14 +1178,7 @@
       "title": "Which did you get?",
       "hint": "Move units to the ones you got. {{name}} keeps the rest.",
       "hintNone": "Move units to the ones you got. The rest stays without a product.",
-      "rest": "gets the rest",
-      "noneRest": "no product chosen, gets the rest",
       "units": "{{name}}, units",
-      "less": "One fewer {{name}}",
-      "more": "One more {{name}}",
-      "apply": "Apply",
-      "notBought": "This changes which rows to buy. Nothing is marked as bought.",
-      "split": "{{name}} split into {{count}} rows",
       "none": "This line names no product",
       "cheapest": "Cheapest",
       "noPrice": "No price",
@@ -1201,32 +1186,11 @@
       "asOfStale": "Prices from {{when}}, and some may be out of date"
     },
     "units": {
-      "extra": "{{lists}} for these lists, plus {{extra}} extra",
-      "lists": "Lists that asked for this",
       "askedFor": "Asked for",
       "got": "Got",
       "askedLabel": "{{name}}, asked for",
       "gotLabel": "{{name}}, got",
-      "more_one": "1 more list",
-      "more_other": "{{count}} more lists",
-      "listAsks": "asks for {{count}} on its list",
-      "listNow": "its list now asks for {{count}}",
-      "pending": "waiting for the list to agree",
-      "noAccess": "You can no longer change this list",
-      "rejected": "that list said no to this line",
-      "cannotTake": "this line cannot be added to that list",
-      "cameHome": "Added to {{name}}. {{count}} recorded as bought there",
-      "stillWaiting_one": "1 bought and not yet on any list",
-      "stillWaiting_other": "{{count}} bought and not yet on any list",
-      "alreadyHere": "this list already has it, read again",
-      "byName": "matched by name: “{{content}}”",
-      "loading": "Reading the lists",
-      "failed": "The lists could not be read",
-      "retry": "Try again",
-      "empty": "There is no list you can put this on"
-    },
-    "send": {
-      "pending": "Waiting for that list to approve it"
+      "pending": "waiting for the list to agree"
     },
     "people": {
       "title": "On this list",
@@ -1390,6 +1354,17 @@
         "make": "Make my shopping list",
         "older": "See older lists"
       }
+    },
+    "entries": {
+      "title": "Lists that ask for this",
+      "otherList": "Another list",
+      "asks": "asks for {{count}}",
+      "got": "got {{count}}",
+      "gotLabel": "{{name}}, got"
+    },
+    "row": {
+      "boughtOf": "{{bought}} of {{asked}}",
+      "gone": "That line is no longer in this list."
     }
   },
   "getList": {

@@ -839,8 +839,11 @@ export const AppShellRoutes: Route[] = [
               // back button dismisses it. None is guarded, because which of them a
               // caller may **use** is decided from the caller's own facts by the
               // page, and the server refuses the rest regardless of what is drawn.
+              // Addressed by the **row key** since velista `0090`: a basket stores
+              // no lines, so there is nothing here to address one by. The key is an
+              // anchor line's id, and the sheet follows it when the anchor moves.
               sheet({
-                path: 'lines/:lineId/settle',
+                path: 'rows/:rowKey/settle',
                 loadComponent: () =>
                   import('@portfolio/velista/feature-shopping-lists').then(
                     (m) => m.SettleSheet

@@ -1,4 +1,4 @@
-import { toBasketView } from './basket-mappers';
+import { toBasket } from './basket-mappers';
 
 /**
  * A price and a place on every product, at the boundary (velista `0062`,
@@ -57,22 +57,26 @@ const SCOPE = {
 };
 
 function basket(overrides: Record<string, unknown> = {}) {
-  return toBasketView({
+  return toBasket({
     id: 'b1',
+    kind: 'GENERATED',
     name: null,
-    status: 'ACTIVE',
-    generatedAt: '2026-09-01T08:00:00.000Z',
-    lines: [],
+    status: 'OPEN',
+    createdAt: '2026-09-01T08:00:00.000Z',
+    rows: [],
+    lists: [],
     participants: [ME],
     me: ME,
-    seesZoneData: true,
     products: [PRODUCT],
     scopes: [SCOPE],
+    // Required, and refused when absent: nothing in this scope recounts, so a
+    // basket that cannot say how far it has got cannot be read at all.
+    progress: { done: 0, unavailable: 0, total: 0, pending: 0 },
     ...overrides,
   });
 }
 
-describe('toBasketView: prices and places (velista 0062)', () => {
+describe('toBasket: prices and places (velista 0062)', () => {
   it('maps an offer whole', () => {
     const view = basket({ products: [{ ...PRODUCT, bestOffer: OFFER }] });
 
@@ -169,7 +173,7 @@ describe('toBasketView: prices and places (velista 0062)', () => {
  * it, which is what lets a row say what **this** shop charges rather than what the
  * cheapest of five does.
  */
-describe('toBasketView: every scope’s offer (velista 0078)', () => {
+describe('toBasket: every scope’s offer (velista 0078)', () => {
   const DIA = { ...OFFER, priceScopeId: 'scope-b', price: 0.79 };
 
   it('reads every offer into a list, in the order the read sent them', () => {

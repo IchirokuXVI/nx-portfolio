@@ -1,331 +1,359 @@
-import { basketTakesLines } from '@portfolio/velista/models';
+import { isOpenBasket } from '@portfolio/velista/models';
 import {
-  toBasketLine,
-  toBasketLineOrigins,
+  restrictRowToServedLists,
+  toBasket,
   toBasketMergeRequired,
-  toBasketOriginQuantityResult,
   toBasketRenameResult,
-  toBasketView,
+  toBasketRow,
+  toBasketRowResult,
 } from './basket-mappers';
 
 /**
- * The boundary, on the distinctions that cost a screen when they are flattened
- * (velista `0054`, `0055` and `0056`).
+ * The boundary, on the rules that cost a screen when they are broken (velista
+ * `0090`, section 16).
  *
  * Rule D4's usual assertions, that every parameter is `unknown` and a row that will
- * not map is dropped, are already covered by the mappers this file joins. What is
- * new here is one rule that has no visible symptom until it is wrong on somebody
- * else's phone: **absent, null and empty are three different answers**, and two of
- * the fields these mappers read are redacted by omission.
+ * not map is dropped, are covered by the mappers this file joins. What is asserted
+ * here is what plan 0090 changed:
+ *
+ * - **Nothing here counts.** A basket without `progress` is refused rather than
+ *   recounted, because recounting is what the plan removed.
+ * - **One gate for "may I name this list"**, applied once per row, so the filter,
+ *   the grouping and the entries pane cannot answer it three ways.
+ * - **A row with no entry is refused unless it is `REMOVED`**, which is the one
+ *   state that means every entry left the coverage.
  */
 
-/** The smallest wire line these mappers accept, for adding a field to. */
-const LINE = {
-  id: 'line-1',
-  content: 'Milk',
-  quantity: 3,
-  settledQuantity: 0,
-  itemId: null,
-  options: [],
-  position: 0,
-  createdByParticipantId: null,
-  lastEditedByParticipantId: null,
-  lastEditedAt: null,
-  lastOutcome: null,
+/** The smallest wire entry these mappers accept, for adding a field to. */
+const ENTRY = {
+  lineId: 'zl-1',
+  listId: 'l-1',
+  left: 2,
+  bought: 1,
+  state: 'PARTLY',
+  approvalStatus: 'APPROVED',
+  demandEditable: true,
 };
 
-describe('toBasketLine: what kind of line it is, and where it was sent', () => {
-  it('reads a line somebody typed here as `ADDED`', () => {
-    expect(toBasketLine({ ...LINE, origin: 'ADDED' })?.kind).toBe('ADDED');
+/** The smallest wire row these mappers accept. */
+const ROW = {
+  rowKey: 'zl-1',
+  content: 'Milk',
+  left: 2,
+  bought: 1,
+  asked: 3,
+  state: 'PARTLY',
+  note: null,
+  noteAt: null,
+  mark: null,
+  awaitingApproval: false,
+  optionIds: ['i-milk'],
+  touchedBy: null,
+  touchedAt: null,
+  entries: [ENTRY],
+};
+
+/** The smallest wire basket, which every read here adds to. */
+const BASKET = {
+  id: 'b-1',
+  kind: 'GENERATED',
+  name: 'Saturday big shop',
+  status: 'OPEN',
+  createdAt: '2026-09-01T08:00:00.000Z',
+  rows: [ROW],
+  lists: [
+    { listId: 'l-1', name: 'Weekly shop', zoneId: 'z-1', zoneName: 'Flat 3B' },
+  ],
+  participants: [],
+  me: { id: 'p-1', kind: 'OWNER' },
+  products: [],
+  progress: { done: 1, unavailable: 0, total: 3, pending: 2 },
+};
+
+describe('toBasket: what it refuses, and why', () => {
+  it('reads a whole basket', () => {
+    const basket = toBasket(BASKET);
+
+    expect(basket?.id).toBe('b-1');
+    expect(basket?.kind).toBe('GENERATED');
+    expect(basket?.status).toBe('OPEN');
+    expect(basket?.rows).toHaveLength(1);
+    expect(basket?.progress).toEqual({ done: 1, unavailable: 0, total: 3 });
   });
 
-  it('reads a line with no kind at all as one the run composed', () => {
-    // A backend from before luna `0055`, where every line was composed by a run, so
-    // `DERIVED` is both the fallback and the truth. It offers no send control, which
-    // is the quiet direction for a value this build cannot read either.
-    expect(toBasketLine(LINE)?.kind).toBe('DERIVED');
-    expect(toBasketLine({ ...LINE, origin: 'SOMETHING_NEW' })?.kind).toBe(
-      'DERIVED'
-    );
+  /**
+   * The refusal the whole plan rests on. The only other way to answer "how much of
+   * this basket is done" is to count the rows, and a second count is what velista
+   * `0090` exists to remove: the server knows about skips, closes and purchases
+   * another shopper made, and this side knows what it was told.
+   */
+  it('refuses a basket with no progress rather than recounting', () => {
+    const { progress: _progress, ...without } = BASKET;
+
+    expect(toBasket(without)).toBeNull();
   });
 
-  it('reads what a line has bought and not yet put on any list', () => {
-    // Zero against a backend from before luna `0093`, which is the truth about one:
-    // it wrote no waiting row, so nothing on its lines is unplaced.
-    expect(toBasketLine({ ...LINE, waitingSettled: 4 })?.waitingSettled).toBe(
-      4
-    );
-    expect(toBasketLine(LINE)?.waitingSettled).toBe(0);
+  it('refuses a basket with no reader, who every attribution resolves against', () => {
+    expect(toBasket({ ...BASKET, me: null })).toBeNull();
   });
 
-  it('keeps absent and null apart on `targetListId`', () => {
-    // Absent is "you may not see this" and null is "it has been sent nowhere". The
-    // send control is offered over the second and never over the first, so
-    // collapsing them would draw it for exactly the reader who may not use it.
-    const redacted = toBasketLine(LINE);
-    const unsent = toBasketLine({ ...LINE, targetListId: null });
-    const bound = toBasketLine({ ...LINE, targetListId: 'list-weekly' });
-
-    expect(redacted !== null && 'targetListId' in redacted).toBe(false);
-    expect(unsent !== null && 'targetListId' in unsent).toBe(true);
-    expect(unsent?.targetListId).toBeNull();
-    expect(bound?.targetListId).toBe('list-weekly');
-  });
-});
-
-describe('toBasketLineOrigins', () => {
-  it('reads the lists on a line, the lists that could be, and every other', () => {
-    const answer = toBasketLineOrigins({
-      basketId: 'b-1',
-      lineId: 'line-1',
-      origins: [
-        {
-          originId: 'o-1',
-          listId: 'list-weekly',
-          lineId: 'zl-1',
-          zoneId: 'zone-flat',
-          listName: 'Weekly shop',
-          zoneName: 'Flat 3B',
-          contributed: 2,
-          listQuantity: 2,
-          settledHere: 1,
-          writable: true,
-          fromRun: true,
-          approvalStatus: 'PENDING',
-        },
-      ],
-      candidates: [
-        {
-          listId: 'list-office',
-          lineId: 'zl-9',
-          zoneId: 'zone-office',
-          listName: 'Office kitchen',
-          zoneName: 'The studio',
-          listQuantity: 2,
-          content: 'Milk',
-          matchedOnText: true,
-          fromRun: false,
-        },
-      ],
-      others: [
-        {
-          listId: 'list-cabin',
-          zoneId: 'zone-cabin',
-          listName: 'Cabin trip',
-          zoneName: 'Weekend away',
-          fromRun: false,
-        },
-      ],
-    });
-
-    expect(answer?.origins[0].settledHere).toBe(1);
-    expect(answer?.origins[0].writable).toBe(true);
-    expect(answer?.origins[0].fromRun).toBe(true);
-    expect(answer?.origins[0].approvalStatus).toBe('PENDING');
-    // Absent means adoptable on the wire, and the model spends a value on it so the
-    // sheet has one field to branch on.
-    expect(answer?.candidates[0].unavailable).toBeNull();
-    expect(answer?.candidates[0].matchedOnText).toBe(true);
-    expect(answer?.others[0].listName).toBe('Cabin trip');
+  /**
+   * It arrives inside `progress` on the wire and is lifted out, because the finish
+   * sheet and the home card read it on its own and the alternative is for one of
+   * them to subtract three numbers the server already subtracted.
+   */
+  it('lifts pending out of the wire’s progress', () => {
+    expect(toBasket(BASKET)?.pending).toBe(2);
   });
 
-  it('reads a reason this build has never heard of as not adoptable', () => {
-    // Offering the row a reel anyway would be a control the server refuses, and
-    // reading it as `CLAIMED` would put a sentence about somebody else's shopping
-    // under a row nobody said that about. `UNAVAILABLE` says only that it cannot be
-    // taken (velista `0068`, section 7).
-    const answer = toBasketLineOrigins({
-      lineId: 'line-1',
-      origins: [],
-      candidates: [
-        {
-          listId: 'list-office',
-          lineId: 'zl-9',
-          zoneId: 'zone-office',
-          listName: null,
-          zoneName: null,
-          listQuantity: 1,
-          content: 'Milk',
-          matchedOnText: false,
-          unavailable: 'SOMETHING_NEW',
-        },
-      ],
-    });
-
-    expect(answer?.candidates[0].unavailable).toBe('UNAVAILABLE');
-  });
-
-  it('reads a line the household has agreed to, and one it has not', () => {
-    // The loud direction on purpose: `PENDING` is the fallback, because a caption a
-    // reader can dismiss is better than somebody believing a household has agreed to
-    // something it has not.
-    const answer = toBasketLineOrigins({
-      lineId: 'line-1',
-      origins: [
-        {
-          originId: 'o-1',
-          listId: 'list-weekly',
-          lineId: 'zl-1',
-          zoneId: 'zone-flat',
-          approvalStatus: 'APPROVED',
-        },
-        {
-          originId: 'o-2',
-          listId: 'list-office',
-          lineId: 'zl-2',
-          zoneId: 'zone-office',
-          approvalStatus: 'SOMETHING_NEW',
-        },
-      ],
-      candidates: [],
-      others: [],
-    });
-
-    expect(answer?.origins.map((row) => row.approvalStatus)).toEqual([
-      'APPROVED',
-      'PENDING',
-    ]);
-  });
-
-  it('drops a row with half an identity rather than drawing it', () => {
-    const answer = toBasketLineOrigins({
-      lineId: 'line-1',
-      origins: [{ originId: 'o-1', listId: 'list-weekly' }],
-      candidates: [{ listId: 'list-office' }],
-      others: [{ listId: 'list-cabin' }],
-    });
-
-    expect(answer?.origins).toEqual([]);
-    expect(answer?.candidates).toEqual([]);
-    expect(answer?.others).toEqual([]);
-  });
-
-  it('reads no other lists from a backend that answers none', () => {
-    // A backend from before luna `0092`. Empty rather than absent, and it reads
-    // correctly: such a server has a separate route for those lists, and this build
-    // no longer draws one.
-    const answer = toBasketLineOrigins({
-      lineId: 'line-1',
-      origins: [],
-      candidates: [],
-    });
-
-    expect(answer?.others).toEqual([]);
-  });
-
-  it('refuses a report that cannot say which line it is about', () => {
-    expect(
-      toBasketLineOrigins({ origins: [], candidates: [], others: [] })
-    ).toBeNull();
-  });
-});
-
-describe('toBasketOriginQuantityResult', () => {
-  it('keeps a null origin, because the list came off the line', () => {
-    // Dropped rather than kept would leave the row drawn at its old number.
-    const result = toBasketOriginQuantityResult({
-      line: LINE,
-      origin: null,
-      listQuantity: 0,
-    });
-
-    expect(result?.origin).toBeNull();
-    expect(result?.listQuantity).toBe(0);
-    expect(result?.line.id).toBe('line-1');
-  });
-
-  it('refuses a result whose line cannot be read', () => {
-    expect(
-      toBasketOriginQuantityResult({ origin: null, listQuantity: 0 })
-    ).toBeNull();
-  });
-});
-
-/**
- * The two fields velista `0077` reads that the client used to drop (section 2) or
- * that the wire does not carry yet (section 4.1).
- *
- * The category is required on `ItemView` and has been since the catalog existed, so
- * the grouping needed no server half at all: it was arriving on every basket and
- * being thrown away. `settled` per origin is backend `0109`'s, required on the wire
- * beside `quantity` and read the same way, because the reel under a list heading is
- * bound to the difference between the two and sends the second as its `from`.
- */
-describe('toBasketView: the kind and what the run was asked for (backend 0133)', () => {
-  const VIEW = {
-    id: 'gl-1',
-    kind: 'GENERATED',
-    status: 'OPEN',
-    me: { id: 'p-1', kind: 'OWNER' },
-    lines: [],
-    participants: [],
-    products: [],
-    seesZoneData: true,
-  };
-
-  it('reads the kind, and an unknown one as UNKNOWN', () => {
-    // The safe direction: a kind this build has never heard of must not read as
-    // the permanent basket, which is what every rule it will drive is about.
-    expect(toBasketView(VIEW)?.kind).toBe('GENERATED');
-    expect(toBasketView({ ...VIEW, kind: 'SOMETHING_NEW' })?.kind).toBe(
+  it('reads the kind and the status, and an unknown one as UNKNOWN', () => {
+    // The safe direction on both: a kind this build has never heard of must not
+    // read as the permanent basket, and a status it does not know must not read as
+    // open, because that would put a finished trip back on the dashboard.
+    expect(toBasket({ ...BASKET, kind: 'SOMETHING_NEW' })?.kind).toBe(
       'UNKNOWN'
     );
+    expect(toBasket({ ...BASKET, status: 'SOMETHING_NEW' })?.status).toBe(
+      'UNKNOWN'
+    );
+    expect(isOpenBasket('UNKNOWN')).toBe(false);
   });
 
-  it('reads a source with no list as a whole zone rather than dropping it', () => {
-    const view = toBasketView({
-      ...VIEW,
-      sources: [
-        { zoneId: 'z-home', listId: 'l-flat' },
-        { zoneId: 'z-parents', listId: null },
+  it('reads the served lists, and a guest’s empty array', () => {
+    expect(toBasket(BASKET)?.lists).toEqual([
+      {
+        listId: 'l-1',
+        name: 'Weekly shop',
+        zoneId: 'z-1',
+        zoneName: 'Flat 3B',
+      },
+    ]);
+    expect(toBasket({ ...BASKET, lists: [] })?.lists).toEqual([]);
+  });
+
+  /**
+   * The whole of this scope's redaction, applied once as the refs are read. A guest
+   * is served no refs, so every entry they hold names no list; and an id the basket
+   * served no ref for is dropped to the same null, so the rest of the client has
+   * one test for "served" and cannot disagree with itself.
+   */
+  it('drops an entry’s list id the basket served no ref for', () => {
+    const basket = toBasket({
+      ...BASKET,
+      rows: [
+        {
+          ...ROW,
+          entries: [ENTRY, { ...ENTRY, lineId: 'zl-2', listId: 'l-other' }],
+        },
       ],
     });
 
-    expect(view?.sources).toEqual([
-      { zoneId: 'z-home', listId: 'l-flat' },
-      { zoneId: 'z-parents', listId: null },
+    expect(basket?.rows[0].entries.map((entry) => entry.listId)).toEqual([
+      'l-1',
+      null,
     ]);
   });
 
-  it('leaves sources undefined when the reader may not see them', () => {
-    // "You may not see this" and "the run drew from nothing" stay different
-    // answers, which is why an absent field is not an empty array.
-    expect(toBasketView(VIEW)?.sources).toBeUndefined();
-  });
+  it('drops every list id for a reader served no ref at all', () => {
+    const basket = toBasket({ ...BASKET, lists: [] });
 
-  it('carries the status through as the string it is', () => {
-    // This view's `status` is a raw string rather than the enum, and what reads
-    // it is `basketTakesLines`, which asks for `OPEN` and says no to everything
-    // else. An old server still saying `DRAFT` therefore costs a composer rather
-    // than drawing one over a basket the server would refuse.
-    expect(toBasketView({ ...VIEW, status: 'OPEN' })?.status).toBe('OPEN');
-    expect(basketTakesLines('OPEN')).toBe(true);
-    expect(basketTakesLines('DRAFT')).toBe(false);
+    expect(basket?.rows[0].entries[0].listId).toBeNull();
   });
 });
 
-describe('toBasketView: the product’s aisle, and what each list got', () => {
-  const VIEW = {
-    id: 'gl-1',
-    me: { id: 'p-1', kind: 'OWNER' },
-    lines: [],
-    participants: [],
-    products: [],
+describe('toBasketRow', () => {
+  it('refuses a row with no key, no content and no entries array', () => {
+    expect(toBasketRow({ ...ROW, rowKey: null })).toBeNull();
+    expect(toBasketRow({ ...ROW, content: null })).toBeNull();
+    expect(toBasketRow({ ...ROW, entries: null })).toBeNull();
+  });
+
+  /**
+   * Every entry of such a row left the coverage, which is exactly what the state
+   * means, so an empty `entries` there is the truth rather than a failure to read
+   * one. Anywhere else it is a row the screen cannot draw.
+   */
+  it('refuses a row with no entry unless it is REMOVED', () => {
+    expect(toBasketRow({ ...ROW, entries: [] })).toBeNull();
+    expect(toBasketRow({ ...ROW, state: 'REMOVED', entries: [] })?.state).toBe(
+      'REMOVED'
+    );
+  });
+
+  it('reads an unknown state as WANTED, which hides nothing', () => {
+    // A row this build cannot classify is still a thing to buy. The other way
+    // round would take it off somebody's screen.
+    expect(toBasketRow({ ...ROW, state: 'SOMETHING_NEW' })?.state).toBe(
+      'WANTED'
+    );
+  });
+
+  /**
+   * A state every row has must resolve to something; a note and a mark are
+   * captions some rows carry, so an unknown one draws nothing rather than putting
+   * a sentence under a row that has no claim to it.
+   */
+  it('reads an unknown note and an unknown mark as null', () => {
+    expect(toBasketRow({ ...ROW, note: 'SOMETHING_NEW' })?.note).toBeNull();
+    expect(toBasketRow({ ...ROW, mark: 'SOMETHING_NEW' })?.mark).toBeNull();
+    expect(toBasketRow({ ...ROW, note: 'SKIPPED_EARLIER' })?.note).toBe(
+      'SKIPPED_EARLIER'
+    );
+  });
+
+  /** Null exactly when the note is: a time with no fact behind it says nothing. */
+  it('drops noteAt when there is no note', () => {
+    expect(
+      toBasketRow({ ...ROW, note: null, noteAt: '2026-09-01T08:00:00.000Z' })
+        ?.noteAt
+    ).toBeNull();
+  });
+
+  /** A negative `left` is a server defect this client does not draw. */
+  it('clamps every count at zero', () => {
+    const row = toBasketRow({ ...ROW, left: -3, bought: -1 });
+
+    expect(row?.left).toBe(0);
+    expect(row?.bought).toBe(0);
+  });
+
+  it('reads an entry’s approval as a boolean, and anything unknown as agreed', () => {
+    const pending = toBasketRow({
+      ...ROW,
+      entries: [{ ...ENTRY, approvalStatus: 'PENDING' }],
+    });
+    const unknown = toBasketRow({
+      ...ROW,
+      entries: [{ ...ENTRY, approvalStatus: 'SOMETHING_NEW' }],
+    });
+
+    expect(pending?.entries[0].awaitingApproval).toBe(true);
+    // The quiet direction: an unreadable value costs a caption rather than putting
+    // one under a row the household already agreed to.
+    expect(unknown?.entries[0].awaitingApproval).toBe(false);
+  });
+
+  /**
+   * The server owns this rule and asks it of the basket's **owner**, so a value
+   * this client cannot read means it has not been told the control is allowed.
+   */
+  it('reads demandEditable as false on anything but an explicit true', () => {
+    expect(
+      toBasketRow({ ...ROW, entries: [{ ...ENTRY, demandEditable: 'yes' }] })
+        ?.entries[0].demandEditable
+    ).toBe(false);
+  });
+
+  /** `bought + left`, which is how backend `0130` section 4 defines it. */
+  it('sums an entry’s asked out of what it bought and what is left', () => {
+    const row = toBasketRow({
+      ...ROW,
+      entries: [{ ...ENTRY, left: 4, bought: 2 }],
+    });
+
+    expect(row?.entries[0].asked).toBe(6);
+  });
+});
+
+describe('restrictRowToServedLists', () => {
+  it('drops an id the reader was not served, and keeps one they were', () => {
+    const row = toBasketRow({
+      ...ROW,
+      entries: [ENTRY, { ...ENTRY, lineId: 'zl-2', listId: 'l-other' }],
+    });
+
+    const gated = restrictRowToServedLists(row!, new Set(['l-1']));
+
+    expect(gated.entries.map((entry) => entry.listId)).toEqual(['l-1', null]);
+  });
+
+  /**
+   * By identity when nothing is dropped, which is the ordinary case: the server
+   * redacts consistently per reader, so a row whose ids all have refs comes back as
+   * the same object and nothing above it re-renders.
+   */
+  it('answers the same object when every id is served', () => {
+    const row = toBasketRow(ROW);
+
+    expect(restrictRowToServedLists(row!, new Set(['l-1']))).toBe(row);
+  });
+});
+
+describe('toBasketRowResult', () => {
+  const RESULT = {
+    row: ROW,
+    progress: { done: 1, unavailable: 0, total: 3, pending: 2 },
   };
 
+  it('reads the row, the counts and the lifted pending', () => {
+    const result = toBasketRowResult(RESULT);
+
+    expect(result?.row.rowKey).toBe('zl-1');
+    expect(result?.progress).toEqual({ done: 1, unavailable: 0, total: 3 });
+    expect(result?.pending).toBe(2);
+  });
+
+  /** Absent on the wire when nothing happened, and null and zero here. */
+  it('reads an absent replacedRowKey and skippedCount as null and zero', () => {
+    const result = toBasketRowResult(RESULT);
+
+    expect(result?.replacedRowKey).toBeNull();
+    expect(result?.skippedCount).toBe(0);
+    expect(
+      toBasketRowResult({ ...RESULT, replacedRowKey: 'zl-9', skippedCount: 2 })
+    ).toMatchObject({ replacedRowKey: 'zl-9', skippedCount: 2 });
+  });
+
+  /**
+   * The store folds the answer whole and patches nothing, so an answer it cannot
+   * fold is one it must not half apply: the caller reads the basket again instead.
+   */
+  it('refuses an answer whose row or counts cannot be read', () => {
+    expect(toBasketRowResult({ ...RESULT, row: null })).toBeNull();
+    expect(toBasketRowResult({ ...RESULT, progress: null })).toBeNull();
+  });
+});
+
+describe('toBasketRenameResult', () => {
+  /**
+   * The same shape every write on a row answers, with the wire's `replacedRowKey`
+   * named for what a rename does with it: the earliest line survives a merge, so
+   * the row the request addressed can be the one that went away.
+   */
+  it('names the absorbed row by the key the request used', () => {
+    expect(
+      toBasketRenameResult({
+        row: ROW,
+        progress: { done: 0, unavailable: 0, total: 1, pending: 1 },
+        replacedRowKey: 'zl-9',
+      })
+    ).toMatchObject({ absorbedRowKey: 'zl-9', replacedRowKey: 'zl-9' });
+  });
+
+  it('answers a null absorbed row when nothing merged', () => {
+    expect(
+      toBasketRenameResult({
+        row: ROW,
+        progress: { done: 0, unavailable: 0, total: 1, pending: 1 },
+      })?.absorbedRowKey
+    ).toBeNull();
+  });
+});
+
+describe('toBasket: the product’s aisle', () => {
   function productsOf(products: readonly unknown[]) {
-    return toBasketView({ ...VIEW, products })?.products;
+    return toBasket({ ...BASKET, products })?.products;
   }
 
   it('reads the wire category into a one element list', () => {
-    const read = productsOf([{ id: 'i-1', category: 'DAIRY' }]);
-
-    expect(read?.get('i-1')?.categories).toEqual(['DAIRY']);
+    expect(
+      productsOf([{ id: 'i-1', category: 'DAIRY' }])?.get('i-1')?.categories
+    ).toEqual(['DAIRY']);
   });
 
   /**
    * A thirteenth category is a product this app cannot name, and the honest place
-   * for one is the heading that says exactly that. Dropping it would take a line off
+   * for one is the heading that says exactly that. Dropping it would take a row off
    * a screen somebody is shopping from.
    */
   it('reads a category it has never heard of as OTHER, and keeps the product', () => {
@@ -337,55 +365,15 @@ describe('toBasketView: the product’s aisle, and what each list got', () => {
     expect(read?.get('i-1')?.categories).toEqual(['OTHER']);
     expect(read?.get('i-2')?.categories).toEqual(['OTHER']);
   });
-
-  it('reads what each list has got, beside what it asked for', () => {
-    const withOrigins = (origins: readonly unknown[]) =>
-      toBasketView({
-        ...VIEW,
-        lines: [
-          {
-            id: 'line-1',
-            content: 'Eggs',
-            quantity: 12,
-            settledQuantity: 0,
-            itemId: null,
-            options: [],
-            position: 0,
-            createdByParticipantId: null,
-            lastEditedByParticipantId: null,
-            lastEditedAt: null,
-            lastOutcome: null,
-            origins,
-          },
-        ],
-      })?.lines[0].origins?.[0];
-
-    const origin = {
-      id: 'o-1',
-      zoneId: 'z-1',
-      listId: 'l-1',
-      lineId: 'zl-1',
-      quantity: 6,
-    };
-
-    expect(withOrigins([{ ...origin, settled: 2 }])?.settled).toBe(2);
-    expect(withOrigins([{ ...origin, settled: 0 }])?.settled).toBe(0);
-    expect(withOrigins([{ ...origin, settled: 2 }])?.quantity).toBe(6);
-    // Zero on a value this build cannot read, exactly as `quantity` above it
-    // defaults. The safe direction rather than an honest one: the row draws a full
-    // reel, and the `from` it then sends is refused as stale rather than applied as
-    // the opposite act.
-    expect(withOrigins([origin])?.settled).toBe(0);
-  });
 });
 
 /**
- * A rename's answer and its merge question (velista `0084`, backend `0113`).
+ * A rename's merge question (velista `0084`, backend `0113`).
  *
  * The question is all or nothing: a row this build cannot read is a merge somebody
  * would confirm without being shown it.
  */
-describe('renaming a basket line, off the wire', () => {
+describe('toBasketMergeRequired', () => {
   const WEEKLY = {
     listId: 'l1',
     listName: 'Weekly shop',
@@ -393,25 +381,20 @@ describe('renaming a basket line, off the wire', () => {
     otherContent: 'Leche entera',
     otherQuantity: 2,
   };
-  const BASKET = {
+  const OTHER_ROW = {
     otherLineId: 'line-2',
     otherContent: 'leche entera',
     otherQuantity: 3,
   };
 
-  it('reads absent absorbedLineId as null', () => {
-    expect(toBasketRenameResult({ line: LINE })).toMatchObject({
-      line: { id: 'line-1' },
-      absorbedLineId: null,
-    });
+  /**
+   * The line id the refusal names is the other row's anchor, which is that row's
+   * key: the refusal is about a line on a list, and a row is keyed by one.
+   */
+  it('reads every list and the other row, keyed by its anchor', () => {
     expect(
-      toBasketRenameResult({ line: LINE, absorbedLineId: 'line-2' })
-        ?.absorbedLineId
-    ).toBe('line-2');
-  });
-
-  it('reads every list and the basket line', () => {
-    expect(toBasketMergeRequired({ lists: [WEEKLY], basket: BASKET })).toEqual({
+      toBasketMergeRequired({ lists: [WEEKLY], basket: OTHER_ROW })
+    ).toEqual({
       lists: [
         {
           listId: 'l1',
@@ -420,7 +403,7 @@ describe('renaming a basket line, off the wire', () => {
           otherQuantity: 2,
         },
       ],
-      basket: { otherLineId: 'line-2', otherQuantity: 3 },
+      basket: { otherRowKey: 'line-2', otherQuantity: 3 },
     });
   });
 

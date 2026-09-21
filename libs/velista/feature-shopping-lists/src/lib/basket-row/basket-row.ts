@@ -15,17 +15,18 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  basketLineState,
   basketMatchRange,
+  basketRowPick,
   inLocale,
   offerAt,
-  outstanding,
   QUANTITY_REEL_CLICK_SHIELD_MS,
-  type BasketLine,
-  type BasketLineOrigin,
+  type BasketListRef,
   type BasketParticipant,
+  type BasketPriceMark,
   type BasketProduct,
-  type BasketRowMark,
+  type BasketRowEntry,
+  type BasketRow as BasketRowModel,
+  type BasketRowState,
 } from '@portfolio/velista/models';
 import { formatMoney } from '@portfolio/velista/platform';
 import {
@@ -36,8 +37,6 @@ import {
   SlashCircleIcon,
 } from '@portfolio/velista/ui';
 import {
-  addedCaption,
-  listShareCaption,
   originsCaption,
   outstandingCaption,
   quantityCaption,
@@ -47,10 +46,14 @@ import {
 /**
  * Which of the four shapes the status control draws.
  *
- * Four and not three, because a `done` line has two readings that must not share a
- * glyph: `NOT_AVAILABLE` closes the outstanding amount exactly as a purchase does, so
- * a tick on one would claim a purchase that never happened, which is the same
- * distinction `touchedCaption` keeps a separate sentence for.
+ * Four and not six, although a row has six states. `SKIPPED` draws as `wanted` in
+ * this plan and `REMOVED` draws as `wanted` with every control off; velista `0092`
+ * and `0093` give each its own treatment, and a glyph invented for them here would
+ * be a shape those plans have to take back.
+ *
+ * `NOT_AVAILABLE` keeps a glyph of its own, because it closes a row without
+ * anything being bought: a tick on one would claim a purchase that never happened,
+ * which is the same distinction `touchedCaption` keeps a separate sentence for.
  */
 export type BasketStatusGlyph = 'wanted' | 'partly' | 'bought' | 'unavailable';
 
@@ -126,11 +129,11 @@ const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
  *
  * ## Absence, again
  *
- * The "from" caption is drawn **only** when {@link BasketLine.origins} is present.
- * A guest's line has no such key at all, so there is nothing to hide and no
- * `@if (seesZoneData)` guarding it: the data decides, which is one fewer place
- * for the rule to be got wrong. Section 4.1's whole point is that a control or a
- * caption you may not have is not drawn rather than disabled.
+ * The "from" caption is drawn **only** for a list this reader was served. A guest
+ * is served none, so every entry they hold names none and there is nothing to
+ * hide: the data decides, which is one fewer place for the rule to be got wrong.
+ * Section 4.1's whole point is that a control or a caption you may not have is not
+ * drawn rather than disabled.
  *
  * ## The product is named, and priced when there is a price
  *
@@ -143,7 +146,7 @@ const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
  * existing, and there is no placeholder where one is missing (section 2).
  */
 @Component({
-  selector: 'lib-basket-line-row',
+  selector: 'lib-basket-row',
   imports: [
     CheckFilledIcon,
     CircleIcon,
@@ -153,40 +156,48 @@ const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
     RokuTranslatorPipe,
     SlashCircleIcon,
   ],
-  templateUrl: './basket-line-row.html',
-  styleUrl: './basket-line-row.scss',
+  templateUrl: './basket-row.html',
+  styleUrl: './basket-row.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BasketLineRow {
+export class BasketRow {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
 
-  readonly line = input.required<BasketLine>();
+  readonly row = input.required<BasketRowModel>();
 
   /** Everybody on the basket, so `touchedBy` can be resolved to a name. */
   readonly people = input.required<ReadonlyMap<string, BasketParticipant>>();
 
-  /** Every product the basket named, so the pick can be named. */
+  /** Every product the basket named, so the row's own can be named. */
   readonly products = input.required<ReadonlyMap<string, BasketProduct>>();
 
-  /** List names for the "from" caption. Empty for a reader who has no origins. */
-  readonly listNames = input<ReadonlyMap<string, string>>(new Map());
+  /**
+   * The covered lists this reader was served, for the "from" caption.
+   *
+   * Empty for a reader served none, which draws no caption: there is one question
+   * here since backend `0136`, and an entry naming a list that is not in this map
+   * is one this reader may not name.
+   */
+  readonly lists = input<ReadonlyMap<string, BasketListRef>>(new Map());
 
   /**
-   * The one list this row is about, or null for a row about the whole line
+   * The one entry this row is drawn for, or null for a row about the whole thing
    * (velista `0077`, section 4.1).
    *
-   * Set only under the list grouping, where a line two households asked for is drawn
-   * twice, once under each heading. It changes **what the numbers on this row mean**
-   * and nothing about what the row says: the ceiling, the value and the progress
-   * caption all become this list's, and the status glyph stays the line's.
+   * Set only under the list grouping, where a row two households asked for is drawn
+   * twice, once under each heading. It changes **what the numbers and the state on
+   * this row mean** and nothing about what the row says: the ceiling, the value, the
+   * glyph and the progress caption all become this household's.
    *
-   * That split is deliberate and it is section 4.1's whole point. A tick beside "6
-   * of 6 got" under one household while the other household's six are still to get
-   * would be a contradiction on one row, so the glyph reads the line, the number
-   * reads the origin, and the caption between them says which is which.
+   * The glyph moves with them, which is the change from velista `0077`. There it
+   * read the line while the number read the origin, because only the line had a
+   * state; backend `0136` gives an entry its own, so a tick beside "6 of 6" under
+   * one household no longer needs a caption to explain that the other household's
+   * six are still to get. The heading says whose row it is and everything on it
+   * agrees.
    */
-  readonly origin = input<BasketLineOrigin | null>(null);
+  readonly entry = input<BasketRowEntry | null>(null);
 
   /**
    * The price scope this row quotes, or null for the cheapest anywhere
@@ -206,11 +217,14 @@ export class BasketLineRow {
    * What this row says about that shop, beside the number, or null.
    *
    * Composed by the pipeline rather than here, because the **sink** is decided
-   * there: the line that says "not listed at Mercadona" is the line that moved to
+   * there: the row that says "not listed at Mercadona" is the row that moved to
    * the end of the list, and a component working the first half out for itself would
    * be a second place for the two to disagree.
+   *
+   * Named `priceMark` beside the row's own change mark, which backend `0130` added
+   * and velista `0093` draws. Two marks on one row need two names.
    */
-  readonly mark = input<BasketRowMark | null>(null);
+  readonly priceMark = input<BasketPriceMark | null>(null);
 
   /** The reader's own participant id, so their own edits can be named. */
   readonly meId = input<string | null>(null);
@@ -229,16 +243,6 @@ export class BasketLineRow {
 
   /** Whether a write on this line is in flight, which the row says quietly. */
   readonly busy = input(false);
-
-  /**
-   * Whether a finished line's status control may actually be pressed.
-   *
-   * `BASKET_REOPEN_AVAILABLE` from the caller rather than imported here, so the row
-   * takes it like every other fact about the world: a component that reached for a
-   * build constant of its own would be a second place the answer lives, and the page
-   * is where the store already is.
-   */
-  readonly canReopen = input(false);
 
   /**
    * Whether the trip this line belongs to is over (velista `0057`, section 6).
@@ -279,21 +283,6 @@ export class BasketLineRow {
   } | null>(null);
 
   /**
-   * Whether this line was sent to a list that has not accepted it yet (`0056`).
-   *
-   * An input rather than something read off the line, because **no field of the line
-   * carries it**: `BasketLineOriginView` holds no approval state, so after a
-   * reload nothing can say a bound line is waiting. What fills it is
-   * `BasketStore.pendingTargets`, which is what this session's own bind was told, and
-   * that is the case where somebody is standing there waiting to be told something.
-   *
-   * False everywhere else, which is honest rather than optimistic: the row says
-   * nothing rather than guessing at a state it has no source for. When the origin
-   * view carries it the row reads the line and this input goes.
-   */
-  readonly awaitingApproval = input(false);
-
-  /**
    * What the basket is being searched for, already folded (velista `0074`,
    * section 4.5).
    *
@@ -308,7 +297,7 @@ export class BasketLineRow {
   readonly highlight = input('');
 
   /**
-   * The line's own words, split around the first match, or null for no match.
+   * The row's own words, split around the first match, or null for no match.
    *
    * The **content only**. The product caption below it is matched too, so a line is
    * found by its pick's name or brand, but it is 12px muted text and a mark on it
@@ -320,7 +309,7 @@ export class BasketLineRow {
    * are the same height.
    */
   protected readonly highlighted = computed(() => {
-    const content = this.line().content;
+    const content = this.row().content;
     const range = basketMatchRange(content, this.highlight());
     if (range === null) {
       return null;
@@ -343,10 +332,18 @@ export class BasketLineRow {
    * tap gesture, and the system allocates oldest origin first exactly as it does when
    * the sheet sends the same body.
    */
+  /**
+   * Buy everything this row still asks for.
+   *
+   * The one tap gesture, which is the common case in a shop and used to cost a tap,
+   * a sheet, a tap and a dismissal. The page sends an explicit quantity, because
+   * every `BOUGHT` carries one since backend `0136`, and `from` beside it is what
+   * makes a double tap safe.
+   */
   readonly settle = output<void>();
 
-  /** Take this line back to fully outstanding (luna `0054`, section 3). */
-  readonly reopen = output<void>();
+  /** Take this row's purchases, or its close, back (backend `0136`, section 5.2). */
+  readonly revert = output<void>();
 
   /**
    * The reel was let go somewhere other than where it started (plan 0054).
@@ -354,31 +351,36 @@ export class BasketLineRow {
    * Absolute numbers in both halves rather than a delta, and `from` is not
    * decoration: a stale gesture would invert its own meaning, so the server refuses
    * a write whose origin no longer matches instead of applying it as the opposite
-   * act (backend `0056`, section 3.2). What the move **means** is the server's to
-   * decide and never this row's.
+   * act. What the move **means** is the server's to decide and never this row's,
+   * which is what `BasketStore.setLeft` turns it into.
    */
-  readonly outstanding = output<{ from: number; to: number }>();
+  readonly left = output<{ from: number; to: number }>();
 
-  protected readonly state = computed(() => basketLineState(this.line()));
+  /**
+   * The state this row draws, which is **the entry's under a list heading**.
+   *
+   * Read and never derived (backend `0130`, section 4). `basketLineState` used to
+   * work it out of two numbers here, and could not tell a shop that had none from a
+   * purchase, because both leave nothing outstanding.
+   */
+  protected readonly state = computed<BasketRowState>(
+    () => this.entry()?.state ?? this.row().state
+  );
 
   /**
    * How many are still to get, which is what the reel is bound to.
    *
-   * **The origin's, on a row drawn under one** (velista `0077`, section 4.1): a
+   * **The entry's, on a row drawn under one** (velista `0077`, section 4.1): a
    * household that asked for six and got two has four still to get, whatever the
-   * other households on the same line have done. The line's own outstanding amount
-   * everywhere else, which is what this row has always drawn.
+   * other households on the same row have done.
    *
-   * Not called `outstanding`: the output that reports a move of it has that name,
-   * and it belongs to the thing a caller listens for rather than to a number they
-   * could read off the line themselves.
+   * Read off whichever of the two the row is about, and never computed: `left` is
+   * what the server says is still wanted, and this side has no way to work it out
+   * from anything else.
    */
-  protected readonly stillToGet = computed(() => {
-    const origin = this.origin();
-    return origin === null
-      ? outstanding(this.line())
-      : Math.max(0, origin.quantity - origin.settled);
-  });
+  protected readonly stillToGet = computed(
+    () => this.entry()?.left ?? this.row().left
+  );
 
   /**
    * What the reel shows while a write is out.
@@ -398,17 +400,15 @@ export class BasketLineRow {
   );
 
   /**
-   * The ceiling: **what the lists asked for**, and nothing above it (velista `0073`).
+   * The ceiling: **what was asked for**, and nothing above it (velista `0073`).
    *
-   * This was `LINE_QUANTITY_MAX` minus what is settled, which let the number run past
-   * the line's own quantity and made the raise a decision to buy more than anybody
-   * wanted. A shopper who puts a tin back reaches for the same number expecting to
-   * undo what they just did, so the reel now runs from zero to the line's quantity
-   * and up takes purchases back. A line of six dragged to zero offers a reel from
-   * zero to six.
+   * `asked`, read and never computed, which is `bought + left` on an open basket
+   * and the frozen number on a finished one. A row of six bought to zero offers a
+   * reel from zero to six, so the shopper who puts a tin back reaches for the same
+   * number expecting to undo what they just did.
    */
   protected readonly ceiling = computed(
-    () => this.origin()?.quantity ?? this.line().quantity
+    () => this.entry()?.asked ?? this.row().asked
   );
 
   /**
@@ -425,10 +425,9 @@ export class BasketLineRow {
    * so this is a guard and not a case anybody meets.
    */
   protected readonly reelLabel = computed(() => {
-    const name = this.line().content;
-    const origin = this.origin();
-    const list =
-      origin === null ? '' : (this.listNames().get(origin.listId) ?? '');
+    const name = this.row().content;
+    const listId = this.entry()?.listId ?? null;
+    const list = listId === null ? '' : (this.lists().get(listId)?.name ?? '');
 
     return this._translator.t(
       list === '' ? 'basket.outstanding.label' : 'basket.outstanding.listLabel',
@@ -486,7 +485,7 @@ export class BasketLineRow {
   protected onCommitted(change: { from: number; to: number }): void {
     this._preview.set(null);
     this._sent.set(change.to);
-    this.outstanding.emit(change);
+    this.left.emit(change);
   }
 
   /**
@@ -513,30 +512,42 @@ export class BasketLineRow {
     this.open.emit();
   }
 
-  /** Which of the four shapes to draw. See {@link BasketStatusGlyph}. */
+  /**
+   * Which of the four shapes to draw, from the state the server sent.
+   *
+   * `SKIPPED` and `REMOVED` fall through to `wanted` in this plan, which is what
+   * section 9.1 says they draw until velista `0092` and `0093` give each its own
+   * treatment. A state this build has never heard of does the same, which is the
+   * direction the model's own fallback takes and for the same reason: a row this
+   * build cannot classify is still a thing to buy.
+   */
   protected readonly statusGlyph = computed<BasketStatusGlyph>(() => {
     const state = this.state();
-    if (state === 'wanted') {
-      return 'wanted';
-    }
-    if (state === 'partly') {
+    if (state === 'PARTLY') {
       return 'partly';
     }
-    return this.line().lastOutcome === 'NOT_AVAILABLE'
-      ? 'unavailable'
-      : 'bought';
+    if (state === 'DONE') {
+      return 'bought';
+    }
+    if (state === 'NOT_AVAILABLE') {
+      return 'unavailable';
+    }
+    return 'wanted';
   });
 
   /**
-   * Whether the glyph is a control, or only a statement of what the line is.
+   * Whether the glyph is a control, or only a statement of what the row is.
    *
-   * Three ways to be a statement rather than a button, and they are three different
-   * facts: the line is finished and this build has no route to reopen one; or the
-   * whole trip is finished, so nothing about this line may change at all. In both
-   * cases what is drawn is what the line **is**, which is why they share a treatment.
+   * Two ways to be a statement rather than a button now, where there were three: a
+   * finished trip, which takes every control off the screen, and a `REMOVED` row,
+   * which is information about the basket rather than a thing to act on.
+   *
+   * The third was a build with no reopen route behind it. There is no such build:
+   * `BASKET_REOPEN_AVAILABLE` guarded a route backend `0136` replaced with a revert
+   * that is always available, so the constant went with it.
    */
   protected readonly statusIsButton = computed(
-    () => !this.finished() && (this.state() !== 'done' || this.canReopen())
+    () => !this.finished() && this.state() !== 'REMOVED'
   );
 
   /**
@@ -562,22 +573,27 @@ export class BasketLineRow {
       : STATES_ON_STATUS[glyph];
 
     return this._translator.t(key, undefined, this._locale(), {
-      name: this.line().content,
+      name: this.row().content,
     });
   });
 
   /**
-   * One tap, in whichever direction the line is facing.
+   * One tap, in whichever direction the row is facing.
    *
    * The row reports the act and does not perform it: the store is the page's, and a
-   * component rendered once per line has no business holding one. The page also owns
-   * what happens **after**, which the row could not draw anyway — a write that comes
-   * back with a skipped origin has a paragraph to report, and a paragraph belongs on
-   * the sheet (plan 0052, section 6.4).
+   * component rendered once per row has no business holding one. The page also owns
+   * what happens **after**, which the row could not draw anyway — a write that could
+   * not reach an entry has a sentence to report, and that sentence belongs on the
+   * sheet (plan 0052, section 6.4).
+   *
+   * A finished row reverts and everything else settles. `NOT_AVAILABLE` is finished
+   * too, and reverting it takes the close back rather than any units, which is what
+   * the page sends: the two directions are one gesture aimed at different things,
+   * and which thing is the state's to say.
    */
   protected toggle(): void {
-    if (this.state() === 'done') {
-      this.reopen.emit();
+    if (this.state() === 'DONE' || this.state() === 'NOT_AVAILABLE') {
+      this.revert.emit();
       return;
     }
     this.settle.emit();
@@ -604,11 +620,17 @@ export class BasketLineRow {
     return product === null ? null : inLocale(product.name, this._locale());
   });
 
-  /** The pick, or null for a free text line and for a pick catalog cannot resolve. */
-  private readonly _product = computed<BasketProduct | null>(() => {
-    const pickId = this.line().pickId;
-    return pickId === null ? null : (this.products().get(pickId) ?? null);
-  });
+  /**
+   * The product this row means, or null for a free text row and for one catalog
+   * can no longer resolve.
+   *
+   * The **row's** and never the entry's, because a row is one thing to pick off one
+   * shelf however many households asked for it. `basketRowPick` is the one place
+   * that decision lives, so the search, the price mark and this agree.
+   */
+  private readonly _product = computed<BasketProduct | null>(
+    () => basketRowPick(this.row(), this.products()) ?? null
+  );
 
   /**
    * The price after the product's name, or null where there is none.
@@ -635,7 +657,7 @@ export class BasketLineRow {
   });
 
   /**
-   * The mark's own sentence, composed, or null when the row carries none.
+   * The price mark's own sentence, composed, or null when the row carries none.
    *
    * One string and not two spans, because the unlisted mark is genuinely two
    * clauses about one thing — "not listed at Mercadona · 2.85 € at Dia" — and
@@ -644,7 +666,7 @@ export class BasketLineRow {
    * captions with.
    */
   protected readonly markCaption = computed<string | null>(() => {
-    const mark = this.mark();
+    const mark = this.priceMark();
     if (mark === null) {
       return null;
     }
@@ -675,29 +697,26 @@ export class BasketLineRow {
     return `${missing} · ${at}`;
   });
 
-  protected readonly quantity = computed(() =>
-    quantityCaption(this.line(), this._translator, this._locale())
-  );
-
   /**
-   * The sentence under the number: the line's, or this list's share of it.
+   * The sentence under the number: the row's, or this household's share of it.
    *
    * One slot and not two, because they answer the same question about the same
-   * number and a row that drew both would say it twice. The line's version is drawn
-   * only for a partly settled line, which is what {@link quantity} has always done;
-   * the list's is drawn on every row under a list heading, because the number beside
-   * it is a household's share and nothing else on the row says so.
+   * number and a row that drew both would say it twice. Under a list heading the
+   * entry answers for itself, and it can: backend `0136` gives an entry its own
+   * state and its own numbers, so "2 of 6" under a household is that household's
+   * and needs no sentence explaining which number it is.
    */
-  protected readonly progressCaption = computed(() => {
-    const origin = this.origin();
-    return origin === null
-      ? this.quantity()
-      : listShareCaption(this.line(), origin, this._translator, this._locale());
-  });
+  protected readonly progressCaption = computed(() =>
+    quantityCaption(
+      this.entry() ?? this.row(),
+      this._translator,
+      this._locale()
+    )
+  );
 
   protected readonly touched = computed(() =>
     touchedCaption(
-      this.line(),
+      this.row(),
       this.people(),
       this._translator,
       this._locale(),
@@ -707,36 +726,22 @@ export class BasketLineRow {
   );
 
   /**
-   * "Who put this here", for a line nobody has touched yet (plan 0053, section 5).
+   * The households this row came from, or null.
    *
-   * Null for every line the run composed, so a basket that nobody has typed into
-   * draws exactly what it drew before: the data decides, as it does for the "from"
-   * caption beside it.
-   */
-  protected readonly added = computed(() =>
-    addedCaption(
-      this.line(),
-      this.people(),
-      this._translator,
-      this._locale(),
-      this.meId(),
-      this.ownName()
-    )
-  );
-
-  /**
-   * Null for a reader who may not see origins, and null under a list heading.
+   * Null under a list heading, which is velista `0077` section 4.1: "from Weekly
+   * shop" is not drawn on a row that sits under Weekly shop's own heading, because
+   * the heading already says it. Drawing both would put the same three words on
+   * every row of the section.
    *
-   * The second is velista `0077`, section 4.1: "from Weekly shop" is not drawn on a
-   * row that sits under Weekly shop's own heading, because the heading already says
-   * it. Drawing both would put the same three words on every row of the section.
+   * Null too for a reader served no list the row is on, which is a guest. The data
+   * decides, as it does everywhere else on this screen.
    */
   protected readonly from = computed(() =>
-    this.origin() !== null
+    this.entry() !== null
       ? null
       : originsCaption(
-          this.line(),
-          this.listNames(),
+          this.row(),
+          this.lists(),
           this._translator,
           this._locale()
         )
@@ -748,10 +753,20 @@ export class BasketLineRow {
    * Everything the row shows, in one string, because the visual layout puts the
    * quantity and the attribution on separate lines and a reader moving by button
    * would otherwise hear only the content.
+   *
+   * **The state, in words, and never by colour alone** (velista `0052`,
+   * section 6.3). It is the same pair the glyph's own name draws from, so a reader
+   * who hears the row and one who sees it are told the same thing.
    */
   protected readonly label = computed(() => {
     const parts = [
-      this.line().content,
+      this.row().content,
+      this._translator.t(
+        STATES_ON_STATUS[this.statusGlyph()],
+        undefined,
+        this._locale(),
+        { name: this.row().content }
+      ),
       this.progressCaption(),
       // The product, its price and what the row says about the shop, each a
       // sentence of its own: a mark is words beside a number and a reader who
@@ -760,12 +775,11 @@ export class BasketLineRow {
       this.productPrice() ?? '',
       this.markCaption() ?? '',
       this.touched() ?? '',
-      this.added() ?? '',
       this.from() ?? '',
       // Announced with the rest of the row rather than only drawn, because a reader
-      // moving by button hears this string and nothing else about the line.
-      this.awaitingApproval()
-        ? this._translator.t('basket.send.pending', undefined, this._locale())
+      // moving by button hears this string and nothing else about the row.
+      this.row().awaitingApproval
+        ? this._translator.t('basket.units.pending', undefined, this._locale())
         : '',
     ];
     return parts.filter((part) => part !== '').join('. ');

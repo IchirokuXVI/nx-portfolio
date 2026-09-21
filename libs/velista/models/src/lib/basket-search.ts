@@ -1,4 +1,4 @@
-import type { BasketLine, BasketProduct } from './basket-view';
+import type { BasketProduct, BasketRow } from './basket-view';
 import { inLocale } from './shopping-profile';
 
 /**
@@ -46,24 +46,25 @@ export function foldForSearch(text: string): string {
 }
 
 /**
- * Whether one basket line answers what somebody typed.
+ * Whether one basket row answers what somebody typed.
  *
  * Three places are searched and they are the three a person in a shop would
- * expect: the words on the line, the name of its pick in the reader's own
- * language, and the pick's brand. The brand is there because somebody standing at
- * the own brand shelf types "hacendado" and means every line that comes from it.
+ * expect: the words on the row, the name of its product in the reader's own
+ * language, and that product's brand. The brand is there because somebody
+ * standing at the own brand shelf types "hacendado" and means every row that
+ * comes from it.
  *
  * **An empty query matches everything**, so the page draws the same list with the
  * field open as with it closed and the count says so. There is no minimum length
  * and no debounce here: `SUGGEST_MIN_CHARS` and `SUGGEST_DEBOUNCE_MS` belong to
  * the composer's typeahead, which asks the server, and this asks a `computed`.
  *
- * The product is whatever the basket holds for {@link BasketLine.pickId}, which is
- * undefined for a free text line and for a pick the catalog no longer names. Both
- * match on the line's own content alone.
+ * The product is whatever the basket holds for {@link basketRowPick}, which is
+ * undefined for a free text row and for a product the catalog no longer names.
+ * Both match on the row's own content alone.
  */
-export function matchesBasketLine(
-  line: BasketLine,
+export function matchesBasketRow(
+  row: BasketRow,
   product: BasketProduct | undefined,
   query: string,
   locale: string
@@ -73,7 +74,7 @@ export function matchesBasketLine(
     return true;
   }
 
-  if (foldForSearch(line.content).includes(folded)) {
+  if (foldForSearch(row.content).includes(folded)) {
     return true;
   }
 

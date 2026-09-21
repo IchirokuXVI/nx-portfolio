@@ -1,13 +1,14 @@
 import type { ProductOffer } from './domain';
 import type {
-  BasketLineKind,
-  BasketOriginUnavailableReason,
-  LineApprovalStatus,
+  BasketChangeMark,
+  BasketKind,
+  BasketRowNote,
+  BasketRowState,
+  BasketStatus,
   ParticipantKind,
   ProductCategory,
   SettlementOutcome,
 } from './enums';
-import { isOpenBasket, type BasketKind } from './enums';
 import type { LocalizedName } from './shopping-profile';
 
 /**
@@ -15,24 +16,37 @@ import type { LocalizedName } from './shopping-profile';
  *
  * Rule D4 (plan 0004, section 4.1): these are **ours**, mapped from `unknown` at
  * the boundary, never the gateway's DTOs passed through. The names are the app's
- * own — a `GeneratedListBasketLineView` on the wire is a {@link BasketLine} here,
- * because the screen is called the basket and nothing in the interface says
- * "basket".
+ * own — a `BasketRowView` on the wire is a {@link BasketRow} here, because the
+ * screen is called the basket and nothing in the interface says "generated list".
  *
  * ## The one idea the whole file turns on
  *
- * **The three views differ by absence, not by a flag.** Plan 0030 settled that
- * for the list page and `0044` section 4.1 holds it here: a control you may not
- * use is not drawn, and data you may not have does not arrive. So the fields the
- * server redacts are optional here too, and they are optional rather than
- * nullable because absent and null are different questions. Absent is "you may
- * not see this"; null would be "there is nothing to see".
+ * **A basket stores none of this** (backend `0136`). It holds a header, a rule
+ * saying which lists it covers and the people on it, and every number below is
+ * read out of those lists on every request. So the client stores none of it
+ * either: nothing here is patched, recomputed or kept in step by hand, and a
+ * write answers the row it changed rather than a delta to apply to one.
  *
- * {@link BasketView.seesZoneData} is what the screen branches on. It is never the
- * authority for anything — the server has already removed what this reader may
- * not have, and refuses the allocation sheet on its own — it is only how the page
- * knows whether to draw a caption at all rather than inferring it from which
- * fields happened to arrive.
+ * That is why {@link BasketRow.left}, {@link BasketRow.bought},
+ * {@link BasketRow.asked} and {@link BasketRow.state} sit beside each other with
+ * no function deriving one from another. `basketLineState` and `outstanding` were
+ * exactly that arithmetic, and plan 0090 deleted them: the server counts, and a
+ * second count on this side is a way for one screen to disagree with itself.
+ *
+ * ## A row is not a line
+ *
+ * One thing to buy can be asked for by two households, and it is one thing to
+ * pick off one shelf. So a **row** is the covered lines that share a merge key,
+ * each of them an **entry**, and a write addresses the row.
+ *
+ * ## Redaction is a list this reader was served
+ *
+ * {@link Basket.lists} holds the covered lists this reader holds `WRITE` on, and
+ * no others: empty for a guest, and their own for a registered co shopper. An
+ * entry whose {@link BasketRowEntry.listId} is `null` belongs to a list this
+ * reader was not served, so the client knows how much and never where. There is
+ * no `seesZoneData` flag any more, because the question it answered is now asked
+ * per entry and answered by the data itself.
  */
 
 /**
@@ -104,35 +118,6 @@ export interface BasketPresenceEntry {
   displayName: string | null;
   guestNumber: number | null;
   userId: string | null;
-}
-
-/**
- * Where one basket line came from: a zone list that wanted some of it.
- *
- * Zone data, so it reaches only a reader who passes the rule. A tin of tomatoes
- * never names its household to a guest.
- */
-export interface BasketLineOrigin {
-  id: string;
-  zoneId: string;
-  listId: string;
-  lineId: string;
-  /** What this origin contributed to the line's summed quantity. */
-  quantity: number;
-  /**
-   * How many of {@link quantity} were bought for this list (luna `0109`, section 4;
-   * velista `0077`, section 4.1).
-   *
-   * `BOUGHT` rows only, with anything reverted excluded, which is the same floor
-   * `0104` checks before it lets a take back through. It is what the reel under a
-   * list heading is bound to and what that row sends as its `from`, so the two
-   * cannot drift: the screen reads and writes one number.
-   *
-   * It rides on the line's `origins`, so it is absent for exactly the readers
-   * `origins` is absent for, and that absence is the redaction rule rather than a
-   * second one here.
-   */
-  settled: number;
 }
 
 /**
@@ -232,379 +217,129 @@ export interface ScopeLocation {
 }
 
 /**
- * One line of a basket: a thing to buy, how many, and how many are already got.
+ * One covered list line inside a row (backend `0130`, section 3).
  *
- * There is no tick and no status. `0043` made the quantity the state and `0047`
- * made settling cumulative, so a line is finished when {@link settled} reaches
- * {@link quantity} and stays exactly where it is either way.
+ * The line a household actually wrote, seen through the basket that covers it.
+ * A row's entries are its whole demand: two households asking for milk are two
+ * entries of one row, and the numbers here are that one household's.
+ *
+ * ## Why an entry carries a state of its own
+ *
+ * A row under a list's heading is drawn for one entry (velista `0077`,
+ * section 4), and whether **that** list's share is done is a different question
+ * from whether the row is. The server answers both, so neither is worked out
+ * here.
  */
-export interface BasketLine {
-  id: string;
-  content: string;
-  /** How many the basket is asking for, summed across its origins. */
-  quantity: number;
-  /** How many have been settled so far, across however many shops. */
-  settled: number;
+export interface BasketRowEntry {
+  readonly lineId: string;
   /**
-   * Units bought on this line before it reached any list, and still waiting for
-   * one (backend `0093`, section 2.2). Zero once every unit has been re-homed.
+   * The list this entry is on, or null for a list this reader was not served.
    *
-   * Somebody adds "batteries" in an aisle and buys four before anybody has said
-   * whose they are. Those four are recorded when they happen and land on the
-   * first list the line reaches, oldest purchase first, up to what that list
-   * asked for. This is what is **still unplaced**, which is what lets the units
-   * sheet say a second list would take the rest (velista `0068`, section 6).
-   *
-   * Present for every reader, guests included, unlike {@link origins}: it counts
-   * this basket's own purchases and names no list, no zone and no household, so
-   * there is nothing in it to redact. Zero against a backend from before that
-   * plan, which reads correctly, because such a server wrote no waiting row and
-   * had nothing unplaced to report.
+   * Null rather than absent, unlike the optional fields the old line model
+   * redacted by omission: there is one question here and it is "may I name this
+   * list", so one representable answer. The mapper drops a list id that
+   * {@link Basket.lists} has no ref for to null as well, so the rest of the
+   * client has a single test for "served" and cannot disagree with itself.
    */
-  waitingSettled: number;
-  /** The exact product this line means. Null for a free text line. */
-  pickId: string | null;
-  /** The products the pick may be switched between. Catalog data, never zone data. */
-  optionIds: readonly string[];
-  position: number;
+  readonly listId: string | null;
+  readonly left: number;
+  readonly bought: number;
+  readonly asked: number;
+  /** This entry's own state, by the server. Never `REMOVED` (backend `0136`). */
+  readonly state: BasketRowState;
   /**
-   * Who **put this line here**, as a participant id, written once and never
-   * afterwards (luna `0055`, section 4).
+   * The line awaits the household's approval, mapped from the wire's
+   * `approvalStatus`.
    *
-   * A separate field from {@link BasketLine.touchedBy} rather than a reading of
-   * it, because that one moves: the moment anybody settles the line, or edits its
-   * quantity, or swaps its product, `touchedBy` becomes them. "Who put this here"
-   * is the question a shop asks about a line nobody recognises, and after one
-   * settle the other field can no longer answer it.
-   *
-   * Null for every line the run composed, which is honest rather than missing: a
-   * derived line was put there by the generation, and the person who ran it is the
-   * owner, who is already named on the basket. Null too on a basket served by a
-   * backend from before that plan, which reads the same way and draws the same
-   * nothing.
+   * A boolean because the client asks one thing of it: whether to draw the
+   * caption saying the list has not agreed yet. `REJECTED` never arrives, since
+   * a rejected line is not covered and so is never a row.
    */
-  createdBy: string | null;
+  readonly awaitingApproval: boolean;
   /**
-   * Who last edited or settled this line, as a participant id.
+   * Whether this entry's demand can be changed, **by the server**.
    *
-   * An id and never a name, for {@link BasketParticipant.displayName}'s reason.
-   * Null when nobody has touched it since it was generated.
+   * It asks the rule of the basket's owner rather than of the reader, and no
+   * client rule can replace it: a reader never learns the owner's permissions,
+   * and a guest has none of their own to ask about. Velista `0092` draws the
+   * control this gates; until then it is carried and not read.
    */
-  touchedBy: string | null;
-  touchedAt: Date | null;
-  /**
-   * What the most recent settle on this line said, or null if there has been
-   * none.
-   *
-   * **The numbers cannot say this.** `NOT_AVAILABLE` closes the outstanding
-   * amount exactly as a purchase does, so a row without this would caption a
-   * shop that had none as somebody who bought it, which claims a purchase that
-   * never happened.
-   */
-  lastOutcome: SettlementOutcome | null;
-  /** Absent for a reader who does not pass the rule, rather than empty. */
-  origins?: readonly BasketLineOrigin[];
-  /**
-   * Where this line came from (`origin` on the wire).
-   *
-   * `DERIVED` when the run composed it out of the zone lists it drew from, `ADDED`
-   * when somebody typed it into the basket in an aisle. It falls back to `DERIVED`
-   * when the wire omits it, which is a backend from before luna `0055`, and that
-   * reads correctly: every line such a backend serves was composed by a run.
-   *
-   * Not optional, unlike {@link origins} and {@link targetListId}, because it is not
-   * redacted. Every reader is told what kind of line they are looking at; what is
-   * gated is which household it touches.
-   */
-  kind: BasketLineKind;
-  /**
-   * The zone list this line was sent to, once somebody has sent it (`targetListId`).
-   *
-   * Three states, and they are three because the row and the send sheet each read a
-   * different pair of them. **Absent** is zone data withheld from a reader who does
-   * not pass the rule, exactly as {@link origins} is. **Null** is a line that has
-   * been sent nowhere, which is where every `ADDED` line starts and is the one state
-   * the send control is offered over. A **list id** is a line already bound, which
-   * cannot be bound again.
-   *
-   * Mapped with an `in` check for that reason: collapsing absent onto null would
-   * offer a guest a control the server refuses, and offer it on a line that may
-   * already be bound.
-   */
-  targetListId?: string | null;
+  readonly demandEditable: boolean;
 }
 
 /**
- * One list already on a basket line, with everything the units sheet draws
- * (velista `0055`; `LineOriginDetail` on the wire).
+ * One thing to buy, however many households asked for it.
  *
- * Zone data throughout, so the whole read is refused to anybody who does not pass the
- * all or nothing rule. A guest never learns that a tin of tomatoes is on a
- * household's list, let alone how many of it that household wanted.
+ * ## The key is a line id, and that is not an accident
  *
- * It is **not** a {@link BasketLineOrigin} with more fields, though it holds the same
- * origin. That one is what the basket read carries on every line, kept to the four ids
- * and a quantity because it is drawn on every row; this is what one sheet asks for
- * about one line, and it costs a request and a join per list to compose.
+ * A row is recomputed on every read, so the group has no identity of its own.
+ * Its anchor's line id is the closest thing to a stable name, and **any** entry's
+ * id addresses the row on a write, which is what stops the next tap on a row
+ * whose anchor was just bought to zero from being a not found.
+ *
+ * It follows that the key can change under an open sheet: somebody adds an
+ * earlier "Milk" on another list, a rename merges two lines, the anchor is
+ * deleted. `BasketStore.rowFor` is how a sheet finds its row again, by key and
+ * then by any entry's line id (velista `0090`, section 7.3).
  */
-export interface BasketLineOriginDetail {
-  originId: string;
-  listId: string;
-  lineId: string;
-  zoneId: string;
-  /** Null where the list no longer has a name to give, meaning it was deleted. */
-  listName: string | null;
-  /** The group it sits in, for the reader who has two lists called "Food". */
-  zoneName: string | null;
-  /** What this list put into the basket line (`contributed`). */
-  contributed: number;
-  /** What the zone line asks for now (`listQuantity`). */
-  listQuantity: number;
+export interface BasketRow {
+  /** The anchor's list line id. The key on the wire and in a sheet's URL. */
+  readonly rowKey: string;
+  readonly content: string;
+  readonly left: number;
+  readonly bought: number;
+  readonly asked: number;
+  readonly state: BasketRowState;
+  /** A fact about the row's past worth a caption, or null. */
+  readonly note: BasketRowNote | null;
+  /** When the fact behind {@link note} happened. Null exactly when `note` is. */
+  readonly noteAt: Date | null;
   /**
-   * How many of this line's units this basket has already bought against this list,
-   * which is the **floor** a contribution cannot go under (`settledHere`).
+   * What changed about this row since this viewer last looked.
    *
-   * Two of the flat's milk having been bought means the flat cannot retroactively
-   * have wanted one, and the server refuses that with `below_settled` rather than
-   * quietly unbuying something.
+   * Carried by the model here and drawn by velista `0093`, so the mapper and the
+   * store are written once. Null on every row until backend `0138` produces it.
    */
-  settledHere: number;
-  /** Whether the basket owner still holds `WRITE` on the list. */
-  writable: boolean;
+  readonly mark: BasketChangeMark | null;
   /**
-   * Whether the run drew from this list (backend `0092`, section 3).
+   * True while any entry awaits its household's approval.
    *
-   * The same fact on every collection of {@link BasketLineOrigins}, and the sheet
-   * sorts on it: the lists the basket came from are the ones somebody in an aisle
-   * almost always means, and the server sorts nothing.
+   * **Never named `pending`**: that word is the count on {@link Basket.pending},
+   * and one word for two facts is how a screen comes to say the wrong number.
    */
-  fromRun: boolean;
+  readonly awaitingApproval: boolean;
+  /** The union of the entries' product sets, in the server's order, anchor first. */
+  readonly optionIds: readonly string[];
   /**
-   * The zone line's own approval, so the row can say the household has not agreed
-   * yet (backend `0092`, section 3).
+   * The participant behind the newest standing act on this row, or null.
    *
-   * A line created by raising a list starts under that list's ordinary approval
-   * rule, and an adopted pending line was already waiting before this basket found
-   * it. Both are the same sentence to whoever raised the row.
+   * An id and never a name, for {@link BasketParticipant.displayName}'s reason:
+   * a typed name is not an identity, so every attribution is resolved against
+   * {@link Basket.participants}.
    */
-  approvalStatus: LineApprovalStatus;
+  readonly touchedBy: string | null;
+  readonly touchedAt: Date | null;
+  /** Oldest first, the anchor at index 0. */
+  readonly entries: readonly BasketRowEntry[];
 }
 
 /**
- * A list holding the same thing that is **not** on the line yet (`OriginCandidate`).
+ * A covered list this **reader** holds `WRITE` on (backend `0130`, section 6).
  *
- * What makes the units sheet an editor rather than a report: the run matched what it
- * could, and this is everything it did not take, so somebody can put a household back
- * on a line the generation missed.
- */
-export interface BasketOriginCandidate {
-  listId: string;
-  lineId: string;
-  zoneId: string;
-  listName: string | null;
-  zoneName: string | null;
-  listQuantity: number;
-  /** That list's own wording of the line, which is often not this basket's. */
-  content: string;
-  /**
-   * Whether the run reached this one on normalized text alone.
-   *
-   * The last resort of the matcher, so it is the one class of candidate that can be
-   * wrong: "butter" and "peanut butter" normalize apart, but a shorter pair may not.
-   * The sheet says so rather than presenting a text match as an identity.
-   */
-  matchedOnText: boolean;
-  /** Null when it can be adopted, which is the ordinary case. */
-  unavailable: BasketOriginUnavailableReason | null;
-  /** Whether the run drew from this list (backend `0092`, section 3). */
-  fromRun: boolean;
-}
-
-/**
- * A list this reader may write that holds no matching line at all (backend `0092`,
- * section 3; `ListRef` on the wire).
+ * The whole of the client's redaction rule, and it is a list rather than a flag:
+ * a guest is served an empty array, a registered co shopper is served the lists
+ * they write themselves, and the owner is served all of them. An entry naming a
+ * list that is not here is an entry this reader may not place.
  *
- * The third collection, and the one that replaced the send sheet's picker (velista
- * `0068`). Raising one of these from zero **creates** the line on that list through
- * the ordinary add, so a row here is a list this basket has never touched and could
- * send this line to.
- *
- * It carries no quantity because there is nothing to carry one: the list asks for
- * none of this, and every row stands at zero until somebody moves it.
+ * The name is reused on purpose. Today's `BasketListRef` described the send
+ * picker of velista `0068`, which has nothing left to pick: a line is on a list
+ * or it does not exist.
  */
 export interface BasketListRef {
-  listId: string;
-  zoneId: string;
-  /** Null under {@link BasketLineOriginDetail.listName}'s rule: never invented. */
-  listName: string | null;
-  zoneName: string | null;
-  /** Whether the run drew from this list, which is what the sheet draws first. */
-  fromRun: boolean;
-}
-
-/**
- * What `GET .../lines/:lineId/origins` answers: every list this reader may write,
- * in three collections (backend `0092`, section 3).
- *
- * They partition those lists: a list is an origin, or it holds a matching line and
- * is a candidate, or it holds nothing matching and is an other. Each one is a row
- * with a number on the units sheet, and the number is what that list asked for
- * through this basket.
- */
-export interface BasketLineOrigins {
-  lineId: string;
-  origins: readonly BasketLineOriginDetail[];
-  candidates: readonly BasketOriginCandidate[];
-  /** Lists holding no matching line. Raising one creates the line there. */
-  others: readonly BasketListRef[];
-}
-
-/**
- * Setting how many of a line are still to get (velista `0054`).
- *
- * **Absolute rather than a delta, and `from` is why.** Two phones in one shop moving
- * one line is the ordinary case, and a gesture whose meaning depends on where it
- * started must be refused rather than reinterpreted: raising the outstanding amount
- * buys more, lowering it records a purchase, and applying either against a number
- * that moved underneath inverts what somebody meant. A mismatch answers
- * `stale_quantity` and the screen redraws at the number as it stands.
- */
-export interface BasketOutstandingRequest {
-  /** How many are still to get after this. Zero finishes the line. */
-  outstanding: number;
-  /** What the control believed was outstanding when it was picked up. */
-  from: number;
-}
-
-/**
- * Giving units of a line to other products, which splits it (velista `0069`).
- *
- * The same `from` bargain as {@link BasketOutstandingRequest}: two phones
- * splitting one line must not double it, so a mismatch answers `stale_quantity`
- * and the pane redraws at the amount as it stands.
- *
- * There is no share for the line's **own** product, and that is the rule rather
- * than an omission. The original keeps whatever the shares leave, so the balance
- * is never typed and a stale request can only land somewhere honest.
- */
-export interface BasketSplitRequest {
-  /** The outstanding amount the pane opened with. */
-  from: number;
-  /** Units for products other than the line's own. Zeroes are not sent. */
-  shares: readonly BasketShare[];
-}
-
-/**
- * Setting what one list contributes to a line (velista `0055`).
- *
- * The same `from` bargain as {@link BasketOutstandingRequest}, and for a sharper
- * reason: two people editing one split must not silently overwrite each other's
- * arithmetic. `from` is 0 for a candidate being adopted, which has contributed
- * nothing yet.
- */
-export interface BasketOriginQuantityRequest {
-  listId: string;
-  /**
-   * The zone line: an existing origin of this basket line, or one being adopted.
-   *
-   * **Absent for a list holding no matching line** (backend `0092`, section 4.2).
-   * The write then creates the line through the ordinary add, which is what raising
-   * a row of {@link BasketLineOrigins.others} from zero means. There is nothing for
-   * the sheet to name, because the line does not exist yet.
-   */
-  lineId?: string;
-  /** What this list should contribute. Zero takes the list off the line. */
-  quantity: number;
-  from: number;
-}
-
-/** What one contribution write did. */
-export interface BasketOriginQuantityResult {
-  line: BasketLine;
-  /** Null when the contribution was set to zero and the origin dropped. */
-  origin: BasketLineOriginDetail | null;
-  /** The zone line's own quantity after the write. */
-  listQuantity: number;
-}
-
-/**
- * Setting how many of a line one list has got (velista `0073`, backend `0104`).
- *
- * **The opposite of {@link BasketOriginQuantityRequest}, and a second request for
- * that reason.** That one says what a household asked for and buys nothing; this
- * one says what this basket bought for them, and every purchase this screen
- * records for one list goes through it. They are the two reels on one row of the
- * settle sheet, and one body carrying both numbers optionally would let a caller
- * send them together and mean neither.
- *
- * The zone line is **required**, unlike its sibling's: a list holding no line of
- * this cannot have got any of it, and raising what it asks for is the other call.
- *
- * The same `from` bargain as {@link BasketOutstandingRequest}, and for the sharpest
- * reason of the three: raising this settles and lowering takes a purchase back, so
- * a gesture applied to a number that moved underneath it buys the opposite of what
- * somebody meant.
- */
-export interface BasketOriginSettledRequest {
-  /** The zone line whose list bought some of this. Already an origin of the line. */
-  lineId: string;
-  /** How many this basket has bought for that list, after this write. */
-  settled: number;
-  /** What the control believed that number was. */
-  from: number;
-}
-
-/**
- * What one `got` write did (backend `0104`, section 4).
- *
- * **Both halves of the row**, which is why the origin is here beside the line: the
- * sheet draws "asked for" and "got" together, and either computed from the other
- * would drift the moment a close, a split or a second shopper moved something this
- * client could not see. The line is what the outstanding number above the rows is
- * read from, and it must be read from the answer rather than from what was asked
- * for: taking back a `NOT_AVAILABLE` close has no units to divide, so the whole
- * close comes back and the number lands above where the reel was dragged.
- *
- * `skipped` is **required** here where {@link BasketSettleResult}'s is optional:
- * the route is refused outright to a reader who does not pass the all or nothing
- * rule, so there is no redacted answer to fall back to.
- */
-export interface BasketOriginSettledResult {
-  line: BasketLine;
-  /** Null when the origin's zone line was deleted underneath the basket. */
-  origin: BasketLineOriginDetail | null;
-  /** How many origins this act could not reach. Zero is the ordinary answer. */
-  skippedCount: number;
-  skipped: readonly BasketSettleSkip[];
-}
-
-/** How far this line has got, which is what the row's indicator draws. */
-export type BasketLineState =
-  /** Nothing settled yet. The ordinary state of a line in a full basket. */
-  | 'wanted'
-  /** Some settled, some outstanding. The row shows both numbers. */
-  | 'partly'
-  /** Settled up to the asked quantity. Drawn quietly, still present, still tappable. */
-  | 'done';
-
-/**
- * How far a line has got. One function so the row and the header agree.
- *
- * A `NOT_AVAILABLE` settle closes the outstanding amount without buying
- * anything, so it lands on `done` here like any other finished line. The
- * difference between "got it" and "they had none" is in the attribution caption,
- * which is where a person actually reads it.
- */
-export function basketLineState(line: BasketLine): BasketLineState {
-  if (line.settled <= 0) {
-    return 'wanted';
-  }
-  return line.settled >= line.quantity ? 'done' : 'partly';
-}
-
-/** How many are still to get. Never negative, however the numbers arrived. */
-export function outstanding(line: BasketLine): number {
-  return Math.max(0, line.quantity - line.settled);
+  readonly listId: string;
+  readonly name: string;
+  readonly zoneId: string;
+  readonly zoneName: string;
 }
 
 /**
@@ -620,6 +355,26 @@ export function outstanding(line: BasketLine): number {
  * Null rather than the cheapest offer as a fallback. Quoting Dia's price under a
  * heading that says Mercadona is the defect this whole plan exists to remove.
  */
+/**
+ * The product a row means, or undefined for a row that means none.
+ *
+ * The **first** of {@link BasketRow.optionIds}, which backend `0136` orders anchor
+ * first: a row has no `pickId` any more, because a pick was a column on the line
+ * the basket stored and a basket stores no lines. What is left is the union of its
+ * entries' product sets, and the first of them is what the anchor line named.
+ *
+ * One function so the search, the price mark and the row itself all resolve the
+ * same product. Undefined for a free text row, and undefined for a product the
+ * catalog can no longer name, which are the same nothing to draw.
+ */
+export function basketRowPick(
+  row: Pick<BasketRow, 'optionIds'>,
+  products: ReadonlyMap<string, BasketProduct>
+): BasketProduct | undefined {
+  const first = row.optionIds[0];
+  return first === undefined ? undefined : products.get(first);
+}
+
 export function offerAt(
   product: BasketProduct | undefined,
   priceScopeId: string
@@ -640,68 +395,39 @@ export interface BasketProgress {
 }
 
 /**
- * What a run of lines comes to, counted in **lines and not units**.
- *
- * "Four things done out of twelve" is what somebody in a shop is tracking, and a
- * basket of one line asking for twelve tins would otherwise read as almost
- * finished. That is `0047`'s rule for a zone list and this is the same count.
- *
- * **`done` is not `finished`.** A `NOT_AVAILABLE` settle closes a line's outstanding
- * amount without buying anything, so counting every finished line as one somebody
- * got would report a shop that had none as a purchase, which is the claim the row's
- * own caption is careful not to make.
- *
- * Here rather than in the store because velista `0077` gives every section of a
- * grouped basket its own count, and a heading that said "1 of 3 got" by one rule
- * while the sentence above it said "4 of 12 got" by another would be two answers to
- * one question. The store's `progress` is this function over the whole basket.
- */
-export function basketLinesProgress(
-  lines: readonly BasketLine[]
-): BasketProgress {
-  const finished = lines.filter((line) => outstanding(line) === 0);
-  const unavailable = finished.filter(
-    (line) => line.lastOutcome === 'NOT_AVAILABLE'
-  ).length;
-
-  return {
-    done: finished.length - unavailable,
-    unavailable,
-    total: lines.length,
-  };
-}
-
-/**
  * A basket, everybody on it, and what this reader may see of it.
  *
- * `participants` and `lines` arrive together because the screen cannot draw a
- * single row without both: a line's attribution is a participant id, so the
- * people are this screen's vocabulary rather than a second screen's data.
+ * `participants` and `rows` arrive together because the screen cannot draw a
+ * single row without both: an attribution is a participant id, so the people are
+ * this screen's vocabulary rather than a second screen's data.
+ *
+ * Named `Basket` and not `BasketView` since plan 0090, because there is nothing
+ * left for the word "view" to distinguish it from: the server stores no basket
+ * rows at all, so every basket anybody holds is a view of the lists it covers.
  */
-export interface BasketView {
-  id: string;
+export interface Basket {
+  readonly id: string;
   /** What this basket is (backend `0133`, section 2). */
-  kind: BasketKind;
-  /** Null is not missing: an unnamed basket is displayed as its generation date. */
-  name: string | null;
-  status: string;
-  generatedAt: Date | null;
-  lines: readonly BasketLine[];
-  participants: readonly BasketParticipant[];
-  /** The reader's own row, so the screen can tell "you" from everybody else. */
-  me: BasketParticipant;
+  readonly kind: BasketKind;
+  /** Null on a `LIVE` basket, and on a `GENERATED` one shown as its date. */
+  readonly name: string | null;
+  readonly status: BasketStatus;
+  readonly createdAt: Date | null;
+  readonly rows: readonly BasketRow[];
   /**
-   * Whether this reader holds `WRITE` on every source list of the run, as the
-   * server evaluated it on this request.
+   * The covered lists this reader writes themselves, and no others.
    *
-   * The screen branches on it to decide what to **draw**. It is all or nothing
-   * today and the cliff is known: one source where the reader holds only `READ`
-   * collapses their view to a guest's. Plan 0051 section 11 keeps the per line
-   * version as the target, and nothing here would have to be redesigned for it.
+   * What replaced `seesZoneData`, `sources` and `listNames` at once. "May this
+   * reader be offered the grouping by list" is `lists.length > 0`; "may this
+   * entry be named" is `entry.listId !== null`; and the heading's words are this
+   * ref's `name`. One collection answers all three, so they cannot disagree.
    */
-  seesZoneData: boolean;
-  /** Every product any line names, by id. Empty when catalog was unreachable. */
-  products: ReadonlyMap<string, BasketProduct>;
+  readonly lists: readonly BasketListRef[];
+  readonly participants: readonly BasketParticipant[];
+  /** The reader's own row, so the screen can tell "you" from everybody else. */
+  readonly me: BasketParticipant;
+  /** Every product any row names, by id. Empty when catalog was unreachable. */
+  readonly products: ReadonlyMap<string, BasketProduct>;
   /**
    * The scopes the products' offers name, by scope id (velista `0062`).
    *
@@ -712,21 +438,23 @@ export interface BasketView {
    */
   readonly scopes: ReadonlyMap<string, BasketPriceScope>;
   /**
-   * What the run was asked to draw from. Absent unless {@link seesZoneData}.
+   * Over the rows that are not `REMOVED`. **The server's, never recounted.**
    *
-   * A null `listId` means every list of that zone the owner can write (backend
-   * `0133`, section 4). Nothing in velista draws a source yet, so the difference
-   * between a zone and a list costs no screen today.
+   * `basketLinesProgress` used to compute it here, and computing it here is what
+   * let the heading of a section and the sentence above it answer the same
+   * question differently. `basketRowsProgress` counts a **section**, over states
+   * the server wrote, and a spec asserts the two agree over a whole basket.
    */
-  sources?: readonly { zoneId: string; listId: string | null }[];
+  readonly progress: BasketProgress;
   /**
-   * Those lists by name, keyed by list id, for the row's "from" caption.
+   * `total - done - unavailable`, by the server. A `SKIPPED` row is pending.
    *
-   * Empty for a reader who may not have them, which is the same reader for whom
-   * every line's `origins` is absent, so the caption has nothing to draw from on
-   * both sides at once.
+   * It arrives inside `progress` on the wire and is lifted here because the
+   * finish sheet and the home card read it on its own, and reading
+   * `progress.pending` at one call site and subtracting at another is exactly
+   * the drift this plan removed.
    */
-  listNames: ReadonlyMap<string, string>;
+  readonly pending: number;
 }
 
 /**
@@ -784,111 +512,99 @@ export interface BasketShareLink {
 }
 
 /**
- * What one add asks for (velista `0053`; luna `0055`, section 3).
+ * What one settling act asked for (velista `0090`, section 3.5).
  *
- * **No `targetListId`**, and its absence is the design rather than an omission: a
- * line added here has no target, so it changes nothing any household shares, which
- * is what makes the gesture safe to hand to somebody who arrived on a forwarded
- * link. Binding one to a list is a separate gesture with a list picker in front of
- * it, and the server refuses the field on this surface outright.
+ * ## `from` is on every write on a row
+ *
+ * Two phones in one shop moving one row is the ordinary case, and a gesture
+ * whose meaning depends on where it started must be refused rather than
+ * reinterpreted. A mismatch answers `stale_quantity`, and the screen reads the
+ * basket again and says so (velista `0054`, section 4.1).
+ *
+ * ## Every `BOUGHT` carries its quantity
+ *
+ * The server used to cap an absent quantity at what the row still asked for,
+ * which is what made a double tap safe. It does not any more: buying three of a
+ * row that says two records three, because the extra unit is real. So the
+ * quantity is explicit and {@link from} is what catches the second tap.
  */
-export interface BasketAddLineRequest {
-  content: string;
-  /** Defaults to one at the server. A line you do not want is not a gesture. */
-  quantity?: number;
-  /** The pick: the exact product this line means, when one was chosen. */
-  itemId?: string;
-  /** The products the pick may be switched between: what a group attaches. */
-  options?: readonly string[];
-}
-
-/**
- * Whether this basket still takes lines, which is what decides the composer.
- *
- * The server refuses an add to a basket that is finished, and a field that cannot
- * submit is the invitation `0038` section 2.1 refuses to draw. So the question is
- * asked here once and the page has no second reading of it.
- *
- * **It names the open status rather than the finished ones**, which is the safe
- * direction and the same one the server's own `isOpenBasket` takes. A status this
- * build has never heard of costs a composer; the other way round it would draw a
- * field over a basket the server considers closed, and every line typed into it would
- * come back refused.
- *
- * It delegates to {@link isOpenBasket} rather than naming the value a second time,
- * and the delegation is the point: this function used to be the only place in the app
- * that had the set right, while the dashboard and the history each asked
- * `status === 'ACTIVE'` and drew nothing for the whole life of the feature. Backend
- * plan 0133 folded that second spelling away, so there is one value to name now; two
- * names for one question are still worth keeping, because "does this take lines" and
- * "is somebody still going to shop this" are asked by different screens for different
- * reasons. Two **answers** are not, which is what this line stops.
- */
-export function basketTakesLines(status: string): boolean {
-  return isOpenBasket(status);
-}
-
-/** What one settling act asked for. The three gestures of section 4.2. */
 export interface BasketSettleRequest {
-  outcome: SettlementOutcome;
-  /** Absent settles the whole outstanding amount, which is the common case. */
-  quantity?: number;
-  /** Per source list, by hand. Only for a reader who passes the rule. */
-  allocations?: readonly { listId: string; quantity: number }[];
-  /** The product actually in the trolley, when it is not the line's pick. */
-  itemId?: string;
-}
-
-/**
- * What one settle did, as this actor is told it.
- *
- * {@link skippedCount} is present for everybody and {@link skipped} only for a
- * reader who passes the rule, which is how `0051` section 6.4 (report a partial
- * settle honestly) and section 5.2 (never name a list to a guest) both hold: the
- * fact is the actor's business and only the names are gated.
- */
-export interface BasketSettleResult {
-  line: BasketLine;
-  /** How many origins this act could not reach. Zero is the ordinary answer. */
-  skippedCount: number;
-  /** Which ones, and why. Absent for a reader who does not pass the rule. */
-  skipped?: readonly BasketSettleSkip[];
-}
-
-/**
- * What one split did, in four collections a client reconciles by id (velista
- * `0069`, section 3; backend `0094`, section 6).
- *
- * Four rather than one basket, because the screen redraws the rows it was told
- * about and nothing else: a whole basket would take the scroll position with it,
- * and any row a second shopper is editing.
- *
- * Nothing here decides **which** of the server's cases happened. A line whose
- * every unit moved is reassigned rather than deleted, so the same id comes back
- * on {@link line} with a new product, and a share for a product that already has
- * a row raises that row into {@link merged}. Both are a merge by id to the store,
- * which is the point: the client applies four lists and reads no rule out of
- * them.
- */
-export interface BasketSplitResult {
-  /** The line the split was asked of, or the row its units ended on. */
-  line: BasketLine;
-  /** One per product that had no row here yet, in position order. */
-  created: readonly BasketLine[];
-  /** The rows a share was given to rather than a new sibling. */
-  merged: readonly BasketLine[];
+  readonly outcome: SettlementOutcome;
+  /** Required for `BOUGHT`. Absent for `NOT_AVAILABLE`, which buys nothing. */
+  readonly quantity?: number;
+  /** The row's `left` the person was looking at. */
+  readonly from: number;
+  /** The product actually in the trolley, when it is not the row's first option. */
+  readonly itemId?: string;
   /**
-   * The ids of rows folded away, which is how moving every unit back off a
-   * sibling ends: it kept nothing, so it is gone.
+   * Units per entry, for a reader who named them. Served entries only.
+   *
+   * Absent is not "none": the server divides the units oldest entry first, which
+   * is what a settle from the row itself means. This is what the entries pane
+   * sends when somebody says which household got what.
    */
-  removed: readonly string[];
+  readonly allocations?: readonly { lineId: string; quantity: number }[];
 }
 
 /**
- * A new name for a basket line (velista `0084`, backend `0113`).
+ * Taking part of a row back (velista `0090`; backend `0136`, section 5.2).
  *
- * The server renames the zone lines the basket line came from in the same write,
- * so this is the one basket write that changes what a household's own list says.
+ * Two targets rather than two requests, because they are one gesture with two
+ * things it can be aimed at: the units somebody said they bought, or the close
+ * somebody said the shop could not supply. A close holds no units, so that
+ * branch has no number to take back and no `from` to check it against.
+ */
+export type BasketRevertRequest =
+  | {
+      readonly target: 'UNITS';
+      readonly units: number;
+      /** The row's `bought` the person was looking at. */
+      readonly from: number;
+    }
+  | { readonly target: 'CLOSE' };
+
+/**
+ * What every write on a row answers (backend `0136`, `BasketRowResult`).
+ *
+ * One shape for all of them, because a client redraws one row after any of them.
+ * The store folds {@link row} by its key and takes {@link progress} whole; **it
+ * never patches a number**, which is the rule the whole row model rests on.
+ */
+export interface BasketRowResult {
+  /**
+   * The row as it now stands, under whatever key it now has.
+   *
+   * Never null: a row bought to zero stays in the view as `DONE`, because the
+   * purchase that emptied it is in scope.
+   */
+  readonly row: BasketRow;
+  readonly progress: BasketProgress;
+  /**
+   * `total - done - unavailable`, by the server, lifted out of the wire's
+   * `progress` exactly as {@link Basket.pending} is.
+   *
+   * It is here rather than left inside {@link progress} because the store has to
+   * put it back on the basket after every write, and the alternative is to work
+   * it out from the three numbers beside it. Nothing in this scope subtracts one
+   * count from another (velista `0060`, section 4), so the server sends it.
+   */
+  readonly pending: number;
+  /**
+   * Set by a rename that folded this row into another: the key the request used.
+   *
+   * The store drops that row and redraws {@link row} without reading the basket
+   * again.
+   */
+  readonly replacedRowKey: string | null;
+  /** Set by a revert: entries whose line was deleted since, so no units went back. */
+  readonly skippedCount: number;
+}
+
+/**
+ * A new name for a basket row (velista `0084`, backend `0113`).
+ *
+ * The server renames every entry of the row on its own list in the same write, so
+ * this is the one basket write that changes what a household's own list says.
  */
 export interface BasketRenameRequest {
   content: string;
@@ -902,13 +618,20 @@ export interface BasketRenameRequest {
 /**
  * What a rename did.
  *
- * {@link line} is the surviving line, and its id differs from the line the request
- * named when that line was the one absorbed: the earliest line survives a merge.
+ * {@link row} is the surviving row, and its key differs from the one the request
+ * named when that row was the one absorbed: the earliest line survives a merge,
+ * and the anchor moves with it. {@link absorbedRowKey} is the row that went
+ * away, which the store drops.
  */
-export interface BasketRenameResult {
-  line: BasketLine;
-  /** The basket line a merge took away, or null when no basket line merged. */
-  absorbedLineId: string | null;
+export interface BasketRenameResult extends BasketRowResult {
+  /**
+   * The row a merge took away, or null when no row merged.
+   *
+   * The same value the wire calls `replacedRowKey`, named for what a rename did
+   * with it. A rename is the only write that produces one today, and the sheet
+   * reads it to know whether its own row survived.
+   */
+  readonly absorbedRowKey: string | null;
 }
 
 /**
@@ -933,48 +656,11 @@ export interface BasketMergeRequiredList {
   readonly otherQuantity: number;
 }
 
-/** The basket line that already carries the new name. */
+/** The basket row that already carries the new name. */
 export interface BasketMergeRequiredBasket {
-  readonly otherLineId: string;
+  readonly otherRowKey: string;
   /** The other line's whole quantity, as the refusal states it. */
   readonly otherQuantity: number;
-}
-
-/**
- * One product of a split, and how many units go to it.
- *
- * Only for products **other than** the line's own: the line keeps the balance,
- * and the balance is never typed. That is what makes a stale request land
- * somewhere honest rather than doubling a line (backend `0094`, section 2).
- */
-export interface BasketShare {
-  itemId: string;
-  quantity: number;
-}
-
-/**
- * One origin a settle could not reach, **named** (plan 0049, section 1.2).
- *
- * The names arrive on the report rather than being looked up, and that is the
- * whole of the design. The basket screen reaches no zone list store and must not
- * grow one: a screen that can name a household is a screen a template mistake
- * could show one to a guest. So the gateway composes the names for a reader
- * entitled to them, in the same way it already composes the basket's own
- * `listNames`, and a guest's report carries no `skipped` at all.
- *
- * {@link listName} is nullable **inside** that entitled report, and the two
- * nulls are different questions. Absent `skipped` is "you may not have this";
- * a null name is "there is no longer a name to give", which is a list deleted
- * since the run. The screen falls back to the bare count for the second, because
- * a count is at least true where an empty name would read as a missing word.
- */
-export interface BasketSettleSkip {
-  listId: string;
-  reason: string;
-  /** The list's own name, or null where it no longer has one to give. */
-  listName: string | null;
-  /** The group it sits in, for the reader who has two lists called "Food". */
-  zoneName: string | null;
 }
 
 /** How the basket screen's one read has got on. */

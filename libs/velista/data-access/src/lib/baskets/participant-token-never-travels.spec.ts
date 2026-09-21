@@ -205,13 +205,19 @@ describe('the participant token never reaches gatewayInterceptor', () => {
     await refresh();
 
     const done = api.getBasket(BASKET);
-    const req = httpMock.expectOne(
-      `${GATEWAY}/v1/baskets/${BASKET}/basket`
-    );
+    const req = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}`);
 
     expect(req.request.headers.get('Authorization')).toBe(`Bearer ${account}`);
     expect(headerValues(req.request.headers)).not.toContain(SOCKET_TOKEN);
-    req.flush({ id: BASKET, me: { id: 'p-owner', kind: 'OWNER' }, lines: [] });
+    req.flush({
+      id: BASKET,
+      kind: 'GENERATED',
+      status: 'OPEN',
+      me: { id: 'p-owner', kind: 'OWNER' },
+      rows: [],
+      lists: [],
+      progress: { done: 0, unavailable: 0, total: 0, pending: 0 },
+    });
     await done;
 
     expect(tokens.tokens()?.accessToken).toBe(account);
@@ -231,7 +237,7 @@ describe('the participant token never reaches gatewayInterceptor', () => {
 
     const done = api.getBasket('somebody-elses-basket');
     const req = httpMock.expectOne(
-      `${GATEWAY}/v1/baskets/somebody-elses-basket/basket`
+      `${GATEWAY}/v1/baskets/somebody-elses-basket`
     );
 
     const sent = headerValues(req.request.headers);
@@ -239,8 +245,12 @@ describe('the participant token never reaches gatewayInterceptor', () => {
     expect(sent).not.toContain('the-secret');
     req.flush({
       id: 'somebody-elses-basket',
+      kind: 'GENERATED',
+      status: 'OPEN',
       me: { id: 'p-other', kind: 'GUEST' },
-      lines: [],
+      rows: [],
+      lists: [],
+      progress: { done: 0, unavailable: 0, total: 0, pending: 0 },
     });
     await done;
   });

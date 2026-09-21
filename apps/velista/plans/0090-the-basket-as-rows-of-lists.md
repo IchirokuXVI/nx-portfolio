@@ -1,3 +1,5 @@
+> **PR:** [#436](https://github.com/IchirokuXVI/nx-portfolio/pull/436)
+
 # 0090: the basket as rows of lists
 
 > Backend half: `apps/luna-shopper-backend/plans/0136`, which must be merged first, with

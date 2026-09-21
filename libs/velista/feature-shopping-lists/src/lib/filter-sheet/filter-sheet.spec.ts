@@ -7,7 +7,11 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import { BasketStore, BasketViewStore } from '@portfolio/velista/data-access';
-import type { BasketLine, BasketPriceScope } from '@portfolio/velista/models';
+import type {
+  BasketListRef,
+  BasketPriceScope,
+  BasketRow,
+} from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -17,46 +21,58 @@ import { FilterSheet } from './filter-sheet';
 
 const BASKET_ID = 'b4b1f0e2-1f5a-4c2e-9a4d-6f0e2b7c1d33';
 
+/**
+ * One row, on the named lists.
+ *
+ * `null` is a reader served no list at all, which is a guest: every entry they
+ * hold names none, so there is nothing for the filter to offer (velista `0090`,
+ * section 8.2).
+ */
 function line(
-  id: string,
+  rowKey: string,
   content: string,
   listIds: readonly string[] | null
-): BasketLine {
+): BasketRow {
+  const lists = listIds ?? [null];
   return {
-    id,
+    rowKey,
     content,
-    quantity: 1,
-    settled: 0,
-    waitingSettled: 0,
-    pickId: null,
+    left: 1,
+    bought: 0,
+    asked: 1,
+    state: 'WANTED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
     optionIds: [],
-    position: 0,
-    createdBy: null,
     touchedBy: null,
     touchedAt: null,
-    lastOutcome: null,
-    ...(listIds === null
-      ? {}
-      : {
-          origins: listIds.map((listId) => ({
-            id: `o-${id}-${listId}`,
-            zoneId: 'z1',
-            listId,
-            lineId: `zl-${id}`,
-            quantity: 1,
-          })),
-        }),
-  } as BasketLine;
+    entries: (lists.length === 0 ? [null] : lists).map((listId) => ({
+      lineId: `zl-${rowKey}-${listId ?? 'none'}`,
+      listId,
+      left: 1,
+      bought: 0,
+      asked: 1,
+      state: 'WANTED' as const,
+      awaitingApproval: false,
+      demandEditable: true,
+    })),
+  };
 }
 
-/** The owner's basket: three lines, two lists the run drew from. */
+function ref(listId: string, name: string): BasketListRef {
+  return { listId, name, zoneId: 'z1', zoneName: 'Home' };
+}
+
+/** The owner's basket: three rows, two lists they were served. */
 const OWNER_LINES = [
   line('l-1', 'Milk', ['l-groceries']),
   line('l-2', 'Bread', ['l-weekly']),
   line('l-3', 'Batteries', []),
 ];
 
-/** A guest's: the same lines with every origin redacted, and no sources. */
+/** A guest's: the same rows, with no list any of them can name. */
 const GUEST_LINES = [
   line('l-1', 'Milk', null),
   line('l-2', 'Bread', null),
@@ -88,8 +104,9 @@ function scope(
 }
 
 function render(options: {
-  readonly lines: readonly BasketLine[];
-  readonly sources?: readonly { zoneId: string; listId: string }[];
+  readonly lines: readonly BasketRow[];
+  /** The lists this reader was served, which is what the sheet offers. */
+  readonly served?: readonly BasketListRef[];
   readonly scopes?: readonly BasketPriceScope[];
 }) {
   TestBed.resetTestingModule();
@@ -99,22 +116,19 @@ function render(options: {
     leaveTo: jest.fn().mockResolvedValue(undefined),
   };
 
-  const sources = signal(options.sources ?? []);
   const scopes = signal(
     new Map((options.scopes ?? []).map((held) => [held.priceScopeId, held]))
   );
+  const served = options.served ?? [
+    ref('l-groceries', 'Groceries'),
+    ref('l-weekly', 'Weekly shop'),
+  ];
   const store = {
-    lines: signal(options.lines),
+    rows: signal(options.lines),
     products: signal(new Map()),
-    lastAdded: signal(null),
     me: signal(null),
-    basket: computed(() => ({ sources: sources(), scopes: scopes() })),
-    listNames: signal(
-      new Map([
-        ['l-groceries', 'Groceries'],
-        ['l-weekly', 'Weekly shop'],
-      ])
-    ),
+    basket: computed(() => ({ scopes: scopes() })),
+    lists: signal(new Map(served.map((held) => [held.listId, held]))),
   };
 
   const paramMap = convertToParamMap({ basketId: BASKET_ID });
@@ -176,7 +190,7 @@ function choices(fixture: ReturnType<typeof render>['fixture'], name: string) {
  */
 describe('FilterSheet', () => {
   it('draws order and group by for every reader', () => {
-    const { fixture } = render({ lines: GUEST_LINES });
+    const { fixture } = render({ lines: GUEST_LINES, served: [] });
 
     expect(legends(fixture)).toEqual([
       'basket.view.order.legend',
@@ -190,7 +204,7 @@ describe('FilterSheet', () => {
    * a reader the server sent no sources to, and the same emptiness hides both.
    */
   it('draws no list grouping and no lists section for a reader with no sources', () => {
-    const { fixture } = render({ lines: GUEST_LINES });
+    const { fixture } = render({ lines: GUEST_LINES, served: [] });
 
     expect(legends(fixture)).not.toContain('basket.view.lists.legend');
     expect(choices(fixture, 'basket-grouping')).toHaveLength(2);
@@ -464,6 +478,7 @@ describe('FilterSheet', () => {
     it('says whose shops these are from the locations the server sent', () => {
       const { fixture } = render({
         lines: GUEST_LINES,
+        served: [],
         scopes: [scope('s-merca', 'Mercadona')],
       });
 

@@ -5,17 +5,18 @@ import {
   inject,
   Injectable,
   signal,
+  untracked,
 } from '@angular/core';
 import {
   isOpenBasket,
-  type CreateBasketRequest,
   type BasketRun,
   type BasketStatus,
   type BasketSummary,
+  type CreateBasketRequest,
   type ShoppingListsLoad,
   type WritableBasketStatus,
 } from '@portfolio/velista/models';
-import { LiveBasketBadge } from '@portfolio/velista/platform';
+import { AppResumed, LiveBasketBadge } from '@portfolio/velista/platform';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -74,9 +75,7 @@ const SETTLE_REFRESH_MS = 1500;
 // Provided by the app layer, never root: rule D5, plan 0004 section 9.
 @Injectable()
 export class BasketListStore {
-  private readonly _service = inject<BasketListServiceI>(
-    BASKET_LIST_SERVICE
-  );
+  private readonly _service = inject<BasketListServiceI>(BASKET_LIST_SERVICE);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _badge = inject(LiveBasketBadge);
 
@@ -98,6 +97,12 @@ export class BasketListStore {
    * the deliberate way past it.
    */
   private _asked = false;
+
+  /** The app coming back, which is now this card's only news of a purchase. */
+  private readonly _resumed = inject(AppResumed);
+
+  /** The resume count this store last acted on. See the effect. */
+  private _actedOnResumes = 0;
 
   /** Every basket the caller has, newest first, in the order the server gave them. */
   readonly lists = this._lists.asReadonly();
@@ -177,31 +182,36 @@ export class BasketListStore {
     // entry point module federation does not dedupe, and a service several remotes
     // provide throws `NG0203` from it with a perfectly correct DI graph. Every other
     // store in this library says the same thing.
+    // The card reads again when the app comes back (velista `0090`, section 7.1).
+    //
+    // It used to hear a settle on the owner's own sessions, through four line
+    // events that carried a line. Those are gone with the line: a basket stores no
+    // rows, so a settle no longer reaches this room with anything in it, and
+    // backend `0130` section 7 names no successor. Until a backend plan gives one,
+    // a card is current on entry, on a header change, and here.
+    //
+    // A counter rather than a flag, for `AppResumed.resumes`' reason, and compared
+    // against what this last acted on: a resume is an edge, and a reader that
+    // missed it cannot tell it happened. Both start at zero, so the first run
+    // reads nothing.
+    effect(() => {
+      const resumes = this._resumed.resumes();
+      untracked(() => {
+        const moved = resumes !== this._actedOnResumes;
+        this._actedOnResumes = resumes;
+        // Nothing to bring up to date until something has been read, which is what
+        // stops a resume on a page that never asked for the listing from asking.
+        if (moved && this._asked) {
+          this._scheduleRefresh();
+        }
+      });
+    });
+
     const subscription = this._realtime.events.subscribe((event) => {
       switch (event.type) {
         case 'basket.created':
         case 'basket.updated':
           this._upsert(event.list);
-          break;
-        // `lineRemoved` is a merge by rename (velista `0084`), which takes a line
-        // away and moves `lineCount` exactly as an edit can.
-        case 'basket.lineSettled':
-        case 'basket.lineUpdated':
-        case 'basket.lineRemoved':
-          // Only for a basket this client is actually holding. A settle on one that
-          // was never read changes nothing on screen, and refetching for it would let
-          // any basket in the account drive requests from a page that is not showing
-          // it.
-          //
-          // `lineUpdated` joined it with velista `0048`, which is when this client
-          // learned the name at all. It is an edit rather than a settle, so it can
-          // move `lineCount` where a settle moves `settledLineCount`, and neither can
-          // be derived from one line: the summary says how many lines are finished,
-          // and knowing that one of them moved says nothing about whether it had
-          // already been counted. Both refetch, and the refetch is coalesced.
-          if (this._lists().some((list) => list.id === event.basketId)) {
-            this._scheduleRefresh();
-          }
           break;
         case 'basket.deleted':
           this._lists.update((lists) =>
@@ -418,14 +428,9 @@ export class BasketListStore {
    * basket this store is not holding, which is the ordinary case for a basket screen
    * opened without the history ever having been read.
    */
-  private _setStatusLocally(
-    basketId: string,
-    status: BasketStatus
-  ): void {
+  private _setStatusLocally(basketId: string, status: BasketStatus): void {
     this._lists.update((lists) =>
-      lists.map((list) =>
-        list.id === basketId ? { ...list, status } : list
-      )
+      lists.map((list) => (list.id === basketId ? { ...list, status } : list))
     );
   }
 

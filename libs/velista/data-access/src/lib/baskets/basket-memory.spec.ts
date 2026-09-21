@@ -1,718 +1,491 @@
+import type { BasketRow } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import { BasketMemory } from './basket-memory';
 
 /**
- * The fake, on the rules it exists to keep (velista `0054`, `0055` and `0056`).
+ * The fake that stands in for the server (velista `0090`, section 5.4).
  *
- * A spec over a fake looks odd until you remember what this one is for: every screen
- * in the three plans is developed and tested against it, so a fake that is kinder
- * than the server lets a bug through into a screen nobody can see is wrong until it
- * meets a real gateway.
+ * It exists to be **no kinder than the server**, so a screen developed against it
+ * meets the refusals the real one makes. What that means since backend `0136` is
+ * mostly one thing: it stores no rows. It holds lists with lines and the
+ * settlements this basket wrote, and derives the rows on every read by the table of
+ * backend `0130` section 4.
  *
- * So what is asserted here is exactly the set of refusals and the arithmetic the
- * screens branch on, and nothing about the fixture's contents beyond what those need.
+ * So the assertions here are about that derivation, in the table's own order, and
+ * about the two guards every write on a row goes through: the `from` it names, and
+ * whether the trip is over.
  */
-const ID = 'basket-saturday';
 
-/** The code on the refusal, or null when the call did not refuse at all. */
-async function refusal(run: () => Promise<unknown>): Promise<string | null> {
+const BASKET = 'basket-saturday';
+
+function rowOf(rows: readonly BasketRow[], content: string): BasketRow {
+  const found = rows.find((row) => row.content === content);
+  if (found === undefined) {
+    throw new Error(`no row for ${content}`);
+  }
+  return found;
+}
+
+async function rowsOf(memory: BasketMemory): Promise<readonly BasketRow[]> {
+  return (await memory.getBasket(BASKET)).rows;
+}
+
+async function codeOf(act: Promise<unknown>): Promise<string> {
   try {
-    await run();
-    return null;
+    await act;
   } catch (error) {
     return error instanceof GatewayError ? error.code : 'not-a-gateway-error';
   }
+  return 'no-error';
 }
 
-describe('BasketMemory: saying how many are still to get', () => {
-  it('refuses a `from` that is not where the line stands', async () => {
-    const memory = new BasketMemory();
+describe('BasketMemory: a row is read, never stored', () => {
+  /**
+   * The whole shape of the rewrite in one assertion. Two households both asking
+   * for milk are one thing to pick off one shelf, so they are one row with two
+   * entries, and the row's numbers are the sum of theirs.
+   */
+  it('groups the lines that share a name into one row with an entry each', async () => {
+    const rows = await rowsOf(new BasketMemory());
 
-    expect(
-      await refusal(() =>
-        memory.setOutstanding(ID, 'line-milk', { outstanding: 1, from: 99 })
-      )
-    ).toBe('stale_quantity');
+    const milk = rowOf(rows, 'Milk');
+    expect(milk.entries).toHaveLength(2);
+    expect(milk.left).toBe(3);
+    expect(milk.asked).toBe(3);
   });
 
-  it('raises the quantity and settles nothing when it goes up', async () => {
-    const memory = new BasketMemory();
+  /** The anchor is the oldest line of the group, and its id keys the row. */
+  it('keys a row by its oldest line', async () => {
+    const rows = await rowsOf(new BasketMemory());
 
-    const result = await memory.setOutstanding(ID, 'line-milk', {
-      outstanding: 5,
-      from: 3,
-    });
-
-    expect(result.line.quantity).toBe(5);
-    expect(result.line.settled).toBe(0);
-    expect(result.line.lastOutcome).toBeNull();
-    expect(result.skippedCount).toBe(0);
+    expect(rowOf(rows, 'Milk').rowKey).toBe('zl-1');
   });
 
-  it('settles the difference as bought when it goes down', async () => {
+  it('sums a row out of its entries and never out of a stored number', async () => {
     const memory = new BasketMemory();
+    const before = rowOf(await rowsOf(memory), 'Eggs');
 
-    const result = await memory.setOutstanding(ID, 'line-milk', {
-      outstanding: 1,
-      from: 3,
-    });
-
-    expect(result.line.settled).toBe(2);
-    expect(result.line.quantity).toBe(3);
-    expect(result.line.lastOutcome).toBe('BOUGHT');
-  });
-
-  it('succeeds and changes nothing when it ends where it began', async () => {
-    // A control that snapped back to where it started must not report a failure.
-    const memory = new BasketMemory();
-
-    const result = await memory.setOutstanding(ID, 'line-milk', {
-      outstanding: 3,
-      from: 3,
-    });
-
-    expect(result.line.quantity).toBe(3);
-    expect(result.line.settled).toBe(0);
-    expect(result.line.lastOutcome).toBeNull();
-  });
-
-  it('refuses a basket whose trip is over, with a code of its own', async () => {
-    // Not a plain conflict: "this list is finished" and "somebody already finished
-    // this line" are different sentences, and the screen picks between them by code.
-    const memory = new BasketMemory();
-    memory.status = 'FINISHED';
-
-    expect(
-      await refusal(() =>
-        memory.setOutstanding(ID, 'line-milk', { outstanding: 1, from: 3 })
-      )
-    ).toBe('basket_finished');
-  });
-});
-
-describe('BasketMemory: the lists on a line', () => {
-  it('refuses the whole read to a guest rather than answering it empty', async () => {
-    // A redacted answer here would be an empty sheet, which reads as "no household
-    // wants this" and is a worse lie than a refusal.
-    const memory = new BasketMemory();
-    memory.me = { ...memory.me, kind: 'GUEST' };
-
-    expect(await refusal(() => memory.getLineOrigins(ID, 'line-milk'))).toBe(
-      'forbidden'
-    );
-  });
-
-  it('refuses a reader who does not pass the all or nothing rule', async () => {
-    const memory = new BasketMemory();
-    memory.seesZoneData = false;
-
-    expect(await refusal(() => memory.getLineOrigins(ID, 'line-milk'))).toBe(
-      'forbidden'
-    );
-  });
-
-  it('answers the two households on the line, named, with their floors', async () => {
-    const memory = new BasketMemory();
-
-    const answer = await memory.getLineOrigins(ID, 'line-milk');
-
-    expect(answer.origins.map((origin) => origin.listName)).toEqual([
-      'Weekly shop',
-      'Groceries',
-    ]);
-    expect(answer.origins.map((origin) => origin.zoneName)).toEqual([
-      'Flat 3B',
-      'Parents’ house',
-    ]);
-    expect(answer.origins.map((origin) => origin.contributed)).toEqual([2, 1]);
-    expect(answer.origins.every((origin) => origin.settledHere === 0)).toBe(
-      true
-    );
-  });
-
-  it('offers both kinds of candidate, so a sheet cannot draw them alike', async () => {
-    // Adoptable, and one the household said no to. A fake with only the first
-    // would let a screen ship that draws every candidate as a reel.
-    // `NOT_APPROVED` and `SETTLED` are not among them, because backend `0092`
-    // section 3.2 made both adoptable, and neither is `CLAIMED`: backend `0133`
-    // section 7 made a line another basket carries adoptable too.
-    const memory = new BasketMemory();
-
-    const answer = await memory.getLineOrigins(ID, 'line-milk');
-
-    expect(answer.candidates.map((row) => row.unavailable)).toEqual([
-      null,
-      null,
-      'REJECTED',
-    ]);
-  });
-
-  it('puts every list in exactly one of the three collections', async () => {
-    // The partition backend `0092` states: a list is an origin, or it holds a
-    // matching line, or it holds none and raising it creates one. Milk reaches all
-    // five lists this fake knows, so its third collection is empty and that is the
-    // partition rather than a gap.
-    const memory = new BasketMemory();
-
-    const answer = await memory.getLineOrigins(ID, 'line-milk');
-
-    const seen = [
-      ...answer.origins.map((row) => row.listId),
-      ...answer.candidates.map((row) => row.listId),
-      ...answer.others.map((row) => row.listId),
-    ];
-    expect(new Set(seen).size).toBe(seen.length);
-    expect(answer.others).toEqual([]);
-  });
-
-  it('carries a floor on the line that has already had some bought', async () => {
-    const memory = new BasketMemory();
-
-    const answer = await memory.getLineOrigins(ID, 'line-eggs');
-
-    expect(answer.origins).toHaveLength(1);
-    expect(answer.origins[0].settledHere).toBe(2);
-  });
-
-  it('answers every list for a line somebody typed here', async () => {
-    // The case velista `0068` exists for. Nobody's list asked for it and the run
-    // never looked, so the first two collections are empty and honestly so; the
-    // third is every list, because that line is the one most worth putting on one.
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, { content: 'Foil' });
-
-    const answer = await memory.getLineOrigins(ID, added.id);
-
-    expect(answer.origins).toEqual([]);
-    expect(answer.candidates).toEqual([]);
-    expect(answer.others).toHaveLength(5);
-    expect(answer.others.filter((row) => row.fromRun)).toHaveLength(2);
-  });
-});
-
-describe('BasketMemory: what one list asked for', () => {
-  it('refuses a `from` that is not what the list is contributing', async () => {
-    const memory = new BasketMemory();
-
-    expect(
-      await refusal(() =>
-        memory.setOriginQuantity(ID, 'line-milk', {
-          listId: 'list-weekly',
-          lineId: 'zl-1',
-          quantity: 4,
-          from: 0,
-        })
-      )
-    ).toBe('stale_quantity');
-  });
-
-  it('refuses a contribution under what has already been bought', async () => {
-    // Two of the eggs having been bought for this list means the list cannot
-    // retroactively have wanted one.
-    const memory = new BasketMemory();
-
-    expect(
-      await refusal(() =>
-        memory.setOriginQuantity(ID, 'line-eggs', {
-          listId: 'list-weekly',
-          lineId: 'zl-3',
-          quantity: 1,
-          from: 12,
-        })
-      )
-    ).toBe('below_settled');
-  });
-
-  it('moves the line by the delta and buys nothing', async () => {
-    const memory = new BasketMemory();
-
-    const result = await memory.setOriginQuantity(ID, 'line-milk', {
-      listId: 'list-weekly',
-      lineId: 'zl-1',
-      quantity: 4,
-      from: 2,
-    });
-
-    expect(result.origin?.contributed).toBe(4);
-    expect(result.listQuantity).toBe(4);
-    expect(result.line.quantity).toBe(5);
-    expect(result.line.settled).toBe(0);
-    expect(result.line.lastOutcome).toBeNull();
-  });
-
-  it('takes the list off the line at zero, and says so with a null origin', async () => {
-    // The sheet has to drop the row rather than leave it drawn at its old number.
-    const memory = new BasketMemory();
-
-    const result = await memory.setOriginQuantity(ID, 'line-milk', {
-      listId: 'list-groceries',
-      lineId: 'zl-2',
-      quantity: 0,
-      from: 1,
-    });
-
-    expect(result.origin).toBeNull();
-    expect(result.line.origins?.map((origin) => origin.listId)).toEqual([
-      'list-weekly',
-    ]);
-    expect(result.line.quantity).toBe(2);
-  });
-
-  it('adopts a candidate as an origin, carrying the ids it was handed', async () => {
-    const memory = new BasketMemory();
-
-    const result = await memory.setOriginQuantity(ID, 'line-milk', {
-      listId: 'list-office',
-      lineId: 'zl-office-milk',
+    await memory.settle(BASKET, before.rowKey, {
+      outcome: 'BOUGHT',
       quantity: 2,
-      from: 0,
+      from: before.left,
     });
 
-    expect(result.origin?.listId).toBe('list-office');
-    expect(result.origin?.lineId).toBe('zl-office-milk');
-    expect(result.line.quantity).toBe(5);
-
-    // And it stops being a candidate, because it is on the line now.
-    const after = await memory.getLineOrigins(ID, 'line-milk');
-    expect(after.candidates.map((row) => row.listId)).not.toContain(
-      'list-office'
-    );
-  });
-
-  it('never lets a line ask for fewer than it has already bought', async () => {
-    const memory = new BasketMemory();
-
-    const result = await memory.setOriginQuantity(ID, 'line-eggs', {
-      listId: 'list-weekly',
-      lineId: 'zl-3',
-      quantity: 2,
-      from: 12,
-    });
-
-    expect(result.line.settled).toBe(2);
-    expect(result.line.quantity).toBe(2);
+    const after = rowOf(await rowsOf(memory), 'Eggs');
+    expect(after.bought).toBe(before.bought + 2);
+    expect(after.left).toBe(before.left - 2);
+    // `bought + left`, by backend `0130` section 4, on every read.
+    expect(after.asked).toBe(after.bought + after.left);
   });
 });
 
 /**
- * What one list **got** (velista `0073`, backend `0104` section 4).
+ * The state table of backend `0130` section 4, in the order it is tested.
  *
- * The opposite write to the block above, and the fake carries the whole rule rather
- * than a sketch of it: the settle sheet's summary is read against this, and a fake
- * that only moved one number would let a screen ship whose arithmetic does not add up.
+ * `SKIPPED` is absent because backend `0137` produces it and this fake models no
+ * skip. Its place in the order is kept by the class, so the day it arrives it goes
+ * where the table says rather than wherever it fits.
  */
-describe('BasketMemory: what one list got', () => {
-  it('refuses a `from` that is not what has been bought for that list', async () => {
-    const memory = new BasketMemory();
-
-    expect(
-      await refusal(() =>
-        memory.setOriginSettled(ID, 'line-eggs', {
-          lineId: 'zl-3',
-          settled: 4,
-          from: 0,
-        })
-      )
-    ).toBe('stale_quantity');
+describe('BasketMemory: the state of a row', () => {
+  it('is WANTED while nothing has been said about it', async () => {
+    expect(rowOf(await rowsOf(new BasketMemory()), 'Milk').state).toBe(
+      'WANTED'
+    );
   });
 
-  it('refuses a zone line that is not on this basket line', async () => {
-    const memory = new BasketMemory();
+  it('is PARTLY when some units were bought and some are left', async () => {
+    // Two of the eggs are bought in the fixture, and ten are still wanted.
+    const eggs = rowOf(await rowsOf(new BasketMemory()), 'Eggs');
 
-    expect(
-      await refusal(() =>
-        memory.setOriginSettled(ID, 'line-eggs', {
-          lineId: 'zl-nowhere',
-          settled: 1,
-          from: 0,
-        })
-      )
-    ).toBe('not_found');
+    expect(eggs.state).toBe('PARTLY');
+    expect(eggs.bought).toBe(2);
+    expect(eggs.left).toBeGreaterThan(0);
   });
 
-  it('records a purchase for that list and takes the outstanding amount down', async () => {
-    // Test 5 from the other side. Eggs stand at twelve asked for and two bought, so
-    // raising the flat to five buys three more against that list alone.
+  it('is DONE when nothing is left and something was bought', async () => {
     const memory = new BasketMemory();
+    const eggs = rowOf(await rowsOf(memory), 'Eggs');
 
-    const result = await memory.setOriginSettled(ID, 'line-eggs', {
-      lineId: 'zl-3',
-      settled: 5,
-      from: 2,
+    await memory.settle(BASKET, eggs.rowKey, {
+      outcome: 'BOUGHT',
+      quantity: eggs.left,
+      from: eggs.left,
     });
 
-    expect(result.origin?.settledHere).toBe(5);
-    expect(result.line.settled).toBe(5);
-    expect(result.line.quantity).toBe(12);
-    expect(result.line.lastOutcome).toBe('BOUGHT');
-    expect(result.skippedCount).toBe(0);
+    expect(rowOf(await rowsOf(memory), 'Eggs').state).toBe('DONE');
   });
 
-  it('takes a purchase back when the number goes down', async () => {
-    const memory = new BasketMemory();
+  /**
+   * It beats `DONE` in the order, and it has to: a close buys nothing, so a row
+   * whose shop had none would otherwise read as a purchase the moment its units
+   * went. The glyph and the caption both rest on the two being told apart.
+   */
+  it('is NOT_AVAILABLE when the newest act says the shop had none', async () => {
+    const bread = rowOf(await rowsOf(new BasketMemory()), 'Sourdough loaf');
 
-    const result = await memory.setOriginSettled(ID, 'line-eggs', {
-      lineId: 'zl-3',
-      settled: 0,
-      from: 2,
-    });
-
-    expect(result.origin?.settledHere).toBe(0);
-    expect(result.line.settled).toBe(0);
+    expect(bread.state).toBe('NOT_AVAILABLE');
+    expect(bread.bought).toBe(0);
   });
 
-  it('never lets a list have got more than it asked for', async () => {
-    // A shopper who bought more raises what the list asked for first, which is the
-    // other reel on the same row.
+  it('is NOT_AVAILABLE again after a close over a purchase', async () => {
     const memory = new BasketMemory();
+    const eggs = rowOf(await rowsOf(memory), 'Eggs');
 
-    const result = await memory.setOriginSettled(ID, 'line-milk', {
-      lineId: 'zl-1',
-      settled: 9,
-      from: 0,
-    });
-
-    expect(result.origin?.settledHere).toBe(2);
-  });
-
-  it('takes a `NOT_AVAILABLE` close back whole on any raise', async () => {
-    // Backend `0104` section 5. The bread was closed by a shop that had none, so
-    // there are no units divided among the lists and the close comes back entire.
-    // Its size is not a column: it is what is settled beyond what the origins
-    // account for, which is why the client must redraw from the answer.
-    const memory = new BasketMemory();
-
-    const result = await memory.setOriginSettled(ID, 'line-bread', {
-      lineId: 'zl-4',
-      settled: 1,
-      from: 0,
-    });
-
-    expect(result.origin?.settledHere).toBe(1);
-    expect(result.line.settled).toBe(1);
-    // The line was closed and is now bought, which is the whole difference.
-    expect(result.line.lastOutcome).toBe('BOUGHT');
-  });
-
-  it('refuses a reader who may not see zone data', async () => {
-    const memory = new BasketMemory();
-    memory.seesZoneData = false;
-
-    expect(
-      await refusal(() =>
-        memory.setOriginSettled(ID, 'line-eggs', {
-          lineId: 'zl-3',
-          settled: 3,
-          from: 2,
-        })
-      )
-    ).toBe('forbidden');
-  });
-
-  it('refuses it once the trip is finished', async () => {
-    const memory = new BasketMemory();
-    memory.status = 'FINISHED';
-
-    expect(
-      await refusal(() =>
-        memory.setOriginSettled(ID, 'line-eggs', {
-          lineId: 'zl-3',
-          settled: 3,
-          from: 2,
-        })
-      )
-    ).toBe('basket_finished');
-  });
-});
-
-describe('BasketMemory: raising a list that was asking for none', () => {
-  it('takes over the demand a candidate already has before it adds any', async () => {
-    // Backend `0092` section 4.1. The office kitchen asks for two on its own, so a
-    // basket asking it for two is taking those two over rather than pushing it to
-    // four. `0057` moved it by the whole contribution, and adopting at one pushed a
-    // list that already wanted one to two.
-    const memory = new BasketMemory();
-
-    const result = await memory.setOriginQuantity(ID, 'line-milk', {
-      listId: 'list-office',
-      lineId: 'zl-office-milk',
-      quantity: 2,
-      from: 0,
-    });
-
-    expect(result.origin?.contributed).toBe(2);
-    expect(result.listQuantity).toBe(2);
-    // The basket still buys all of it, which is the half that does move.
-    expect(result.line.quantity).toBe(5);
-  });
-
-  it('moves a candidate’s own line only by what is above what it asked for', async () => {
-    const memory = new BasketMemory();
-
-    const result = await memory.setOriginQuantity(ID, 'line-milk', {
-      listId: 'list-office',
-      lineId: 'zl-office-milk',
-      quantity: 3,
-      from: 0,
-    });
-
-    expect(result.listQuantity).toBe(3);
-  });
-
-  it('creates the line on a list holding none, with no zone line named', async () => {
-    // What raising a row of `others` means, and the whole of what replaced the send
-    // sheet: there is nothing for the client to name, because the line does not
-    // exist yet.
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, { content: 'Foil', quantity: 2 });
-
-    const result = await memory.setOriginQuantity(ID, added.id, {
-      listId: 'list-weekly',
-      quantity: 2,
-      from: 0,
-    });
-
-    expect(result.origin?.listId).toBe('list-weekly');
-    expect(result.origin?.lineId).not.toBe('');
-    expect(result.origin?.approvalStatus).toBe('APPROVED');
-    expect(result.listQuantity).toBe(2);
-    // Written once, at the add. Putting the line on a list does not make somebody
-    // else the person who typed it.
-    expect(result.line.createdBy).toBe(added.createdBy);
-  });
-
-  it('gives the list what the line was carrying for nobody rather than adding to it', async () => {
-    // The report of 2026-09-18. A line added by hand asks for one that no list
-    // asked for, so raising a list to one says that one is theirs. Adding to it
-    // told the shopper to buy two: one for the list and one for nobody.
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, { content: 'Foil', quantity: 1 });
-
-    const result = await memory.setOriginQuantity(ID, added.id, {
-      listId: 'list-weekly',
-      quantity: 1,
-      from: 0,
-    });
-
-    expect(result.origin?.contributed).toBe(1);
-    expect(result.line.quantity).toBe(1);
-  });
-
-  it('raises a hand added line by the part it was not already carrying', async () => {
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, { content: 'Foil', quantity: 2 });
-
-    const result = await memory.setOriginQuantity(ID, added.id, {
-      listId: 'list-weekly',
-      quantity: 5,
-      from: 0,
-    });
-
-    expect(result.line.quantity).toBe(5);
-  });
-
-  it('says a created line is waiting where the list does not accept on its own', async () => {
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, { content: 'Foil' });
-
-    const result = await memory.setOriginQuantity(ID, added.id, {
-      listId: 'list-groceries',
-      quantity: 1,
-      from: 0,
-    });
-
-    expect(result.origin?.approvalStatus).toBe('PENDING');
-  });
-
-  it('answers the line the add landed on, which is not always a new one', async () => {
-    // The name fold (backend `0092`, section 4.2): after `0091` the add answers the
-    // line it landed on, and it can be one the candidate read never offered. The
-    // sheet has to keep the answered id rather than the one it asked for.
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, { content: 'Foil' });
-
-    const result = await memory.setOriginQuantity(ID, added.id, {
-      listId: 'list-cabin',
-      quantity: 1,
-      from: 0,
-    });
-
-    expect(result.origin?.lineId).toBe('zl-cabin-existing');
-  });
-
-  it('costs nothing when a reel is let go where it started', async () => {
-    // Zero with no origin is a no op that answers success: the write never creates
-    // a zone line for none of something.
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, { content: 'Foil', quantity: 2 });
-
-    const result = await memory.setOriginQuantity(ID, added.id, {
-      listId: 'list-weekly',
-      quantity: 0,
-      from: 0,
-    });
-
-    expect(result.origin).toBeNull();
-    expect(result.line.origins).toEqual([]);
-    expect(result.line.quantity).toBe(2);
-  });
-
-  it('refuses a raise on a list this basket has already put the line on', async () => {
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, { content: 'Foil' });
-    await memory.setOriginQuantity(ID, added.id, {
-      listId: 'list-weekly',
-      quantity: 1,
-      from: 0,
-    });
-
-    expect(
-      await refusal(() =>
-        memory.setOriginQuantity(ID, added.id, {
-          listId: 'list-weekly',
-          quantity: 1,
-          from: 0,
-        })
-      )
-    ).toBe('stale_quantity');
-  });
-
-  it('refuses a basket whose trip is over', async () => {
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, { content: 'Foil' });
-    memory.status = 'FINISHED';
-
-    expect(
-      await refusal(() =>
-        memory.setOriginQuantity(ID, added.id, {
-          listId: 'list-weekly',
-          quantity: 1,
-          from: 0,
-        })
-      )
-    ).toBe('basket_finished');
-  });
-
-  it('brings home the units bought before the line reached any list', async () => {
-    // Backend `0093`. Somebody adds batteries, buys four, and sends the line home
-    // afterwards: the four are recorded when they happen and land on the first list
-    // the line reaches, up to what that list asked for.
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, {
-      content: 'Batteries',
-      quantity: 4,
-    });
-    const bought = await memory.settle(ID, added.id, { outcome: 'BOUGHT' });
-    expect(bought.line.waitingSettled).toBe(4);
-
-    const result = await memory.setOriginQuantity(ID, added.id, {
-      listId: 'list-weekly',
-      quantity: 4,
-      from: 0,
-    });
-
-    expect(result.origin?.settledHere).toBe(4);
-    expect(result.line.waitingSettled).toBe(0);
-  });
-
-  it('leaves what one list could not take waiting for the next', async () => {
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, {
-      content: 'Batteries',
-      quantity: 4,
-    });
-    await memory.settle(ID, added.id, { outcome: 'BOUGHT' });
-
-    const first = await memory.setOriginQuantity(ID, added.id, {
-      listId: 'list-weekly',
-      quantity: 1,
-      from: 0,
-    });
-
-    expect(first.origin?.settledHere).toBe(1);
-    expect(first.line.waitingSettled).toBe(3);
-
-    // And the next list the line reaches takes what is left of them.
-    const second = await memory.setOriginQuantity(ID, added.id, {
-      listId: 'list-office',
-      quantity: 3,
-      from: 0,
-    });
-
-    expect(second.origin?.settledHere).toBe(3);
-    expect(second.line.waitingSettled).toBe(0);
-  });
-
-  it('waits for nothing on a shop that had none', async () => {
-    // `NOT_AVAILABLE` closes the outstanding amount and claims no purchase, so it is
-    // about the product rather than about units and adds nothing to the total.
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, {
-      content: 'Batteries',
-      quantity: 4,
-    });
-
-    const result = await memory.settle(ID, added.id, {
+    await memory.settle(BASKET, eggs.rowKey, {
       outcome: 'NOT_AVAILABLE',
+      from: eggs.left,
     });
 
-    expect(result.line.waitingSettled).toBe(0);
-  });
-
-  it('has nothing waiting on a line the run composed', async () => {
-    // It had lists from the start, so every purchase against it was recorded on one.
-    const memory = new BasketMemory();
-
-    const result = await memory.settle(ID, 'line-milk', { outcome: 'BOUGHT' });
-
-    expect(result.line.waitingSettled).toBe(0);
-  });
-
-  it('refuses the write to a guest', async () => {
-    const memory = new BasketMemory();
-    memory.me = { ...memory.me, kind: 'GUEST' };
-
-    expect(
-      await refusal(() =>
-        memory.setOriginQuantity(ID, 'line-milk', {
-          listId: 'list-cabin',
-          quantity: 1,
-          from: 0,
-        })
-      )
-    ).toBe('forbidden');
+    const after = rowOf(await rowsOf(memory), 'Eggs');
+    expect(after.state).toBe('NOT_AVAILABLE');
+    // The units somebody did buy are still bought: a close says the shop had no
+    // more, not that the trolley was emptied.
+    expect(after.bought).toBe(2);
   });
 });
 
-describe('BasketMemory: what a reader who may not see zone data gets', () => {
-  it('strips `targetListId` beside `origins`, rather than nulling it', async () => {
-    // The two are the same fact: which household's list a line reaches. Null is a
-    // real answer here, meaning sent nowhere, and the send control is offered over
-    // it, so a redacted line must not read that way.
+describe('BasketMemory: the counts', () => {
+  /** Over rows that are not `REMOVED`, which is the server's rule. */
+  it('counts done, unavailable and the total', async () => {
+    const basket = await new BasketMemory().getBasket(BASKET);
+
+    expect(basket.progress).toEqual({ done: 0, unavailable: 1, total: 3 });
+  });
+
+  /** `total - done - unavailable`. The client never works it out. */
+  it('answers pending beside the progress', async () => {
+    const basket = await new BasketMemory().getBasket(BASKET);
+
+    expect(basket.pending).toBe(2);
+  });
+
+  it('moves the counts as a row finishes', async () => {
     const memory = new BasketMemory();
-    memory.seesZoneData = false;
+    const eggs = rowOf(await rowsOf(memory), 'Eggs');
 
-    const basket = await memory.getBasket();
+    await memory.settle(BASKET, eggs.rowKey, {
+      outcome: 'BOUGHT',
+      quantity: eggs.left,
+      from: eggs.left,
+    });
 
-    for (const line of basket.lines) {
-      expect('origins' in line).toBe(false);
-      expect('targetListId' in line).toBe(false);
+    const basket = await memory.getBasket(BASKET);
+    expect(basket.progress.done).toBe(1);
+    expect(basket.pending).toBe(1);
+  });
+});
+
+describe('BasketMemory: settling a row', () => {
+  /**
+   * Two phones in one shop moving one row is the ordinary case, and a gesture
+   * whose meaning depends on where it started must be refused rather than
+   * reinterpreted (velista `0054`).
+   */
+  it('refuses a `from` that is not where the row stands', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+
+    expect(
+      await codeOf(
+        memory.settle(BASKET, milk.rowKey, {
+          outcome: 'BOUGHT',
+          quantity: 1,
+          from: milk.left + 1,
+        })
+      )
+    ).toBe('stale_quantity');
+  });
+
+  /** Oldest entry first, up to what it still asks for, which is the server's rule. */
+  it('divides the units oldest entry first when the caller names none', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+
+    await memory.settle(BASKET, milk.rowKey, {
+      outcome: 'BOUGHT',
+      quantity: 2,
+      from: milk.left,
+    });
+
+    const after = rowOf(await rowsOf(memory), 'Milk');
+    // The anchor asked for two and got both; the second household got none yet.
+    expect(after.entries[0].bought).toBe(2);
+    expect(after.entries[1].bought).toBe(0);
+  });
+
+  it('charges one named entry when the caller allocates by hand', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+    const second = milk.entries[1];
+
+    await memory.settle(BASKET, milk.rowKey, {
+      outcome: 'BOUGHT',
+      quantity: 1,
+      from: milk.left,
+      allocations: [{ lineId: second.lineId, quantity: 1 }],
+    });
+
+    const after = rowOf(await rowsOf(memory), 'Milk');
+    expect(after.entries[0].bought).toBe(0);
+    expect(
+      after.entries.find((entry) => entry.lineId === second.lineId)?.bought
+    ).toBe(1);
+  });
+
+  /**
+   * The server does not cap an absent quantity at what the row asks for any more:
+   * buying three of a row that says two records three, because the extra unit is
+   * real and belongs in the consumption history.
+   */
+  it('records more than the row asked for rather than capping it', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+
+    await memory.settle(BASKET, milk.rowKey, {
+      outcome: 'BOUGHT',
+      quantity: milk.left + 2,
+      from: milk.left,
+    });
+
+    const after = rowOf(await rowsOf(memory), 'Milk');
+    expect(after.bought).toBe(milk.left + 2);
+    expect(after.left).toBe(0);
+  });
+
+  /**
+   * A row whose anchor was just bought to zero must not turn the next tap on the
+   * same row into a not found, which is why any entry's id addresses it.
+   */
+  it('answers a write addressed by any entry’s line id', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+
+    const result = await memory.settle(BASKET, milk.entries[1].lineId, {
+      outcome: 'BOUGHT',
+      quantity: 1,
+      from: milk.left,
+    });
+
+    expect(result.row.rowKey).toBe(milk.rowKey);
+  });
+
+  it('answers the row and the counts, never a delta', async () => {
+    const memory = new BasketMemory();
+    const eggs = rowOf(await rowsOf(memory), 'Eggs');
+
+    const result = await memory.settle(BASKET, eggs.rowKey, {
+      outcome: 'BOUGHT',
+      quantity: 1,
+      from: eggs.left,
+    });
+
+    expect(result.row.content).toBe('Eggs');
+    expect(result.progress.total).toBe(3);
+    expect(result.pending).toBe(2);
+    expect(result.replacedRowKey).toBeNull();
+  });
+
+  it('refuses a basket whose trip is over, with a code of its own', async () => {
+    const memory = new BasketMemory();
+    const eggs = rowOf(await rowsOf(memory), 'Eggs');
+    memory.status = 'FINISHED';
+
+    expect(
+      await codeOf(
+        memory.settle(BASKET, eggs.rowKey, {
+          outcome: 'BOUGHT',
+          quantity: 1,
+          from: eggs.left,
+        })
+      )
+    ).toBe('basket_finished');
+  });
+});
+
+describe('BasketMemory: taking a row back', () => {
+  it('gives units back, newest purchase first', async () => {
+    const memory = new BasketMemory();
+    const eggs = rowOf(await rowsOf(memory), 'Eggs');
+
+    await memory.revert(BASKET, eggs.rowKey, {
+      target: 'UNITS',
+      units: 1,
+      from: eggs.bought,
+    });
+
+    const after = rowOf(await rowsOf(memory), 'Eggs');
+    expect(after.bought).toBe(1);
+  });
+
+  it('refuses a `from` that is not what the row has bought', async () => {
+    const memory = new BasketMemory();
+    const eggs = rowOf(await rowsOf(memory), 'Eggs');
+
+    expect(
+      await codeOf(
+        memory.revert(BASKET, eggs.rowKey, {
+          target: 'UNITS',
+          units: 1,
+          from: eggs.bought + 5,
+        })
+      )
+    ).toBe('stale_quantity');
+  });
+
+  /**
+   * A close holds no units, so that branch has no number to take back and no
+   * `from` to check it against: the two targets are one gesture aimed twice.
+   */
+  it('takes a close back, which restores the row to what it asks for', async () => {
+    const memory = new BasketMemory();
+    const bread = rowOf(await rowsOf(memory), 'Sourdough loaf');
+
+    await memory.revert(BASKET, bread.rowKey, { target: 'CLOSE' });
+
+    const after = rowOf(await rowsOf(memory), 'Sourdough loaf');
+    expect(after.state).toBe('WANTED');
+    expect(after.left).toBe(bread.left);
+  });
+
+  it('refuses a close on a row that has none', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+
+    expect(
+      await codeOf(memory.revert(BASKET, milk.rowKey, { target: 'CLOSE' }))
+    ).toBe('validation_failed');
+  });
+});
+
+describe('BasketMemory: renaming a row', () => {
+  it('renames every line inside the row', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+
+    await memory.renameRow(BASKET, milk.rowKey, { content: 'Whole milk' });
+
+    const after = rowOf(await rowsOf(memory), 'Whole milk');
+    expect(after.entries).toHaveLength(2);
+  });
+
+  /**
+   * A name already on the basket is refused until the same request carries the
+   * confirmation, which is backend `0113`'s rule and what the sheet's merge
+   * question exists to ask.
+   */
+  it('refuses a name another row already holds, until the merge is confirmed', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+
+    expect(
+      await codeOf(memory.renameRow(BASKET, milk.rowKey, { content: 'Eggs' }))
+    ).toBe('line_merge_required');
+
+    const result = await memory.renameRow(BASKET, milk.rowKey, {
+      content: 'Eggs',
+      confirmMerge: true,
+    });
+    expect(result.row.content).toBe('Eggs');
+  });
+
+  it('refuses a blank name', async () => {
+    const memory = new BasketMemory();
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+
+    expect(
+      await codeOf(memory.renameRow(BASKET, milk.rowKey, { content: '   ' }))
+    ).toBe('validation_failed');
+  });
+});
+
+/**
+ * Redaction, which is one collection since backend `0136`: the covered lists this
+ * reader holds `WRITE` on, and no others.
+ */
+describe('BasketMemory: what a reader is served', () => {
+  it('serves the covered lists to a reader who writes them', async () => {
+    const basket = await new BasketMemory().getBasket(BASKET);
+
+    expect(basket.lists.map((ref) => ref.listId)).toEqual([
+      'list-weekly',
+      'list-groceries',
+    ]);
+  });
+
+  /**
+   * A guest is served no ref at all, so every entry they hold names no list: they
+   * know how much and never where.
+   */
+  it('serves a guest no list, and no entry they can place', async () => {
+    const memory = new BasketMemory();
+    memory.servesLists = false;
+
+    const basket = await memory.getBasket(BASKET);
+
+    expect(basket.lists).toEqual([]);
+    expect(
+      basket.rows.flatMap((row) => row.entries.map((entry) => entry.listId))
+    ).toEqual(basket.rows.flatMap((row) => row.entries.map(() => null)));
+  });
+
+  /**
+   * A list the basket covers but the reader does not write. It is in the fixture
+   * so the "Other lists" heading and the unplaceable entry are reachable without a
+   * second fake.
+   */
+  it('leaves an entry on a covered list it served no ref for unplaceable', async () => {
+    const basket = await new BasketMemory().getBasket(BASKET);
+
+    const eggs = rowOf(basket.rows, 'Eggs');
+    expect(eggs.entries.some((entry) => entry.listId === null)).toBe(true);
+  });
+
+  /** The shops are the owner's geography, and a guest is served the chain alone. */
+  it('serves a guest the chain and no shop', async () => {
+    const memory = new BasketMemory();
+    memory.servesLists = false;
+
+    const basket = await memory.getBasket(BASKET);
+
+    for (const scope of basket.scopes.values()) {
+      expect(scope.locations).toEqual([]);
+      expect(scope.supermarketName.en).not.toBe('');
     }
   });
+});
 
-  it('marks a line a person typed as `ADDED`, and the run’s as `DERIVED`', async () => {
-    // Not gated, unlike the two above: every reader is told what kind of line they
-    // are looking at, and what is withheld is which household it touches.
-    const memory = new BasketMemory();
-    const added = await memory.addLine(ID, { content: 'Foil' });
-    const basket = await memory.getBasket();
+describe('BasketMemory: what a row says about approval', () => {
+  /**
+   * A line raised onto a list that vets its lines is waiting, and the row is the
+   * only thing standing there to say so. It stays buyable either way (backend
+   * `0130`, section 3).
+   */
+  it('says a row is awaiting approval while any entry is', async () => {
+    const rows = await rowsOf(new BasketMemory());
 
-    expect(added.kind).toBe('ADDED');
-    expect(added.targetListId).toBeNull();
+    const milk = rowOf(rows, 'Milk');
+    expect(milk.awaitingApproval).toBe(true);
+    expect(milk.entries.some((entry) => entry.awaitingApproval)).toBe(true);
+    // And still a thing to buy.
+    expect(milk.state).toBe('WANTED');
+  });
+
+  it('says nothing about approval on a row every household agreed to', async () => {
     expect(
-      basket.lines
-        .filter((line) => line.id !== added.id)
-        .every((line) => line.kind === 'DERIVED')
-    ).toBe(true);
+      rowOf(await rowsOf(new BasketMemory()), 'Sourdough loaf').awaitingApproval
+    ).toBe(false);
+  });
+
+  /**
+   * No client can compute it: a reader never learns the owner's permissions, and a
+   * guest has none of their own to ask about. So the server answers, per entry.
+   */
+  it('serves demandEditable per entry', async () => {
+    const eggs = rowOf(await rowsOf(new BasketMemory()), 'Eggs');
+
+    expect(eggs.entries.map((entry) => entry.demandEditable)).toEqual([
+      true,
+      false,
+    ]);
   });
 });

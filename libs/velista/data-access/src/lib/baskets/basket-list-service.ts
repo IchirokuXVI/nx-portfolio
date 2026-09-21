@@ -1,9 +1,9 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
-  CreateBasketRequest,
   BasketRun,
   BasketSummary,
+  CreateBasketRequest,
   Page,
   SharedBasketSummary,
   WritableBasketStatus,
@@ -76,10 +76,7 @@ export interface BasketListServiceI {
    * `BasketListStore` flips the status it already holds, and every open basket,
    * this caller's included, is told over the socket by `basket.updated`.
    */
-  setStatus(
-    basketId: string,
-    status: WritableBasketStatus
-  ): Promise<void>;
+  setStatus(basketId: string, status: WritableBasketStatus): Promise<void>;
 }
 
 /**

@@ -71,6 +71,25 @@ export function oneOf<T extends string>(
 }
 
 /**
+ * One of a union, or null for anything else.
+ *
+ * {@link oneOf} with no value to fall back on, for a field whose absence is a
+ * real answer rather than a failure to read one: a basket row's note and its
+ * change mark are captions some rows carry, so a value this build does not know
+ * draws nothing, where a guess would put a sentence under a row that has no
+ * claim to it (velista `0090`, section 3.1).
+ */
+export function oneOfOrNull<T extends string>(
+  value: unknown,
+  allowed: readonly T[]
+): T | null {
+  return typeof value === 'string' &&
+    (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : null;
+}
+
+/**
  * An ISO 8601 timestamp.
  *
  * Returns `null` for anything unparseable, including a string that `Date` accepts but

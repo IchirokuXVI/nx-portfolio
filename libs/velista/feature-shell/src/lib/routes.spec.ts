@@ -759,7 +759,7 @@ describe('AppShellRoutes', () => {
       // paths share a prefix.
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
         [
-          'sheet/lines/:lineId/settle',
+          'sheet/rows/:rowKey/settle',
           'sheet/people',
           'sheet/share',
           'sheet/finish',

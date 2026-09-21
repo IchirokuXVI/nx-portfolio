@@ -1,43 +1,29 @@
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
-  BasketAddLineRequest,
-  BasketLine,
-  BasketLineOrigins,
+  Basket,
   BasketLinkPreview,
-  BasketOriginQuantityRequest,
-  BasketOriginQuantityResult,
-  BasketOriginSettledRequest,
-  BasketOriginSettledResult,
-  BasketOutstandingRequest,
   BasketParticipant,
   BasketRenameRequest,
   BasketRenameResult,
+  BasketRevertRequest,
+  BasketRowResult,
   BasketSession,
   BasketSettleRequest,
-  BasketSettleResult,
   BasketShareLink,
-  BasketSplitRequest,
-  BasketSplitResult,
-  BasketView,
   CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { anonymous, operation } from '../auth/http-context';
 import {
-  toBasketLine,
-  toBasketLineOrigins,
+  toBasket,
   toBasketLinkPreview,
-  toBasketOriginQuantityResult,
-  toBasketOriginSettledResult,
   toBasketParticipant,
   toBasketRenameResult,
+  toBasketRowResult,
   toBasketSession,
-  toBasketSettleResult,
   toBasketShareLink,
-  toBasketSplitResult,
-  toBasketView,
 } from '../mapping/basket-mappers';
 import { toCatalogSuggestion } from '../mapping/mappers';
 import { isRecord, mapArray } from '../mapping/primitives';
@@ -55,6 +41,17 @@ import { BasketSessionStore } from './basket-session-store';
  * type, so importing this one would pull the whole barrel in at runtime.
  */
 export const PARTICIPANT_SECRET_HEADER = 'x-participant-secret';
+
+/**
+ * Where a basket lives: its own rows, and its sharing half too (backend `0144`).
+ *
+ * A constant rather than a string at each call site, because eleven template
+ * literals name it. Backend `0136` served the rows from here and left the
+ * participant token, the share link, the participants and leaving under the old
+ * path; backend `0144` moved those here as well, so one constant answers for
+ * every call this file makes.
+ */
+const BASKETS = '/v1/baskets';
 
 /**
  * The shared basket over HTTP. The default behind `BASKET_SERVICE`.
@@ -149,203 +146,105 @@ export class BasketApi implements BasketServiceI {
 
   // --- The participant surface ----------------------------------------------
 
-  async getBasket(basketId: string): Promise<BasketView> {
+  async getBasket(basketId: string): Promise<Basket> {
     const body = await firstValueFrom(
       this._http.get<unknown>(
-        `${this._basket(basketId)}/basket`,
+        this._basket(basketId),
         this._participantOptions(basketId, 'basket.get')
       )
     );
 
-    return required(toBasketView(body), 'basket.get');
+    return required(toBasket(body), 'basket.get');
   }
 
+  /**
+   * Say what happened to a row at the shelf.
+   *
+   * The optional fields are **omitted rather than sent undefined**, which is this
+   * file's rule everywhere: the server validates `itemId` as a uuid and refuses a
+   * `quantity` on a `NOT_AVAILABLE`, so a key present and empty is a refusal
+   * where an absent one is the branch the caller meant.
+   *
+   * The allocations are copied rather than passed through, because the caller's
+   * array can be a signal's value on a live pane and this request is
+   * asynchronous.
+   */
   async settle(
     basketId: string,
-    lineId: string,
+    rowKey: string,
     body: BasketSettleRequest
-  ): Promise<BasketSettleResult> {
-    const answer = await firstValueFrom(
-      this._http.post<unknown>(
-        `${this._line(basketId, lineId)}/settle`,
-        body,
-        this._participantOptions(basketId, 'basket.settle')
-      )
-    );
-
-    return required(toBasketSettleResult(answer), 'basket.settle');
-  }
-
-  async reopen(
-    basketId: string,
-    lineId: string
-  ): Promise<BasketSettleResult> {
-    const answer = await firstValueFrom(
-      this._http.post<unknown>(
-        `${this._line(basketId, lineId)}/reopen`,
-        {},
-        // The same participant credential as the settle, because it is the same
-        // authorization: any live participant may reopen a line, guests included
-        // (luna `0054`, section 3.5).
-        this._participantOptions(basketId, 'basket.reopen')
-      )
-    );
-
-    return required(toBasketSettleResult(answer), 'basket.reopen');
-  }
-
-  /**
-   * Say how many are still to get (velista `0054`).
-   *
-   * The participant credential, like every other write on this surface: the gesture
-   * is made in an aisle by whoever is holding the phone, which is very often not the
-   * person who wrote the list.
-   */
-  async setOutstanding(
-    basketId: string,
-    lineId: string,
-    body: BasketOutstandingRequest
-  ): Promise<BasketSettleResult> {
-    const answer = await firstValueFrom(
-      this._http.post<unknown>(
-        `${this._line(basketId, lineId)}/outstanding`,
-        body,
-        this._participantOptions(basketId, 'basket.outstanding')
-      )
-    );
-
-    return required(toBasketSettleResult(answer), 'basket.outstanding');
-  }
-
-  /**
-   * Which lists are on this line, and which could be (velista `0055`).
-   *
-   * The same participant credential, and the server is what refuses it to a guest.
-   * There is no check here, on purpose: a client side gate would be a second answer
-   * to a question the gateway already answers per request, against the database, and
-   * the two would eventually disagree.
-   */
-  async getLineOrigins(
-    basketId: string,
-    lineId: string
-  ): Promise<BasketLineOrigins> {
-    const body = await firstValueFrom(
-      this._http.get<unknown>(
-        `${this._line(basketId, lineId)}/origins`,
-        this._participantOptions(basketId, 'basket.origins')
-      )
-    );
-
-    return required(toBasketLineOrigins(body), 'basket.origins');
-  }
-
-  /**
-   * Set what one list contributes to this line (velista `0055`).
-   *
-   * The zone line is **omitted rather than sent undefined** when there is none,
-   * which is `addLine`'s rule and matters for the same reason: the gateway validates
-   * `lineId` as a uuid, so a key present and empty is a refusal where an absent one
-   * is the create branch that raising a list with no such line depends on.
-   */
-  async setOriginQuantity(
-    basketId: string,
-    lineId: string,
-    body: BasketOriginQuantityRequest
-  ): Promise<BasketOriginQuantityResult> {
+  ): Promise<BasketRowResult> {
     const request: Record<string, unknown> = {
-      listId: body.listId,
-      quantity: body.quantity,
+      outcome: body.outcome,
       from: body.from,
     };
-    if (body.lineId !== undefined) {
-      request['lineId'] = body.lineId;
+    if (body.quantity !== undefined) {
+      request['quantity'] = body.quantity;
+    }
+    if (body.itemId !== undefined) {
+      request['itemId'] = body.itemId;
+    }
+    if (body.allocations !== undefined && body.allocations.length > 0) {
+      request['allocations'] = body.allocations.map((allocation) => ({
+        lineId: allocation.lineId,
+        quantity: allocation.quantity,
+      }));
     }
 
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._line(basketId, lineId)}/origins`,
+        `${this._row(basketId, rowKey)}/settle`,
         request,
-        this._participantOptions(basketId, 'basket.setOriginQuantity')
+        this._participantOptions(basketId, 'basket.settle')
       )
     );
 
-    return required(
-      toBasketOriginQuantityResult(answer),
-      'basket.setOriginQuantity'
-    );
+    return required(toBasketRowResult(answer), 'basket.settle');
   }
 
   /**
-   * Set how many of a line one list has got (velista `0073`, backend `0104`).
+   * Take units, or a close, back off a row.
    *
-   * A second route beside the one above rather than a flag on it, because the two
-   * are opposite acts: that one changes what a household asked for and buys
-   * nothing, and this one records or takes back a purchase for one list.
+   * The two branches send different bodies rather than one body with optional
+   * halves, because that is what they are: the server requires `units` and `from`
+   * on `UNITS` and refuses them on `CLOSE`, and a close has no number to take
+   * back.
    *
-   * The zone line is sent plainly, without the sibling's omit dance: it is required
-   * here, and a list holding no line of this cannot have got any of it.
+   * The same participant credential as the settle, because it is the same
+   * authorization: any live participant may, guests included (luna `0054`,
+   * section 3.5).
    */
-  async setOriginSettled(
+  async revert(
     basketId: string,
-    lineId: string,
-    body: BasketOriginSettledRequest
-  ): Promise<BasketOriginSettledResult> {
+    rowKey: string,
+    body: BasketRevertRequest
+  ): Promise<BasketRowResult> {
+    const request =
+      body.target === 'UNITS'
+        ? { target: 'UNITS', units: body.units, from: body.from }
+        : { target: 'CLOSE' };
+
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._line(basketId, lineId)}/origins/settled`,
-        { lineId: body.lineId, settled: body.settled, from: body.from },
-        this._participantOptions(basketId, 'basket.setOriginSettled')
+        `${this._row(basketId, rowKey)}/revert`,
+        request,
+        this._participantOptions(basketId, 'basket.revert')
       )
     );
 
-    return required(
-      toBasketOriginSettledResult(answer),
-      'basket.setOriginSettled'
-    );
+    return required(toBasketRowResult(answer), 'basket.revert');
   }
 
   /**
-   * Give units of a line to other products, which splits the line.
-   *
-   * `…/products` and not `…/pick`, which this replaces: moving every outstanding
-   * unit to one other product is this write with one share, and two routes would
-   * be two rules about which product a settlement records.
-   *
-   * The shares are copied rather than passed through, because the caller's array
-   * is a signal's value on a live pane and this request is asynchronous.
-   */
-  async splitLine(
-    basketId: string,
-    lineId: string,
-    body: BasketSplitRequest
-  ): Promise<BasketSplitResult> {
-    const answer = await firstValueFrom(
-      this._http.post<unknown>(
-        `${this._line(basketId, lineId)}/products`,
-        {
-          from: body.from,
-          shares: body.shares.map((share) => ({
-            itemId: share.itemId,
-            quantity: share.quantity,
-          })),
-        },
-        this._participantOptions(basketId, 'basket.splitLine')
-      )
-    );
-
-    return required(toBasketSplitResult(answer), 'basket.splitLine');
-  }
-
-  /**
-   * Rename a basket line, and the zone lines it came from (velista `0084`).
+   * Rename a row, and every list line inside it (velista `0084`).
    *
    * `confirmMerge` is **omitted unless true**, so the first request always asks: a
    * body that carried `false` would mean the same thing today and would be one
    * refactor away from carrying `true` by accident.
    */
-  async renameLine(
+  async renameRow(
     basketId: string,
-    lineId: string,
+    rowKey: string,
     body: BasketRenameRequest
   ): Promise<BasketRenameResult> {
     const request: Record<string, unknown> = { content: body.content };
@@ -355,62 +254,22 @@ export class BasketApi implements BasketServiceI {
 
     const answer = await firstValueFrom(
       this._http.patch<unknown>(
-        `${this._basket(basketId)}/basket/lines/${encodeURIComponent(
-          lineId
-        )}`,
+        this._row(basketId, rowKey),
         request,
-        this._participantOptions(basketId, 'basket.renameLine')
+        this._participantOptions(basketId, 'basket.renameRow')
       )
     );
 
-    return required(toBasketRenameResult(answer), 'basket.renameLine');
-  }
-
-  /**
-   * Put a line in the basket, as whichever kind of participant is holding it.
-   *
-   * `basket/lines` and not `lines`: the second is the **owner's** add on the account
-   * surface, resolved by `ownerUserId`, and a guest with a perfectly valid session
-   * gets a not found from it. See {@link BasketServiceI.addLine}.
-   *
-   * The optional fields are **omitted rather than sent undefined**, which is
-   * `LineApi.addLine`'s rule and matters more here: the server validates `itemId` as
-   * a uuid and `options` as an array of them, so a key present and empty is a
-   * refusal where an absent one is a free text line.
-   */
-  async addLine(
-    basketId: string,
-    body: BasketAddLineRequest
-  ): Promise<BasketLine> {
-    const request: Record<string, unknown> = { content: body.content };
-    if (body.quantity !== undefined) {
-      request['quantity'] = body.quantity;
-    }
-    if (body.itemId !== undefined) {
-      request['itemId'] = body.itemId;
-    }
-    if (body.options !== undefined && body.options.length > 0) {
-      request['options'] = [...body.options];
-    }
-
-    const answer = await firstValueFrom(
-      this._http.post<unknown>(
-        `${this._basket(basketId)}/basket/lines`,
-        request,
-        this._participantOptions(basketId, 'basket.addLine')
-      )
-    );
-
-    return required(toBasketLine(answer), 'basket.addLine');
+    return required(toBasketRenameResult(answer), 'basket.renameRow');
   }
 
   /**
    * The catalog, searched through the basket rather than through an account.
    *
    * No scope goes out with it, and that is the route's design rather than an
-   * omission on this side: the ranking is the **run's**, which the gateway resolves
-   * from the basket's own snapshot. A guest naming where to price a stranger's
-   * basket is not a thing the server accepts.
+   * omission on this side: the ranking is the **basket's**, which the gateway
+   * resolves from the basket's own pricing profile. A guest naming where to price
+   * a stranger's basket is not a thing the server accepts.
    *
    * **Empty rather than thrown**, exactly as `CatalogApi.suggest` is: a dropdown is
    * an offer, and the one thing this must never do is make adding a line fail
@@ -422,13 +281,10 @@ export class BasketApi implements BasketServiceI {
   ): Promise<readonly CatalogSuggestion[]> {
     try {
       const body = await firstValueFrom(
-        this._http.get<unknown>(
-          `${this._basket(basketId)}/catalog/suggest`,
-          {
-            ...this._participantOptions(basketId, 'basket.suggest'),
-            params: new HttpParams().set('q', query),
-          }
-        )
+        this._http.get<unknown>(`${this._basket(basketId)}/catalog/suggest`, {
+          ...this._participantOptions(basketId, 'basket.suggest'),
+          params: new HttpParams().set('q', query),
+        })
       );
 
       // The order is the server's and is never re-sorted here, for the reason
@@ -469,7 +325,10 @@ export class BasketApi implements BasketServiceI {
 
     const held = this._sessions.read(basketId);
     const refreshed = required(
-      toBasketSession({ ...(body as object), basketId }),
+      toBasketSession({
+        ...(body as object),
+        basketId: basketId,
+      }),
       'basket.socketToken'
     );
     // The refresh answers a token and a participant, never a session secret:
@@ -514,15 +373,12 @@ export class BasketApi implements BasketServiceI {
     cascade = false
   ): Promise<{ revoked: number }> {
     const body = await firstValueFrom(
-      this._http.delete<unknown>(
-        `${this._basket(basketId)}/share-link`,
-        {
-          // Always sent explicitly, never left to the server's default: the two
-          // outcomes differ by whether three people are thrown out of a shop.
-          params: new HttpParams().set('revokeParticipants', cascade),
-          context: operation('basket.shareLink.revoke'),
-        }
-      )
+      this._http.delete<unknown>(`${this._basket(basketId)}/share-link`, {
+        // Always sent explicitly, never left to the server's default: the two
+        // outcomes differ by whether three people are thrown out of a shop.
+        params: new HttpParams().set('revokeParticipants', cascade),
+        context: operation('basket.shareLink.revoke'),
+      })
     );
 
     const revoked = (body as { revoked?: unknown } | null)?.revoked;
@@ -589,14 +445,20 @@ export class BasketApi implements BasketServiceI {
       : { context: operation(name) };
   }
 
+  /**
+   * One basket's path: its rows, its catalog search and its sharing half.
+   *
+   * There were two helpers here while the split was real, because backend `0136`
+   * moved the rows to `/v1/baskets` and left the sharing half where it was.
+   * Backend `0144` moved the rest, so both halves answer to one helper.
+   */
   private _basket(basketId: string): string {
-    return this._urls.gateway(
-      `/v1/baskets/${encodeURIComponent(basketId)}`
-    );
+    return this._urls.gateway(`${BASKETS}/${encodeURIComponent(basketId)}`);
   }
 
-  private _line(basketId: string, lineId: string): string {
-    return `${this._basket(basketId)}/lines/${encodeURIComponent(lineId)}`;
+  /** One row of a basket, which every write addresses. */
+  private _row(basketId: string, rowKey: string): string {
+    return `${this._basket(basketId)}/rows/${encodeURIComponent(rowKey)}`;
   }
 
   private _link(secret: string): string {

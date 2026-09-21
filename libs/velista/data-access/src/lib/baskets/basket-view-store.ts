@@ -1,26 +1,19 @@
-import {
-  computed,
-  effect,
-  inject,
-  Injectable,
-  signal,
-  untracked,
-} from '@angular/core';
+import { computed, inject, Injectable, signal } from '@angular/core';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import {
   basketPricedScope,
   basketViewActiveCount,
   basketViewChips,
-  basketViewLines,
+  basketViewRows,
   composeBasketView,
   DEFAULT_BASKET_VIEW_STATE,
   foldForSearch,
   inLocale,
   resetBasketViewProperty,
   type BasketGrouping,
-  type BasketLine,
   type BasketOrder,
   type BasketPriceScope,
+  type BasketRow,
   type BasketViewProperty,
   type BasketViewState,
 } from '@portfolio/velista/models';
@@ -177,53 +170,33 @@ export class BasketViewStore {
   });
 
   /**
-   * The source lists the filter offers, named and counted (section 6).
+   * The lists the filter offers, named and counted (velista `0090`, section 8.2).
    *
-   * Taken from the run's own `sources` rather than from the lines, so a list the
-   * basket drew from is offered even when every line it contributed has since gone:
-   * it is still one of the households this basket is about, and a checkbox that
-   * appears and disappears as lines are bought would be unusable.
+   * **Every list this reader was served**, and not the lists its rows happen to
+   * name: a list this basket covers is still one of the households it is about
+   * when every row of it has been bought, and a checkbox that appeared and
+   * disappeared as rows were settled would be unusable.
    *
-   * **A source with no name is dropped.** That is the rule the row's "from" caption
-   * follows for the same data, and here it matters more: a checkbox with no words is
-   * a control nobody can act on. Empty for a reader who may not see origins at all,
-   * which is what keeps the whole section out of a guest's sheet without a
-   * `seesZoneData` branch anywhere in the template.
+   * It used to read the run's `sources` and a map of names. Backend `0136` replaced
+   * both with `Basket.lists`, which is exactly the lists a reader may name, so
+   * a ref with no name is no longer representable and the whole section stays out
+   * of a guest's sheet without a flag anywhere in the template.
+   *
+   * The count is the **rows** with a served entry on that list, so a row two
+   * households ask for counts once under each of them, which is what the list
+   * grouping draws.
    */
   readonly sourceLists = computed<readonly BasketSourceList[]>(() => {
-    const sources = this._basket.basket()?.sources ?? [];
-    if (sources.length === 0) {
-      return [];
-    }
-
-    const names = this._basket.listNames();
-    const lines = this._basket.lines();
-
-    const offered: BasketSourceList[] = [];
-    // By id and not by source row: one list reached by two zones would otherwise be
-    // drawn twice, and the two checkboxes would set the same thing.
-    const seen = new Set<string>();
-    for (const source of sources) {
-      // A source naming no list names a whole zone (backend `0133`, section 4).
-      // This sheet offers lists, and the names it draws from are the basket's
-      // own origins, so a whole zone contributes nothing to offer here.
-      if (source.listId === null || seen.has(source.listId)) {
-        continue;
-      }
-      const name = names.get(source.listId);
-      if (name === undefined || name === '') {
-        continue;
-      }
-      seen.add(source.listId);
-      offered.push({
-        id: source.listId,
-        name,
-        lines: lines.filter((line) =>
-          (line.origins ?? []).some((origin) => origin.listId === source.listId)
-        ).length,
-      });
-    }
-    return offered;
+    const rows = this._basket.rows();
+    return [...this._basket.lists().values()].map((ref) => ({
+      id: ref.listId,
+      // The group's name beside the list's, because a list alone is ambiguous
+      // when two households both keep one called "Groceries".
+      name: `${ref.name} \u00b7 ${ref.zoneName}`,
+      lines: rows.filter((row) =>
+        row.entries.some((entry) => entry.listId === ref.listId)
+      ).length,
+    }));
   });
 
   /**
@@ -241,17 +214,17 @@ export class BasketViewStore {
   /**
    * The sections the page draws: filtered, ordered, then cut up (section 3).
    *
-   * A `computed` over `BasketStore.lines` and nothing else, which is what makes
-   * realtime free: `apply`, `append`, `drop` and a whole `refresh` all flow through
-   * here, so a line that arrives lands in its section with nothing subscribed to
-   * anything (section 7).
+   * A `computed` over `BasketStore.rows` and nothing else, which is what makes
+   * realtime free: a folded write and a whole `refresh` both land on that signal,
+   * so a row that moves lands in its section with nothing subscribed to anything
+   * (section 7).
    */
   readonly sections = computed(() =>
-    composeBasketView(this._basket.lines(), this._state(), {
+    composeBasketView(this._basket.rows(), this._state(), {
       query: this._query(),
       products: this._basket.products(),
       locale: this._locale(),
-      listNames: this._basket.listNames(),
+      lists: this._basket.lists(),
       // Empty until the basket loads, and empty for a read the gateway could not
       // price: the pipeline then marks nothing, which is the same screen as before.
       scopes: this._basket.basket()?.scopes ?? new Map(),
@@ -259,26 +232,28 @@ export class BasketViewStore {
   );
 
   /**
-   * The distinct lines on the screen, in the order they are drawn.
+   * The distinct rows on the screen, in the order they are drawn.
    *
    * `0074` answered this by identity for an untouched basket. It cannot any more:
-   * every line in a section is wrapped in a row, so the flat list is read back out
-   * of the rows and is a new array each time. The lines themselves are still the
-   * store's own objects, which is what `track line.id` and every row input depend
+   * every row in a section is wrapped, so the flat list is read back out of the
+   * wrappers and is a new array each time. The rows themselves are still the
+   * store's own objects, which is what `track row.rowKey` and every input depend
    * on, and a dozen wrappers per redraw does not pay for a second code path.
    */
-  readonly visibleLines = computed<readonly BasketLine[]>(() =>
-    basketViewLines(this.sections())
+  readonly visibleRows = computed<readonly BasketRow[]>(() =>
+    basketViewRows(this.sections())
   );
 
   /**
-   * How many lines the page is showing, which is what the sheet's button and the
+   * How many rows the page is showing, which is what the sheet's button and the
    * chip row's count both say.
    *
-   * One answer and not two: a line drawn once per list by `0077` counts once here,
-   * so a basket grouped by list cannot report more lines than it has.
+   * One answer and not two: a row drawn once per household by `0077` counts once
+   * here, so a basket grouped by list cannot report more rows than it has. A
+   * `REMOVED` row is counted, because it is on the screen; what does not count it
+   * is `progress`, which is a different question and the server's.
    */
-  readonly visibleCount = computed(() => this.visibleLines().length);
+  readonly visibleCount = computed(() => this.visibleRows().length);
 
   /**
    * The scope every row quotes, or null for the cheapest anywhere (`0078`).
@@ -289,7 +264,7 @@ export class BasketViewStore {
    * each row, so one basket asks the question once.
    */
   readonly pricedShop = computed(() =>
-    basketPricedScope(this._basket.lines(), this._state(), {
+    basketPricedScope(this._basket.rows(), this._state(), {
       products: this._basket.products(),
       scopes: this._basket.basket()?.scopes ?? new Map(),
     })
@@ -307,7 +282,7 @@ export class BasketViewStore {
    */
   readonly chips = computed(() =>
     basketViewChips(this._state(), {
-      listNames: this._basket.listNames(),
+      lists: this._basket.lists(),
       listCount: this.sourceLists().length,
       // The chain and never the shop (velista `0078`, section 5): the chip row is
       // one line on a 390 wide phone, and "Mercadona" is what distinguishes this
@@ -316,33 +291,6 @@ export class BasketViewStore {
       chainName: this.chosenShop()?.chain ?? null,
     })
   );
-
-  /**
-   * Clear the search when this reader's **own** line lands (section 4.6).
-   *
-   * The thing somebody searched for and did not find is very often the next line
-   * they add, and a row that arrived hidden by the search that failed to find it is
-   * a row somebody types a second time. So the add wins and the query goes.
-   *
-   * `createdBy` is what makes it the reader's own. `BasketStore.lastAdded` is set
-   * for every line that arrives, including the four other people's, and clearing the
-   * query because somebody across the shop typed something would take the screen out
-   * from under the person holding this phone.
-   */
-  private readonly _clearOnOwnAdd = effect(() => {
-    const added = this._basket.lastAdded();
-    if (added === null) {
-      return;
-    }
-    // The arrival is the only thing this watches. Who the reader is has nothing to
-    // say about when the query should go, so reading it here would re-run the whole
-    // effect on a participant list that merely refreshed.
-    untracked(() => {
-      if (added.createdBy === (this._basket.me()?.id ?? null)) {
-        this._query.set('');
-      }
-    });
-  });
 
   /** Search for this, or for nothing when it is empty. */
   search(query: string): void {

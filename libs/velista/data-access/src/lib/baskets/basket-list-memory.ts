@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import type {
-  CreateBasketRequest,
   BasketRun,
   BasketSummary,
+  CreateBasketRequest,
   Page,
   SharedBasketSummary,
   WritableBasketStatus,

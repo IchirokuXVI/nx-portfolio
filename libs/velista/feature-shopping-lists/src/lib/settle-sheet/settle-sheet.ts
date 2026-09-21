@@ -28,22 +28,20 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
-  formatDay,
+  basketRowPick,
   inLocale,
   LINE_CONTENT_MAX_LENGTH,
-  outstanding,
   toSettlementRow,
-  type BasketLine,
   type BasketParticipant,
   type BasketPriceScope,
-  type BasketSettleResult,
+  type BasketRow as BasketRowModel,
+  type BasketRowResult,
   type SettlementOutcome,
   type SettlementRowVm,
 } from '@portfolio/velista/models';
 import {
-  formatMoney,
   basketIdOf,
-  lineIdOf,
+  rowKeyOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import {
@@ -60,7 +58,7 @@ import {
 } from '../basket-error-copy';
 import { participantName, touchedCaption } from '../basket-labels';
 import { basketPath, settleSheetPath } from '../basket-paths';
-import { LineListsSummary } from '../line-lists-summary/line-lists-summary';
+import { RowEntries } from '../row-entries/row-entries';
 
 /**
  * Where a price is from, as one line under the option's name (velista `0062`,
@@ -100,7 +98,7 @@ function placeOf(
  * make the precise ones two taps and a navigation away from the number they were
  * about to type.
  */
-type Pane = 'settle' | 'quantity' | 'product' | 'history' | 'merge';
+type Pane = 'settle' | 'quantity' | 'history' | 'merge';
 
 /**
  * One row of the merge question (velista `0084`, section 4): a place the name is
@@ -144,7 +142,7 @@ type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
  * for** opened a second sheet saying who wanted how many. They were the same rows
  * drawn twice, in two places nobody found.
  *
- * What replaced them is `LineListsSummary`, drawn under the product entry for a
+ * What replaced them is `RowEntries`, drawn under the product entry for a
  * reader who passes the all or nothing rule: one row per list, both numbers, both
  * controls. A guest sees the sheet without it and settles the whole line or part of
  * it through the buttons exactly as before.
@@ -187,7 +185,7 @@ type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
  * one: they have no account token to present.
  *
  * **Privilege is checked per request and never cached at join** (backend `0051`).
- * `seesZoneData` is the server's answer on the most recent basket read, so a
+ * The served list refs are the server's answer on the most recent basket read, so a
  * participant who loses `WRITE` loses the control on the next one, and the request
  * behind it is refused by the gateway regardless of what is on screen.
  */
@@ -195,7 +193,7 @@ type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
   selector: 'lib-settle-sheet',
   imports: [
     CheckIcon,
-    LineListsSummary,
+    RowEntries,
     QuantityReel,
     RokuTranslatorPipe,
     SheetShell,
@@ -231,17 +229,18 @@ export class SettleSheet {
   private readonly _basketId = basketIdOf(this._route);
 
   /**
-   * The line, as a signal and not a snapshot (velista `0084`).
+   * The row, as a signal and not a snapshot (velista `0090`, section 7.3).
    *
-   * A merge can leave this sheet's line behind, and the sheet then follows the
-   * survivor with `leaveTo` onto its own route with another `lineId`. The router
-   * reuses this component for that URL, so a snapshot read once would keep
-   * describing the line that is gone.
+   * A row's key is its **anchor's** line id, and the anchor moves: somebody adds an
+   * earlier line of the same name on another list, a rename merges two rows, the
+   * anchor is bought to zero and deleted. The sheet holds the key from its URL and
+   * asks the store on every change, which is the third answer `rowFor` exists for.
    */
-  private readonly _lineIdParam = lineIdOf(this._route);
-  private get _lineId(): string {
-    return this._lineIdParam();
+  private readonly _rowKeyParam = rowKeyOf(this._route);
+  private get _rowKey(): string {
+    return this._rowKeyParam();
   }
+
   private readonly _injector = inject(Injector);
   private readonly _pane = signal<Pane>('settle');
   private readonly _settling = signal(false);
@@ -256,7 +255,7 @@ export class SettleSheet {
    * and this is the second half of that key.
    */
   private readonly _failedOp = signal<BasketOperation | null>(null);
-  private readonly _result = signal<BasketSettleResult | null>(null);
+  private readonly _result = signal<BasketRowResult | null>(null);
 
   private readonly _history = signal<readonly SettlementRowVm[]>([]);
   private readonly _historyState = signal<HistoryLoad>('idle');
@@ -292,16 +291,22 @@ export class SettleSheet {
   protected readonly correlationId = computed<string | null>(() =>
     this._failedOp() === null ? null : correlationIdOf(this._store.error())
   );
-  protected readonly seesZoneData = this._store.seesZoneData;
   protected readonly history = this._history.asReadonly();
   protected readonly historyState = this._historyState.asReadonly();
   protected readonly historyHasMore = computed(
     () => this._historyCursors().size > 0
   );
 
-  /** The line this sheet is about, read live so a settle updates it under us. */
-  protected readonly line = computed<BasketLine | null>(
-    () => this._store.lines().find((row) => row.id === this._lineId) ?? null
+  /**
+   * The row this sheet is about, read live so a write updates it under us.
+   *
+   * Found by its key, then by any entry's line id, which is
+   * {@link BasketStore.rowFor}'s whole point: a row whose anchor changed is the same
+   * row under a new key, and a sheet that could not find it would dismiss itself
+   * over nothing.
+   */
+  protected readonly row = computed<BasketRowModel | null>(() =>
+    this._store.rowFor(this._rowKey)
   );
 
   /**
@@ -313,54 +318,87 @@ export class SettleSheet {
   private _left = false;
 
   constructor() {
-    // A sheet about a line that is gone dismisses itself (velista `0069`, section
-    // 3.1; `0031`). Moving every unit of a sibling back to the product that
-    // already has a row folds the sibling away, and the sheet over it is then
-    // about nothing: a back gesture would land on it, and the pane's controls
-    // would send writes for an id the server no longer holds. The same handling
-    // covers a removal that arrives over the socket, which is a second phone
-    // doing the same thing.
+    // A sheet whose row was **re-keyed** follows it, in place (velista `0090`,
+    // section 7.3).
+    //
+    // The row is the same thing under a new key, so the sheet replaces its own URL
+    // and says nothing: its pane stays, its typed values stay, and focus stays where
+    // it was. A dismissal here would close a sheet over a row that is still there,
+    // which is what happens to anybody standing at a shelf while somebody else adds
+    // the same thing on another list.
     effect(() => {
-      // Only once the basket has actually been read. Before that every line is
-      // absent, and dismissing then would close the sheet somebody deep linked
-      // to before it ever drew.
-      // Nor while a rename is out or following its survivor (velista `0084`). A
-      // merge that absorbs this line takes it out of the store before the answer
-      // reaches this sheet, and the sheet then leaves for the survivor itself.
+      const row = this.row();
+      if (row === null || this._left || this._following()) {
+        return;
+      }
+      const key = this._rowKey;
+      if (row.rowKey === key) {
+        return;
+      }
+      untracked(() => void this._followRowKey(row.rowKey));
+    });
+
+    // A sheet about a row that is **gone** dismisses itself (velista `0069`,
+    // section 3.1; `0031`). A back gesture would land on it, and its controls would
+    // send writes for a key the server no longer holds.
+    effect(() => {
+      // Only once the basket has actually been read. Before that every row is
+      // absent, and dismissing then would close the sheet somebody deep linked to
+      // before it ever drew.
+      //
+      // Nor while a rename is out or following a new key: a merge that absorbs this
+      // row takes it out of the store before the answer reaches this sheet.
       if (
         this._left ||
         this.saving() ||
         this._following() ||
         this._store.state() !== 'ready' ||
-        this.line() !== null
+        this.row() !== null
       ) {
         return;
       }
       this._left = true;
+      this._store.sayRowGone();
       this.close();
     });
   }
 
-  protected readonly outstanding = computed(() => {
-    const line = this.line();
-    return line === null ? 0 : outstanding(line);
-  });
+  /**
+   * Take this sheet's URL to the row's new key, without a history entry.
+   *
+   * `leaveTo` replaces rather than pushes, which is what this needs and why it is
+   * the right call here: nothing happened that a back gesture should undo, and a
+   * pushed entry would put a dead key in the history for a back gesture to land on.
+   */
+  private async _followRowKey(rowKey: string): Promise<void> {
+    this._following.set(true);
+    await this._sheet.leaveTo(
+      settleSheetPath(
+        this._locale(),
+        this._basePath,
+        this._basketId(),
+        rowKey
+      )
+    );
+    this._following.set(false);
+  }
+
+  /** What this row still asks for, read and never computed. */
+  protected readonly outstanding = computed(() => this.row()?.left ?? 0);
 
   /**
-   * Whether this line has nothing left to settle (plan 0052, section 7.1).
+   * Whether this row has nothing left to settle (plan 0052, section 7.1).
    *
-   * A finished line is still tappable, deliberately: `0043` section 3.2 keeps it in
+   * A finished row is still tappable, deliberately: `0043` section 3.2 keeps it in
    * place so somebody can look at what they bought. So this sheet opens on one, and
-   * every settle target on it was a control that could not work. The plural rule
-   * picked `all_other` for a count of zero and the button read **"Got all 0"**, and
-   * pressing either it or "They had none" sent a settle that core refuses, because
-   * `basket-settle.service.ts` throws when `outstanding === 0`.
+   * every settle target on it would be a control that could not work: the server
+   * refuses a settle on a row with nothing outstanding.
    *
    * **A control you may not use is not drawn** (`0030`), so this is what the settle
    * pane branches its targets on rather than a disabled state.
    */
   protected readonly finished = computed(
-    () => this.line() !== null && this.outstanding() === 0
+    () => this.row() !== null && this.outstanding() === 0
   );
 
   /**
@@ -387,19 +425,19 @@ export class SettleSheet {
   );
 
   /**
-   * What happened to this line, in one sentence, for a finished one.
+   * What happened to this row, in one sentence, for a finished one.
    *
-   * The **same** sentence `touchedCaption` composes for the row, so the sheet and the
-   * row underneath it cannot disagree about what a person did. Null for a line nobody
-   * has touched, which a finished line never is, and for one that was edited rather
+   * The **same** sentence `touchedCaption` composes for the row underneath, so the
+   * sheet and the row cannot disagree about what a person did. Null for a row nobody
+   * has touched, which a finished row never is, and for one that was renamed rather
    * than settled.
    */
   protected readonly whatHappened = computed<string | null>(() => {
-    const line = this.line();
-    return line === null
+    const row = this.row();
+    return row === null
       ? null
       : touchedCaption(
-          line,
+          row,
           this._store.participantsById(),
           this._translator,
           this._locale(),
@@ -445,215 +483,12 @@ export class SettleSheet {
     }
   }
 
-  /** The picked product's name, for the line under the title. */
+  /** The product's name, for the line under the title. */
   protected readonly productName = computed<string | null>(() => {
-    const pickId = this.line()?.pickId ?? null;
+    const row = this.row();
     const product =
-      pickId === null ? undefined : this._store.basket()?.products.get(pickId);
+      row === null ? undefined : basketRowPick(row, this._store.products());
     return product ? inLocale(product.name, this._locale()) : null;
-  });
-
-  /**
-   * Every product this line may be switched to, named and priced, **in the
-   * order given** (velista `0062`, section 5).
-   *
-   * The order is the line's own option order and never changes: sorting by
-   * price would move rows under the thumb of somebody reading them at a shelf,
-   * and reorder the list every time a harvest changed a number. The cheapest is
-   * *marked* instead, and only when at least two options are priced, because on
-   * one priced option the mark says nothing and looks like a recommendation.
-   * The mark lands on the cheapest and not on the pick, which is the useful
-   * case: the sheet shows in one glance that the default is not the cheapest.
-   *
-   * Every string is decided here and carried on the row (`price`, `unitPrice`,
-   * `place`), so a row that has decided what it says cannot say it differently
-   * on a re render. `noPrice` is drawn only in a mix (section 5.3): when no
-   * option is priced the pane is exactly today's pane, and when some are, the
-   * blank one has to say it is unknown rather than free.
-   *
-   * There is **no branch on who is reading**. The place is whatever the scope
-   * carries: the chain, and the first shop when the server sent any. A guest
-   * reads "Mercadona" and an owner reads "Mercadona · Ronda de los Tejares",
-   * and this component cannot tell which it is drawing (section 6).
-   */
-  protected readonly options = computed(() => {
-    const line = this.line();
-    const basket = this._store.basket();
-    if (line === null || basket === undefined || basket === null) {
-      return [];
-    }
-    const locale = this._locale();
-    const { products, scopes } = basket;
-
-    const rows = line.optionIds.flatMap((id) => {
-      const product = products.get(id);
-      // A product catalog no longer has is dropped rather than drawn as an id:
-      // a basket outlives the catalog it was composed from.
-      if (!product) {
-        return [];
-      }
-      const offer = product.offer;
-      const priced = offer !== null && offer.price !== null;
-      return [
-        {
-          id,
-          name: inLocale(product.name, locale),
-          brand: product.brand,
-          chosen: id === line.pickId,
-          price: priced
-            ? formatMoney(offer.price, offer.currency, locale)
-            : null,
-          amount: priced ? offer.price : null,
-          unitPrice:
-            offer !== null && offer.unitPrice !== null
-              ? `${formatMoney(offer.unitPrice, null, locale)} ${offer.unitPriceLabel ?? ''}`.trim()
-              : null,
-          place:
-            offer === null
-              ? null
-              : placeOf(scopes.get(offer.priceScopeId), locale),
-          cheapest: false,
-          noPrice: false,
-        },
-      ];
-    });
-
-    const pricedRows = rows.filter((row) => row.amount !== null);
-    if (pricedRows.length === 0) {
-      return rows;
-    }
-    const cheapest =
-      pricedRows.length >= 2
-        ? pricedRows.reduce((best, row) =>
-            (row.amount ?? Infinity) < (best.amount ?? Infinity) ? row : best
-          )
-        : null;
-    return rows.map((row) => ({
-      ...row,
-      cheapest: row === cheapest,
-      noPrice: row.amount === null,
-    }));
-  });
-
-  /**
-   * What the outstanding amount was when the product pane was opened.
-   *
-   * The pane's whole arithmetic runs off this one number rather than off
-   * {@link outstanding}, and that is deliberate. It is what goes out as the
-   * write's `from`, so the balance a shopper reads and the amount the server
-   * checks are the same fact: a pane whose steppers were capped by a live number
-   * while `from` held an older one could show a legal move that the server then
-   * refuses. Somebody else moving the line underneath is exactly what the guard
-   * is for, and it answers `stale_quantity`, which reloads the pane.
-   */
-  private readonly _from = signal(0);
-
-  /** Units put against each product other than the line's own, by product id. */
-  private readonly _shares = signal<ReadonlyMap<string, number>>(new Map());
-
-  /**
-   * What the line's own product keeps: everything the steppers did not take.
-   *
-   * A computed and never a control, which is the rule the pane is built on. The
-   * balance is never typed, so the sum can never exceed what is outstanding and
-   * a stale request can only land somewhere honest (backend `0094`, section 2).
-   */
-  protected readonly balance = computed(() => {
-    const given = [...this._shares().values()].reduce((sum, n) => sum + n, 0);
-    return Math.max(0, this._from() - given);
-  });
-
-  /**
-   * The product pane's rows: every option, with what it has been given and how
-   * much more it may take.
-   *
-   * The ceiling is the balance **plus this row's own value**, which is what makes
-   * a stepper reversible: raising one lowers every other row's ceiling by the same
-   * amount, and lowering it gives the room back. The sum can never exceed the
-   * outstanding amount and the balance can never read below zero.
-   *
-   * Built on {@link options} rather than beside it, so the name, the price and
-   * the place a row draws are decided in exactly one place (velista `0062`).
-   */
-  protected readonly productRows = computed(() => {
-    const shares = this._shares();
-    const balance = this.balance();
-    return this.options().map((row) => {
-      const share = shares.get(row.id) ?? 0;
-      return { ...row, share, max: balance + share };
-    });
-  });
-
-  /**
-   * The balance's own row at the top of the pane, or null when an option holds
-   * it.
-   *
-   * Drawn for a line whose product no option row can show: a group added line
-   * that was never picked (backend `0055`, section 3), and a line whose product
-   * the catalog has since dropped, which {@link options} leaves out rather than
-   * drawing as an id. Both need somewhere for the rest to go, and a shopper needs
-   * to see what an unpicked remainder means.
-   *
-   * `name` is null only in the first case, which is the one that reads "no
-   * product chosen": the second has a name and simply has no row of its own.
-   */
-  protected readonly restRow = computed<{ name: string | null } | null>(() =>
-    this.options().some((row) => row.chosen)
-      ? null
-      : { name: this.productName() }
-  );
-
-  /** Whether anything has been moved, which is what the commit waits on. */
-  protected readonly moved = computed(() =>
-    [...this._shares().values()].some((quantity) => quantity > 0)
-  );
-
-  /**
-   * How old the prices on the pane are, once, under it (section 5.4): the
-   * oldest `observedAt` among the options shown, and whether the server
-   * flagged any of them stale, in the same sentence. Null when nothing is
-   * priced, so the pane draws nothing.
-   *
-   * The flag is read, never inferred (backend plan 0080, section 5). This used
-   * to say "entered by hand" from `sourceKind === 'ADMIN'` and let the oldest
-   * date stand for freshness, and neither can know the policy: a typed price
-   * has no maximum age, so an old one is not stale, while a crawl price a week
-   * old is. The server decides and this draws it. The date still travels, for
-   * display.
-   *
-   * The two are interpolated keys, so what is held here is the key and its
-   * argument rather than a sentence: the template hands both to the pipe.
-   */
-  protected readonly pricesAsOf = computed<{
-    key: 'basket.product.asOf' | 'basket.product.asOfStale';
-    when: string;
-  } | null>(() => {
-    const line = this.line();
-    const basket = this._store.basket();
-    if (line === null || !basket) {
-      return null;
-    }
-    let oldest: Date | null = null;
-    let stale = false;
-    for (const id of line.optionIds) {
-      const offer = basket.products.get(id)?.offer;
-      if (!offer || offer.price === null) {
-        continue;
-      }
-      if (offer.stale) {
-        stale = true;
-      }
-      if (offer.observedAt && (oldest === null || offer.observedAt < oldest)) {
-        oldest = offer.observedAt;
-      }
-    }
-    if (oldest === null) {
-      return null;
-    }
-    return {
-      key: stale ? 'basket.product.asOfStale' : 'basket.product.asOf',
-      when: formatDay(oldest, this._locale()),
-    };
   });
 
   /**
@@ -661,49 +496,56 @@ export class SettleSheet {
    *
    * Two conditions, and they are two because they are two different facts. The reader
    * must hold an **account**, since the settlement route authenticates one and a guest
-   * has none to present; and they must pass the **all or nothing rule**, which is
-   * `WRITE` on every source list of the run as the server evaluated it on the most
-   * recent basket read. The owner satisfies both by owning the basket.
+   * has none to present; and the row must have at least one entry on a list they were
+   * **served**, because that is the list whose settlements the route reads. The owner
+   * satisfies both by owning the basket.
    *
    * A control you may not use is not drawn (`0030`), so this decides whether the way
    * into the pane exists at all rather than whether it is disabled. Losing `WRITE`
-   * flips `seesZoneData` on the next basket read and the control goes with it, which
-   * is the per request check working rather than a second copy of it.
+   * takes the list's ref off the next basket read and the control goes with it,
+   * which is the per request check working rather than a second copy of it.
    */
-  protected readonly canReadHistory = computed(
-    () => this._store.seesZoneData() && this._store.me()?.kind !== 'GUEST'
-  );
+  protected readonly canReadHistory = computed(() => {
+    const row = this.row();
+    return (
+      row !== null &&
+      this._store.me()?.kind !== 'GUEST' &&
+      row.entries.some((entry) => entry.listId !== null)
+    );
+  });
 
   /** The sheet's accessible title, which is the line's own words. */
-  protected readonly title = computed(() => this.line()?.content ?? '');
+  protected readonly title = computed(() => this.row()?.content ?? '');
 
-  // --- Renaming the line (velista `0084`) ------------------------------------
+  // --- Renaming the row (velista `0084`) -------------------------------------
 
   /**
    * Whether to draw the name field in place of the title (section 2).
    *
-   * The owner, on any line. A registered participant who sees zone data, on a line
-   * with origins: backend `0113` lets them rename exactly the lines whose every list
-   * they can write, and `seesZoneData` is that answer for every list of the run. A
-   * guest never. Nobody once the trip is finished, like every other control here.
+   * An account, and **every entry's list served**, which is the client half of the
+   * server's rule: backend `0113` lets somebody rename exactly the rows whose every
+   * list they can write, and a list this reader was not served is one they cannot.
+   * A guest never, because a guest is served no list at all. Nobody once the trip is
+   * finished, like every other control here.
+   *
+   * It replaced a `seesZoneData` read, which was one flag for the whole basket: a
+   * reader who could write four of five covered lists was refused the field on every
+   * row, including the four rows they could rename. The question is per row now
+   * because the data is.
    *
    * This only decides whether the field is drawn. The server asks again on the save,
    * and its refusal is what the sheet then shows.
    */
   protected readonly canRename = computed(() => {
-    const line = this.line();
+    const row = this.row();
     const me = this._store.me();
-    if (line === null || me === null || this.basketFinished()) {
+    if (row === null || me === null || this.basketFinished()) {
       return false;
     }
-    if (me.kind === 'OWNER') {
-      return true;
+    if (me.kind === 'GUEST') {
+      return false;
     }
-    return (
-      me.kind === 'REGISTERED' &&
-      this._store.seesZoneData() &&
-      (line.origins ?? []).length > 0
-    );
+    return row.entries.every((entry) => entry.listId !== null);
   });
 
   /** The longest name the server takes, on the field. */
@@ -753,13 +595,13 @@ export class SettleSheet {
 
   /** Whether the trimmed name differs from the line and is not blank (section 3). */
   protected readonly canSave = computed(() => {
-    const line = this.line();
+    const row = this.row();
     const typed = this.name().trim();
     return (
       this.canRename() &&
-      line !== null &&
+      row !== null &&
       typed !== '' &&
-      typed !== line.content &&
+      typed !== row.content &&
       !this.busy()
     );
   });
@@ -770,7 +612,7 @@ export class SettleSheet {
    * reads it, and the sheet fills the field from that answer itself.
    */
   private readonly _seedName = effect(() => {
-    const content = this.line()?.content;
+    const content = this.row()?.content;
     if (content === undefined || this.saving()) {
       return;
     }
@@ -814,7 +656,7 @@ export class SettleSheet {
   }
 
   private async _rename(confirmMerge: boolean): Promise<void> {
-    const lineId = this._lineId;
+    const rowKey = this._rowKey;
     const content = (this.merge()?.name ?? this.name()).trim();
 
     this.saving.set(true);
@@ -823,12 +665,12 @@ export class SettleSheet {
     this.renameErrorArgs.set({});
     this.renameReference.set(null);
 
-    const result = await this._store.renameLine(
-      lineId,
+    const result = await this._store.renameRow(
+      rowKey,
       confirmMerge ? { content, confirmMerge: true } : { content }
     );
 
-    if (result !== null && result.line.id !== lineId) {
+    if (result !== null && result.row.rowKey !== rowKey) {
       // Before `saving` drops, so the dismissal effect never sees this line gone
       // and unheld.
       this._following.set(true);
@@ -844,17 +686,18 @@ export class SettleSheet {
     this._pane.set('settle');
     this.saved.set(true);
     // From the answer: a merge keeps the survivor's own spelling.
-    this.name.set(result.line.content);
-    this._shown = result.line.content;
+    this.name.set(result.row.content);
+    this._shown = result.row.content;
 
-    if (result.line.id !== lineId) {
-      // This line was absorbed. The reader stays on the line that remains.
+    if (result.row.rowKey !== rowKey) {
+      // This row was absorbed, or its anchor moved. The reader stays on the row
+      // that remains, at the key it now has.
       await this._sheet.leaveTo(
         settleSheetPath(
           this._locale(),
           this._basePath,
           this._basketId(),
-          result.line.id
+          result.row.rowKey
         )
       );
       this._following.set(false);
@@ -940,169 +783,126 @@ export class SettleSheet {
       quantity: list.otherQuantity,
     }));
     if (required.basket !== null) {
-      const { otherLineId, otherQuantity } = required.basket;
-      const held = this._store.lines().find((row) => row.id === otherLineId);
+      const { otherRowKey, otherQuantity } = required.basket;
+      const held = this._store.rowFor(otherRowKey);
       rows.push({
         key: 'basket',
         listName: null,
         zoneName: '',
         amountKey: 'basket.rename.mergeToGet',
-        quantity: held === undefined ? otherQuantity : outstanding(held),
+        // What that row still asks for, read off it where this basket holds it and
+        // taken from the refusal where it does not: the refusal states the other
+        // line's whole quantity, which is the honest answer when there is no row.
+        quantity: held === null ? otherQuantity : held.left,
       });
     }
     return { name, rows };
   }
 
   /**
-   * Whether to draw the list summary under the product (velista `0073`, section 3.3).
+   * Whether the entries pane is drawn under the product (velista `0090`,
+   * section 9.2).
    *
-   * The reader must hold an account and pass the all or nothing rule, which is
-   * {@link canReadHistory}'s pair of conditions and for the same reason: the read
-   * behind it names households, and the server refuses the whole of it to anybody
-   * else rather than redacting it. A guest sees the sheet without the summary and
-   * settles the whole line or part of it through the buttons as they do today.
+   * More than one entry, or one whose list this reader was served. A row with a
+   * single unserved entry says nothing anybody can act on — "another list asks for
+   * 2" on a row that asks for 2 — so the pane is not drawn rather than drawn empty.
    *
-   * **Every line, added or derived, with lists or without.** Backend `0092` made
-   * every list a row at zero, so a line somebody typed in an aisle is the one this
-   * is most worth reading: three for the flat and two for their parents.
-   *
-   * A finished trip keeps it, unlike the control this replaced. The summary is
-   * something the sheet **says** as well as a pair of controls, and a finished basket
-   * is the receipt for a trip somebody took; the reels go and the numbers stay, which
-   * is the treatment the row one screen up already gives a finished basket.
+   * It replaced a `seesZoneData` read and a separate load. The pane draws the
+   * basket's own rows now, so there is nothing to fetch and nothing to fail.
    */
-  protected readonly canSeeLists = computed(
-    () =>
-      this._store.seesZoneData() &&
-      this._store.me()?.kind !== 'GUEST' &&
-      this.line() !== null
-  );
+  protected readonly canSeeEntries = computed(() => {
+    const row = this.row();
+    if (row === null) {
+      return false;
+    }
+    return row.entries.length > 1 || row.entries[0]?.listId !== null;
+  });
 
-  /** The basket line the summary is about, for its required input. */
-  protected readonly lineId = this._lineIdParam;
+  /** The lists this reader was served, for the name on each entry. */
+  protected readonly lists = this._store.lists;
 
   /**
-   * The whole outstanding amount, in one tap. The common case.
+   * Everything this row still asks for, in one tap. The common case.
+   *
+   * **With an explicit quantity**, which is what backend `0136` requires: the server
+   * no longer caps an absent one at what the row asks for, because buying three of a
+   * row that says two records three. `from` beside it is what makes the second tap
+   * of a double tap safe (velista `0054`).
    */
   protected async settleAll(): Promise<void> {
-    await this._send({ outcome: 'BOUGHT' });
+    const from = this.outstanding();
+    await this._send({ outcome: 'BOUGHT', quantity: from, from });
   }
 
-  /** A number the person typed. Asks nothing about zones, so guests may use it. */
+  /** A number the person chose. Asks nothing about lists, so guests may use it. */
   protected async settleSome(): Promise<void> {
-    await this._send({ outcome: 'BOUGHT', quantity: this.typed() });
+    await this._send({
+      outcome: 'BOUGHT',
+      quantity: this.typed(),
+      from: this.outstanding(),
+    });
   }
 
   /**
    * The shop did not have it.
    *
-   * An outcome rather than a quantity: it closes the outstanding amount, and it
-   * claims nothing was bought.
+   * An outcome rather than a quantity: it closes the row and claims nothing was
+   * bought. It carries `from` like every other write on a row.
    */
   protected async settleNone(): Promise<void> {
-    await this._send({ outcome: 'NOT_AVAILABLE' });
-  }
-
-  /**
-   * Move units onto one product, or off it.
-   *
-   * Clamped **here** rather than trusted from the control. The reel bounds itself
-   * at the ceiling the row hands it, but a write must hold whatever feeds it, and
-   * this one is also driven directly. The floor is zero and the ceiling is the
-   * balance plus this row's own value, which is the same rule
-   * {@link productRows} draws.
-   */
-  protected setShare(itemId: string, quantity: number): void {
-    this._shares.update((held) => {
-      const own = held.get(itemId) ?? 0;
-      const ceiling = this.balance() + own;
-      const next = new Map(held);
-      next.set(
-        itemId,
-        Math.max(0, Math.min(ceiling, Math.trunc(quantity) || 0))
-      );
-      return next;
+    await this._send({
+      outcome: 'NOT_AVAILABLE',
+      from: this.outstanding(),
     });
   }
 
   /**
-   * The number under the thumb on a product's reel, written through as it moves.
+   * One household's "got" number was moved on the entries pane (section 9.2).
    *
-   * Two things hang on the write being live rather than waiting for the commit:
-   * the balance above the rows walks down under the gesture, and an Apply pressed
-   * inside the reel's idle beat sends the number on screen rather than the one
-   * the last settled run left behind.
+   * Raising it settles those units against that household **alone**, which is what
+   * `allocations` naming one line means. Lowering it takes that household's newest
+   * purchases back, and a revert names the row's `bought` as its `from` because that
+   * is the number it takes from.
+   *
+   * Both go through the same busy state and the same failure reporting as the
+   * targets above, because they are the same act aimed more precisely.
    */
-  protected onSharePreview(itemId: string, next: number | null): void {
-    if (next !== null) {
-      this.setShare(itemId, next);
-    }
-  }
-
-  /**
-   * Commit the split: one write, on the button, and never per stepper move.
-   *
-   * Each tick of a stepper is a fragment of one decision, and creating a row per
-   * tick would draw and fold rows while the thumb is still moving (section 2).
-   *
-   * The sheet dismisses on success, which is also what keeps section 3.1 simple:
-   * this line may be the one the split folded away, and a sheet that stayed open
-   * would be about a row that no longer exists. It goes either way, so there is
-   * no case to tell apart.
-   */
-  protected async apply(): Promise<void> {
-    const shares = [...this._shares()]
-      .filter(([, quantity]) => quantity > 0)
-      .map(([itemId, quantity]) => ({ itemId, quantity }));
-    if (shares.length === 0) {
+  protected async allocate(change: {
+    lineId: string;
+    from: number;
+    to: number;
+  }): Promise<void> {
+    if (change.to === change.from) {
       return;
     }
 
-    this._settling.set(true);
-    this._failedOp.set(null);
-    const result = await this._store.splitLine(this._lineId, {
-      from: this._from(),
-      shares,
+    if (change.to > change.from) {
+      await this._send({
+        outcome: 'BOUGHT',
+        quantity: change.to - change.from,
+        from: this.outstanding(),
+        allocations: [
+          { lineId: change.lineId, quantity: change.to - change.from },
+        ],
+      });
+      return;
+    }
+
+    await this._revert({
+      target: 'UNITS',
+      units: change.from - change.to,
+      from: this.row()?.bought ?? 0,
     });
-    this._settling.set(false);
-
-    if (result === null) {
-      this._failedOp.set('basket.split');
-      // The store has already refetched on a stale `from`, so the pane reloads
-      // its numbers rather than sitting on the ones it was refused for: the
-      // sentence under the button names the amount as it now stands, exactly as
-      // `0054` section 4.1 draws a stale reel.
-      this._openProductPane();
-      return;
-    }
-
-    this.close();
   }
 
   protected openPane(pane: Pane): void {
     this._failedOp.set(null);
     if (pane === 'history') {
-      // Read on the way in rather than with the basket: most people settle a line and
-      // never ask what happened to it, and this is one request per origin.
+      // Read on the way in rather than with the basket: most people settle a row and
+      // never ask what happened to it, and this is one request per entry.
       void this._loadHistory();
     }
-    if (pane === 'product') {
-      this._openProductPane();
-    }
     this._pane.set(pane);
-  }
-
-  /**
-   * Take the pane's numbers from the line as it now stands: nothing moved, and
-   * the whole outstanding amount as the balance.
-   *
-   * Called on the way in and again after a refused write, which is the same act:
-   * the steppers a person set were refused, so leaving them there would invite
-   * the same refusal.
-   */
-  private _openProductPane(): void {
-    this._from.set(this.outstanding());
-    this._shares.set(new Map());
   }
 
   /**
@@ -1110,8 +910,8 @@ export class SettleSheet {
    *
    * The basket's **whole** URL rather than a relative `..`, and that is the fix
    * rather than a preference. This sheet's path is three segments,
-   * `lines/:lineId/settle`, and `..` climbs exactly one of them: closing left the
-   * URL on `lines/:lineId`, which no route under the basket declares, so the
+   * `rows/:rowKey/settle`, and `..` climbs exactly one of them: closing left the
+   * URL on `rows/:rowKey`, which no route under the basket declares, so the
    * sheet dismissed onto the app's own 404. Every other sheet in the app already
    * names its page in full for the same reason (plan 0031).
    *
@@ -1129,18 +929,17 @@ export class SettleSheet {
   }
 
   /**
-   * How many origins this act could not reach, phrased for whoever is reading.
+   * How many entries a **revert** could not reach, or null (backend `0136`).
    *
-   * A reader who passes the rule gets the list names; everybody else gets the
-   * count alone, which is section 6.4's report with the zone data taken out.
+   * The names are gone with the rule that produced them. A settle used to skip an
+   * origin whose access had gone, and the gateway composed a named report for a
+   * reader entitled to it; coverage is recomputed on every request now, so there is
+   * no `ACCESS_GONE` skip left to report (backend `0130`, section 5). What can still
+   * be skipped is an entry whose **line was deleted** since the purchase, which has
+   * no units to put back, and that is a count and not a household: naming it would
+   * name a list that is not there.
    *
-   * **The count is always drawn, and the names are added to it** (plan 0049,
-   * section 1.2). "2 lines could not be updated" is true for everybody and
-   * unactionable on its own, so a reader entitled to the names is told which
-   * list to go and look at; a guest keeps the sentence unchanged. The names
-   * arrive **on the report**, composed by the gateway, so this screen still
-   * reaches no zone list store and still cannot name a household it was not
-   * handed one for.
+   * So the sentence is the count alone, which was already the half every reader got.
    */
   protected readonly missed = computed<string | null>(() => {
     const result = this._result();
@@ -1148,68 +947,21 @@ export class SettleSheet {
       return null;
     }
 
-    const locale = this._locale();
-    const count = this._translator.t(
+    return this._translator.t(
       'basket.settle.missed',
       undefined,
-      locale,
-      {
-        count: result.skippedCount,
-      }
+      this._locale(),
+      { count: result.skippedCount }
     );
-
-    const named = this._missedNames();
-    if (named === null) {
-      return count;
-    }
-
-    return `${count} ${this._translator.t(
-      'basket.settle.missedNamed',
-      undefined,
-      locale,
-      { lists: named }
-    )}`;
   });
 
   /**
-   * The skipped lists as one phrase, or null when there is nothing to name.
+   * What happened to this row, newest first, across every entry it groups.
    *
-   * Null covers the two cases that must not be told apart in the copy: a reader
-   * whose report has no `skipped` key at all, and an entitled report whose
-   * entries have all lost their names to a deleted list. Both leave the bare
-   * count, which is the honest half of the sentence.
-   *
-   * Deduplicated by name rather than by list id: two origins on one list are one
-   * household to the person reading, and the report carries an entry per origin.
-   */
-  private readonly _missedNames = computed<string | null>(() => {
-    const skipped = this._result()?.skipped ?? [];
-    const names = new Set<string>();
-
-    for (const entry of skipped) {
-      if (entry.listName === null || entry.listName === '') {
-        continue;
-      }
-      // The group is appended only where there is one, so a reader with two
-      // lists called "Food" can tell them apart and everybody else is not made
-      // to read a redundant word.
-      names.add(
-        entry.zoneName === null || entry.zoneName === ''
-          ? entry.listName
-          : `${entry.listName} (${entry.zoneName})`
-      );
-    }
-
-    return names.size === 0 ? null : [...names].join(', ');
-  });
-
-  /**
-   * What happened to this line, newest first, across every origin it was composed from.
-   *
-   * **One request per origin, and the answers merged.** The settlement route is keyed
-   * on a *zone list line*, and a basket line is a sum of several: two flats both
-   * wanting milk merge into one row here and contribute an origin each. Asking only the
-   * first would draw one household's half of a shared line's history and give no sign
+   * **One request per entry, and the answers merged.** The settlement route is keyed
+   * on a *list line*, and a row is a group of several: two flats both wanting milk are
+   * one row here and one entry each. Asking only the first would draw one household's
+   * half of a shared row's history and give no sign
    * that the other half existed.
    *
    * `origins` is absent for a reader who does not pass the rule, which is the same
@@ -1221,8 +973,13 @@ export class SettleSheet {
    * load: the whole reason to open it is to reconcile two people's trips.
    */
   private async _loadHistory(reset = true): Promise<void> {
-    const origins = this.line()?.origins ?? [];
-    if (origins.length === 0) {
+    // The **served** entries, which is what the route can answer for: it reads a
+    // zone list line as an account, so a list this reader was not served is one
+    // they hold no `WRITE` on and the request would be refused.
+    const entries = (this.row()?.entries ?? []).filter(
+      (entry) => entry.listId !== null
+    );
+    if (entries.length === 0) {
       this._history.set([]);
       this._historyCursors.set(new Map());
       this._historyState.set('loaded');
@@ -1232,7 +989,7 @@ export class SettleSheet {
     // Which line to ask about, and from where. A reset asks each origin from the
     // beginning; `Show more` asks only the origins that still have a cursor.
     const asking = reset
-      ? [...new Set(origins.map((origin) => origin.lineId))].map(
+      ? [...new Set(entries.map((entry) => entry.lineId))].map(
           (lineId) => [lineId, undefined] as const
         )
       : [...this._historyCursors()].map(
@@ -1373,14 +1130,34 @@ export class SettleSheet {
   private async _send(
     body: Parameters<BasketStore['settle']>[1]
   ): Promise<void> {
+    await this._run(() => this._store.settle(this._rowKey, body));
+  }
+
+  /** The other direction of the same gesture (backend `0136`, section 5.2). */
+  private async _revert(
+    body: Parameters<BasketStore['revert']>[1]
+  ): Promise<void> {
+    await this._run(() => this._store.revert(this._rowKey, body));
+  }
+
+  /**
+   * One write on this row, with the busy state and the failure reporting around it.
+   *
+   * Shared by the settle targets, the entries pane and the revert, because all of
+   * them do the same three things: mark the sheet busy, fold or report, and get out
+   * of the way when there is nothing to say.
+   */
+  private async _run(
+    send: () => Promise<BasketRowResult | null>
+  ): Promise<void> {
     this._settling.set(true);
     this._failedOp.set(null);
-    const result = await this._store.settle(this._lineId, body);
+    const result = await send();
     this._settling.set(false);
 
     if (result === null) {
       // Named rather than flagged, so the sentence can be the one the failure
-      // actually deserves: a `conflict` here is somebody else finishing this line
+      // actually deserves: a `conflict` here is somebody else finishing this row
       // between the sheet opening and the tap landing, which is the ordinary case
       // when two people work one list in a shop.
       this._failedOp.set('basket.settle');
@@ -1390,7 +1167,7 @@ export class SettleSheet {
     this._result.set(result);
     if (result.skippedCount === 0) {
       // Nothing to report, so the sheet gets out of the way: the person is in a
-      // shop and the next line is what they want to see.
+      // shop and the next row is what they want to see.
       this.close();
     }
     // Otherwise it stays open showing what was missed, because a shopper who has

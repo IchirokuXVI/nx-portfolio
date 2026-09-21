@@ -35,10 +35,9 @@ function basket(overrides: Partial<BasketSummary> = {}) {
   return {
     id: 'gl1',
     name: 'Saturday big shop',
-    // 'OPEN' and not 'DRAFT'. Backend plan 0133 folded the four statuses into
-    // three and stopped writing 'DRAFT', and 'isOpenBasket' is 'status ===
-    // OPEN', so a 'DRAFT' fixture leaves 'active' empty and the redirect below
-    // never fires. Corrected by plan 0144, which only surfaced it.
+    // `OPEN`, which is what a basket somebody is still going to shop is: backend
+    // `0133` folded `DRAFT` and `ACTIVE` into one value, and `isOpenBasket` names
+    // that one. A fixture still saying `DRAFT` is a basket no filter matches.
     status: 'OPEN',
     generatedAt: new Date('2026-08-21T10:00:00.000Z'),
     lineCount: 12,

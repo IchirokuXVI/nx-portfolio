@@ -1,5 +1,4 @@
 import {
-  toBasketLine,
   toBasketParticipant,
   toBasketPresenceEntry,
 } from '../mapping/basket-mappers';
@@ -306,59 +305,19 @@ export function toRealtimeEvent(
       return list === null ? null : { type: name, list };
     }
 
-    case 'basket.lineSettled':
-    case 'basket.lineUpdated': {
-      // **Both halves, because there are two listeners with different needs.** The
-      // basket id is what `BasketListStore` wants: it holds summaries, and a
-      // settled line cannot say whether `settledLineCount` should move, so it refetches.
-      // The line is what the basket screen wants: it holds the lines, so one merge by
-      // id moves one row with no request at all.
+    case 'basket.linesChanged': {
+      // Ids and nothing else, which is the whole event (backend `0130`,
+      // section 6): a basket room holds guests, so a broadcast carries the least
+      // privileged view there is. There is nothing here to merge and the store
+      // reads the basket again.
       //
-      // A line this build cannot read is null rather than fatal to the event. The id is
-      // still readable, so the store that only wanted the id is unaffected, and the one
-      // that wanted the line falls back to its refetch.
+      // An unreadable id is dropped rather than failing the event, because the
+      // event's meaning is "something moved" and one bad id does not make that
+      // untrue. An empty array still says it, so it is still delivered.
       if (!isRecord(payload)) {
         return null;
       }
-      const movedIn = str(payload['basketId']);
-      return movedIn === null
-        ? null
-        : {
-            type: name,
-            basketId: movedIn,
-            line: toBasketLine(payload['line']),
-          };
-    }
-
-    case 'basket.lineAdded': {
-      // **Both halves are required here**, which is the difference from the two
-      // above. There the id alone is worth something, because a summary store
-      // refetches from it; here the line is the entire content of the event, and an
-      // append is the one merge that cannot fall back to what is already held.
-      //
-      // So a line this build cannot read drops the event rather than appending a
-      // blank row, and the screen learns about it at its next read.
-      if (!isRecord(payload)) {
-        return null;
-      }
-      const addedIn = str(payload['basketId']);
-      const added = toBasketLine(payload['line']);
-      return addedIn === null || added === null
-        ? null
-        : { type: name, basketId: addedIn, line: added };
-    }
-
-    case 'basket.lineRemoved': {
-      // Both ids are required: a removal that cannot say which line would remove
-      // nothing, and one that cannot say which basket could remove the wrong one.
-      if (!isRecord(payload)) {
-        return null;
-      }
-      const removedFrom = str(payload['basketId']);
-      const removed = str(payload['lineId']);
-      return removedFrom === null || removed === null
-        ? null
-        : { type: name, basketId: removedFrom, lineId: removed };
+      return { type: name, lineIds: mapArray(payload['lineIds'], str) };
     }
 
     case 'basket.participantJoined':

@@ -5,13 +5,13 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import type {
-  BasketLine,
   BasketParticipant,
   BasketProduct,
+  BasketRow,
   ProductOffer,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
-import { BasketLineRow } from './basket-line-row';
+import { BasketRow as BasketRowComponent } from './basket-row';
 
 /**
  * The price on a row (velista `0062`, section 4).
@@ -23,20 +23,33 @@ import { BasketLineRow } from './basket-line-row';
  * on a product nobody has chosen.
  */
 
-function line(overrides: Partial<BasketLine> = {}): BasketLine {
+function line(overrides: Partial<BasketRow> = {}): BasketRow {
   return {
-    id: 'line-1',
+    rowKey: 'zl-1',
     content: 'Milk',
-    quantity: 3,
-    settled: 0,
-    pickId: null,
+    left: 3,
+    bought: 0,
+    asked: 3,
+    state: 'WANTED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
     optionIds: [],
-    position: 0,
-    createdBy: null,
     touchedBy: null,
     touchedAt: null,
-    lastOutcome: null,
-    kind: 'DERIVED',
+    entries: [
+      {
+        lineId: 'zl-1',
+        listId: null,
+        left: 3,
+        bought: 0,
+        asked: 3,
+        state: 'WANTED',
+        awaitingApproval: false,
+        demandEditable: true,
+      },
+    ],
     ...overrides,
   };
 }
@@ -68,25 +81,24 @@ const product = (
 ];
 
 async function render(
-  row: BasketLine,
+  row: BasketRow,
   products: ReadonlyMap<string, BasketProduct>
 ) {
   TestBed.resetTestingModule();
 
   await TestBed.configureTestingModule({
-    imports: [BasketLineRow, RokuTranslatorTestingModule.forTesting()],
+    imports: [BasketRowComponent, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
     ],
   }).compileComponents();
 
-  const fixture = TestBed.createComponent(BasketLineRow);
-  fixture.componentRef.setInput('line', row);
+  const fixture = TestBed.createComponent(BasketRowComponent);
+  fixture.componentRef.setInput('row', row);
   fixture.componentRef.setInput('people', new Map<string, BasketParticipant>());
   fixture.componentRef.setInput('products', products);
-  fixture.componentRef.setInput('listNames', new Map());
-  fixture.componentRef.setInput('canReopen', false);
+  fixture.componentRef.setInput('lists', new Map());
   fixture.componentRef.setInput('busy', false);
   fixture.componentRef.setInput('notice', null);
   fixture.detectChanges();
@@ -99,10 +111,10 @@ const caption = (fixture: Awaited<ReturnType<typeof render>>) =>
     .querySelector('.product')
     ?.textContent?.trim() ?? null;
 
-describe('BasketLineRow: the price on the caption line', () => {
+describe('BasketRowComponent: the price on the caption line', () => {
   it('renders the pick with its price after the separator', async () => {
     const fixture = await render(
-      line({ pickId: 'i-milk', optionIds: ['i-milk'] }),
+      line({ optionIds: ['i-milk'] }),
       new Map([product('i-milk', offer(0.95))])
     );
 
@@ -113,11 +125,11 @@ describe('BasketLineRow: the price on the caption line', () => {
 
   it('renders exactly the caption it rendered before when there is no price', async () => {
     const unpriced = await render(
-      line({ pickId: 'i-milk', optionIds: ['i-milk'] }),
+      line({ optionIds: ['i-milk'] }),
       new Map([product('i-milk', null)])
     );
     const priceless = await render(
-      line({ pickId: 'i-milk', optionIds: ['i-milk'] }),
+      line({ optionIds: ['i-milk'] }),
       new Map([product('i-milk', offer(null))])
     );
 
@@ -128,14 +140,31 @@ describe('BasketLineRow: the price on the caption line', () => {
     expect(caption(priceless)).toBe('Hacendado whole milk 1 L');
   });
 
-  it('renders no price on a line with options and no pick', async () => {
-    const fixture = await render(
-      line({ pickId: null, optionIds: ['i-milk'] }),
-      new Map([product('i-milk', offer(0.95))])
-    );
+  /**
+   * A row has no unchosen product to draw around any more.
+   *
+   * `pickId` was a column on the line the basket stored, and backend `0136`
+   * deleted that table: what a row names is the union of its entries' product
+   * sets, anchor first, so `optionIds[0]` **is** the product it means. "Options
+   * and no pick" is not a state the model can hold.
+   *
+   * What is left is a row that names no product at all, which is free text
+   * somebody typed and a row whose product the catalog can no longer resolve.
+   */
+  it('renders no caption at all for a row that names no product', async () => {
+    // Free text somebody typed in an aisle. There is no product entry, so the
+    // node the caption lives in is not drawn.
+    const fixture = await render(line({ optionIds: [] }), new Map());
 
-    // The row already says the choice has not been made, and the tap that
-    // resolves it is right there (section 4.1).
+    expect(caption(fixture)).toBeNull();
+  });
+
+  it('says the product is unknown when the catalog cannot resolve it', async () => {
+    // A basket outlives the catalog it was read against, and a row with an
+    // unnameable product is still a thing to buy: the row names an option, so
+    // the entry is drawn, and it says the product could not be named.
+    const fixture = await render(line({ optionIds: ['i-gone'] }), new Map());
+
     expect(caption(fixture)).toBe('basket.product.none');
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain(
       '0.95'

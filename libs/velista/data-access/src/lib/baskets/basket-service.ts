@@ -1,25 +1,16 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
-  BasketAddLineRequest,
-  BasketLine,
-  BasketLineOrigins,
+  Basket,
   BasketLinkPreview,
-  BasketOriginQuantityRequest,
-  BasketOriginQuantityResult,
-  BasketOriginSettledRequest,
-  BasketOriginSettledResult,
-  BasketOutstandingRequest,
   BasketParticipant,
   BasketRenameRequest,
   BasketRenameResult,
+  BasketRevertRequest,
+  BasketRowResult,
   BasketSession,
   BasketSettleRequest,
-  BasketSettleResult,
   BasketShareLink,
-  BasketSplitRequest,
-  BasketSplitResult,
-  BasketView,
   CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { BasketApi } from './basket-api';
@@ -45,6 +36,13 @@ import { BasketApi } from './basket-api';
  * database, with no cache, so revocation bites on the next action (backend `0051`,
  * section 3.3). A client supplied participant id would be a second answer to a
  * question the server has already answered better.
+ *
+ * ## Every write addresses a row, and answers one
+ *
+ * A basket stores no lines since backend `0136`, so there is nothing to address
+ * one by. A write names a `rowKey` and answers a {@link BasketRowResult}, which
+ * is the row as it now stands and the basket's counts. The store folds that whole
+ * and patches nothing.
  */
 export interface BasketServiceI {
   /**
@@ -76,140 +74,95 @@ export interface BasketServiceI {
   join(secret: string, displayName?: string): Promise<BasketSession>;
 
   /**
-   * The basket, its lines and everybody on it
-   * (`GET /v1/baskets/:id/basket`).
+   * The basket, its rows and everybody on it (`GET /v1/baskets/:id`).
    *
-   * One request for the whole screen, including the products every line names,
-   * because a line's attribution is a participant id and its pick is a product
-   * id: a basket without both is a page of identifiers.
+   * One request for the whole screen, including the products every row names,
+   * because an attribution is a participant id and a product is a product id: a
+   * basket without both is a page of identifiers.
    *
-   * The answer is **redacted per reader** by the server (backend `0051`,
-   * section 5.2), so what comes back for a guest genuinely lacks the origins
-   * rather than carrying them behind a flag.
+   * The answer is **redacted per reader** by the server (backend `0130`,
+   * section 6), and the redaction is `Basket.lists`: a guest is served no list
+   * refs, so every entry they receive names no list.
    */
-  getBasket(basketId: string): Promise<BasketView>;
+  getBasket(basketId: string): Promise<Basket>;
 
   /**
-   * Settle a line (`POST .../lines/:lineId/settle`).
+   * Say what happened to a row at the shelf
+   * (`POST /v1/baskets/:id/rows/:rowKey/settle`).
    *
-   * The three gestures of section 4.2 in one call, because they are the same act
-   * with progressively more of it supplied. Available to everybody for the first
-   * two; an `allocations` array is refused by the server for a reader who does
-   * not pass the rule, which is why the sheet that produces one is not drawn for
-   * them in the first place.
+   * The gestures of velista `0052` section 4.2 in one call, because they are the
+   * same act with progressively more of it supplied. Available to everybody; an
+   * `allocations` array naming a list this reader was not served is refused by
+   * the server, which is why the pane that produces one is drawn only over
+   * entries whose list the basket served.
+   *
+   * **Every `BOUGHT` carries its quantity**, and `from` is what makes a double
+   * tap safe. The server no longer caps an absent quantity at what the row asks
+   * for: buying three of a row that says two records three, because the extra
+   * unit is real and belongs in the consumption history.
    */
   settle(
     basketId: string,
-    lineId: string,
+    rowKey: string,
     body: BasketSettleRequest
-  ): Promise<BasketSettleResult>;
+  ): Promise<BasketRowResult>;
 
   /**
-   * Take a finished line back to fully outstanding
-   * (`POST .../lines/:lineId/reopen`), luna `0054` section 3.
+   * Take part of a row back (`POST /v1/baskets/:id/rows/:rowKey/revert`),
+   * backend `0136` section 5.2.
    *
-   * **The whole line, never a number of units.** That is the gesture the row's status
-   * control makes, and a partial reopen has no honest answer to which of several
-   * settlements it is undoing.
+   * Two targets rather than two routes, because they are one gesture with two
+   * things it can be aimed at: the units somebody said they bought, or the close
+   * somebody said the shop could not supply. A close holds no units, so that
+   * branch carries no number and no `from`.
    *
-   * The history is **not deleted** by it: each settlement this line produced is marked
-   * reverted and is still served by the settlement pane, because "somebody said they
-   * got this and then took it back" is a truer history than a gap.
+   * It replaced `reopen`, which took a whole line back and nothing less. **Any
+   * live participant may, guests included** (luna `0054`, section 3.5): a revert
+   * is not a wider act than a settle, and refusing it to the person who just made
+   * the mistake would leave the mistake standing.
    *
-   * Answers the same shape as {@link settle}, and for the same reason: an origin whose
-   * line has been deleted since cannot have its units put back, and the caller has to
-   * be told something did not land.
-   *
-   * **Any live participant may, guests included** (luna `0054`, section 3.5). A reopen
-   * is not a wider act than a settle: it touches exactly the origins this line's own
-   * settlements touched, and refusing it to the person who just made the mistake would
-   * leave the mistake standing.
+   * `skippedCount` on the answer is how many entries could not have units put
+   * back because their line was deleted since, which is why the caller is told
+   * rather than left to infer it from a number that did not move.
    */
-  reopen(basketId: string, lineId: string): Promise<BasketSettleResult>;
-
-  /**
-   * Give units of a line to other products (`POST .../lines/:lineId/products`),
-   * which splits it (velista `0069`; backend `0094`).
-   *
-   * **Anybody may, guests included.** The options are catalog products and never
-   * zone data, and the person at the shelf is exactly who took three of one milk
-   * and two of another.
-   *
-   * It replaces `setPick`, which this interface carried until velista `0069`.
-   * Moving every outstanding unit to one other product is this call with one
-   * share, and a second route would be a second rule about which product a
-   * settlement records.
-   */
-  splitLine(
+  revert(
     basketId: string,
-    lineId: string,
-    body: BasketSplitRequest
-  ): Promise<BasketSplitResult>;
+    rowKey: string,
+    body: BasketRevertRequest
+  ): Promise<BasketRowResult>;
 
   /**
-   * Rename a basket line and every zone line it came from
-   * (`PATCH .../basket/lines/:lineId`), velista `0084`, backend `0113`.
+   * Rename a row and every list line inside it (`PATCH /v1/baskets/:id/rows/:rowKey`),
+   * velista `0084`, backend `0113`.
    *
-   * One route for the owner and for a registered participant, under `basket` for
-   * the reason {@link addLine} gives. **The server decides who may**: a guest never,
-   * a line with origins only somebody who can write every list behind it, and a line
-   * with no origin only the owner. The sheet draws the field from the same rule, but
-   * a refusal here is still the answer.
+   * **The server decides who may**: a guest never, and otherwise only somebody who
+   * can write every list behind the row. The sheet draws the field from the same
+   * rule — every entry's list served — but a refusal here is still the answer.
    *
    * A name already taken, on a list or in the basket, is refused with
    * `line_merge_required` until the same request carries `confirmMerge`. After a
-   * merge the answer's line is the survivor, which may not be the line addressed.
+   * merge the answer's row is the survivor, which may not be the row addressed:
+   * `absorbedRowKey` names the one that went away.
    */
-  renameLine(
+  renameRow(
     basketId: string,
-    lineId: string,
+    rowKey: string,
     body: BasketRenameRequest
   ): Promise<BasketRenameResult>;
 
   /**
-   * Put a line in the basket (`POST .../basket/lines`), velista `0053`.
-   *
-   * **Every participant may, guests included**, and that is the unusual part of this
-   * screen rather than a relaxation of `0030`'s rule. There is no permission to read
-   * and no branch to write, because a line added here has no target list: it changes
-   * nothing shared, names no zone and claims no zone line. It is a note on the list
-   * somebody is carrying, and the gate that matters is on **binding** it to a
-   * household's list, which is a separate gesture with a list picker in front of it.
-   *
-   * The one refusal that has a screen treatment is a **finished basket**, which the
-   * server answers with a code of its own rather than a validation failure. The page
-   * draws no composer over one at all, so that code is a race rather than a state.
-   *
-   * Answers the created line, which is what the caller appends. Nothing is drawn
-   * optimistically here, unlike the list page: four people work a basket at once,
-   * and a row that appeared locally and then reordered when the server answered is a
-   * row somebody might tap in between.
-   *
-   * ## The path is under `basket`, not `:id/lines`
-   *
-   * `POST /v1/baskets/:id/lines` is the **owner's** add, resolved by
-   * `ownerUserId`, so a guest holding a perfectly valid session gets a not found
-   * from it. The participant surface reads through `basket` already, and its write
-   * sits beside that read.
-   */
-  addLine(
-    basketId: string,
-    body: BasketAddLineRequest
-  ): Promise<BasketLine>;
-
-  /**
    * The catalog, searched **through the basket**
-   * (`GET .../catalog/suggest?q=`), velista `0053` section 4.
+   * (`GET /v1/baskets/:id/catalog/suggest?q=`), velista `0053` section 4.
    *
    * A route of its own rather than `CatalogServiceI.suggest`, because that one sits
    * behind the account guard and resolves its scope from the caller's shopping
    * profile, and the reader here may hold no account at all. The gateway composes
    * this one on the participant's behalf, exactly as it already composes the product
-   * names every basket line carries.
+   * names every basket row carries.
    *
-   * **The scope is the run's, never the caller's** (luna `0055`, section 5.1): the
-   * ranking is the basket's own, so a stranger's basket is not priced by a different
-   * city's shops, and a guest with no profile gets a ranking at all.
+   * **The scope is the basket's, never the caller's** (luna `0055`, section 5.1):
+   * the ranking is the basket's own, so a stranger's basket is not priced by a
+   * different city's shops, and a guest with no profile gets a ranking at all.
    *
    * **Empty rather than thrown**, matching {@link CatalogServiceI.suggest}: a
    * dropdown is an offer, free text has been first class since `0043`, and adding a
@@ -220,105 +173,8 @@ export interface BasketServiceI {
     query: string
   ): Promise<readonly CatalogSuggestion[]>;
 
-  /**
-   * Say how many of a line are still to get (`POST .../lines/:lineId/outstanding`),
-   * velista `0054`.
-   *
-   * **The number, not a delta**, and {@link BasketOutstandingRequest.from} is the
-   * whole of why. Above the current amount the basket asks for more and nothing is
-   * settled; below it, the difference was bought; zero finishes the line exactly as
-   * "got all" does. Which of those a gesture meant depends entirely on where it
-   * started, so a `from` that no longer matches is refused with `stale_quantity`
-   * rather than applied to a number that moved underneath it.
-   *
-   * Answers a {@link BasketSettleResult} in **both** directions, which is not a
-   * convenience: the downward move writes a settlement and can skip an origin whose
-   * access has gone, so the caller has to be told something did not land, exactly as
-   * it does after {@link settle}.
-   */
-  setOutstanding(
-    basketId: string,
-    lineId: string,
-    body: BasketOutstandingRequest
-  ): Promise<BasketSettleResult>;
-
-  /**
-   * Every list this reader may write, in three collections
-   * (`GET .../lines/:lineId/origins`), velista `0055`, widened by backend `0092`.
-   *
-   * The lists already on the line, the lists holding the same thing, and the lists
-   * holding nothing matching. It answers for **any** line, including one somebody
-   * added in an aisle whose first two collections are empty, because that is exactly
-   * the line the sheet most needs to offer (velista `0068`, section 2).
-   *
-   * **Zone data throughout**, so the server refuses it outright to a guest and to a
-   * registered participant who does not pass the all or nothing rule: a redacted
-   * version of this answer would be an empty sheet, which is a worse lie than a
-   * refusal. The screen does not draw the way in for them either.
-   */
-  getLineOrigins(
-    basketId: string,
-    lineId: string
-  ): Promise<BasketLineOrigins>;
-
-  /**
-   * Set what one list contributes (`POST .../lines/:lineId/origins`), velista `0055`.
-   *
-   * One call for four gestures, because they are one write at different starting
-   * points: changing an existing contribution, adopting a candidate (`from: 0`),
-   * creating the line on a list that holds none (`from: 0` and no `lineId`), and
-   * taking a list off the line altogether (`quantity: 0`).
-   *
-   * **Adoption takes over demand before it adds any** (backend `0092`, section 4.1):
-   * raising a list to what it already asks for on its own moves that list by
-   * nothing, and above it by the difference. Creation is the ordinary add, under
-   * that list's own approval rule, which is what the answered origin's
-   * `approvalStatus` says.
-   *
-   * **It buys nothing, ever.** No settlement is written and no bought indicator is
-   * set, whichever way the number goes, which is what keeps this sheet's captions
-   * free of any sentence about a purchase. Going under what the basket has already
-   * bought against the list is refused with `below_settled` rather than quietly
-   * unbuying it.
-   */
-  setOriginQuantity(
-    basketId: string,
-    lineId: string,
-    body: BasketOriginQuantityRequest
-  ): Promise<BasketOriginQuantityResult>;
-
-  /**
-   * Set how many of a line one list has got
-   * (`POST .../lines/:lineId/origins/settled`), velista `0073`, backend `0104`.
-   *
-   * **Everything {@link setOriginQuantity} refuses to do, this does.** Raising
-   * settles the difference against that list alone, lowering takes that list's
-   * newest purchases back, a settlement is written either way and the household
-   * hears `line.settled`. The two are separate calls because they are opposite acts
-   * on one row, and a caller that could send both numbers at once would mean neither.
-   *
-   * Bounded by the origin's own `contributed` above and by zero below, and the server
-   * is what holds both: a list cannot have got more of a line than it asked for.
-   *
-   * **Read the line out of the answer and never out of what was asked for.** A
-   * `NOT_AVAILABLE` close has no units to divide, so any raise takes the whole close
-   * back and the outstanding number can land above where the control was dragged
-   * (backend `0104`, section 5).
-   *
-   * Zone data, so the server refuses it outright to a guest and to a registered
-   * participant who does not pass the all or nothing rule, which is why its `skipped`
-   * report is required rather than optional.
-   */
-  setOriginSettled(
-    basketId: string,
-    lineId: string,
-    body: BasketOriginSettledRequest
-  ): Promise<BasketOriginSettledResult>;
-
   /** Everybody on the basket (`GET .../participants/mine`), for presence. */
-  listParticipants(
-    basketId: string
-  ): Promise<readonly BasketParticipant[]>;
+  listParticipants(basketId: string): Promise<readonly BasketParticipant[]>;
 
   /**
    * A fresh socket token (`POST .../participant-token`).
@@ -355,10 +211,7 @@ export interface BasketServiceI {
   ): Promise<{ revoked: number }>;
 
   /** Remove one participant and nobody else (`DELETE .../participants/:id`). */
-  revokeParticipant(
-    basketId: string,
-    participantId: string
-  ): Promise<void>;
+  revokeParticipant(basketId: string, participantId: string): Promise<void>;
 
   /**
    * Add one of the owner's contacts to the basket
@@ -367,10 +220,7 @@ export interface BasketServiceI {
    * Owner only, account authenticated. Somebody already on it by link becomes an
    * invited member, and somebody who was removed or left is brought back.
    */
-  addParticipant(
-    basketId: string,
-    userId: string
-  ): Promise<BasketParticipant>;
+  addParticipant(basketId: string, userId: string): Promise<BasketParticipant>;
 
   /**
    * Leave a basket somebody else shared (`DELETE .../participants/mine`, backend
@@ -379,27 +229,6 @@ export interface BasketServiceI {
    */
   leaveBasket(basketId: string): Promise<void>;
 }
-
-/**
- * Whether the deployment serves the reopen route, which is luna `0054`'s to ship.
- *
- * A constant rather than a runtime probe, exactly as `VERIFY_RESEND_AVAILABLE` is and
- * for its reasons: there is nothing to discover at runtime that is not already known
- * at build time, and a probe would spend a request per basket read learning something
- * a one line edit says better.
- *
- * What it gates is **one control's behaviour and not its existence** (plan 0052,
- * section 10). A finished row still draws its status glyph while this is false; the
- * glyph is a state indicator rather than a button, because a control you may not use
- * is not drawn (`0030`) and offering an act that would 404 is the same mistake wearing
- * a different hat. The settle direction works in full either way, and it is most of
- * the value.
- *
- * **Turned on**: luna `0054` shipped `POST .../lines/:lineId/reopen`, so a finished
- * row's glyph is a control again. What the constant is still worth is the record of
- * what it gates, and the one line to change if the route is ever withdrawn.
- */
-export const BASKET_REOPEN_AVAILABLE = true;
 
 /**
  * Inject this, typed as the interface, never a concrete class.

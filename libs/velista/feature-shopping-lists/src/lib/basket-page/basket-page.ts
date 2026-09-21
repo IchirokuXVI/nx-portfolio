@@ -3,11 +3,8 @@ import {
   Component,
   computed,
   DestroyRef,
-  effect,
   inject,
   signal,
-  untracked,
-  viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -16,7 +13,6 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  BASKET_REOPEN_AVAILABLE,
   BasketStore,
   BasketViewStore,
   BasketListStore,
@@ -24,14 +20,9 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
-  outstanding,
-  SUGGEST_DEBOUNCE_MS,
-  SUGGEST_MIN_CHARS,
-  type BasketLine,
-  type BasketLineOrigin,
+  type BasketRow as BasketRowModel,
   type BasketViewRow,
   type BasketViewSection,
-  type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -42,7 +33,6 @@ import {
   ChevronLeftIcon,
   ChipRow,
   FlagIcon,
-  LineComposer,
   ListTools,
   OfflineIcon,
   PersonIcon,
@@ -51,8 +41,8 @@ import {
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
 import { outstandingCaption, participantInitials } from '../basket-labels';
-import { BasketLineRow } from '../basket-line-row/basket-line-row';
 import { BASKET_PATHS } from '../basket-paths';
+import { BasketRow } from '../basket-row/basket-row';
 
 /**
  * The basket: a list of lines with quantities, which whoever is holding the
@@ -80,7 +70,8 @@ import { BASKET_PATHS } from '../basket-paths';
  *
  * The two things that do branch are the share control, which is the owner's
  * alone, and the allocation pane, which the settle sheet draws on
- * `seesZoneData`. Both are also refused server side, so a template mistake is a
+ * the lists it was served. Both are also refused server side, so a template
+ * mistake is a
  * cosmetic bug rather than a disclosure.
  *
  * **The composer is the one row of that table with no reader-shaped condition on
@@ -110,11 +101,10 @@ import { BASKET_PATHS } from '../basket-paths';
 @Component({
   selector: 'lib-basket-page',
   imports: [
-    BasketLineRow,
+    BasketRow,
     ChevronLeftIcon,
     ChipRow,
     FlagIcon,
-    LineComposer,
     ListTools,
     OfflineIcon,
     PersonIcon,
@@ -179,12 +169,12 @@ export class BasketPage {
     this._route.snapshot.paramMap.get('basketId') ?? '';
 
   protected readonly state = this._store.state;
-  protected readonly lines = this._store.lines;
+  protected readonly rows = this._store.rows;
   protected readonly progress = this._store.progress;
-  protected readonly busyLines = this._store.busyLines;
+  protected readonly busyRows = this._store.busyRows;
   protected readonly participantsById = this._store.participantsById;
-  protected readonly listNames = this._store.listNames;
-  protected readonly seesZoneData = this._store.seesZoneData;
+  /** The covered lists this reader was served, for the "from" caption on a row. */
+  protected readonly lists = this._store.lists;
 
   /** Only the owner is offered the share control, and only they can use it. */
   protected readonly isOwner = computed(
@@ -248,8 +238,10 @@ export class BasketPage {
   protected readonly allSettled = computed(
     () =>
       this.canFinish() &&
-      this.lines().length > 0 &&
-      this._store.unsettled() === 0
+      this.rows().length > 0 &&
+      // The server's count, never a subtraction here (backend `0130`, section 4):
+      // a `SKIPPED` row is pending, and this side has no way to know that.
+      this._store.pending() === 0
   );
 
   /** Whether a finish or a reopen is in flight, so the banner's control can wait. */
@@ -274,7 +266,7 @@ export class BasketPage {
   /**
    * The reader's own account name, handed down to every row.
    *
-   * Read once here rather than in {@link BasketLineRow}, which is constructed once per
+   * Read once here rather than in {@link BasketRow}, which is constructed once per
    * line: the page already holds the session, and the caption on a line the reader
    * settled themselves is the one thing on the row the basket alone cannot name.
    */
@@ -298,7 +290,7 @@ export class BasketPage {
     if (basket.name !== null && basket.name !== '') {
       return basket.name;
     }
-    const at = basket.generatedAt;
+    const at = basket.createdAt;
     if (at === null) {
       return this._translator.t('basket.unnamed', undefined, this._locale());
     }
@@ -329,17 +321,6 @@ export class BasketPage {
   protected readonly revoked = this._store.revoked;
 
   /**
-   * Whether a finished row's status control may be pressed (plan 0052, section 10).
-   *
-   * A build constant and not state, so it is read once here and handed down rather
-   * than imported by the row, which is constructed once per line. While it is false a
-   * finished line's glyph is a state indicator instead of a button: it says what the
-   * line is, and does not offer an act that would 404 against a backend without luna
-   * `0054`'s route.
-   */
-  protected readonly canReopen = BASKET_REOPEN_AVAILABLE;
-
-  /**
    * What the last move of a row's number came to, for the live region.
    *
    * **One region for the whole basket**, which is the same choice the composer's
@@ -357,26 +338,18 @@ export class BasketPage {
    * the moment any row starts another move.
    */
   private readonly _notice = signal<{
-    readonly lineId: string;
+    readonly rowKey: string;
     readonly key: string;
     readonly count: number;
   } | null>(null);
 
   /** The notice for this row, or null. Identity is stable, so the row is not redrawn. */
   protected noticeFor(
-    line: BasketLine
+    row: BasketRowModel
   ): { readonly key: string; readonly count: number } | null {
     const notice = this._notice();
-    return notice !== null && notice.lineId === line.id ? notice : null;
+    return notice !== null && notice.rowKey === row.rowKey ? notice : null;
   }
-
-  /**
-   * Which lines were sent to a list that has not accepted them yet (`0056`).
-   *
-   * From the store rather than from the lines, because no field of a line carries
-   * it. See `BasketStore.pendingTargets` for the gap it stands in for.
-   */
-  protected readonly pendingTargets = this._store.pendingTargets;
 
   /**
    * The faces along the top: **who has this basket open right now**.
@@ -478,41 +451,62 @@ export class BasketPage {
     });
   }
 
-  protected isBusy(line: BasketLine): boolean {
-    return this.busyLines().has(line.id);
+  protected isBusy(row: BasketRowModel): boolean {
+    return this.busyRows().has(row.rowKey);
   }
 
-  protected openLine(line: BasketLine): void {
-    void this._router.navigate(sheetSegments('lines', line.id, 'settle'), {
+  protected openRow(row: BasketRowModel): void {
+    void this._router.navigate(sheetSegments('rows', row.rowKey, 'settle'), {
       relativeTo: this._route,
     });
   }
 
   /**
-   * The row's status control, settling direction: the whole outstanding amount.
+   * The row's status control, settling direction: everything it still asks for.
    *
    * The same body the sheet's primary button sends, so the two gestures cannot
-   * allocate differently. It does not open the allocation pane and it asks nothing
-   * about zones: the system allocates oldest origin first exactly as it does when the
-   * sheet sends the same body (plan 0052, section 6.4).
+   * allocate differently. **With an explicit quantity**, which backend `0136`
+   * requires, and with `from` beside it, which is what makes a double tap safe: the
+   * second tap names a number the first one moved, and the server refuses it.
+   *
+   * It asks nothing about lists: the server divides the units oldest entry first,
+   * exactly as it does when the sheet sends the same body.
    */
-  protected settleLine(line: BasketLine): void {
-    void this._toggle(line, () =>
-      this._store.settle(line.id, { outcome: 'BOUGHT' })
+  protected settleRow(row: BasketRowModel): void {
+    void this._toggle(row, () =>
+      this._store.settle(row.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: row.left,
+        from: row.left,
+      })
     );
   }
 
-  /** The other direction: a finished line back to fully outstanding. */
-  protected reopenLine(line: BasketLine): void {
-    void this._toggle(line, () => this._store.reopen(line.id));
+  /**
+   * The other direction: take this row's purchases, or its close, back.
+   *
+   * Which of the two is the **state's** to say and never this page's. A row the shop
+   * had none of holds no units to give back, so reverting it takes the close; a row
+   * somebody bought gives the units back. Sending the wrong one would be refused,
+   * and deciding it here from two numbers is the arithmetic velista `0090` removed.
+   */
+  protected revertRow(row: BasketRowModel): void {
+    void this._toggle(row, () =>
+      this._store.revert(
+        row.rowKey,
+        row.state === 'NOT_AVAILABLE'
+          ? { target: 'CLOSE' }
+          : { target: 'UNITS', units: row.bought, from: row.bought }
+      )
+    );
   }
 
   /**
    * Run a row write, and open the sheet on it if it has something to report.
    *
-   * **The row cannot draw a skipped origin report**, because it is a paragraph and a
-   * row is three short lines. So a write that comes back with `skippedCount > 0` opens
-   * the settle sheet on that line, which is where `0051` section 6.4's sentence
+   * **The row cannot draw what a write could not reach**, because it is a sentence
+   * and a row is three short lines. So a write that comes back with
+   * `skippedCount > 0` opens the settle sheet on that row, where the sentence
    * already lives and where the person can read it beside what they were doing.
    *
    * A failure needs no branch here. It has already moved `BasketStore.state` or is a
@@ -520,27 +514,32 @@ export class BasketPage {
    * way; the sheet is where a failure gets a sentence, and the person opens it.
    */
   private async _toggle(
-    line: BasketLine,
+    row: BasketRowModel,
     write: () => Promise<{ skippedCount: number } | null>
   ): Promise<void> {
     const result = await write();
     if (result !== null && result.skippedCount > 0) {
-      this.openLine(line);
+      this.openRow(row);
     }
   }
 
   /**
    * The row's reel was let go: one call, whichever direction it went (plan 0054).
    *
-   * **The client never decides whether the drag was a purchase or a raise.** Backend
-   * `0056` section 3 makes that decision on numbers only it can see, and a client
-   * that decided would get it wrong exactly when two phones are moving one line. So
-   * this sends where the gesture ended and where it believed it began, and the
-   * answer is a settle result in both directions: a raise answers `skippedCount: 0`,
-   * so the skip reporting comes across unchanged and needs no branch.
+   * **The client never decides whether the drag was a purchase or a take back.**
+   * `BasketStore.setLeft` turns the pair of numbers into a settle or a revert, and it
+   * is the one place that decision lives, so the row, the entries pane and this
+   * cannot disagree. What this page owns is the sentence a refusal leaves behind.
+   *
+   * Under a list heading the row is drawn for one entry, and moving its reel is
+   * still a write on the **row**: the units it settles are allocated to that
+   * household through `allocations`, which is velista `0092`'s to draw from the
+   * entries pane. Until then the reel under a heading commits against the row and
+   * the server divides oldest entry first, which is what it did before a heading
+   * existed.
    */
-  protected async setOutstanding(
-    line: BasketLine,
+  protected async setRowLeft(
+    row: BasketViewRow,
     change: { from: number; to: number }
   ): Promise<void> {
     // Whatever the last move of any row came to, gone before this one starts: one
@@ -548,14 +547,14 @@ export class BasketPage {
     // a row somebody has since moved again would be a lie about the present.
     this._notice.set(null);
 
-    const result = await this._store.setOutstanding(
-      line.id,
+    const result = await this._store.setLeft(
+      row.row.rowKey,
       change.to,
       change.from
     );
 
     if (result === null) {
-      this._reportOutstanding(line);
+      this._reportLeft(row.row);
       return;
     }
 
@@ -571,7 +570,7 @@ export class BasketPage {
     );
 
     if (result.skippedCount > 0) {
-      this.openLine(line);
+      this.openRow(row.row);
     }
   }
 
@@ -643,93 +642,23 @@ export class BasketPage {
   }
 
   /**
-   * A row's reel was let go: the whole line, or one household's share of it.
-   *
-   * Two writes behind one gesture, and **the row does not choose between them**: it
-   * reports where the number went and this decides, because the row it belongs to is
-   * what carries the origin and the page is what holds the store. A row under a list
-   * heading commits that list's own purchase through velista `0073`'s per list write;
-   * every other row commits the line's, exactly as it always has.
-   */
-  protected async setRowOutstanding(
-    row: BasketViewRow,
-    change: { from: number; to: number }
-  ): Promise<void> {
-    const origin = row.origin;
-    if (origin === null) {
-      await this.setOutstanding(row.line, change);
-      return;
-    }
-    await this.setOriginOutstanding(row.line, origin, change);
-  }
-
-  /**
-   * One household's share of a line moved (velista `0077`, section 4.1).
-   *
-   * The reel counts what is **still to get** and the write takes what has been
-   * **got**, so the two numbers are subtracted from what the list asked for on the
-   * way past. `from` is that list's settled count as this screen last read it, which
-   * is the same stale check every other write on this page sends: the server refuses
-   * a move whose origin no longer matches rather than applying it as the opposite
-   * act (backend `0056`, section 3.2).
-   *
-   * The answer carries the **whole line**, and the store applies it, so the row
-   * redraws from what the server now says rather than from the number that was sent.
-   * That matters here for `0073`'s own reason: taking back a `NOT_AVAILABLE` close
-   * has no units to divide, so the whole close comes back and the number lands above
-   * where the control was dragged.
-   */
-  private async setOriginOutstanding(
-    line: BasketLine,
-    origin: BasketLineOrigin,
-    change: { from: number; to: number }
-  ): Promise<void> {
-    // One sentence at a time across the whole basket, exactly as `setOutstanding`
-    // clears it: a stale refusal under a row somebody has since moved again is a lie
-    // about the present.
-    this._notice.set(null);
-
-    const result = await this._store.setOriginSettled(line.id, {
-      lineId: origin.lineId,
-      settled: Math.max(0, origin.quantity - change.to),
-      from: origin.settled,
-    });
-
-    if (result === null) {
-      this._reportOutstanding(line);
-      return;
-    }
-
-    this._say(
-      outstandingCaption(
-        change.from,
-        change.to,
-        this._translator,
-        this._locale()
-      ) ?? ''
-    );
-
-    if (result.skippedCount > 0) {
-      this.openLine(line);
-    }
-  }
-
-  /**
    * Say what went wrong, once, on the row it went wrong on.
    *
-   * The count is read back off the store rather than off the line this was called
-   * with, and that is the whole of the stale answer: `BasketStore.setOutstanding`
+   * The count is read back off the store rather than off the row this was called
+   * with, and that is the whole of the stale answer: `BasketStore.setLeft`
    * refetches before it returns null, so by now the row's number is the true one and
    * "it says 3 now" is a sentence worth saying. Every other failure gets its own
    * sentence the same way, because a failure with no sentence is the defect
    * `basket-error-copy.ts` exists to close (plan 0052, section 7).
    */
-  private _reportOutstanding(line: BasketLine): void {
+  private _reportLeft(row: BasketRowModel): void {
     const key = basketErrorKey(this._store.error(), 'basket.outstanding');
-    const found = this.lines().find((row) => row.id === line.id);
-    const count = outstanding(found ?? line);
+    // Found again rather than trusted: a `stale_quantity` refetch can land a
+    // re-keyed row, and the number to report is that row's as it now stands.
+    const found = this._store.rowFor(row.rowKey);
+    const count = (found ?? row).left;
 
-    this._notice.set({ lineId: line.id, key, count });
+    this._notice.set({ rowKey: row.rowKey, key, count });
     this._say(this._translator.t(key, undefined, this._locale(), { count }));
   }
 
@@ -806,7 +735,7 @@ export class BasketPage {
    * about the trip and stays about the trip: a search hides rows and changes nothing
    * about how much shopping is left.
    */
-  protected readonly visibleLines = this._view.visibleLines;
+  protected readonly visibleLines = this._view.visibleRows;
 
   /** What is in the search field, for the count and for the no match sentence. */
   protected readonly searchQuery = this._view.query;
@@ -894,13 +823,17 @@ export class BasketPage {
   /**
    * The count at the chip row's trailing edge, or null.
    *
-   * **Drawn only while fewer lines are shown than the basket holds.** A row saying
+   * **Drawn only while fewer rows are shown than the basket holds.** A row saying
    * "12 of 12" next to a chip that reorders is noise: the chips say what is on, and
    * this says what it cost.
    */
   protected readonly chipCount = computed(() => {
     const shown = this.visibleCount();
-    const total = this.lines().length;
+    // The rows a shopper is working through, which is every row that is not
+    // `REMOVED`: one somebody took off the basket is information about it rather
+    // than a thing the filter is hiding, and counting it would make an unfiltered
+    // basket report fewer rows than it holds.
+    const total = this.rows().filter((row) => row.state !== 'REMOVED').length;
     if (shown >= total) {
       return null;
     }
@@ -931,159 +864,6 @@ export class BasketPage {
   }
 
   // --- The composer (plan 0053) ---------------------------------------------
-
-  /**
-   * Whether the field at the bottom is drawn, and it is drawn for **everybody**.
-   *
-   * That is the unusual part of this screen and not a relaxation of `0030`. The list
-   * page draws its composer from certainty, because `myPermissions` arrives with the
-   * list and somebody without `WRITE` never sees a field. The basket inverts it:
-   * every participant may add a line, guests included, so there is no permission to
-   * read and no branch to write. A line added here has no target list, so it changes
-   * nothing shared, names no zone and claims no zone line — it is a note on the list
-   * somebody is carrying, and the gate that matters is on binding it to a
-   * household's list.
-   *
-   * The one absence is a **finished basket**, where the server refuses the add and a
-   * field that cannot submit is the invitation `0038` section 2.1 refuses to draw.
-   */
-  protected readonly canAdd = this._store.takesLines;
-
-  /** Whether an add is in flight. The field stays usable; only the button waits. */
-  protected readonly adding = this._store.adding;
-
-  /**
-   * What the composer offers under the field, in the **server's** order.
-   *
-   * Never re-sorted here, for the reason written on `CatalogApi.suggest`: the client
-   * holds none of the prices, scopes or synonyms that decided it.
-   */
-  protected readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
-
-  /**
-   * The newest line to arrive, announced politely and once.
-   *
-   * One region rather than one per line, which is what makes it bearable when four
-   * people add at the same time: a polite region reads whatever the node last held,
-   * so simultaneous adds collapse into one sentence (section 8).
-   */
-  protected readonly announcement = computed(
-    () => this._store.lastAdded()?.content ?? ''
-  );
-
-  /**
-   * The most recent split, said in the **same** region (velista `0069`, section
-   * 4).
-   *
-   * The store sets one of the two and clears the other, so whichever happened
-   * last is what the region holds. Null after an add, and null for a split that
-   * left one row, which is a sibling folded back into the row it came from:
-   * nothing was split, so nothing is said.
-   *
-   * The new rows need no scroll and no highlight. They carry positions between
-   * the original and the line after it, so they are already under the row the
-   * shopper was looking at.
-   */
-  protected readonly splitAnnouncement = this._store.lastSplit;
-
-  private readonly _composer = viewChild(LineComposer);
-
-  /** The last thing typed, which the effect below watches. */
-  private readonly _query = signal('');
-
-  protected onComposerQuery(query: string): void {
-    this._query.set(query);
-  }
-
-  /**
-   * Ask the catalog, at most once per {@link SUGGEST_DEBOUNCE_MS} of quiet.
-   *
-   * **Identical in behaviour to the list page's, deliberately**: somebody who has
-   * used velista's list screen must not have to learn a second search. The container
-   * owns the debounce, the three character floor and the sequence number, and the
-   * composer emits raw keystrokes and knows nothing about requests (rule D1).
-   *
-   * The sequence number is what makes this correct rather than merely debounced: two
-   * requests can be in flight when somebody types through the beat and they can
-   * answer out of order, so an older answer must not replace a newer one. Comparing
-   * against the query the effect was started for is not enough, since the same text
-   * can be typed twice.
-   *
-   * The request goes to the **participant surface**, because the reader may hold no
-   * account token, and it is scoped to the run's own shopping profile rather than to
-   * the reader's, so the ranking is the basket's. Both of those are the store's and
-   * the gateway's business, not this page's.
-   */
-  private _suggestSeq = 0;
-
-  private readonly _suggestEffect = effect((onCleanup) => {
-    const query = this._query().trim();
-
-    if (query.length < SUGGEST_MIN_CHARS) {
-      // Cleared synchronously rather than after the debounce: a dropdown that
-      // lingered over a field somebody has just emptied is offering matches for
-      // nothing.
-      untracked(() => this.suggestions.set([]));
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      const seq = (this._suggestSeq += 1);
-      void this._store.suggest(query).then((found) => {
-        if (seq === this._suggestSeq) {
-          this.suggestions.set(found);
-        }
-      });
-    }, SUGGEST_DEBOUNCE_MS);
-
-    onCleanup(() => clearTimeout(timer));
-  });
-
-  /**
-   * Add a line, from the field or from a suggestion.
-   *
-   * **Not optimistic**, which is the opposite of the list page and is the whole of
-   * section 7: four people are working this basket at once, and a row that appeared
-   * locally and then reordered when the server answered is a row somebody might tap
-   * in between. `BasketStore` appends when the server answers, and the socket carries
-   * the same line to everybody else.
-   *
-   * ## What a suggestion attaches
-   *
-   * The composer hands down `itemIds`: one product for an item suggestion, a group's
-   * whole set for a group one. Both become `options`, which is what the line may be
-   * switched between; the **pick** is set only where exactly one product was
-   * attached, because that is the case where somebody chose a product rather than a
-   * kind of thing. A group leaves the pick unset, so the row offers "which one did
-   * you get?" at the shelf, which is where that question belongs.
-   *
-   * A failed add puts the text back in the field. Losing six characters is nothing;
-   * losing the item somebody just remembered in an aisle is the failure this screen
-   * cannot afford.
-   */
-  protected async add(entry: {
-    content: string;
-    quantity: number;
-    itemIds?: readonly string[];
-  }): Promise<void> {
-    const itemIds = entry.itemIds ?? [];
-    const line = await this._store.addLine({
-      content: entry.content,
-      quantity: entry.quantity,
-      ...(itemIds.length === 1 ? { itemId: itemIds[0] } : {}),
-      ...(itemIds.length > 0 ? { options: itemIds } : {}),
-    });
-
-    // The dropdown goes with the words that produced it, whichever way the add
-    // went. Clearing it here rather than in the composer keeps the two from
-    // disagreeing about whether a list is open.
-    this._query.set('');
-    this.suggestions.set([]);
-
-    if (line === null) {
-      this._composer()?.restore(entry.content);
-    }
-  }
 
   /**
    * Back to wherever this was opened from.

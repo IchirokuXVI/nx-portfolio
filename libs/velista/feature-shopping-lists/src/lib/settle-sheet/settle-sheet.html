@@ -113,47 +113,28 @@
       @if (productName(); as product) {
         <div class="product">
           <span class="product-name">{{ product }}</span>
-          <!--
-            Everybody may swap, guests included: the options are catalog products
-            and never zone data (backend 0051, section 6.1).
-          -->
-          <!--
-            Absent once the whole trip is finished, like every other control on this
-            screen: the server refuses a swap on a finished basket, and a correction
-            of the record is still a change to it (velista 0057, section 6).
-          -->
-          @if (options().length > 1 && !basketFinished()) {
-            <button
-              (click)="openPane('product')"
-              class="product-change"
-              type="button"
-            >
-              {{ 'basket.product.change' | rokuT }}
-            </button>
-          }
         </div>
       }
 
       <!--
-        What every list asked for and what every list got (velista 0073, section 3).
+        What each household asked for and got (velista `0090`, section 9.2).
 
         Directly under the product entry and above the settle buttons, which is where
-        the plan puts it: the shopper has already opened this sheet and already picked
-        the product, and the six rows they used to have to find on a second sheet are
-        the next thing under it.
+        `0073` put its predecessor: the shopper has already opened this sheet, and the
+        rows they used to have to find on a second sheet are the next thing under it.
 
-        Only for a reader who passes the all or nothing rule (section 3.3). A guest
-        sees the sheet without it and settles the whole line or part of it through the
-        buttons below, because a guest is never told which household a tin of tomatoes
-        belongs to.
-
-        It owns its own read and draws its own loading and failure states, so the
-        settle buttons below never wait for it (section 3.4).
+        **It reads the basket's own row** and fetches nothing, so it has no loading
+        state and no failure of its own: the numbers arrived with the basket. Drawn
+        when there is something to say, which is more than one entry or one whose
+        list this reader was served.
       -->
-      @if (canSeeLists()) {
-        <lib-line-lists-summary
+      @if (canSeeEntries()) {
+        <lib-row-entries
+          (allocated)="allocate($event)"
+          [busy]="busy()"
           [finished]="basketFinished()"
-          [lineId]="lineId()"
+          [lists]="lists()"
+          [row]="row()!"
         />
       }
 
@@ -220,7 +201,7 @@
         What happened to this line, for a reader entitled to it (plan 0049, section
         1.1). Not drawn for a guest, who holds no account to authenticate the read
         with, and not drawn for a participant who has lost WRITE: `canReadHistory`
-        follows `seesZoneData`, which is the server's answer on the last basket read.
+        follows the served list refs, which are the server's answer on the last read.
 
         Below the settle targets and outside the actions group, because it is a thing
         to read rather than a thing to do, and the thumb reaching for the big button
@@ -273,182 +254,6 @@
       </div>
     }
 
-    <!--
-      One stepper per product and one commit, since velista 0069.
-
-      It was a radio group: one tap chose one product for the whole line, so
-      somebody holding three skimmed and two whole recorded the other two as the
-      wrong milk. A line still holds one product, because a settlement names one,
-      so choosing several **splits** the line (backend 0094): the row keeps its
-      own product and the balance, and one row appears under it per other
-      product.
-
-      Everything velista 0062 draws is unchanged. The order is the line's own
-      option order and never changes, the cheapest is marked rather than moved,
-      and a row with no price and a row with one are the same shape.
-    -->
-    @case ('product') {
-      <p class="pane-title">{{ 'basket.product.title' | rokuT }}</p>
-      <!--
-        Named after the product that keeps the balance, so the sentence says
-        where the units nobody moved are going. A line that names no product has
-        no name to put in it and gets the other sentence, which says the same
-        thing without one.
-      -->
-      @if (productName(); as product) {
-        <p class="hint">
-          {{ 'basket.product.hint' | rokuT: { name: product } }}
-        </p>
-      } @else {
-        <p class="hint">{{ 'basket.product.hintNone' | rokuT }}</p>
-      }
-
-      <ul class="options">
-        <!--
-          The balance's own row, for a line no option row can hold it on: one
-          added to a group with no product picked, and one whose product the
-          catalog has since dropped. Without it the rule would read differently
-          for those lines, and nothing on screen would say what an unpicked
-          remainder means.
-        -->
-        @if (restRow(); as rest) {
-          <li class="option is-rest">
-            <span class="option-line">
-              <span class="option-name">
-                {{ rest.name || ('basket.product.noneRest' | rokuT) }}
-              </span>
-              <span class="option-balance" role="status">{{ balance() }}</span>
-            </span>
-            <span class="option-line option-detail">
-              <span class="option-rest-label">
-                {{ 'basket.product.rest' | rokuT }}
-              </span>
-            </span>
-          </li>
-        }
-
-        @for (option of productRows(); track option.id) {
-          <li [class.is-rest]="option.chosen" class="option">
-            <span class="option-line">
-              <span class="option-name">{{ option.name }}</span>
-              @if (option.price) {
-                <span class="option-price">{{ option.price }}</span>
-              } @else if (option.noPrice) {
-                <span class="option-price is-unknown">
-                  {{ 'basket.product.noPrice' | rokuT }}
-                </span>
-              }
-            </span>
-            @if (option.brand || option.place || option.unitPrice) {
-              <span class="option-line option-detail">
-                <span class="option-brand">
-                  @if (option.brand) {
-                    {{ option.brand }}
-                  }
-                  @if (option.brand && option.place) {
-                    ·
-                  }
-                  @if (option.place) {
-                    {{ option.place }}
-                  }
-                </span>
-                @if (option.unitPrice) {
-                  <span class="option-unit-price">{{ option.unitPrice }}</span>
-                }
-              </span>
-            }
-            <span class="option-line option-foot">
-              @if (option.cheapest) {
-                <span class="option-cheapest">
-                  {{ 'basket.product.cheapest' | rokuT }}
-                </span>
-              }
-              <!--
-                The line's own product carries the balance and no control: it is
-                what the steppers did not take, and a control over it would be a
-                second way to say one number (section 2).
-              -->
-              @if (option.chosen) {
-                <span class="option-rest">
-                  <span class="option-rest-label">
-                    {{ 'basket.product.rest' | rokuT }}
-                  </span>
-                  <span class="option-balance" role="status">
-                    {{ balance() }}
-                  </span>
-                </span>
-              } @else {
-                <!--
-                  The reel, buttons kept: this control was a minus, a number and a
-                  plus before it was a reel, and the amounts here are small and
-                  moved at a shelf with one hand. `preview` writes through as the
-                  thumb moves, so the balance above walks down under the gesture
-                  and Apply pressed inside the reel's idle beat sends what is on
-                  screen. The ceiling is the row's, and `setShare` clamps again
-                  rather than trusting any control.
-                -->
-                <lib-quantity-reel
-                  (committedTo)="setShare(option.id, $event.to)"
-                  (preview)="onSharePreview(option.id, $event)"
-                  [label]="
-                    'basket.product.units' | rokuT: { name: option.name }
-                  "
-                  [max]="option.max"
-                  [min]="0"
-                  [readonly]="busy()"
-                  [value]="option.share"
-                  class="share-reel"
-                />
-              }
-            </span>
-          </li>
-        }
-      </ul>
-
-      <!--
-        How old the prices are, once for the pane rather than on eleven rows,
-        and whether any was typed in by hand (section 5.4). Absent when nothing
-        is priced, which is every pane in staging and production.
-      -->
-      @if (pricesAsOf(); as asOf) {
-        <p class="prices-as-of">{{ asOf.key | rokuT: { when: asOf.when } }}</p>
-      }
-
-      <div class="actions">
-        <button
-          (click)="apply()"
-          [disabled]="busy() || !moved()"
-          class="primary"
-          type="button"
-        >
-          {{ 'basket.product.apply' | rokuT }}
-        </button>
-        <button
-          (click)="openPane('settle')"
-          [disabled]="busy()"
-          class="quiet"
-          type="button"
-        >
-          {{ 'basket.settle.cancel' | rokuT }}
-        </button>
-      </div>
-
-      <!--
-        This pane used to change the record of a purchase and now changes only
-        what is still to buy (section 2.1). Under the button, because that is
-        where somebody looks before pressing it.
-      -->
-      <p class="hint">{{ 'basket.product.notBought' | rokuT }}</p>
-    }
-
-    <!--
-      What happened to this line and in what order (plan 0049, section 1.1).
-
-      The row says who last touched it; this says what everybody did, which is the
-      question after a trip where two people bought against one line. Every row is this
-      one line by construction, across however many households it was composed from, so
-      no row names a list: the pane is about the line and not about where it came from.
-    -->
     @case ('merge') {
       <!--
         The merge question (velista 0084, section 4): a heading naming the typed
