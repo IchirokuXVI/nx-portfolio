@@ -56,13 +56,9 @@ import {
   catalogSchemas,
 } from './messages/catalog.schemas';
 import {
-  generatedListSharingMessageContracts,
-  generatedListSharingSchemas,
-} from './messages/generated-list-sharing.schemas';
-import {
-  generatedListMessageContracts,
-  generatedListSchemas,
-} from './messages/generated-list.schemas';
+  basketSharingMessageContracts,
+  basketSharingSchemas,
+} from './messages/basket-sharing.schemas';
 import {
   harvestMessageContracts,
   harvestSchemas,
@@ -106,9 +102,8 @@ export const messageContracts: Record<string, MessageContract> = {
   ...harvestMessageContracts,
   ...statsMessageContracts,
   ...assistantMessageContracts,
-  ...generatedListMessageContracts,
-  ...generatedListSharingMessageContracts,
   ...basketMessageContracts,
+  ...basketSharingMessageContracts,
   ...basketChangeMessageContracts,
   ...purchaseMessageContracts,
 };
@@ -140,9 +135,8 @@ export const allSchemas: JsonSchema[] = [
   ...harvestSchemas,
   ...statsSchemas,
   ...assistantSchemas,
-  ...generatedListSchemas,
-  ...generatedListSharingSchemas,
   ...basketSchemas,
+  ...basketSharingSchemas,
   ...basketChangeSchemas,
   ...purchaseSchemas,
   ...identityEventSchemas,

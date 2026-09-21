@@ -1,4 +1,4 @@
-import { GENERATED_LIST_SHARING_PATTERNS } from '../../lib/messages/generated-list-sharing.messages';
+import { BASKET_SHARING_PATTERNS } from '../../lib/messages/basket-sharing.messages';
 import {
   array,
   boolean,
@@ -16,7 +16,7 @@ import { ENUM_IDS } from '../enums.schemas';
 /**
  * Sharing a basket with people who have no account (plan 0051).
  *
- * A separate file from `generated-list.schemas.ts` for the same reason the
+ * A separate file from `basket.schemas.ts` for the same reason the
  * message file is separate: it is a separate feature with a separate reader set,
  * and plan 0050 gave every basket exactly one reader.
  *
@@ -25,54 +25,42 @@ import { ENUM_IDS } from '../enums.schemas';
  * gateway composes from two services, because core owns the participant and auth
  * owns the signing key, and neither can answer alone.
  */
-export const GENERATED_LIST_SHARING_SCHEMA_IDS = {
-  shareLinkView: schemaId('generated-list-sharing/ShareLinkView'),
-  participantView: schemaId('generated-list-sharing/ParticipantView'),
-  participantListResult: schemaId(
-    'generated-list-sharing/ParticipantListResult'
-  ),
-  linkPreview: schemaId('generated-list-sharing/LinkPreview'),
-  joinCoreResult: schemaId('generated-list-sharing/JoinCoreResult'),
+export const BASKET_SHARING_SCHEMA_IDS = {
+  shareLinkView: schemaId('basket-sharing/ShareLinkView'),
+  participantView: schemaId('basket-sharing/ParticipantView'),
+  participantListResult: schemaId('basket-sharing/ParticipantListResult'),
+  linkPreview: schemaId('basket-sharing/LinkPreview'),
+  joinCoreResult: schemaId('basket-sharing/JoinCoreResult'),
   /** The gateway's composed body: the core result plus a signed socket token. */
-  joinResult: schemaId('generated-list-sharing/JoinResult'),
-  participantContext: schemaId('generated-list-sharing/ParticipantContext'),
+  joinResult: schemaId('basket-sharing/JoinResult'),
+  participantContext: schemaId('basket-sharing/ParticipantContext'),
   /** The gateway's composed body for a token refresh. */
-  participantTokenResult: schemaId(
-    'generated-list-sharing/ParticipantTokenResult'
-  ),
-  shareRequest: schemaId('msg/generatedList.shareLink/request'),
-  ensureLinkRequest: schemaId('msg/generatedList.shareLink.ensure/request'),
-  revokeLinkRequest: schemaId('msg/generatedList.shareLink.revoke/request'),
-  revokeLinkResult: schemaId('msg/generatedList.shareLink.revoke/response'),
-  previewRequest: schemaId('msg/generatedList.shareLink.preview/request'),
-  joinRequest: schemaId('msg/generatedList.participant.join/request'),
-  listParticipantsRequest: schemaId(
-    'msg/generatedList.participant.list/request'
-  ),
-  revokeParticipantRequest: schemaId(
-    'msg/generatedList.participant.revoke/request'
-  ),
-  revokeParticipantResult: schemaId(
-    'msg/generatedList.participant.revoke/response'
-  ),
-  resolveParticipantRequest: schemaId(
-    'msg/generatedList.participant.resolve/request'
-  ),
+  participantTokenResult: schemaId('basket-sharing/ParticipantTokenResult'),
+  shareRequest: schemaId('msg/basket.shareLink/request'),
+  ensureLinkRequest: schemaId('msg/basket.shareLink.ensure/request'),
+  revokeLinkRequest: schemaId('msg/basket.shareLink.revoke/request'),
+  revokeLinkResult: schemaId('msg/basket.shareLink.revoke/response'),
+  previewRequest: schemaId('msg/basket.shareLink.preview/request'),
+  joinRequest: schemaId('msg/basket.participant.join/request'),
+  listParticipantsRequest: schemaId('msg/basket.participant.list/request'),
+  revokeParticipantRequest: schemaId('msg/basket.participant.revoke/request'),
+  revokeParticipantResult: schemaId('msg/basket.participant.revoke/response'),
+  resolveParticipantRequest: schemaId('msg/basket.participant.resolve/request'),
   /** Zero links or one, so `link` is optional rather than nullable (section 3). */
-  shareLinkResult: schemaId('generated-list-sharing/ShareLinkResult'),
+  shareLinkResult: schemaId('basket-sharing/ShareLinkResult'),
   /** Add one of the owner's contacts (plan 0114, section 4). */
-  addParticipantRequest: schemaId('msg/generatedList.participant.add/request'),
+  addParticipantRequest: schemaId('msg/basket.participant.add/request'),
   /** Leave a basket as a registered participant (plan 0114, section 6). */
-  leaveRequest: schemaId('msg/generatedList.participant.leave/request'),
+  leaveRequest: schemaId('msg/basket.participant.leave/request'),
   /** What a person's own sessions hear about their access (section 10). */
-  accessEvent: schemaId('generated-list-sharing/AccessEvent'),
+  accessEvent: schemaId('basket-sharing/AccessEvent'),
 } as const;
 
 const shareLinkView = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.shareLinkView,
+  BASKET_SHARING_SCHEMA_IDS.shareLinkView,
   {
     id: nonEmptyString(),
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     // Served on every read, unlike a participant's session secret: the owner has
     // to be able to copy the invitation again tomorrow (section 3.1).
     secret: nonEmptyString(),
@@ -85,7 +73,7 @@ const shareLinkView = object(
   },
   [
     'id',
-    'generatedListId',
+    'basketId',
     'secret',
     'createdByParticipantId',
     'createdAt',
@@ -104,13 +92,13 @@ const shareLinkView = object(
  * Absent means the basket is not shared right now.
  */
 const shareLinkResult = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.shareLinkResult,
-  { link: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.shareLinkView) },
+  BASKET_SHARING_SCHEMA_IDS.shareLinkResult,
+  { link: ref(BASKET_SHARING_SCHEMA_IDS.shareLinkView) },
   []
 );
 
 const participantView = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.participantView,
+  BASKET_SHARING_SCHEMA_IDS.participantView,
   {
     id: nonEmptyString(),
     kind: ref(ENUM_IDS.participantKind),
@@ -148,9 +136,9 @@ const participantView = object(
 );
 
 const participantListResult = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.participantListResult,
+  BASKET_SHARING_SCHEMA_IDS.participantListResult,
   {
-    participants: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)),
+    participants: array(ref(BASKET_SHARING_SCHEMA_IDS.participantView)),
   },
   ['participants']
 );
@@ -165,7 +153,7 @@ const participantListResult = object(
  * honest sentence (section 4).
  */
 const linkPreview = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.linkPreview,
+  BASKET_SHARING_SCHEMA_IDS.linkPreview,
   {
     joinable: boolean(),
     name: nullableString(),
@@ -175,28 +163,28 @@ const linkPreview = object(
 );
 
 const joinCoreResult = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.joinCoreResult,
+  BASKET_SHARING_SCHEMA_IDS.joinCoreResult,
   {
-    generatedListId: nonEmptyString(),
-    participant: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
+    basketId: nonEmptyString(),
+    participant: ref(BASKET_SHARING_SCHEMA_IDS.participantView),
     // Null for a registered participant and the owner, who authenticate with an
     // account token and need no second credential.
     sessionSecret: nullableString(),
   },
-  ['generatedListId', 'participant', 'sessionSecret']
+  ['basketId', 'participant', 'sessionSecret']
 );
 
 const joinResult = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.joinResult,
+  BASKET_SHARING_SCHEMA_IDS.joinResult,
   {
-    generatedListId: nonEmptyString(),
-    participant: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
+    basketId: nonEmptyString(),
+    participant: ref(BASKET_SHARING_SCHEMA_IDS.participantView),
     sessionSecret: nullableString(),
     socketToken: nonEmptyString(),
     socketTokenExpiresAt: nonEmptyString(),
   },
   [
-    'generatedListId',
+    'basketId',
     'participant',
     'sessionSecret',
     'socketToken',
@@ -205,72 +193,72 @@ const joinResult = object(
 );
 
 const participantTokenResult = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.participantTokenResult,
+  BASKET_SHARING_SCHEMA_IDS.participantTokenResult,
   {
     socketToken: nonEmptyString(),
     socketTokenExpiresAt: nonEmptyString(),
-    participant: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
+    participant: ref(BASKET_SHARING_SCHEMA_IDS.participantView),
   },
   ['socketToken', 'socketTokenExpiresAt', 'participant']
 );
 
 const participantContext = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.participantContext,
+  BASKET_SHARING_SCHEMA_IDS.participantContext,
   {
     participantId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     kind: ref(ENUM_IDS.participantKind),
     userId: nullableString(),
   },
-  ['participantId', 'generatedListId', 'kind', 'userId']
+  ['participantId', 'basketId', 'kind', 'userId']
 );
 
 // --- Requests --------------------------------------------------------------
 
 const shareRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.shareRequest,
-  { userId: nonEmptyString(), generatedListId: nonEmptyString() },
-  ['userId', 'generatedListId']
+  BASKET_SHARING_SCHEMA_IDS.shareRequest,
+  { userId: nonEmptyString(), basketId: nonEmptyString() },
+  ['userId', 'basketId']
 );
 
 // No lifetime field (plan 0140, section 2): every link lasts twelve hours and a
 // caller may not ask for another number.
 const ensureLinkRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.ensureLinkRequest,
+  BASKET_SHARING_SCHEMA_IDS.ensureLinkRequest,
   {
     userId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     // Sharing mints the owner's participant row, so it is where their account
     // name has to arrive (plan 0054, section 2.3).
     username: nullableString(),
   },
-  ['userId', 'generatedListId']
+  ['userId', 'basketId']
 );
 
 const revokeLinkRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.revokeLinkRequest,
+  BASKET_SHARING_SCHEMA_IDS.revokeLinkRequest,
   {
     userId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     revokeParticipants: boolean(),
   },
-  ['userId', 'generatedListId']
+  ['userId', 'basketId']
 );
 
 const revokeLinkResult = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.revokeLinkResult,
+  BASKET_SHARING_SCHEMA_IDS.revokeLinkResult,
   { revoked: integer({ minimum: 0 }) },
   ['revoked']
 );
 
 const previewRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.previewRequest,
+  BASKET_SHARING_SCHEMA_IDS.previewRequest,
   { secret: nonEmptyString() },
   ['secret']
 );
 
 const joinRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.joinRequest,
+  BASKET_SHARING_SCHEMA_IDS.joinRequest,
   {
     secret: nonEmptyString(),
     displayName: string(),
@@ -284,67 +272,67 @@ const joinRequest = object(
 );
 
 const listParticipantsRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.listParticipantsRequest,
+  BASKET_SHARING_SCHEMA_IDS.listParticipantsRequest,
   {
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     asParticipantId: nonEmptyString(),
     userId: nonEmptyString(),
     username: nullableString(),
   },
-  ['generatedListId']
+  ['basketId']
 );
 
 const revokeParticipantRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantRequest,
+  BASKET_SHARING_SCHEMA_IDS.revokeParticipantRequest,
   {
     userId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     participantId: nonEmptyString(),
   },
-  ['userId', 'generatedListId', 'participantId']
+  ['userId', 'basketId', 'participantId']
 );
 
 const revokeParticipantResult = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantResult,
+  BASKET_SHARING_SCHEMA_IDS.revokeParticipantResult,
   { id: nonEmptyString() },
   ['id']
 );
 
 const resolveParticipantRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.resolveParticipantRequest,
+  BASKET_SHARING_SCHEMA_IDS.resolveParticipantRequest,
   {
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     sessionSecret: nonEmptyString(),
     userId: nonEmptyString(),
   },
-  ['generatedListId']
+  ['basketId']
 );
 
 const addParticipantRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.addParticipantRequest,
+  BASKET_SHARING_SCHEMA_IDS.addParticipantRequest,
   {
     userId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     memberUserId: nonEmptyString(),
     globalUsername: nullableString(),
   },
-  ['userId', 'generatedListId', 'memberUserId']
+  ['userId', 'basketId', 'memberUserId']
 );
 
 const leaveRequest = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.leaveRequest,
-  { generatedListId: nonEmptyString(), participantId: nonEmptyString() },
-  ['generatedListId', 'participantId']
+  BASKET_SHARING_SCHEMA_IDS.leaveRequest,
+  { basketId: nonEmptyString(), participantId: nonEmptyString() },
+  ['basketId', 'participantId']
 );
 
 // Ids only, because the person hearing it may be in no room that may read more.
 const accessEvent = object(
-  GENERATED_LIST_SHARING_SCHEMA_IDS.accessEvent,
-  { generatedListId: nonEmptyString() },
-  ['generatedListId']
+  BASKET_SHARING_SCHEMA_IDS.accessEvent,
+  { basketId: nonEmptyString() },
+  ['basketId']
 );
 
-export const generatedListSharingSchemas: JsonSchema[] = [
+export const basketSharingSchemas: JsonSchema[] = [
   addParticipantRequest,
   leaveRequest,
   accessEvent,
@@ -369,57 +357,57 @@ export const generatedListSharingSchemas: JsonSchema[] = [
   resolveParticipantRequest,
 ];
 
-export const generatedListSharingMessageContracts: Record<
+export const basketSharingMessageContracts: Record<
   string,
   { request: string; response: string }
 > = {
-  [GENERATED_LIST_SHARING_PATTERNS.linkEnsure]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.ensureLinkRequest,
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.shareLinkView,
+  [BASKET_SHARING_PATTERNS.linkEnsure]: {
+    request: BASKET_SHARING_SCHEMA_IDS.ensureLinkRequest,
+    response: BASKET_SHARING_SCHEMA_IDS.shareLinkView,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.linkGet]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.shareRequest,
+  [BASKET_SHARING_PATTERNS.linkGet]: {
+    request: BASKET_SHARING_SCHEMA_IDS.shareRequest,
     // Zero links or one is the ordinary state, so the answer wraps an optional
     // link rather than being a bare nullable view (section 3).
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.shareLinkResult,
+    response: BASKET_SHARING_SCHEMA_IDS.shareLinkResult,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.linkRevoke]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeLinkRequest,
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeLinkResult,
+  [BASKET_SHARING_PATTERNS.linkRevoke]: {
+    request: BASKET_SHARING_SCHEMA_IDS.revokeLinkRequest,
+    response: BASKET_SHARING_SCHEMA_IDS.revokeLinkResult,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.linkPreview]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.previewRequest,
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.linkPreview,
+  [BASKET_SHARING_PATTERNS.linkPreview]: {
+    request: BASKET_SHARING_SCHEMA_IDS.previewRequest,
+    response: BASKET_SHARING_SCHEMA_IDS.linkPreview,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.join]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.joinRequest,
+  [BASKET_SHARING_PATTERNS.join]: {
+    request: BASKET_SHARING_SCHEMA_IDS.joinRequest,
     // Core's answer, which stops short of the socket token: core holds no
     // signing key, so the gateway composes the HTTP body from this and auth.
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.joinCoreResult,
+    response: BASKET_SHARING_SCHEMA_IDS.joinCoreResult,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.participantList]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.listParticipantsRequest,
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.participantListResult,
+  [BASKET_SHARING_PATTERNS.participantList]: {
+    request: BASKET_SHARING_SCHEMA_IDS.listParticipantsRequest,
+    response: BASKET_SHARING_SCHEMA_IDS.participantListResult,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.participantRevoke]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantRequest,
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantResult,
+  [BASKET_SHARING_PATTERNS.participantRevoke]: {
+    request: BASKET_SHARING_SCHEMA_IDS.revokeParticipantRequest,
+    response: BASKET_SHARING_SCHEMA_IDS.revokeParticipantResult,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.participantAdd]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.addParticipantRequest,
+  [BASKET_SHARING_PATTERNS.participantAdd]: {
+    request: BASKET_SHARING_SCHEMA_IDS.addParticipantRequest,
     // The owner's view of the row, device string and join time included.
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.participantView,
+    response: BASKET_SHARING_SCHEMA_IDS.participantView,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.participantLeave]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.leaveRequest,
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.revokeParticipantResult,
+  [BASKET_SHARING_PATTERNS.participantLeave]: {
+    request: BASKET_SHARING_SCHEMA_IDS.leaveRequest,
+    response: BASKET_SHARING_SCHEMA_IDS.revokeParticipantResult,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.participantResolve]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.resolveParticipantRequest,
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.participantContext,
+  [BASKET_SHARING_PATTERNS.participantResolve]: {
+    request: BASKET_SHARING_SCHEMA_IDS.resolveParticipantRequest,
+    response: BASKET_SHARING_SCHEMA_IDS.participantContext,
   },
-  [GENERATED_LIST_SHARING_PATTERNS.participantRefresh]: {
-    request: GENERATED_LIST_SHARING_SCHEMA_IDS.resolveParticipantRequest,
-    response: GENERATED_LIST_SHARING_SCHEMA_IDS.participantTokenResult,
+  [BASKET_SHARING_PATTERNS.participantRefresh]: {
+    request: BASKET_SHARING_SCHEMA_IDS.resolveParticipantRequest,
+    response: BASKET_SHARING_SCHEMA_IDS.participantTokenResult,
   },
 };

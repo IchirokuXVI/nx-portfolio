@@ -10,7 +10,7 @@ import {
   schemaId,
 } from '../builders';
 import { ENUM_IDS } from '../enums.schemas';
-import { GENERATED_LIST_SCHEMA_IDS } from './generated-list.schemas';
+import { BASKET_SCHEMA_IDS } from './basket.schemas';
 
 export const REALTIME_SCHEMA_IDS = {
   checkZoneAccessRequest: schemaId('msg/realtime.checkZoneAccess/request'),
@@ -28,7 +28,7 @@ export const REALTIME_SCHEMA_IDS = {
     'msg/realtime.checkParticipantAccess/request'
   ),
   participantPresenceEntry: schemaId('realtime/ParticipantPresenceEntry'),
-  generatedListPresence: schemaId('realtime/GeneratedListPresence'),
+  basketPresence: schemaId('realtime/BasketPresence'),
 } as const;
 
 const checkZoneAccessRequest = object(
@@ -55,14 +55,14 @@ const accessCheckResult = object(
     // What kind of basket the participant answer is about (plan 0139, section
     // 6). Declared for the same reason the two above are: the field exists on
     // the type, and `object` refuses what it has not been told about.
-    basketKind: ref(GENERATED_LIST_SCHEMA_IDS.basketKind),
+    basketKind: ref(BASKET_SCHEMA_IDS.basketKind),
   },
   ['allowed']
 );
 const checkParticipantAccessRequest = object(
   REALTIME_SCHEMA_IDS.checkParticipantAccessRequest,
-  { participantId: nonEmptyString(), generatedListId: nonEmptyString() },
-  ['participantId', 'generatedListId']
+  { participantId: nonEmptyString(), basketId: nonEmptyString() },
+  ['participantId', 'basketId']
 );
 /**
  * One participant connected to a shared basket (plan 0051, section 7).
@@ -82,13 +82,13 @@ const participantPresenceEntry = object(
   },
   ['participantId', 'kind', 'displayName', 'guestNumber', 'userId']
 );
-const generatedListPresence = object(
-  REALTIME_SCHEMA_IDS.generatedListPresence,
+const basketPresence = object(
+  REALTIME_SCHEMA_IDS.basketPresence,
   {
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     present: array(ref(REALTIME_SCHEMA_IDS.participantPresenceEntry)),
   },
-  ['generatedListId', 'present']
+  ['basketId', 'present']
 );
 const presenceUser = object(
   REALTIME_SCHEMA_IDS.presenceUser,
@@ -133,7 +133,7 @@ export const realtimeSchemas: JsonSchema[] = [
   checkListAccessRequest,
   checkParticipantAccessRequest,
   participantPresenceEntry,
-  generatedListPresence,
+  basketPresence,
   accessCheckResult,
   presenceUser,
   presenceEditor,

@@ -1,9 +1,9 @@
-import type { ParticipantKind } from '../enums/generated-list.enums';
+import type { ParticipantKind } from '../enums/basket.enums';
 
 /**
- * Sharing a generated list with people who have no account (plan 0051).
+ * Sharing a basket with people who have no account (plan 0051).
  *
- * Separate from `generated-list.messages.ts` because it is a separate feature
+ * Separate from `basket.messages.ts` because it is a separate feature
  * with a separate reader set: plan 0050 gave every basket exactly one reader, and
  * everything here is the widening of that.
  *
@@ -24,7 +24,7 @@ import type { ParticipantKind } from '../enums/generated-list.enums';
  * The **participant** session secret is a credential, so it is stored hashed and
  * returned exactly once. The **link** secret is an invitation the owner has to be
  * able to copy again tomorrow, from another device, for the next person, so it is
- * stored retrievably and {@link GeneratedListShareLinkView} carries it on every
+ * stored retrievably and {@link BasketShareLinkView} carries it on every
  * read. The cost is named rather than hidden: a database leak hands over working
  * invitations, which mint guests until revoked or expired. It hands over no
  * participant's session, and a basket lives about as long as a shopping trip.
@@ -37,25 +37,25 @@ import type { ParticipantKind } from '../enums/generated-list.enums';
  * into a browser history has a single use job, and the long lived credential is
  * per person and individually revocable.
  */
-export const GENERATED_LIST_SHARING_PATTERNS = {
+export const BASKET_SHARING_PATTERNS = {
   /** The share sheet: the live link and its secret, minting one if there is none. */
-  linkEnsure: 'generatedList.shareLink.ensure',
+  linkEnsure: 'basket.shareLink.ensure',
   /** The live link if there is one, without minting (section 3). */
-  linkGet: 'generatedList.shareLink.get',
+  linkGet: 'basket.shareLink.get',
   /** Revoke the live link, optionally cascading to its guests (section 3.4). */
-  linkRevoke: 'generatedList.shareLink.revoke',
+  linkRevoke: 'basket.shareLink.revoke',
   /** What the join screen may know before anybody joins (section 4, step 1). */
-  linkPreview: 'generatedList.shareLink.preview',
+  linkPreview: 'basket.shareLink.preview',
   /** Mint a participant from a link, or attach a registered caller (section 4). */
-  join: 'generatedList.participant.join',
+  join: 'basket.participant.join',
   /** Everybody on the basket, for the owner's share sheet and for presence. */
-  participantList: 'generatedList.participant.list',
+  participantList: 'basket.participant.list',
   /** Revoke exactly one participant: the lost phone (section 3.4). */
-  participantRevoke: 'generatedList.participant.revoke',
+  participantRevoke: 'basket.participant.revoke',
   /** Add one of the owner's contacts to the basket (plan 0114, section 4). */
-  participantAdd: 'generatedList.participant.add',
+  participantAdd: 'basket.participant.add',
   /** A registered participant leaves the basket (plan 0114, section 6). */
-  participantLeave: 'generatedList.participant.leave',
+  participantLeave: 'basket.participant.leave',
   /**
    * Turn a presented credential into a participant, for the gateway's guard.
    *
@@ -65,9 +65,9 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
    * which is what lets section 3.4 revoke a link without evicting the people
    * already shopping.
    */
-  participantResolve: 'generatedList.participant.resolve',
+  participantResolve: 'basket.participant.resolve',
   /** Exchange a live participant credential for a fresh socket token (section 9). */
-  participantRefresh: 'generatedList.participant.refresh',
+  participantRefresh: 'basket.participant.refresh',
 } as const;
 
 /**
@@ -82,7 +82,7 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
  * accepting people once the basket is finished, is still a predicate in the
  * service rather than a number here.
  */
-export const GENERATED_LIST_SHARING_LIMITS = {
+export const BASKET_SHARING_LIMITS = {
   displayNameMaxLength: 40,
   /** A basket is a shopping trip, not a mailing list. */
   maxParticipants: 50,
@@ -93,15 +93,15 @@ export const GENERATED_LIST_SHARING_LIMITS = {
 /**
  * The live share link, as its owner's share sheet sees it (plan 0051, section 3).
  *
- * **A generated list has zero share links or one.** It starts with zero, pressing
+ * **A basket has zero share links or one.** It starts with zero, pressing
  * share mints one, revoking returns it to zero, and sharing again mints a fresh
  * one. Several concurrent links with per link labels were in the first draft and
  * were dropped at review: one link at a time is easier to understand and costs
  * nothing, because the one link can be handed to any number of people.
  */
-export interface GeneratedListShareLinkView {
+export interface BasketShareLinkView {
   id: string;
-  generatedListId: string;
+  basketId: string;
   /**
    * The invitation itself, returned on **every** read rather than once.
    *
@@ -133,8 +133,8 @@ export interface GeneratedListShareLinkView {
  * shared, and the shape stays a plain object that a schema and an OpenAPI
  * component can both describe without a top level union.
  */
-export interface GeneratedListShareLinkResult {
-  link?: GeneratedListShareLinkView;
+export interface BasketShareLinkResult {
+  link?: BasketShareLinkView;
 }
 
 /**
@@ -148,7 +148,7 @@ export interface GeneratedListShareLinkResult {
  * stable for the life of the participant. Clients must render a guest visibly as
  * a guest, never in a form that could be mistaken for a registered member.
  */
-export interface GeneratedListParticipantView {
+export interface BasketParticipantView {
   id: string;
   kind: ParticipantKind;
   /** Null when a guest skipped the prompt; the client renders `Guest N`. */
@@ -246,7 +246,7 @@ export interface GeneratedListParticipantView {
  * the stronger of the two guarantees and the one an attacker would be probing.
  * `name` and `participantCount` are therefore present only when `joinable`.
  */
-export interface GeneratedListLinkPreview {
+export interface BasketLinkPreview {
   joinable: boolean;
   /** The basket's name, or null when it is unnamed. Only when joinable. */
   name?: string | null;
@@ -260,11 +260,11 @@ export interface GeneratedListLinkPreview {
  * It stops short of the socket token because core cannot mint one: the signing
  * key lives in auth, and core references users by an opaque id and holds no
  * credentials of any kind. The gateway asks auth for the token and returns
- * {@link GeneratedListJoinResult}, which is this plus that.
+ * {@link BasketJoinResult}, which is this plus that.
  */
-export interface GeneratedListJoinCoreResult {
-  generatedListId: string;
-  participant: GeneratedListParticipantView;
+export interface BasketJoinCoreResult {
+  basketId: string;
+  participant: BasketParticipantView;
   /**
    * The guest's own credential, returned **once** and stored hashed.
    *
@@ -279,9 +279,9 @@ export interface GeneratedListJoinCoreResult {
  * The result of joining, and the only time a guest's session secret exists
  * outside the database (plan 0051, sections 3.1 and 4).
  */
-export interface GeneratedListJoinResult {
-  generatedListId: string;
-  participant: GeneratedListParticipantView;
+export interface BasketJoinResult {
+  basketId: string;
+  participant: BasketParticipantView;
   /**
    * The guest's own credential, returned **once** and stored hashed.
    *
@@ -307,9 +307,9 @@ export interface GeneratedListJoinResult {
  *
  * The analogue of `CurrentUser` for the participant authenticated surface.
  */
-export interface GeneratedListParticipantContext {
+export interface BasketParticipantContext {
   participantId: string;
-  generatedListId: string;
+  basketId: string;
   kind: ParticipantKind;
   /** Set for `OWNER` and `REGISTERED`, null for a `GUEST`. */
   userId: string | null;
@@ -340,7 +340,7 @@ export interface GeneratedListParticipantContext {
  */
 export interface ParticipantTokenClaims {
   participantId: string;
-  /** The one generated list this token is good for, and nothing else. */
+  /** The one basket this token is good for, and nothing else. */
   aud: string;
   kind: ParticipantKind;
   iat?: number;
@@ -350,16 +350,16 @@ export interface ParticipantTokenClaims {
 // --- Requests --------------------------------------------------------------
 
 /** Every sharing request core answers is scoped to one basket. */
-export interface GeneratedListShareRequest {
+export interface BasketShareRequest {
   /** The caller the gateway's verified token resolved to. */
   userId: string;
-  generatedListId: string;
+  basketId: string;
 }
 
 /**
  * Mint the live link, or hand back the one that is already live (section 3).
  *
- * Idempotent by the partial unique index over `generatedListId` where
+ * Idempotent by the partial unique index over `basketId` where
  * `revokedAt` is null, so a double tap on share cannot produce two live links
  * and does not need to be defended against in the service.
  *
@@ -368,7 +368,7 @@ export interface GeneratedListShareRequest {
  * nobody sets is a field somebody sets to a year. A basket whose link expired
  * gets a fresh one from this same call.
  */
-export interface EnsureShareLinkRequest extends GeneratedListShareRequest {
+export interface EnsureShareLinkRequest extends BasketShareRequest {
   /**
    * The owner's own account name, so the row this call creates for them carries
    * it (plan 0054, section 2.3).
@@ -396,7 +396,7 @@ export interface EnsureShareLinkRequest extends GeneratedListShareRequest {
  * is the explicit second choice the plan phrases as "revoke all guests from this
  * link?".
  */
-export interface RevokeShareLinkRequest extends GeneratedListShareRequest {
+export interface RevokeShareLinkRequest extends BasketShareRequest {
   revokeParticipants?: boolean;
 }
 
@@ -410,10 +410,10 @@ export interface PreviewShareLinkRequest {
  *
  * `userId` is set when the caller presented a valid account token, which is step
  * 3 rather than step 2: they are attached as a `REGISTERED` participant with no
- * name prompt, and the unique index over (`generatedListId`, `userId`) makes a
+ * name prompt, and the unique index over (`basketId`, `userId`) makes a
  * second link they open resolve to the same row.
  */
-export interface JoinGeneratedListRequest {
+export interface JoinBasketRequest {
   secret: string;
   /** What a guest typed. Absent means they skipped it and get `Guest N`. */
   displayName?: string;
@@ -441,7 +441,7 @@ export interface JoinGeneratedListRequest {
  * account token the gateway has already verified.
  */
 export interface ResolveParticipantRequest {
-  generatedListId: string;
+  basketId: string;
   /** A guest's session secret, hashed before it is looked up. */
   sessionSecret?: string;
   /** The account a verified token resolved to. */
@@ -455,25 +455,25 @@ export type RefreshParticipantTokenRequest = ResolveParticipantRequest;
 export interface ParticipantTokenResult {
   socketToken: string;
   socketTokenExpiresAt: string;
-  participant: GeneratedListParticipantView;
+  participant: BasketParticipantView;
 }
 
 /**
  * Revoke one participant and nobody else (plan 0051, section 3.4): the lost
  * phone, and the guest who should not have been given it.
  */
-export interface RevokeParticipantRequest extends GeneratedListShareRequest {
+export interface RevokeParticipantRequest extends BasketShareRequest {
   participantId: string;
 }
 
 /**
  * Add one of the owner's contacts to the basket (plan 0114, section 4).
  *
- * Owner only, like every request on {@link GeneratedListShareRequest}, and the
+ * Owner only, like every request on {@link BasketShareRequest}, and the
  * person must share an approved group with the owner at this moment. What
  * happens to a row they already have is section 4's table.
  */
-export interface AddGeneratedListParticipantRequest extends GeneratedListShareRequest {
+export interface AddBasketParticipantRequest extends BasketShareRequest {
   /** The person to add. Never the owner. */
   memberUserId: string;
   /**
@@ -489,8 +489,8 @@ export interface AddGeneratedListParticipantRequest extends GeneratedListShareRe
  * resolved. A registered participant only: a guest is refused, and so is the
  * owner, whose standing comes from owning the basket.
  */
-export interface LeaveGeneratedListRequest {
-  generatedListId: string;
+export interface LeaveBasketRequest {
+  basketId: string;
   participantId: string;
 }
 
@@ -498,13 +498,13 @@ export interface LeaveGeneratedListRequest {
  * What a person's own sessions hear when a basket is shared with them, or stops
  * being (plan 0114, section 10): the basket's id and nothing else.
  */
-export interface GeneratedListAccessEvent {
-  generatedListId: string;
+export interface BasketAccessEvent {
+  basketId: string;
 }
 
 /** Everybody on a basket, for the share sheet and for presence. */
 export interface ListParticipantsRequest {
-  generatedListId: string;
+  basketId: string;
   /**
    * The participant asking, so section 5.2 can decide whether `userAgent` is
    * included. Absent when the owner asks through an account authenticated route,
@@ -523,8 +523,8 @@ export interface ListParticipantsRequest {
 }
 
 /** The people on a basket, newest last, revoked ones omitted. */
-export interface GeneratedListParticipantListResult {
-  participants: GeneratedListParticipantView[];
+export interface BasketParticipantListResult {
+  participants: BasketParticipantView[];
 }
 
 // --- Settling from the basket ----------------------------------------------
@@ -594,7 +594,7 @@ export interface ParticipantPresenceEntry {
 }
 
 /**
- * Payload of {@link RealtimeEvent.PresenceGeneratedListUpdated}: who is in the
+ * Payload of {@link RealtimeEvent.PresenceBasketUpdated}: who is in the
  * shop right now (plan 0051, section 7).
  *
  * **One entry per socket, not per person**, which is where this departs from
@@ -604,7 +604,7 @@ export interface ParticipantPresenceEntry {
  * by typed name, which is exactly the mistake section 3.5 warns about: two guests
  * can both type "Dani" and are not the same person.
  */
-export interface GeneratedListPresence {
-  generatedListId: string;
+export interface BasketPresence {
+  basketId: string;
   present: ParticipantPresenceEntry[];
 }

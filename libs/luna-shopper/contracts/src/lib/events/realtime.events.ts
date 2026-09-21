@@ -1,5 +1,5 @@
 import type { BasketKind } from '../enums/basket.enums';
-import type { GeneratedListStatus } from '../enums/generated-list.enums';
+import type { BasketStatus } from '../enums/basket.enums';
 
 /**
  * Domain events core publishes for the realtime fan out (plan 0006, section 9;
@@ -122,7 +122,7 @@ export enum RealtimeEvent {
   /**
    * Who is on a shared basket right now (plan 0051, section 7).
    *
-   * The room is `generated:{id}:presence`, following plan 0032's rule that the
+   * The room is `basket:{id}:presence`, following plan 0032's rule that the
    * room **is** the access control rather than a filter applied to a broadcast.
    *
    * Its entries are deliberately not `PresenceUser`, which is
@@ -133,7 +133,7 @@ export enum RealtimeEvent {
    * and deduplicating by typed name would be exactly the mistake section 3.5
    * warns about.
    */
-  PresenceGeneratedListUpdated = 'presence.generatedListUpdated',
+  PresenceBasketUpdated = 'presence.basketUpdated',
 
   /**
    * A user's global username changed (plan 0030, section 4.3), addressed to that
@@ -166,7 +166,7 @@ export enum RealtimeEvent {
   ProfilesChanged = 'profiles.changed',
 
   /**
-   * A generated list changed (plan 0050, section 9), addressed to its owner's own
+   * A basket changed (plan 0050, section 9), addressed to its owner's own
    * sessions and to nothing else.
    *
    * A basket is private (section 8), so the owner's room is the only audience it
@@ -180,14 +180,14 @@ export enum RealtimeEvent {
    * visible to everybody else without telling any of them which basket it came
    * from.
    */
-  GeneratedListCreated = 'generatedList.created',
+  BasketCreated = 'basket.created',
   /**
    * A basket was deleted. Addressed to the owner's own sessions **and** to the
    * basket's room since plan 0114 (section 10), so every participant hears it
    * rather than nobody, and realtime has a basket on the envelope to sweep both
    * basket rooms by. The payload is `{ id }`.
    */
-  GeneratedListDeleted = 'generatedList.deleted',
+  BasketDeleted = 'basket.deleted',
 
   /**
    * Somebody joined or left a shared basket (plan 0051, section 3), on the
@@ -199,8 +199,8 @@ export enum RealtimeEvent {
    * their browser emits neither. Since plan 0114 `participantLeft` also asks
    * realtime to sweep both basket rooms, so the socket goes at once.
    */
-  GeneratedListParticipantJoined = 'generatedList.participantJoined',
-  GeneratedListParticipantLeft = 'generatedList.participantLeft',
+  BasketParticipantJoined = 'basket.participantJoined',
+  BasketParticipantLeft = 'basket.participantLeft',
 
   /**
    * A basket is now shared with this person (plan 0114, section 10), addressed
@@ -208,23 +208,23 @@ export enum RealtimeEvent {
    *
    * Sent when a registered person's row becomes live: the owner adding them, or
    * the link letting them in or back. The payload is
-   * {@link GeneratedListAccessEvent}, ids only, because the person is in no room
+   * {@link BasketAccessEvent}, ids only, because the person is in no room
    * that may read more, and the shared baskets read is where the rest comes from.
    */
-  GeneratedListShared = 'generatedList.shared',
+  BasketShared = 'basket.shared',
   /**
-   * The mirror of {@link GeneratedListShared}: this person is no longer on the
+   * The mirror of {@link BasketShared}: this person is no longer on the
    * basket, because the owner removed them, the link they came by was revoked
    * with its people, they left, or the basket was deleted. Ids only, to their
    * own sessions.
    */
-  GeneratedListUnshared = 'generatedList.unshared',
+  BasketUnshared = 'basket.unshared',
 
   /**
    * A zone line is, or is no longer, in somebody's active basket (plan 0051,
    * section 5.3), on the **zone** room.
    *
-   * Plan 0050 section 8 said generated lists never emit zone events. They emit
+   * Plan 0050 section 8 said baskets never emit zone events. They emit
    * exactly this one, so that a zone line can show that somebody is out buying
    * it, which is the third indicator plan 0047 section 5 lists and explicitly
    * hands to this plan to decide.
@@ -273,8 +273,8 @@ export enum RealtimeEvent {
    * A basket's own header moved: a rename, a finish, a reopen, or the sweep
    * finishing it for its owner (plan 0139, section 4).
    *
-   * It replaces `generatedList.updated`, which went to the owner's own sessions
-   * alone and carried a whole `GeneratedListView`. Two things were wrong with
+   * It replaces `basket.updated`, which went to the owner's own sessions
+   * alone and carried a whole `BasketHeaderView`. Two things were wrong with
    * that. A guest in the shop never heard their basket being renamed or
    * finished, and the view named the basket's sources, which a guest must not
    * see. This one is addressed to the owner **and** to the basket's room, and
@@ -309,7 +309,7 @@ export interface BasketLinesChangedEvent {
  * What {@link RealtimeEvent.BasketUpdated} carries (plan 0139, section 4).
  *
  * The four fields a guest already reads on the basket itself, and not the
- * `GeneratedListView` its predecessor carried: that view names the basket's
+ * `BasketHeaderView` its predecessor carried: that view names the basket's
  * sources, and since plan 0136 it carries no lines anyway.
  */
 export interface BasketUpdatedEvent {
@@ -318,11 +318,11 @@ export interface BasketUpdatedEvent {
   name: string | null;
   /**
    * The plan writes this field's type as `BasketStatus`. The enum is called
-   * {@link GeneratedListStatus} today and renaming it is plan 0144's, along with
-   * the rooms and the remaining `generatedList.*` names, so this is the one name
+   * {@link BasketStatus} today and renaming it is plan 0144's, along with
+   * the rooms and the remaining `basket.*` names, so this is the one name
    * it has rather than a second one.
    */
-  status: GeneratedListStatus;
+  status: BasketStatus;
 }
 
 /**
@@ -365,12 +365,12 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.MergeRejected,
   RealtimeEvent.UserUsernameChanged,
   RealtimeEvent.ProfilesChanged,
-  RealtimeEvent.GeneratedListCreated,
-  RealtimeEvent.GeneratedListDeleted,
-  RealtimeEvent.GeneratedListParticipantJoined,
-  RealtimeEvent.GeneratedListParticipantLeft,
-  RealtimeEvent.GeneratedListShared,
-  RealtimeEvent.GeneratedListUnshared,
+  RealtimeEvent.BasketCreated,
+  RealtimeEvent.BasketDeleted,
+  RealtimeEvent.BasketParticipantJoined,
+  RealtimeEvent.BasketParticipantLeft,
+  RealtimeEvent.BasketShared,
+  RealtimeEvent.BasketUnshared,
   RealtimeEvent.LineClaimChanged,
   RealtimeEvent.BasketLinesChanged,
   RealtimeEvent.BasketUpdated,
@@ -458,7 +458,7 @@ export interface DomainEvent<T = unknown> {
    * An envelope whose audience the consumer cannot read is addressed to nobody,
    * which it drops as a fault.
    */
-  generatedListId?: string;
+  basketId?: string;
   payload: T;
 }
 
