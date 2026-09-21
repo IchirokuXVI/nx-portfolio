@@ -45,7 +45,7 @@ import { mergeKey, normalizeContent } from './line-dedup';
  * It narrows the same query the read runs, with the same four parameters and the
  * same scope, so a line the read left out of a row is a line this cannot find
  * either. The fold for a free text row is `normalizeContent` in TypeScript,
- * never a second definition in SQL, for the reason `ORDER_HISTORY_SQL` gives
+ * never a second definition in SQL, for the reason `WALK_HISTORY_SQL` gives
  * about its own key: a fold written twice is free to drift, and the two
  * definitions would disagree exactly on the rows that are hardest to reason
  * about.

@@ -64,11 +64,10 @@ describeIntegration('the ask a finish writes down (real Postgres)', () => {
     generated = new GeneratedListService(
       dataSource,
       dataSource.getRepository(GeneratedList),
-      // The run's profile resolution and walk order, which no write here asks.
+      // The run's profile resolution, which no write here asks.
       undefined as never,
       fakeLineClaims({}).service,
       { emitTo: jest.fn(), emitToUsers: jest.fn() } as never,
-      undefined as never,
       { liveRegistered: async () => [] } as never,
       dataSource.getRepository(BasketSource),
       tripRows,

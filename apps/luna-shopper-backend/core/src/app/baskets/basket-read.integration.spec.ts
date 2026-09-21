@@ -91,8 +91,9 @@ describeIntegration('the basket, read from its lists (real Postgres)', () => {
             ])
           ),
       } as never,
-      // The walk order learns from finished trips, and none of these tests has
-      // one, so it answers what it was given.
+      // The walk order learns from the owner's past sessions (plan 0141), and
+      // none of these tests has one, so it answers what it was given. Its own
+      // file owns the rule.
       { order: async <T>(_userId: string, rows: T[]) => rows } as never,
       // What changed since somebody looked (plan 0138). Every read below passes
       // no viewer, so the marks are never asked for; the reads that are about

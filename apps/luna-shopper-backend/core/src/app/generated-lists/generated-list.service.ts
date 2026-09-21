@@ -47,7 +47,6 @@ import {
   SHARED_BASKETS_SQL,
   type SharedBasketRow,
 } from './generated-list-members.sql';
-import { GeneratedListOrderService } from './generated-list-order.service';
 import {
   NO_GENERATED_LINE_COUNTS,
   toBasketSourceView,
@@ -130,10 +129,6 @@ export class GeneratedListService {
     private readonly profiles: ProfileService,
     private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher,
-    // The order a shopper walks (plan 0110), asked once per run and never
-    // afterwards. A service of its own because it is a read of the owner's past
-    // trips rather than anything about the lists this run drew from.
-    private readonly order: GeneratedListOrderService,
     // The people a basket is shared with on purpose (plan 0114): checked and
     // written by the run, read back by the shared listing, and told of a
     // deletion.

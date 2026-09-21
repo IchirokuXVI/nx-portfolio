@@ -378,7 +378,6 @@ describe('what a finished basket still does (section 3.4)', () => {
       fakeLineClaims().service,
       {} as unknown as CoreEventsPublisher,
       {} as never,
-      {} as never,
       { find: async () => [] } as never,
       {} as never,
       {} as never
@@ -470,7 +469,6 @@ describe('finishing and unfinishing (section 2)', () => {
           });
         },
       } as unknown as CoreEventsPublisher,
-      {} as never,
       {} as never,
       { find: async () => [] } as never,
       tripRows.service,

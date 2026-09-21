@@ -155,7 +155,7 @@ export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
  * entries of **one** row: a `set:` merge key is a hash the database can compare,
  * and a `text:` key is `normalizeContent`, a fold that lives in TypeScript. A
  * second definition of that fold in SQL would be free to drift from the first,
- * which is the reasoning `ORDER_HISTORY_SQL` gives for stopping one step short
+ * which is the reasoning `WALK_HISTORY_SQL` gives for stopping one step short
  * of the key, so `TEXT` narrows to the lines that have no hash and the caller
  * folds them.
  */
