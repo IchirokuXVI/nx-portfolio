@@ -43,6 +43,8 @@ describe('one history entry (section 3)', () => {
     lineCount: '4' as never,
     boughtLineCount: '3' as never,
     spentCents: '1240',
+    currencies: 1,
+    currency: 'EUR',
     unpricedCount: '1' as never,
     ...extra,
   });
@@ -57,7 +59,7 @@ describe('one history entry (section 3)', () => {
       endedAt: '2026-01-10T12:30:00.000Z',
       lineCount: 4,
       boughtLineCount: 3,
-      spentCents: 1240,
+      spent: { cents: 1240, currency: 'EUR' },
       unpricedCount: 1,
     });
   });
@@ -65,17 +67,31 @@ describe('one history entry (section 3)', () => {
   // The sum arrives as a `bigint`, which the driver hands back as a string so
   // no precision is lost on the way out of Postgres.
   it('reads a bigint sum as a number', () => {
-    expect(
-      toPurchaseEntryView(row({ spentCents: '987654321' })).spentCents
-    ).toBe(987654321);
+    expect(toPurchaseEntryView(row({ spentCents: '987654321' })).spent).toEqual(
+      { cents: 987654321, currency: 'EUR' }
+    );
   });
 
   // Section 3.3: an entry where nothing carries a price has no total, and 0
   // would say the shopping was free.
   it('keeps a missing total null, never zero', () => {
     expect(
-      toPurchaseEntryView(row({ spentCents: null })).spentCents
+      toPurchaseEntryView(
+        row({ spentCents: null, currency: null, currencies: 0 })
+      ).spent
     ).toBeNull();
+  });
+
+  // Plan 0143, section 7: two shops in two currencies in one session have no
+  // total. Every row still says what it cost, and `unpricedCount` is unchanged:
+  // it counts rows with no price, not rows that refuse to add up.
+  it('has no total when the entry’s priced rows carry two currencies', () => {
+    const view = toPurchaseEntryView(
+      row({ spentCents: '1240', currencies: 2, currency: 'EUR' })
+    );
+
+    expect(view.spent).toBeNull();
+    expect(view.unpricedCount).toBe(1);
   });
 
   it('reads a kind it does not know as a session', () => {
@@ -92,6 +108,9 @@ describe('one row of an entry (section 4)', () => {
     outcome: 'BOUGHT',
     quantity: '3' as never,
     pricePaidCents: 120,
+    pricePaidCurrency: 'EUR',
+    priceScopeId: 'scope-1',
+    supermarketLocationId: 'shop-1',
     settledAt: new Date('2026-01-10T11:00:00.000Z'),
     lineId: 'line-1',
     listId: 'list-1',
@@ -107,7 +126,9 @@ describe('one row of an entry (section 4)', () => {
       itemId: 'item-1',
       outcome: SettlementOutcome.BOUGHT,
       quantity: 3,
-      pricePaidCents: 120,
+      pricePaid: { cents: 120, currency: 'EUR' },
+      priceScopeId: 'scope-1',
+      supermarketLocationId: 'shop-1',
       settledAt: '2026-01-10T11:00:00.000Z',
       lineId: 'line-1',
       listId: 'list-1',
@@ -115,6 +136,14 @@ describe('one row of an entry (section 4)', () => {
       zoneId: 'zone-1',
       content: 'Milk',
     });
+  });
+
+  // An amount with no currency is a number, so the two travel together or
+  // neither is served (plan 0143, section 2).
+  it('serves no price when the currency is missing', () => {
+    expect(toPurchaseRowView(row({ pricePaidCurrency: null })).pricePaid).toBe(
+      null
+    );
   });
 
   // A reader who lost `READ` keeps the purchase and loses where it was made.
@@ -133,7 +162,7 @@ describe('one row of an entry (section 4)', () => {
     expect(view).toMatchObject({
       itemId: 'item-1',
       quantity: 3,
-      pricePaidCents: 120,
+      pricePaid: { cents: 120, currency: 'EUR' },
       lineId: null,
       listId: null,
       listName: null,
@@ -145,12 +174,19 @@ describe('one row of an entry (section 4)', () => {
   it('reads a row nothing was bought on as not available', () => {
     expect(
       toPurchaseRowView(
-        row({ outcome: 'NOT_AVAILABLE', quantity: 0, pricePaidCents: null })
+        row({
+          outcome: 'NOT_AVAILABLE',
+          quantity: 0,
+          pricePaidCents: null,
+          pricePaidCurrency: null,
+        })
       )
     ).toMatchObject({
       outcome: SettlementOutcome.NOT_AVAILABLE,
       quantity: 0,
-      pricePaidCents: null,
+      pricePaid: null,
+      // Which chain had none is the half of that outcome worth keeping.
+      priceScopeId: 'scope-1',
     });
   });
 });
@@ -177,6 +213,8 @@ describe('the two reads', () => {
     lineCount: 1,
     boughtLineCount: 1,
     spentCents: null,
+    currencies: 0,
+    currency: null,
     unpricedCount: 1,
   });
 
@@ -186,6 +224,9 @@ describe('the two reads', () => {
     outcome: 'BOUGHT',
     quantity: 1,
     pricePaidCents: null,
+    pricePaidCurrency: null,
+    priceScopeId: null,
+    supermarketLocationId: null,
     settledAt: new Date('2026-01-10T11:00:00.000Z'),
     lineId: 'line-1',
     listId: 'list-1',

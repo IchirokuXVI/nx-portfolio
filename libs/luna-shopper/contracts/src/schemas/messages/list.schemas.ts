@@ -35,6 +35,7 @@ export const LIST_SCHEMA_IDS = {
   addLineResultList: schemaId('list/AddLineResultList'),
   lineClaimRef: schemaId('list/LineClaimRef'),
   lineClaimChangedEvent: schemaId('list/LineClaimChangedEvent'),
+  settlementPaid: schemaId('list/SettlementPaid'),
   lineSettlementView: schemaId('list/LineSettlementView'),
   lineSettlementResult: schemaId('list/LineSettlementResult'),
   lineSettlementPage: schemaId('list/LineSettlementPage'),
@@ -223,10 +224,40 @@ const updateLineResult = object(
   lineViewRequired
 );
 
+// What a settle cost, as the gateway read it (plan 0143, section 4.2).
+//
+// It appears on the two settle **messages** and on neither settle DTO. A client
+// names a place, the gateway reads the price, and there is no field on either
+// request body to put an amount in.
+//
+// `pricePaidCurrency` is three upper case letters and `pricePaidCents` a non
+// negative integer, and core checks both before it writes (`paidColumns`). Here
+// the currency is bounded by its length alone, as `countryCode` already is: a
+// regex in a document nothing validates against is a second statement of one
+// rule. That the two are null together is a check constraint in the database
+// rather than a `not` here, because that is the one place it cannot be forgotten.
+const settlementPaid = object(
+  LIST_SCHEMA_IDS.settlementPaid,
+  {
+    priceScopeId: nonEmptyString(),
+    supermarketLocationId: nullableString(),
+    pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
+    pricePaidCurrency: { type: ['string', 'null'], maxLength: 3 },
+  },
+  [
+    'priceScopeId',
+    'supermarketLocationId',
+    'pricePaidCents',
+    'pricePaidCurrency',
+  ]
+);
+
 // One origin line touched by one settling act (plan 0047, section 3).
 // `generatedListLineId` is deliberately absent: it is stored and never served, so
 // a reader learns that something was bought and not which basket it came out of
-// (section 3.1).
+// (section 3.1). `supermarketLocationId` is absent for the same reason since plan
+// 0143: the price of a tin at a chain is a product fact, and a street and a time
+// are a fact about where somebody was standing (section 6).
 const lineSettlementView = object(
   LIST_SCHEMA_IDS.lineSettlementView,
   {
@@ -245,6 +276,12 @@ const lineSettlementView = object(
     // reverted settlement is excluded from every total and still appears in the
     // history, marked.
     revertedAt: nullableString(),
+    // What one unit cost, and where the price was read: a chain's catchment and
+    // never a shop (plan 0143, section 6). Null together, and null on every row
+    // written before that plan.
+    pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
+    pricePaidCurrency: { type: ['string', 'null'], maxLength: 3 },
+    priceScopeId: nullableString(),
   },
   [
     'id',
@@ -256,6 +293,9 @@ const lineSettlementView = object(
     'settledByUserId',
     'settledAt',
     'revertedAt',
+    'pricePaidCents',
+    'pricePaidCurrency',
+    'priceScopeId',
   ]
 );
 
@@ -552,6 +592,8 @@ const settleLineRequest = object(
     outcome: ref(ENUM_IDS.settlementOutcome),
     quantity: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
     itemId: nonEmptyString(),
+    // Written by the gateway (plan 0143). A client body has no field for it.
+    paid: ref(LIST_SCHEMA_IDS.settlementPaid),
   },
   ['userId', 'lineId', 'outcome']
 );
@@ -826,6 +868,7 @@ export const listSchemas: JsonSchema[] = [
   addLineResultList,
   lineClaimRef,
   lineClaimChangedEvent,
+  settlementPaid,
   lineSettlementView,
   lineSettlementResult,
   commentRecording,

@@ -11,6 +11,7 @@ import type {
 } from '../enums/list.enums';
 import type { ItemView, LocalizedText } from './catalog.messages';
 import type { GeneratedListParticipantView } from './generated-list-sharing.messages';
+import type { SettlementPaid } from './list.messages';
 
 /**
  * The basket, read rather than stored (plan 0136).
@@ -302,6 +303,14 @@ export interface SettleBasketRowRequest {
   itemId?: string;
   /** Which entry got what. Derived oldest first when absent. */
   allocations?: BasketAllocationEntry[];
+  /**
+   * What the screen said one of it costs, and where (plan 0143).
+   *
+   * Written by the **gateway**, which reads the price as the basket's owner at
+   * the basket's scopes, and never by a client: the actor at the shelf can be a
+   * guest. The same four values are written on every row this settle writes.
+   */
+  paid?: SettlementPaid;
 }
 
 /** One line's share of a settle, when the caller allocates by hand. */
@@ -406,6 +415,19 @@ export interface BasketSearchScope {
   ownerUserId: string;
   /** Null on a basket composed before plan 0078, which stays unpriced. */
   profileId: string | null;
+  /**
+   * Whether **this participant** is served shop addresses, which is the one
+   * condition plan 0136 section 2 left deciding that question
+   * (`BasketView.servesLocations`).
+   *
+   * It rides here, on the question the settle already asks, rather than on a
+   * second read of the basket: plan 0143 needs the same flag to decide whether
+   * a settle may record the shop a client named, and a settle that read the
+   * whole basket to learn one boolean would pay for a thousand rows to answer
+   * it. It is the actor's flag, unlike the two fields above it, which are the
+   * basket's; that is why it is documented and not merely added.
+   */
+  servesLocations: boolean;
 }
 
 // --- Results ----------------------------------------------------------------

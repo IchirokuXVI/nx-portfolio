@@ -20,6 +20,7 @@ import {
 import type { ShopperSelection } from '../catalog/scope-resolution.service';
 import { BasketCatalogService } from './basket-catalog.service';
 import { BasketController } from './basket.controller';
+import { SettlePriceService } from './settle-price.service';
 
 /**
  * What a basket row costs, and where (plan 0066, sections 3 to 5).
@@ -236,6 +237,10 @@ function build(world: World = {}) {
         return {
           ownerUserId: OWNER,
           profileId: world.profileId === undefined ? PROFILE : world.profileId,
+          // The actor's flag, carried on the same answer since plan 0143 so
+          // that a settle can decide whether it may record a shop without
+          // reading a whole basket for one boolean.
+          servesLocations: world.servesLocations ?? false,
         };
       case ITEM_PATTERNS.getMany:
         if (world.items === 'throws') {
@@ -287,7 +292,13 @@ function build(world: World = {}) {
       forShops,
     } as never
   );
-  const controller = new BasketController({ send } as never, catalog);
+  // The settle price service is not what this file proves (plan 0143 has its
+  // own spec), and the controller needs one to be constructed.
+  const controller = new BasketController(
+    { send } as never,
+    catalog,
+    new SettlePriceService({ send } as never, { describe } as never)
+  );
 
   const lookups = () =>
     calls

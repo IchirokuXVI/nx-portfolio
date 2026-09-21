@@ -29,6 +29,20 @@ import type { Paginated } from '../pagination';
  * basket screen's business and is attributed there (section 5).
  */
 
+/**
+ * An amount of money, with the currency it is in (plan 0143, section 7).
+ *
+ * An amount with no currency is a number, and every sum over it is only honest
+ * while every row happens to be in euros. So the two travel together or neither
+ * is served: a null here is "nothing recorded a price", never "zero".
+ */
+export interface MoneyView {
+  /** In the minor unit of {@link currency}. */
+  cents: number;
+  /** ISO 4217. */
+  currency: string;
+}
+
 /** The subjects of the history reads. Both need an account and no more. */
 export const PURCHASE_PATTERNS = {
   /** A page of history entries, newest first (plan 0142, section 3). */
@@ -63,11 +77,15 @@ export interface PurchaseEntryView {
    * What the entry cost: the sum over its standing `BOUGHT` purchases that
    * carry a price, of the price of one unit times the units.
    *
-   * **Null and never zero when no purchase carries a price** (section 3.3).
-   * Until plan 0143 fills `pricePaidCents` that is every entry, which is a
-   * correct answer and needs no flag of its own.
+   * **Null and never zero when no purchase carries a price** (section 3.3),
+   * which is a correct answer and needs no flag of its own.
+   *
+   * **Null also when the entry's priced rows carry two currencies** (plan 0143,
+   * section 7): two shops in two countries in one session have no total, every
+   * row still says what it cost, and {@link unpricedCount} is unchanged,
+   * because it counts rows with no price and not rows that refuse to add up.
    */
-  spentCents: number | null;
+  spent: MoneyView | null;
   /**
    * How many bought lines hold at least one purchase with no price.
    *
@@ -87,10 +105,10 @@ export interface PurchaseEntryPage {
  * One row of an entry: what was bought, how many, and at what price each
  * (section 4).
  *
- * **One row per `(lineId, itemId, pricePaidCents)`.** Three partial settles of
- * one milk at one price are one row of three. The same milk at two prices,
- * which is two shops in one session, is two rows: a history that averaged them
- * would report a price nobody paid.
+ * **One row per `(lineId, itemId, pricePaidCents, pricePaidCurrency)`.** Three
+ * partial settles of one milk at one price are one row of three. The same milk
+ * at two prices, which is two shops in one session, is two rows: a history that
+ * averaged them would report a price nobody paid.
  */
 export interface PurchaseRowView {
   /** The earliest settlement folded into the row. The cursor's key. */
@@ -101,8 +119,19 @@ export interface PurchaseRowView {
   outcome: SettlementOutcome;
   /** Standing `BOUGHT` units. Zero for `NOT_AVAILABLE`. */
   quantity: number;
-  /** What one unit cost, or null while nothing records it. */
-  pricePaidCents: number | null;
+  /** What **one unit** cost, or null when nothing recorded it. */
+  pricePaid: MoneyView | null;
+  /**
+   * The chain catchment the price was read at, and the one shop, when the
+   * shopper named one and was served shops at all (plan 0143, section 6).
+   *
+   * This is the **one** place `supermarketLocationId` is served: the reader is
+   * the person the purchase is about, or the owner whose basket was shopped. It
+   * is withheld from every reader of a list, because a shop and a time say
+   * where a named member of the household was standing at 18:40.
+   */
+  priceScopeId: string | null;
+  supermarketLocationId: string | null;
   /** The row's earliest purchase. */
   settledAt: string;
   /**

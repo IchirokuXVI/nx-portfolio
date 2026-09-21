@@ -134,11 +134,18 @@ export function toLineView(
 /**
  * A settlement on the wire (plan 0047, section 3).
  *
- * Three stored columns do not appear, and their absence is the point.
+ * Two stored columns do not appear, and their absence is the point.
+ *
  * `basketId` is the basket the purchase came out of, which is private where the
- * purchase itself is a zone fact (section 3.1); `pricePaidCents` and
- * `supermarketLocationId` are declared for backlog 0004 and written by nothing
- * yet, so serving them would promise a number this plan never fills in.
+ * purchase itself is a zone fact (section 3.1).
+ *
+ * `supermarketLocationId` is the shop (plan 0143, section 6). A reader of a
+ * list is served what one unit cost and the chain catchment it was read at,
+ * because plan 0066 section 5 already calls a chain's price a product fact and
+ * it is the fact a household asks about. **A shop is different**: a shop and a
+ * time say where a named member of the household was standing at 18:40, which
+ * is not a fact about the milk. It is served in one place only, a person's own
+ * history, where the reader is the person it is about.
  */
 export function toLineSettlementView(
   settlement: LineSettlement
@@ -167,6 +174,9 @@ export function toLineSettlementView(
     // history than a gap. `revertedByParticipantId` stays unserved for the
     // reason the three columns above it are, being meaningless to a zone reader.
     revertedAt: settlement.revertedAt?.toISOString() ?? null,
+    pricePaidCents: settlement.pricePaidCents,
+    pricePaidCurrency: settlement.pricePaidCurrency,
+    priceScopeId: settlement.priceScopeId,
   };
 }
 

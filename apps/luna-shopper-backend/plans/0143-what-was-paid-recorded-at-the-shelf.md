@@ -1,3 +1,5 @@
+> **PR:** [#433](https://github.com/IchirokuXVI/nx-portfolio/pull/433)
+
 # 0143: what was paid, recorded at the shelf
 
 > Part of the series recorded in `0130`. Needs `0136` (the open basket is a view, and its

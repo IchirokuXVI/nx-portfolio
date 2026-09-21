@@ -183,6 +183,13 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
       userId?: string;
       itemId?: string | null;
       pricePaidCents?: number | null;
+      /**
+       * The currency beside the amount (plan 0143). It defaults to euros
+       * whenever there is an amount, because `ck_line_settlements_price` makes
+       * the two null together and a helper that wrote one alone would fail
+       * every test that priced anything.
+       */
+      pricePaidCurrency?: string;
       reverted?: boolean;
     } = {}
   ): Promise<string> {
@@ -207,6 +214,12 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
         revertedByParticipantId: options.reverted ? randomUUID() : null,
         basketId: options.basketId ?? null,
         pricePaidCents: options.pricePaidCents ?? null,
+        pricePaidCurrency:
+          options.pricePaidCents === undefined ||
+          options.pricePaidCents === null
+            ? null
+            : (options.pricePaidCurrency ?? 'EUR'),
+        priceScopeId: null,
         supermarketLocationId: null,
       })
     );
@@ -607,13 +620,13 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
       expect(mine[0]).toMatchObject({
         lineCount: 4,
         boughtLineCount: 3,
-        spentCents: 2 * 120 + 250,
+        spent: { cents: 2 * 120 + 250, currency: 'EUR' },
         unpricedCount: 1,
       });
     });
 
-    // Before plan 0143 nothing writes a price, so this is every entry. Zero
-    // would say the shopping was free.
+    // A settle whose client showed no price records none, so an entry of them
+    // has no total. Zero would say the shopping was free.
     it('answers null and not zero when no purchase carries a price', async () => {
       const flat = await list(zones.flat, 'Flat');
       const milk = await line(flat, 'Milk');
@@ -621,9 +634,64 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
 
       const mine = await entries();
 
-      expect(mine[0].spentCents).toBeNull();
+      expect(mine[0].spent).toBeNull();
       expect(mine[0].unpricedCount).toBe(1);
       expect(mine[0].boughtLineCount).toBe(1);
+    });
+
+    /**
+     * Two currencies in one entry have no total (plan 0143, section 7).
+     *
+     * Every row still says what it cost, and `unpricedCount` is unchanged: it
+     * counts rows with no price, not rows that refuse to add up.
+     */
+    it('has no total when two currencies meet, and still prices both rows', async () => {
+      const flat = await list(zones.flat, 'Flat');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread');
+
+      await settled(flat, milk, '2026-04-03T10:00:00Z', {
+        pricePaidCents: 120,
+      });
+      await settled(flat, bread, '2026-04-03T10:05:00Z', {
+        pricePaidCents: 300,
+        pricePaidCurrency: 'GBP',
+      });
+
+      const [entry] = await entries();
+
+      expect(entry.spent).toBeNull();
+      expect(entry.unpricedCount).toBe(0);
+      expect((await rowsOf(entry)).map((row) => row.pricePaid)).toEqual([
+        { cents: 120, currency: 'EUR' },
+        { cents: 300, currency: 'GBP' },
+      ]);
+    });
+
+    // The same line, the same amount, two currencies: one entry, two rows, and
+    // no total. A fold keyed on the amount alone would report one row of two.
+    it('does not fold two currencies of the same amount into one row', async () => {
+      const flat = await list(zones.flat, 'Flat');
+      const milk = await line(flat, 'Milk');
+      const item = randomUUID();
+
+      await settled(flat, milk, '2026-04-04T10:00:00Z', {
+        itemId: item,
+        pricePaidCents: 120,
+      });
+      await settled(flat, milk, '2026-04-04T10:05:00Z', {
+        itemId: item,
+        pricePaidCents: 120,
+        pricePaidCurrency: 'GBP',
+      });
+
+      const [entry] = await entries();
+
+      expect(entry.spent).toBeNull();
+      expect((await rowsOf(entry)).map((row) => row.pricePaid)).toEqual([
+        { cents: 120, currency: 'EUR' },
+        { cents: 120, currency: 'GBP' },
+      ]);
     });
   });
 
@@ -768,13 +836,14 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
       expect(rows[0]).toMatchObject({
         itemId: item,
         quantity: 3,
-        pricePaidCents: 100,
+        pricePaid: { cents: 100, currency: 'EUR' },
         outcome: SettlementOutcome.BOUGHT,
         settledAt: '2026-08-01T10:00:00.000Z',
         content: 'Milk',
       });
-      expect(rows.slice(1).map((row) => row.pricePaidCents)).toEqual([
-        200, 250,
+      expect(rows.slice(1).map((row) => row.pricePaid)).toEqual([
+        { cents: 200, currency: 'EUR' },
+        { cents: 250, currency: 'EUR' },
       ]);
     });
 

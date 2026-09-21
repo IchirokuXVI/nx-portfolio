@@ -29,6 +29,7 @@ import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineClaimService } from '../generated-lists/line-claim.service';
 import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
+import { paidColumns } from '../lists/settlement-paid';
 import { leftOf, lockEntries, type BasketRow } from './basket-row-resolver';
 import {
   allocateOldestFirst,
@@ -90,6 +91,10 @@ export class BasketSettleService {
     const row = await opened.row(req.rowKey);
     const itemId = resolvePick(row, req.itemId);
     const units = this.resolveUnits(req, row);
+    // The same four values on every row this settle writes, one per entry
+    // (plan 0143, section 4.3). Checked here, before the transaction opens,
+    // because a malformed message must be refused with nothing locked.
+    const paid = paidColumns(req.paid, req.outcome);
 
     const announcements: ZoneAnnouncement[] = [];
     // The entries this call took to zero or closed, which is what decides
@@ -177,8 +182,11 @@ export class BasketSettleService {
             // What every read asking "which trip was this bought on" uses
             // (plan 0134, section 3).
             basketId: opened.basket.id,
-            pricePaidCents: null,
-            supermarketLocationId: null,
+            // What the screen said one of them costs, and where, as the
+            // gateway read it as this basket's **owner** (plan 0143). Every
+            // entry of the row gets the same four values: it is a price per
+            // unit, so it needs no dividing between the households.
+            ...paid,
           })
         );
 

@@ -760,6 +760,8 @@ export type SettleBasketRowDto = {
   quantity?: number;
   from: number;
   itemId?: string;
+  priceScopeId?: string;
+  supermarketLocationId?: string;
   allocations?: BasketAllocationDto[];
 };
 
@@ -770,6 +772,8 @@ export type SettleLineDto = {
   outcome: 'BOUGHT' | 'NOT_AVAILABLE';
   quantity?: number;
   itemId?: string;
+  priceScopeId?: string;
+  supermarketLocationId?: string;
 };
 
 /**
@@ -3480,6 +3484,9 @@ export type ListLineSettlementView = {
   settledByUserId: string;
   settledAt: string;
   revertedAt: string | null;
+  pricePaidCents: number | null;
+  pricePaidCurrency: string | null;
+  priceScopeId: string | null;
 };
 
 /**
@@ -3828,6 +3835,14 @@ export type ProfileShoppingProfileView = {
 };
 
 /**
+ * `purchase.MoneyView` in the gateway's OpenAPI document.
+ */
+export type PurchaseMoneyView = {
+  cents: number;
+  currency: string;
+};
+
+/**
  * `purchase.PurchaseEntryPage` in the gateway's OpenAPI document.
  */
 export type PurchasePurchaseEntryPage = {
@@ -3847,7 +3862,7 @@ export type PurchasePurchaseEntryView = {
   endedAt: string;
   lineCount: number;
   boughtLineCount: number;
-  spentCents: number | null;
+  spent: PurchaseMoneyView | null;
   unpricedCount: number;
 };
 
@@ -3869,7 +3884,9 @@ export type PurchasePurchaseRowView = {
   itemId: string | null;
   outcome: EnumsSettlementOutcome;
   quantity: number;
-  pricePaidCents: number | null;
+  pricePaid: PurchaseMoneyView | null;
+  priceScopeId: string | null;
+  supermarketLocationId: string | null;
   settledAt: string;
   lineId: string | null;
   listId: string | null;

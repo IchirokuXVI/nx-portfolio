@@ -325,6 +325,23 @@ export class SettleLineDto {
   @IsOptional()
   @IsUUID()
   itemId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The price scope the price on your screen was read at. There is no field for an amount, and there will not be: the gateway reads the price itself, at your own shops.',
+  })
+  @IsOptional()
+  @IsUUID()
+  priceScopeId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'The one shop you are standing in.',
+  })
+  @IsOptional()
+  @IsUUID()
+  supermarketLocationId?: string;
 }
 
 export class ReorderLinesDto {

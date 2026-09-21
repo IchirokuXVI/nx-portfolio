@@ -36,6 +36,7 @@ import {
   type RevertBasketRowRequest,
   type SetBasketRowDemandRequest,
   type SettleBasketRowRequest,
+  type SettlementPaid,
   type SkipBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -73,6 +74,7 @@ import {
   SetBasketRowDemandDto,
   SettleBasketRowDto,
 } from './basket.dto';
+import { SettlePriceService } from './settle-price.service';
 
 /**
  * The basket that is always there (plan 0136, section 4).
@@ -123,10 +125,7 @@ export class BasketLiveController {
   @ApiProblemResponses({ auth: true })
   summary(@AuthUser() user: CurrentUser): Promise<BasketSummaryView> {
     const req: GetLiveBasketRequest = { userId: user.userId };
-    return this.nats.send<BasketSummaryView>(
-      BASKET_PATTERNS.liveSummary,
-      req
-    );
+    return this.nats.send<BasketSummaryView>(BASKET_PATTERNS.liveSummary, req);
   }
 
   /**
@@ -178,7 +177,9 @@ export class BasketLiveController {
 export class BasketController {
   constructor(
     private readonly nats: NatsClient,
-    private readonly catalog: BasketCatalogService
+    private readonly catalog: BasketCatalogService,
+    /** What a settle cost, read here and never sent by a client (plan 0143). */
+    private readonly prices: SettlePriceService
   ) {}
 
   /** The basket, its rows, its people and the products they name. */
@@ -231,7 +232,7 @@ export class BasketController {
     notFound: true,
     finishedBasket: true,
   })
-  settle(
+  async settle(
     @Participant() participant: GeneratedListParticipantContext,
     @Param('id') id: string,
     @Param('rowKey') rowKey: string,
@@ -246,8 +247,58 @@ export class BasketController {
       from: dto.from,
       itemId: dto.itemId,
       allocations: dto.allocations,
+      // What the screen said one of it costs, read here and never sent by the
+      // client (plan 0143). It runs **before** the write and not after it: a
+      // second message attaching a price to a settlement already written would
+      // have to find its rows again after a revert split them.
+      paid: (await this.paidFor(id, participant, dto)) ?? undefined,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowSettle, req);
+  }
+
+  /**
+   * The price a settle records, read as the basket's **owner** (plan 0143,
+   * section 4.2).
+   *
+   * The owner and the profile come from `basket.searchScope`, which is the
+   * question the basket read already asks to price the screen, and the same
+   * message now carries whether this actor is served shops. So an actor who is
+   * a registered participant with a profile of their own, or a guest with none,
+   * still records the owner's price at the owner's scopes: the owner delegated
+   * shopping, not pricing.
+   *
+   * It costs one catalog round trip more than a settle used to, at most the
+   * service's own budget and usually a few milliseconds, and only when the
+   * client named a scope.
+   */
+  private async paidFor(
+    basketId: string,
+    participant: GeneratedListParticipantContext,
+    dto: SettleBasketRowDto
+  ): Promise<SettlementPaid | null> {
+    if (!dto.priceScopeId) {
+      return null;
+    }
+    let scope: BasketSearchScope;
+    try {
+      scope = await this.nats.send<BasketSearchScope>(
+        BASKET_PATTERNS.searchScope,
+        { basketId, participantId: participant.participantId }
+      );
+    } catch {
+      // Core could not say whose basket this is, so there is no owner to price
+      // as. The settle itself is about to ask core the same question and will
+      // fail or succeed on its own terms.
+      return null;
+    }
+    return this.prices.read({
+      userId: scope.ownerUserId,
+      profileId: scope.profileId ?? undefined,
+      itemId: dto.itemId,
+      priceScopeId: dto.priceScopeId,
+      supermarketLocationId: dto.supermarketLocationId,
+      servedLocations: scope.servesLocations,
+    });
   }
 
   /** Take back units somebody said they bought, or the close on a row. */
@@ -582,9 +633,7 @@ export class BasketController {
  * them**, so a guest is refused here rather than in core: they present a
  * session secret and hold no `WRITE` on anything.
  */
-function requireAccount(
-  participant: GeneratedListParticipantContext
-): string {
+function requireAccount(participant: GeneratedListParticipantContext): string {
   if (!participant.userId) {
     throw new ForbiddenException(
       'Only people with an account can do this on a basket'

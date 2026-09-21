@@ -363,6 +363,11 @@ describe('contract schemas', () => {
             // Standing, which is every settlement a settle writes (plan 0054,
             // section 3.3). Only a basket reopen sets it.
             revertedAt: null,
+            // What one of them cost, and the chain catchment it was read at
+            // (plan 0143). The shop is stored and never served here.
+            pricePaidCents: 129,
+            pricePaidCurrency: 'EUR',
+            priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
           },
         }).valid
       ).toBe(true);
@@ -384,6 +389,12 @@ describe('contract schemas', () => {
               settledByUserId: 'u',
               settledAt: '2026-01-01T00:00:00.000Z',
               revertedAt: null,
+              // A close records no price, by check constraint, and keeps the
+              // scope: which chain had none is the half worth keeping (plan
+              // 0143, section 3).
+              pricePaidCents: null,
+              pricePaidCurrency: null,
+              priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
             },
           ],
           nextCursor: null,

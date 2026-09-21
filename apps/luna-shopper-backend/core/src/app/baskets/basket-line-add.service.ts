@@ -14,6 +14,7 @@ import {
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
 import { ProfileService } from '../profiles/profile.service';
+import { servesLocations } from './basket-redaction';
 import { BasketWriteContext } from './basket-write.context';
 
 /**
@@ -132,6 +133,12 @@ export class BasketLineAddService {
               undefined
             )
           : opened.basket.pricingProfileId,
+      // The **actor's** flag where the two above are the basket's, and the same
+      // one the read obeys (plan 0136, section 2). It rides here so that the
+      // settle of plan 0143, which already asks this question to price what was
+      // paid, learns whether this reader may record the shop they named without
+      // reading a whole basket for one boolean.
+      servesLocations: servesLocations(opened.participant),
     };
   }
 }

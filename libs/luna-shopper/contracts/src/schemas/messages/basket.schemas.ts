@@ -22,6 +22,7 @@ import { ENUM_IDS } from '../enums.schemas';
 import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
 import { GENERATED_LIST_SHARING_SCHEMA_IDS } from './generated-list-sharing.schemas';
 import { GENERATED_LIST_SCHEMA_IDS } from './generated-list.schemas';
+import { LIST_SCHEMA_IDS } from './list.schemas';
 
 /**
  * The basket, as a language neutral contract (plan 0136).
@@ -248,8 +249,13 @@ const searchScope = object(
   {
     ownerUserId: nonEmptyString(),
     profileId: nullableString(),
+    // The actor's flag, where the two above it are the basket's: whether this
+    // participant is served shop addresses (plan 0136, section 2). The settle
+    // of plan 0143 reads it here rather than reading a whole basket for one
+    // boolean.
+    servesLocations: boolean(),
   },
-  ['ownerUserId', 'profileId']
+  ['ownerUserId', 'profileId', 'servesLocations']
 );
 
 const getRequest = object(
@@ -278,6 +284,8 @@ const settleRequest = object(
     from: integer({ minimum: 0 }),
     itemId: nonEmptyString(),
     allocations: array(ref(BASKET_SCHEMA_IDS.allocationEntry)),
+    // Written by the gateway (plan 0143). A client body has no field for it.
+    paid: ref(LIST_SCHEMA_IDS.settlementPaid),
   },
   ['basketId', 'participantId', 'rowKey', 'outcome', 'from']
 );

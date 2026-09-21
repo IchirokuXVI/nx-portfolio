@@ -50,20 +50,23 @@ import { READABLE_LIST } from '../zones/zone-summary.sql';
 export const PERSON_PURCHASES_CTE = `
   "mine" AS (
     SELECT s.id, s."lineId", s."listId", s."itemId", s."basketId", s."outcome",
-           s."quantity", s."settledAt", s."pricePaidCents"
+           s."quantity", s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
+           s."priceScopeId", s."supermarketLocationId"
     FROM "generated_lists" gl
     JOIN "line_settlements" s ON s."basketId" = gl.id
     WHERE gl."ownerUserId" = $1::uuid
       AND s."revertedAt" IS NULL
     UNION
     SELECT s.id, s."lineId", s."listId", s."itemId", s."basketId", s."outcome",
-           s."quantity", s."settledAt", s."pricePaidCents"
+           s."quantity", s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
+           s."priceScopeId", s."supermarketLocationId"
     FROM "line_settlements" s
     WHERE s."settledByUserId" = $1::uuid
       AND s."revertedAt" IS NULL
     UNION
     SELECT s.id, s."lineId", s."listId", s."itemId", s."basketId", s."outcome",
-           s."quantity", s."settledAt", s."pricePaidCents"
+           s."quantity", s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
+           s."priceScopeId", s."supermarketLocationId"
     FROM "generated_list_participants" p
     JOIN "line_settlements" s ON s."settledByParticipantId" = p.id
     WHERE p."userId" = $1::uuid
@@ -230,11 +233,13 @@ export function purchaseEntriesSql(narrow = true): string {
   )},
   "purchases" AS (
     SELECT 'SESSION'::text AS "kind", x."entryId" AS "entryId", x."lineId",
-           x."outcome", x."quantity", x."settledAt", x."pricePaidCents"
+           x."outcome", x."quantity", x."settledAt", x."pricePaidCents",
+           x."pricePaidCurrency"
     FROM "sessioned" x
     UNION ALL
     SELECT 'BASKET'::text, t."ownBasketId", t."lineId",
-           t."outcome", t."quantity", t."settledAt", t."pricePaidCents"
+           t."outcome", t."quantity", t."settledAt", t."pricePaidCents",
+           t."pricePaidCurrency"
     FROM "tagged" t
     WHERE t."ownBasketId" IS NOT NULL
   ),
@@ -246,6 +251,15 @@ export function purchaseEntriesSql(narrow = true): string {
              FILTER (WHERE p."outcome" = 'BOUGHT' AND p."pricePaidCents" IS NOT NULL)
              AS "spent",
            BOOL_OR(p."outcome" = 'BOUGHT' AND p."pricePaidCents" IS NULL) AS "unpriced",
+           -- Plan 0143, section 7: how many currencies the priced rows carry,
+           -- and which one when they carry exactly one. An entry whose rows
+           -- carry two has no total, and the mapper is what decides that.
+           COUNT(DISTINCT p."pricePaidCurrency")
+             FILTER (WHERE p."outcome" = 'BOUGHT' AND p."pricePaidCents" IS NOT NULL)
+             AS "currencies",
+           MIN(p."pricePaidCurrency")
+             FILTER (WHERE p."outcome" = 'BOUGHT' AND p."pricePaidCents" IS NOT NULL)
+             AS "currency",
            MIN(p."settledAt") AS "firstAt",
            MAX(p."settledAt") AS "lastAt"
     FROM "purchases" p
@@ -258,6 +272,16 @@ export function purchaseEntriesSql(narrow = true): string {
            COUNT(*)::int AS "lineCount",
            (COUNT(*) FILTER (WHERE e."bought" > 0))::int AS "boughtLineCount",
            SUM(e."spent")::bigint AS "spentCents",
+           -- Two currencies anywhere below make two here, whether they met on
+           -- one line or across two. Counting the lines own currency column
+           -- alone would miss the first case, because that column is already a
+           -- MIN over the line's values and a line carrying two answers with
+           -- one of them. So a line that said two is carried up, not recounted.
+           (CASE
+              WHEN MAX(e."currencies") > 1 THEN 2
+              ELSE COUNT(DISTINCT e."currency")
+            END)::int AS "currencies",
+           MIN(e."currency") AS "currency",
            (COUNT(*) FILTER (WHERE e."unpriced"))::int AS "unpricedCount"
     FROM "entry_lines" e
     GROUP BY e."kind", e."entryId"
@@ -271,7 +295,8 @@ export function purchaseEntriesSql(narrow = true): string {
     LEFT JOIN "generated_lists" gl ON e."kind" = 'BASKET' AND gl.id = e."id"
   )
   SELECT d."id", d."kind", d."name", d."open", d."startedAt", d."endedAt",
-         d."lineCount", d."boughtLineCount", d."spentCents", d."unpricedCount"
+         d."lineCount", d."boughtLineCount", d."spentCents", d."currencies",
+         d."currency", d."unpricedCount"
   FROM "dated" d
   WHERE $3::uuid IS NULL
      OR (d."startedAt", d."id") < (SELECT b."at", b."id" FROM "boundary" b)
@@ -287,11 +312,19 @@ export const PURCHASE_ENTRIES_SQL = purchaseEntriesSql();
  * The rows of one entry, folded and located. `readerParam` is the reader and
  * `cursorParam` the boundary row's id or null; both reads below select this.
  *
- * ## One row per `(lineId, itemId, pricePaidCents)`
+ * ## One row per `(lineId, itemId, pricePaidCents, pricePaidCurrency)`
  *
  * Three partial settles of one milk at one price are one row of three. The same
  * milk at two prices, which is two shops in one session, is two rows, because a
- * history that averaged them says a price nobody paid.
+ * history that averaged them says a price nobody paid. The currency is part of
+ * the key for the same reason (plan 0143, section 7): 120 in two currencies is
+ * two prices, and folding them would report one.
+ *
+ * The scope and the shop ride the group rather than keying it, and each is
+ * served only when the whole group agrees on it. Two shops charging the same
+ * for the same milk fold into one row, and naming either of them would say the
+ * shopping happened somewhere it may not have; null is the same answer `spent`
+ * gives when two currencies meet, for the same reason.
  *
  * A group holding any `BOUGHT` row reads `BOUGHT`, and the units are that
  * group's standing bought units. A line whose only word in this entry is
@@ -320,14 +353,33 @@ export const PURCHASE_ENTRIES_SQL = purchaseEntriesSql();
 function foldedRows(readerParam: string, cursorParam: string): string {
   return `
   "folded" AS (
-    SELECT e."lineId", e."itemId", e."pricePaidCents",
+    SELECT e."lineId", e."itemId", e."pricePaidCents", e."pricePaidCurrency",
            (ARRAY_AGG(e.id ORDER BY e."settledAt", e.id))[1] AS "id",
            MIN(e."settledAt") AS "settledAt",
            COALESCE(SUM(e."quantity") FILTER (WHERE e."outcome" = 'BOUGHT'), 0)::int
              AS "quantity",
-           BOOL_OR(e."outcome" = 'BOUGHT') AS "anyBought"
+           BOOL_OR(e."outcome" = 'BOUGHT') AS "anyBought",
+           -- Served only when every row of the group names it and they all
+           -- name the same one (plan 0143, section 6). Both halves matter: two
+           -- shops charging the same fold into one row, and naming either
+           -- would say the shopping happened somewhere it may not have, while
+           -- a group where only some rows named a shop knows less than one
+           -- value would claim.
+           --
+           -- An ordered array rather than MIN, which Postgres does not define
+           -- over uuid.
+           CASE
+             WHEN COUNT(DISTINCT e."priceScopeId") = 1
+              AND COUNT(e."priceScopeId") = COUNT(*)
+             THEN (ARRAY_AGG(DISTINCT e."priceScopeId"))[1]
+           END AS "priceScopeId",
+           CASE
+             WHEN COUNT(DISTINCT e."supermarketLocationId") = 1
+              AND COUNT(e."supermarketLocationId") = COUNT(*)
+             THEN (ARRAY_AGG(DISTINCT e."supermarketLocationId"))[1]
+           END AS "supermarketLocationId"
     FROM "entry" e
-    GROUP BY e."lineId", e."itemId", e."pricePaidCents"
+    GROUP BY e."lineId", e."itemId", e."pricePaidCents", e."pricePaidCurrency"
   ),
   "kept" AS (
     SELECT f.*
@@ -356,6 +408,9 @@ function foldedRows(readerParam: string, cursorParam: string): string {
          CASE WHEN k."anyBought" THEN 'BOUGHT' ELSE 'NOT_AVAILABLE' END AS "outcome",
          k."quantity",
          k."pricePaidCents",
+         k."pricePaidCurrency",
+         k."priceScopeId",
+         k."supermarketLocationId",
          k."settledAt",
          CASE WHEN k."readable" THEN k."lineId" END AS "lineId",
          CASE WHEN k."readable" THEN k."listId" END AS "listId",
@@ -388,7 +443,8 @@ function foldedRows(readerParam: string, cursorParam: string): string {
 export const PURCHASE_BASKET_ROWS_SQL = `
   WITH "entry" AS (
     SELECT s.id, s."lineId", s."itemId", s."outcome", s."quantity",
-           s."settledAt", s."pricePaidCents"
+           s."settledAt", s."pricePaidCents", s."pricePaidCurrency",
+           s."priceScopeId", s."supermarketLocationId"
     FROM "line_settlements" s
     JOIN "generated_lists" gl ON gl.id = s."basketId"
     WHERE s."basketId" = $2::uuid
@@ -415,7 +471,8 @@ export const PURCHASE_SESSION_ROWS_SQL = `
   ${sessionWindowCtes('$2', '')},
   "entry" AS (
     SELECT x.id, x."lineId", x."itemId", x."outcome", x."quantity",
-           x."settledAt", x."pricePaidCents"
+           x."settledAt", x."pricePaidCents", x."pricePaidCurrency",
+           x."priceScopeId", x."supermarketLocationId"
     FROM "sessioned" x
     WHERE x."entryId" = $3::uuid
   ),
@@ -434,6 +491,13 @@ export interface PurchaseEntryRow {
   boughtLineCount: number;
   /** A `bigint`, which the driver hands back as a string. Null when unpriced. */
   spentCents: string | number | null;
+  /**
+   * How many currencies the entry's priced purchases carry, and which one when
+   * they carry exactly one (plan 0143, section 7). Two of them have no total,
+   * and the mapper is what decides that.
+   */
+  currencies: number;
+  currency: string | null;
   unpricedCount: number;
 }
 
@@ -444,6 +508,10 @@ export interface PurchaseLineRow {
   outcome: string;
   quantity: number;
   pricePaidCents: number | null;
+  pricePaidCurrency: string | null;
+  /** Null when the folded group did not agree on one (plan 0143, section 6). */
+  priceScopeId: string | null;
+  supermarketLocationId: string | null;
   settledAt: string | Date;
   lineId: string | null;
   listId: string | null;
