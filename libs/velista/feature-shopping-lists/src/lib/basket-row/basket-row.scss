@@ -86,6 +86,17 @@
   color: var(--app-status-success-fg);
 }
 
+// The clock, which takes **no** state colour (velista 0092, section 4).
+//
+// Amber is not attention in this app, and a skip is not a warning either way: it
+// is somebody deciding not today, which is an ordinary thing to decide. Sharing
+// the amber with `is-unavailable` would also be the one pairing that matters
+// least — those two are the pair a shopper has to tell apart — so the shape does
+// that work alone and the colour stays out of it.
+.is-skipped {
+  color: var(--app-text-secondary);
+}
+
 // A finished line is drawn **quietly**, not removed and not struck through: it
 // stays where it is, still tappable, because settling is cumulative and somebody
 // may want to look at what they bought (plan 0043, section 3.2).
@@ -177,6 +188,17 @@
 .from {
   font-size: var(--app-text-xs);
   color: var(--app-text-muted);
+}
+
+// Put off for now, or put off earlier (velista 0092, section 3).
+//
+// The same quiet role as the two captions above it, and deliberately **not** an
+// attention or a warning one: a skip is a decision somebody made on purpose, and
+// amber is not attention in this app (`0002`, section 4.4). The shape carries the
+// state; this says it in words for anybody who reads rather than scans.
+.skipped {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
 }
 
 // The trailing column, which is the reel and one caption under it. `flex: none` so

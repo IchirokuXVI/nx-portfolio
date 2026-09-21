@@ -343,3 +343,60 @@ export function outstandingCaption(
         count: next - current,
       });
 }
+
+/**
+ * The quiet line about this row having been put off, or null (velista `0092`,
+ * section 3).
+ *
+ * Three cases and they are three: the row is skipped now; it was skipped and the
+ * server says when; it was skipped and the server sent no date. The third is a
+ * guard rather than a case anybody meets, and it draws the undated sentence
+ * rather than a sentence with a hole in it.
+ *
+ * **The date is the server\u2019s** (`noteAt`, which is its `skippedAt`) and it is
+ * only formatted here. Nothing on this side decides that twelve hours have
+ * passed: it reads a row that already says so, which is why a `SKIPPED` row and a
+ * `SKIPPED_EARLIER` one are two answers from the server rather than one answer
+ * and a clock.
+ *
+ * Here beside the row\u2019s other three sentences rather than in the component, for
+ * the reason they are here: the date formatting is worth a test of its own, and
+ * the testing translator echoes its key without its values, so the only place the
+ * argument can be asserted is a direct call.
+ */
+export function skipCaption(
+  row: Pick<BasketRow, 'state' | 'note' | 'noteAt'>,
+  translator: RokuTranslatorService,
+  locale: string
+): string | null {
+  if (row.state === 'SKIPPED') {
+    return translator.t('basket.skip.caption', undefined, locale);
+  }
+  if (row.note !== 'SKIPPED_EARLIER') {
+    return null;
+  }
+  if (row.noteAt === null) {
+    return translator.t('basket.skip.earlier', undefined, locale);
+  }
+
+  return translator.t('basket.skip.earlierOn', undefined, locale, {
+    date: formatDay(row.noteAt, locale),
+  });
+}
+
+/**
+ * One date, in the reader\u2019s language.
+ *
+ * `Intl` rather than `DatePipe`, which is this library\u2019s convention: the pipe
+ * needs `registerLocaleData` per locale and a `LOCALE_ID` this app does not set,
+ * because the language is runtime state rather than the shell\u2019s build time
+ * locale. An unrecognised tag throws a `RangeError`, and an ISO date is a poorer
+ * caption than a localized one but a better one than no row at all.
+ */
+function formatDay(at: Date, locale: string): string {
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(at);
+  } catch {
+    return at.toISOString().slice(0, 10);
+  }
+}

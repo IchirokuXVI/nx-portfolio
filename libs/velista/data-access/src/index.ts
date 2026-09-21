@@ -25,6 +25,7 @@ export * from './lib/baskets/basket-service';
 export * from './lib/baskets/basket-session-store';
 export * from './lib/baskets/basket-socket';
 export * from './lib/baskets/basket-store';
+export * from './lib/baskets/basket-target-store';
 export * from './lib/baskets/basket-view-store';
 export * from './lib/baskets/live-basket-store';
 export * from './lib/baskets/shared-list-store';

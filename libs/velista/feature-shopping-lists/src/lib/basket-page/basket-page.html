@@ -465,6 +465,63 @@
 <p aria-live="polite" class="visually-hidden said">{{ outstandingSaid() }}</p>
 
 <!--
+  The composer, back with a list to put things on (velista 0092, section 7).
+
+  It sits in a fixed dock at the foot of the page, which is where the list page's
+  sits and where a thumb finds it. That is also what keeps it out of a sheet's
+  way: a sheet is fixed to the viewport above everything on the page, so the
+  composer is covered by it rather than sitting over its panel.
+
+  **Drawn for an account holder with somewhere to put a line, and nobody else.**
+  A guest gets no dock, no field and no sentence about it: velista 0038 section
+  2.1 refuses to draw an invitation that cannot be accepted, and the product rule
+  that a guest is never pushed to register forbids explaining why.
+-->
+@if (state() === 'ready' && canAdd()) {
+  <div class="composer-dock">
+    <!--
+      Where the next line goes, above the field it goes from.
+
+      A button when there is something to pick between and **text when there is
+      not**: one list chooses itself, and a button opening a sheet with one row
+      on it would be asking a question with one answer (`0030`).
+    -->
+    @if (canRetarget()) {
+      <button
+        (click)="openTarget()"
+        [disabled]="adding()"
+        class="target"
+        type="button"
+      >
+        @if (target(); as list) {
+          {{ 'basket.add.to' | rokuT: { list: list.name } }}
+        } @else {
+          {{ 'basket.add.choose' | rokuT }}
+        }
+      </button>
+    } @else if (target(); as list) {
+      <p class="target is-static">
+        {{ 'basket.add.to' | rokuT: { list: list.name } }}
+      </p>
+    }
+
+    <!--
+      The field stays usable while no target is chosen, so somebody can type the
+      thing they just remembered and choose where it goes second. Only the submit
+      waits, which is what `submitDisabled` is for.
+    -->
+    <lib-line-composer
+      (queryChanged)="onComposerQuery($event)"
+      (submitted)="add($event)"
+      [busy]="adding()"
+      [submitDisabled]="target() === null"
+      [suggestions]="suggestions()"
+      [voice]="false"
+    />
+  </div>
+}
+
+<!--
   The sheets, as children of the page they cover (rule E1, plan 0008): the page
   keeps its scroll underneath and Android's back button dismisses them.
 -->

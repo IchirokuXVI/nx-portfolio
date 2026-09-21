@@ -2,6 +2,8 @@ import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   Basket,
+  BasketAddLineRequest,
+  BasketDemandRequest,
   BasketLinkPreview,
   BasketParticipant,
   BasketRenameRequest,
@@ -155,6 +157,79 @@ export interface BasketServiceI {
     basketId: string,
     rowKey: string,
     body: BasketRevertRequest
+  ): Promise<BasketRowResult>;
+
+  /**
+   * Put a row off for now (`PUT /v1/baskets/:id/rows/:rowKey/skip`), backend
+   * `0137`.
+   *
+   * **A state of the row on this trip, never an outcome of a settle.** Nothing
+   * is bought, nothing is closed and no list moves: the shopper walked past the
+   * bread today. `SETTLEMENT_OUTCOMES` deliberately has no `SKIPPED` member for
+   * exactly this reason (backend `0130`, section 11, decision 3).
+   *
+   * Every participant may, a guest included (backend `0130`, section 5): it is
+   * a smaller act than a settle, which every participant already may.
+   *
+   * **It carries no `from`.** Every other row write names the number it started
+   * from, because its meaning depends on where the number was. A skip has no
+   * number, so there is nothing to be stale about; what the server refuses
+   * instead is a row with nothing left to get, which is the case a `from` would
+   * have caught (backend `0137`, section 5).
+   *
+   * `PUT` because it is "ensure": skipping a row that is already skipped is the
+   * state it asked for, not a second skip.
+   */
+  skip(basketId: string, rowKey: string): Promise<BasketRowResult>;
+
+  /**
+   * Put a skipped row back (`DELETE` on the same route).
+   *
+   * The same route and the opposite verb, because it is the same fact being set
+   * and unset. A purchase ends a skip too, and the server does that itself: a
+   * person who skipped the bread and then found it presses "Got it", and the
+   * skip goes with the settle rather than needing this first.
+   */
+  unskip(basketId: string, rowKey: string): Promise<BasketRowResult>;
+
+  /**
+   * Change what one list asks for (`POST /v1/baskets/:id/rows/:rowKey/demand`),
+   * velista `0092` section 6, backend `0131`.
+   *
+   * **The one write on this screen that changes a household's list**, for
+   * everybody, on every screen the list appears on. Everything else here records
+   * what a trip did.
+   *
+   * So the rule behind it is the list's, asked of the basket's **owner** and
+   * never of the caller: a reader never learns the owner's permissions and a
+   * guest has none of their own, which is why the answer travels as
+   * `BasketRowEntry.demandEditable` rather than being worked out here.
+   *
+   * {@link BasketRowResult.row} is null when the row left the basket, which is
+   * a demand taken to zero on a row nothing was bought of.
+   */
+  setDemand(
+    basketId: string,
+    rowKey: string,
+    body: BasketDemandRequest
+  ): Promise<BasketRowResult>;
+
+  /**
+   * Add a line, onto one of the basket's covered lists (`POST
+   * /v1/baskets/:id/lines`), velista `0092` section 7, backend `0136`.
+   *
+   * **It names a list, and that is not optional.** A line added from the basket
+   * used to live in the basket alone; a basket stores nothing now, so an add
+   * with no list would be a line with nowhere to be.
+   *
+   * It goes through the list's ordinary rules, so it can land on a line the list
+   * already held (backend `0091`) and it can land unapproved on a list that does
+   * not auto approve. Either way the answer is the row it landed on, which the
+   * store folds like any other row write.
+   */
+  addLine(
+    basketId: string,
+    body: BasketAddLineRequest
   ): Promise<BasketRowResult>;
 
   /**

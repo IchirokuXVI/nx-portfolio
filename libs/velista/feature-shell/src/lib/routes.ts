@@ -9,6 +9,7 @@ import { NotFoundComponent } from '@portfolio/shared/ui';
 import {
   BasketSocket,
   BasketStore,
+  BasketTargetStore,
   BasketViewStore,
   ListViewStore,
   TripStore,
@@ -271,6 +272,21 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
       loadComponent: () =>
         import('@portfolio/velista/feature-shopping-lists').then(
           (m) => m.FilterSheet
+        ),
+    }),
+    // Which list the composer adds to (velista `0092`, section 7.3). A sheet
+    // rather than a menu on the dock, because it is a grouped list of every
+    // household's lists and the dock is one field and a button on a phone.
+    //
+    // Unguarded like its siblings: which reader may **use** it is decided by
+    // the page, from `Basket.lists`, which is the server's own redaction. A
+    // guest is served none, gets no composer, and has nothing to reach it
+    // from; the add behind it is refused for them regardless of what is drawn.
+    sheet({
+      path: 'add/list',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-shopping-lists').then(
+          (m) => m.TargetListSheet
         ),
     }),
   ];
@@ -929,7 +945,12 @@ export const AppShellRoutes: Route[] = [
               ),
             // The same three, scoped the same way, for the reason written out on the
             // route below.
-            providers: [BasketSocket, BasketStore, BasketViewStore],
+            providers: [
+              BasketSocket,
+              BasketStore,
+              BasketTargetStore,
+              BasketViewStore,
+            ],
             children: basketSheetRoutes({ finish: false }),
           },
           {
@@ -977,7 +998,12 @@ export const AppShellRoutes: Route[] = [
             // closes the socket and clears both stores from its own teardown, which
             // is what makes presence answer "who is here" rather than "who has ever
             // opened this", and what stops a basket opened later starting searched.
-            providers: [BasketSocket, BasketStore, BasketViewStore],
+            providers: [
+              BasketSocket,
+              BasketStore,
+              BasketTargetStore,
+              BasketViewStore,
+            ],
             children: basketSheetRoutes({ finish: true }),
           },
           {

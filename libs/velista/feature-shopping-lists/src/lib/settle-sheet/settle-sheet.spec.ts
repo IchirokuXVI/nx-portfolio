@@ -8,6 +8,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BasketStore,
+  BasketViewStore,
   GatewayError,
   LINE_SERVICE,
   SessionStore,
@@ -161,6 +162,14 @@ interface World {
    * ones a line with something still outstanding would otherwise offer.
    */
   readonly basketFinished?: boolean;
+  /**
+   * Which product somebody already said they got, by row key (velista `0092`,
+   * section 5).
+   *
+   * In memory for the visit and stored nowhere, so a spec seeds it here rather
+   * than through anything that outlives the page.
+   */
+  readonly chosen?: ReadonlyMap<string, string>;
 }
 
 /** Every settlement read the sheet made, so a test can assert it asked both origins. */
@@ -218,7 +227,45 @@ function storeDouble(world: World) {
     rows().find((row) => row.entries.some((held) => held.lineId === key)) ??
     null;
 
+  /**
+   * Which product was said to be got, for this visit (velista `0092`,
+   * section 5).
+   *
+   * The double keeps the **real** rule rather than returning whatever was
+   * chosen, because the rule is the thing three controls depend on: a choice
+   * only counts while it is still one of the row's own options, and a row with
+   * exactly one option needs no choice at all.
+   */
+  const chosen = signal<ReadonlyMap<string, string>>(
+    world.chosen ?? new Map<string, string>()
+  );
+  const itemIdFor = (key: string): string | undefined => {
+    const row = rowFor(key);
+    if (row === null) {
+      return undefined;
+    }
+    const held = chosen().get(key);
+    if (held !== undefined && row.optionIds.includes(held)) {
+      return held;
+    }
+    return row.optionIds.length === 1 ? row.optionIds[0] : undefined;
+  };
+
   return {
+    chosen,
+    itemIdFor,
+    choose: jest.fn((key: string, itemId: string) => {
+      const next = new Map(chosen());
+      next.set(key, itemId);
+      chosen.set(next);
+    }),
+    skip: jest.fn().mockResolvedValue(null),
+    unskip: jest.fn().mockResolvedValue(null),
+    setDemand: jest.fn().mockResolvedValue(null),
+    addLine: jest.fn().mockResolvedValue(null),
+    adding: signal(false),
+    handedOver: signal(null),
+    handOver: jest.fn(),
     basket,
     // How the sheet addresses its own basket since velista `0091`: off the store,
     // never off `paramMap`, which has no id under `shopping-lists/live`. The sheet
@@ -317,6 +364,11 @@ async function render(world: World = {}) {
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       { provide: BasketStore, useValue: store },
+      // The real one, as the filter sheet spec uses it: it reads the faked
+      // `BasketStore` above and a `BrowserFacade` `provideVelistaTesting` already
+      // supplies. The sheet asks it one thing, which shop the screen is pricing
+      // at, and the honest answer for a spec that has not chosen one is its own.
+      BasketViewStore,
       { provide: LINE_SERVICE, useValue: lineService },
       // The reader's own account name, which the sheet uses for their own row in the
       // history and for the caption on a finished line (plan 0052, section 2.1).
@@ -1540,5 +1592,296 @@ describe('SettleSheet: renaming the line', () => {
 
       expect(said(fixture)).toContain('basket.error.renameForbidden');
     });
+  });
+});
+
+/**
+ * Not today, and taking it back (velista `0092`, section 3.1).
+ *
+ * The button and the state it is offered from, which is what `0030` makes worth
+ * asserting: a control the server refuses is not drawn, so where it appears and
+ * where it does not is the rule rather than a decoration on one.
+ */
+describe('SettleSheet: putting a row off for now', () => {
+  const buttons = (fixture: ComponentFixture<SettleSheet>) => [
+    ...(
+      fixture.nativeElement as HTMLElement
+    ).querySelectorAll<HTMLButtonElement>('.actions button'),
+  ];
+
+  const press = async (
+    fixture: ComponentFixture<SettleSheet>,
+    label: string
+  ) => {
+    const found = buttons(fixture).find((button) =>
+      (button.textContent ?? '').includes(label)
+    );
+    found?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return found;
+  };
+
+  it('offers it on a row nobody has touched', async () => {
+    const { fixture } = await render();
+    expect(text(fixture)).toContain('basket.skip.action');
+  });
+
+  it('offers it on a partly bought row', async () => {
+    const { fixture } = await render({
+      lines: [line({ state: 'PARTLY', bought: 1, left: 3 })],
+    });
+
+    expect(text(fixture)).toContain('basket.skip.action');
+  });
+
+  it('offers it to a guest, who may skip like anybody else', async () => {
+    // A smaller act than a settle, which every participant already may
+    // (backend `0130`, section 5). Nothing about it is zone data.
+    const { fixture } = await render({ meKind: 'GUEST', served: [] });
+    expect(text(fixture)).toContain('basket.skip.action');
+  });
+
+  it('does not offer it on a row the shop had none of', async () => {
+    // Already closed for today. The server refuses it, and a control it refuses
+    // is not drawn.
+    const { fixture } = await render({
+      lines: [line({ state: 'NOT_AVAILABLE', left: 4 })],
+    });
+
+    expect(text(fixture)).not.toContain('basket.skip.action');
+  });
+
+  it('does not offer it on a finished trip', async () => {
+    const { fixture } = await render({ basketFinished: true });
+    expect(text(fixture)).not.toContain('basket.skip.action');
+  });
+
+  it('calls the store and says nothing about a list', async () => {
+    const { fixture, store } = await render();
+    await press(fixture, 'basket.skip.action');
+
+    // One argument, which is the row. A skip carries no `from` and no
+    // quantity: it has no number to be stale about and buys nothing.
+    expect(store.skip).toHaveBeenCalledWith(LINE_ID);
+    expect(store.settle).not.toHaveBeenCalled();
+  });
+
+  it('leads with taking it back on a skipped row, and keeps the buying actions', async () => {
+    const { fixture } = await render({ lines: [line({ state: 'SKIPPED' })] });
+
+    const labels = buttons(fixture).map((button) => button.textContent ?? '');
+    expect(labels[0]).toContain('basket.skip.undo');
+    // A person who skipped the bread and then found it buys it, so the three
+    // stay under it rather than being replaced by the undo.
+    expect(labels.join(' ')).toContain('basket.settle.all');
+  });
+
+  it('does not offer the skip again on a row that is already skipped', async () => {
+    const { fixture } = await render({ lines: [line({ state: 'SKIPPED' })] });
+    // Two buttons with two names, never one toggle (section 11).
+    expect(text(fixture)).not.toContain('basket.skip.action');
+  });
+
+  it('takes it back through the store', async () => {
+    const { fixture, store } = await render({
+      lines: [line({ state: 'SKIPPED' })],
+    });
+    await press(fixture, 'basket.skip.undo');
+
+    expect(store.unskip).toHaveBeenCalledWith(LINE_ID);
+  });
+});
+
+/**
+ * Which did you get? (velista `0092`, section 5.)
+ *
+ * The pane that used to split a row between products asks one question now, and
+ * the answer travels with the settle. What matters here is the **nothing stored**
+ * half: a choice reaches the server as `itemId` on a purchase and by no other
+ * route, which is why every assertion about it ends on a settle body.
+ */
+describe('SettleSheet: the product somebody got', () => {
+  const MILK: BasketProduct = {
+    id: 'i-whole',
+    name: { en: 'Whole milk 1 L', es: 'Leche entera 1 L' },
+    brand: null,
+    format: null,
+    imageUrl: null,
+    offer: null,
+    offers: [],
+    categories: [],
+  };
+  const SKIMMED: BasketProduct = { ...MILK, id: 'i-skimmed' };
+
+  const products = new Map([
+    [MILK.id, MILK],
+    [SKIMMED.id, SKIMMED],
+  ]);
+
+  const twoOptions = (over: Partial<BasketRow> = {}) =>
+    line({ optionIds: [MILK.id, SKIMMED.id], ...over });
+
+  const options = (fixture: ComponentFixture<SettleSheet>) => [
+    ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+      '.option'
+    ),
+  ];
+
+  async function openProducts(fixture: ComponentFixture<SettleSheet>) {
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.product-change')
+      ?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  it('offers the way in only when there is something to choose between', async () => {
+    const one = await render({
+      lines: [line({ optionIds: [MILK.id] })],
+      products,
+    });
+    expect(
+      (one.fixture.nativeElement as HTMLElement).querySelector(
+        '.product-change'
+      )
+    ).toBeNull();
+
+    const two = await render({ lines: [twoOptions()], products });
+    expect(
+      (two.fixture.nativeElement as HTMLElement).querySelector(
+        '.product-change'
+      )
+    ).not.toBeNull();
+  });
+
+  it('says no product is chosen on a row of several, and draws the one on a row of one', async () => {
+    const none = await render({ lines: [twoOptions()], products });
+    expect(text(none.fixture)).toContain('basket.line.free');
+
+    // Not a choice at all: there was nothing to choose between, and the row has
+    // been drawing that product all along.
+    const one = await render({
+      lines: [line({ optionIds: [MILK.id] })],
+      products,
+    });
+    expect(text(one.fixture)).toContain('Whole milk 1 L');
+  });
+
+  it('lists the options in the server’s order', async () => {
+    const { fixture } = await render({ lines: [twoOptions()], products });
+    await openProducts(fixture);
+
+    // Never sorted by price: the anchor's product first and then the rest as the
+    // entries named them, which is the order the row above draws.
+    expect(options(fixture)).toHaveLength(2);
+    expect(options(fixture)[0].textContent).toContain('Whole milk 1 L');
+  });
+
+  it('records the choice and goes back to the settle buttons', async () => {
+    const { fixture, store } = await render({
+      lines: [twoOptions()],
+      products,
+    });
+    await openProducts(fixture);
+    options(fixture)[1].querySelector('input')?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(store.choose).toHaveBeenCalledWith(LINE_ID, SKIMMED.id);
+    // Closing the pane on the choice is the whole gesture: somebody who has
+    // answered must not be left looking at their own answer with a second
+    // button still to press.
+    expect(text(fixture)).toContain('basket.settle.all');
+  });
+
+  it('writes nothing to the server when somebody chooses', async () => {
+    const { fixture, store } = await render({
+      lines: [twoOptions()],
+      products,
+    });
+    await openProducts(fixture);
+    options(fixture)[1].querySelector('input')?.click();
+    await fixture.whenStable();
+
+    // **Nothing is stored about a product before the purchase.** Backend `0136`
+    // deleted the stored pick, and this is what replaces it on the screen.
+    expect(store.settle).not.toHaveBeenCalled();
+    expect(store.renameRow).not.toHaveBeenCalled();
+  });
+
+  it('sends the chosen product with the purchase', async () => {
+    const { fixture, store } = await render({
+      lines: [twoOptions()],
+      products,
+      chosen: new Map([[LINE_ID, SKIMMED.id]]),
+    });
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.actions .primary')
+      ?.click();
+    await fixture.whenStable();
+
+    expect(store.settle).toHaveBeenCalledWith(
+      LINE_ID,
+      expect.objectContaining({ outcome: 'BOUGHT', itemId: SKIMMED.id })
+    );
+  });
+
+  it('sends a row’s only product without anybody choosing it', async () => {
+    const { fixture, store } = await render({
+      lines: [line({ optionIds: [MILK.id] })],
+      products,
+    });
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.actions .primary')
+      ?.click();
+    await fixture.whenStable();
+
+    expect(store.settle).toHaveBeenCalledWith(
+      LINE_ID,
+      expect.objectContaining({ itemId: MILK.id })
+    );
+  });
+
+  it('names no product when nobody chose from several', async () => {
+    const { fixture, store } = await render({
+      lines: [twoOptions()],
+      products,
+    });
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.actions .primary')
+      ?.click();
+    await fixture.whenStable();
+
+    // The honest record: nobody said which. An `itemId` here would name the
+    // first option, which is a product nobody picked up.
+    const [, body] = (store.settle as unknown as jest.Mock).mock.calls[0];
+    expect(body.itemId).toBeUndefined();
+  });
+
+  it('names no product on a close, which buys nothing', async () => {
+    const { fixture, store } = await render({
+      lines: [line({ optionIds: [MILK.id] })],
+      products,
+    });
+
+    const none = [
+      ...(
+        fixture.nativeElement as HTMLElement
+      ).querySelectorAll<HTMLButtonElement>('.actions button'),
+    ].find((button) =>
+      (button.textContent ?? '').includes('basket.settle.none')
+    );
+    none?.click();
+    await fixture.whenStable();
+
+    const [, body] = (store.settle as unknown as jest.Mock).mock.calls[0];
+    expect(body.outcome).toBe('NOT_AVAILABLE');
+    // Naming one would put a product in a purchase history that has no purchase
+    // in it.
+    expect(body.itemId).toBeUndefined();
   });
 });

@@ -251,6 +251,82 @@
   cursor: pointer;
 }
 
+// Nothing picked up yet, on a row with several products behind it. Muted and
+// italic, the same treatment the row underneath gives the same sentence: it is an
+// absence rather than a name, and it must not read as a product called "No
+// product chosen".
+.product-name.is-missing {
+  color: var(--app-text-muted);
+  font-style: italic;
+}
+
+// Which did you get? (velista 0092, section 5.)
+//
+// A radio group, so the whole row is the target and a keyboard gets the arrow
+// keys through the options for free. `border: none` because a fieldset's own
+// border is a box inside a sheet that is already a box.
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  margin: 0 0 var(--app-space-4);
+  padding: 0;
+  border: none;
+}
+
+.option {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: var(--app-space-2) var(--app-space-3);
+  border-radius: var(--app-card-radius);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-surface-sunken);
+  }
+
+  // The focus ring lands on the row and not on the native control, which is a
+  // 13px square somewhere inside it.
+  &:has(input:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.option-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-inline-size: 0;
+}
+
+.option-name {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+// The price and where it is from, on one line under the name. The place is server
+// data joined by the separator the app already uses, so it carries no key.
+.option-price {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}
+
+.option-place {
+  color: var(--app-text-muted);
+}
+
+// This shop does not list it. A fact about the shop rather than about the
+// product, which is still a product to buy, so it is a shade of the caption and
+// not a state.
+.option-price.is-missing {
+  color: var(--app-text-muted);
+}
+
 .actions {
   display: flex;
   flex-direction: column;

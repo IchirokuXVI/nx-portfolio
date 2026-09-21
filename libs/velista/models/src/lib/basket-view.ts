@@ -565,6 +565,57 @@ export type BasketRevertRequest =
   | { readonly target: 'CLOSE' };
 
 /**
+ * Changing what one list asks for, from the basket (velista `0092`, section 6).
+ *
+ * **It writes to a household's list and not to this basket**, which is what
+ * separates it from every other write on this screen. A settle records what the
+ * shopper put in the trolley; this one says the household wants a different
+ * number from now on, for everybody, on every screen the list appears on.
+ *
+ * So the permission behind it is the list's, asked of the **basket's owner**
+ * rather than of whoever is holding the phone, and the client cannot compute it:
+ * see {@link BasketRowEntry.demandEditable}.
+ *
+ * **Zero is allowed and is not a removal.** The line stays on its list asking
+ * for nothing, which is backend `0047`'s "stocked".
+ */
+export interface BasketDemandRequest {
+  /**
+   * Which household's ask to move.
+   *
+   * Always sent, although the server requires it only on a row of several
+   * entries: the control is drawn per entry, so the caller always knows which
+   * one it is about, and a request that left it to the server's single entry
+   * rule would be one entry away from moving the wrong list.
+   */
+  readonly lineId: string;
+  /** What that list asks for from now on. Zero is allowed. */
+  readonly quantity: number;
+  /** The entry's `left` the person was looking at. */
+  readonly from: number;
+}
+
+/**
+ * A new line, added from the basket onto one of its covered lists (velista
+ * `0092`, section 7).
+ *
+ * **`targetListId` is required, and that is the whole change from velista
+ * `0053`.** A line added from the basket used to live in the basket alone, which
+ * is what let a guest add one: it changed nothing shared. Every line has a list
+ * now, so the add goes through that list's ordinary rules — its approval rule,
+ * its audit and its merge — and the answer is whichever row it landed on, which
+ * may be a row the list already held.
+ */
+export interface BasketAddLineRequest {
+  /** A list from {@link Basket.lists}, which is one this reader holds `WRITE` on. */
+  readonly targetListId: string;
+  readonly content: string;
+  readonly quantity: number;
+  /** The product set a suggestion carried, as the list's own add takes it. */
+  readonly itemIds?: readonly string[];
+}
+
+/**
  * What every write on a row answers (backend `0136`, `BasketRowResult`).
  *
  * One shape for all of them, because a client redraws one row after any of them.
@@ -573,12 +624,23 @@ export type BasketRevertRequest =
  */
 export interface BasketRowResult {
   /**
-   * The row as it now stands, under whatever key it now has.
+   * The row as it now stands, under whatever key it now has, or null when the
+   * write took it out of the basket altogether (velista `0092`, section 6.2).
    *
-   * Never null: a row bought to zero stays in the view as `DONE`, because the
-   * purchase that emptied it is in scope.
+   * A row bought to zero is **not** that case: it stays in the view as `DONE`,
+   * because the purchase that emptied it is in scope. The one write that can
+   * empty a basket of a row is {@link BasketDemandRequest}, which lowers what a
+   * list asks for: a row nothing asks for and nothing was bought of is not a
+   * thing to buy, so it leaves the view.
+   *
+   * **The wire says it with a row rather than with a null.** The server answers
+   * a row carrying the requested key, an empty `entries` array and zeros, which
+   * `toBasketRowResult` reads as this null: the client has one question here,
+   * "is there still a row", so it has one representable answer. Reading a row
+   * whose every number is zero and whose state is `WANTED` as a real row would
+   * put an empty line on the screen with nothing to say and nothing to press.
    */
-  readonly row: BasketRow;
+  readonly row: BasketRow | null;
   readonly progress: BasketProgress;
   /**
    * `total - done - unavailable`, by the server, lifted out of the wire's

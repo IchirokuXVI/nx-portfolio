@@ -10,6 +10,7 @@ import {
   participantInitials,
   participantName,
   quantityCaption,
+  skipCaption,
   touchedCaption,
 } from './basket-labels';
 
@@ -524,5 +525,94 @@ describe('originsCaption', () => {
         'en'
       )
     ).toBe('basket.from.one:{"first":"Weekly shop"}');
+  });
+});
+
+/**
+ * The sentence about a row somebody put off (velista `0092`, section 3).
+ *
+ * The date is the one thing on this screen that needs asserting where it is
+ * composed rather than in the DOM: the testing translator echoes a key without
+ * its values, so a row spec can only say which sentence was chosen.
+ *
+ * **Nothing here counts hours.** A `SKIPPED` row and a `SKIPPED_EARLIER` one are
+ * two answers from the server, and the only clock involved is the one that
+ * formatted a date the server sent.
+ */
+describe('skipCaption', () => {
+  const at = new Date('2026-09-01T09:00:00.000Z');
+
+  it('says a skipped row is skipped for now', () => {
+    expect(
+      skipCaption(
+        { state: 'SKIPPED', note: null, noteAt: null },
+        translator,
+        'en'
+      )
+    ).toBe('basket.skip.caption');
+  });
+
+  it('formats the server’s date with Intl, in the reader’s locale', () => {
+    const said = skipCaption(
+      { state: 'WANTED', note: 'SKIPPED_EARLIER', noteAt: at },
+      translator,
+      'en'
+    );
+
+    expect(said).toContain('basket.skip.earlierOn');
+    expect(said).toContain(
+      new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(at)
+    );
+  });
+
+  it('formats it differently in another language', () => {
+    // The whole reason it goes through `Intl` rather than a fixed pattern: the
+    // language is runtime state in this app, and the date follows it.
+    const english = skipCaption(
+      { state: 'WANTED', note: 'SKIPPED_EARLIER', noteAt: at },
+      translator,
+      'en'
+    );
+    const spanish = skipCaption(
+      { state: 'WANTED', note: 'SKIPPED_EARLIER', noteAt: at },
+      translator,
+      'es'
+    );
+
+    expect(spanish).not.toBe(english);
+  });
+
+  it('falls back to the plain sentence with no date', () => {
+    expect(
+      skipCaption(
+        { state: 'WANTED', note: 'SKIPPED_EARLIER', noteAt: null },
+        translator,
+        'en'
+      )
+    ).toBe('basket.skip.earlier');
+  });
+
+  it('says nothing about a row that was never put off', () => {
+    expect(
+      skipCaption(
+        { state: 'WANTED', note: null, noteAt: null },
+        translator,
+        'en'
+      )
+    ).toBeNull();
+  });
+
+  it('survives a locale tag Intl cannot parse', () => {
+    // A malformed tag, which `Intl` throws a `RangeError` on. (A well formed tag
+    // for a language it does not know is not this case: it falls back and
+    // formats.) An ISO date is a poorer caption than a localized one and a better
+    // one than no row at all.
+    const said = skipCaption(
+      { state: 'WANTED', note: 'SKIPPED_EARLIER', noteAt: at },
+      translator,
+      'not a locale'
+    );
+
+    expect(said).toContain('2026-09-01');
   });
 });

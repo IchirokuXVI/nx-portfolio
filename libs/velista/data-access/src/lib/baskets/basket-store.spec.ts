@@ -139,6 +139,10 @@ function build(
     settle: (id, rowKey, body) => memory.settle(id, rowKey, body),
     revert: (id, rowKey, body) => memory.revert(id, rowKey, body),
     renameRow: (id, rowKey, body) => memory.renameRow(id, rowKey, body),
+    skip: (id, rowKey) => memory.skip(id, rowKey),
+    unskip: (id, rowKey) => memory.unskip(id, rowKey),
+    setDemand: (id, rowKey, body) => memory.setDemand(id, rowKey, body),
+    addLine: (id, body) => memory.addLine(id, body),
     suggest: (id, query) => memory.suggest(id, query),
     listParticipants: () => memory.listParticipants(),
     refreshSocketToken: () => memory.refreshSocketToken(),
@@ -1593,5 +1597,165 @@ describe('BasketStore: sharing with people', () => {
       expect(store.basket()).toBeNull();
       expect(store.address()).toBeNull();
     });
+  });
+});
+
+/**
+ * The four writes of velista `0092`, through the store (sections 3, 6 and 7).
+ *
+ * What is asserted here and nowhere below is the **fold**: the store replaces the
+ * row by key and takes the counts whole, and three of these four answer something
+ * the fold has to get right. A skip answers the same row under the same key; a
+ * demand can answer no row at all; an add can answer a row that was already on
+ * the screen, under a key nobody named.
+ */
+describe('BasketStore: skip, demand and the add', () => {
+  it('folds a skip, without patching a state of its own', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+
+    const before = rowOf(store, 'Eggs');
+    await store.skip(before.rowKey);
+
+    // The state is the server\u2019s answer. Nothing here decided that a skipped row
+    // is skipped, which is the rule the whole row model rests on.
+    expect(rowOf(store, 'Eggs').state).toBe('SKIPPED');
+  });
+
+  it('keeps a skipped row where it was', async () => {
+    // A row that jumps the moment a sheet closes is an order moving under a
+    // thumb (velista `0053`, section 7), and the person who skipped it knows
+    // where it was.
+    const { store } = build();
+    await store.open('basket-saturday');
+    const order = store.rows().map((row) => row.content);
+
+    await store.skip(rowOf(store, 'Eggs').rowKey);
+
+    expect(store.rows().map((row) => row.content)).toEqual(order);
+  });
+
+  it('takes a skip back', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+    const key = rowOf(store, 'Eggs').rowKey;
+
+    await store.skip(key);
+    await store.unskip(key);
+
+    expect(rowOf(store, 'Eggs').state).toBe('PARTLY');
+  });
+
+  it('folds a demand and leaves the other household alone', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
+
+    await store.setDemand(milk.rowKey, {
+      lineId: milk.entries[0].lineId,
+      quantity: 5,
+      from: milk.entries[0].left,
+    });
+
+    const after = rowOf(store, 'Milk');
+    expect(after.entries[0].left).toBe(5);
+    expect(after.entries[1].left).toBe(1);
+  });
+
+  it('drops the row when a demand leaves nothing to buy of it', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+    const loaf = rowOf(store, 'Sourdough loaf');
+
+    const result = await store.setDemand(loaf.rowKey, {
+      lineId: loaf.entries[0].lineId,
+      quantity: 0,
+      from: loaf.entries[0].left,
+    });
+
+    // Not a failure: the list now asks for nothing, which is what was asked for.
+    // The caller reads the null row to know which of the two happened.
+    expect(result?.row).toBeNull();
+    expect(
+      store.rows().some((row) => row.content === 'Sourdough loaf')
+    ).toBe(false);
+  });
+
+  it('takes the counts from the answer even when the row went away', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+    const loaf = rowOf(store, 'Sourdough loaf');
+    const before = store.progress().total;
+
+    await store.setDemand(loaf.rowKey, {
+      lineId: loaf.entries[0].lineId,
+      quantity: 0,
+      from: loaf.entries[0].left,
+    });
+
+    // The row leaving is what changed them, so they are read and not recounted.
+    expect(store.progress().total).toBe(before - 1);
+  });
+
+  it('adds a line and folds the row it landed on', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+
+    const result = await store.addLine({
+      targetListId: 'list-weekly',
+      content: 'Batteries',
+      quantity: 1,
+    });
+
+    expect(result?.row?.content).toBe('Batteries');
+    expect(store.rows().some((row) => row.content === 'Batteries')).toBe(true);
+  });
+
+  it('folds an add that merged in place, rather than drawing a second row', async () => {
+    // The add goes through the target list\u2019s own rules, so it can land on a
+    // line the list already held (backend `0091`). The answer is then a row
+    // already on the screen under a key nobody named.
+    const { store } = build();
+    await store.open('basket-saturday');
+    const rows = store.rows().length;
+
+    await store.addLine({
+      targetListId: 'list-weekly',
+      content: 'milk',
+      quantity: 2,
+    });
+
+    expect(store.rows()).toHaveLength(rows);
+    expect(rowOf(store, 'Milk').entries[0].left).toBe(4);
+  });
+
+  it('says when an add is out, and stops when it lands', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+
+    const out = store.addLine({
+      targetListId: 'list-weekly',
+      content: 'Batteries',
+      quantity: 1,
+    });
+    // An add names no row, so it is its own flag rather than a member of
+    // `busyRows`: which row it lands on is the answer and not the request.
+    expect(store.adding()).toBe(true);
+
+    await out;
+    expect(store.adding()).toBe(false);
+  });
+
+  it('hands one sentence to the page, with a sequence so it can be said twice', () => {
+    const { store } = build();
+
+    store.handOver('Sourdough loaf is no longer asked for.');
+    const first = store.handedOver();
+    store.handOver('Sourdough loaf is no longer asked for.');
+
+    expect(first?.text).toBe('Sourdough loaf is no longer asked for.');
+    // The same words twice are two announcements, which a bare string could not
+    // say: a polite region reads a node that changed.
+    expect(store.handedOver()?.seq).not.toBe(first?.seq);
   });
 });
