@@ -1,0 +1,166 @@
+{
+  "title": "Velista: the product typeahead",
+  "lede": "The bigger product suggestion card, for the two places the typeahead is used today: the composer on a zone list page and the composer on the basket page. It stays <code>lib-suggestion-list</code> in <code>libs/velista/ui/src/lib/list/</code> and is never promoted to <code>@portfolio/shared/ui</code>. Phone only, 390 by 844, with one Day artboard. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The interactive version, where the chain row expands and the popover opens, is the published canvas linked from <code>../README.md</code>.",
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Zone list page"
+    },
+    {
+      "file": "BasketPage.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Basket page"
+    },
+    {
+      "file": "Group.dc.html",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "A group, opened"
+    },
+    {
+      "file": "GroupInfo.dc.html",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "What a group is"
+    },
+    {
+      "file": "Assistant.dc.html",
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "What the assistant heard"
+    },
+    {
+      "file": "Day.dc.html",
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Day theme"
+    },
+    {
+      "file": "Expanded.dc.html",
+      "x": 2820,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Every shop price"
+    },
+    {
+      "file": "Sizes.dc.html",
+      "x": 3290,
+      "y": 0,
+      "w": 470,
+      "h": 800,
+      "title": "Thumbnail sizes"
+    },
+    {
+      "file": "Budget.dc.html",
+      "x": 3840,
+      "y": 0,
+      "w": 900,
+      "h": 844,
+      "title": "The vertical budget"
+    },
+    {
+      "file": "Edge.dc.html",
+      "x": 0,
+      "y": 1244,
+      "w": 1370,
+      "h": 780,
+      "title": "The other states"
+    },
+    {
+      "file": "Placements.dc.html",
+      "x": 1470,
+      "y": 1244,
+      "w": 1370,
+      "h": 470,
+      "title": "Where the button that adds went"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -620,
+      "w": 470,
+      "text": "THE BRIEF. The suggestion row becomes a card: a photo, the brand, the name, the packaging format, the price, the price per unit when it differs, the chains that sell it with the cheapest named first, and a way through to the product.\nScope is deliberately narrow. This is the typeahead the two composers use, so it is not a general component and it is not promoted out of velista. The old `add as written` row is gone, because the composer button already adds the typed words, and that row cost more than it gave once the panel had to fit around a keyboard."
+    },
+    {
+      "id": "t1",
+      "x": 530,
+      "y": -620,
+      "w": 470,
+      "text": "RULE T1: THE CARD IS NOT THE TARGET. One button adds the product, and it is a column down the right edge of the card.\nA row now carries a chain row that expands, a link to the product, and on a group an explanation and a reveal, so a tap anywhere else was a guess at which of five things somebody meant. The column is 44px wide. It stretches to the three lines of type that describe the product and stops there, at 59px, rather than growing with a card that also names the lines it is already on: a 44 by 137 control is a stripe, not a better target.\nPlacement was decided by height, which this screen has none of. See the placements board."
+    },
+    {
+      "id": "t2",
+      "x": 1060,
+      "y": -620,
+      "w": 470,
+      "text": "RULE T2: A CONTROL IN THE PANEL MUST NOT CLOSE THE KEYBOARD. Every button and link inside the panel cancels `mousedown`, because the browser moves focus on mousedown and iOS Safari raises a synthetic one before it does. If the field blurs, the keyboard leaves and the whole page moves under the finger that is still travelling.\nDo not cancel `pointerdown` or `touchstart` instead. Those carry the panel's own scroll, and cancelling them takes it away.\nThis killed an earlier trick. Opening the shop prices used to blur the field on purpose, so the keyboard closed and the panel went from 237px to 573px."
+    },
+    {
+      "id": "t3",
+      "x": 1590,
+      "y": -620,
+      "w": 470,
+      "text": "RULE T3: THE KEYBOARD SETS THE CARD HEIGHT, SO THE HEIGHT IS WRITTEN DOWN AND NOT CHOSEN. On a 390 by 844 phone the keyboard with its predictive row is 336px. Take a 47px status inset, a 52px header, a 60px composer and two 56px list rows off what is left, and the panel may have 237px. The card is 73px plus its rule, so three fit.\n`--app-suggestions-max-height` is a `min()` of three cards and what the viewport leaves, and `--app-viewport` has to come from `window.visualViewport`, because an iOS keyboard does not shorten `100dvh`. A 375 by 667 phone resolves to two cards, which is the floor the rule protects.\nThe panel scrolls and never grows. It is bottom anchored by `margin-top: auto` on its first child rather than by `justify-content: flex-end`, because a flex column that pushes its content down cannot be scrolled back up to what overflowed."
+    },
+    {
+      "id": "t4",
+      "x": 2120,
+      "y": -620,
+      "w": 470,
+      "text": "RULE T4: SIX THINGS ON THIS CANVAS HAVE NO FIELD BEHIND THEM YET. Each is a backend change rather than a component one, and the card cannot be built without them:\n1. A product image. `CatalogItem` has none. The mock uses Open Food Facts front photos, which is where luna plans 0126 to 0129 are already heading. The image is on the list rows too, so this blocks three screens.\n2. The chains that sell it, with a price each. `ProductOffer` carries one `priceScopeId` and the suggestion response carries no scopes to resolve it against, so a row today cannot name a single shop.\n3. A packaging format, for example `Pack 6` or `Docena`. Not `size` plus `unit`.\n4. The age behind `ProductOffer.stale`, for `seen 12 days ago`.\n5. The lines that already hold the product, with the quantity on each, and on the basket the list each line came from.\n6. On the group variant, each product's name, brand and price, and the total count. `itemIds` carries ids and nothing else."
+    },
+    {
+      "id": "t5",
+      "x": 2650,
+      "y": -620,
+      "w": 470,
+      "text": "RULE T5: A GROUP IS ONE LINE, NOT SEVERAL. Adding a group adds a single line, and which of its products it buys is settled at the shop, by price.\nSo the group card is collapsed like any other at 73px, and its products sit behind a button that states how many there are. Opened, it draws five of them, cheapest first, as name, brand and price on one 22px line, then `and N more`, then a Details link. Its own price stays labelled, `from 0,89 EUR`, because it is the cheapest of several and not the price of a thing.\nThe badge beside the name says the word `Group` and is also the help: nothing else on the row says in words what a group is. velista has no popover component yet. It cannot be a child of the panel, because the panel clips and scrolls and this opens towards the edge it clips at, so it is a CDK overlay positioned against the badge."
+    },
+    {
+      "id": "t6",
+      "x": 3180,
+      "y": -620,
+      "w": 470,
+      "text": "RULE T6: THE ASSISTANT DOES NOT FILL THE TYPEAHEAD. One sentence produces four rows at once, out of audio that is misheard silently, onto a list other people are looking at. So the rows are reviewed in a sheet, and nothing exists until one button is pressed.\nThe sheet reuses the card unchanged. Only the right hand slot differs, taking a row out instead of putting one in. It also carries rows the catalog matched nothing to, drawn at the same weight as the rest, because a list has always accepted lines that are only what somebody wrote."
+    },
+    {
+      "id": "t7",
+      "x": 3710,
+      "y": -620,
+      "w": 470,
+      "text": "RULE T7: `PRODUCT ALREADY IN YOUR LIST` NAMES LINES, NOT LISTS. One row per line, showing the line's own words, so a line somebody renamed says what it was renamed to. On the basket the list sits above the line on a second text line, because the same product reaches the basket from several lists.\nTHE ONE QUESTION THIS CANVAS LEAVES OPEN. The quantity on those rows is drawn as a plain count chip, 32px per row, so the section informs and does not act. Putting `lib-quantity-stepper` back is one swap and takes the row to 44px, which buys the original intent of the section: increase a line instead of adding the product again. The states board draws both. Nobody has chosen."
+    },
+    {
+      "id": "e1",
+      "x": 0,
+      "y": 944,
+      "w": 660,
+      "text": "THE OTHER STATES. The skeleton the panel shows while the catalog is being asked, a product with no price anywhere, a price old enough to be marked stale, the composer the panel sits on, and the already row drawn twice: once with the count chip and once with the stepper.\nRULE T8: THREE TARGETS PER ROW BREAKS THE LISTBOX. Add, expand the chains, open the product, and a group's two more cannot live inside `role=\"option\"`, which may not contain focusable children. The pattern that fits is the ARIA combobox with a grid popup, and that is a change to the existing `lib-suggestion-list` markup rather than an addition to it."
+    },
+    {
+      "id": "p1",
+      "x": 1470,
+      "y": 944,
+      "w": 660,
+      "text": "WHERE THE BUTTON THAT ADDS WENT. The three placements, drawn at the size they really are, with what each costs in height.\nA column at the right edge keeps the card at 73px, so three cards fit the panel. A band across the foot reading `Add this product to the list` makes the card 123px, and a button under the image makes it 114px: one and a half cards and two cards. Only the column keeps three.\nThe two rejected placements are drawn rather than described, because the argument is about height on a screen that has none, and that is a thing to look at rather than read."
+    }
+  ]
+}

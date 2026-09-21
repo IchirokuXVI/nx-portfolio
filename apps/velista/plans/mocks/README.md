@@ -23,6 +23,7 @@ on top of them, and the page built from both.
 | `onboarding/`     | `0098` the setup a new account walks through, with backend `0145` behind it                                                                      | https://claude.ai/artifact/Y3K3PZNGLnEjNUHjfWBDBF                    |
 | `tour/`           | `0099` the tour, with backend `0145` behind it                                                                                                   | https://claude.ai/artifact/YbfH7bVn7DGC1MFqWdqNvS                    |
 | `catalog/`        | `0100` the catalog tab, with backend `0146` behind it                                                                                            | https://claude.ai/artifact/9UppvQ8HfCVouog2WK7fi7                    |
+| `typeahead/`      | `0101` the product suggestion card, in the two composers that use it. Photographs and a stylesheet per artboard: see its README                  | https://claude.ai/artifact/GASRtmT5Y74jM7fywGeMK3                    |
 | `brand/`          | The mark itself. Source of truth for both, see below                                                                                             |                                                                      |
 
 ## How a folder is put together
@@ -55,6 +56,10 @@ on purpose: the publisher supplies that skeleton, and a browser supplies it too.
 
 The consequence to remember: **`index.html` is output.** Never hand edit it. Change an
 artboard or `canvas.json` and run the script.
+
+One folder qualifies the "one file" part. `typeahead/` draws product photographs, so its
+`index.html` points at a `photos/` directory beside it and has to be published with those
+files alongside. It is still generated, and it is still never edited by hand.
 
 ## Conventions every artboard follows
 
