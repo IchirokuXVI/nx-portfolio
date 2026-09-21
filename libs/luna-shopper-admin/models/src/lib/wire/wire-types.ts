@@ -875,6 +875,14 @@ export type UpdateAdminZoneDto = {
 };
 
 /**
+ * `UpdateAppStateDto` in the gateway's OpenAPI document.
+ */
+export type UpdateAppStateDto = {
+  setupCompleted?: true;
+  tourSeen?: true;
+};
+
+/**
  * `UpdateBasketDto` in the gateway's OpenAPI document.
  */
 export type UpdateBasketDto = {
@@ -1629,6 +1637,13 @@ export type AuthMintOAuthStateResult = {
  */
 export type AuthRetryAfterResult = {
   retryAfterSeconds: number;
+};
+
+/**
+ * `auth.SuggestUsernameResult` in the gateway's OpenAPI document.
+ */
+export type AuthSuggestUsernameResult = {
+  username: string;
 };
 
 /**
@@ -2583,6 +2598,14 @@ export type CommonUserIdResult = {
 };
 
 /**
+ * `core.UserAppStateView` in the gateway's OpenAPI document.
+ */
+export type CoreUserAppStateView = {
+  setupCompletedAt: string | null;
+  tourSeenAt: string | null;
+};
+
+/**
  * `enums.AdapterKey` in the gateway's OpenAPI document.
  */
 export type EnumsAdapterKey =
@@ -2896,6 +2919,19 @@ export type EnumsZoneRole = 'OWNER' | 'ADMIN' | 'MEMBER';
  * `enums.ZoneStatus` in the gateway's OpenAPI document.
  */
 export type EnumsZoneStatus = 'ACTIVE' | 'MARKED_FOR_DELETION';
+
+/**
+ * `gateway.AccountMeView` in the gateway's OpenAPI document.
+ */
+export type GatewayAccountMeView = {
+  userId: string;
+  kind: EnumsUserKind;
+  username: string;
+  email: string | null;
+  emailVerified: boolean;
+  displayName: string | null;
+  appState: CoreUserAppStateView;
+};
 
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
