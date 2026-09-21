@@ -1,3 +1,5 @@
+> **PR:** [#432](https://github.com/IchirokuXVI/nx-portfolio/pull/432)
+
 # 0142: what a person bought, with or without a basket
 
 > Part of the series recorded in `0130`. Needs `0134` (a purchase names its basket) and
