@@ -447,18 +447,6 @@ export interface DomainEvent<T = unknown> {
    * each with its own `eventId`.
    */
   basketIds?: readonly string[];
-  /**
-   * The old name for the room of one basket.
-   *
-   * @deprecated Written by nothing since plan 0139, which replaced it with
-   * {@link basketIds}. Read by the realtime consumer until plan 0144, and that is
-   * the whole reason it is still here: staging deploys only the affected
-   * services, so a new core can publish to an old realtime and the reverse, and
-   * the durable JetStream consumer replays envelopes written before the deploy.
-   * An envelope whose audience the consumer cannot read is addressed to nobody,
-   * which it drops as a fault.
-   */
-  basketId?: string;
   payload: T;
 }
 

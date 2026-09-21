@@ -47,7 +47,7 @@ export const DEDUPE_KEY_PREFIX = 'dedupe:event';
  * inside two minutes. Move them together, never one alone.
  */
 export {
-  generatedListPresenceKey,
+  basketPresenceKey,
   listEditorsKey,
   listViewersKey,
   PRESENCE_HEARTBEAT_MS,

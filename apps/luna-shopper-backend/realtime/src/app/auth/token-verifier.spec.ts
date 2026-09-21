@@ -42,7 +42,7 @@ describe('verifying a socket token', () => {
     await expect(service.verifyIdentity('t')).resolves.toEqual({
       kind: 'participant',
       participantId: 'p-1',
-      generatedListId: 'gl-1',
+      basketId: 'gl-1',
       participantKind: ParticipantKind.GUEST,
     });
   });

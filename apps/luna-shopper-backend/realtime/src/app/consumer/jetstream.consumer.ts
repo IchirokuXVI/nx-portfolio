@@ -389,7 +389,7 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     // can reach a guest at all.
     //
     // **Both names are read, for one release.** Core writes `basketIds` alone
-    // since plan 0139, and `generatedListId` is what every envelope written
+    // since plan 0139, and `basketId` is what every envelope written
     // before that deploy carries. Staging deploys only the affected services and
     // the durable consumer replays what the stream still holds, so an envelope of
     // either shape can arrive here at any moment in the window. Reading only the

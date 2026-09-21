@@ -90,7 +90,7 @@ export class RealtimeAccessController {
   }
 
   /**
-   * Gates the two `generated:{id}` rooms (plan 0051, section 7).
+   * Gates the two `basket:{id}` rooms (plan 0051, section 7).
    *
    * The one check here that names a participant rather than a user, because a
    * guest has no user id and none of the three above could be asked about them.

@@ -12,7 +12,7 @@ import { RealtimeAccessController } from './realtime-access.controller';
  * answer the room subscription checks over NATS.
  *
  * The third is plan 0051, section 7, and it is the only one of the three that
- * answers about a **participant** rather than a user, because the `generated:`
+ * answers about a **participant** rather than a user, because the `basket:`
  * rooms are the only ones a guest can be in.
  */
 @Module({
