@@ -1,6 +1,6 @@
 import {
   BasketKind,
-  GeneratedListStatus,
+  BasketStatus,
   MembershipStatus,
   ParticipantEndedReason,
   ParticipantKind,
@@ -19,15 +19,15 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
   CORE_ENTITIES,
-  GeneratedList,
-  GeneratedListParticipant,
+  Basket,
+  BasketParticipant,
   LineSettlement,
   ListLine,
   ShoppingList,
   Zone,
   ZoneMembership,
 } from '../entities';
-import { SHARED_BASKETS_SQL } from '../generated-lists/generated-list-members.sql';
+import { SHARED_BASKETS_SQL } from '../baskets/basket-members.sql';
 import { PurchasesService } from './purchases.service';
 import { purchaseEntriesSql, type PurchaseEntryRow } from './purchases.sql';
 
@@ -99,30 +99,30 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
    * A basket, owned by the reader unless the test says otherwise.
    *
    * A `LIVE` basket goes through the same helper: the shape the database allows
-   * is narrow (`uq_generated_lists_live_owner` allows one per owner and
-   * `ck_generated_lists_live_shape` requires it to be `OPEN`, unnamed and
+   * is narrow (`uq_baskets_live_owner` allows one per owner and
+   * `ck_baskets_live_shape` requires it to be `OPEN`, unnamed and
    * without an idempotency key, plan 0133 section 2), so the caller passes the
    * kind and nothing more.
    */
   async function basket(
     options: {
       name?: string | null;
-      status?: GeneratedListStatus;
+      status?: BasketStatus;
       generatedAt?: Date;
       kind?: BasketKind;
       ownerUserId?: string;
     } = {}
   ): Promise<string> {
     const kind = options.kind ?? BasketKind.GENERATED;
-    const repo = dataSource.getRepository(GeneratedList);
+    const repo = dataSource.getRepository(Basket);
     const saved = await repo.save(
       repo.create({
         ownerUserId: options.ownerUserId ?? reader,
         name: kind === BasketKind.LIVE ? null : (options.name ?? null),
         status:
           kind === BasketKind.LIVE
-            ? GeneratedListStatus.OPEN
-            : (options.status ?? GeneratedListStatus.FINISHED),
+            ? BasketStatus.OPEN
+            : (options.status ?? BasketStatus.FINISHED),
         generatedAt: options.generatedAt ?? new Date('2026-01-10T10:00:00Z'),
         kind,
         idempotencyKey: null,
@@ -133,13 +133,13 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
 
   /** A participant of a basket. `userId` null is a guest, who has no account. */
   async function participant(
-    generatedListId: string,
+    basketId: string,
     userId: string | null
   ): Promise<string> {
-    const repo = dataSource.getRepository(GeneratedListParticipant);
+    const repo = dataSource.getRepository(BasketParticipant);
     const saved = await repo.save(
       repo.create({
-        generatedListId,
+        basketId,
         shareLinkId: null,
         kind: userId ? ParticipantKind.REGISTERED : ParticipantKind.GUEST,
         userId,
@@ -155,7 +155,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
         invitedAt: null,
         invitedByUserId: null,
         // A link visitor always carries an expiry
-        // (`ck_generated_list_participants_expiry`, plan 0140).
+        // (`ck_basket_participants_expiry`, plan 0140).
         expiresAt: new Date('2026-01-10T21:00:00Z'),
       })
     );
@@ -321,7 +321,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
     if (dataSource?.isInitialized) {
       // Baskets belong to a person and not to a zone, so they go on their own.
       // Lists, lines and their settlements cascade with the zone.
-      const baskets = dataSource.getRepository(GeneratedList);
+      const baskets = dataSource.getRepository(Basket);
       for (const owner of owners) {
         await baskets.delete({ ownerUserId: owner });
       }
@@ -376,8 +376,8 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
       ]);
 
       // Being removed from the basket afterwards does not unbuy the bread. A
-      // revoked row names why (`ck_generated_list_participants_ended`).
-      await dataSource.getRepository(GeneratedListParticipant).update(
+      // revoked row names why (`ck_basket_participants_ended`).
+      await dataSource.getRepository(BasketParticipant).update(
         { id: me },
         {
           revokedAt: new Date(),
@@ -469,7 +469,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
       const bread = await line(flat, 'Bread');
       const id = await basket({
         name: 'Saturday',
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
         generatedAt: new Date('2026-02-08T09:00:00Z'),
       });
       const guest = await participant(id, null);
@@ -496,8 +496,8 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
       ]);
 
       await dataSource
-        .getRepository(GeneratedList)
-        .update({ id }, { status: GeneratedListStatus.FINISHED });
+        .getRepository(Basket)
+        .update({ id }, { status: BasketStatus.FINISHED });
 
       expect((await entries())[0].open).toBe(false);
     });
@@ -1012,7 +1012,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
      * has none, so the planner picks between indexes arbitrarily.
      */
     beforeAll(async () => {
-      await dataSource.query('VACUUM ANALYZE "generated_list_participants"');
+      await dataSource.query('VACUUM ANALYZE "basket_participants"');
     });
 
     /**
@@ -1040,19 +1040,19 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
     it('serves the third route, which needs the ended rows a partial index hides', async () => {
       const text = await planFor(
         `SELECT s.id
-         FROM "generated_list_participants" p
+         FROM "basket_participants" p
          JOIN "line_settlements" s ON s."settledByParticipantId" = p.id
          WHERE p."userId" = $1::uuid AND s."revertedAt" IS NULL`,
         [reader]
       );
 
-      expect(text).toContain('ix_generated_list_participants_user');
+      expect(text).toContain('ix_basket_participants_user');
     });
 
     it('still serves the shared baskets read of plan 0114', async () => {
       const text = await planFor(SHARED_BASKETS_SQL, [reader, null, 20]);
 
-      expect(text).toContain('ix_generated_list_participants_user');
+      expect(text).toContain('ix_basket_participants_user');
     });
   });
 });

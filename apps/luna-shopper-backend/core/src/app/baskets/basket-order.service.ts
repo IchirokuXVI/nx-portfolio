@@ -73,7 +73,7 @@ export interface OrderableRow {
  *
  * ## What it does not key on
  *
- * Not the shop: `generated_lists` carries a `pricingProfileId` since plan 0133
+ * Not the shop: `baskets` carries a `pricingProfileId` since plan 0133
  * and a settlement a `priceScopeId`, and neither is read here (plan 0141,
  * section 7). Not a similar name and not a product in the same group: a wrong
  * match puts the bread in the dairy aisle, which is worse than no order at all.
@@ -95,7 +95,7 @@ export class BasketOrderService {
    * convention of `suggestion-rules.ts` and what lets a spec state the rule.
    *
    * One query, through the `DataSource` and outside any transaction, bounded by
-   * the owner's baskets (`ix_generated_lists_owner`) and their standing
+   * the owner's baskets (`ix_baskets_owner`) and their standing
    * settlements (`ix_settlements_basket_live`). **No cache**: core runs more than
    * one replica, and two pods holding histories of different ages would answer
    * two orders for one basket, which is a row moving under a thumb produced by

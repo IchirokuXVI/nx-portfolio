@@ -8,14 +8,14 @@ import {
   type RevertBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
-  GeneratedListFinishedException,
+  BasketFinishedException,
   StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, In, IsNull, MoreThanOrEqual } from 'typeorm';
 import { LineSettlement, ListLine } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { LineClaimService } from '../generated-lists/line-claim.service';
+import { LineClaimService } from '../baskets/line-claim.service';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { boughtOfRow, lockEntries } from './basket-row-resolver';
 import {
@@ -49,7 +49,7 @@ import {
  * ## The owner's `WRITE` holds by construction
  *
  * The entries come from a coverage computed for this request, which closes the
- * hole the audit found in `generated-list-reopen.service.ts` and which plan 0131
+ * hole the audit found in `basket-reopen.service.ts` and which plan 0131
  * patched with a check: a list the owner has lost is not in the row, so no walk
  * can put units on it.
  */
@@ -65,7 +65,7 @@ export class BasketRevertService {
   async revert(req: RevertBasketRowRequest): Promise<BasketRowResult> {
     const opened = await this.context.open(req);
     if (!isOpenBasket(opened.basket.status)) {
-      throw new GeneratedListFinishedException(
+      throw new BasketFinishedException(
         'This basket is finished, so nothing in it can be taken back'
       );
     }

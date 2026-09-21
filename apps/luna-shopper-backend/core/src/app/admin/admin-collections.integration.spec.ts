@@ -14,7 +14,7 @@ import { CORE_MIGRATIONS } from '../db/migrations';
 import {
   BasketSource,
   CORE_ENTITIES,
-  GeneratedList,
+  Basket,
   ListLine,
   ShoppingList,
   Zone,
@@ -123,7 +123,7 @@ describeIntegration('the admin collections that read across a parent', () => {
     listService = new AdminListService(
       lists,
       lines,
-      dataSource.getRepository(GeneratedList),
+      dataSource.getRepository(Basket),
       dataSource.getRepository(BasketSource),
       gate,
       {} as never,

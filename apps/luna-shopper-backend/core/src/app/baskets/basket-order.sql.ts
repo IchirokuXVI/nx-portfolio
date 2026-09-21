@@ -67,7 +67,7 @@ export const WALK_HISTORY_SQL = `
            s."lineId" AS "lineId",
            s."itemId" AS "itemId",
            s."settledAt" AS "settledAt"
-    FROM "generated_lists" gl
+    FROM "baskets" gl
     JOIN "line_settlements" s ON s."basketId" = gl.id
     WHERE gl."ownerUserId" = $1::uuid
       AND s."revertedAt" IS NULL

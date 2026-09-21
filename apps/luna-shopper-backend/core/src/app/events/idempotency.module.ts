@@ -12,7 +12,7 @@ import { ProcessedEventStore } from './idempotency.store';
  * second: `ProductGroupSyncService` in `ListsModule` reconciles catalog's group
  * membership into a household's lines, and it needs exactly the same at least
  * once protection. `ListsModule` cannot import `AccountModule` to get it, because
- * that module imports `GeneratedListsModule`, which imports `ListsModule`, so
+ * that module imports `BasketsModule`, which imports `ListsModule`, so
  * lifting the store into a module of its own is what breaks the cycle rather than
  * a second copy of the store.
  */

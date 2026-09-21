@@ -1,6 +1,6 @@
 import {
   BasketKind,
-  GeneratedListStatus,
+  BasketStatus,
   ListPermission,
   MembershipStatus,
   ZoneRole,
@@ -15,7 +15,7 @@ import { DataSource, QueryFailedError } from 'typeorm';
 import {
   BasketSource,
   CORE_ENTITIES,
-  GeneratedList,
+  Basket,
   ListAccess,
   ShoppingList,
   Zone,
@@ -95,18 +95,18 @@ describeIntegration('what a basket covers (real Postgres)', () => {
   /** A basket of the owner's, with the source rows it was asked for. */
   async function seedBasket(options: {
     kind?: BasketKind;
-    status?: GeneratedListStatus;
+    status?: BasketStatus;
     sources?: { zoneId: string; listId: string | null }[];
     ownerUserId?: string;
-  }): Promise<GeneratedList> {
-    const baskets = dataSource.getRepository(GeneratedList);
+  }): Promise<Basket> {
+    const baskets = dataSource.getRepository(Basket);
     const kind = options.kind ?? BasketKind.GENERATED;
     const basket = await baskets.save(
       baskets.create({
         ownerUserId: options.ownerUserId ?? ids.owner,
         kind,
         name: kind === BasketKind.LIVE ? null : 'Weekly',
-        status: options.status ?? GeneratedListStatus.OPEN,
+        status: options.status ?? BasketStatus.OPEN,
         generatedAt: new Date(),
         pricingProfileId: null,
         idempotencyKey: null,
@@ -128,14 +128,14 @@ describeIntegration('what a basket covers (real Postgres)', () => {
   /**
    * The owner's one permanent basket.
    *
-   * Seeded once and reused, because `uq_generated_lists_live_owner` allows one a
+   * Seeded once and reused, because `uq_baskets_live_owner` allows one a
    * person: a helper that made a second would be asserting the constraint by
    * accident every time it ran.
    */
-  let live: GeneratedList;
+  let live: Basket;
 
   /** The lists a basket covers, as ids alone, so an assertion reads plainly. */
-  const coveredBy = async (basket: GeneratedList): Promise<string[]> =>
+  const coveredBy = async (basket: Basket): Promise<string[]> =>
     (await coverage.listsOf(basket)).map((row) => row.listId).sort();
 
   beforeAll(async () => {
@@ -175,7 +175,7 @@ describeIntegration('what a basket covers (real Postgres)', () => {
     );
 
     coverage = new BasketCoverageService(
-      dataSource.getRepository(GeneratedList)
+      dataSource.getRepository(Basket)
     );
     live = await seedBasket({ kind: BasketKind.LIVE });
   });
@@ -288,11 +288,11 @@ describeIntegration('what a basket covers (real Postgres)', () => {
 
     it('leaves out a finished basket and an archived one', async () => {
       const finished = await seedBasket({
-        status: GeneratedListStatus.FINISHED,
+        status: BasketStatus.FINISHED,
         sources: [{ zoneId: ids.zoneHome, listId: null }],
       });
       const archived = await seedBasket({
-        status: GeneratedListStatus.ARCHIVED,
+        status: BasketStatus.ARCHIVED,
         sources: [{ zoneId: ids.zoneHome, listId: null }],
       });
 
@@ -412,11 +412,11 @@ describeIntegration('what a basket covers (real Postgres)', () => {
       const open = await seedBasket({ ownerUserId: member, sources: [] });
       await seedBasket({
         ownerUserId: member,
-        status: GeneratedListStatus.FINISHED,
+        status: BasketStatus.FINISHED,
       });
       await seedBasket({
         ownerUserId: member,
-        status: GeneratedListStatus.ARCHIVED,
+        status: BasketStatus.ARCHIVED,
       });
 
       expect(await openIn(zone)).toEqual([open.id]);
@@ -483,7 +483,7 @@ describeIntegration('what a basket covers (real Postgres)', () => {
         sources: [{ zoneId: ids.zoneHome, listId: null }],
       });
 
-      await dataSource.getRepository(GeneratedList).delete({ id: basket.id });
+      await dataSource.getRepository(Basket).delete({ id: basket.id });
 
       expect(
         await dataSource
@@ -496,7 +496,7 @@ describeIntegration('what a basket covers (real Postgres)', () => {
   describe('what the database says a LIVE basket is (section 2)', () => {
     const insert = (columns: Record<string, unknown>) =>
       dataSource.query(
-        `INSERT INTO "generated_lists"
+        `INSERT INTO "baskets"
            ("ownerUserId", "kind", "name", "status", "generatedAt",
             "idempotencyKey")
          VALUES ($1, $2, $3, $4, now(), $5)`,
@@ -514,14 +514,14 @@ describeIntegration('what a basket covers (real Postgres)', () => {
       await insert({
         ownerUserId: owner,
         kind: BasketKind.LIVE,
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
       });
 
       await expect(
         insert({
           ownerUserId: owner,
           kind: BasketKind.LIVE,
-          status: GeneratedListStatus.OPEN,
+          status: BasketStatus.OPEN,
         })
       ).rejects.toBeInstanceOf(QueryFailedError);
 
@@ -531,18 +531,18 @@ describeIntegration('what a basket covers (real Postgres)', () => {
           ownerUserId: owner,
           kind: BasketKind.GENERATED,
           name: 'Saturday',
-          status: GeneratedListStatus.OPEN,
+          status: BasketStatus.OPEN,
         })
       ).resolves.toBeDefined();
     });
 
     it('refuses a named one, a finished one and one a run composed', async () => {
       for (const columns of [
-        { name: 'Saturday', status: GeneratedListStatus.OPEN },
-        { name: null, status: GeneratedListStatus.FINISHED },
+        { name: 'Saturday', status: BasketStatus.OPEN },
+        { name: null, status: BasketStatus.FINISHED },
         {
           name: null,
-          status: GeneratedListStatus.OPEN,
+          status: BasketStatus.OPEN,
           idempotencyKey: 'tap-1',
         },
       ]) {

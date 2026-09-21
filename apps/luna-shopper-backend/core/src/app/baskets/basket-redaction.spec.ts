@@ -1,5 +1,5 @@
 import { ParticipantKind } from '@portfolio/luna-shopper/contracts';
-import type { GeneratedListParticipant } from '../entities';
+import type { BasketParticipant } from '../entities';
 import { BasketRedaction } from './basket-redaction';
 
 /**
@@ -12,15 +12,15 @@ import { BasketRedaction } from './basket-redaction';
  */
 
 function participant(
-  over: Partial<GeneratedListParticipant> = {}
-): GeneratedListParticipant {
+  over: Partial<BasketParticipant> = {}
+): BasketParticipant {
   return {
     id: 'p1',
     kind: ParticipantKind.REGISTERED,
     userId: 'u1',
     invitedAt: null,
     ...over,
-  } as GeneratedListParticipant;
+  } as BasketParticipant;
 }
 
 describe('the lists a reader is served', () => {

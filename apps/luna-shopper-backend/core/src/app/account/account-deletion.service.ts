@@ -11,7 +11,7 @@ import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import { Zone, ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ProcessedEventStore } from '../events/idempotency.store';
-import { GeneratedListService } from '../generated-lists/generated-list.service';
+import { BasketService } from '../baskets/basket.service';
 import { ZoneCountsService } from '../zones/zone-counts.service';
 import { toMembershipView, toZoneView } from '../zones/zone.mappers';
 import { anonymizedUsername } from './anonymize';
@@ -33,10 +33,10 @@ export class AccountDeletionService {
     private readonly events: CoreEventsPublisher,
     private readonly zoneCounts: ZoneCountsService,
     private readonly store: ProcessedEventStore,
-    private readonly generatedLists: GeneratedListService,
+    private readonly baskets: BasketService,
     // A retired membership moves what the household's open baskets cover (plan
     // 0139, section 5).
-    private readonly baskets: BasketAnnouncer
+    private readonly announcer: BasketAnnouncer
   ) {}
 
   /** Handle `user.deleted`, at most once per user (plan 0011, section 2). */
@@ -55,7 +55,7 @@ export class AccountDeletionService {
     // The `LineSettlement` rows those baskets wrote are **not** deleted with
     // them. A settlement is a zone fact and the purchase is the household's
     // (plan 0047, section 3.1); only the basket it came from was ever private.
-    await this.generatedLists.deleteForUser(userId);
+    await this.baskets.deleteForUser(userId);
 
     const memberships = await this.memberships.find({ where: { userId } });
     for (const membership of memberships) {
@@ -88,7 +88,7 @@ export class AccountDeletionService {
       );
       // A retired membership is a member leaving the household, so what the
       // remaining members' open baskets cover moved (plan 0139, section 5).
-      await this.baskets.coverageMoved(membership.zoneId);
+      await this.announcer.coverageMoved(membership.zoneId);
       // The member count drops with no user action at all, so the zone's open
       // screens need telling (plan 0017, section 9).
       await this.zoneCounts.emitZoneCounts(membership.zoneId);

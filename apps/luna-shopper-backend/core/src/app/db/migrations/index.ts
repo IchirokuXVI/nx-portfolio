@@ -27,6 +27,7 @@ import { BasketLinkAndAccessExpiry1756002800000 } from './1756002800000-BasketLi
 import { OpenBasketsByOwner1756002900000 } from './1756002900000-OpenBasketsByOwner';
 import { PersonPurchases1756003000000 } from './1756003000000-PersonPurchases';
 import { SettlementPricePaid1756003100000 } from './1756003100000-SettlementPricePaid';
+import { GeneratedListsBecomeBaskets1756003200000 } from './1756003200000-GeneratedListsBecomeBaskets';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -144,4 +145,10 @@ export const CORE_MIGRATIONS = [
   // price columns are null on every existing row, so it follows every
   // migration that touched that table and nothing else (plan 0143, section 5).
   SettlementPricePaid1756003100000,
+  // Three tables, two columns, twelve indexes and eleven constraints renamed,
+  // and no row moved: every name plan 0050 and plan 0051 gave the basket said
+  // `generated list`. It touches every table those two migrations created and
+  // reads nothing, so it follows all of them and nothing else (plan 0144,
+  // section 3).
+  GeneratedListsBecomeBaskets1756003200000,
 ];

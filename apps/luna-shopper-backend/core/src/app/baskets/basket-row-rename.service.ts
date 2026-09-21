@@ -10,13 +10,13 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
-  GeneratedListFinishedException,
+  BasketFinishedException,
   LineMergeRequiredException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, In, type EntityManager } from 'typeorm';
 import { Zone } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
+import { BasketSharingService } from '../baskets/basket-sharing.service';
 import {
   LineService,
   type ListRenameOutcome,
@@ -60,14 +60,14 @@ export class BasketRowRenameService {
     private readonly context: BasketWriteContext,
     private readonly zoneLines: LineService,
     private readonly listAccess: ListAccessService,
-    private readonly sharing: GeneratedListSharingService,
+    private readonly sharing: BasketSharingService,
     private readonly events: CoreEventsPublisher
   ) {}
 
   async rename(req: RenameBasketRowRequest): Promise<BasketRowResult> {
     const opened = await this.context.open(req);
     if (!isOpenBasket(opened.basket.status)) {
-      throw new GeneratedListFinishedException(
+      throw new BasketFinishedException(
         'This basket is finished, so its rows cannot be renamed'
       );
     }

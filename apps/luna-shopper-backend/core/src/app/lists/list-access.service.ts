@@ -249,7 +249,7 @@ export class ListAccessService {
    * answer as an empty set and one query cheaper to produce.
    *
    * It exists because the basket sheet asks about every list on a line at once.
-   * {@link GeneratedListSharingService.writableAmong} already answers `WRITE`
+   * {@link BasketSharingService.writableAmong} already answers `WRITE`
    * that way and stays, because the settle, the redaction and the pickers all
    * read it; this answers all four, which is what a rule branching on `DECIDE`
    * needs.

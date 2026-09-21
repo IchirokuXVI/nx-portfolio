@@ -25,7 +25,7 @@ import {
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ProcessedEventStore } from '../events/idempotency.store';
-import { LineClaimService } from '../generated-lists/line-claim.service';
+import { LineClaimService } from '../baskets/line-claim.service';
 import { itemSetHash } from './item-set-hash';
 import { toLineItemSet } from './line-item-set';
 import { toLineView } from './list.mappers';

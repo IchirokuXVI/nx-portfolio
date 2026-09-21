@@ -102,7 +102,7 @@ export class ListLineChange {
    *
    * `core/src/migrate.ts` commits every pending migration in one transaction,
    * where a newly created enum value cannot be used, so a migration that added a
-   * kind and wrote it would fail. `generated_list_participants.endedReason` set
+   * kind and wrote it would fail. `basket_participants.endedReason` set
    * this precedent.
    */
   @Column({ type: 'varchar' })

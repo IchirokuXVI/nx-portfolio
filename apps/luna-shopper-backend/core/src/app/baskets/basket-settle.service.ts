@@ -14,19 +14,19 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
-  GeneratedListFinishedException,
+  BasketFinishedException,
   StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, IsNull, Repository, type EntityManager } from 'typeorm';
 import {
-  GeneratedList,
+  Basket,
   LineSettlement,
   ListLine,
   ListLineItem,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { LineClaimService } from '../generated-lists/line-claim.service';
+import { LineClaimService } from '../baskets/line-claim.service';
 import { toLineItemSet, type LineItemSet } from '../lists/line-item-set';
 import { toLineSettlementView, toLineView } from '../lists/list.mappers';
 import { paidColumns } from '../lists/settlement-paid';
@@ -69,8 +69,8 @@ import { BasketWriteContext } from './basket-write.context';
 export class BasketSettleService {
   constructor(
     private readonly dataSource: DataSource,
-    @InjectRepository(GeneratedList)
-    private readonly baskets: Repository<GeneratedList>,
+    @InjectRepository(Basket)
+    private readonly baskets: Repository<Basket>,
     private readonly context: BasketWriteContext,
     private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher
@@ -83,7 +83,7 @@ export class BasketSettleService {
       // a finished trip that still took settlements could write into a
       // household's zone lines days after the shopper went home, from a link
       // shared with somebody who is no longer shopping.
-      throw new GeneratedListFinishedException(
+      throw new BasketFinishedException(
         'This basket is finished, so nothing more can be settled in it'
       );
     }

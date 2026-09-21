@@ -17,7 +17,7 @@ import { AuditModule } from './audit/audit.module';
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
 import { CORE_ENTITIES } from './entities';
-import { GeneratedListsModule } from './generated-lists/generated-lists.module';
+import { BasketsModule } from './baskets/baskets.module';
 import { ListsModule } from './lists/lists.module';
 import { MergeModule } from './merge/merge.module';
 import { ProfilesModule } from './profiles/profiles.module';
@@ -59,7 +59,7 @@ import { ZonesModule } from './zones/zones.module';
     // Shopping profiles: where a person shops (plan 0049).
     ProfilesModule,
     // Generated shopping lists: the basket you carry round the shop (plan 0050).
-    GeneratedListsModule,
+    BasketsModule,
     AccountModule,
     // What one person bought, with or without a basket (plan 0142). It imports
     // nothing: both reads are raw statements whose own `WHERE` is the

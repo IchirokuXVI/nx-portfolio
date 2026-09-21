@@ -11,7 +11,7 @@ import {
   DomainException,
   ForbiddenException,
 } from '@portfolio/luna-shopper/platform';
-import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
+import { BasketSharingService } from '../baskets/basket-sharing.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { managesZone } from '../zones/zone.mappers';
@@ -31,7 +31,7 @@ export class RealtimeAccessController {
   constructor(
     private readonly zoneAuthz: ZoneAuthzService,
     private readonly listAccess: ListAccessService,
-    private readonly sharing: GeneratedListSharingService
+    private readonly sharing: BasketSharingService
   ) {}
 
   /**
@@ -104,7 +104,7 @@ export class RealtimeAccessController {
   ): Promise<AccessCheckResult> {
     const admission = await this.sharing.livePresenceEntry(
       req.participantId,
-      req.generatedListId
+      req.basketId
     );
     // The entry rides back with the answer so the realtime service can seed
     // presence without a second call, and without the display name having been
