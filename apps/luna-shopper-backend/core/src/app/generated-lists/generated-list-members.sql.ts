@@ -1,3 +1,5 @@
+import { LIVE_PARTICIPANT } from './live-participant';
+
 /**
  * The reads sharing with people you know makes (plan 0114, sections 2, 8 and 9).
  *
@@ -45,6 +47,10 @@ export const COMMON_GROUPS_SQL = `
  * newest share first. `sharedAt` is when the owner added them, and when they
  * joined by the link otherwise.
  *
+ * "Live" is {@link LIVE_PARTICIPANT} rather than a `revokedAt` written out here
+ * (plan 0140, section 3), so a basket leaves somebody's shared listing at the
+ * instant their twelve hours run out and not at the next sweep.
+ *
  * ## The cursor names a basket, and Postgres reads its own key back
  *
  * The same reasoning `member-listing.service.ts` gives: a `timestamptz` keeps
@@ -62,7 +68,7 @@ export const SHARED_BASKETS_SQL = `
   JOIN "generated_lists" gl ON gl.id = p."generatedListId"
   WHERE p."userId" = $1
     AND p."kind" = 'REGISTERED'
-    AND p."revokedAt" IS NULL
+    AND ${LIVE_PARTICIPANT}
     AND gl."status" <> 'ARCHIVED'
     AND (
       $2::uuid IS NULL

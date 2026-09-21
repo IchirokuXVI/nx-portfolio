@@ -29,6 +29,10 @@ export const ERROR_CATALOG: Record<
     en: 'You are no longer part of this shopping list.',
     es: 'Ya no formas parte de esta lista de la compra.',
   },
+  [ERROR_CODES.PARTICIPANT_EXPIRED]: {
+    en: 'Your access to this shopping list has ended. Ask the owner to add you.',
+    es: 'Tu acceso a esta lista de la compra ha terminado. Pide que te añadan.',
+  },
   [ERROR_CODES.FORBIDDEN]: {
     en: 'You do not have permission to do that.',
     es: 'No tienes permiso para hacer eso.',

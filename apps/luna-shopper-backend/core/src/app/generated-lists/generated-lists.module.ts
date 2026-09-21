@@ -32,6 +32,7 @@ import {
 import { ListsModule } from '../lists/lists.module';
 import { ProfilesModule } from '../profiles/profiles.module';
 import { ZonesModule } from '../zones/zones.module';
+import { BasketAccessSweepService } from './basket-access-sweep.service';
 import { BasketTripRowsService } from './basket-trip-rows.service';
 import { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListOrderService } from './generated-list-order.service';
@@ -183,6 +184,11 @@ import { LineClaimModule } from './line-claim.module';
     // in the zone reaper's shape that finishes live baskets past the claim
     // window, through `GeneratedListService.update` so the release is heard.
     GeneratedListSweepService,
+    // What evicts a socket when somebody's twelve hours run out (plan 0140,
+    // section 7). HTTP never waits for it: the live participant predicate
+    // already refuses an expired row. It closes the sockets a predicate cannot
+    // and writes down why a row ended.
+    BasketAccessSweepService,
   ],
   // Exported so account deletion (plan 0011) can drop a departing user's baskets
   // without reaching into the repositories itself. The sharing service is

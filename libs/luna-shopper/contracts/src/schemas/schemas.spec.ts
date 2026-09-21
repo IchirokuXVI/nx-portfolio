@@ -426,9 +426,12 @@ describe('contract schemas', () => {
               joinedAt: '2026-01-01T00:00:00.000Z',
               lastSeenAt: '2026-01-01T00:00:00.000Z',
               shareLinkId: 'sl',
+              // A person the owner added by name never expires (plan 0140).
+              expiresAt: null,
             },
             // A guest has no account behind them, so both a null typed name and
             // a null username, and the number is what the screen falls back to.
+            // They came by a link, so their access ends (plan 0140, section 5).
             {
               id: 'p2',
               kind: 'GUEST',
@@ -439,6 +442,7 @@ describe('contract schemas', () => {
               joinedAt: '2026-01-01T00:00:00.000Z',
               lastSeenAt: '2026-01-01T00:00:00.000Z',
               shareLinkId: 'sl',
+              expiresAt: '2026-01-01T12:00:00.000Z',
             },
           ],
         }).valid

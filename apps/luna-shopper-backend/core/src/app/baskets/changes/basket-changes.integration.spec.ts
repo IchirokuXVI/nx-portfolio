@@ -303,6 +303,12 @@ describeIntegration(
             options.joinedAt ?? new Date(Date.now() - 24 * 60 * 60 * 1000),
           lastSeenAt: new Date(),
           revokedAt: null,
+          // A link visitor always carries one and the owner never does, which
+          // plan 0140's `ck_generated_list_participants_expiry` holds.
+          expiresAt:
+            kind === ParticipantKind.OWNER
+              ? null
+              : new Date(Date.now() + 12 * 60 * 60 * 1000),
         })
       );
       return { basket: saved, participantId: participant.id };
