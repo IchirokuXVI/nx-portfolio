@@ -164,14 +164,12 @@ describe('the audience an envelope names', () => {
 });
 
 /**
- * The basket audience, in both of the names it can arrive under (plan 0139,
- * section 1).
+ * The basket audience (plan 0139, section 1).
  *
- * Core writes `basketIds` and the consumer must keep reading `generatedListId`
- * until plan 0144, because staging deploys only the affected services and the
- * durable consumer replays envelopes written before the deploy. Either shape can
- * arrive in the same minute, and an envelope whose audience this cannot read is
- * addressed to nobody, which is dropped as a fault.
+ * Core writes `basketIds` and nothing else. The lone `generatedListId` that
+ * envelopes written before that plan carried was read beside it for one
+ * release, and plan 0144 deleted it with the last of the old names, so the two
+ * cases that proved the old name still worked went with it.
  */
 describe('the baskets an envelope names', () => {
   const basketEvent = (overrides: Partial<DomainEvent>): DomainEvent =>
@@ -193,21 +191,12 @@ describe('the baskets an envelope names', () => {
     ]);
   });
 
-  it('still answers the room of a lone generatedListId', async () => {
-    const { published } = await deliver(basketEvent({ generatedListId: 'b1' }));
+  it('addresses nobody when the envelope names no basket', async () => {
+    // An envelope with no audience this can read is dropped as a fault rather
+    // than broadcast, which is the behaviour the old name was kept alive for.
+    const { published } = await deliver(basketEvent({ basketIds: [] }));
 
-    expect(published[0].rooms).toEqual([basketRoom('b1')]);
-  });
-
-  it('reads the new name and ignores the old one when both are set', async () => {
-    // Nothing writes both. If anything ever did, the new name is the one core
-    // states deliberately and the old one is a leftover, so reading both would
-    // name a room twice and the union is the wrong place to fix that.
-    const { published } = await deliver(
-      basketEvent({ basketIds: ['b1'], generatedListId: 'b1' })
-    );
-
-    expect(published[0].rooms).toEqual([basketRoom('b1')]);
+    expect(published).toEqual([]);
   });
 
   it('addresses the baskets alongside the other audiences, once each', async () => {

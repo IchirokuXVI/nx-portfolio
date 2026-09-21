@@ -73,7 +73,7 @@ export const ERROR_CODES = [
    * this member it read as a plain `conflict`, which on the settle path is a
    * different sentence entirely: "somebody already finished this line".
    */
-  'generated_list_finished',
+  'basket_finished',
   /**
    * The number this write was moving is not where the caller believed it started
    * (backend plans 0056 and 0057), as a 409.

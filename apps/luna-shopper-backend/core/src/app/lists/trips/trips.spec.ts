@@ -7,7 +7,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import type { DataSource } from 'typeorm';
-import type { LineClaimService } from '../../generated-lists/line-claim.service';
+import type { LineClaimService } from '../../baskets/line-claim.service';
 import type { ListAccessService } from '../list-access.service';
 import { announceTripsChanged } from './trips.announce';
 import { toTripRowView, toTripView } from './trips.mappers';

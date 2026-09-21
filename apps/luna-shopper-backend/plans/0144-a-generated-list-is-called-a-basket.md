@@ -1,3 +1,5 @@
+> **PR:** [#435](https://github.com/IchirokuXVI/nx-portfolio/pull/435)
+
 # 0144: a generated list is called a basket, everywhere
 
 > The last plan of the series recorded in `0130`. Needs every backend plan from `0131` to

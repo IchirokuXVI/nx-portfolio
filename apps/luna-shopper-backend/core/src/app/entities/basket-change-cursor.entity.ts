@@ -1,5 +1,5 @@
 import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm';
-import { GeneratedListParticipant } from './generated-list-participant.entity';
+import { BasketParticipant } from './basket-participant.entity';
 
 /**
  * What one viewer of a basket has seen of its lists' changes (plan 0138, section
@@ -36,9 +36,9 @@ export class BasketChangeCursor {
   @PrimaryColumn({ type: 'uuid' })
   participantId!: string;
 
-  @OneToOne(() => GeneratedListParticipant, { onDelete: 'CASCADE' })
+  @OneToOne(() => BasketParticipant, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'participantId' })
-  participant!: GeneratedListParticipant;
+  participant!: BasketParticipant;
 
   /**
    * The start of the window the lingering marks are in: what

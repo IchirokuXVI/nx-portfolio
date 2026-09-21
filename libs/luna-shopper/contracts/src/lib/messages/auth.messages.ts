@@ -71,7 +71,7 @@ export type AuthPattern = (typeof AUTH_PATTERNS)[keyof typeof AUTH_PATTERNS];
 export interface MintParticipantTokenRequest {
   participantId: string;
   /** Becomes the token's `aud`, so it is worthless on any other basket. */
-  generatedListId: string;
+  basketId: string;
   /** Copied into the claims so a guard can tell a guest from a member cheaply. */
   kind: string;
 }

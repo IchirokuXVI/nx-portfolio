@@ -25,7 +25,7 @@ import {
  * purchases and there is no user id on either path. Core holds every rule,
  * including which purchases are the caller's, so nothing here decides anything.
  *
- * **It is not `GET /v1/generated-lists`**, which stays exactly as it is and
+ * **It is not `GET /v1/baskets`**, which stays exactly as it is and
  * still answers "the baskets I made" for the lists tabs (section 6). This is
  * what the history page reads instead, and a finished basket appears in it as a
  * `BASKET` entry whose id opens the same basket page as before.

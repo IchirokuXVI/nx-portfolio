@@ -131,7 +131,7 @@ function render(options: {
     lists: signal(new Map(served.map((held) => [held.listId, held]))),
   };
 
-  const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const paramMap = convertToParamMap({ basketId: BASKET_ID });
   TestBed.configureTestingModule({
     imports: [FilterSheet, RokuTranslatorTestingModule.forTesting()],
     providers: [

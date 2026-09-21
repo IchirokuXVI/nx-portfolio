@@ -1,6 +1,6 @@
 import {
   BasketKind,
-  GeneratedListStatus,
+  BasketStatus,
   MembershipStatus,
   ParticipantKind,
   RealtimeEvent,
@@ -21,8 +21,8 @@ import {
   BasketSource,
   BasketTripRow,
   CORE_ENTITIES,
-  GeneratedList,
-  GeneratedListParticipant,
+  Basket,
+  BasketParticipant,
   LineSettlement,
   ListAccess,
   ListLine,
@@ -30,9 +30,9 @@ import {
   Zone,
   ZoneMembership,
 } from '../../entities';
-import { BasketTripRowsService } from '../../generated-lists/basket-trip-rows.service';
-import { GeneratedListService } from '../../generated-lists/generated-list.service';
-import { fakeLineClaims } from '../../generated-lists/line-claims.fake';
+import { BasketTripRowsService } from '../../baskets/basket-trip-rows.service';
+import { BasketService } from '../../baskets/basket.service';
+import { fakeLineClaims } from '../../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../../zones/zone-authz.service';
 import { ListAccessService } from '../list-access.service';
 import { tripListsOfBasket } from './trips.announce';
@@ -100,17 +100,17 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
   async function basket(
     options: {
       name?: string | null;
-      status?: GeneratedListStatus;
+      status?: BasketStatus;
       generatedAt?: Date;
       kind?: BasketKind;
     } = {}
   ): Promise<string> {
-    const repo = dataSource.getRepository(GeneratedList);
+    const repo = dataSource.getRepository(Basket);
     const saved = await repo.save(
       repo.create({
         ownerUserId: ids.shopper,
         name: options.name ?? null,
-        status: options.status ?? GeneratedListStatus.FINISHED,
+        status: options.status ?? BasketStatus.FINISHED,
         generatedAt: options.generatedAt ?? new Date('2026-01-10T10:00:00Z'),
         kind: options.kind ?? BasketKind.GENERATED,
         idempotencyKey: null,
@@ -147,9 +147,9 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       );
     }
     const basket = await dataSource
-      .getRepository(GeneratedList)
+      .getRepository(Basket)
       .findOneByOrFail({ id: basketId });
-    if (basket.status === GeneratedListStatus.OPEN) {
+    if (basket.status === BasketStatus.OPEN) {
       await dataSource
         .getRepository(ListLine)
         .update({ id: lineId }, { quantity });
@@ -169,12 +169,12 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
 
   /**
    * End a trip that was seeded `OPEN`: the status, then the freeze, in that
-   * order, which is the order `GeneratedListService.update` writes them in.
+   * order, which is the order `BasketService.update` writes them in.
    */
   async function finish(basketId: string): Promise<void> {
     await dataSource
-      .getRepository(GeneratedList)
-      .update({ id: basketId }, { status: GeneratedListStatus.FINISHED });
+      .getRepository(Basket)
+      .update({ id: basketId }, { status: BasketStatus.FINISHED });
     await tripRows.freeze(dataSource.manager, basketId);
   }
 
@@ -183,20 +183,20 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
    * need one (plan 0134, tests 9 and 11).
    *
    * Plan 0136 is what creates them, so there is none to settle through yet, and
-   * the shape the database holds is narrow: `uq_generated_lists_live_owner`
-   * allows one per owner and `ck_generated_lists_live_shape` requires it to be
+   * the shape the database holds is narrow: `uq_baskets_live_owner`
+   * allows one per owner and `ck_baskets_live_shape` requires it to be
    * `OPEN`, unnamed and without an idempotency key (plan 0133, section 2).
    */
   async function liveBasket(): Promise<string> {
     if (ids.live) {
       return ids.live;
     }
-    const repo = dataSource.getRepository(GeneratedList);
+    const repo = dataSource.getRepository(Basket);
     const saved = await repo.save(
       repo.create({
         ownerUserId: ids.shopper,
         name: null,
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
         generatedAt: new Date('2026-01-10T10:00:00Z'),
         kind: BasketKind.LIVE,
         idempotencyKey: null,
@@ -213,13 +213,13 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
    * 0134, section 4.3).
    */
   async function participant(
-    generatedListId: string,
+    basketId: string,
     userId: string | null
   ): Promise<string> {
-    const repo = dataSource.getRepository(GeneratedListParticipant);
+    const repo = dataSource.getRepository(BasketParticipant);
     const saved = await repo.save(
       repo.create({
-        generatedListId,
+        basketId,
         shareLinkId: null,
         kind: userId ? ParticipantKind.REGISTERED : ParticipantKind.GUEST,
         userId,
@@ -235,7 +235,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         invitedAt: null,
         invitedByUserId: null,
         // Everybody here came by a link, and a link visitor always carries an
-        // expiry: plan 0140's `ck_generated_list_participants_expiry` says so.
+        // expiry: plan 0140's `ck_basket_participants_expiry` says so.
         expiresAt: new Date('2026-01-10T21:00:00Z'),
       })
     );
@@ -376,7 +376,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       // Baskets belong to a person and not to a zone, so they go on their own.
       // Lists, lines and their settlements cascade with the zone.
       await dataSource
-        .getRepository(GeneratedList)
+        .getRepository(Basket)
         .delete({ ownerUserId: ids.shopper });
       if (ids.zone) {
         await dataSource.getRepository(Zone).delete({ id: ids.zone });
@@ -636,7 +636,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       await asked(ended, flat, milk, 2);
       const open = await basket({
         name: 'Open',
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
         generatedAt: new Date('2026-01-11T10:00:00Z'),
       });
       await asked(open, flat, bread, 5);
@@ -689,7 +689,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       // every write (plan 0059) and the freeze happens at the finish.
       const id = await basket({
         name: 'Saturday',
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
       });
       await asked(id, flat, milk, 2);
       await settled(flat, milk, '2026-01-10T11:00:00Z', {
@@ -913,7 +913,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         quantity: 2,
       });
 
-      await dataSource.getRepository(GeneratedList).delete({ id });
+      await dataSource.getRepository(Basket).delete({ id });
 
       const heads = await trips.list({ userId: ids.shopper, listId: flat });
       expect(heads.items).toEqual([
@@ -1183,19 +1183,19 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const now = new Date();
       const inside = await basket({
         name: 'Out now',
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
         generatedAt: now,
       });
       // Still `DRAFT`, because the sweep has not reached it, and past the
       // window: it claims nothing, so it is not live.
       const outside = await basket({
         name: 'Forgotten',
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
         generatedAt: new Date(now.getTime() - WINDOW_MS - 60_000),
       });
       const finished = await basket({
         name: 'Finished today',
-        status: GeneratedListStatus.FINISHED,
+        status: BasketStatus.FINISHED,
         generatedAt: new Date(now.getTime() - 60_000),
       });
       for (const id of [inside, outside, finished]) {
@@ -1249,7 +1249,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       // and either repeats it or skips its twin.
       const moment = '2026-02-10T08:00:00.000456Z';
       await dataSource.query(
-        `UPDATE "generated_lists" SET "generatedAt" = $1::timestamptz WHERE id = $2`,
+        `UPDATE "baskets" SET "generatedAt" = $1::timestamptz WHERE id = $2`,
         [moment, tiedBasket]
       );
       await dataSource.query(
@@ -1295,7 +1295,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
 
   describe('the event (section 6)', () => {
     const emitTo = jest.fn();
-    let generated: GeneratedListService;
+    let generated: BasketService;
 
     /** The lists `list.tripsChanged` was addressed to, in order. */
     function announcedLists(): string[] {
@@ -1309,9 +1309,9 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
     }
 
     beforeAll(() => {
-      generated = new GeneratedListService(
+      generated = new BasketService(
         dataSource,
-        dataSource.getRepository(GeneratedList),
+        dataSource.getRepository(Basket),
         // The run's profile resolution, which no write here asks.
         undefined as never,
         fakeLineClaims({}).service,
@@ -1336,7 +1336,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const parents = await list('Event parents');
       const id = await basket({
         name: 'Saturday',
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
       });
       await asked(id, flat, await line(flat, 'Milk'), 1);
       await asked(id, flat, await line(flat, 'Bread'), 1);
@@ -1360,7 +1360,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
 
       await generated.update({
         userId: ids.shopper,
-        generatedListId: id,
+        basketId: id,
         name: 'Renamed',
       });
       expect(announcedLists().sort()).toEqual([flat, parents].sort());
@@ -1368,8 +1368,8 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       emitTo.mockClear();
       await generated.update({
         userId: ids.shopper,
-        generatedListId: id,
-        status: GeneratedListStatus.FINISHED,
+        basketId: id,
+        status: BasketStatus.FINISHED,
       });
       expect(announcedLists().sort()).toEqual([flat, parents].sort());
     });
@@ -1382,7 +1382,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       // a write of the value that is already there.
       await generated.update({
         userId: ids.shopper,
-        generatedListId: id,
+        basketId: id,
         name: 'Saturday',
       });
 
@@ -1392,7 +1392,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
     it('still knows its lists when the basket is deleted', async () => {
       const { id, flat, parents } = await basketOverTwoLists();
 
-      await generated.delete({ userId: ids.shopper, generatedListId: id });
+      await generated.delete({ userId: ids.shopper, basketId: id });
 
       expect(announcedLists().sort()).toEqual([flat, parents].sort());
       // The sources went with it, which is why they were read first.

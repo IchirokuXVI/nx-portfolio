@@ -138,7 +138,7 @@ export function peopleTiles(
         delta: null,
         trend: null,
         // By name, which is `baskets`. Its segment is `shopping-lists`, the
-        // gateway's own word for a generated list, and this link used to be
+        // gateway's own word for a basket, and this link used to be
         // that segment written out: a second copy of a fact the descriptor
         // already holds, and wrong the moment the screen moved into a section.
         link: pathOf('baskets'),

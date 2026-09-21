@@ -45,7 +45,7 @@ function person(over: Partial<BasketParticipant> = {}): BasketParticipant {
  * The owner's participant row, exactly as core creates it.
  *
  * No display name and no guest number, which is not an oversight in the fixture: it
- * is what `generated-list-sharing.service.ts` writes, and it is the shape that made
+ * is what `basket-sharing.service.ts` writes, and it is the shape that made
  * the whole face row draw one repeated bubble.
  */
 function owner(over: Partial<BasketParticipant> = {}): BasketParticipant {

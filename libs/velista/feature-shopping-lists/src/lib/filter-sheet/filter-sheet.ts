@@ -20,7 +20,7 @@ import {
   type BasketOrder,
 } from '@portfolio/velista/models';
 import {
-  generatedListIdOf,
+  basketIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
@@ -82,7 +82,7 @@ export class FilterSheet {
   private readonly _locale = inject(RokuLocaleStore).locale;
 
   /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _generatedListId = generatedListIdOf(this._route);
+  private readonly _basketId = basketIdOf(this._route);
 
   protected readonly order = this._view.order;
   protected readonly grouping = this._view.grouping;
@@ -219,7 +219,7 @@ export class FilterSheet {
    */
   protected openPicker(): void {
     void this._router.navigateByUrl(
-      shopPickerPath(this._locale(), this._basePath, this._generatedListId())
+      shopPickerPath(this._locale(), this._basePath, this._basketId())
     );
   }
 
@@ -236,7 +236,7 @@ export class FilterSheet {
    */
   protected close(): void {
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._generatedListId())
+      basketPath(this._locale(), this._basePath, this._basketId())
     );
   }
 }

@@ -200,22 +200,22 @@ export async function ensurePostalCode(
 
 // --- Baskets -----------------------------------------------------------------
 
-export interface GeneratedListSummary {
+export interface BasketSummary {
   id: string;
   name: string | null;
   status: 'OPEN' | 'FINISHED' | 'ARCHIVED';
 }
 
-/** `GET /v1/generated-lists`: the user's own baskets, live and finished. */
-export async function listBaskets(s: Session): Promise<GeneratedListSummary[]> {
-  const page = await s.get<{ items: GeneratedListSummary[] }>(
-    '/v1/generated-lists?includeArchived=true&limit=50'
+/** `GET /v1/baskets`: the user's own baskets, live and finished. */
+export async function listBaskets(s: Session): Promise<BasketSummary[]> {
+  const page = await s.get<{ items: BasketSummary[] }>(
+    '/v1/baskets?includeArchived=true&limit=50'
   );
   return page.items;
 }
 
 /**
- * `PATCH /v1/generated-lists/:id` to FINISHED on every open basket.
+ * `PATCH /v1/baskets/:id` to FINISHED on every open basket.
  *
  * An open basket claims the zone lines it carries, so a spec that reads a claim
  * needs every earlier basket out of the way first. It no longer clears the way
@@ -225,7 +225,7 @@ export async function listBaskets(s: Session): Promise<GeneratedListSummary[]> {
 export async function finishOpenBaskets(s: Session): Promise<void> {
   for (const basket of await listBaskets(s)) {
     if (basket.status === 'OPEN') {
-      await s.patch(`/v1/generated-lists/${basket.id}`, {
+      await s.patch(`/v1/baskets/${basket.id}`, {
         status: 'FINISHED',
       });
     }
@@ -239,24 +239,33 @@ export interface BasketLineView {
   settledQuantity: number;
 }
 
-/** `GET /v1/generated-lists/:id/basket`: the basket as a participant reads it. */
+/**
+ * `GET /v1/baskets/:id/basket`: the basket as a participant reads it.
+ *
+ * **This route does not exist.** Plan 0136 replaced it with
+ * `GET /v1/baskets/:id`, which answers rows rather than lines, and velista
+ * `0096` is the plan that moves this suite onto it. Plan 0144 renamed the path
+ * it names and changed nothing else, because a rename may not fix behaviour;
+ * the helper was already calling a deleted route before that rename and still
+ * is after it.
+ */
 export async function readBasketLines(
   s: Session,
   basketId: string
 ): Promise<BasketLineView[]> {
   const body = await s.get<{ lines: BasketLineView[] }>(
-    `/v1/generated-lists/${basketId}/basket`
+    `/v1/baskets/${basketId}/basket`
   );
   return body.lines;
 }
 
-/** `GET /v1/generated-lists/:id/share-link`: the link, if one exists. */
+/** `GET /v1/baskets/:id/share-link`: the link, if one exists. */
 export async function readShareLink(
   s: Session,
   basketId: string
 ): Promise<{ secret: string } | undefined> {
   const body = await s.get<{ link?: { secret: string } }>(
-    `/v1/generated-lists/${basketId}/share-link`
+    `/v1/baskets/${basketId}/share-link`
   );
   return body.link;
 }

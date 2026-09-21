@@ -177,7 +177,7 @@ function groupPageOf(zoneId: string) {
 }
 
 /**
- * **`shopping-lists/:generatedListId` matches only a UUID** (velista 0044).
+ * **`shopping-lists/:basketId` matches only a UUID** (velista 0044).
  *
  * Rule G1 again, and it is added before the collision exists rather than after.
  * Plan 0045 owns `shopping-lists` as a listing, and the first thing anybody will
@@ -188,7 +188,7 @@ function groupPageOf(zoneId: string) {
  * The same `canMatch` and not `canActivate`, for the same reason: a declined
  * match carries on to the next route, and an aborted activation does not.
  */
-export const generatedListIdGuard: CanMatchFn = (
+export const basketIdGuard: CanMatchFn = (
   _route: Route,
   segments: UrlSegment[]
 ) => {

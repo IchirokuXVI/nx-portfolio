@@ -434,7 +434,7 @@ export interface LineClaimRef {
  * ## What it may say, which is very little
  *
  * That a line is claimed and whose it is. Not what else is in the basket, not
- * where they are shopping, not what it costs, and **not the generated list id**.
+ * where they are shopping, not what it costs, and **not the basket id**.
  * That last omission is the load bearing one: an id in a payload is an invitation
  * for a client to fetch it, and the refusal would then be the only thing standing
  * between a zone member and somebody else's basket. The event names a person, not
@@ -893,7 +893,7 @@ export interface SettleLineRequest {
 /**
  * One origin line, touched by one settling act (plan 0047, section 3).
  *
- * `generatedListLineId` is stored and **never served**: which basket a purchase
+ * `basketLineId` is stored and **never served**: which basket a purchase
  * came out of is the one thing a settlement does not tell the list (section 3.1).
  * The purchase itself is a zone fact, readable by anybody who can read the list.
  */
@@ -913,7 +913,7 @@ export interface LineSettlementView {
    * Null does not mean nobody. It means the settle came off a basket, where the
    * actor is a participant rather than a user and may be a guest with no account
    * at all. The participant id is deliberately **not** served here, for the same
-   * reason `generatedListLineId` is not: a participant id is meaningless to a
+   * reason `basketLineId` is not: a participant id is meaningless to a
    * zone reader who cannot resolve it, and serving one would hand the zone a
    * handle on a private basket's membership in exchange for nothing.
    *

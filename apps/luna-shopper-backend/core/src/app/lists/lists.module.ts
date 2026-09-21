@@ -14,7 +14,7 @@ import {
   ZoneMembership,
 } from '../entities';
 import { IdempotencyModule } from '../events/idempotency.module';
-import { LineClaimModule } from '../generated-lists/line-claim.module';
+import { LineClaimModule } from '../baskets/line-claim.module';
 import { ZonesModule } from '../zones/zones.module';
 import { LineChangeRecorder } from './changes/line-change.recorder';
 import { ListLineChangeSweepService } from './changes/list-line-change-sweep.service';
@@ -60,10 +60,10 @@ import { TripsService } from './trips/trips.service';
     SharedListGrantModule,
     // Every write to a list line is a write to every basket that covers the list
     // (plan 0139, section 3). The coverage module depends on nothing here, which
-    // is why `GeneratedListsModule` and this one can both import it.
+    // is why `BasketsModule` and this one can both import it.
     BasketCoverageModule,
     // The third indicator on a line (plan 0052). A module of its own rather than
-    // `GeneratedListsModule`, which imports this one, on exactly the reasoning
+    // `BasketsModule`, which imports this one, on exactly the reasoning
     // `SharedListGrantModule` above it exists for.
     LineClaimModule,
     // The `processed_events` inbox the catalog event handlers dedupe on (plan

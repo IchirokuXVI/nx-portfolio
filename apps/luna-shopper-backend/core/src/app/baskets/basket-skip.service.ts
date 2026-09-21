@@ -7,13 +7,13 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
-  GeneratedListFinishedException,
+  BasketFinishedException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, type EntityManager } from 'typeorm';
 import { BasketLineSkip } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { LineClaimService } from '../generated-lists/line-claim.service';
-import type { ZoneLineClaimRef } from '../generated-lists/line-claim.sql';
+import { LineClaimService } from '../baskets/line-claim.service';
+import type { ZoneLineClaimRef } from '../baskets/line-claim.sql';
 import { lockEntries } from './basket-row-resolver';
 import {
   BasketWriteContext,
@@ -24,7 +24,7 @@ import {
   STANDING_SKIP_LINES_SQL,
   UNREVERTED_SKIP_LINES_SQL,
   type BasketSkipLineRow,
-} from './basket.sql';
+} from './basket-read.sql';
 
 /**
  * "Not today" on a row, and taking it back (plan 0137, section 5).
@@ -201,7 +201,7 @@ export class BasketSkipService {
   private async openOpen(req: SkipBasketRowRequest): Promise<OpenBasketWrite> {
     const opened = await this.context.open(req);
     if (!isOpenBasket(opened.basket.status)) {
-      throw new GeneratedListFinishedException(
+      throw new BasketFinishedException(
         'This basket is finished, so nothing more can be skipped in it'
       );
     }

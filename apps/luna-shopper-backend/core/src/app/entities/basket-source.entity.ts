@@ -7,7 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { GeneratedList } from './generated-list.entity';
+import { Basket } from './basket.entity';
 import { ShoppingList } from './shopping-list.entity';
 import { Zone } from './zone.entity';
 
@@ -21,7 +21,7 @@ import { Zone } from './zone.entity';
  * over a `jsonb` array of pairs makes that a lookup.
  *
  * It does not extend `BaseEntity`, on the same reasoning as
- * the deleted `GeneratedListLineOrigin`: a source is written once with its basket and never
+ * the deleted `BasketLineOrigin`: a source is written once with its basket and never
  * edited, so it has no life of its own to audit.
  *
  * ## Why it carries foreign keys where the origins carry none
@@ -62,9 +62,9 @@ export class BasketSource {
   @Column({ type: 'uuid' })
   basketId!: string;
 
-  @ManyToOne(() => GeneratedList, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Basket, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'basketId' })
-  basket!: GeneratedList;
+  basket!: Basket;
 
   @Column({ type: 'uuid' })
   zoneId!: string;

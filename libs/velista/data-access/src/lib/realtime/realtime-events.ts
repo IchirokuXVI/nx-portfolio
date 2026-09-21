@@ -2,7 +2,7 @@ import type {
   BasketParticipant,
   BasketPresenceEntry,
   Comment,
-  GeneratedListSummary,
+  BasketSummary,
   Line,
   LineSettlement,
   ListPermission,
@@ -262,8 +262,8 @@ export type RealtimeEvent =
        * summary out of it: the dashboard card and the history draw a name, a date and
        * two counts, and the screen that wants the lines fetches them itself.
        */
-      readonly type: 'generatedList.created' | 'generatedList.updated';
-      readonly list: GeneratedListSummary;
+      readonly type: 'basket.created' | 'basket.updated';
+      readonly list: BasketSummary;
     }
   | {
       /**
@@ -310,8 +310,8 @@ export type RealtimeEvent =
        * needs none: it arrives only on a connection pinned to one basket.
        */
       readonly type:
-        | 'generatedList.participantJoined'
-        | 'generatedList.participantLeft';
+        | 'basket.participantJoined'
+        | 'basket.participantLeft';
       readonly participant: BasketParticipant;
     }
   | {
@@ -323,8 +323,8 @@ export type RealtimeEvent =
        * a diff would leave a client that missed one message permanently wrong about
        * who is in a shop.
        */
-      readonly type: 'presence.generatedListUpdated';
-      readonly generatedListId: string;
+      readonly type: 'presence.basketUpdated';
+      readonly basketId: string;
       readonly present: readonly BasketPresenceEntry[];
     }
   | {
@@ -336,8 +336,8 @@ export type RealtimeEvent =
        * anyway, because a card pointing at a basket the server no longer has is worse
        * than a card that quietly goes away.
        */
-      readonly type: 'generatedList.deleted';
-      readonly generatedListId: string;
+      readonly type: 'basket.deleted';
+      readonly basketId: string;
     }
   | {
       /**
@@ -349,8 +349,8 @@ export type RealtimeEvent =
        * access ends: removed, the link revoked with its people, leaving, and the
        * basket being deleted.
        */
-      readonly type: 'generatedList.shared' | 'generatedList.unshared';
-      readonly generatedListId: string;
+      readonly type: 'basket.shared' | 'basket.unshared';
+      readonly basketId: string;
     }
   | { readonly type: 'presence.zoneUpdated'; readonly presence: ZonePresence }
   | { readonly type: 'presence.listUpdated'; readonly presence: ListPresence };
@@ -389,17 +389,17 @@ export const REALTIME_EVENT_NAMES = [
   'merge.approved',
   'merge.rejected',
   'profiles.changed',
-  'generatedList.created',
-  'generatedList.updated',
+  'basket.created',
+  'basket.updated',
   'basket.linesChanged',
-  'generatedList.participantJoined',
-  'generatedList.participantLeft',
-  'generatedList.deleted',
-  'generatedList.shared',
-  'generatedList.unshared',
+  'basket.participantJoined',
+  'basket.participantLeft',
+  'basket.deleted',
+  'basket.shared',
+  'basket.unshared',
   'presence.zoneUpdated',
   'presence.listUpdated',
-  'presence.generatedListUpdated',
+  'presence.basketUpdated',
 ] as const;
 
 /**

@@ -4,7 +4,7 @@ import {
 } from '../mapping/basket-mappers';
 import {
   toComment,
-  toGeneratedListFromView,
+  toBasketFromView,
   toLine,
   toLineSettlement,
   toListPermissions,
@@ -295,13 +295,13 @@ export function toRealtimeEvent(
       return profiles.length === 0 ? null : { type: name, profiles };
     }
 
-    case 'generatedList.created':
-    case 'generatedList.updated': {
+    case 'basket.created':
+    case 'basket.updated': {
       // The payload is the whole basket and only its summary is kept. A body this
       // build cannot read is dropped and counted rather than applied, which for these
       // two means the card keeps whatever the last read said instead of losing its
       // counts to an unreadable event.
-      const list = toGeneratedListFromView(payload);
+      const list = toBasketFromView(payload);
       return list === null ? null : { type: name, list };
     }
 
@@ -320,40 +320,40 @@ export function toRealtimeEvent(
       return { type: name, lineIds: mapArray(payload['lineIds'], str) };
     }
 
-    case 'generatedList.participantJoined':
-    case 'generatedList.participantLeft': {
+    case 'basket.participantJoined':
+    case 'basket.participantLeft': {
       // The bare participant view, with no basket id on it, and it needs none: it
       // arrives only on a connection pinned to one basket.
       const participant = toBasketParticipant(payload);
       return participant === null ? null : { type: name, participant };
     }
 
-    case 'generatedList.deleted': {
+    case 'basket.deleted': {
       if (!isRecord(payload)) {
         return null;
       }
-      const generatedListId = str(payload['id']);
-      return generatedListId === null ? null : { type: name, generatedListId };
+      const basketId = str(payload['id']);
+      return basketId === null ? null : { type: name, basketId };
     }
 
-    case 'generatedList.shared':
-    case 'generatedList.unshared': {
-      // `{ generatedListId }` rather than the `{ id }` a deletion carries: the
+    case 'basket.shared':
+    case 'basket.unshared': {
+      // `{ basketId }` rather than the `{ id }` a deletion carries: the
       // reader is in no room that may read more than the id (backend `0114`).
       if (!isRecord(payload)) {
         return null;
       }
-      const accessTo = str(payload['generatedListId']);
+      const accessTo = str(payload['basketId']);
       return accessTo === null
         ? null
-        : { type: name, generatedListId: accessTo };
+        : { type: name, basketId: accessTo };
     }
 
-    case 'presence.generatedListUpdated': {
+    case 'presence.basketUpdated': {
       if (!isRecord(payload)) {
         return null;
       }
-      const presentIn = str(payload['generatedListId']);
+      const presentIn = str(payload['basketId']);
       if (presentIn === null) {
         return null;
       }
@@ -363,7 +363,7 @@ export function toRealtimeEvent(
       // a shop that is full.
       return {
         type: name,
-        generatedListId: presentIn,
+        basketId: presentIn,
         present: mapArray(payload['present'], toBasketPresenceEntry),
       };
     }

@@ -3,12 +3,12 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
-  fakeGeneratedListStore,
+  fakeBasketListStore,
   GatewayError,
-  provideFakeGeneratedListStore,
-  type FakeGeneratedListStore,
+  provideFakeBasketListStore,
+  type FakeBasketListStore,
 } from '@portfolio/velista/data-access';
-import { type GeneratedListSummary } from '@portfolio/velista/models';
+import { type BasketSummary } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -31,7 +31,7 @@ import { BasketCurrentPage } from './basket-current';
 @Component({ selector: 'lib-test-page', template: '' })
 class TestPage {}
 
-function basket(overrides: Partial<GeneratedListSummary> = {}) {
+function basket(overrides: Partial<BasketSummary> = {}) {
   return {
     id: 'gl1',
     name: 'Saturday big shop',
@@ -46,11 +46,11 @@ function basket(overrides: Partial<GeneratedListSummary> = {}) {
     notAvailableLineCount: 1,
     presentCount: 0,
     ...overrides,
-  } as GeneratedListSummary;
+  } as BasketSummary;
 }
 
 async function render(
-  store: FakeGeneratedListStore = fakeGeneratedListStore()
+  store: FakeBasketListStore = fakeBasketListStore()
 ): Promise<ComponentFixture<BasketCurrentPage>> {
   TestBed.resetTestingModule();
 
@@ -60,7 +60,7 @@ async function render(
       provideRouter([{ path: '**', component: TestPage }]),
       provideVelistaTesting(),
       provideFakeBrowserFacade(),
-      provideFakeGeneratedListStore(store),
+      provideFakeBasketListStore(store),
     ],
   }).compileComponents();
 
@@ -84,7 +84,7 @@ describe('BasketCurrentPage', () => {
    */
   it('goes to the live basket, replacing its own entry', async () => {
     const go = jest.spyOn(Router.prototype, 'navigateByUrl');
-    await render(fakeGeneratedListStore([basket()]));
+    await render(fakeBasketListStore([basket()]));
 
     expect(go).toHaveBeenCalledWith('/en/shopping-lists/gl1', {
       replaceUrl: true,
@@ -99,7 +99,7 @@ describe('BasketCurrentPage', () => {
    */
   it('never pushes an entry of its own', async () => {
     const go = jest.spyOn(Router.prototype, 'navigateByUrl');
-    await render(fakeGeneratedListStore([basket()]));
+    await render(fakeBasketListStore([basket()]));
 
     expect(
       go.mock.calls.every(([, extras]) => extras?.replaceUrl === true)
@@ -112,7 +112,7 @@ describe('BasketCurrentPage', () => {
   it('stays on the empty state for a finished basket', async () => {
     const go = jest.spyOn(Router.prototype, 'navigateByUrl');
     const fixture = await render(
-      fakeGeneratedListStore([basket({ status: 'COMPLETED' })])
+      fakeBasketListStore([basket({ status: 'COMPLETED' })])
     );
 
     expect(go).not.toHaveBeenCalled();
@@ -167,7 +167,7 @@ describe('BasketCurrentPage', () => {
   describe('the clock in the header', () => {
     it('is there while the listing is on its way', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([], { state: 'loading' })
+        fakeBasketListStore([], { state: 'loading' })
       );
 
       expect(query(fixture, '.bar .history')).not.toBeNull();
@@ -196,7 +196,7 @@ describe('BasketCurrentPage', () => {
    */
   it('says what the history says when the read fails', async () => {
     const fixture = await render(
-      fakeGeneratedListStore([], {
+      fakeBasketListStore([], {
         state: 'failed',
         error: new GatewayError(500, 'boom', 'cid-1'),
       })

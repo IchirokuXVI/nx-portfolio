@@ -1,5 +1,5 @@
 import type { GenerationScope } from './enums';
-import type { GeneratedListSource } from './generated-list-view';
+import type { BasketSource } from './basket-summary';
 
 /**
  * Where somebody shops, as this app models it (plan 0046; backend plan 0049).
@@ -164,12 +164,12 @@ export interface ProfileGenerationScope {
    * The stored sources, meaningful only when {@link scope} is `SELECTED`.
    *
    * A null `listId` is the whole group including lists made later, exactly as it is on
-   * a generation request, which is why this is `GeneratedListSource` and not a second
+   * a generation request, which is why this is `BasketSource` and not a second
    * type saying the same thing. The server keeps them under `ALL` too and this carries
    * whatever it sent, because a scope widened to `ALL` and then narrowed again should
    * find its old ticks where it left them.
    */
-  readonly sources: readonly GeneratedListSource[];
+  readonly sources: readonly BasketSource[];
 }
 
 /**

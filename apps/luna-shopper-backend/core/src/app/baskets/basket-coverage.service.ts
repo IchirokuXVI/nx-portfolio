@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { GeneratedList } from '../entities';
+import { Basket } from '../entities';
 import {
   BASKET_COVERAGE_SQL,
   BASKETS_OF_ZONE_MEMBERS_SQL,
@@ -27,8 +27,8 @@ import {
 @Injectable()
 export class BasketCoverageService {
   constructor(
-    @InjectRepository(GeneratedList)
-    private readonly baskets: Repository<GeneratedList>
+    @InjectRepository(Basket)
+    private readonly baskets: Repository<Basket>
   ) {}
 
   /**
@@ -44,7 +44,7 @@ export class BasketCoverageService {
    * a screen, not authorizing anything.
    */
   async listsOf(
-    basket: Pick<GeneratedList, 'id' | 'kind' | 'ownerUserId'>
+    basket: Pick<Basket, 'id' | 'kind' | 'ownerUserId'>
   ): Promise<CoveredList[]> {
     return this.baskets.query(BASKET_COVERAGE_SQL, [basket.id]);
   }

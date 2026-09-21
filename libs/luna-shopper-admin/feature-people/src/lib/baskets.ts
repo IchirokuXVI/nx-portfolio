@@ -10,7 +10,7 @@ import { BASKET_SEED, type BasketRow } from './people-seed';
 /** A generated shopping list, as the back office reads one. */
 export type Basket = BasketRow;
 
-/** Where a basket is in its life, which is the whole of `GeneratedListStatus`. */
+/** Where a basket is in its life, which is the whole of `BasketStatus`. */
 export const BASKET_STATUS_OPTIONS = [
   { value: 'OPEN', label: 'people.baskets.status.OPEN' },
   { value: 'FINISHED', label: 'people.baskets.status.FINISHED' },

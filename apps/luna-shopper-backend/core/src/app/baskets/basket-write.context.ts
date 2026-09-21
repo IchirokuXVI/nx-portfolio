@@ -11,8 +11,8 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
-import { GeneratedList, GeneratedListParticipant } from '../entities';
-import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
+import { Basket, BasketParticipant } from '../entities';
+import { BasketSharingService } from '../baskets/basket-sharing.service';
 import { BasketAnnouncer, type ChangedLine } from './basket-announcer.service';
 import { BasketCoverageService } from './basket-coverage.service';
 import { BasketReadService } from './basket-read.service';
@@ -35,10 +35,10 @@ import { BasketRowResolver, type BasketRow } from './basket-row-resolver';
 @Injectable()
 export class BasketWriteContext {
   constructor(
-    @InjectRepository(GeneratedList)
-    private readonly baskets: Repository<GeneratedList>,
+    @InjectRepository(Basket)
+    private readonly baskets: Repository<Basket>,
     private readonly coverage: BasketCoverageService,
-    private readonly sharing: GeneratedListSharingService,
+    private readonly sharing: BasketSharingService,
     private readonly resolver: BasketRowResolver,
     private readonly read: BasketReadService,
     // Who tells the baskets a write reached them (plan 0139, section 3). Handed
@@ -94,9 +94,9 @@ export class BasketWriteContext {
 /** One write, with everything it may read already answered. */
 export class OpenBasketWrite {
   constructor(
-    readonly basket: GeneratedList,
+    readonly basket: Basket,
     /** The actor: attribution, the redaction and the answer all read this row. */
-    readonly participant: GeneratedListParticipant,
+    readonly participant: BasketParticipant,
     readonly coveredListIds: readonly string[],
     private readonly zones: ReadonlyMap<string, string>,
     /** The covered lists this actor writes themselves (section 3.4). */

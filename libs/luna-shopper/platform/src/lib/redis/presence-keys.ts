@@ -47,8 +47,8 @@ export const listEditorsKey = (listId: string): string =>
  * above, because a participant entry carries more than an id and has to be read
  * back whole.
  */
-export const generatedListPresenceKey = (generatedListId: string): string =>
-  `presence:generated:${generatedListId}`;
+export const basketPresenceKey = (basketId: string): string =>
+  `presence:basket:${basketId}`;
 
 /**
  * How many of a presence hash's entries are still live.

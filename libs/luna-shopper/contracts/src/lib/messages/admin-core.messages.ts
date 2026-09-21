@@ -1,7 +1,7 @@
 import type { BasketKind } from '../enums/basket.enums';
 import type {
-  GeneratedListStatus,
-} from '../enums/generated-list.enums';
+  BasketStatus,
+} from '../enums/basket.enums';
 import type { LineApprovalStatus } from '../enums/list.enums';
 import type {
   MembershipStatus,
@@ -16,7 +16,7 @@ import type { MembershipView } from './zone.messages';
  * The back office's view of core: zones, lists and baskets that belong to
  * somebody else (plan 0074).
  *
- * Every subject in `zone.*`, `list.*` and `generatedList.*` is scoped to the
+ * Every subject in `zone.*`, `list.*` and `basket.*` is scoped to the
  * caller, deliberately and from the day each was written. An operator is not a
  * member of the zone they are looking at and never should be, so none of those
  * subjects can answer for them; widening one to accept an operator would put a
@@ -24,7 +24,7 @@ import type { MembershipView } from './zone.messages';
  * A separate namespace keeps the bypass in files that are entirely about it.
  *
  * **Every write goes through the service, and never through the row** (plan
- * 0077, section 1). A list line participates in settlements, generated list
+ * 0077, section 1). A list line participates in settlements, basket
  * bindings, permission sets and realtime broadcasts other clients have already
  * applied, and the invariants live in services rather than in constraints. So
  * every subject here that writes delegates to the service method the user facing
@@ -578,7 +578,7 @@ export interface AdminBasketView {
   kind: BasketKind;
   /** Null is not missing: an unnamed basket displays as its generation date. */
   name: string | null;
-  status: GeneratedListStatus;
+  status: BasketStatus;
   /** The distinct zones this basket covers (plan 0136). May be empty. */
   zoneIds: string[];
   lineCount: number;

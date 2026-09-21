@@ -137,7 +137,7 @@ export interface AdminIdentityDashboard {
 /**
  * Core's block (plan 0088, section 3.2).
  *
- * `baskets` are `generated_lists`. `total`, `open` and `finished` are counted
+ * `baskets` are `baskets`. `total`, `open` and `finished` are counted
  * over `GENERATED` baskets alone, so their sum falls short of `total` only when
  * an `ARCHIVED` row exists, which is why `total` is sent rather than derived.
  * `live` counts the permanent baskets beside them (plan 0133, section 6), and it

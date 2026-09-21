@@ -294,6 +294,19 @@ first time a preserved value is the thing that broke the stack.
 `--reset-env --keep-env GEMINI_API_KEY` spares the named ones. `--keep-env` on its
 own is an error rather than a silent no-op.
 
+**A key that is renamed is a key that is preserved stale.** Plan 0144 renamed
+four of them, `GENERATED_LIST_CLAIM_WINDOW`, `GENERATED_LIST_SWEEP_ENABLED`,
+`GENERATED_LIST_SWEEP_INTERVAL` and `GENERATED_LIST_SWEEP_BATCH`, to
+`BASKET_*`. They are plain defaults rather than `DERIVED_KEYS`, so a slot whose
+`.env` predates that plan keeps the old four, where nothing reads them any more,
+and the new four take their template defaults. That is harmless for three of
+them and **wrong for `GENERATED_LIST_SWEEP_ENABLED=false`** on a slot somebody
+switched off on purpose: the sweep comes back on. Run this once after pulling:
+
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --reset-env --keep-env <the keys you pasted>
+```
+
 **A new slot dependent key belongs in `DERIVED_KEYS`.** The list is inclusive, so
 a key nobody classified is preserved rather than recomputed, and it would keep a
 stale port. A stale port is the worst failure this area has: a service pointed at

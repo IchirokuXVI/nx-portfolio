@@ -6,7 +6,7 @@ import {
   LINE_PATTERNS,
   ParticipantKind,
   SettlementOutcome,
-  type GeneratedListParticipantContext,
+  type BasketParticipantContext,
   type SettleBasketRowRequest,
   type SettleLineRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -79,9 +79,9 @@ function buildBasket(options: { servesLocations?: boolean } = {}) {
 const actor = (
   kind: ParticipantKind,
   userId: string | null
-): GeneratedListParticipantContext => ({
+): BasketParticipantContext => ({
   participantId: 'p-1',
-  generatedListId: BASKET,
+  basketId: BASKET,
   kind,
   userId,
 });

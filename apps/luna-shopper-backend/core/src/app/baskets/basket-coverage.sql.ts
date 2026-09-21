@@ -1,4 +1,4 @@
-import { WRITABLE_LIST } from '../generated-lists/generated-list.sql';
+import { WRITABLE_LIST } from '../baskets/basket.sql';
 
 /**
  * The two directions of one rule (plan 0133, section 5).
@@ -9,7 +9,7 @@ import { WRITABLE_LIST } from '../generated-lists/generated-list.sql';
  * exactly when `L` is in `listsOf(basket)` and the basket is open.
  *
  * Raw SQL with every camelCase column quoted by hand, for the reason
- * `generated-list.sql.ts` gives at length: TypeORM does not rewrite
+ * `basket.sql.ts` gives at length: TypeORM does not rewrite
  * `alias.property` inside raw SQL, and an unquoted `sl."zoneId"` reaches Postgres
  * as `zoneid` and fails at runtime where no mocked repository could catch it.
  */
@@ -49,7 +49,7 @@ const COVERS = `
  */
 export const BASKET_COVERAGE_SQL = `
   SELECT sl.id AS "listId", sl."zoneId" AS "zoneId"
-  FROM "generated_lists" gl
+  FROM "baskets" gl
   JOIN "zone_memberships" m ON m."userId" = gl."ownerUserId"
   JOIN "shopping_lists" sl ON sl."zoneId" = m."zoneId"
   WHERE gl.id = $1::uuid
@@ -75,7 +75,7 @@ export const COVERING_BASKETS_SQL = `
   SELECT gl.id AS "basketId", gl."ownerUserId" AS "ownerUserId"
   FROM "shopping_lists" sl
   JOIN "zone_memberships" m ON m."zoneId" = sl."zoneId"
-  JOIN "generated_lists" gl ON gl."ownerUserId" = m."userId"
+  JOIN "baskets" gl ON gl."ownerUserId" = m."userId"
   WHERE sl.id = $1::uuid
     AND gl."status" = 'OPEN'
     AND (${WRITABLE_LIST})
@@ -103,7 +103,7 @@ export const COVERING_BASKETS_SQL = `
 export const BASKETS_OF_ZONE_MEMBERS_SQL = `
   SELECT DISTINCT gl.id AS "basketId", gl."ownerUserId" AS "ownerUserId"
   FROM "zone_memberships" m
-  JOIN "generated_lists" gl ON gl."ownerUserId" = m."userId"
+  JOIN "baskets" gl ON gl."ownerUserId" = m."userId"
   WHERE m."zoneId" = $1::uuid
     AND m.status = 'APPROVED'
     AND gl."status" = 'OPEN'

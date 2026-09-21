@@ -98,7 +98,7 @@ that person can.
 - **Auth** owns users, operator accounts and token issuing. It sends account email over SMTP
   (Mailpit in the local compose stack) and publishes identity events.
 - **Core** owns zones, memberships, lists, lines, comments, merges, shopping profiles and baskets
-  (generated lists). It asks catalog over the broker for postal code lookups and publishes the
+  (baskets). It asks catalog over the broker for postal code lookups and publishes the
   domain events the realtime service fans out.
 - **Catalog** owns products, brands, supermarkets, shops, price scopes and every stored price. It
   publishes catalog events on the broker.

@@ -2,7 +2,7 @@ import {
   BASKET_PATTERNS,
   BasketKind,
   BasketRowState,
-  GeneratedListStatus,
+  BasketStatus,
   ITEM_PATTERNS,
   ItemCategory,
   LineApprovalStatus,
@@ -13,8 +13,8 @@ import {
   UnitOfMeasure,
   type BasketView,
   type CatalogScopeView,
-  type GeneratedListParticipantContext,
-  type GeneratedListParticipantView,
+  type BasketParticipantContext,
+  type BasketParticipantView,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
 import type { ShopperSelection } from '../catalog/scope-resolution.service';
@@ -29,7 +29,7 @@ import { SettlePriceService } from './settle-price.service';
  * 0136 moved out of the participant controller with nothing about it changed
  * except where it reads the rows from, and it is reached here through
  * `BasketController.get`, the `GET /v1/baskets/:id` that replaced
- * `GET /v1/generated-lists/:id/basket`. The spec moved with the composition it
+ * `GET /v1/baskets/:id/basket`. The spec moved with the composition it
  * proves; the rules it proves are the same ones.
  *
  * The basket read carries two things a client may ignore entirely: a `bestOffer`
@@ -50,17 +50,17 @@ const SCOPE_A = 'scope-a';
 const SCOPE_B = 'scope-b';
 
 const participant = (
-  overrides: Partial<GeneratedListParticipantContext> = {}
-): GeneratedListParticipantContext => ({
+  overrides: Partial<BasketParticipantContext> = {}
+): BasketParticipantContext => ({
   participantId: 'p-1',
-  generatedListId: BASKET_ID,
+  basketId: BASKET_ID,
   kind: ParticipantKind.GUEST,
   userId: null,
   ...overrides,
 });
 
 /** The reader's own participant row, as core hands it back on the view. */
-const me: GeneratedListParticipantView = {
+const me: BasketParticipantView = {
   id: 'p-1',
   kind: ParticipantKind.GUEST,
   displayName: null,
@@ -85,7 +85,7 @@ const basketView = (servesLocations: boolean): BasketView => ({
   id: BASKET_ID,
   kind: BasketKind.GENERATED,
   name: null,
-  status: GeneratedListStatus.OPEN,
+  status: BasketStatus.OPEN,
   createdAt: '2026-09-01T08:00:00.000Z',
   rows: [
     {

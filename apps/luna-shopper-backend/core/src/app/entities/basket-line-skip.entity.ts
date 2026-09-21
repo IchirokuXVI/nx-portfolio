@@ -7,7 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { GeneratedList } from './generated-list.entity';
+import { Basket } from './basket.entity';
 import { ListLine } from './list-line.entity';
 
 /**
@@ -71,9 +71,9 @@ export class BasketLineSkip {
   @Column({ type: 'uuid' })
   basketId!: string;
 
-  @ManyToOne(() => GeneratedList, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Basket, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'basketId' })
-  basket!: GeneratedList;
+  basket!: Basket;
 
   /** The covered zone line. It cascades too: a skip means nothing without it. */
   @Column({ type: 'uuid' })

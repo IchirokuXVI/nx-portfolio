@@ -8,7 +8,7 @@
  * it. The question they all mean is "a trip somebody composed, still being
  * shopped", and that is two columns rather than one.
  *
- * Both fragments assume the alias `gl` for `"generated_lists"`, which every
+ * Both fragments assume the alias `gl` for `"baskets"`, which every
  * query that asks them already uses. They are string fragments rather than
  * parameters for the same reason the rest of this codebase's raw SQL is written
  * by hand: an enum value is not user input, and a fragment cannot be passed the

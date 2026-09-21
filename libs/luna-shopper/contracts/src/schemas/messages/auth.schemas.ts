@@ -213,10 +213,10 @@ const mintParticipantTokenRequest = object(
   AUTH_SCHEMA_IDS.mintParticipantTokenRequest,
   {
     participantId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     kind: nonEmptyString(),
   },
-  ['participantId', 'generatedListId', 'kind']
+  ['participantId', 'basketId', 'kind']
 );
 
 const mintParticipantTokenResult = object(

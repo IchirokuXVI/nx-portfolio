@@ -6,7 +6,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
-  GeneratedListFinishedException,
+  BasketFinishedException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
@@ -61,7 +61,7 @@ export class BasketDemandService {
   async setDemand(req: SetBasketRowDemandRequest): Promise<BasketRowResult> {
     const opened = await this.context.open(req);
     if (!isOpenBasket(opened.basket.status)) {
-      throw new GeneratedListFinishedException(
+      throw new BasketFinishedException(
         'This basket is finished, so what it asks for cannot be changed'
       );
     }

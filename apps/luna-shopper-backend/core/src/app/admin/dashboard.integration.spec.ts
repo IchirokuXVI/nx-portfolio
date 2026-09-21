@@ -1,7 +1,7 @@
 import {
   ADMIN_DASHBOARD_WINDOW_DAYS,
   BasketKind,
-  GeneratedListStatus,
+  BasketStatus,
   MembershipStatus,
   ZoneRole,
   ZoneStatus,
@@ -20,7 +20,7 @@ import { CORE_MIGRATIONS } from '../db/migrations';
 import {
   CORE_ENTITIES,
   CoreAudit,
-  GeneratedList,
+  Basket,
   ShoppingList,
   Zone,
   ZoneMembership,
@@ -87,7 +87,7 @@ describeIntegration('core’s dashboard block (real Postgres)', () => {
   let zones: Repository<Zone>;
   let memberships: Repository<ZoneMembership>;
   let lists: Repository<ShoppingList>;
-  let baskets: Repository<GeneratedList>;
+  let baskets: Repository<Basket>;
   let trail: Repository<CoreAudit>;
 
   beforeAll(async () => {
@@ -117,7 +117,7 @@ describeIntegration('core’s dashboard block (real Postgres)', () => {
     zones = dataSource.getRepository(Zone);
     memberships = dataSource.getRepository(ZoneMembership);
     lists = dataSource.getRepository(ShoppingList);
-    baskets = dataSource.getRepository(GeneratedList);
+    baskets = dataSource.getRepository(Basket);
     trail = dataSource.getRepository(CoreAudit);
 
     audit = new CoreAuditService(dataSource);
@@ -182,13 +182,13 @@ describeIntegration('core’s dashboard block (real Postgres)', () => {
   }
 
   async function newBasket(
-    status: GeneratedListStatus,
+    status: BasketStatus,
     kind: BasketKind = BasketKind.GENERATED
-  ): Promise<GeneratedList> {
+  ): Promise<Basket> {
     return baskets.save(
       baskets.create({
         // A person holds one permanent basket, by
-        // `uq_generated_lists_live_owner`, so a `LIVE` one gets an owner of its
+        // `uq_baskets_live_owner`, so a `LIVE` one gets an owner of its
         // own rather than sharing the member every trip here belongs to.
         ownerUserId: kind === BasketKind.LIVE ? randomUUID() : MEMBER,
         name: null,
@@ -271,17 +271,17 @@ describeIntegration('core’s dashboard block (real Postgres)', () => {
   });
 
   it('counts the trips by status, and the permanent baskets beside them', async () => {
-    await newBasket(GeneratedListStatus.OPEN);
-    await newBasket(GeneratedListStatus.OPEN);
-    await newBasket(GeneratedListStatus.FINISHED);
+    await newBasket(BasketStatus.OPEN);
+    await newBasket(BasketStatus.OPEN);
+    await newBasket(BasketStatus.FINISHED);
     // The row that makes `total` worth sending rather than deriving from the
     // two: the reported statuses fall short of the total exactly when an
     // archived row exists.
-    await newBasket(GeneratedListStatus.ARCHIVED);
+    await newBasket(BasketStatus.ARCHIVED);
     // One permanent basket, counted on its own and outside `total` (plan 0133,
     // section 6): one row per person is a different number from how many trips
     // have been composed.
-    await newBasket(GeneratedListStatus.OPEN, BasketKind.LIVE);
+    await newBasket(BasketStatus.OPEN, BasketKind.LIVE);
 
     const block = await dashboard.dashboard(REQUEST);
 

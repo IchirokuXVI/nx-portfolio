@@ -75,7 +75,7 @@ import {
  */
 
 /**
- * From `GeneratedListParticipantView`.
+ * From `BasketParticipantView`.
  *
  * `userAgent` becomes `device`, which is what the sheet calls it, and stays
  * absent when the wire omits it. That is the difference between "guests do not
@@ -630,7 +630,7 @@ export function toBasket(raw: unknown): Basket | null {
 }
 
 /**
- * From `GeneratedListLinkPreview` (`GET /v1/share-links/:secret`).
+ * From `BasketLinkPreview` (`GET /v1/share-links/:secret`).
  *
  * **Never null**, because the route never fails by design: a link that never
  * existed, one revoked, one expired and one whose basket is finished all answer
@@ -654,7 +654,7 @@ export function toBasketLinkPreview(raw: unknown): BasketLinkPreview {
 }
 
 /**
- * From `GeneratedListJoinResult` (`POST /v1/share-links/:secret/join`).
+ * From `BasketJoinResult` (`POST /v1/share-links/:secret/join`).
  *
  * All three of the basket id, the participant and the socket token are required.
  * Without the first there is nowhere to store the credential, without the second
@@ -666,12 +666,12 @@ export function toBasketSession(raw: unknown): BasketSession | null {
     return null;
   }
 
-  const generatedListId = str(raw['generatedListId']);
+  const basketId = str(raw['basketId']);
   const participant = toBasketParticipant(raw['participant']);
   const socketToken = str(raw['socketToken']);
 
   if (
-    generatedListId === null ||
+    basketId === null ||
     participant === null ||
     socketToken === null
   ) {
@@ -679,7 +679,7 @@ export function toBasketSession(raw: unknown): BasketSession | null {
   }
 
   return {
-    generatedListId,
+    basketId,
     participantId: participant.id,
     // Null for a registered participant and for the owner, who authenticate with
     // their account token and are given no second credential.
@@ -690,7 +690,7 @@ export function toBasketSession(raw: unknown): BasketSession | null {
 }
 
 /**
- * From `GeneratedListShareLinkResult` or `GeneratedListShareLinkView`.
+ * From `BasketShareLinkResult` or `BasketShareLinkView`.
  *
  * The `GET` wraps an optional link and the `PUT` answers the view itself, so the
  * wrapper is unwrapped here rather than at both call sites. Null means the basket

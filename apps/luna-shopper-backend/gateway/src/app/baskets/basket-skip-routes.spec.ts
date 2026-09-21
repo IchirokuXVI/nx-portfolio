@@ -1,5 +1,5 @@
-import { PARTICIPANT_THROTTLE } from '../generated-lists/participant-throttler.guard';
-import { ParticipantGuard } from '../generated-lists/participant.guard';
+import { PARTICIPANT_THROTTLE } from '../baskets/participant-throttler.guard';
+import { ParticipantGuard } from '../baskets/participant.guard';
 import { BasketController } from './basket.controller';
 
 /**

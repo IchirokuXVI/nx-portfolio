@@ -31,10 +31,10 @@ interface ListIdRow {
  */
 export async function tripListsOfBasket(
   query: Query,
-  generatedListId: string
+  basketId: string
 ): Promise<string[]> {
   const rows = (await query(BASKET_TRIP_LISTS_SQL, [
-    generatedListId,
+    basketId,
   ])) as ListIdRow[];
   return rows.map((row) => row.listId);
 }

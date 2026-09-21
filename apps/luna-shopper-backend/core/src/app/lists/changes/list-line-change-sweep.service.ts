@@ -26,7 +26,7 @@ import { DELETE_STALE_CHANGES_SQL } from './list-line-change.sql';
  * is large where the other sweeps' are small: it deletes rows nobody is looking
  * at, in the order they were written.
  *
- * Shaped like {@link GeneratedListSweepService} rather than inventing a second
+ * Shaped like {@link BasketSweepService} rather than inventing a second
  * background style: an `unref`ed interval that never holds the process open, a
  * `running` flag so two ticks cannot overlap, a cap per tick, and a
  * {@link sweep} a spec calls directly with no timers involved.

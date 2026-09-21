@@ -24,7 +24,7 @@ import type {
   UpdateAdminListLineRequest,
   UpdateAdminListRequest,
 } from '@portfolio/luna-shopper/contracts';
-import { GeneratedListStatus } from '@portfolio/luna-shopper/contracts';
+import { BasketStatus } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
   decodeCursor,
@@ -35,11 +35,11 @@ import { Repository } from 'typeorm';
 import { BasketReadService } from '../baskets/basket-read.service';
 import {
   BasketSource,
-  GeneratedList,
+  Basket,
   ListLine,
   ShoppingList,
 } from '../entities';
-import { GeneratedListService } from '../generated-lists/generated-list.service';
+import { BasketService } from '../baskets/basket.service';
 import { LineService } from '../lists/line.service';
 import { ListService } from '../lists/list.service';
 import { CorePlatformAdminService } from './platform-admin.service';
@@ -76,7 +76,7 @@ interface LineCursor {
  *
  * Two aggregates rather than one, because core has two things a person would
  * call a list: a `ShoppingList` is the standing list inside a zone, and a
- * `GeneratedList` is the basket somebody took to the shop. The plan lists them
+ * `Basket` is the basket somebody took to the shop. The plan lists them
  * separately for that reason, and they filter differently because they are shaped
  * differently: a list is in a zone, and a basket belongs to a person and merely
  * drew its lines from zones.
@@ -89,7 +89,7 @@ interface LineCursor {
  * inconsistency. A list's writes all delegate to `ListService` and `LineService`,
  * so an operator's edit is the edit a member with `MANAGE` makes and it emits
  * what that emits. A basket has no such service to delegate to, because the app
- * offers no basket line editor either: since plan 0136 a `GeneratedList` is a
+ * offers no basket line editor either: since plan 0136 a `Basket` is a
  * **view** of the lines of the lists its `basket_sources` name, and there is no
  * row of its own here to edit at all. So baskets stay read only in full (plan
  * 0077, section 6.4).
@@ -106,8 +106,8 @@ export class AdminListService {
     private readonly lists: Repository<ShoppingList>,
     @InjectRepository(ListLine)
     private readonly lines: Repository<ListLine>,
-    @InjectRepository(GeneratedList)
-    private readonly baskets: Repository<GeneratedList>,
+    @InjectRepository(Basket)
+    private readonly baskets: Repository<Basket>,
     // What a basket was asked to draw from (plan 0133), which is the only thing
     // that puts a basket in a zone now that it holds no lines of its own.
     @InjectRepository(BasketSource)
@@ -119,7 +119,7 @@ export class AdminListService {
     // disagree about how large a basket is (plan 0136, section 7.5). A value
     // import, never a `type` one: a `type` import on a constructor dependency
     // erases its DI token.
-    private readonly generated: GeneratedListService,
+    private readonly generated: BasketService,
     // The rows of an **open** basket, unredacted: an operator reads what the
     // shopper reads.
     private readonly basketRead: BasketReadService
@@ -546,9 +546,9 @@ export class AdminListService {
 
   /** The rows an operator is shown, whichever half of the split answers them. */
   private async rowsOfBasket(
-    basket: GeneratedList
+    basket: Basket
   ): Promise<AdminBasketRowView[]> {
-    if (basket.status === GeneratedListStatus.OPEN) {
+    if (basket.status === BasketStatus.OPEN) {
       return (await this.basketRead.openRows(basket)).map((row) => ({
         rowKey: row.rowKey,
         content: row.content,
@@ -610,7 +610,7 @@ export class AdminListService {
  * own that the list did not have first.
  *
  * Every camelCase column is quoted by hand, for the reason the SQL in
- * `generated-list.sql.ts` gives at length: TypeORM does not rewrite
+ * `basket.sql.ts` gives at length: TypeORM does not rewrite
  * `alias.property` inside a raw select expression.
  */
 const FINISHED_BASKET_ROWS_SQL = `
@@ -683,7 +683,7 @@ function toLineView(line: ListLine, listName: string): AdminListLineView {
 }
 
 function toBasketRow(
-  basket: GeneratedList,
+  basket: Basket,
   lineCount: number,
   zoneIds: string[]
 ): AdminBasketView {

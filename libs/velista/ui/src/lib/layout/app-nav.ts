@@ -119,7 +119,7 @@ export class AppNav {
   /**
    * The third tab opens the basket being shopped, through the screen that finds it
    * (section 7). `current` is a word rather than an id, and the route table declares it
-   * before `:generatedListId` so it is never read as one.
+   * before `:basketId` so it is never read as one.
    */
   readonly basketUrl = computed(() =>
     appPath(this._locale(), this._basePath, 'shopping-lists', 'current')

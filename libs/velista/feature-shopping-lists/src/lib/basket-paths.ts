@@ -22,7 +22,7 @@ export const BASKET_PATHS = {
   /** The history listing (`0045`), and the prefix the basket sits under. */
   list: 'shopping-lists',
   /** One basket, the screen `0044` is about. Takes a generated list id. */
-  basket: 'shopping-lists/:generatedListId',
+  basket: 'shopping-lists/:basketId',
   /**
    * The guest join screen, on a short segment because it is the one path in this
    * app that gets pasted into a group chat and read aloud.
@@ -38,9 +38,9 @@ export const BASKET_PATHS = {
 export function basketPath(
   locale: string,
   basePath: string,
-  generatedListId: string
+  basketId: string
 ): string {
-  return appPath(locale, basePath, BASKET_PATHS.list, generatedListId);
+  return appPath(locale, basePath, BASKET_PATHS.list, basketId);
 }
 
 /**
@@ -78,9 +78,9 @@ export function settleSheetPath(
 export function filterSheetPath(
   locale: string,
   basePath: string,
-  generatedListId: string
+  basketId: string
 ): string {
-  return `${basketPath(locale, basePath, generatedListId)}/${sheetSegments(
+  return `${basketPath(locale, basePath, basketId)}/${sheetSegments(
     'filter'
   ).join('/')}`;
 }
@@ -89,9 +89,9 @@ export function filterSheetPath(
 export function shopPickerPath(
   locale: string,
   basePath: string,
-  generatedListId: string
+  basketId: string
 ): string {
-  return `${basketPath(locale, basePath, generatedListId)}/${sheetSegments(
+  return `${basketPath(locale, basePath, basketId)}/${sheetSegments(
     'filter',
     'shop'
   ).join('/')}`;

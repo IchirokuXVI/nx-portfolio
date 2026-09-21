@@ -129,7 +129,7 @@ async function render(
     }),
   };
 
-  const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const paramMap = convertToParamMap({ basketId: BASKET_ID });
 
   await TestBed.configureTestingModule({
     imports: [ShareSheet, RokuTranslatorTestingModule.forTesting()],

@@ -70,7 +70,7 @@ export const ERROR_CATALOG: Record<
   // move of what is outstanding, in either direction. One code with one sentence
   // that is true of every one of them beats a sentence that is exact for the
   // first caller and wrong for the second.
-  [ERROR_CODES.GENERATED_LIST_FINISHED]: {
+  [ERROR_CODES.BASKET_FINISHED]: {
     en: 'This basket is finished, so it cannot be changed.',
     es: 'Esta cesta está terminada, así que no se puede modificar.',
   },

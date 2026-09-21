@@ -7,7 +7,7 @@ import {
   type ListSuggestionsRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { DataSource } from 'typeorm';
-import { LineClaimService } from '../../generated-lists/line-claim.service';
+import { LineClaimService } from '../../baskets/line-claim.service';
 import { ListAccessService } from '../list-access.service';
 import {
   daysBetween,

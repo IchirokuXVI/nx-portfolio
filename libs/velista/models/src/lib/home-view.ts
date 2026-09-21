@@ -91,7 +91,7 @@ export interface ZoneCardVm {
  * to remember, which meant it had to be talked out of showing a list the reader had
  * been removed from, one written by a build that stored a different shape, or one they
  * merely glanced at once. `ShoppingListCardVm` in `shopping-lists-view.ts` answers the
- * same question from the server: an `ACTIVE` generated list exists for this account or
+ * same question from the server: an `ACTIVE` basket exists for this account or
  * it does not, so there is no stale case left to defend against.
  *
  * The **write** of `StorageKeys.lastList` survives, because the list page still records

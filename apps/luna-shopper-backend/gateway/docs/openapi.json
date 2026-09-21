@@ -8576,7 +8576,428 @@
         ]
       }
     },
+    "/v1/baskets": {
+      "post": {
+        "operationId": "BasketsController_create_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBasketDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `basket.create` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketRunResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      },
+      "get": {
+        "operationId": "BasketsController_listMine_v1",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "The `nextCursor` of the previous page. Opaque.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "includeArchived",
+            "required": false,
+            "in": "query",
+            "description": "Include archived baskets, which the default listing leaves out without deleting them.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.listMine` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/shared": {
+      "get": {
+        "operationId": "BasketsController_listShared_v1",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "The `nextCursor` of the previous page. Opaque.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Composed by the gateway from more than one service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.SharedBasketPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
     "/v1/baskets/{id}": {
+      "patch": {
+        "operationId": "BasketsController_update_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBasketDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `basket.update` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket.BasketHeaderView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      },
+      "delete": {
+        "operationId": "BasketsController_remove_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.delete` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      },
       "get": {
         "operationId": "BasketController_get_v1",
         "parameters": [
@@ -8719,7 +9140,7 @@
             }
           },
           "409": {
-            "description": "`generated_list_finished` — This basket is finished, so it cannot be changed.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8827,7 +9248,7 @@
             }
           },
           "409": {
-            "description": "`generated_list_finished` — This basket is finished, so it cannot be changed.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8945,7 +9366,7 @@
             }
           },
           "409": {
-            "description": "`generated_list_finished` — This basket is finished, so it cannot be changed.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9063,7 +9484,7 @@
             }
           },
           "409": {
-            "description": "`generated_list_finished` — This basket is finished, so it cannot be changed.\n\n`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9151,7 +9572,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.\n\n`generated_list_finished` — This basket is finished, so it cannot be changed.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`basket_finished` — This basket is finished, so it cannot be changed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9237,7 +9658,7 @@
             }
           },
           "409": {
-            "description": "`generated_list_finished` — This basket is finished, so it cannot be changed.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9347,7 +9768,7 @@
             }
           },
           "409": {
-            "description": "`generated_list_finished` — This basket is finished, so it cannot be changed.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9608,6 +10029,873 @@
           },
           "401": {
             "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/participants/mine": {
+      "get": {
+        "operationId": "BasketParticipantController_listParticipants_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.participant.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket-sharing.ParticipantListResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      },
+      "delete": {
+        "operationId": "BasketParticipantController_leave_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.participant.leave` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.basket.participant.revoke.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/participant-token": {
+      "post": {
+        "operationId": "BasketParticipantController_refreshToken_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Composed by the gateway from more than one service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket-sharing.ParticipantTokenResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/share-link": {
+      "put": {
+        "operationId": "BasketShareController_ensureLink_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.shareLink.ensure` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket-sharing.ShareLinkView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      },
+      "get": {
+        "operationId": "BasketShareController_getLink_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.shareLink.get` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket-sharing.ShareLinkResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      },
+      "delete": {
+        "operationId": "BasketShareController_revokeLink_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revokeParticipants",
+            "required": false,
+            "in": "query",
+            "description": "Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.shareLink.revoke` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.basket.shareLink.revoke.response"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/participants": {
+      "get": {
+        "operationId": "BasketShareController_listParticipants_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.participant.list` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket-sharing.ParticipantListResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      },
+      "post": {
+        "operationId": "BasketShareController_addParticipant_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddBasketParticipantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `basket.participant.add` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket-sharing.ParticipantView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/baskets/{id}/participants/{participantId}": {
+      "delete": {
+        "operationId": "BasketShareController_revokeParticipant_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "participantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.participant.revoke` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.basket.participant.revoke.response"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/share-links/{secret}": {
+      "get": {
+        "operationId": "ShareLinkController_preview_v1",
+        "parameters": [
+          {
+            "name": "secret",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `basket.shareLink.preview` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket-sharing.LinkPreview"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
+    "/v1/share-links/{secret}/join": {
+      "post": {
+        "operationId": "ShareLinkController_join_v1",
+        "parameters": [
+          {
+            "name": "secret",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user-agent",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinBasketDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Composed by the gateway from more than one service.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/basket-sharing.JoinResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`not_a_participant` — You are no longer part of this shopping list.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16323,1369 +17611,6 @@
         ]
       }
     },
-    "/v1/generated-lists": {
-      "post": {
-        "operationId": "GeneratedListController_create_v1",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateGeneratedListDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "The `generatedList.create` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list.GeneratedListRunResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      },
-      "get": {
-        "operationId": "GeneratedListController_listMine_v1",
-        "parameters": [
-          {
-            "name": "cursor",
-            "required": false,
-            "in": "query",
-            "description": "The `nextCursor` of the previous page. Opaque.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "type": "number"
-            }
-          },
-          {
-            "name": "includeArchived",
-            "required": false,
-            "in": "query",
-            "description": "Include archived baskets, which the default listing leaves out without deleting them.",
-            "schema": {
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.listMine` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list.GeneratedListPage"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/generated-lists/shared": {
-      "get": {
-        "operationId": "GeneratedListController_listShared_v1",
-        "parameters": [
-          {
-            "name": "cursor",
-            "required": false,
-            "in": "query",
-            "description": "The `nextCursor` of the previous page. Opaque.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Composed by the gateway from more than one service.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list.SharedGeneratedListPage"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/generated-lists/{id}": {
-      "get": {
-        "operationId": "GeneratedListController_get_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.get` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list.GeneratedListView"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      },
-      "patch": {
-        "operationId": "GeneratedListController_update_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateGeneratedListDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The `generatedList.update` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list.GeneratedListView"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      },
-      "delete": {
-        "operationId": "GeneratedListController_remove_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.delete` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/common.IdResult"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/generated-lists/{id}/participants/mine": {
-      "get": {
-        "operationId": "GeneratedListParticipantController_listParticipants_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.participant.list` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list-sharing.ParticipantListResult"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "generated-lists"
-        ]
-      },
-      "delete": {
-        "operationId": "GeneratedListParticipantController_leave_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.participant.leave` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/msg.generatedList.participant.revoke.response"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "`forbidden` — You do not have permission to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/generated-lists/{id}/participant-token": {
-      "post": {
-        "operationId": "GeneratedListParticipantController_refreshToken_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Composed by the gateway from more than one service.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list-sharing.ParticipantTokenResult"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/generated-lists/{id}/share-link": {
-      "put": {
-        "operationId": "GeneratedListShareController_ensureLink_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.shareLink.ensure` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list-sharing.ShareLinkView"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      },
-      "get": {
-        "operationId": "GeneratedListShareController_getLink_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.shareLink.get` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list-sharing.ShareLinkResult"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      },
-      "delete": {
-        "operationId": "GeneratedListShareController_revokeLink_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "revokeParticipants",
-            "required": false,
-            "in": "query",
-            "description": "Also revoke everybody this link let in. Without it the link stops accepting new people and every existing participant keeps working, which is the common case: stop it spreading, do not throw out the people in the shop.",
-            "schema": {
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.shareLink.revoke` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/msg.generatedList.shareLink.revoke.response"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/generated-lists/{id}/participants": {
-      "get": {
-        "operationId": "GeneratedListShareController_listParticipants_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.participant.list` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list-sharing.ParticipantListResult"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      },
-      "post": {
-        "operationId": "GeneratedListShareController_addParticipant_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddGeneratedListParticipantDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "The `generatedList.participant.add` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/generated-lists/{id}/participants/{participantId}": {
-      "delete": {
-        "operationId": "GeneratedListShareController_revokeParticipant_v1",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "participantId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.participant.revoke` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/msg.generatedList.participant.revoke.response"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`unauthorized` — You need to sign in to do that.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "access-token": []
-          }
-        ],
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/share-links/{secret}": {
-      "get": {
-        "operationId": "ShareLinkController_preview_v1",
-        "parameters": [
-          {
-            "name": "secret",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The `generatedList.shareLink.preview` contract response.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list-sharing.LinkPreview"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
-    "/v1/share-links/{secret}/join": {
-      "post": {
-        "operationId": "ShareLinkController_join_v1",
-        "parameters": [
-          {
-            "name": "secret",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "user-agent",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/JoinGeneratedListDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Composed by the gateway from more than one service.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/generated-list-sharing.JoinResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "`not_a_participant` — You are no longer part of this shopping list.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "`not_found` — The requested resource was not found.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "`internal` — Something went wrong on our side. Please try again.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "generated-lists"
-        ]
-      }
-    },
     "/v1/zones/{zoneId}/merges": {
       "post": {
         "operationId": "MergeController_request_v1",
@@ -23820,6 +23745,81 @@
           "body"
         ]
       },
+      "BasketSourceDto": {
+        "type": "object",
+        "properties": {
+          "zoneId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "listId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Null means every list in the zone the caller may draw from, rather than one list within it."
+          }
+        },
+        "required": [
+          "zoneId"
+        ]
+      },
+      "CreateBasketDto": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "maxItems": 100,
+            "description": "The zones and lists to draw from. Omitted falls back to the profile named below, then to the caller default profile, which draws from everything they may write to.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BasketSourceDto"
+            }
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The shopping profile whose stored generation sources the run should use. Only consulted when no sources are given."
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120,
+            "description": "Null renders as the generation date on the client. The default is never stored, because the server does not know the reader locale."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Repeat the same key to get the basket the first call produced, rather than a second basket."
+          },
+          "memberUserIds": {
+            "maxItems": 49,
+            "uniqueItems": true,
+            "description": "People to share the basket with as it is created, chosen from GET /v1/contacts. Each must share an approved group with the caller at this moment, or the whole request is refused with validation_failed naming the ids that are not.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "UpdateBasketDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "FINISHED",
+              "ARCHIVED"
+            ]
+          }
+        }
+      },
       "SettlementOutcome": {
         "type": "string",
         "enum": [
@@ -24009,6 +24009,29 @@
         "required": [
           "through"
         ]
+      },
+      "AddBasketParticipantDto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The person to add, chosen from GET /v1/contacts. They must share an approved group with the caller at this moment."
+          }
+        },
+        "required": [
+          "userId"
+        ]
+      },
+      "JoinBasketDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "What to call this person on the screen. Unverified text on an unauthenticated link, so it is never treated as identity; skipping it gets them \"Guest N\"."
+          }
+        }
       },
       "LookupItemsDto": {
         "type": "object",
@@ -24883,104 +24906,6 @@
           "sourceKind",
           "entries"
         ]
-      },
-      "GeneratedListSourceDto": {
-        "type": "object",
-        "properties": {
-          "zoneId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "listId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true,
-            "description": "Null means every list in the zone the caller may draw from, rather than one list within it."
-          }
-        },
-        "required": [
-          "zoneId"
-        ]
-      },
-      "CreateGeneratedListDto": {
-        "type": "object",
-        "properties": {
-          "sources": {
-            "maxItems": 100,
-            "description": "The zones and lists to draw from. Omitted falls back to the profile named below, then to the caller default profile, which draws from everything they may write to.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/GeneratedListSourceDto"
-            }
-          },
-          "profileId": {
-            "type": "string",
-            "format": "uuid",
-            "description": "The shopping profile whose stored generation sources the run should use. Only consulted when no sources are given."
-          },
-          "name": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 120,
-            "description": "Null renders as the generation date on the client. The default is never stored, because the server does not know the reader locale."
-          },
-          "idempotencyKey": {
-            "type": "string",
-            "maxLength": 200,
-            "description": "Repeat the same key to get the basket the first call produced, rather than a second basket."
-          },
-          "memberUserIds": {
-            "maxItems": 49,
-            "uniqueItems": true,
-            "description": "People to share the basket with as it is created, chosen from GET /v1/contacts. Each must share an approved group with the caller at this moment, or the whole request is refused with validation_failed naming the ids that are not.",
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        }
-      },
-      "UpdateGeneratedListDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "nullable": true,
-            "maxLength": 120
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "OPEN",
-              "FINISHED",
-              "ARCHIVED"
-            ]
-          }
-        }
-      },
-      "AddGeneratedListParticipantDto": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string",
-            "format": "uuid",
-            "description": "The person to add, chosen from GET /v1/contacts. They must share an approved group with the caller at this moment."
-          }
-        },
-        "required": [
-          "userId"
-        ]
-      },
-      "JoinGeneratedListDto": {
-        "type": "object",
-        "properties": {
-          "displayName": {
-            "type": "string",
-            "maxLength": 40,
-            "description": "What to call this person on the screen. Unverified text on an unauthenticated link, so it is never treated as identity; skipping it gets them \"Guest N\"."
-          }
-        }
       },
       "RequestMergeDto": {
         "type": "object",
@@ -26080,7 +26005,7 @@
             ]
           },
           "status": {
-            "$ref": "#/components/schemas/enums.GeneratedListStatus"
+            "$ref": "#/components/schemas/enums.BasketStatus"
           },
           "zoneIds": {
             "type": "array",
@@ -26203,7 +26128,7 @@
             ]
           },
           "status": {
-            "$ref": "#/components/schemas/enums.GeneratedListStatus"
+            "$ref": "#/components/schemas/enums.BasketStatus"
           },
           "zoneIds": {
             "type": "array",
@@ -27779,6 +27704,225 @@
         ],
         "additionalProperties": false
       },
+      "basket-sharing.JoinResult": {
+        "type": "object",
+        "properties": {
+          "basketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "participant": {
+            "$ref": "#/components/schemas/basket-sharing.ParticipantView"
+          },
+          "sessionSecret": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "socketToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "socketTokenExpiresAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "basketId",
+          "participant",
+          "sessionSecret",
+          "socketToken",
+          "socketTokenExpiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "basket-sharing.LinkPreview": {
+        "type": "object",
+        "properties": {
+          "joinable": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "participantCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "joinable"
+        ],
+        "additionalProperties": false
+      },
+      "basket-sharing.ParticipantListResult": {
+        "type": "object",
+        "properties": {
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket-sharing.ParticipantView"
+            }
+          }
+        },
+        "required": [
+          "participants"
+        ],
+        "additionalProperties": false
+      },
+      "basket-sharing.ParticipantTokenResult": {
+        "type": "object",
+        "properties": {
+          "socketToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "socketTokenExpiresAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "participant": {
+            "$ref": "#/components/schemas/basket-sharing.ParticipantView"
+          }
+        },
+        "required": [
+          "socketToken",
+          "socketTokenExpiresAt",
+          "participant"
+        ],
+        "additionalProperties": false
+      },
+      "basket-sharing.ParticipantView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.ParticipantKind"
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "guestNumber": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "userId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "joinedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "shareLinkId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "userAgent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "displayName",
+          "username",
+          "guestNumber",
+          "userId",
+          "shareLinkId",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "basket-sharing.ShareLinkResult": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "$ref": "#/components/schemas/basket-sharing.ShareLinkView"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "basket-sharing.ShareLinkView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "basketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "secret": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdByParticipantId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expiresAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "participantCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "basketId",
+          "secret",
+          "createdByParticipantId",
+          "createdAt",
+          "expiresAt",
+          "participantCount"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketChangeActorView": {
         "anyOf": [
           {
@@ -27948,6 +28092,104 @@
         ],
         "additionalProperties": false
       },
+      "basket.BasketHeaderView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.BasketStatus"
+          },
+          "generatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketSourceView"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "status",
+          "generatedAt",
+          "sources"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketHistoryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.BasketStatus"
+          },
+          "generatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledLineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "boughtLineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notAvailableLineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "presentCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "status",
+          "generatedAt",
+          "lineCount",
+          "settledLineCount",
+          "boughtLineCount",
+          "notAvailableLineCount",
+          "presentCount"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketListRef": {
         "type": "object",
         "properties": {
@@ -27973,6 +28215,46 @@
           "zoneName"
         ],
         "additionalProperties": false
+      },
+      "basket.BasketOwnerView": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.BasketHistoryView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "basket.BasketPriceScopeView": {
         "type": "object",
@@ -28048,7 +28330,7 @@
             ]
           },
           "status": {
-            "$ref": "#/components/schemas/enums.GeneratedListStatus"
+            "$ref": "#/components/schemas/enums.BasketStatus"
           },
           "createdAt": {
             "type": "string",
@@ -28069,11 +28351,11 @@
           "participants": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
+              "$ref": "#/components/schemas/basket-sharing.ParticipantView"
             }
           },
           "me": {
-            "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
+            "$ref": "#/components/schemas/basket-sharing.ParticipantView"
           },
           "progress": {
             "$ref": "#/components/schemas/basket.BasketProgress"
@@ -28288,6 +28570,18 @@
         ],
         "additionalProperties": false
       },
+      "basket.BasketRunResult": {
+        "type": "object",
+        "properties": {
+          "list": {
+            "$ref": "#/components/schemas/basket.BasketHeaderView"
+          }
+        },
+        "required": [
+          "list"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketScopeLocationView": {
         "type": "object",
         "properties": {
@@ -28333,6 +28627,26 @@
         ],
         "additionalProperties": false
       },
+      "basket.BasketSourceView": {
+        "type": "object",
+        "properties": {
+          "zoneId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "zoneId",
+          "listId"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketSummaryView": {
         "type": "object",
         "properties": {
@@ -28351,6 +28665,96 @@
           "id",
           "kind",
           "progress"
+        ],
+        "additionalProperties": false
+      },
+      "basket.SharedBasketPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/basket.SharedBasketView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "basket.SharedBasketView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.BasketKind"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.BasketStatus"
+          },
+          "generatedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledLineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "boughtLineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notAvailableLineCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "presentCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "owner": {
+            "$ref": "#/components/schemas/basket.BasketOwnerView"
+          },
+          "sharedAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "status",
+          "generatedAt",
+          "lineCount",
+          "settledLineCount",
+          "boughtLineCount",
+          "notAvailableLineCount",
+          "presentCount",
+          "owner",
+          "sharedAt"
         ],
         "additionalProperties": false
       },
@@ -30450,6 +30854,14 @@
           "REMOVED"
         ]
       },
+      "enums.BasketStatus": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "FINISHED",
+          "ARCHIVED"
+        ]
+      },
       "enums.BulkOperationErrorCode": {
         "type": "string",
         "enum": [
@@ -30477,14 +30889,6 @@
           "NEW",
           "IMPORTED",
           "REJECTED"
-        ]
-      },
-      "enums.GeneratedListStatus": {
-        "type": "string",
-        "enum": [
-          "OPEN",
-          "FINISHED",
-          "ARCHIVED"
         ]
       },
       "enums.GenerationScope": {
@@ -30767,485 +31171,6 @@
           "ACTIVE",
           "MARKED_FOR_DELETION"
         ]
-      },
-      "generated-list-sharing.JoinResult": {
-        "type": "object",
-        "properties": {
-          "generatedListId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "participant": {
-            "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
-          },
-          "sessionSecret": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "socketToken": {
-            "type": "string",
-            "minLength": 1
-          },
-          "socketTokenExpiresAt": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": [
-          "generatedListId",
-          "participant",
-          "sessionSecret",
-          "socketToken",
-          "socketTokenExpiresAt"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list-sharing.LinkPreview": {
-        "type": "object",
-        "properties": {
-          "joinable": {
-            "type": "boolean"
-          },
-          "name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "participantCount": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "joinable"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list-sharing.ParticipantListResult": {
-        "type": "object",
-        "properties": {
-          "participants": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
-            }
-          }
-        },
-        "required": [
-          "participants"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list-sharing.ParticipantTokenResult": {
-        "type": "object",
-        "properties": {
-          "socketToken": {
-            "type": "string",
-            "minLength": 1
-          },
-          "socketTokenExpiresAt": {
-            "type": "string",
-            "minLength": 1
-          },
-          "participant": {
-            "$ref": "#/components/schemas/generated-list-sharing.ParticipantView"
-          }
-        },
-        "required": [
-          "socketToken",
-          "socketTokenExpiresAt",
-          "participant"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list-sharing.ParticipantView": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "kind": {
-            "$ref": "#/components/schemas/enums.ParticipantKind"
-          },
-          "displayName": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "username": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "guestNumber": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "userId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "joinedAt": {
-            "type": "string",
-            "minLength": 1
-          },
-          "lastSeenAt": {
-            "type": "string",
-            "minLength": 1
-          },
-          "shareLinkId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "userAgent": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "expiresAt": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "displayName",
-          "username",
-          "guestNumber",
-          "userId",
-          "shareLinkId",
-          "expiresAt"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list-sharing.ShareLinkResult": {
-        "type": "object",
-        "properties": {
-          "link": {
-            "$ref": "#/components/schemas/generated-list-sharing.ShareLinkView"
-          }
-        },
-        "required": [],
-        "additionalProperties": false
-      },
-      "generated-list-sharing.ShareLinkView": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "generatedListId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "secret": {
-            "type": "string",
-            "minLength": 1
-          },
-          "createdByParticipantId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "createdAt": {
-            "type": "string",
-            "minLength": 1
-          },
-          "expiresAt": {
-            "type": "string",
-            "minLength": 1
-          },
-          "participantCount": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "id",
-          "generatedListId",
-          "secret",
-          "createdByParticipantId",
-          "createdAt",
-          "expiresAt",
-          "participantCount"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list.BasketSourceView": {
-        "type": "object",
-        "properties": {
-          "zoneId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "listId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "zoneId",
-          "listId"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list.GeneratedListOwnerView": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "userId",
-          "name"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list.GeneratedListPage": {
-        "type": "object",
-        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
-        "additionalProperties": false,
-        "required": [
-          "items",
-          "nextCursor"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/generated-list.GeneratedListSummaryView"
-            }
-          },
-          "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "generated-list.GeneratedListRunResult": {
-        "type": "object",
-        "properties": {
-          "list": {
-            "$ref": "#/components/schemas/generated-list.GeneratedListView"
-          }
-        },
-        "required": [
-          "list"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list.GeneratedListSummaryView": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "kind": {
-            "$ref": "#/components/schemas/enums.BasketKind"
-          },
-          "name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "status": {
-            "$ref": "#/components/schemas/enums.GeneratedListStatus"
-          },
-          "generatedAt": {
-            "type": "string",
-            "minLength": 1
-          },
-          "lineCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "settledLineCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "boughtLineCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "notAvailableLineCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "presentCount": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "name",
-          "status",
-          "generatedAt",
-          "lineCount",
-          "settledLineCount",
-          "boughtLineCount",
-          "notAvailableLineCount",
-          "presentCount"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list.GeneratedListView": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "kind": {
-            "$ref": "#/components/schemas/enums.BasketKind"
-          },
-          "name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "status": {
-            "$ref": "#/components/schemas/enums.GeneratedListStatus"
-          },
-          "generatedAt": {
-            "type": "string",
-            "minLength": 1
-          },
-          "sources": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/generated-list.BasketSourceView"
-            }
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "name",
-          "status",
-          "generatedAt",
-          "sources"
-        ],
-        "additionalProperties": false
-      },
-      "generated-list.SharedGeneratedListPage": {
-        "type": "object",
-        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
-        "additionalProperties": false,
-        "required": [
-          "items",
-          "nextCursor"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/generated-list.SharedGeneratedListView"
-            }
-          },
-          "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "generated-list.SharedGeneratedListView": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "kind": {
-            "$ref": "#/components/schemas/enums.BasketKind"
-          },
-          "name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "status": {
-            "$ref": "#/components/schemas/enums.GeneratedListStatus"
-          },
-          "generatedAt": {
-            "type": "string",
-            "minLength": 1
-          },
-          "lineCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "settledLineCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "boughtLineCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "notAvailableLineCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "presentCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "owner": {
-            "$ref": "#/components/schemas/generated-list.GeneratedListOwnerView"
-          },
-          "sharedAt": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "name",
-          "status",
-          "generatedAt",
-          "lineCount",
-          "settledLineCount",
-          "boughtLineCount",
-          "notAvailableLineCount",
-          "presentCount",
-          "owner",
-          "sharedAt"
-        ],
-        "additionalProperties": false
       },
       "harvest.AdapterCapabilityTable": {
         "type": "object",
@@ -33790,7 +33715,7 @@
         ],
         "additionalProperties": false
       },
-      "msg.generatedList.participant.revoke.response": {
+      "msg.basket.participant.revoke.response": {
         "type": "object",
         "properties": {
           "id": {
@@ -33803,7 +33728,7 @@
         ],
         "additionalProperties": false
       },
-      "msg.generatedList.shareLink.revoke.response": {
+      "msg.basket.shareLink.revoke.response": {
         "type": "object",
         "properties": {
           "revoked": {
@@ -34014,7 +33939,7 @@
               "rate_limited",
               "not_configured",
               "client_too_old",
-              "generated_list_finished",
+              "basket_finished",
               "stale_quantity",
               "account_locked",
               "postal_code_unknown",

@@ -44,7 +44,7 @@ export interface ParticipantNameOptions {
   /**
    * The reader's own account username, for their own row.
    *
-   * **Core stores no `displayName` for an `OWNER`** (`generated-list-sharing.service.ts`
+   * **Core stores no `displayName` for an `OWNER`** (`basket-sharing.service.ts`
    * creates the row with a null name and a null guest number), so the owner's own
    * participant arrives anonymous and there is nothing on the basket to name them
    * with. The account knows, and only for the reader themself: nobody else's username

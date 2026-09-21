@@ -9,7 +9,7 @@ import { toRealtimeEvent } from './realtime-event-mapper';
  * that stops matching the server's is the same silence again, which is why every
  * payload here is written the way core actually emits it.
  *
- * **Four line events became one.** `generatedList.lineSettled`, `lineUpdated`,
+ * **Four line events became one.** `basket.lineSettled`, `lineUpdated`,
  * `lineAdded` and `lineRemoved` each carried a line, and a basket stores no lines
  * since backend `0136`: a row is read out of the covered lists on every request, so
  * an event that said what a row now is would be a second answer to a question only
@@ -74,16 +74,16 @@ describe('the basket room, off the wire', () => {
     const event = toRealtimeEvent('basket.linesChanged', {
       lineIds: ['zl-1'],
       // Ignored even when a server sends one: the room is what says which basket.
-      generatedListId: 'gl-1',
+      basketId: 'gl-1',
     });
 
-    expect(event).not.toHaveProperty('generatedListId');
+    expect(event).not.toHaveProperty('basketId');
   });
 
   it('reads a participant joining, which arrives bare', () => {
     // No basket id on the payload, and it needs none: it arrives only on a
     // connection pinned to one basket.
-    const event = toRealtimeEvent('generatedList.participantJoined', {
+    const event = toRealtimeEvent('basket.participantJoined', {
       id: 'p-3',
       kind: 'GUEST',
       displayName: null,
@@ -95,7 +95,7 @@ describe('the basket room, off the wire', () => {
     });
 
     expect(event).toMatchObject({
-      type: 'generatedList.participantJoined',
+      type: 'basket.participantJoined',
       participant: { id: 'p-3', kind: 'GUEST', guestNumber: 2 },
     });
   });
@@ -103,8 +103,8 @@ describe('the basket room, off the wire', () => {
   it('reads who is present, keyed by participant and never by user', () => {
     // A guest has no user id at all, which is exactly what a presence entry built on
     // `PresenceUser` could not express, and why this is its own shape.
-    const event = toRealtimeEvent('presence.generatedListUpdated', {
-      generatedListId: 'gl-1',
+    const event = toRealtimeEvent('presence.basketUpdated', {
+      basketId: 'gl-1',
       present: [
         {
           participantId: 'p-3',
@@ -117,8 +117,8 @@ describe('the basket room, off the wire', () => {
     });
 
     expect(event).toEqual({
-      type: 'presence.generatedListUpdated',
-      generatedListId: 'gl-1',
+      type: 'presence.basketUpdated',
+      basketId: 'gl-1',
       present: [
         {
           participantId: 'p-3',
@@ -132,8 +132,8 @@ describe('the basket room, off the wire', () => {
   });
 
   it('drops one unreadable face rather than emptying a full shop', () => {
-    const event = toRealtimeEvent('presence.generatedListUpdated', {
-      generatedListId: 'gl-1',
+    const event = toRealtimeEvent('presence.basketUpdated', {
+      basketId: 'gl-1',
       present: [
         { kind: 'GUEST' },
         {

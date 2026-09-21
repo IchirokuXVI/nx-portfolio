@@ -16,7 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
-import { COVERED_LINES_SQL } from '../baskets/basket.sql';
+import { COVERED_LINES_SQL } from '../baskets/basket-read.sql';
 import {
   CommentAudio,
   CORE_ENTITIES,
@@ -31,8 +31,8 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
-import {} from '../generated-lists/generated-list.sql';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import {} from '../baskets/basket.sql';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { MergeService } from '../merge/merge.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { LIST_COUNTS_SQL } from '../zones/zone-summary.sql';
@@ -269,7 +269,7 @@ describeIntegration(
       it('does not return a soft deleted line to a locking findOne', async () => {
         // The load bearing one (plan 0132, section 9, test 1). A basket settle
         // reads its origin with exactly this call
-        // (`generated-list-settle.service.ts`), and the reopen does too. If the
+        // (`basket-settle.service.ts`), and the reopen does too. If the
         // column did not reach a locked read, a soft deleted origin would settle
         // as though it still stood instead of reporting ORIGIN_DELETED.
         const line = await seedLine('Milk');

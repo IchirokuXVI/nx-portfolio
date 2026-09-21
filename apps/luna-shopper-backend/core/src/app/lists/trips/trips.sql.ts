@@ -2,7 +2,7 @@ import {
   GENERATED_BASKET,
   OPEN_GENERATED_BASKET,
 } from '../../baskets/open-basket.sql';
-import { WRITABLE_LIST } from '../../generated-lists/generated-list.sql';
+import { WRITABLE_LIST } from '../../baskets/basket.sql';
 import { basketAskedCte } from './basket-asked.sql';
 
 /**
@@ -30,7 +30,7 @@ import { basketAskedCte } from './basket-asked.sql';
  * ## Which purchase belongs to which kind of trip
  *
  * One test, asked the same way in every query below (plan 0134, section 4.1):
- * **does `basketId` name a row of `generated_lists` whose kind is `GENERATED`?**
+ * **does `basketId` name a row of `baskets` whose kind is `GENERATED`?**
  * The column has no foreign key, so after a basket is deleted it names a row that
  * is gone. A purchase whose basket exists and is `GENERATED` is that basket's.
  * Every other standing purchase of the list is a session purchase: the ones made
@@ -102,7 +102,7 @@ function basketRowsCte(basketParam: string | null): string {
            (ARRAY_AGG(s."outcome"::text ORDER BY s."settledAt" DESC, s.id DESC))[1]
              AS "lastOutcome"
     FROM "line_settlements" s
-    JOIN "generated_lists" gl ON gl.id = s."basketId" AND ${GENERATED_BASKET}
+    JOIN "baskets" gl ON gl.id = s."basketId" AND ${GENERATED_BASKET}
     WHERE s."listId" = $1::uuid
       AND s."revertedAt" IS NULL ${boughtFilter}
     GROUP BY s."basketId", s."lineId"
@@ -172,13 +172,13 @@ const LOOSE_ROWS_CTE = `
       ON ll.id = s."lineId"
      AND ll."listId" = $1::uuid
      AND ll."deletedAt" IS NULL
-    LEFT JOIN "generated_list_participants" p
+    LEFT JOIN "basket_participants" p
       ON p.id = s."settledByParticipantId"
     WHERE s."listId" = $1::uuid
       AND s."revertedAt" IS NULL
       AND NOT EXISTS (
         SELECT 1
-        FROM "generated_lists" gl
+        FROM "baskets" gl
         WHERE gl.id = s."basketId"
           AND ${GENERATED_BASKET}
       )
@@ -255,7 +255,7 @@ const TRIPS_CTE = `
              WHERE r."bought" > 0 AND r."bought" >= r."asked"
            ))::int AS "boughtLineCount"
     FROM "basket_rows" r
-    JOIN "generated_lists" gl ON gl.id = r."tripId"
+    JOIN "baskets" gl ON gl.id = r."tripId"
     GROUP BY gl.id
     UNION ALL
     SELECT r."tripId" AS "id",
@@ -318,7 +318,7 @@ export const ENDED_TRIPS_SQL = `
         SELECT b."at", b."id"
         FROM (
           SELECT gl."generatedAt" AS "at", gl.id AS "id"
-          FROM "generated_lists" gl
+          FROM "baskets" gl
           WHERE $5::text = 'BASKET' AND gl.id = $4::uuid
           UNION ALL
           SELECT s."settledAt" AS "at", s.id AS "id"
@@ -415,7 +415,7 @@ export const LOOSE_TRIP_ROWS_SQL = `
  */
 export const BASKET_TRIP_LISTS_SQL = `
   SELECT DISTINCT sl.id AS "listId"
-  FROM "generated_lists" gl
+  FROM "baskets" gl
   JOIN "zone_memberships" m ON m."userId" = gl."ownerUserId"
   JOIN "shopping_lists" sl ON sl."zoneId" = m."zoneId"
   WHERE gl.id = $1::uuid
@@ -432,7 +432,7 @@ export const BASKET_TRIP_LISTS_SQL = `
 /** The lists any basket of one owner is a trip of. `$1` is the owner. */
 export const OWNER_TRIP_LISTS_SQL = `
   SELECT DISTINCT sl.id AS "listId"
-  FROM "generated_lists" gl
+  FROM "baskets" gl
   JOIN "zone_memberships" m ON m."userId" = gl."ownerUserId"
   JOIN "shopping_lists" sl ON sl."zoneId" = m."zoneId"
   WHERE gl."ownerUserId" = $1::uuid

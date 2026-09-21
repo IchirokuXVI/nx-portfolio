@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { BasketSource, GeneratedList } from '../entities';
+import { BasketSource, Basket } from '../entities';
 import { CoreEventsModule } from '../events/core-events.module';
 import { BasketAnnouncer } from './basket-announcer.service';
 import { BasketCoverageService } from './basket-coverage.service';
@@ -9,11 +9,11 @@ import { BasketCoverageService } from './basket-coverage.service';
  * What a basket covers, in a module of its own (plan 0133, section 5).
  *
  * It stands alone for the reason `LineClaimModule` does, and for the same shape
- * of problem: `GeneratedListsModule` needs it now, `ListsModule` needs it in plan
+ * of problem: `BasketsModule` needs it now, `ListsModule` needs it in plan
  * 0139, and those two already point one way, so a module either of them owned
  * could not be reached from the other.
  *
- * It registers `GeneratedList` and `BasketSource` and nothing else. Every one of
+ * It registers `Basket` and `BasketSource` and nothing else. Every one of
  * its queries is raw SQL over the whole join, so the repository is a connection
  * rather than a mapper, and nothing here writes.
  *
@@ -27,7 +27,7 @@ import { BasketCoverageService } from './basket-coverage.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([GeneratedList, BasketSource]),
+    TypeOrmModule.forFeature([Basket, BasketSource]),
     CoreEventsModule,
   ],
   providers: [BasketCoverageService, BasketAnnouncer],

@@ -1,9 +1,15 @@
 import {
+  BasketKind,
   BasketRowMark,
   BasketRowNote,
   BasketRowState,
+  BasketStatus,
 } from '../../lib/enums/basket.enums';
-import { BASKET_PATTERNS } from '../../lib/messages/basket.messages';
+import { BASKET_SHARING_LIMITS } from '../../lib/messages/basket-sharing.messages';
+import {
+  BASKET_LIMITS,
+  BASKET_PATTERNS,
+} from '../../lib/messages/basket.messages';
 import { LINE_QUANTITY_MAX } from '../../lib/messages/list.messages';
 import {
   array,
@@ -14,14 +20,16 @@ import {
   nonEmptyString,
   nullableString,
   object,
+  paginated,
   ref,
   schemaId,
   string,
 } from '../builders';
+import { COMMON_IDS } from '../common.schemas';
 import { ENUM_IDS } from '../enums.schemas';
+import { AUTH_SCHEMA_IDS } from './auth.schemas';
+import { BASKET_SHARING_SCHEMA_IDS } from './basket-sharing.schemas';
 import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
-import { GENERATED_LIST_SHARING_SCHEMA_IDS } from './generated-list-sharing.schemas';
-import { GENERATED_LIST_SCHEMA_IDS } from './generated-list.schemas';
 import { LIST_SCHEMA_IDS } from './list.schemas';
 
 /**
@@ -56,6 +64,28 @@ export const BASKET_SCHEMA_IDS = {
   renameRequest: schemaId('msg/basket.row.rename/request'),
   skipRequest: schemaId('msg/basket.row.skip/request'),
   addLineRequest: schemaId('msg/basket.line.add/request'),
+  basketKind: schemaId('enums/BasketKind'),
+  basketStatus: schemaId('enums/BasketStatus'),
+  basketSourceView: schemaId('basket/BasketSourceView'),
+  /** The header a run answers: the basket's own fields and its sources. */
+  headerView: schemaId('basket/BasketHeaderView'),
+  /** One row of the history listing (plan 0050, section 7). */
+  historyView: schemaId('basket/BasketHistoryView'),
+  runResult: schemaId('basket/BasketRunResult'),
+  page: schemaId('basket/BasketPage'),
+  sourceInput: schemaId('basket/BasketSourceInput'),
+  createRequest: schemaId('msg/basket.create/request'),
+  idRequest: schemaId('msg/basket.id/request'),
+  listMineRequest: schemaId('msg/basket.listMine/request'),
+  updateRequest: schemaId('msg/basket.update/request'),
+  // The baskets shared with the caller (plan 0114, section 8).
+  listSharedRequest: schemaId('msg/basket.listShared/request'),
+  sharedCoreView: schemaId('basket/SharedBasketCoreView'),
+  sharedCorePage: schemaId('basket/SharedBasketCorePage'),
+  ownerView: schemaId('basket/BasketOwnerView'),
+  /** The gateway's composed row: core's, with the owner named (section 9). */
+  sharedView: schemaId('basket/SharedBasketView'),
+  sharedPage: schemaId('basket/SharedBasketPage'),
 } as const;
 
 const rowState = enumOf(
@@ -143,14 +173,14 @@ const progress = object(
 /** Core's own answer. The gateway's adds `products` and `scopes` below. */
 const viewProperties = {
   id: nonEmptyString(),
-  kind: ref(GENERATED_LIST_SCHEMA_IDS.basketKind),
+  kind: ref(BASKET_SCHEMA_IDS.basketKind),
   name: nullableString(),
-  status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
+  status: ref(BASKET_SCHEMA_IDS.basketStatus),
   createdAt: nonEmptyString(),
   rows: array(ref(BASKET_SCHEMA_IDS.rowView)),
   lists: array(ref(BASKET_SCHEMA_IDS.listRef)),
-  participants: array(ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView)),
-  me: ref(GENERATED_LIST_SHARING_SCHEMA_IDS.participantView),
+  participants: array(ref(BASKET_SHARING_SCHEMA_IDS.participantView)),
+  me: ref(BASKET_SHARING_SCHEMA_IDS.participantView),
   progress: ref(BASKET_SCHEMA_IDS.progress),
   truncated: boolean(),
   servesLocations: boolean(),
@@ -183,7 +213,7 @@ const summaryView = object(
   BASKET_SCHEMA_IDS.summaryView,
   {
     id: nonEmptyString(),
-    kind: ref(GENERATED_LIST_SCHEMA_IDS.basketKind),
+    kind: ref(BASKET_SCHEMA_IDS.basketKind),
     progress: ref(BASKET_SCHEMA_IDS.progress),
   },
   ['id', 'kind', 'progress']
@@ -368,6 +398,191 @@ const addLineRequest = object(
   ['basketId', 'participantId', 'userId', 'targetListId', 'content']
 );
 
+
+
+
+
+// --- Schemas for the header, the history and the run (plan 0050) -------------
+
+// What an owner's line edit answers: the surviving line, and the basket line a
+// rename merged away when there was one (plan 0113). Absent when nothing merged.
+/**
+ * One source of a basket, as it was named (plan 0133, section 4).
+ *
+ * A registered schema of its own rather than an object inlined into the views
+ * that hold it, and that is a rule of this file rather than a preference: a
+ * nested `$id` opens a new resolution scope inside its parent, which leaves the
+ * sibling schemas registered after it unreachable and turns every `$ref` to them
+ * into "can't resolve reference" at compile time. Every schema here is top level
+ * and referenced by id.
+ *
+ * `listId` is nullable and null is the meaning rather than the absence: it says
+ * every list of the zone the owner can write.
+ */
+const basketSourceView = object(
+  BASKET_SCHEMA_IDS.basketSourceView,
+  { zoneId: nonEmptyString(), listId: nullableString() },
+  ['zoneId', 'listId']
+);
+
+const headerView = object(
+  BASKET_SCHEMA_IDS.headerView,
+  {
+    id: nonEmptyString(),
+    kind: ref(BASKET_SCHEMA_IDS.basketKind),
+    // Null is the value the client renders as the generation date, because core
+    // has no locale to render it in (plan 0050, section 1).
+    name: nullableString(),
+    status: ref(BASKET_SCHEMA_IDS.basketStatus),
+    generatedAt: nonEmptyString(),
+    sources: array(ref(BASKET_SCHEMA_IDS.basketSourceView)),
+  },
+  ['id', 'kind', 'name', 'status', 'generatedAt', 'sources']
+);
+
+const historyViewProperties = {
+  id: nonEmptyString(),
+  kind: ref(BASKET_SCHEMA_IDS.basketKind),
+  name: nullableString(),
+  status: ref(BASKET_SCHEMA_IDS.basketStatus),
+  generatedAt: nonEmptyString(),
+  lineCount: integer({ minimum: 0 }),
+  settledLineCount: integer({ minimum: 0 }),
+  boughtLineCount: integer({ minimum: 0 }),
+  notAvailableLineCount: integer({ minimum: 0 }),
+  presentCount: integer({ minimum: 0 }),
+};
+
+const historyViewRequired = [
+  'id',
+  'kind',
+  'name',
+  'status',
+  'generatedAt',
+  'lineCount',
+  'settledLineCount',
+  'boughtLineCount',
+  'notAvailableLineCount',
+  'presentCount',
+];
+
+const historyView = object(
+  BASKET_SCHEMA_IDS.historyView,
+  historyViewProperties,
+  historyViewRequired
+);
+
+// A shared basket as core answers it (plan 0114, section 8): a history row, its
+// owner, the owner's name in the one group the two people share, and the date.
+const sharedCoreView = object(
+  BASKET_SCHEMA_IDS.sharedCoreView,
+  {
+    ...historyViewProperties,
+    ownerUserId: nonEmptyString(),
+    // Null when the two people share no approved group or several, which is the
+    // gateway's cue to ask auth for the global name (section 9).
+    ownerZoneUsername: nullableString(),
+    sharedAt: nonEmptyString(),
+  },
+  [...historyViewRequired, 'ownerUserId', 'ownerZoneUsername', 'sharedAt']
+);
+
+const ownerView = object(
+  BASKET_SCHEMA_IDS.ownerView,
+  { userId: nonEmptyString(), name: string() },
+  ['userId', 'name']
+);
+
+// The same row once the gateway has named the owner, which is what the route
+// answers.
+const sharedView = object(
+  BASKET_SCHEMA_IDS.sharedView,
+  {
+    ...historyViewProperties,
+    owner: ref(BASKET_SCHEMA_IDS.ownerView),
+    sharedAt: nonEmptyString(),
+  },
+  [...historyViewRequired, 'owner', 'sharedAt']
+);
+
+const runResult = object(
+  BASKET_SCHEMA_IDS.runResult,
+  { list: ref(BASKET_SCHEMA_IDS.headerView) },
+  ['list']
+);
+
+const sourceInput = object(
+  BASKET_SCHEMA_IDS.sourceInput,
+  { zoneId: nonEmptyString(), listId: nullableString() },
+  ['zoneId']
+);
+
+const createRequest = object(
+  BASKET_SCHEMA_IDS.createRequest,
+  {
+    userId: nonEmptyString(),
+    sources: array(ref(BASKET_SCHEMA_IDS.sourceInput)),
+    profileId: nonEmptyString(),
+    name: {
+      type: ['string', 'null'],
+      maxLength: BASKET_LIMITS.nameMaxLength,
+    },
+    defaultTargetListId: nullableString(),
+    idempotencyKey: nonEmptyString(),
+    // The people to share the basket with as it is created (plan 0114, section 4).
+    memberUserIds: {
+      ...array(nonEmptyString()),
+      maxItems: BASKET_SHARING_LIMITS.maxParticipants - 1,
+      uniqueItems: true,
+    },
+    globalUsernames: array(ref(AUTH_SCHEMA_IDS.userUsernameView)),
+  },
+  ['userId']
+);
+
+const idRequest = object(
+  BASKET_SCHEMA_IDS.idRequest,
+  { userId: nonEmptyString(), basketId: nonEmptyString() },
+  ['userId', 'basketId']
+);
+
+const listMineRequest = object(
+  BASKET_SCHEMA_IDS.listMineRequest,
+  {
+    userId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+    includeArchived: boolean(),
+  },
+  ['userId']
+);
+
+const listSharedRequest = object(
+  BASKET_SCHEMA_IDS.listSharedRequest,
+  {
+    userId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId']
+);
+
+const updateRequest = object(
+  BASKET_SCHEMA_IDS.updateRequest,
+  {
+    userId: nonEmptyString(),
+    basketId: nonEmptyString(),
+    name: {
+      type: ['string', 'null'],
+      maxLength: BASKET_LIMITS.nameMaxLength,
+    },
+    status: ref(BASKET_SCHEMA_IDS.basketStatus),
+    defaultTargetListId: nullableString(),
+  },
+  ['userId', 'basketId']
+);
+
 export const basketSchemas: JsonSchema[] = [
   rowState,
   rowNote,
@@ -391,6 +606,24 @@ export const basketSchemas: JsonSchema[] = [
   demandRequest,
   renameRequest,
   addLineRequest,
+  enumOf(BASKET_SCHEMA_IDS.basketKind, Object.values(BasketKind)),
+  enumOf(BASKET_SCHEMA_IDS.basketStatus, Object.values(BasketStatus)),
+  basketSourceView,
+  headerView,
+  historyView,
+  runResult,
+  paginated(BASKET_SCHEMA_IDS.page, BASKET_SCHEMA_IDS.historyView),
+  sharedCoreView,
+  ownerView,
+  sharedView,
+  paginated(BASKET_SCHEMA_IDS.sharedCorePage, BASKET_SCHEMA_IDS.sharedCoreView),
+  paginated(BASKET_SCHEMA_IDS.sharedPage, BASKET_SCHEMA_IDS.sharedView),
+  sourceInput,
+  createRequest,
+  idRequest,
+  listMineRequest,
+  listSharedRequest,
+  updateRequest,
 ];
 
 export const basketMessageContracts: Record<
@@ -440,5 +673,27 @@ export const basketMessageContracts: Record<
   [BASKET_PATTERNS.searchScope]: {
     request: BASKET_SCHEMA_IDS.getRequest,
     response: BASKET_SCHEMA_IDS.searchScope,
+  },
+  [BASKET_PATTERNS.create]: {
+    request: BASKET_SCHEMA_IDS.createRequest,
+    response: BASKET_SCHEMA_IDS.runResult,
+  },
+  [BASKET_PATTERNS.listMine]: {
+    request: BASKET_SCHEMA_IDS.listMineRequest,
+    response: BASKET_SCHEMA_IDS.page,
+  },
+  [BASKET_PATTERNS.listShared]: {
+    request: BASKET_SCHEMA_IDS.listSharedRequest,
+    // Core's page, with the owner half named. The route answers `sharedPage`,
+    // which the gateway composes from this and auth.
+    response: BASKET_SCHEMA_IDS.sharedCorePage,
+  },
+  [BASKET_PATTERNS.update]: {
+    request: BASKET_SCHEMA_IDS.updateRequest,
+    response: BASKET_SCHEMA_IDS.headerView,
+  },
+  [BASKET_PATTERNS.delete]: {
+    request: BASKET_SCHEMA_IDS.idRequest,
+    response: COMMON_IDS.idResult,
   },
 };

@@ -12,7 +12,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   ContactStore,
-  GeneratedListStore,
+  BasketListStore,
   LIST_SERVICE,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileStore,
@@ -24,9 +24,9 @@ import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
 import {
   APP_BASE_PATH,
   formatGeneratedDate,
-  GENERATED_LIST_NAME_MAX_LENGTH,
+  BASKET_NAME_MAX_LENGTH,
   groupContacts,
-  type GeneratedListSource,
+  type BasketSource,
   type ProfileGenerationScope,
 } from '@portfolio/velista/models';
 import { appPath, SheetNavigation } from '@portfolio/velista/platform';
@@ -134,7 +134,7 @@ const MAX_LIST_PAGES = 100;
 })
 export class GetListSheet {
   private readonly _zones = inject(ZoneStore);
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
   private readonly _profiles = inject(ShoppingProfileStore);
   /**
    * The profile service directly, for the generation scope and nothing else.
@@ -189,7 +189,7 @@ export class GetListSheet {
    */
   readonly showHistory = this._returnTo !== 'shopping-lists';
 
-  readonly maxLength = GENERATED_LIST_NAME_MAX_LENGTH;
+  readonly maxLength = BASKET_NAME_MAX_LENGTH;
 
   readonly name = signal('');
   readonly submitting = signal(false);
@@ -303,8 +303,8 @@ export class GetListSheet {
   readonly showProfiles = computed(() => this.profiles().length > 1);
 
   /** What Generate will send. Empty means nothing is ticked and the submit is off. */
-  readonly sources = computed<readonly GeneratedListSource[]>(() => {
-    const sources: GeneratedListSource[] = [];
+  readonly sources = computed<readonly BasketSource[]>(() => {
+    const sources: BasketSource[] = [];
 
     for (const zone of this.zones()) {
       const chosen = this._selectionOf(zone.id);
