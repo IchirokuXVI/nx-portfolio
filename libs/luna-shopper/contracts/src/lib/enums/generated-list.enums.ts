@@ -89,6 +89,16 @@ export enum ParticipantEndedReason {
   LINK_REVOKED = 'LINK_REVOKED',
   /** The person left on their own. */
   LEFT = 'LEFT',
+  /**
+   * Their twelve hours ran out and the sweep wrote it down (plan 0140,
+   * section 7).
+   *
+   * Beside {@link LEFT} as a reason the link can undo: nobody refused them, so
+   * a fresh link brings the same row back with a new expiry. The row is ended
+   * by a clock rather than by a person, which is why the owner is not the one
+   * who has to take it back.
+   */
+  EXPIRED = 'EXPIRED',
 }
 
 /**

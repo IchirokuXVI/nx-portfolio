@@ -1,15 +1,18 @@
 import {
   GeneratedListStatus,
+  ParticipantEndedReason,
   ParticipantKind,
   RealtimeEvent,
 } from '@portfolio/luna-shopper/contracts';
 import { DomainException } from '@portfolio/luna-shopper/platform';
 import { createHash } from 'node:crypto';
-import type { DataSource } from 'typeorm';
+import type { DataSource, FindOperator } from 'typeorm';
 import { GeneratedListParticipant, GeneratedListShareLink } from '../entities';
+import type { ConfigService } from '@nestjs/config';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { GeneratedListMembersService } from './generated-list-members.service';
 import { GeneratedListSharingService } from './generated-list-sharing.service';
+import { COMMON_GROUPS_SQL } from './generated-list-members.sql';
 import {
   NEXT_GUEST_NUMBER_SQL,
   WRITABLE_AMONG_SQL,
@@ -30,6 +33,22 @@ import {
  * here through the loser path (the write throws, the re-read succeeds) and the
  * constraints themselves live in the migration.
  */
+
+/**
+ * The harness's clock, which stands in for the database's (plan 0140).
+ *
+ * Every expiry in these fakes is computed from it and compared against it, so
+ * nothing here depends on the wall clock and a spec cannot pass in the morning
+ * and fail in the evening.
+ */
+const NOW = new Date('2026-06-01T12:00:00.000Z');
+const LINK_TTL_MS = 12 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+/** A moment that many hours after {@link NOW}, for seeding and asserting. */
+function hours(count: number): Date {
+  return new Date(NOW.getTime() + count * 60 * 60 * 1000);
+}
 
 const OWNER = 'u-owner';
 const OTHER_USER = 'u-someone-else';
@@ -65,6 +84,8 @@ function build(
     writable?: Record<string, string[]>;
     /** Make the next link insert lose the partial unique index. */
     loseTheLinkRace?: Partial<GeneratedListShareLink>;
+    /** userId -> their name in the one group they share with the owner. */
+    contacts?: Record<string, string>;
   } = {}
 ): Harness {
   const links = [...(options.links ?? [])];
@@ -83,7 +104,19 @@ function build(
   let nextId = 0;
   const id = (prefix: string) => `${prefix}-${++nextId}`;
 
+  const contacts = options.contacts ?? {};
+
   const query = async (sql: string, params: unknown[]): Promise<unknown[]> => {
+    if (sql === COMMON_GROUPS_SQL) {
+      const [, userIds] = params as [string, string[]];
+      return userIds
+        .filter((userId) => contacts[userId] !== undefined)
+        .map((userId) => ({
+          userId,
+          groupCount: 1,
+          username: contacts[userId],
+        }));
+    }
     if (sql === WRITABLE_AMONG_SQL) {
       const [userId, listIds] = params as [string, string[]];
       const allowed = new Set(writable[userId] ?? []);
@@ -98,13 +131,62 @@ function build(
       );
       return [{ next: String(highest + 1) }];
     }
+    if (sql.includes('SELECT now()')) {
+      return [{ now: NOW }];
+    }
     if (sql.includes('FOR UPDATE')) {
       return [{ id: BASKET }];
     }
+    if (sql.includes('INSERT INTO "generated_list_share_links"')) {
+      const [generatedListId, secret, createdByParticipantId, ttl] = params as [
+        string,
+        string,
+        string,
+        number,
+      ];
+      if (options.loseTheLinkRace && links.every((link) => link.revokedAt)) {
+        // The index refused ours; the winner's row is what the re-read finds.
+        links.push(options.loseTheLinkRace);
+        throw uniqueViolation();
+      }
+      // Both moments from one statement, which is the whole reason the insert
+      // is raw (plan 0140, section 4).
+      const saved = {
+        id: id('link'),
+        generatedListId,
+        secret,
+        createdByParticipantId,
+        createdAt: NOW,
+        expiresAt: new Date(NOW.getTime() + ttl),
+        revokedAt: null,
+      };
+      links.push(saved);
+      return [saved];
+    }
+    if (sql.includes('UPDATE "generated_list_share_links"')) {
+      // Freeing the slot an expired link still holds, and the sweep's second
+      // statement. Both revoke every unrevoked link they are pointed at.
+      for (const link of links) {
+        if (!link.revokedAt) {
+          link.revokedAt = NOW;
+        }
+      }
+      return [];
+    }
+    if (sql.includes('UPDATE "generated_list_participants"')) {
+      const [rowId, ttl] = params as [string, number];
+      const row = participants.find((p) => p.id === rowId);
+      if (!row) {
+        return [];
+      }
+      // `GREATEST`, so a second link never shortens somebody's access.
+      const asked = new Date(NOW.getTime() + ttl);
+      const held = row.expiresAt ?? NOW;
+      row.expiresAt = held > asked ? held : asked;
+      return [row];
+    }
     throw new Error(`unmocked query: ${sql.slice(0, 60)}`);
   };
-
-  const liveLinkFor = () => links.find((link) => !link.revokedAt) ?? null;
 
   const listRepo = {
     query,
@@ -119,41 +201,34 @@ function build(
     },
   };
 
-  let linkSaves = 0;
-  const linkRepo = {
-    findOne: async ({ where }: { where: Record<string, unknown> }) => {
-      if (where['secret'] !== undefined) {
-        return links.find((link) => link.secret === where['secret']) ?? null;
-      }
-      return liveLinkFor();
-    },
-    create: (data: Partial<GeneratedListShareLink>) => ({ ...data }),
-    save: async (row: Partial<GeneratedListShareLink>) => {
-      linkSaves += 1;
-      if (options.loseTheLinkRace && linkSaves === 1) {
-        // The index refused ours; the winner's row is what the re-read finds.
-        links.push(options.loseTheLinkRace);
-        throw uniqueViolation();
-      }
-      const saved = { ...row, id: id('link'), createdAt: new Date() };
-      links.push(saved);
-      return saved;
-    },
-  };
-
   const matches = (
     row: Partial<Record<string, unknown>>,
     where: Record<string, unknown>
   ): boolean =>
     Object.entries(where).every(([key, value]) => {
       const actual = (row as Record<string, unknown>)[key];
-      // `IsNull()` is an object rather than a literal, so it is recognised by
-      // shape: every `where` here uses it for exactly one thing.
+      // A find operator is an object rather than a literal, so it is recognised
+      // by shape. Two kinds reach here: `IsNull()`, and the `Raw` that plan
+      // 0140 put on both expiry rules. A fake that read the second as the first
+      // would call every live visitor expired, which is why the operator's own
+      // SQL is what decides.
       if (value && typeof value === 'object' && '@instanceof' in value) {
+        const sql = (value as FindOperator<unknown>).getSql?.('X');
+        if (sql) {
+          if (actual === null || actual === undefined) {
+            return sql.includes('X IS NULL');
+          }
+          return (actual as Date).getTime() > NOW.getTime();
+        }
         return actual === null || actual === undefined;
       }
       return actual === value;
     });
+
+  const linkRepo = {
+    findOne: async ({ where }: { where: Record<string, unknown> }) =>
+      links.find((link) => matches(link, where)) ?? null,
+  };
 
   const participantRepo = {
     findOne: async ({ where }: { where: Record<string, unknown> }) =>
@@ -236,6 +311,11 @@ function build(
   const dataSource = {
     transaction: async (fn: (m: typeof manager) => Promise<unknown>) =>
       fn(manager),
+    // The pooled manager, which a live visitor's expiry is pushed out through:
+    // no transaction is needed for one statement on one row.
+    manager,
+    // The contact check reads through the data source rather than a repository.
+    query,
   } as unknown as DataSource;
 
   const publisher = {
@@ -246,12 +326,23 @@ function build(
       events.push({ event, userIds: [...userIds] }),
   } as unknown as CoreEventsPublisher;
 
+  const configService = {
+    getOrThrow: () => ({
+      basket: {
+        linkTtlMs: LINK_TTL_MS,
+        linkSessionTtlMs: SESSION_TTL_MS,
+        accessSweep: { enabled: false, intervalMs: 60_000, batchSize: 200 },
+      },
+    }),
+  } as unknown as ConfigService;
+
   const service = new GeneratedListSharingService(
     dataSource,
     listRepo as never,
     linkRepo as never,
     participantRepo as never,
-    new GeneratedListMembersService(dataSource, publisher)
+    new GeneratedListMembersService(dataSource, publisher),
+    configService
   );
 
   return { service, links, participants, events };
@@ -285,8 +376,8 @@ describe('a basket has zero share links or one (section 3)', () => {
         secret: 'winner',
         generatedListId: BASKET,
         createdByParticipantId: 'p-owner',
-        createdAt: new Date('2026-01-01T00:00:00.000Z'),
-        expiresAt: null,
+        createdAt: NOW,
+        expiresAt: hours(12),
         revokedAt: null,
       },
     });
@@ -380,7 +471,8 @@ describe('the link preview discloses nothing (section 4, step 1)', () => {
           id: 'link-old',
           generatedListId: BASKET,
           secret: 'expired',
-          expiresAt: new Date('2020-01-01T00:00:00.000Z'),
+          createdAt: hours(-24),
+          expiresAt: hours(-12),
           revokedAt: null,
         },
       ],
@@ -396,7 +488,14 @@ describe('the link preview discloses nothing (section 4, step 1)', () => {
     const harness = build({
       status: GeneratedListStatus.FINISHED,
       links: [
-        { id: 'l', generatedListId: BASKET, secret: 'live', revokedAt: null },
+        {
+          id: 'l',
+          generatedListId: BASKET,
+          secret: 'live',
+          createdAt: NOW,
+          expiresAt: hours(12),
+          revokedAt: null,
+        },
       ],
     });
     await expect(harness.service.preview({ secret: 'live' })).resolves.toEqual({
@@ -1053,5 +1152,531 @@ describe('the device string is not presence data (section 7)', () => {
     for (const person of people.participants) {
       expect(person).not.toHaveProperty('sessionSecretHash');
     }
+  });
+});
+
+describe('a link lasts twelve hours (plan 0140, section 4)', () => {
+  it('mints one that ends twelve hours after it was created', async () => {
+    const harness = build();
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+
+    expect(link.createdAt).toBe(NOW.toISOString());
+    expect(link.expiresAt).toBe(hours(12).toISOString());
+  });
+
+  it('answers no link at all once that link expired', async () => {
+    // The state the share sheet draws "Share" in, and the reason it can: an
+    // expired link is not a link to anybody who reads.
+    const harness = build({
+      links: [
+        {
+          id: 'link-old',
+          generatedListId: BASKET,
+          secret: 'expired',
+          createdAt: hours(-24),
+          expiresAt: hours(-12),
+          revokedAt: null,
+        },
+      ],
+    });
+    await expect(
+      harness.service.getLink({ userId: OWNER, generatedListId: BASKET })
+    ).resolves.toEqual({});
+  });
+
+  it('revokes the expired link and mints another when share is pressed again', async () => {
+    // The partial unique index cannot read a clock, so the slot an expired link
+    // still holds is freed by a write. Without it, pressing share would hand
+    // back a dead link.
+    const harness = build({
+      links: [
+        {
+          id: 'link-old',
+          generatedListId: BASKET,
+          secret: 'expired',
+          createdAt: hours(-24),
+          expiresAt: hours(-12),
+          revokedAt: null,
+        },
+      ],
+    });
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+
+    expect(link.id).not.toBe('link-old');
+    expect(link.expiresAt).toBe(hours(12).toISOString());
+    expect(harness.links.find((l) => l.id === 'link-old')?.revokedAt).toEqual(
+      NOW
+    );
+    expect(harness.links.filter((l) => !l.revokedAt)).toHaveLength(1);
+  });
+
+  it('never cascades to the people that expired link let in', async () => {
+    // They carry their own expiry. Revoking a link with its people is still the
+    // owner's gesture, and this is not it.
+    const harness = build({
+      links: [
+        {
+          id: 'link-old',
+          generatedListId: BASKET,
+          secret: 'expired',
+          createdAt: hours(-24),
+          expiresAt: hours(-12),
+          revokedAt: null,
+        },
+      ],
+      participants: [
+        {
+          id: 'p-guest',
+          generatedListId: BASKET,
+          kind: ParticipantKind.GUEST,
+          shareLinkId: 'link-old',
+          guestNumber: 1,
+          expiresAt: hours(4),
+          revokedAt: null,
+        },
+      ],
+    });
+    await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+
+    const guest = harness.participants.find((p) => p.id === 'p-guest');
+    expect(guest?.revokedAt).toBeFalsy();
+    expect(guest?.expiresAt).toEqual(hours(4));
+  });
+
+  it('refuses a join through an expired link exactly as through an unknown one', async () => {
+    const harness = build({
+      links: [
+        {
+          id: 'link-old',
+          generatedListId: BASKET,
+          secret: 'expired',
+          createdAt: hours(-24),
+          expiresAt: hours(-12),
+          revokedAt: null,
+        },
+      ],
+    });
+    await expect(
+      harness.service.join({ secret: 'expired' })
+    ).rejects.toBeInstanceOf(DomainException);
+    await expect(
+      harness.service.join({ secret: 'never-existed' })
+    ).rejects.toBeInstanceOf(DomainException);
+  });
+});
+
+describe('the people a link lets in (plan 0140, section 5)', () => {
+  it('gives a guest twelve hours from their own join', async () => {
+    const harness = build();
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    const joined = await harness.service.join({ secret: link.secret });
+
+    expect(joined.participant.expiresAt).toBe(hours(12).toISOString());
+  });
+
+  it('gives a signed in visitor the same twelve hours, and no session secret', async () => {
+    // "Never binds to an account" does not mean "writes no row": every
+    // attribution in core is a participant. The row ends by itself instead.
+    const harness = build();
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    const joined = await harness.service.join({
+      secret: link.secret,
+      userId: OTHER_USER,
+    });
+
+    expect(joined.participant.expiresAt).toBe(hours(12).toISOString());
+    expect(joined.sessionSecret).toBeNull();
+  });
+
+  it('gives the owner opening their own link no expiry at all', async () => {
+    const harness = build();
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    const joined = await harness.service.join({
+      secret: link.secret,
+      userId: OWNER,
+    });
+
+    expect(joined.participant.kind).toBe(ParticipantKind.OWNER);
+    expect(joined.participant.expiresAt).toBeNull();
+  });
+
+  it('brings a visitor whose access expired back under the same participant id', async () => {
+    // Nobody refused them, so the link may undo it, and the id has to be the
+    // same one or everything they already bought is attributed to a stranger.
+    const harness = build({
+      participants: [
+        {
+          id: 'p-back',
+          generatedListId: BASKET,
+          kind: ParticipantKind.REGISTERED,
+          userId: OTHER_USER,
+          shareLinkId: 'link-old',
+          expiresAt: hours(-1),
+          revokedAt: hours(-1),
+          endedReason: ParticipantEndedReason.EXPIRED,
+        },
+      ],
+    });
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    const joined = await harness.service.join({
+      secret: link.secret,
+      userId: OTHER_USER,
+    });
+
+    expect(joined.participant.id).toBe('p-back');
+    expect(joined.participant.expiresAt).toBe(hours(12).toISOString());
+    expect(
+      harness.participants.find((p) => p.id === 'p-back')?.revokedAt
+    ).toBeNull();
+  });
+
+  it('brings back one whose expiry passed before the sweep reached them', async () => {
+    const harness = build({
+      participants: [
+        {
+          id: 'p-unswept',
+          generatedListId: BASKET,
+          kind: ParticipantKind.REGISTERED,
+          userId: OTHER_USER,
+          shareLinkId: 'link-old',
+          expiresAt: hours(-1),
+          revokedAt: null,
+          endedReason: null,
+        },
+      ],
+    });
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    const joined = await harness.service.join({
+      secret: link.secret,
+      userId: OTHER_USER,
+    });
+
+    expect(joined.participant.id).toBe('p-unswept');
+    expect(joined.participant.expiresAt).toBe(hours(12).toISOString());
+  });
+
+  it('still refuses somebody the owner removed', async () => {
+    const harness = build({
+      participants: [
+        {
+          id: 'p-out',
+          generatedListId: BASKET,
+          kind: ParticipantKind.REGISTERED,
+          userId: OTHER_USER,
+          expiresAt: hours(-1),
+          revokedAt: hours(-2),
+          endedReason: ParticipantEndedReason.REMOVED,
+        },
+      ],
+    });
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    await expect(
+      harness.service.join({ secret: link.secret, userId: OTHER_USER })
+    ).rejects.toBeInstanceOf(DomainException);
+  });
+
+  it('never shortens a live visitor’s access when they open a second link', async () => {
+    const harness = build({
+      participants: [
+        {
+          id: 'p-long',
+          generatedListId: BASKET,
+          kind: ParticipantKind.REGISTERED,
+          userId: OTHER_USER,
+          shareLinkId: 'link-old',
+          expiresAt: hours(20),
+          revokedAt: null,
+        },
+      ],
+    });
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    const joined = await harness.service.join({
+      secret: link.secret,
+      userId: OTHER_USER,
+    });
+
+    // The window they already hold is longer, and a shorter one cannot take it
+    // back: `GREATEST`, not an assignment.
+    expect(joined.participant.expiresAt).toBe(hours(20).toISOString());
+  });
+
+  it('never turns a named person into a visitor', async () => {
+    const harness = build({
+      participants: [
+        {
+          id: 'p-named',
+          generatedListId: BASKET,
+          kind: ParticipantKind.REGISTERED,
+          userId: OTHER_USER,
+          shareLinkId: null,
+          invitedAt: hours(-40),
+          invitedByUserId: OWNER,
+          expiresAt: null,
+          revokedAt: null,
+        },
+      ],
+    });
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    const joined = await harness.service.join({
+      secret: link.secret,
+      userId: OTHER_USER,
+    });
+
+    expect(joined.participant.expiresAt).toBeNull();
+    expect(joined.participant.shareLinkId).toBeNull();
+  });
+
+  it('stops counting an expired visitor toward the room at their expiry', async () => {
+    // Not at the next sweep. The seat is free when the access is.
+    const harness = build({
+      participants: [
+        {
+          id: 'p-gone',
+          generatedListId: BASKET,
+          kind: ParticipantKind.GUEST,
+          guestNumber: 1,
+          expiresAt: hours(-1),
+          revokedAt: null,
+        },
+      ],
+    });
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    const preview = await harness.service.preview({ secret: link.secret });
+
+    // The owner's row alone. The expired guest counts for nothing.
+    expect(preview.participantCount).toBe(1);
+  });
+});
+
+describe('keeping somebody by adding them (plan 0140, section 6)', () => {
+  const liveVisitor = () => ({
+    id: 'p-visitor',
+    generatedListId: BASKET,
+    kind: ParticipantKind.REGISTERED,
+    userId: OTHER_USER,
+    shareLinkId: 'link-1',
+    username: 'Dani',
+    joinedAt: hours(-6),
+    lastSeenAt: hours(-1),
+    expiresAt: hours(6),
+    revokedAt: null,
+    invitedAt: null,
+    invitedByUserId: null,
+  });
+
+  it('clears the expiry and keeps the participant id', async () => {
+    const harness = build({ participants: [liveVisitor()] });
+    const kept = await harness.service.addParticipant({
+      userId: OWNER,
+      generatedListId: BASKET,
+      memberUserId: OTHER_USER,
+    });
+
+    expect(kept.id).toBe('p-visitor');
+    expect(kept.expiresAt).toBeNull();
+    expect(kept.shareLinkId).toBeNull();
+  });
+
+  it('waives the contact rule for somebody already on the basket', async () => {
+    // The rule exists so that nobody is put on a basket by a stranger who
+    // guessed a user id. The owner handed this person the link themselves.
+    const harness = build({ participants: [liveVisitor()], contacts: {} });
+    await expect(
+      harness.service.addParticipant({
+        userId: OWNER,
+        generatedListId: BASKET,
+        memberUserId: OTHER_USER,
+      })
+    ).resolves.toMatchObject({ id: 'p-visitor' });
+  });
+
+  it('keeps the contact rule for somebody with no live row', async () => {
+    const harness = build({ contacts: {} });
+    await expect(
+      harness.service.addParticipant({
+        userId: OWNER,
+        generatedListId: BASKET,
+        memberUserId: OTHER_USER,
+      })
+    ).rejects.toBeInstanceOf(DomainException);
+  });
+
+  it('gives a person added from the owner’s contacts no expiry', async () => {
+    const harness = build({ contacts: { [OTHER_USER]: 'Dani' } });
+    const added = await harness.service.addParticipant({
+      userId: OWNER,
+      generatedListId: BASKET,
+      memberUserId: OTHER_USER,
+    });
+
+    expect(added.expiresAt).toBeNull();
+  });
+
+  it('puts them out of reach of a later revoke with its people', async () => {
+    const harness = build({
+      links: [
+        {
+          id: 'link-1',
+          generatedListId: BASKET,
+          secret: 'live',
+          createdAt: NOW,
+          expiresAt: hours(12),
+          revokedAt: null,
+        },
+      ],
+      participants: [liveVisitor()],
+    });
+    await harness.service.addParticipant({
+      userId: OWNER,
+      generatedListId: BASKET,
+      memberUserId: OTHER_USER,
+    });
+    await harness.service.revokeLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+      revokeParticipants: true,
+    });
+
+    expect(
+      harness.participants.find((p) => p.id === 'p-visitor')?.revokedAt
+    ).toBeFalsy();
+  });
+});
+
+describe('what an expired person is told (plan 0140, section 8)', () => {
+  it('tells a visitor past their expiry that their access ended', async () => {
+    const harness = build({
+      participants: [
+        {
+          id: 'p-late',
+          generatedListId: BASKET,
+          kind: ParticipantKind.GUEST,
+          guestNumber: 1,
+          sessionSecretHash: hash('guest-secret'),
+          expiresAt: hours(-1),
+          revokedAt: null,
+        },
+      ],
+    });
+    await expect(
+      harness.service.resolveParticipant({
+        generatedListId: BASKET,
+        sessionSecret: 'guest-secret',
+      })
+    ).rejects.toMatchObject({ code: 'participant_expired' });
+  });
+
+  it('tells one the sweep already ended the same thing', async () => {
+    const harness = build({
+      participants: [
+        {
+          id: 'p-swept',
+          generatedListId: BASKET,
+          kind: ParticipantKind.REGISTERED,
+          userId: OTHER_USER,
+          expiresAt: hours(-2),
+          revokedAt: hours(-2),
+          endedReason: ParticipantEndedReason.EXPIRED,
+        },
+      ],
+    });
+    await expect(
+      harness.service.resolveParticipant({
+        generatedListId: BASKET,
+        userId: OTHER_USER,
+      })
+    ).rejects.toMatchObject({ code: 'participant_expired' });
+  });
+
+  it('keeps not_a_participant for somebody the owner removed', async () => {
+    // A different sentence about a different thing: a person said so.
+    const harness = build({
+      participants: [
+        {
+          id: 'p-removed',
+          generatedListId: BASKET,
+          kind: ParticipantKind.REGISTERED,
+          userId: OTHER_USER,
+          expiresAt: hours(4),
+          revokedAt: hours(-1),
+          endedReason: ParticipantEndedReason.REMOVED,
+        },
+      ],
+    });
+    await expect(
+      harness.service.resolveParticipant({
+        generatedListId: BASKET,
+        userId: OTHER_USER,
+      })
+    ).rejects.toMatchObject({ code: 'not_a_participant' });
+  });
+
+  it('keeps not_a_participant for a credential that names nobody', async () => {
+    const harness = build();
+    await expect(
+      harness.service.resolveParticipant({
+        generatedListId: BASKET,
+        sessionSecret: 'never-issued',
+      })
+    ).rejects.toMatchObject({ code: 'not_a_participant' });
+  });
+
+  it('serves the expiry on the participants read, for everybody', async () => {
+    // The people sheet offers "keep" from it, so it is not behind the device
+    // rule: it is a fact the whole basket may see.
+    const harness = build();
+    const link = await harness.service.ensureLink({
+      userId: OWNER,
+      generatedListId: BASKET,
+    });
+    await harness.service.join({ secret: link.secret });
+
+    const people = await harness.service.listParticipants({
+      generatedListId: BASKET,
+    });
+    const owner = people.participants.find(
+      (p) => p.kind === ParticipantKind.OWNER
+    );
+    const guest = people.participants.find(
+      (p) => p.kind === ParticipantKind.GUEST
+    );
+    expect(owner?.expiresAt).toBeNull();
+    expect(guest?.expiresAt).toBe(hours(12).toISOString());
   });
 });

@@ -34,7 +34,9 @@ export function toShareLinkView(
     secret: link.secret,
     createdByParticipantId: link.createdByParticipantId,
     createdAt: link.createdAt.toISOString(),
-    expiresAt: link.expiresAt?.toISOString() ?? null,
+    // Never null since plan 0140: every link ends twelve hours after it was
+    // minted, and the share sheet draws a countdown from this.
+    expiresAt: link.expiresAt.toISOString(),
     participantCount,
   };
 }
@@ -69,6 +71,11 @@ export function toParticipantView(
     guestNumber: participant.guestNumber,
     userId: participant.userId,
     shareLinkId: participant.shareLinkId,
+    // When this person's access ends, on **every** projection (plan 0140,
+    // section 8), and deliberately not behind `withDevice`: the people sheet
+    // offers "keep" for everybody who carries one, and the shopper themselves
+    // needs the warning. Null for the owner and for a person added by name.
+    expiresAt: participant.expiresAt?.toISOString() ?? null,
     // Join time and last seen travel with the device string, as the comment above
     // always said they did (plan 0114, section 11): when somebody arrived is part
     // of inspecting them, and guests do not get to inspect each other.

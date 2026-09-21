@@ -234,6 +234,9 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         endedReason: null,
         invitedAt: null,
         invitedByUserId: null,
+        // Everybody here came by a link, and a link visitor always carries an
+        // expiry: plan 0140's `ck_generated_list_participants_expiry` says so.
+        expiresAt: new Date('2026-01-10T21:00:00Z'),
       })
     );
     return saved.id;

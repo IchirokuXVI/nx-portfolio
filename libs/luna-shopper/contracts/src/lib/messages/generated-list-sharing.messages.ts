@@ -74,15 +74,15 @@ export const GENERATED_LIST_SHARING_PATTERNS = {
  * The bounds sharing has to satisfy, stated once so the DTO, the JSON Schema and
  * the service enforce the same numbers.
  *
- * `defaultLinkTtlDays` implements section 11's leaning rather than settling it:
- * an absolute cap, because an unauthenticated read of somebody's shopping habits
- * should not outlive the trip. The other half of that leaning, that a link stops
- * accepting people once the basket is `COMPLETED` or `ARCHIVED`, is a predicate
- * in the service rather than a number here.
+ * **How long a link lives is not here and is not a limit** (plan 0140,
+ * section 2). `defaultLinkTtlDays: 30` was a cap a caller could ask under, and
+ * both halves of that are gone: the product owner decided the number, so it is
+ * configuration read by the service (`BASKET_LINK_TTL`), and no request may name
+ * another. The other half of plan 0051 section 11's leaning, that a link stops
+ * accepting people once the basket is finished, is still a predicate in the
+ * service rather than a number here.
  */
 export const GENERATED_LIST_SHARING_LIMITS = {
-  /** Long enough for a weekly shop to be planned ahead, short of a standing key. */
-  defaultLinkTtlDays: 30,
   displayNameMaxLength: 40,
   /** A basket is a shopping trip, not a mailing list. */
   maxParticipants: 50,
@@ -113,7 +113,14 @@ export interface GeneratedListShareLinkView {
   secret: string;
   createdByParticipantId: string;
   createdAt: string;
-  expiresAt: string | null;
+  /**
+   * When the invitation stops accepting people: twelve hours after
+   * {@link createdAt}, always (plan 0140, section 4).
+   *
+   * Not nullable any more. A link with no end was a link to a household's whole
+   * shopping for ever, and the share sheet draws a countdown from this.
+   */
+  expiresAt: string;
   /** How many people arrived through this link, so the sheet can say so. */
   participantCount: number;
 }
@@ -200,6 +207,20 @@ export interface GeneratedListParticipantView {
    * so the two cases stay distinguishable.
    */
   userAgent?: string | null;
+  /**
+   * When this person's access ends, and null when it does not (plan 0140,
+   * section 8).
+   *
+   * Null for the owner and for a person the owner added by name. Set, to twelve
+   * hours after their own join, for everybody a link let in, guest or signed in
+   * alike.
+   *
+   * **Served to every reader**, which is deliberate: the people sheet offers
+   * "keep" for everybody who carries one, and the shopper themselves needs the
+   * warning. It is a moment to display and never a decision: whether it has
+   * passed is the server's answer, read by asking again.
+   */
+  expiresAt: string | null;
 }
 
 /**
@@ -341,14 +362,13 @@ export interface GeneratedListShareRequest {
  * Idempotent by the partial unique index over `generatedListId` where
  * `revokedAt` is null, so a double tap on share cannot produce two live links
  * and does not need to be defended against in the service.
+ *
+ * **It names no lifetime** (plan 0140, section 2). Every link lasts twelve
+ * hours from the moment it was minted, the number is configuration, and a field
+ * nobody sets is a field somebody sets to a year. A basket whose link expired
+ * gets a fresh one from this same call.
  */
 export interface EnsureShareLinkRequest extends GeneratedListShareRequest {
-  /**
-   * When the invitation should lapse. Defaults to
-   * {@link GENERATED_LIST_SHARING_LIMITS.defaultLinkTtlDays} from now; an
-   * explicit null asks for no expiry, which the service still caps.
-   */
-  expiresAt?: string | null;
   /**
    * The owner's own account name, so the row this call creates for them carries
    * it (plan 0054, section 2.3).

@@ -47,7 +47,6 @@ import {
 import { NatsClient } from '../messaging/nats-client';
 import {
   AddGeneratedListParticipantDto,
-  EnsureShareLinkDto,
   JoinGeneratedListDto,
   RevokeShareLinkDto,
 } from './generated-list-sharing.dto';
@@ -151,19 +150,22 @@ export class GeneratedListShareController {
    * has a live one gets that link back rather than a second. The partial unique
    * index makes that true in the database rather than in a check the second
    * request could race past, and the idempotent verb is what says so to a client.
+   *
+   * **No body** (plan 0140, section 2): a link lasts twelve hours and no caller
+   * may name another number. A basket whose link expired gets a fresh one from
+   * this same call, which is what keeps pressing share on a stale sheet from
+   * handing back a dead link.
    */
   @Put(':id/share-link')
   @ApiContractResponse(GENERATED_LIST_SHARING_PATTERNS.linkEnsure)
-  @ApiProblemResponses({ auth: true, body: true, notFound: true })
+  @ApiProblemResponses({ auth: true, notFound: true })
   async ensureLink(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Body() dto: EnsureShareLinkDto
+    @Param('id') id: string
   ): Promise<GeneratedListShareLinkView> {
     const req: EnsureShareLinkRequest = {
       userId: user.userId,
       generatedListId: id,
-      ...dto,
       // Sharing mints the owner's participant row, so this is where their name
       // reaches it (plan 0054, section 2.3). Core is told the name and never
       // asks for it, which is plan 0018 section 9's rule unchanged.

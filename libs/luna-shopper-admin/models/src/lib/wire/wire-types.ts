@@ -343,13 +343,6 @@ export type CreateZoneDto = {
 };
 
 /**
- * `EnsureShareLinkDto` in the gateway's OpenAPI document.
- */
-export type EnsureShareLinkDto = {
-  expiresAt?: string | null;
-};
-
-/**
  * `ForgotPasswordDto` in the gateway's OpenAPI document.
  */
 export type ForgotPasswordDto = {
@@ -488,6 +481,7 @@ export type ProblemDetails = {
     | 'validation_failed'
     | 'unauthorized'
     | 'not_a_participant'
+    | 'participant_expired'
     | 'forbidden'
     | 'not_found'
     | 'conflict'
@@ -2787,6 +2781,7 @@ export type GeneratedListSharingParticipantView = {
   lastSeenAt?: string;
   shareLinkId: string | null;
   userAgent?: string | null;
+  expiresAt: string | null;
 };
 
 /**
@@ -2805,7 +2800,7 @@ export type GeneratedListSharingShareLinkView = {
   secret: string;
   createdByParticipantId: string;
   createdAt: string;
-  expiresAt: string | null;
+  expiresAt: string;
   participantCount: number;
 };
 

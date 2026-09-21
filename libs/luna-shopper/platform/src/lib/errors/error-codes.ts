@@ -23,6 +23,21 @@ export const ERROR_CODES = {
    * refused again, and signed the person out of the whole app.
    */
   NOT_A_PARTICIPANT: 'not_a_participant',
+  /**
+   * The credential named a participant of this basket whose twelve hours ran
+   * out (plan 0140, section 8).
+   *
+   * The same 401 as {@link NOT_A_PARTICIPANT} and a code of its own, because the
+   * two ask the client for different sentences: "you were removed" against "your
+   * access has ended, ask to be added". It is not a leak, because the caller
+   * presented a credential that **was** valid for this basket, so being told it
+   * ran out tells them nothing they did not already hold. The preview and the
+   * join take no credential and stay silent as ever.
+   *
+   * Like its neighbour it says nothing about the account, so a client must not
+   * answer it by refreshing or ending the session.
+   */
+  PARTICIPANT_EXPIRED: 'participant_expired',
   FORBIDDEN: 'forbidden',
   NOT_FOUND: 'not_found',
   CONFLICT: 'conflict',
@@ -227,6 +242,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 401 and not 403, so a client that has read "refused" from a 401 since plan
   // 0051 keeps reading it. The code is what tells it the account is not at fault.
   [ERROR_CODES.NOT_A_PARTICIPANT]: HttpStatus.UNAUTHORIZED,
+  // The same status as the code above it, on the same reasoning: the account is
+  // not at fault, so a client must not sign anybody out over it (plan 0140).
+  [ERROR_CODES.PARTICIPANT_EXPIRED]: HttpStatus.UNAUTHORIZED,
   [ERROR_CODES.FORBIDDEN]: HttpStatus.FORBIDDEN,
   [ERROR_CODES.NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ERROR_CODES.CONFLICT]: HttpStatus.CONFLICT,

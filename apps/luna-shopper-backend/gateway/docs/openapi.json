@@ -10632,16 +10632,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EnsureShareLinkDto"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "The `generatedList.shareLink.ensure` contract response.",
@@ -10649,16 +10639,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/generated-list-sharing.ShareLinkView"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -24092,17 +24072,6 @@
           }
         }
       },
-      "EnsureShareLinkDto": {
-        "type": "object",
-        "properties": {
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true,
-            "description": "When the invitation lapses. Defaults to the cap; a longer value is capped rather than refused, since an unauthenticated read of somebody’s shopping habits should not outlive the trip."
-          }
-        }
-      },
       "AddGeneratedListParticipantDto": {
         "type": "object",
         "properties": {
@@ -30782,6 +30751,12 @@
               "string",
               "null"
             ]
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -30791,7 +30766,8 @@
           "username",
           "guestNumber",
           "userId",
-          "shareLinkId"
+          "shareLinkId",
+          "expiresAt"
         ],
         "additionalProperties": false
       },
@@ -30829,10 +30805,8 @@
             "minLength": 1
           },
           "expiresAt": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "minLength": 1
           },
           "participantCount": {
             "type": "integer",
@@ -33847,6 +33821,7 @@
               "validation_failed",
               "unauthorized",
               "not_a_participant",
+              "participant_expired",
               "forbidden",
               "not_found",
               "conflict",

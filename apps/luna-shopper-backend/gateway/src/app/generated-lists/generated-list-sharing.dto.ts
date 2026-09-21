@@ -7,7 +7,6 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsInt,
-  IsISO8601,
   IsOptional,
   IsString,
   IsUUID,
@@ -33,17 +32,13 @@ export const BASKET_SUGGEST_QUERY_MAX_LENGTH = 120;
  * forty characters and the same fifty people.
  */
 
-export class EnsureShareLinkDto {
-  @ApiPropertyOptional({
-    format: 'date-time',
-    nullable: true,
-    description:
-      'When the invitation lapses. Defaults to the cap; a longer value is capped rather than refused, since an unauthenticated read of somebody’s shopping habits should not outlive the trip.',
-  })
-  @IsOptional()
-  @IsISO8601()
-  expiresAt?: string;
-}
+/*
+ * There is no `EnsureShareLinkDto` (plan 0140, section 2). The route takes no
+ * body at all: every link lasts twelve hours from the moment it was minted, the
+ * number is the server's configuration, and a caller may ask for neither a
+ * longer one nor a shorter one. A field nobody sets is a field somebody sets to
+ * a year.
+ */
 
 export class RevokeShareLinkDto {
   @ApiPropertyOptional({

@@ -23,6 +23,7 @@ import { BasketTripRows1756002400000 } from './1756002400000-BasketTripRows';
 import { BasketsBecomeViews1756002500000 } from './1756002500000-BasketsBecomeViews';
 import { BasketLineSkips1756002600000 } from './1756002600000-BasketLineSkips';
 import { ListLineChangesAndCursors1756002700000 } from './1756002700000-ListLineChangesAndCursors';
+import { BasketLinkAndAccessExpiry1756002800000 } from './1756002800000-BasketLinkAndAccessExpiry';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -117,4 +118,11 @@ export const CORE_MIGRATIONS = [
   // migration wrote and adds nothing any of them needs, so it follows all of
   // them and nothing else (plan 0138, section 11).
   ListLineChangesAndCursors1756002700000,
+  // Alters `generated_list_participants` and `generated_list_share_links`,
+  // which plan 0051's migration created and plan 0114's last touched, and it
+  // recreates plan 0114's `endedReason` constraint with a fourth value. Its
+  // backfill reads plan 0114's `invitedAt` and plan 0051's `kind`, and nothing
+  // any later migration wrote, so it follows every migration that touched
+  // either table and nothing else (plan 0140, section 9).
+  BasketLinkAndAccessExpiry1756002800000,
 ];
