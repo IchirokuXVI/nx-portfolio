@@ -13,13 +13,15 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BasketListStore,
   BasketStore,
   BasketViewStore,
-  BasketListStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  selectBasketSurface,
+  type BasketProgressSentence,
   type BasketRow as BasketRowModel,
   type BasketViewRow,
   type BasketViewSection,
@@ -165,12 +167,41 @@ export class BasketPage {
    */
   private readonly _generated = inject(BasketListStore);
 
-  private readonly _id =
-    this._route.snapshot.paramMap.get('basketId') ?? '';
+  /**
+   * Which basket this page was opened for (velista `0091`, section 2.4).
+   *
+   * `data.basket` is the route saying "the caller's own", which is the only thing
+   * the URL cannot: `shopping-lists/live` carries no id, because the id differs
+   * for every reader and the server hands it back on the first read. Everything
+   * else is a basket named by its id, which is every arrival on a link and every
+   * basket somebody else shared.
+   */
+  private readonly _live = this._route.snapshot.data['basket'] === 'live';
+
+  private readonly _id = this._route.snapshot.paramMap.get('basketId') ?? '';
 
   protected readonly state = this._store.state;
   protected readonly rows = this._store.rows;
   protected readonly progress = this._store.progress;
+
+  /**
+   * Everything this page draws differently for a `LIVE` basket (velista `0091`,
+   * section 3).
+   *
+   * **One computed, and the template asks it rather than asking `kind`.** There
+   * is one basket page: the two kinds differ in a heading, a sentence, four
+   * absent controls and two words of an empty state, and a `@if (live)` at each
+   * of those places is how the second screen gets built by accident.
+   *
+   * Null before the first answer, where nothing below the header is drawn
+   * anyway; the header's own two controls read it with a fallback that draws
+   * neither, because a share control over a basket that has not loaded is a
+   * control for a thing nobody can name yet.
+   */
+  protected readonly surface = computed(() => {
+    const basket = this._store.basket();
+    return basket === null ? null : selectBasketSurface(basket, basket.me);
+  });
   protected readonly busyRows = this._store.busyRows;
   protected readonly participantsById = this._store.participantsById;
   /** The covered lists this reader was served, for the "from" caption on a row. */
@@ -219,7 +250,7 @@ export class BasketPage {
    * second reader.
    */
   protected readonly canFinish = computed(
-    () => this.isOwner() && !this.finished()
+    () => this.surface()?.finish === true
   );
 
   /**
@@ -236,13 +267,53 @@ export class BasketPage {
    * congratulate anybody, and only for the reader who could act on it.
    */
   protected readonly allSettled = computed(
-    () =>
-      this.canFinish() &&
-      this.rows().length > 0 &&
-      // The server's count, never a subtraction here (backend `0130`, section 4):
-      // a `SKIPPED` row is pending, and this side has no way to know that.
-      this._store.pending() === 0
+    () => this.surface()?.allDone === true
   );
+
+  /**
+   * The sentence above the rows, which is a different sentence per kind
+   * (velista `0091`, section 4).
+   *
+   * A `GENERATED` basket counts a trip that ends. A `LIVE` one says what is left
+   * first, because "3 of 40 got" on a basket that is never finished is true and
+   * reads as a failure. Which of the four it is belongs to the model, and the
+   * fallback below is only ever read before the first answer, where the row that
+   * draws it is not on screen.
+   */
+  protected readonly progressLine = computed<BasketProgressSentence>(
+    () =>
+      this.surface()?.progress ?? {
+        key: 'basket.progress',
+        args: { done: 0, total: 0 },
+        unavailable: 0,
+      }
+  );
+
+  /** One line under the heading, or null. Only the `LIVE` basket has one. */
+  protected readonly hint = computed(() => this.surface()?.hintKey ?? null);
+
+  /** What an empty basket says, which is about what put lines in it. */
+  protected readonly emptyTitle = computed(
+    () => this.surface()?.emptyTitleKey ?? 'basket.empty'
+  );
+
+  protected readonly emptyBody = computed(
+    () => this.surface()?.emptyBodyKey ?? 'basket.emptyHint'
+  );
+
+  /**
+   * Whether the finished banner is drawn at all.
+   *
+   * Separate from {@link finished}, which also takes the controls off every row:
+   * a `LIVE` basket is never finished, so the two happen to agree today, and
+   * they are two questions and are asked separately.
+   */
+  protected readonly finishedBanner = computed(
+    () => this.surface()?.finishedBanner === true
+  );
+
+  /** Whether the reader is offered the share sheet. The owner, on both kinds. */
+  protected readonly canShare = computed(() => this.surface()?.share === true);
 
   /** Whether a finish or a reopen is in flight, so the banner's control can wait. */
   private readonly _statusBusy = signal(false);
@@ -287,6 +358,21 @@ export class BasketPage {
     if (basket === null) {
       return this._translator.t('basket.title', undefined, this._locale());
     }
+
+    // The permanent basket has no name to give and never will, so its heading is
+    // words this app owns: "Everything to buy", or whose everything it is
+    // (velista `0091`, section 3). The surface decides which, because deciding it
+    // here would be the second place that reads `kind`.
+    const title = this.surface()?.title;
+    if (title !== undefined && title.kind === 'key') {
+      return this._translator.t(
+        title.key,
+        undefined,
+        this._locale(),
+        title.args
+      );
+    }
+
     if (basket.name !== null && basket.name !== '') {
       return basket.name;
     }
@@ -382,6 +468,14 @@ export class BasketPage {
       this._store.participants().map((person) => [person.id, person])
     );
 
+    // Nothing at all on a basket with no presence room (backend `0130`, section
+    // 7). The signal is empty for one anyway, and this says so on purpose: an
+    // empty row and a row that must not be drawn are two different facts, and
+    // the day a `LIVE` basket gains presence this is the line to delete.
+    if (this.surface()?.presence !== true) {
+      return [];
+    }
+
     return this._store
       .present()
       .slice(0, 3)
@@ -409,7 +503,8 @@ export class BasketPage {
    * it has to survive the face row going away.
    */
   protected readonly hasPeople = computed(
-    () => this._store.participants().length > 0
+    () =>
+      this.surface()?.presence === true && this._store.participants().length > 0
   );
 
   /** The overflow count, collapsing into a stacked chip like the price display. */
@@ -428,7 +523,9 @@ export class BasketPage {
      * date passes while the shopper is standing in an aisle must not move the rows
      * in front of them.
      */
-    void this._store.open(this._id).then(() => this._view.restore());
+    void (
+      this._live ? this._store.openLive() : this._store.open(this._id)
+    ).then(() => this._view.restore());
 
     /**
      * The socket is closed from **here**, and it has to be.
@@ -709,7 +806,12 @@ export class BasketPage {
     this._statusBusy.set(true);
     this._reopenFailed.set(false);
 
-    const landed = await this._generated.setStatus(this._id, 'OPEN');
+    // The id off the basket rather than off the URL: this control is the owner's
+    // on a generated basket, where the two agree, and one source cannot drift.
+    const landed = await this._generated.setStatus(
+      this._store.basket()?.id ?? this._id,
+      'OPEN'
+    );
     if (landed) {
       await this._store.refresh();
     }
@@ -882,7 +984,7 @@ export class BasketPage {
    */
   protected back(): void {
     void this._pages.back(
-      this.isOwner()
+      this.surface()?.back === 'history'
         ? appPath(this._locale(), this._basePath, BASKET_PATHS.list)
         : appPath(this._locale(), this._basePath, 'home')
     );

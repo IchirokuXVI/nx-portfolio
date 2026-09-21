@@ -10,6 +10,7 @@ import {
 import {
   isOpenBasket,
   type Basket,
+  type BasketAddress,
   type BasketListRef,
   type BasketLoad,
   type BasketParticipant,
@@ -124,6 +125,9 @@ export class BasketStore {
 
   /** Which basket this store is about, once it has been told. */
   private _id: string | null = null;
+
+  /** See {@link address}. A signal, because the sheets read it to build URLs. */
+  private readonly _address = signal<BasketAddress | null>(null);
 
   /**
    * Whether the reader is leaving this basket on purpose (velista `0085`, section 7).
@@ -272,6 +276,20 @@ export class BasketStore {
 
   /** The basket, or null before the first read completes. */
   readonly basket = this._basket.asReadonly();
+
+  /**
+   * How the **URL** names the basket this store opened (velista `0091`).
+   *
+   * Every sheet over the basket page builds its own address and its dismissal
+   * from this, and never from `paramMap`, which has no id at all under the
+   * `shopping-lists/live` route. Set before either read goes out, so a sheet
+   * constructed on a cold load already has it; null only before the first open
+   * and after {@link leave}.
+   *
+   * It is about URLs and nothing else. Requests always name {@link Basket.id},
+   * including under `live`, where the id arrives with the first answer.
+   */
+  readonly address = this._address.asReadonly();
 
   /** How the read has got on, which is what the page branches its whole body on. */
   readonly state = this._state.asReadonly();
@@ -493,6 +511,7 @@ export class BasketStore {
    */
   async open(basketId: string): Promise<void> {
     this._id = basketId;
+    this._address.set({ basketId });
     this._state.set('loading');
     this._error.set(null);
     this._present.set([]);
@@ -501,6 +520,34 @@ export class BasketStore {
     // round trip on the screen where being live is the point; and the socket needs
     // nothing the read produces, since the credential it presents is already held.
     this._socket.open(basketId);
+    await this.refresh();
+  }
+
+  /**
+   * Load the caller's own permanent basket (velista `0091`, section 2.4).
+   *
+   * **The id comes from the answer**, because the caller has none: the route is
+   * a word, the server creates the basket the first time it is read, and every
+   * request after this one addresses it by the id it handed back. So the socket
+   * is opened after the read rather than beside it, which is the one way this
+   * differs from {@link open} and is forced: there is nothing to connect to
+   * until the answer arrives, and a read that failed must leave no connection
+   * behind.
+   *
+   * {@link address} is set **before** the request goes out. A sheet over this
+   * page builds its own URL from it, and on a cold load on a sheet's address the
+   * sheet is constructed while this read is still out.
+   *
+   * There is no guard doing this instead, and that is deliberate: a guard that
+   * waits on a request is a white screen with nothing to retry. A failure lands
+   * on the page's own failed state, whose Try again calls {@link refresh}.
+   */
+  async openLive(): Promise<void> {
+    this._id = null;
+    this._address.set('live');
+    this._state.set('loading');
+    this._error.set(null);
+    this._present.set([]);
     await this.refresh();
   }
 
@@ -526,6 +573,9 @@ export class BasketStore {
     this._socket.close();
     this._cancelRefresh();
     this._id = null;
+    // Cleared beside the id, and a read still out reads both: under `live` the
+    // address is the only thing that says whose read it was.
+    this._address.set(null);
     this._leaving = false;
     this._basket.set(null);
     // A read that is still out was asked for the basket being let go, so it is
@@ -562,7 +612,10 @@ export class BasketStore {
    */
   async refresh(): Promise<void> {
     const id = this._id;
-    if (id === null) {
+    // Null with a `live` address is the one read that has no id yet: the caller's
+    // own basket, before the answer that names it. Null with no address at all is
+    // a store nobody has opened, or one that has been let go.
+    if (id === null && this._address() !== 'live') {
       return;
     }
 
@@ -598,20 +651,26 @@ export class BasketStore {
    * A failure ends it, keeping {@link _fail}'s treatment, and so does the screen
    * letting this basket go while the read was out.
    */
-  private async _read(id: string): Promise<void> {
+  private async _read(id: string | null): Promise<void> {
     for (;;) {
       const generation = this._generation;
       this._queued = false;
 
       let basket: Basket;
       try {
-        basket = await this._service.getBasket(id);
+        // A null id is the caller's own basket, which this read is what names:
+        // it is the first read of a `live` page and no later one, because the
+        // id is recorded below and every refresh after it goes out by id.
+        basket =
+          id === null
+            ? await this._service.getLiveBasket()
+            : await this._service.getBasket(id);
       } catch (error) {
         this._fail(id, error);
         return;
       }
 
-      if (this._id !== id) {
+      if (!this._stillReading(id)) {
         // `leave` happened while this was out, so there is no screen to draw on
         // and the next visit reads for itself.
         return;
@@ -619,6 +678,13 @@ export class BasketStore {
 
       if (this._generation !== generation) {
         continue;
+      }
+
+      if (this._id === null) {
+        // The answer to the only read that had no id. The socket waits for it,
+        // unlike `open`'s, because there was nothing to connect to until now.
+        this._id = basket.id;
+        this._socket.open(basket.id);
       }
 
       this._basket.set(basket);
@@ -629,6 +695,17 @@ export class BasketStore {
         return;
       }
     }
+  }
+
+  /**
+   * Whether the screen this read was started for is still the one on the phone.
+   *
+   * By id for an ordinary read, and by the **address** for the first read of a
+   * `live` page, which has no id to compare: {@link leave} clears both, so a
+   * basket let go while a read was out answers no either way.
+   */
+  private _stillReading(id: string | null): boolean {
+    return id === null ? this._address() === 'live' : this._id === id;
   }
 
   /**
@@ -1035,10 +1112,18 @@ export class BasketStore {
    * moment, so the person is offered the join screen — where the link they still
    * have may let them back in — rather than a basket that refuses every tap.
    */
-  private _fail(basketId: string, error: unknown): void {
+  private _fail(basketId: string | null, error: unknown): void {
     this._error.set(error);
 
-    if (hasResponse(error) && (error as { status: number }).status === 401) {
+    // A null id is the read of the caller's **own** basket, which is account
+    // authenticated and holds no participant session: a 401 there is a session
+    // that has ended, which the interceptor already answers for the whole app,
+    // and neither of the two readings below is about this reader.
+    if (
+      basketId !== null &&
+      hasResponse(error) &&
+      (error as { status: number }).status === 401
+    ) {
       // The two readings of one status, told apart by what this browser was
       // holding. A credential that has stopped working was **revoked**, and the
       // person should be told so. No credential at all is a stranger who has

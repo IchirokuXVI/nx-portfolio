@@ -86,8 +86,7 @@ export class JoinPage {
    * Arriving here creates this component, so there is no later value to miss, and
    * a subscription would be one that fires exactly once.
    */
-  private readonly _secret =
-    this._route.snapshot.paramMap.get('secret') ?? '';
+  private readonly _secret = this._route.snapshot.paramMap.get('secret') ?? '';
 
   private readonly _state = signal<JoinState>('checking');
   private readonly _preview = signal<BasketLinkPreview>({ joinable: false });
@@ -160,7 +159,9 @@ export class JoinPage {
     try {
       const session = await this._service.join(this._secret, this.name());
       await this._router.navigateByUrl(
-        basketPath(this._locale(), this._basePath, session.basketId)
+        basketPath(this._locale(), this._basePath, {
+          basketId: session.basketId,
+        })
       );
     } catch {
       // A link that died between the preview and the tap lands here, and so does

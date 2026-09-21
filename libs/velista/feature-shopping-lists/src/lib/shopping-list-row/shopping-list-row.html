@@ -30,8 +30,16 @@
     </span>
 
     <span class="meta">
-      {{ generatedOn() }}
-      <span aria-hidden="true"> &middot; </span>
+      <!--
+        The date, and the permanent basket has none (velista `0091`, section 6):
+        it was made by the server the first time somebody read it, which is not a
+        day anybody shopped. The separator goes with it, because a separator is
+        only ever "there is something before this".
+      -->
+      @if (!vm.live) {
+        {{ generatedOn() }}
+        <span aria-hidden="true"> &middot; </span>
+      }
       <!--
         What actually came home, once the summary can say it (plan 0049, section 2).
         `breakdown` is null on a server that does not carry the two outcome counts, and

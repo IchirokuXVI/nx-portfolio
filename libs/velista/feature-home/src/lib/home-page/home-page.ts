@@ -16,9 +16,10 @@ import {
 import {
   AccountNotice,
   AUTH_SERVICE,
-  GatewayError,
   BasketListStore,
+  GatewayError,
   hasOthers,
+  LiveBasketStore,
   MemberNames,
   NetworkError,
   presenceNames,
@@ -31,7 +32,10 @@ import {
   type AuthServiceI,
   type RealtimeClientI,
 } from '@portfolio/velista/data-access';
-import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
+import {
+  BASKET_PATHS,
+  basketPath,
+} from '@portfolio/velista/feature-shopping-lists';
 import {
   APP_BASE_PATH,
   displayNames,
@@ -54,6 +58,7 @@ import {
   ErrorState,
   GuestUpgradeBanner,
   InviteCard,
+  LiveBasketCard,
   ShoppingListCard,
   SuccessNote,
   ZoneCard,
@@ -93,6 +98,7 @@ import { selectHomeState } from './select-home-state';
     ErrorState,
     GuestUpgradeBanner,
     InviteCard,
+    LiveBasketCard,
     ShoppingListCard,
     SuccessNote,
     ZoneCard,
@@ -105,6 +111,14 @@ import { selectHomeState } from './select-home-state';
 export class HomePage {
   private readonly _zoneStore = inject(ZoneStore);
   private readonly _generated = inject(BasketListStore);
+  /**
+   * The permanent basket's summary, which the card at the top of the dock draws.
+   *
+   * A store of its own beside `BasketListStore` and not a row inside it: the
+   * server leaves this basket out of the listing that one pages through, and the
+   * two answer different questions about different baskets.
+   */
+  private readonly _live = inject(LiveBasketStore);
   private readonly _presence = inject(PresenceStore);
   private readonly _names = inject(MemberNames);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
@@ -229,6 +243,7 @@ export class HomePage {
       loadState: this._zoneStore.state(),
       correlationId: this._correlationId(),
       activeShoppingLists: this._generated.active(),
+      liveBasket: this._live.summary(),
       shoppingListNames: this._shoppingListNames(),
       zoneOnline: (zoneId) => this._presenceNames().zones.get(zoneId) ?? [],
       listViewers: (listId) => this._presenceNames().lists.get(listId) ?? [],
@@ -395,6 +410,16 @@ export class HomePage {
     // arrive is a settle, which core publishes to the basket's room; `BasketListStore`
     // documents that gap where it applies the events.
     void this._generated.load();
+
+    // The permanent basket's three numbers (velista `0091`, section 5.2). Beside
+    // the two reads above for the same reason they are beside each other: the
+    // dock is drawn with the zone skeletons rather than appearing a beat later,
+    // under a thumb already on its way to it.
+    //
+    // **It creates the basket** on an account that has never opened the screen,
+    // which is the server's doing and is why the card can promise a way in
+    // before anybody has asked for one.
+    void this._live.load();
 
     // The one field the confirm-your-email card stands on, and the only reason this
     // page reads a profile at all.
@@ -678,6 +703,30 @@ export class HomePage {
     void this._router.navigate(['..', BASKET_PATHS.list, basketId], {
       relativeTo: this._route,
     });
+  }
+
+  /**
+   * Whether the permanent basket's first read is still out, which is the card's
+   * skeleton and nothing else.
+   *
+   * A failed read is deliberately **not** loading: the card draws its title with
+   * no sentence and stays tappable, which is what the page behind it is for.
+   */
+  readonly liveBasketLoading = computed(() => this._live.state() === 'loading');
+
+  /**
+   * The basket that is always there (velista `0091`), at the one URL that is the
+   * same for every reader.
+   *
+   * The whole URL rather than a relative navigation, because the path is two
+   * segments and a commands array does not split one string into two. `basketPath`
+   * is the one place either of this screen's basket URLs is assembled, so the card
+   * and the page it opens cannot disagree about the address.
+   */
+  openLiveBasket(): void {
+    void this._router.navigateByUrl(
+      basketPath(this._locale(), this._basePath, 'live')
+    );
   }
 
   /** The history (plan 0045, section 3.3). A sibling for `openShoppingList`'s reason. */

@@ -39,11 +39,7 @@ import {
   type SettlementOutcome,
   type SettlementRowVm,
 } from '@portfolio/velista/models';
-import {
-  basketIdOf,
-  rowKeyOf,
-  SheetNavigation,
-} from '@portfolio/velista/platform';
+import { rowKeyOf, SheetNavigation } from '@portfolio/velista/platform';
 import {
   CheckIcon,
   QuantityReel,
@@ -225,8 +221,15 @@ export class SettleSheet {
    */
   private readonly _session = inject(SessionStore);
 
-  /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _basketId = basketIdOf(this._route);
+  /**
+   * The basket underneath, which is where closing this sheet goes and what its
+   * own re-keyed URL is built from.
+   *
+   * From the **store** and not from `paramMap` since velista `0091`: the same
+   * page is routed at `shopping-lists/live`, where there is no id in the URL at
+   * all, and a sheet that read one there would dismiss to `/shopping-lists/`.
+   */
+  private readonly _address = this._store.address;
 
   /**
    * The row, as a signal and not a snapshot (velista `0090`, section 7.3).
@@ -373,12 +376,7 @@ export class SettleSheet {
   private async _followRowKey(rowKey: string): Promise<void> {
     this._following.set(true);
     await this._sheet.leaveTo(
-      settleSheetPath(
-        this._locale(),
-        this._basePath,
-        this._basketId(),
-        rowKey
-      )
+      settleSheetPath(this._locale(), this._basePath, this._address(), rowKey)
     );
     this._following.set(false);
   }
@@ -696,7 +694,7 @@ export class SettleSheet {
         settleSheetPath(
           this._locale(),
           this._basePath,
-          this._basketId(),
+          this._address(),
           result.row.rowKey
         )
       );
@@ -924,7 +922,7 @@ export class SettleSheet {
     // dismiss a second time for a line that went away as this sheet was leaving.
     this._left = true;
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._basketId())
+      basketPath(this._locale(), this._basePath, this._address())
     );
   }
 

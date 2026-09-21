@@ -101,9 +101,7 @@ describe('ShoppingListsPage', () => {
     // instant before it happens and drawing the empty state there would flash "no
     // shopping lists yet" at somebody who has a hundred.
     it('treats idle as loading rather than as empty', async () => {
-      const fixture = await render(
-        fakeBasketListStore([], { state: 'idle' })
-      );
+      const fixture = await render(fakeBasketListStore([], { state: 'idle' }));
 
       expect(query(fixture, 'lib-row-skeleton')).not.toBeNull();
       expect(text(fixture)).not.toContain('history.empty.title');
@@ -631,5 +629,72 @@ describe('ShoppingListsPage: the two tabs', () => {
     fixture.componentInstance.retry();
 
     expect(shared.calls).toContain('reload');
+  });
+});
+
+/**
+ * The permanent basket, in a listing of trips (velista `0091`, section 6).
+ *
+ * The server leaves the reader's own out of "mine" already. This asserts the
+ * client drops it anyway, in one place, because of what a row **is**: a date, a
+ * Finished badge and a delete, over the one basket that has no date, is never
+ * finished and cannot go away. One somebody **shared** is a real thing to open,
+ * so the shared tab keeps it and titles it by its owner.
+ */
+describe('ShoppingListsPage: the basket that is always there', () => {
+  it('is never a row of the reader’s own history', async () => {
+    const mine = fakeBasketListStore([
+      basket({ id: 'live', kind: 'LIVE', name: null }),
+      basket({ id: 'gl1' }),
+    ]);
+
+    const fixture = await render(mine);
+
+    const drawn = fixture.debugElement
+      .queryAll(By.directive(ShoppingListRow))
+      .map((found) => (found.componentInstance as ShoppingListRow).row().id);
+    expect(drawn).toEqual(['gl1']);
+  });
+
+  it('leaves the history empty rather than listing it alone', async () => {
+    const mine = fakeBasketListStore([
+      basket({ id: 'live', kind: 'LIVE', name: null }),
+    ]);
+
+    const fixture = await render(mine);
+
+    expect(
+      fixture.debugElement.queryAll(By.directive(ShoppingListRow))
+    ).toHaveLength(0);
+  });
+
+  it('is kept on the shared tab, titled by whose it is', async () => {
+    const shared = fakeSharedListStore();
+    shared.landPage([
+      sharedBasket({ id: 'sh-live', kind: 'LIVE', name: null }),
+    ]);
+
+    const fixture = await render(undefined, shared, '/?tab=shared');
+
+    const row = fixture.debugElement.query(By.directive(ShoppingListRow))
+      ?.componentInstance as ShoppingListRow;
+    expect(row.row().name).toBe('basket.live.titleOf');
+    // And no date, because it has none: `generatedAt` is the moment the server
+    // first made it, which is not a day anybody shopped.
+    expect(row.row().live).toBe(true);
+  });
+
+  it('shows no date on that row', async () => {
+    const shared = fakeSharedListStore();
+    shared.landPage([
+      sharedBasket({ id: 'sh-live', kind: 'LIVE', name: null }),
+    ]);
+
+    const fixture = await render(undefined, shared, '/?tab=shared');
+
+    // The row still says who shared it and when, which is the one date that is
+    // about a person rather than about the basket.
+    expect(text(fixture)).toContain('history.shared.byOn');
+    expect(text(fixture)).not.toContain('21 August');
   });
 });

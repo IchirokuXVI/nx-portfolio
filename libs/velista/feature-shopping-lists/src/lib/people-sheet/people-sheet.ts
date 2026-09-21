@@ -21,11 +21,7 @@ import {
   formatGeneratedDate,
   type BasketParticipant,
 } from '@portfolio/velista/models';
-import {
-  appPath,
-  basketIdOf,
-  SheetNavigation,
-} from '@portfolio/velista/platform';
+import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
 import { participantInitials, participantName } from '../basket-labels';
 import { basketPath } from '../basket-paths';
@@ -81,8 +77,14 @@ export class PeopleSheet {
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
 
-  /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _basketId = basketIdOf(this._route);
+  /**
+   * The basket underneath, which is where closing this sheet goes.
+   *
+   * From the **store** and not from `paramMap` since velista `0091`: the same
+   * page is routed at `shopping-lists/live`, where there is no id in the URL at
+   * all, and a sheet that read one there would dismiss to `/shopping-lists/`.
+   */
+  private readonly _address = this._store.address;
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
   /** The account, for the owner's own row, which the basket carries unnamed. */
@@ -301,7 +303,7 @@ export class PeopleSheet {
    */
   protected close(): void {
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._basketId())
+      basketPath(this._locale(), this._basePath, this._address())
     );
   }
 }

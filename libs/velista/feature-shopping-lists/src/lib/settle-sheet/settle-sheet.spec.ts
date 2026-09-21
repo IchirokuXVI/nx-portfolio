@@ -220,6 +220,10 @@ function storeDouble(world: World) {
 
   return {
     basket,
+    // How the sheet addresses its own basket since velista `0091`: off the store,
+    // never off `paramMap`, which has no id under `shopping-lists/live`. The sheet
+    // builds its dismissal and its own re-keyed URL from it.
+    address: signal({ basketId: BASKET_ID }),
     state: signal('ready'),
     error: signal<unknown>(null),
     shareLink: signal(null),

@@ -8,10 +8,10 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BasketListStore,
   BasketStore,
   BasketViewStore,
   GatewayError,
-  BasketListStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
 import type {
@@ -115,6 +115,8 @@ interface Options {
   readonly lines?: readonly BasketRow[];
   /** Whether the trip is over (plan 0057). A finished basket draws no controls. */
   readonly finished?: boolean;
+  /** Which basket this is (velista `0091`). `LIVE` draws the other surface. */
+  readonly kind?: 'GENERATED' | 'LIVE' | 'UNKNOWN';
   /**
    * How many rows are still to do, **by the server**.
    *
@@ -326,7 +328,9 @@ async function render(options: Options = {}): Promise<{
           snapshot: {
             paramMap,
             queryParamMap: convertToParamMap({}),
-            data: {},
+            // What the route says about which basket to open (velista `0091`):
+            // `live` for the caller's own, absent for a basket named by its id.
+            data: options.kind === 'LIVE' ? { basket: 'live' } : {},
           },
           parent: null,
         },
@@ -340,9 +344,14 @@ async function render(options: Options = {}): Promise<{
         useValue: {
           basket: signal({
             id: 'basket-saturday',
-            kind: 'GENERATED',
+            kind: options.kind ?? 'GENERATED',
             name: 'Saturday shop',
-            status: 'OPEN',
+            // Where the trip has got to, **on the basket**, which is where the page
+            // reads it from since velista `0091`: `selectBasketSurface` decides the
+            // banner, the finish control and the prompt from the basket it is
+            // handed, so a fixture that left this `OPEN` and moved a separate flag
+            // would be describing a basket the server cannot send.
+            status: (options.finished ?? false) ? 'FINISHED' : 'OPEN',
             createdAt: null,
             rows: store.rows(),
             lists: options.served ?? [],
@@ -371,7 +380,9 @@ async function render(options: Options = {}): Promise<{
           revoked: store.revoked,
           present: store.present,
           participants: store.participants,
-          kind: signal('GENERATED'),
+          kind: signal(options.kind ?? 'GENERATED'),
+          // How a sheet over this page addresses its basket (velista `0091`).
+          address: signal({ basketId: 'basket-saturday' }),
           isOpen: signal(!(options.finished ?? false)),
           // A sheet that could not find its row says so once, through the page.
           rowGone: signal(0),
@@ -384,6 +395,12 @@ async function render(options: Options = {}): Promise<{
             null,
           open: (id: string) => {
             store.opened.push(id);
+            return Promise.resolve();
+          },
+          // The caller's own basket, which takes no id: the route is a word and
+          // the server hands the id back on the answer.
+          openLive: () => {
+            store.opened.push('live');
             return Promise.resolve();
           },
           leave: store.leave,
@@ -1887,5 +1904,115 @@ describe('searching the basket', () => {
 
       expect(TestBed.inject(BasketViewStore).sourceLists()).toEqual([]);
     });
+  });
+});
+
+/**
+ * The same page, drawing the basket that is always there (velista `0091`,
+ * section 3).
+ *
+ * **One component and one template.** What differs is a heading, a sentence,
+ * four absent controls and two words of an empty state, and every one of them
+ * comes off `selectBasketSurface`, so these tests are about the page reading that
+ * model rather than about the model itself.
+ */
+describe('the basket that is always there', () => {
+  const someLines = [line('Milk', { left: 2 }), line('Eggs')];
+
+  it('opens the caller’s own basket, with no id to open it by', async () => {
+    const { store } = await render({ kind: 'LIVE', lines: someLines });
+
+    expect(store.opened).toEqual(['live']);
+  });
+
+  it('draws no finish control, because it is never finished', async () => {
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      me: participant(owner()),
+    });
+
+    expect(query(fixture, '.finish')).toBeNull();
+  });
+
+  it('never asks whether the trip is over', async () => {
+    // Every line settled is not a status change here and finishes nothing: the
+    // basket has no end to reach.
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      unsettled: 0,
+    });
+
+    expect(query(fixture, '.prompt')).toBeNull();
+  });
+
+  it('draws no finished banner and no reopen', async () => {
+    // `finished: true` is refused by the model rather than by the template: a
+    // `LIVE` basket is always `OPEN`, so the banner has nothing to say.
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      finished: true,
+    });
+
+    expect(query(fixture, '.finished')).toBeNull();
+  });
+
+  it('draws no faces, because the server keeps no presence room for it', async () => {
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      present: [owner(), guest('p-9', 1)],
+      participants: [participant(owner())],
+    });
+
+    expect(query(fixture, '.faces')).toBeNull();
+    expect(query(fixture, '.people')).toBeNull();
+  });
+
+  it('still offers the owner the share sheet: both kinds are shareable', async () => {
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      me: participant(owner()),
+    });
+
+    expect(query(fixture, '.share')).not.toBeNull();
+  });
+
+  it('says what it is, once, under the heading', async () => {
+    const { fixture } = await render({ kind: 'LIVE', lines: someLines });
+
+    expect(text(fixture)).toContain('basket.live.hint');
+  });
+
+  it('says what is left rather than counting a trip', async () => {
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      unsettled: 12,
+      progress: { done: 3, unavailable: 0, total: 15 },
+    });
+
+    expect(text(fixture)).toContain('basket.live.leftAndGot');
+    expect(text(fixture)).not.toContain('basket.progress');
+  });
+
+  it('says a different thing when there is nothing to buy', async () => {
+    const { fixture } = await render({ kind: 'LIVE', lines: [] });
+
+    expect(text(fixture)).toContain('basket.live.empty');
+    expect(text(fixture)).toContain('basket.live.emptyHint');
+  });
+
+  it('keeps every row a generated basket would draw', async () => {
+    // The rows, the reels and the settle sheet are the same screen. Only the
+    // header and the two sentences differ.
+    const { fixture } = await render({ kind: 'LIVE', lines: someLines });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.lines li')
+    ).toHaveLength(2);
   });
 });

@@ -340,6 +340,9 @@
     "section": {
       "zones": "Your groups"
     },
+    "liveBasket": {
+      "open": "Everything to buy, {{pending}} left"
+    },
     "shoppingList": {
       "open": "{{name}}, {{count}} still to get",
       "more_one": "and {{count}} more",
@@ -1045,6 +1048,16 @@
     "failed": "This list would not load",
     "retry": "Try again",
     "back": "Back",
+    "live": {
+      "title": "Everything to buy",
+      "titleOf": "{{name}}: everything to buy",
+      "hint": "Every list you can add to, in one place.",
+      "left": "{{pending}} to buy",
+      "leftAndGot": "{{pending}} to buy, {{done}} got this trip",
+      "allGot": "Nothing left, {{done}} got this trip",
+      "empty": "Nothing to buy",
+      "emptyHint": "Lines added to your lists show up here."
+    },
     "unnamed": "Shopping list",
     "notLive": "Not updating right now",
     "revoked": {

@@ -170,6 +170,20 @@ lib-line-composer {
   white-space: nowrap;
 }
 
+// What the basket that is always there is (velista `0091`, section 3).
+//
+// Secondary text, one line of it, sitting where the first row of the list would
+// otherwise start. It takes the page's own inline padding rather than the bar's,
+// because it belongs to the content below it and not to the furniture above.
+.hint {
+  flex: none;
+  margin: 0;
+  padding-inline: var(--app-space-4);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
 // A row of faces and no sentence. The overflow collapses into a stacked chip,
 // which is the same "+X" pattern the price display uses.
 .faces {

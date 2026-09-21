@@ -20,6 +20,7 @@ import {
   type BasketShareLink,
   type CatalogSuggestion,
   type ErrorCode,
+  type LiveBasketSummary,
   type ProductOffer,
 } from '@portfolio/velista/models';
 import { CatalogMemory } from '../catalog/catalog-memory';
@@ -61,6 +62,15 @@ function normalizeContent(content: string): string {
 
 /** The basket every read here is about. */
 const BASKET_ID = 'basket-saturday';
+
+/**
+ * The caller's own permanent basket (velista `0091`).
+ *
+ * A second id rather than the same one, because the two are two baskets on the
+ * server and a fake that answered one id for both would let a screen pass while
+ * addressing the wrong one.
+ */
+const LIVE_BASKET_ID = 'basket-live';
 
 /**
  * The two scopes the mock prices against, which are two chains.
@@ -568,6 +578,35 @@ export class BasketMemory implements BasketServiceI {
           this.servesLists ? scope : { ...scope, locations: [] },
         ])
       ),
+      progress: this._progress(rows),
+      pending: this._pending(rows),
+    };
+  }
+
+  /**
+   * The caller's own permanent basket (velista `0091`).
+   *
+   * The same lines and the same people as {@link getBasket}, because it stands
+   * in for a server that reads both from the same lists. What differs is the
+   * header, and it differs in exactly the three ways backend `0130` says: no
+   * name, a `LIVE` kind, and a status that is always open. A developer who wants
+   * the other surface opens a basket by id, which is what the app does.
+   */
+  async getLiveBasket(): Promise<Basket> {
+    const basket = await this.getBasket();
+    return {
+      ...basket,
+      id: LIVE_BASKET_ID,
+      kind: 'LIVE',
+      name: null,
+      status: 'OPEN',
+    };
+  }
+
+  async getLiveSummary(): Promise<LiveBasketSummary> {
+    const rows = this._rows();
+    return {
+      id: LIVE_BASKET_ID,
       progress: this._progress(rows),
       pending: this._pending(rows),
     };

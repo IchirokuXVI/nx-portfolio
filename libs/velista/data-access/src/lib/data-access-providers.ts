@@ -8,17 +8,18 @@ import { AuthMemory } from './auth/auth-memory';
 import { SessionStore } from './auth/session-store';
 import { SessionValidation } from './auth/session-validation';
 import { TokenStore } from './auth/token-store';
+import { BasketListMemory } from './baskets/basket-list-memory';
+import { BasketListStore } from './baskets/basket-list-store';
+import { BasketSessionStore } from './baskets/basket-session-store';
+import { BasketStore } from './baskets/basket-store';
+import { LiveBasketStore } from './baskets/live-basket-store';
+import { SharedListStore } from './baskets/shared-list-store';
 import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
 import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
 import { ContactMemory } from './contacts/contact-memory';
 import { ContactStore } from './contacts/contact-store';
-import { BasketSessionStore } from './baskets/basket-session-store';
-import { BasketStore } from './baskets/basket-store';
-import { BasketListMemory } from './baskets/basket-list-memory';
-import { BasketListStore } from './baskets/basket-list-store';
-import { SharedListStore } from './baskets/shared-list-store';
 import { LineMemory } from './lines/line-memory';
 import { LineStore } from './lines/line-store';
 import { ListMemory } from './lists/list-memory';
@@ -124,6 +125,14 @@ import { ZoneStore } from './zones/zone-store';
  * between them. `BasketListMemory` joins for `AccountMemory`'s reason exactly, and
  * `BasketListApi` stays out like every other real transport.
  *
+ * `LiveBasketStore` (velista `0091`) joins for `BasketListStore`'s reason exactly: it
+ * resolves `BASKET_SERVICE` and `REALTIME_CLIENT`. It is app scoped rather than page
+ * scoped because the dashboard reads it on every visit and the numbers it holds outlive
+ * one, so returning from the basket draws the card immediately and asks again behind it.
+ * It is a **second** reader of `BASKET_SERVICE` beside the page scoped `BasketStore`,
+ * which is allowed and is not a duplicate: one holds a whole basket for the screen in a
+ * shop, the other holds three numbers for a card.
+ *
  * `ItemNames` (plan 0047) joins for `MemberNames`' reason exactly: it resolves
  * `CATALOG_SERVICE`, so at the root it would name products from whatever that token's
  * default resolved to rather than from the catalog the app bound. It is app scoped
@@ -191,6 +200,7 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ContactStore,
   BasketSessionStore,
   BasketStore,
+  LiveBasketStore,
   StartupProbe,
   SessionValidation,
 ];

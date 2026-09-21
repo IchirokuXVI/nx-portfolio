@@ -12,6 +12,7 @@ import type {
   BasketSettleRequest,
   BasketShareLink,
   CatalogSuggestion,
+  LiveBasketSummary,
 } from '@portfolio/velista/models';
 import { BasketApi } from './basket-api';
 
@@ -85,6 +86,31 @@ export interface BasketServiceI {
    * refs, so every entry they receive names no list.
    */
   getBasket(basketId: string): Promise<Basket>;
+
+  /**
+   * The caller's own permanent basket (`GET /v1/baskets/live`), velista `0091`.
+   *
+   * **The server creates it on the first read**, so this never answers "there is
+   * none": one basket per person, holding every line of every list they can
+   * write, never finished and never named. Two tabs opening the app at once make
+   * one basket, through a unique index rather than through a lock.
+   *
+   * Account authenticated, unlike everything else on the participant surface: a
+   * guest holding a link has no basket of their own to ask for. The id comes
+   * back on the answer and every later request names it, which is why nothing
+   * else here takes a `'live'`.
+   */
+  getLiveBasket(): Promise<Basket>;
+
+  /**
+   * The three numbers the dashboard card draws (`GET /v1/baskets/live/summary`).
+   *
+   * A read of its own so the card does not pay for a thousand rows and a catalog
+   * composition to draw one sentence. It creates the basket exactly as
+   * {@link getLiveBasket} does, so the card is the first thing to make one for
+   * an account that has never opened the screen.
+   */
+  getLiveSummary(): Promise<LiveBasketSummary>;
 
   /**
    * Say what happened to a row at the shelf
