@@ -622,7 +622,7 @@ function toBasketPriceScope(raw: unknown): BasketPriceScope | null {
 }
 
 /**
- * From the gateway's `GET /v1/generated-lists/:id/basket`.
+ * From the gateway's `GET /v1/baskets/:id/basket`.
  *
  * Null only when there is no reader: `me` is what every attribution on the screen
  * resolves against, and a basket that cannot say who is holding it cannot be
@@ -748,12 +748,12 @@ export function toBasketSession(raw: unknown): BasketSession | null {
     return null;
   }
 
-  const generatedListId = str(raw['generatedListId']);
+  const basketId = str(raw['basketId']);
   const participant = toBasketParticipant(raw['participant']);
   const socketToken = str(raw['socketToken']);
 
   if (
-    generatedListId === null ||
+    basketId === null ||
     participant === null ||
     socketToken === null
   ) {
@@ -761,7 +761,7 @@ export function toBasketSession(raw: unknown): BasketSession | null {
   }
 
   return {
-    generatedListId,
+    basketId,
     participantId: participant.id,
     // Null for a registered participant and for the owner, who authenticate with
     // their account token and are given no second credential.

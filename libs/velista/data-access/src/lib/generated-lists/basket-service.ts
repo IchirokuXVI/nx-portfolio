@@ -77,7 +77,7 @@ export interface BasketServiceI {
 
   /**
    * The basket, its lines and everybody on it
-   * (`GET /v1/generated-lists/:id/basket`).
+   * (`GET /v1/baskets/:id/basket`).
    *
    * One request for the whole screen, including the products every line names,
    * because a line's attribution is a participant id and its pick is a product
@@ -87,7 +87,7 @@ export interface BasketServiceI {
    * section 5.2), so what comes back for a guest genuinely lacks the origins
    * rather than carrying them behind a flag.
    */
-  getBasket(generatedListId: string): Promise<BasketView>;
+  getBasket(basketId: string): Promise<BasketView>;
 
   /**
    * Settle a line (`POST .../lines/:lineId/settle`).
@@ -99,7 +99,7 @@ export interface BasketServiceI {
    * them in the first place.
    */
   settle(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketSettleRequest
   ): Promise<BasketSettleResult>;
@@ -125,7 +125,7 @@ export interface BasketServiceI {
    * settlements touched, and refusing it to the person who just made the mistake would
    * leave the mistake standing.
    */
-  reopen(generatedListId: string, lineId: string): Promise<BasketSettleResult>;
+  reopen(basketId: string, lineId: string): Promise<BasketSettleResult>;
 
   /**
    * Give units of a line to other products (`POST .../lines/:lineId/products`),
@@ -141,7 +141,7 @@ export interface BasketServiceI {
    * settlement records.
    */
   splitLine(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketSplitRequest
   ): Promise<BasketSplitResult>;
@@ -161,7 +161,7 @@ export interface BasketServiceI {
    * merge the answer's line is the survivor, which may not be the line addressed.
    */
   renameLine(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketRenameRequest
   ): Promise<BasketRenameResult>;
@@ -187,13 +187,13 @@ export interface BasketServiceI {
    *
    * ## The path is under `basket`, not `:id/lines`
    *
-   * `POST /v1/generated-lists/:id/lines` is the **owner's** add, resolved by
+   * `POST /v1/baskets/:id/lines` is the **owner's** add, resolved by
    * `ownerUserId`, so a guest holding a perfectly valid session gets a not found
    * from it. The participant surface reads through `basket` already, and its write
    * sits beside that read.
    */
   addLine(
-    generatedListId: string,
+    basketId: string,
     body: BasketAddLineRequest
   ): Promise<BasketLine>;
 
@@ -216,7 +216,7 @@ export interface BasketServiceI {
    * line must never fail because a search did.
    */
   suggest(
-    generatedListId: string,
+    basketId: string,
     query: string
   ): Promise<readonly CatalogSuggestion[]>;
 
@@ -237,7 +237,7 @@ export interface BasketServiceI {
    * it does after {@link settle}.
    */
   setOutstanding(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketOutstandingRequest
   ): Promise<BasketSettleResult>;
@@ -257,7 +257,7 @@ export interface BasketServiceI {
    * refusal. The screen does not draw the way in for them either.
    */
   getLineOrigins(
-    generatedListId: string,
+    basketId: string,
     lineId: string
   ): Promise<BasketLineOrigins>;
 
@@ -282,7 +282,7 @@ export interface BasketServiceI {
    * unbuying it.
    */
   setOriginQuantity(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketOriginQuantityRequest
   ): Promise<BasketOriginQuantityResult>;
@@ -310,14 +310,14 @@ export interface BasketServiceI {
    * report is required rather than optional.
    */
   setOriginSettled(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketOriginSettledRequest
   ): Promise<BasketOriginSettledResult>;
 
   /** Everybody on the basket (`GET .../participants/mine`), for presence. */
   listParticipants(
-    generatedListId: string
+    basketId: string
   ): Promise<readonly BasketParticipant[]>;
 
   /**
@@ -327,7 +327,7 @@ export interface BasketServiceI {
    * this call: it presents the participant credential, which is the database read
    * that refuses somebody who has been removed (backend `0051`, section 9).
    */
-  refreshSocketToken(generatedListId: string): Promise<BasketSession>;
+  refreshSocketToken(basketId: string): Promise<BasketSession>;
 
   /**
    * The live share link, minting one if there is none (`PUT .../share-link`).
@@ -335,10 +335,10 @@ export interface BasketServiceI {
    * Owner only, and account authenticated. `PUT` rather than `POST` because it is
    * "ensure": pressing share on two devices produces one link, not two.
    */
-  ensureShareLink(generatedListId: string): Promise<BasketShareLink>;
+  ensureShareLink(basketId: string): Promise<BasketShareLink>;
 
   /** The live link if there is one, without minting (`GET .../share-link`). */
-  getShareLink(generatedListId: string): Promise<BasketShareLink | null>;
+  getShareLink(basketId: string): Promise<BasketShareLink | null>;
 
   /**
    * Revoke the live link (`DELETE .../share-link`).
@@ -350,13 +350,13 @@ export interface BasketServiceI {
    * shop on one tap.
    */
   revokeShareLink(
-    generatedListId: string,
+    basketId: string,
     cascade?: boolean
   ): Promise<{ revoked: number }>;
 
   /** Remove one participant and nobody else (`DELETE .../participants/:id`). */
   revokeParticipant(
-    generatedListId: string,
+    basketId: string,
     participantId: string
   ): Promise<void>;
 
@@ -368,7 +368,7 @@ export interface BasketServiceI {
    * invited member, and somebody who was removed or left is brought back.
    */
   addParticipant(
-    generatedListId: string,
+    basketId: string,
     userId: string
   ): Promise<BasketParticipant>;
 
@@ -377,7 +377,7 @@ export interface BasketServiceI {
    * `0114` section 6). A registered participant only: a guest and the owner are
    * refused.
    */
-  leaveBasket(generatedListId: string): Promise<void>;
+  leaveBasket(basketId: string): Promise<void>;
 }
 
 /**

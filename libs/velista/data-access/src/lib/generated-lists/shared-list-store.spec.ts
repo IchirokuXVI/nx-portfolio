@@ -106,11 +106,11 @@ describe('SharedListStore', () => {
     ]);
     await store.load();
 
-    realtime.emit('generatedList.shared', { generatedListId: 'b' });
+    realtime.emit('basket.shared', { basketId: 'b' });
     jest.advanceTimersByTime(500);
-    realtime.emit('generatedList.shared', { generatedListId: 'c' });
+    realtime.emit('basket.shared', { basketId: 'c' });
     jest.advanceTimersByTime(500);
-    realtime.emit('generatedList.shared', { generatedListId: 'd' });
+    realtime.emit('basket.shared', { basketId: 'd' });
     expect(store.state()).toBe('loaded');
     jest.advanceTimersByTime(2000);
     await Promise.resolve();
@@ -130,7 +130,7 @@ describe('SharedListStore', () => {
     ]);
     await store.load();
 
-    realtime.emit('generatedList.unshared', { generatedListId: 'a' });
+    realtime.emit('basket.unshared', { basketId: 'a' });
 
     expect(store.lists().map((list) => list.id)).toEqual(['b']);
   });
@@ -139,7 +139,7 @@ describe('SharedListStore', () => {
     jest.useFakeTimers();
     const { realtime, reads } = harness([{ items: [], nextCursor: null }]);
 
-    realtime.emit('generatedList.shared', { generatedListId: 'b' });
+    realtime.emit('basket.shared', { basketId: 'b' });
     jest.advanceTimersByTime(2000);
     await Promise.resolve();
 

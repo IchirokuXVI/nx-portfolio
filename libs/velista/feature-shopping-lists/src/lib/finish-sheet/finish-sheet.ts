@@ -15,7 +15,7 @@ import {
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
 import {
-  generatedListIdOf,
+  basketIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
@@ -48,7 +48,7 @@ import { basketPath } from '../basket-paths';
  * It also does not revoke the link, evict a guest or drop anybody's socket
  * (section 6.1). Somebody in the shop when this lands keeps the basket open and keeps
  * their name on the rows they settled; their screen redraws in place from
- * `generatedList.updated`.
+ * `basket.updated`.
  *
  * ## Two stores, and why
  *
@@ -80,7 +80,7 @@ export class FinishSheet {
   private readonly _locale = inject(RokuLocaleStore).locale;
 
   /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _generatedListId = generatedListIdOf(this._route);
+  private readonly _basketId = basketIdOf(this._route);
 
   private readonly _busy = signal(false);
   private readonly _failed = signal(false);
@@ -111,7 +111,7 @@ export class FinishSheet {
     this._failed.set(false);
 
     const landed = await this._generated.setStatus(
-      this._generatedListId(),
+      this._basketId(),
       'FINISHED'
     );
 
@@ -139,7 +139,7 @@ export class FinishSheet {
    */
   protected close(): void {
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._generatedListId())
+      basketPath(this._locale(), this._basePath, this._basketId())
     );
   }
 }

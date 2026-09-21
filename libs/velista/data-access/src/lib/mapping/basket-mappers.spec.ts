@@ -76,7 +76,7 @@ describe('toBasketLine: what kind of line it is, and where it was sent', () => {
 describe('toBasketLineOrigins', () => {
   it('reads the lists on a line, the lists that could be, and every other', () => {
     const answer = toBasketLineOrigins({
-      generatedListId: 'b-1',
+      basketId: 'b-1',
       lineId: 'line-1',
       origins: [
         {

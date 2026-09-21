@@ -75,14 +75,14 @@ describe('toContact', () => {
 describe('the access events', () => {
   it('maps generatedList.shared and generatedList.unshared to their basket id', () => {
     expect(
-      toRealtimeEvent('generatedList.shared', { generatedListId: 'gl1' })
-    ).toEqual({ type: 'generatedList.shared', generatedListId: 'gl1' });
+      toRealtimeEvent('basket.shared', { basketId: 'gl1' })
+    ).toEqual({ type: 'basket.shared', basketId: 'gl1' });
     expect(
-      toRealtimeEvent('generatedList.unshared', { generatedListId: 'gl1' })
-    ).toEqual({ type: 'generatedList.unshared', generatedListId: 'gl1' });
+      toRealtimeEvent('basket.unshared', { basketId: 'gl1' })
+    ).toEqual({ type: 'basket.unshared', basketId: 'gl1' });
   });
 
   it('drops one that names no basket', () => {
-    expect(toRealtimeEvent('generatedList.unshared', { id: 'gl1' })).toBeNull();
+    expect(toRealtimeEvent('basket.unshared', { id: 'gl1' })).toBeNull();
   });
 });

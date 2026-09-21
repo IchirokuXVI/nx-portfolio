@@ -176,7 +176,7 @@ export class BasketPage {
   private readonly _generated = inject(GeneratedListStore);
 
   private readonly _id =
-    this._route.snapshot.paramMap.get('generatedListId') ?? '';
+    this._route.snapshot.paramMap.get('basketId') ?? '';
 
   protected readonly state = this._store.state;
   protected readonly lines = this._store.lines;
@@ -772,7 +772,7 @@ export class BasketPage {
    * reversible, which is why that sheet warns about the people rather than about
    * finality.
    *
-   * The basket is refetched rather than waited for over the socket. `generatedList.updated`
+   * The basket is refetched rather than waited for over the socket. `basket.updated`
    * does arrive, coalesced by a second and a half, and a screen whose controls came
    * back that long after the tap reads as a button that did not work.
    */

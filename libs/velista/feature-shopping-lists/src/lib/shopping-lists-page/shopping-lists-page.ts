@@ -370,8 +370,8 @@ export class ShoppingListsPage {
     void this._pages.back(this._router.serializeUrl(dashboard));
   }
 
-  open(generatedListId: string): void {
-    void this._router.navigate(['..', BASKET_PATHS.list, generatedListId], {
+  open(basketId: string): void {
+    void this._router.navigate(['..', BASKET_PATHS.list, basketId], {
       relativeTo: this._route,
     });
   }

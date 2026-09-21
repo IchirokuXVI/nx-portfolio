@@ -86,7 +86,7 @@ describe('BasketMemory: saying how many are still to get', () => {
       await refusal(() =>
         memory.setOutstanding(ID, 'line-milk', { outstanding: 1, from: 3 })
       )
-    ).toBe('generated_list_finished');
+    ).toBe('basket_finished');
   });
 });
 
@@ -421,7 +421,7 @@ describe('BasketMemory: what one list got', () => {
           from: 2,
         })
       )
-    ).toBe('generated_list_finished');
+    ).toBe('basket_finished');
   });
 });
 
@@ -590,7 +590,7 @@ describe('BasketMemory: raising a list that was asking for none', () => {
           from: 0,
         })
       )
-    ).toBe('generated_list_finished');
+    ).toBe('basket_finished');
   });
 
   it('brings home the units bought before the line reached any list', async () => {

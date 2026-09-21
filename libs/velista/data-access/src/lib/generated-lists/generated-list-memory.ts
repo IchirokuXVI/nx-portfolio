@@ -139,10 +139,10 @@ export class GeneratedListMemory implements GeneratedListServiceI {
    * moved.
    */
   async setStatus(
-    generatedListId: string,
+    basketId: string,
     status: WritableGeneratedListStatus
   ): Promise<void> {
-    const at = this._lists.findIndex((list) => list.id === generatedListId);
+    const at = this._lists.findIndex((list) => list.id === basketId);
     if (at < 0) {
       throw new GatewayError({
         code: 'not_found',

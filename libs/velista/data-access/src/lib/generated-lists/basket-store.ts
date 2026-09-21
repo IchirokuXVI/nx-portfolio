@@ -140,7 +140,7 @@ export class BasketStore {
   private readonly _socket = inject(BasketSocket);
   /**
    * The account socket, for the one basket event that cannot reach the basket's own
-   * room: `generatedList.unshared` (velista `0085`, section 6). It is addressed to the
+   * room: `basket.unshared` (velista `0085`, section 6). It is addressed to the
    * reader's user room, because once access has ended the basket room has already let
    * this socket go.
    */
@@ -209,9 +209,9 @@ export class BasketStore {
     // store in this library says the same thing.
     const subscription = this._socket.events.subscribe((event) => {
       switch (event.type) {
-        case 'generatedList.lineSettled':
-        case 'generatedList.lineUpdated':
-          if (event.generatedListId !== this._id) {
+        case 'basket.lineSettled':
+        case 'basket.lineUpdated':
+          if (event.basketId !== this._id) {
             // The socket is pinned to one basket, so this cannot normally happen. It
             // is checked anyway, because the alternative to a cheap comparison is a
             // row from another basket appearing in this one.
@@ -226,8 +226,8 @@ export class BasketStore {
           this.apply(event.line);
           return;
 
-        case 'generatedList.lineAdded':
-          if (event.generatedListId !== this._id) {
+        case 'basket.lineAdded':
+          if (event.basketId !== this._id) {
             return;
           }
           // Its own case and not a fold into the two above, which is the whole
@@ -237,24 +237,24 @@ export class BasketStore {
           this.append(event.line);
           return;
 
-        case 'generatedList.lineRemoved':
+        case 'basket.lineRemoved':
           // A rename merged this line into another one (backend `0113`, section 6).
           // The survivor arrives beside it as `lineUpdated`, and the server sends
           // this first, so the basket never draws two lines of one name.
-          if (event.generatedListId === this._id) {
+          if (event.basketId === this._id) {
             this.drop(event.lineId);
           }
           return;
 
-        case 'generatedList.participantJoined':
-        case 'generatedList.participantLeft':
+        case 'basket.participantJoined':
+        case 'basket.participantLeft':
           // The participant list is redacted per reader and carries a device for some
           // of them, so it is refetched rather than assembled from a broadcast that
           // was redacted to somebody else.
           this._scheduleRefresh();
           return;
 
-        case 'generatedList.updated':
+        case 'basket.updated':
           // The name or the status moved. The payload is a summary and this store
           // holds the whole basket, so there is nothing here to merge.
           if (event.list.id === this._id) {
@@ -262,8 +262,8 @@ export class BasketStore {
           }
           return;
 
-        case 'presence.generatedListUpdated':
-          if (event.generatedListId === this._id) {
+        case 'presence.basketUpdated':
+          if (event.basketId === this._id) {
             this._present.set(event.present);
           }
           return;
@@ -279,10 +279,10 @@ export class BasketStore {
     // so the event lands on the same state rather than on a second notice.
     const access = this._realtime.events.subscribe((event) => {
       if (
-        event.type === 'generatedList.unshared' &&
+        event.type === 'basket.unshared' &&
         !this._leaving &&
         this._id !== null &&
-        event.generatedListId === this._id
+        event.basketId === this._id
       ) {
         this._cancelRefresh();
         this._sessions.forget(this._id);
@@ -534,8 +534,8 @@ export class BasketStore {
    * link, which is `needsJoin` rather than a failure: the join screen is the
    * answer, not an error.
    */
-  async open(generatedListId: string): Promise<void> {
-    this._id = generatedListId;
+  async open(basketId: string): Promise<void> {
+    this._id = basketId;
     this._state.set('loading');
     this._error.set(null);
     this._present.set([]);
@@ -543,7 +543,7 @@ export class BasketStore {
     // request of its own, so waiting for the basket would delay going live by a whole
     // round trip on the screen where being live is the point; and the socket needs
     // nothing the read produces, since the credential it presents is already held.
-    this._socket.open(generatedListId);
+    this._socket.open(basketId);
     await this.refresh();
   }
 
@@ -837,7 +837,7 @@ export class BasketStore {
    * only the button waits.
    *
    * The socket carries the same line to everybody else through
-   * `generatedList.lineAdded`, and {@link append} is what both paths go through, so
+   * `basket.lineAdded`, and {@link append} is what both paths go through, so
    * the person who typed it and the person standing next to them get the same row by
    * the same route.
    *
@@ -1309,7 +1309,7 @@ export class BasketStore {
    * Doing it in each caller would be the same three lines in two sheets, and the one
    * that forgot would draw a sentence over a stale number.
    *
-   * `generated_list_finished` is the same shape of answer about the whole basket
+   * `basket_finished` is the same shape of answer about the whole basket
    * rather than one line (velista `0057`, section 7): the owner ended the trip while
    * this phone was in a shop, so the write that just refused is one of a screenful
    * that would all refuse the same way. Refetching turns the basket into the finished
@@ -1357,7 +1357,7 @@ export class BasketStore {
     if (
       error instanceof GatewayError &&
       (error.code === 'stale_quantity' ||
-        error.code === 'generated_list_finished')
+        error.code === 'basket_finished')
     ) {
       await this.refresh();
       this._error.set(error);
@@ -1395,7 +1395,7 @@ export class BasketStore {
    * moment, so the person is offered the join screen — where the link they still
    * have may let them back in — rather than a basket that refuses every tap.
    */
-  private _fail(generatedListId: string, error: unknown): void {
+  private _fail(basketId: string, error: unknown): void {
     this._error.set(error);
 
     if (hasResponse(error) && (error as { status: number }).status === 401) {
@@ -1404,8 +1404,8 @@ export class BasketStore {
       // person should be told so. No credential at all is a stranger who has
       // followed a link and simply has not joined yet, which is not a failure
       // and must not be reported as one.
-      const held = this._sessions.read(generatedListId);
-      this._sessions.forget(generatedListId);
+      const held = this._sessions.read(basketId);
+      this._sessions.forget(basketId);
       this._state.set(held === null ? 'needsJoin' : 'revoked');
       return;
     }

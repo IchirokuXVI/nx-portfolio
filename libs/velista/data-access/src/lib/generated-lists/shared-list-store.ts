@@ -38,7 +38,7 @@ const ACCESS_REFRESH_MS = 1500;
  *
  * ## What keeps it current
  *
- * `generatedList.shared` and `generatedList.unshared` arrive on the account socket,
+ * `basket.shared` and `basket.unshared` arrive on the account socket,
  * addressed to the reader alone and carrying only a basket id. The id is not enough to
  * draw a row, so both refetch the first page, quietly and coalesced. An `unshared`
  * also drops its row at once, because the refetch cannot remove a row that sits on a
@@ -77,13 +77,13 @@ export class SharedListStore {
     // entry point module federation does not dedupe (see `GeneratedListStore`).
     const subscription = this._realtime.events.subscribe((event) => {
       switch (event.type) {
-        case 'generatedList.unshared':
+        case 'basket.unshared':
           this._lists.update((lists) =>
-            lists.filter((list) => list.id !== event.generatedListId)
+            lists.filter((list) => list.id !== event.basketId)
           );
           this._scheduleRefresh();
           break;
-        case 'generatedList.shared':
+        case 'basket.shared':
           this._scheduleRefresh();
           break;
         default:

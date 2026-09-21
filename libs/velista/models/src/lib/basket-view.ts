@@ -758,7 +758,7 @@ export interface BasketLinkPreview {
  * who authenticate with their account token instead and need no second credential.
  */
 export interface BasketSession {
-  generatedListId: string;
+  basketId: string;
   participantId: string;
   /** Returned exactly once, at join. Null when an account token stands in for it. */
   secret: string | null;

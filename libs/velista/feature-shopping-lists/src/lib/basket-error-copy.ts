@@ -93,7 +93,7 @@ export function basketErrorKey(
       // retroactively have wanted one.
       return 'basket.error.belowSettled';
 
-    case 'generated_list_finished':
+    case 'basket_finished':
       // The trip is over. Its own code on the backend since luna `0055`, and its own
       // member here since velista `0054`, because read as a plain conflict it drew
       // "somebody already finished this line" over a line nobody had finished.

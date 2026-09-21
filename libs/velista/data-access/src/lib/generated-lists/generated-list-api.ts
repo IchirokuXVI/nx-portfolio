@@ -51,7 +51,7 @@ export class GeneratedListApi implements GeneratedListServiceI {
     const body = await firstValueFrom(
       this._http.get<unknown>(this._lists(), {
         params,
-        context: operation('generatedList.listMine'),
+        context: operation('basket.listMine'),
       })
     );
 
@@ -67,7 +67,7 @@ export class GeneratedListApi implements GeneratedListServiceI {
     const body = await firstValueFrom(
       this._http.get<unknown>(`${this._lists()}/shared`, {
         params,
-        context: operation('generatedList.listShared'),
+        context: operation('basket.listShared'),
       })
     );
 
@@ -110,11 +110,11 @@ export class GeneratedListApi implements GeneratedListServiceI {
             ? {}
             : { memberUserIds: [...request.memberUserIds] }),
         },
-        { context: operation('generatedList.create') }
+        { context: operation('basket.create') }
       )
     );
 
-    return required(toGeneratedListRun(body), 'generatedList.create');
+    return required(toGeneratedListRun(body), 'basket.create');
   }
 
   /**
@@ -129,19 +129,19 @@ export class GeneratedListApi implements GeneratedListServiceI {
    * `GeneratedListServiceI.setStatus` for who learns about the change instead.
    */
   async setStatus(
-    generatedListId: string,
+    basketId: string,
     status: WritableGeneratedListStatus
   ): Promise<void> {
     await firstValueFrom(
       this._http.patch<unknown>(
-        `${this._lists()}/${generatedListId}`,
+        `${this._lists()}/${basketId}`,
         { status },
-        { context: operation('generatedList.setStatus') }
+        { context: operation('basket.setStatus') }
       )
     );
   }
 
   private _lists(): string {
-    return this._urls.gateway('/v1/generated-lists');
+    return this._urls.gateway('/v1/baskets');
   }
 }

@@ -704,7 +704,7 @@ export class BasketMemory implements BasketServiceI {
     this._participants = [...this._participants, joined];
 
     return {
-      generatedListId: BASKET_ID,
+      basketId: BASKET_ID,
       participantId: joined.id,
       secret: `secret-${joined.id}`,
       socketToken: 'socket-token',
@@ -753,7 +753,7 @@ export class BasketMemory implements BasketServiceI {
   }
 
   async settle(
-    _generatedListId: string,
+    _basketId: string,
     lineId: string,
     body: BasketSettleRequest
   ): Promise<BasketSettleResult> {
@@ -824,7 +824,7 @@ export class BasketMemory implements BasketServiceI {
    * and the state is the reason.
    */
   async reopen(
-    _generatedListId: string,
+    _basketId: string,
     lineId: string
   ): Promise<BasketSettleResult> {
     this._requireLive();
@@ -883,7 +883,7 @@ export class BasketMemory implements BasketServiceI {
    * applied the number anyway would let a screen ship with no refetch on it.
    */
   async setOutstanding(
-    _generatedListId: string,
+    _basketId: string,
     lineId: string,
     body: BasketOutstandingRequest
   ): Promise<BasketSettleResult> {
@@ -945,7 +945,7 @@ export class BasketMemory implements BasketServiceI {
    * empty is what let a screen ship with no way in for it.
    */
   async getLineOrigins(
-    _generatedListId: string,
+    _basketId: string,
     lineId: string
   ): Promise<BasketLineOrigins> {
     this._requireZoneReader();
@@ -1004,7 +1004,7 @@ export class BasketMemory implements BasketServiceI {
    * starts under that list's own approval rule.
    */
   async setOriginQuantity(
-    _generatedListId: string,
+    _basketId: string,
     lineId: string,
     body: BasketOriginQuantityRequest
   ): Promise<BasketOriginQuantityResult> {
@@ -1178,7 +1178,7 @@ export class BasketMemory implements BasketServiceI {
    * field: it is what is settled beyond what the origins between them account for.
    */
   async setOriginSettled(
-    _generatedListId: string,
+    _basketId: string,
     lineId: string,
     body: BasketOriginSettledRequest
   ): Promise<BasketOriginSettledResult> {
@@ -1292,7 +1292,7 @@ export class BasketMemory implements BasketServiceI {
    * no screen's benefit.
    */
   async splitLine(
-    _generatedListId: string,
+    _basketId: string,
     lineId: string,
     body: BasketSplitRequest
   ): Promise<BasketSplitResult> {
@@ -1354,7 +1354,7 @@ export class BasketMemory implements BasketServiceI {
    * list where the name is taken, and `details.lists` is always empty here.
    */
   async renameLine(
-    _generatedListId: string,
+    _basketId: string,
     lineId: string,
     body: BasketRenameRequest
   ): Promise<BasketRenameResult> {
@@ -1631,12 +1631,12 @@ export class BasketMemory implements BasketServiceI {
    *   origins would hide exactly that.
    */
   async addLine(
-    _generatedListId: string,
+    _basketId: string,
     body: BasketAddLineRequest
   ): Promise<BasketLine> {
     // The same refusal every other write here gets, and by the same route since
     // velista `0057`. It used to throw a plain conflict, on the grounds that
-    // `ERROR_CODES` did not carry `generated_list_finished` and that nothing
+    // `ERROR_CODES` did not carry `basket_finished` and that nothing
     // branched on telling the two apart. Both halves have since stopped being true:
     // the code is in `problem.ts`, luna `0059` section 3.1 widened the set of writes
     // that raise it from three to nine with the add among them, and `BasketStore`
@@ -1687,7 +1687,7 @@ export class BasketMemory implements BasketServiceI {
    * no prices, so honouring a scope would mean inventing one.
    */
   async suggest(
-    _generatedListId: string,
+    _basketId: string,
     query: string
   ): Promise<readonly CatalogSuggestion[]> {
     return this._catalog.suggest(query);
@@ -1701,7 +1701,7 @@ export class BasketMemory implements BasketServiceI {
 
   async refreshSocketToken(): Promise<BasketSession> {
     return {
-      generatedListId: BASKET_ID,
+      basketId: BASKET_ID,
       participantId: this.me.id,
       secret: null,
       socketToken: 'socket-token',
@@ -1727,7 +1727,7 @@ export class BasketMemory implements BasketServiceI {
   }
 
   async revokeShareLink(
-    _generatedListId: string,
+    _basketId: string,
     cascade = false
   ): Promise<{ revoked: number }> {
     const minted = this._participants.filter(
@@ -1747,7 +1747,7 @@ export class BasketMemory implements BasketServiceI {
   }
 
   async revokeParticipant(
-    _generatedListId: string,
+    _basketId: string,
     participantId: string
   ): Promise<void> {
     this._participants = this._participants.filter(
@@ -1760,7 +1760,7 @@ export class BasketMemory implements BasketServiceI {
    * are, which is what the server does for a live invited member.
    */
   async addParticipant(
-    _generatedListId: string,
+    _basketId: string,
     userId: string
   ): Promise<BasketParticipant> {
     const held = this._participants.find((person) => person.userId === userId);
@@ -1835,7 +1835,7 @@ export class BasketMemory implements BasketServiceI {
   private _requireLive(): void {
     if (!basketTakesLines(this.status)) {
       throw new GatewayError({
-        code: 'generated_list_finished',
+        code: 'basket_finished',
         status: 409,
         correlationId: 'memory',
         detail: 'This basket is finished, so it cannot be changed',

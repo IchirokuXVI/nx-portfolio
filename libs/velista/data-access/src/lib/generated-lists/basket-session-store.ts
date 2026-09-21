@@ -43,15 +43,15 @@ export class BasketSessionStore {
    * Null is the ordinary answer for a stranger arriving on a link, and it is what
    * sends the basket page to the join screen rather than to an error.
    */
-  read(generatedListId: string): BasketSession | null {
-    const raw = this._browser.readStorage(basketSessionKey(generatedListId));
+  read(basketId: string): BasketSession | null {
+    const raw = this._browser.readStorage(basketSessionKey(basketId));
     if (raw === null) {
       return null;
     }
 
     try {
       const parsed: unknown = JSON.parse(raw);
-      return this._revive(generatedListId, parsed);
+      return this._revive(basketId, parsed);
     } catch {
       // Storage that will not parse is storage from another version of this app,
       // or from a half written write. Either way it is not a credential, and
@@ -63,7 +63,7 @@ export class BasketSessionStore {
   /** Remember a credential just minted by a join, or refreshed by a token call. */
   write(session: BasketSession): void {
     this._browser.writeStorage(
-      basketSessionKey(session.generatedListId),
+      basketSessionKey(session.basketId),
       JSON.stringify({
         participantId: session.participantId,
         secret: session.secret,
@@ -81,8 +81,8 @@ export class BasketSessionStore {
    * would send the reader to a basket that refuses them on every action instead
    * of to the join screen, where the link they still hold might let them back in.
    */
-  forget(generatedListId: string): void {
-    this._browser.removeStorage(basketSessionKey(generatedListId));
+  forget(basketId: string): void {
+    this._browser.removeStorage(basketSessionKey(basketId));
   }
 
   /**
@@ -92,7 +92,7 @@ export class BasketSessionStore {
    * in the key, so storing it again would be a second copy that could disagree.
    */
   private _revive(
-    generatedListId: string,
+    basketId: string,
     raw: unknown
   ): BasketSession | null {
     if (typeof raw !== 'object' || raw === null) {
@@ -112,7 +112,7 @@ export class BasketSessionStore {
         : null;
 
     return {
-      generatedListId,
+      basketId,
       participantId,
       // Null is a real value here and not a missing one: a registered
       // participant and the owner authenticate with their account token and are

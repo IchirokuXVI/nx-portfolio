@@ -391,7 +391,7 @@ export class HomePage {
     // after them, so the card renders with the zone skeletons instead of appearing a
     // beat later and pushing the groups down as somebody is reaching for one.
     //
-    // No room is subscribed to for it. `generatedList.created` and `.updated` are
+    // No room is subscribed to for it. `basket.created` and `.updated` are
     // addressed to the owner's own sessions, which this client already holds, so unlike
     // the resume card this needs no `subscribeList` at all. The one thing that does not
     // arrive is a settle, which core publishes to the basket's room; `GeneratedListStore`
@@ -676,8 +676,8 @@ export class HomePage {
    * One id and not two, unlike `openList`: a basket is addressed on its own, because
    * unlike a zone list it belongs to the caller rather than to a group.
    */
-  openShoppingList(generatedListId: string): void {
-    void this._router.navigate(['..', BASKET_PATHS.list, generatedListId], {
+  openShoppingList(basketId: string): void {
+    void this._router.navigate(['..', BASKET_PATHS.list, basketId], {
       relativeTo: this._route,
     });
   }

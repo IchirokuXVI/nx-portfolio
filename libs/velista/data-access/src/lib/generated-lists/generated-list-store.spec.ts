@@ -58,7 +58,7 @@ function fakeService(options: FakeOptions = {}) {
   const calls: {
     method: string;
     cursor?: string;
-    generatedListId?: string;
+    basketId?: string;
     status?: string;
   }[] = [];
   const pages = options.pages ?? [{ items: [], nextCursor: null }];
@@ -90,10 +90,10 @@ function fakeService(options: FakeOptions = {}) {
       return pages[++served] ?? { items: [], nextCursor: null };
     },
     setStatus: async (
-      generatedListId: string,
+      basketId: string,
       status: WritableGeneratedListStatus
     ) => {
-      calls.push({ method: 'setStatus', generatedListId, status });
+      calls.push({ method: 'setStatus', basketId, status });
       if (options.setStatusRejectsWith !== undefined) {
         throw options.setStatusRejectsWith;
       }
@@ -385,8 +385,8 @@ describe('GeneratedListStore', () => {
    * and these are the four properties that make a refetch safe to do on a broadcast.
    */
   describe('a line being settled', () => {
-    const settled = (generatedListId: string) => ({
-      generatedListId,
+    const settled = (basketId: string) => ({
+      basketId,
       line: { id: 'line-1', content: 'Milk', quantity: 2, settledQuantity: 2 },
     });
 
@@ -414,7 +414,7 @@ describe('GeneratedListStore', () => {
       await store.load();
       expect(store.lists()[0]?.settledLineCount).toBe(4);
 
-      realtime.emit('generatedList.lineSettled', settled('a'));
+      realtime.emit('basket.lineSettled', settled('a'));
       jest.advanceTimersByTime(2000);
       await Promise.resolve();
       await Promise.resolve();
@@ -433,11 +433,11 @@ describe('GeneratedListStore', () => {
       await store.load();
       const before = calls.filter((call) => call.method === 'listMine').length;
 
-      realtime.emit('generatedList.lineSettled', settled('a'));
+      realtime.emit('basket.lineSettled', settled('a'));
       jest.advanceTimersByTime(500);
-      realtime.emit('generatedList.lineSettled', settled('a'));
+      realtime.emit('basket.lineSettled', settled('a'));
       jest.advanceTimersByTime(500);
-      realtime.emit('generatedList.lineSettled', settled('a'));
+      realtime.emit('basket.lineSettled', settled('a'));
       jest.advanceTimersByTime(2000);
       await Promise.resolve();
 
@@ -457,7 +457,7 @@ describe('GeneratedListStore', () => {
       });
       await store.load();
 
-      realtime.emit('generatedList.lineSettled', settled('a'));
+      realtime.emit('basket.lineSettled', settled('a'));
       expect(store.state()).toBe('loaded');
 
       jest.advanceTimersByTime(2000);
@@ -483,7 +483,7 @@ describe('GeneratedListStore', () => {
       await store.loadMore();
       expect(store.lists().map((list) => list.id)).toEqual(['a', 'old']);
 
-      realtime.emit('generatedList.lineSettled', settled('a'));
+      realtime.emit('basket.lineSettled', settled('a'));
       jest.advanceTimersByTime(2000);
       await Promise.resolve();
       await Promise.resolve();
@@ -503,7 +503,7 @@ describe('GeneratedListStore', () => {
       await store.load();
       const before = calls.filter((call) => call.method === 'listMine').length;
 
-      realtime.emit('generatedList.lineSettled', settled('somebody-elses'));
+      realtime.emit('basket.lineSettled', settled('somebody-elses'));
       jest.advanceTimersByTime(2000);
       await Promise.resolve();
 
@@ -521,7 +521,7 @@ describe('GeneratedListStore', () => {
       await store.load();
       const before = calls.filter((call) => call.method === 'listMine').length;
 
-      realtime.emit('generatedList.lineSettled', { line: { id: 'line-1' } });
+      realtime.emit('basket.lineSettled', { line: { id: 'line-1' } });
       jest.advanceTimersByTime(2000);
       await Promise.resolve();
 
@@ -537,7 +537,7 @@ describe('GeneratedListStore', () => {
       const { store, realtime } = harness();
       await store.load();
 
-      realtime.emit('generatedList.created', {
+      realtime.emit('basket.created', {
         id: 'remote',
         name: 'From the laptop',
         status: 'OPEN',
@@ -561,7 +561,7 @@ describe('GeneratedListStore', () => {
       });
       await store.load();
 
-      realtime.emit('generatedList.updated', {
+      realtime.emit('basket.updated', {
         id: 'b',
         name: 'Renamed',
         status: 'OPEN',
@@ -579,7 +579,7 @@ describe('GeneratedListStore', () => {
       });
       await store.load();
 
-      realtime.emit('generatedList.deleted', { id: 'a' });
+      realtime.emit('basket.deleted', { id: 'a' });
 
       expect(store.lists()).toEqual([]);
     });
@@ -595,7 +595,7 @@ describe('GeneratedListStore', () => {
       });
       await store.load();
 
-      realtime.emit('generatedList.updated', {
+      realtime.emit('basket.updated', {
         id: 'a',
         generatedAt: 'not a date',
       });
@@ -625,7 +625,7 @@ describe('GeneratedListStore', () => {
 
       expect(calls).toContainEqual({
         method: 'setStatus',
-        generatedListId: 'a',
+        basketId: 'a',
         status: 'FINISHED',
       });
     });
@@ -699,7 +699,7 @@ describe('GeneratedListStore', () => {
       expect(store.lists()).toEqual([]);
       expect(calls).toContainEqual({
         method: 'setStatus',
-        generatedListId: 'never-read',
+        basketId: 'never-read',
         status: 'FINISHED',
       });
     });

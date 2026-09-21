@@ -41,28 +41,28 @@ describe('the basket room, off the wire', () => {
     // The half this used to throw away. `GeneratedListStore` wants the id, because a
     // summary cannot be recomputed from one line; the basket screen wants the line,
     // because it holds the lines and one merge moves one row with no request.
-    const event = toRealtimeEvent('generatedList.lineSettled', {
-      generatedListId: 'gl-1',
+    const event = toRealtimeEvent('basket.lineSettled', {
+      basketId: 'gl-1',
       line,
     });
 
     expect(event).toMatchObject({
-      type: 'generatedList.lineSettled',
-      generatedListId: 'gl-1',
+      type: 'basket.lineSettled',
+      basketId: 'gl-1',
       // Mapped into this app's own names, and carrying what the row draws.
       line: { id: 'line-1', settled: 1, touchedBy: 'p-2' },
     });
   });
 
   it('maps an edit the same way a settle is mapped', () => {
-    const event = toRealtimeEvent('generatedList.lineUpdated', {
-      generatedListId: 'gl-1',
+    const event = toRealtimeEvent('basket.lineUpdated', {
+      basketId: 'gl-1',
       line,
     });
 
     expect(event).toMatchObject({
-      type: 'generatedList.lineUpdated',
-      generatedListId: 'gl-1',
+      type: 'basket.lineUpdated',
+      basketId: 'gl-1',
     });
   });
 
@@ -71,14 +71,14 @@ describe('the basket room, off the wire', () => {
     // `0055` gave it one: a client receiving that would have to decide whether to
     // replace a row or append one, and the merge does nothing at all for an id the
     // basket does not hold, so the new line would vanish.
-    const event = toRealtimeEvent('generatedList.lineAdded', {
-      generatedListId: 'gl-1',
+    const event = toRealtimeEvent('basket.lineAdded', {
+      basketId: 'gl-1',
       line: { ...line, createdByParticipantId: 'p-3' },
     });
 
     expect(event).toMatchObject({
-      type: 'generatedList.lineAdded',
-      generatedListId: 'gl-1',
+      type: 'basket.lineAdded',
+      basketId: 'gl-1',
       line: { id: 'line-1', createdBy: 'p-3' },
     });
   });
@@ -87,8 +87,8 @@ describe('the basket room, off the wire', () => {
     // The one place a readable id is not enough. An append has no earlier copy to
     // fall back on, so a blank row in a shop is the alternative to dropping it.
     expect(
-      toRealtimeEvent('generatedList.lineAdded', {
-        generatedListId: 'gl-1',
+      toRealtimeEvent('basket.lineAdded', {
+        basketId: 'gl-1',
         line: 'not a line',
       })
     ).toBeNull();
@@ -98,8 +98,8 @@ describe('the basket room, off the wire', () => {
     // Null is the honest answer rather than a missing field: a derived line was put
     // there by the generation and not by a person. Absent reads the same way, which
     // is what lets a basket served by an older backend draw the same nothing.
-    const event = toRealtimeEvent('generatedList.lineAdded', {
-      generatedListId: 'gl-1',
+    const event = toRealtimeEvent('basket.lineAdded', {
+      basketId: 'gl-1',
       line,
     });
 
@@ -109,14 +109,14 @@ describe('the basket room, off the wire', () => {
   it('keeps the basket id when the line is unreadable', () => {
     // Null rather than dropping the event: the id is still good, so the store that
     // only wanted the id is unaffected and the one that wanted the line refetches.
-    const event = toRealtimeEvent('generatedList.lineSettled', {
-      generatedListId: 'gl-1',
+    const event = toRealtimeEvent('basket.lineSettled', {
+      basketId: 'gl-1',
       line: 'not a line',
     });
 
     expect(event).toEqual({
-      type: 'generatedList.lineSettled',
-      generatedListId: 'gl-1',
+      type: 'basket.lineSettled',
+      basketId: 'gl-1',
       line: null,
     });
   });
@@ -124,7 +124,7 @@ describe('the basket room, off the wire', () => {
   it('reads a participant joining, which arrives bare', () => {
     // No basket id on the payload, and it needs none: it arrives only on a
     // connection pinned to one basket.
-    const event = toRealtimeEvent('generatedList.participantJoined', {
+    const event = toRealtimeEvent('basket.participantJoined', {
       id: 'p-3',
       kind: 'GUEST',
       displayName: null,
@@ -136,7 +136,7 @@ describe('the basket room, off the wire', () => {
     });
 
     expect(event).toMatchObject({
-      type: 'generatedList.participantJoined',
+      type: 'basket.participantJoined',
       participant: { id: 'p-3', kind: 'GUEST', guestNumber: 2 },
     });
   });
@@ -144,8 +144,8 @@ describe('the basket room, off the wire', () => {
   it('reads who is present, keyed by participant and never by user', () => {
     // A guest has no user id at all, which is exactly what a presence entry built on
     // `PresenceUser` could not express, and why this is its own shape.
-    const event = toRealtimeEvent('presence.generatedListUpdated', {
-      generatedListId: 'gl-1',
+    const event = toRealtimeEvent('presence.basketUpdated', {
+      basketId: 'gl-1',
       present: [
         {
           participantId: 'p-3',
@@ -158,8 +158,8 @@ describe('the basket room, off the wire', () => {
     });
 
     expect(event).toEqual({
-      type: 'presence.generatedListUpdated',
-      generatedListId: 'gl-1',
+      type: 'presence.basketUpdated',
+      basketId: 'gl-1',
       present: [
         {
           participantId: 'p-3',
@@ -175,26 +175,26 @@ describe('the basket room, off the wire', () => {
   it('reads a line a rename took away as an id and a basket', () => {
     // `GeneratedListLineRemovedEvent` (backend `0113`, section 6): ids only.
     expect(
-      toRealtimeEvent('generatedList.lineRemoved', {
-        generatedListId: 'gl-1',
+      toRealtimeEvent('basket.lineRemoved', {
+        basketId: 'gl-1',
         lineId: 'line-1',
       })
     ).toEqual({
-      type: 'generatedList.lineRemoved',
-      generatedListId: 'gl-1',
+      type: 'basket.lineRemoved',
+      basketId: 'gl-1',
       lineId: 'line-1',
     });
   });
 
   it('drops a removal that does not say which line', () => {
     expect(
-      toRealtimeEvent('generatedList.lineRemoved', { generatedListId: 'gl-1' })
+      toRealtimeEvent('basket.lineRemoved', { basketId: 'gl-1' })
     ).toBeNull();
   });
 
   it('drops one unreadable face rather than emptying a full shop', () => {
-    const event = toRealtimeEvent('presence.generatedListUpdated', {
-      generatedListId: 'gl-1',
+    const event = toRealtimeEvent('presence.basketUpdated', {
+      basketId: 'gl-1',
       present: [
         { kind: 'GUEST' },
         {

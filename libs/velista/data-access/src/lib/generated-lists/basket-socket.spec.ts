@@ -110,7 +110,7 @@ class FakeSocket implements SocketLike {
 
 function session(token: string): BasketSession {
   return {
-    generatedListId: 'basket-saturday',
+    basketId: 'basket-saturday',
     participantId: 'p-guest-9',
     secret: 'the-secret',
     socketToken: token,
@@ -167,8 +167,8 @@ describe('BasketSocket', () => {
     refreshAnswer = () => Promise.resolve(session('participant-token'));
 
     const service: Partial<BasketServiceI> = {
-      refreshSocketToken: (generatedListId: string) => {
-        refreshes.push(generatedListId);
+      refreshSocketToken: (basketId: string) => {
+        refreshes.push(basketId);
         return refreshAnswer();
       },
     };
@@ -275,13 +275,13 @@ describe('BasketSocket', () => {
       client.open('basket-saturday');
       await settle();
       socket().driveConnect();
-      socket().driveEvent('generatedList.lineSettled', {
-        generatedListId: 'basket-saturday',
+      socket().driveEvent('basket.lineSettled', {
+        basketId: 'basket-saturday',
         line: null,
       });
 
       expect(seen).toHaveLength(1);
-      expect(seen[0].type).toBe('generatedList.lineSettled');
+      expect(seen[0].type).toBe('basket.lineSettled');
     });
 
     it('ignores an event this app does not know', async () => {
@@ -307,7 +307,7 @@ describe('BasketSocket', () => {
       socket().driveConnect();
 
       expect(() =>
-        socket().driveEvent('generatedList.lineSettled', 'not an object')
+        socket().driveEvent('basket.lineSettled', 'not an object')
       ).not.toThrow();
       expect(seen).toEqual([]);
     });
@@ -323,8 +323,8 @@ describe('BasketSocket', () => {
       socket().driveConnect();
 
       expect(() =>
-        socket().driveEvent('generatedList.lineSettled', {
-          generatedListId: 'basket-saturday',
+        socket().driveEvent('basket.lineSettled', {
+          basketId: 'basket-saturday',
           line: null,
         })
       ).not.toThrow();

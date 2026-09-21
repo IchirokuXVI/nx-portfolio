@@ -273,7 +273,7 @@ async function render(options: Options = {}): Promise<{
     progress: signal(options.progress ?? { done: 0, unavailable: 0, total: 0 }),
   };
 
-  const paramMap = convertToParamMap({ generatedListId: 'basket-saturday' });
+  const paramMap = convertToParamMap({ basketId: 'basket-saturday' });
 
   await TestBed.configureTestingModule({
     imports: [BasketPage, RokuTranslatorTestingModule.forTesting()],

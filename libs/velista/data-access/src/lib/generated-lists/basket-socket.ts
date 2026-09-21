@@ -43,14 +43,14 @@ const KNOWN_EVENT_NAMES: ReadonlySet<string> = new Set(REALTIME_EVENT_NAMES);
  * Teaching that client a second credential would put "which of two identities am I"
  * inside every existing subscription, to serve one screen. So this is its own client,
  * with its own token source and its own lifetime, and the owner holds **both**: their
- * account room already carries `generatedList.lineSettled` so the dashboard's counts
+ * account room already carries `basket.lineSettled` so the dashboard's counts
  * move, and the basket room carries the per line detail that room does not.
  *
  * ## There is nothing to subscribe to
  *
  * No room registry, no reconciliation, no acks, which is what makes this a third of
  * `RealtimeSocket`'s size. The token names exactly one basket in its audience, and the
- * server joins the socket to `generated:{id}` and `generated:{id}:presence` inside its
+ * server joins the socket to `basket:{id}` and `basket:{id}:presence` inside its
  * connection handler, for the same reason it joins `user:{id}` there: the token is the
  * claim, and asking whether this participant may hear about this basket would be a
  * round trip to answer a tautology.
@@ -170,13 +170,13 @@ export class BasketSocket {
    * two sockets. Naming a different basket closes the first, since a participant token
    * names exactly one and a socket carrying it can reach nothing else.
    */
-  open(generatedListId: string): void {
-    if (this._id === generatedListId) {
+  open(basketId: string): void {
+    if (this._id === basketId) {
       return;
     }
 
     this.close();
-    this._id = generatedListId;
+    this._id = basketId;
     this._degraded.set(false);
     this._revoked.set(false);
     this._failures = 0;

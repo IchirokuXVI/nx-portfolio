@@ -67,7 +67,7 @@ function pair(access: string): SessionTokens {
 
 /** What the gateway answers a signed in person: a member, and no secret. */
 const REGISTERED_ANSWER = {
-  generatedListId: BASKET,
+  basketId: BASKET,
   participant: {
     id: 'p-dana',
     kind: 'REGISTERED',
@@ -81,7 +81,7 @@ const REGISTERED_ANSWER = {
 
 /** What it answers a visitor: a guest, and the secret they will present. */
 const GUEST_ANSWER = {
-  generatedListId: BASKET,
+  basketId: BASKET,
   participant: { id: 'p-guest-9', kind: 'GUEST', guestNumber: 9 },
   sessionSecret: 'the-secret',
   socketToken: 'socket-token-for-a-guest',
@@ -192,7 +192,7 @@ describe('BasketApi.join', () => {
     const req = httpMock.expectOne(`${GATEWAY}/v1/share-links/${SECRET}`);
 
     expect(req.request.headers.has('Authorization')).toBe(false);
-    req.flush({ generatedListId: BASKET, name: 'Saturday big shop' });
+    req.flush({ basketId: BASKET, name: 'Saturday big shop' });
     await done;
   });
 });
@@ -242,7 +242,7 @@ describe('BasketApi.renameLine', () => {
 
   afterEach(() => httpMock.verify());
 
-  const url = `${GATEWAY}/v1/generated-lists/${BASKET}/basket/lines/line-1`;
+  const url = `${GATEWAY}/v1/baskets/${BASKET}/basket/lines/line-1`;
 
   it('patches the basket route and leaves confirmMerge off the first request', async () => {
     const done = api.renameLine(BASKET, 'line-1', { content: 'Leche entera' });

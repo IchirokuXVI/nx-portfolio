@@ -116,7 +116,7 @@ describe('the participant token never reaches gatewayInterceptor', () => {
   async function refresh(): Promise<string[]> {
     const done = api.refreshSocketToken(BASKET);
     const req = httpMock.expectOne(
-      `${GATEWAY}/v1/generated-lists/${BASKET}/participant-token`
+      `${GATEWAY}/v1/baskets/${BASKET}/participant-token`
     );
     const sent = headerValues(req.request.headers);
 
@@ -132,7 +132,7 @@ describe('the participant token never reaches gatewayInterceptor', () => {
 
   it('is not in TokenStore after the refresh that minted it', async () => {
     sessions.write({
-      generatedListId: BASKET,
+      basketId: BASKET,
       participantId: 'p-guest-9',
       secret: 'the-secret',
       socketToken: 'an-older-one',
@@ -151,7 +151,7 @@ describe('the participant token never reaches gatewayInterceptor', () => {
 
   it('does not travel on the request that mints it', async () => {
     sessions.write({
-      generatedListId: BASKET,
+      basketId: BASKET,
       participantId: 'p-guest-9',
       secret: 'the-secret',
       socketToken: 'an-older-one',
@@ -169,7 +169,7 @@ describe('the participant token never reaches gatewayInterceptor', () => {
 
   it('does not travel on a guest’s next request either', async () => {
     sessions.write({
-      generatedListId: BASKET,
+      basketId: BASKET,
       participantId: 'p-guest-9',
       secret: 'the-secret',
       socketToken: 'an-older-one',
@@ -179,7 +179,7 @@ describe('the participant token never reaches gatewayInterceptor', () => {
 
     const done = api.listParticipants(BASKET);
     const req = httpMock.expectOne(
-      `${GATEWAY}/v1/generated-lists/${BASKET}/participants/mine`
+      `${GATEWAY}/v1/baskets/${BASKET}/participants/mine`
     );
 
     expect(req.request.headers.has('Authorization')).toBe(false);
@@ -195,7 +195,7 @@ describe('the participant token never reaches gatewayInterceptor', () => {
     const account = accountToken();
     tokens.set(pair(account));
     sessions.write({
-      generatedListId: BASKET,
+      basketId: BASKET,
       participantId: 'p-owner',
       secret: null,
       socketToken: 'an-older-one',
@@ -206,7 +206,7 @@ describe('the participant token never reaches gatewayInterceptor', () => {
 
     const done = api.getBasket(BASKET);
     const req = httpMock.expectOne(
-      `${GATEWAY}/v1/generated-lists/${BASKET}/basket`
+      `${GATEWAY}/v1/baskets/${BASKET}/basket`
     );
 
     expect(req.request.headers.get('Authorization')).toBe(`Bearer ${account}`);
@@ -221,7 +221,7 @@ describe('the participant token never reaches gatewayInterceptor', () => {
     // The token names one basket in its audience and authorizes nothing about a
     // second, so a store keyed by basket is the thing that keeps them apart.
     sessions.write({
-      generatedListId: BASKET,
+      basketId: BASKET,
       participantId: 'p-guest-9',
       secret: 'the-secret',
       socketToken: 'an-older-one',
@@ -231,7 +231,7 @@ describe('the participant token never reaches gatewayInterceptor', () => {
 
     const done = api.getBasket('somebody-elses-basket');
     const req = httpMock.expectOne(
-      `${GATEWAY}/v1/generated-lists/somebody-elses-basket/basket`
+      `${GATEWAY}/v1/baskets/somebody-elses-basket/basket`
     );
 
     const sent = headerValues(req.request.headers);

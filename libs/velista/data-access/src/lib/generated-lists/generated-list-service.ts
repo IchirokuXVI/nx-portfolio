@@ -45,7 +45,7 @@ export interface GeneratedListServiceI {
 
   /**
    * The baskets other people shared with the caller, most recently shared first
-   * (`GET /v1/generated-lists/shared`, backend `0114` section 8).
+   * (`GET /v1/baskets/shared`, backend `0114` section 8).
    *
    * Still "mine" in this interface's sense: the caller is resolved from their own
    * token, and the rows are the ones they are a live registered participant of.
@@ -62,7 +62,7 @@ export interface GeneratedListServiceI {
   create(request: CreateGeneratedListRequest): Promise<GeneratedListRun>;
 
   /**
-   * Move a basket between statuses (`PATCH /v1/generated-lists/:id`, backend `0059`).
+   * Move a basket between statuses (`PATCH /v1/baskets/:id`, backend `0059`).
    *
    * The route has existed since backend `0050` and nothing called it until velista
    * `0057`: `COMPLETED` was a value the enum carried and no screen could write. What
@@ -74,10 +74,10 @@ export interface GeneratedListServiceI {
    * different shape from the summaries this surface deals in and would have to be
    * counted down into one. The two readers of the change both learn it another way:
    * `GeneratedListStore` flips the status it already holds, and every open basket,
-   * this caller's included, is told over the socket by `generatedList.updated`.
+   * this caller's included, is told over the socket by `basket.updated`.
    */
   setStatus(
-    generatedListId: string,
+    basketId: string,
     status: WritableGeneratedListStatus
   ): Promise<void>;
 }

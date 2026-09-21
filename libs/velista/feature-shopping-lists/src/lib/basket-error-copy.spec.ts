@@ -183,7 +183,7 @@ describe('basketErrorKey: the three codes that used to read as a conflict', () =
     // Distinct from `alreadyFinished`, which is about one line. This is the basket.
     expect(
       basketErrorKey(
-        gateway('generated_list_finished', 409),
+        gateway('basket_finished', 409),
         'basket.outstanding'
       )
     ).toBe('basket.error.basketFinished');
@@ -214,7 +214,7 @@ describe('basketErrorKey: the three codes that used to read as a conflict', () =
     'basket.origins',
   ] as const)('names the finished trip on a refused %s', (operation) => {
     expect(
-      basketErrorKey(gateway('generated_list_finished', 409), operation)
+      basketErrorKey(gateway('basket_finished', 409), operation)
     ).toBe('basket.error.basketFinished');
   });
 });

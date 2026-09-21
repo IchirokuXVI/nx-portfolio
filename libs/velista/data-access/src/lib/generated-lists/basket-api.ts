@@ -149,11 +149,11 @@ export class BasketApi implements BasketServiceI {
 
   // --- The participant surface ----------------------------------------------
 
-  async getBasket(generatedListId: string): Promise<BasketView> {
+  async getBasket(basketId: string): Promise<BasketView> {
     const body = await firstValueFrom(
       this._http.get<unknown>(
-        `${this._basket(generatedListId)}/basket`,
-        this._participantOptions(generatedListId, 'basket.get')
+        `${this._basket(basketId)}/basket`,
+        this._participantOptions(basketId, 'basket.get')
       )
     );
 
@@ -161,15 +161,15 @@ export class BasketApi implements BasketServiceI {
   }
 
   async settle(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketSettleRequest
   ): Promise<BasketSettleResult> {
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._line(generatedListId, lineId)}/settle`,
+        `${this._line(basketId, lineId)}/settle`,
         body,
-        this._participantOptions(generatedListId, 'basket.settle')
+        this._participantOptions(basketId, 'basket.settle')
       )
     );
 
@@ -177,17 +177,17 @@ export class BasketApi implements BasketServiceI {
   }
 
   async reopen(
-    generatedListId: string,
+    basketId: string,
     lineId: string
   ): Promise<BasketSettleResult> {
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._line(generatedListId, lineId)}/reopen`,
+        `${this._line(basketId, lineId)}/reopen`,
         {},
         // The same participant credential as the settle, because it is the same
         // authorization: any live participant may reopen a line, guests included
         // (luna `0054`, section 3.5).
-        this._participantOptions(generatedListId, 'basket.reopen')
+        this._participantOptions(basketId, 'basket.reopen')
       )
     );
 
@@ -202,15 +202,15 @@ export class BasketApi implements BasketServiceI {
    * person who wrote the list.
    */
   async setOutstanding(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketOutstandingRequest
   ): Promise<BasketSettleResult> {
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._line(generatedListId, lineId)}/outstanding`,
+        `${this._line(basketId, lineId)}/outstanding`,
         body,
-        this._participantOptions(generatedListId, 'basket.outstanding')
+        this._participantOptions(basketId, 'basket.outstanding')
       )
     );
 
@@ -226,13 +226,13 @@ export class BasketApi implements BasketServiceI {
    * the two would eventually disagree.
    */
   async getLineOrigins(
-    generatedListId: string,
+    basketId: string,
     lineId: string
   ): Promise<BasketLineOrigins> {
     const body = await firstValueFrom(
       this._http.get<unknown>(
-        `${this._line(generatedListId, lineId)}/origins`,
-        this._participantOptions(generatedListId, 'basket.origins')
+        `${this._line(basketId, lineId)}/origins`,
+        this._participantOptions(basketId, 'basket.origins')
       )
     );
 
@@ -248,7 +248,7 @@ export class BasketApi implements BasketServiceI {
    * is the create branch that raising a list with no such line depends on.
    */
   async setOriginQuantity(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketOriginQuantityRequest
   ): Promise<BasketOriginQuantityResult> {
@@ -263,9 +263,9 @@ export class BasketApi implements BasketServiceI {
 
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._line(generatedListId, lineId)}/origins`,
+        `${this._line(basketId, lineId)}/origins`,
         request,
-        this._participantOptions(generatedListId, 'basket.setOriginQuantity')
+        this._participantOptions(basketId, 'basket.setOriginQuantity')
       )
     );
 
@@ -286,15 +286,15 @@ export class BasketApi implements BasketServiceI {
    * here, and a list holding no line of this cannot have got any of it.
    */
   async setOriginSettled(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketOriginSettledRequest
   ): Promise<BasketOriginSettledResult> {
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._line(generatedListId, lineId)}/origins/settled`,
+        `${this._line(basketId, lineId)}/origins/settled`,
         { lineId: body.lineId, settled: body.settled, from: body.from },
-        this._participantOptions(generatedListId, 'basket.setOriginSettled')
+        this._participantOptions(basketId, 'basket.setOriginSettled')
       )
     );
 
@@ -315,13 +315,13 @@ export class BasketApi implements BasketServiceI {
    * is a signal's value on a live pane and this request is asynchronous.
    */
   async splitLine(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketSplitRequest
   ): Promise<BasketSplitResult> {
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._line(generatedListId, lineId)}/products`,
+        `${this._line(basketId, lineId)}/products`,
         {
           from: body.from,
           shares: body.shares.map((share) => ({
@@ -329,7 +329,7 @@ export class BasketApi implements BasketServiceI {
             quantity: share.quantity,
           })),
         },
-        this._participantOptions(generatedListId, 'basket.splitLine')
+        this._participantOptions(basketId, 'basket.splitLine')
       )
     );
 
@@ -344,7 +344,7 @@ export class BasketApi implements BasketServiceI {
    * refactor away from carrying `true` by accident.
    */
   async renameLine(
-    generatedListId: string,
+    basketId: string,
     lineId: string,
     body: BasketRenameRequest
   ): Promise<BasketRenameResult> {
@@ -355,11 +355,11 @@ export class BasketApi implements BasketServiceI {
 
     const answer = await firstValueFrom(
       this._http.patch<unknown>(
-        `${this._basket(generatedListId)}/basket/lines/${encodeURIComponent(
+        `${this._basket(basketId)}/basket/lines/${encodeURIComponent(
           lineId
         )}`,
         request,
-        this._participantOptions(generatedListId, 'basket.renameLine')
+        this._participantOptions(basketId, 'basket.renameLine')
       )
     );
 
@@ -379,7 +379,7 @@ export class BasketApi implements BasketServiceI {
    * refusal where an absent one is a free text line.
    */
   async addLine(
-    generatedListId: string,
+    basketId: string,
     body: BasketAddLineRequest
   ): Promise<BasketLine> {
     const request: Record<string, unknown> = { content: body.content };
@@ -395,9 +395,9 @@ export class BasketApi implements BasketServiceI {
 
     const answer = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._basket(generatedListId)}/basket/lines`,
+        `${this._basket(basketId)}/basket/lines`,
         request,
-        this._participantOptions(generatedListId, 'basket.addLine')
+        this._participantOptions(basketId, 'basket.addLine')
       )
     );
 
@@ -417,15 +417,15 @@ export class BasketApi implements BasketServiceI {
    * because a search did.
    */
   async suggest(
-    generatedListId: string,
+    basketId: string,
     query: string
   ): Promise<readonly CatalogSuggestion[]> {
     try {
       const body = await firstValueFrom(
         this._http.get<unknown>(
-          `${this._basket(generatedListId)}/catalog/suggest`,
+          `${this._basket(basketId)}/catalog/suggest`,
           {
-            ...this._participantOptions(generatedListId, 'basket.suggest'),
+            ...this._participantOptions(basketId, 'basket.suggest'),
             params: new HttpParams().set('q', query),
           }
         )
@@ -443,12 +443,12 @@ export class BasketApi implements BasketServiceI {
   }
 
   async listParticipants(
-    generatedListId: string
+    basketId: string
   ): Promise<readonly BasketParticipant[]> {
     const body = await firstValueFrom(
       this._http.get<unknown>(
-        `${this._basket(generatedListId)}/participants/mine`,
-        this._participantOptions(generatedListId, 'basket.participants')
+        `${this._basket(basketId)}/participants/mine`,
+        this._participantOptions(basketId, 'basket.participants')
       )
     );
 
@@ -458,18 +458,18 @@ export class BasketApi implements BasketServiceI {
     );
   }
 
-  async refreshSocketToken(generatedListId: string): Promise<BasketSession> {
+  async refreshSocketToken(basketId: string): Promise<BasketSession> {
     const body = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._basket(generatedListId)}/participant-token`,
+        `${this._basket(basketId)}/participant-token`,
         {},
-        this._participantOptions(generatedListId, 'basket.socketToken')
+        this._participantOptions(basketId, 'basket.socketToken')
       )
     );
 
-    const held = this._sessions.read(generatedListId);
+    const held = this._sessions.read(basketId);
     const refreshed = required(
-      toBasketSession({ ...(body as object), generatedListId }),
+      toBasketSession({ ...(body as object), basketId }),
       'basket.socketToken'
     );
     // The refresh answers a token and a participant, never a session secret:
@@ -485,10 +485,10 @@ export class BasketApi implements BasketServiceI {
 
   // --- The owner's share sheet ----------------------------------------------
 
-  async ensureShareLink(generatedListId: string): Promise<BasketShareLink> {
+  async ensureShareLink(basketId: string): Promise<BasketShareLink> {
     const body = await firstValueFrom(
       this._http.put<unknown>(
-        `${this._basket(generatedListId)}/share-link`,
+        `${this._basket(basketId)}/share-link`,
         {},
         { context: operation('basket.shareLink.ensure') }
       )
@@ -497,9 +497,9 @@ export class BasketApi implements BasketServiceI {
     return required(toBasketShareLink(body), 'basket.shareLink.ensure');
   }
 
-  async getShareLink(generatedListId: string): Promise<BasketShareLink | null> {
+  async getShareLink(basketId: string): Promise<BasketShareLink | null> {
     const body = await firstValueFrom(
-      this._http.get<unknown>(`${this._basket(generatedListId)}/share-link`, {
+      this._http.get<unknown>(`${this._basket(basketId)}/share-link`, {
         context: operation('basket.shareLink.get'),
       })
     );
@@ -510,12 +510,12 @@ export class BasketApi implements BasketServiceI {
   }
 
   async revokeShareLink(
-    generatedListId: string,
+    basketId: string,
     cascade = false
   ): Promise<{ revoked: number }> {
     const body = await firstValueFrom(
       this._http.delete<unknown>(
-        `${this._basket(generatedListId)}/share-link`,
+        `${this._basket(basketId)}/share-link`,
         {
           // Always sent explicitly, never left to the server's default: the two
           // outcomes differ by whether three people are thrown out of a shop.
@@ -530,12 +530,12 @@ export class BasketApi implements BasketServiceI {
   }
 
   async revokeParticipant(
-    generatedListId: string,
+    basketId: string,
     participantId: string
   ): Promise<void> {
     await firstValueFrom(
       this._http.delete<unknown>(
-        `${this._basket(generatedListId)}/participants/${encodeURIComponent(
+        `${this._basket(basketId)}/participants/${encodeURIComponent(
           participantId
         )}`,
         { context: operation('basket.participant.revoke') }
@@ -544,12 +544,12 @@ export class BasketApi implements BasketServiceI {
   }
 
   async addParticipant(
-    generatedListId: string,
+    basketId: string,
     userId: string
   ): Promise<BasketParticipant> {
     const body = await firstValueFrom(
       this._http.post<unknown>(
-        `${this._basket(generatedListId)}/participants`,
+        `${this._basket(basketId)}/participants`,
         { userId },
         { context: operation('basket.participant.add') }
       )
@@ -558,11 +558,11 @@ export class BasketApi implements BasketServiceI {
     return required(toBasketParticipant(body), 'basket.participant.add');
   }
 
-  async leaveBasket(generatedListId: string): Promise<void> {
+  async leaveBasket(basketId: string): Promise<void> {
     await firstValueFrom(
       this._http.delete<unknown>(
-        `${this._basket(generatedListId)}/participants/mine`,
-        this._participantOptions(generatedListId, 'basket.participant.leave')
+        `${this._basket(basketId)}/participants/mine`,
+        this._participantOptions(basketId, 'basket.participant.leave')
       )
     );
   }
@@ -577,10 +577,10 @@ export class BasketApi implements BasketServiceI {
    * token. Both are accepted by the same guard, so no route needs two versions.
    */
   private _participantOptions(
-    generatedListId: string,
+    basketId: string,
     name: string
   ): { headers?: HttpHeaders; context: ReturnType<typeof operation> } {
-    const secret = this._sessions.read(generatedListId)?.secret;
+    const secret = this._sessions.read(basketId)?.secret;
     return secret
       ? {
           headers: new HttpHeaders().set(PARTICIPANT_SECRET_HEADER, secret),
@@ -589,14 +589,14 @@ export class BasketApi implements BasketServiceI {
       : { context: operation(name) };
   }
 
-  private _basket(generatedListId: string): string {
+  private _basket(basketId: string): string {
     return this._urls.gateway(
-      `/v1/generated-lists/${encodeURIComponent(generatedListId)}`
+      `/v1/baskets/${encodeURIComponent(basketId)}`
     );
   }
 
-  private _line(generatedListId: string, lineId: string): string {
-    return `${this._basket(generatedListId)}/lines/${encodeURIComponent(lineId)}`;
+  private _line(basketId: string, lineId: string): string {
+    return `${this._basket(basketId)}/lines/${encodeURIComponent(lineId)}`;
   }
 
   private _link(secret: string): string {

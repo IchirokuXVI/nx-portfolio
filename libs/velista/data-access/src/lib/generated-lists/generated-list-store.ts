@@ -154,15 +154,15 @@ export class GeneratedListStore {
     // store in this library says the same thing.
     const subscription = this._realtime.events.subscribe((event) => {
       switch (event.type) {
-        case 'generatedList.created':
-        case 'generatedList.updated':
+        case 'basket.created':
+        case 'basket.updated':
           this._upsert(event.list);
           break;
         // `lineRemoved` is a merge by rename (velista `0084`), which takes a line
         // away and moves `lineCount` exactly as an edit can.
-        case 'generatedList.lineSettled':
-        case 'generatedList.lineUpdated':
-        case 'generatedList.lineRemoved':
+        case 'basket.lineSettled':
+        case 'basket.lineUpdated':
+        case 'basket.lineRemoved':
           // Only for a basket this client is actually holding. A settle on one that
           // was never read changes nothing on screen, and refetching for it would let
           // any basket in the account drive requests from a page that is not showing
@@ -174,13 +174,13 @@ export class GeneratedListStore {
           // be derived from one line: the summary says how many lines are finished,
           // and knowing that one of them moved says nothing about whether it had
           // already been counted. Both refetch, and the refetch is coalesced.
-          if (this._lists().some((list) => list.id === event.generatedListId)) {
+          if (this._lists().some((list) => list.id === event.basketId)) {
             this._scheduleRefresh();
           }
           break;
-        case 'generatedList.deleted':
+        case 'basket.deleted':
           this._lists.update((lists) =>
-            lists.filter((list) => list.id !== event.generatedListId)
+            lists.filter((list) => list.id !== event.basketId)
           );
           break;
         default:
@@ -259,7 +259,7 @@ export class GeneratedListStore {
    * Compose a basket (plan 0045, section 3.4).
    *
    * The new run is written in straight away rather than waited for over the socket, so
-   * the sheet can navigate to a card that is already there. `generatedList.created`
+   * the sheet can navigate to a card that is already there. `basket.created`
    * arrives a moment later and {@link _upsert} makes it the same row rather than a
    * second one.
    *
@@ -288,25 +288,25 @@ export class GeneratedListStore {
    * The flip is a no-op when the listing has never been read, which is the ordinary
    * case for this caller: a basket opened from a link or from the dashboard card has
    * no row here to move. The write still goes out, and the socket's
-   * `generatedList.updated` is what fills the listing in when it is next read.
+   * `basket.updated` is what fills the listing in when it is next read.
    *
    * **False rather than a throw on failure**, matching the row writes on
    * `BasketStore`: the caller is a page that has to decide whether to say something,
    * not a sheet that stays open on an error.
    */
   async setStatus(
-    generatedListId: string,
+    basketId: string,
     status: WritableGeneratedListStatus
   ): Promise<boolean> {
-    const before = this._lists().find((list) => list.id === generatedListId);
-    this._setStatusLocally(generatedListId, status);
+    const before = this._lists().find((list) => list.id === basketId);
+    this._setStatusLocally(basketId, status);
 
     try {
-      await this._service.setStatus(generatedListId, status);
+      await this._service.setStatus(basketId, status);
       return true;
     } catch {
       if (before !== undefined) {
-        this._setStatusLocally(generatedListId, before.status);
+        this._setStatusLocally(basketId, before.status);
       }
       return false;
     }
@@ -394,12 +394,12 @@ export class GeneratedListStore {
    * opened without the history ever having been read.
    */
   private _setStatusLocally(
-    generatedListId: string,
+    basketId: string,
     status: GeneratedListStatus
   ): void {
     this._lists.update((lists) =>
       lists.map((list) =>
-        list.id === generatedListId ? { ...list, status } : list
+        list.id === basketId ? { ...list, status } : list
       )
     );
   }

@@ -271,7 +271,7 @@ async function render(world: World = {}) {
     },
   };
 
-  const pageMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const pageMap = convertToParamMap({ basketId: BASKET_ID });
   const sheetMap = convertToParamMap({ lineId: LINE_ID });
 
   await TestBed.configureTestingModule({

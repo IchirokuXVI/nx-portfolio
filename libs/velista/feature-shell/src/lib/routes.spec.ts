@@ -114,9 +114,9 @@ describe('AppShellRoutes', () => {
     it('declares the basket before the history that now has children', () => {
       const paths = pages.map((route) => route.path);
 
-      expect(paths).toContain('shopping-lists/:generatedListId');
+      expect(paths).toContain('shopping-lists/:basketId');
       expect(paths).toContain('shopping-lists');
-      expect(paths.indexOf('shopping-lists/:generatedListId')).toBeLessThan(
+      expect(paths.indexOf('shopping-lists/:basketId')).toBeLessThan(
         paths.indexOf('shopping-lists')
       );
     });
@@ -134,7 +134,7 @@ describe('AppShellRoutes', () => {
      */
     it('scopes the connection and the store to the basket route', () => {
       const basket = pages.find(
-        (route) => route.path === 'shopping-lists/:generatedListId'
+        (route) => route.path === 'shopping-lists/:basketId'
       );
       const provided = (basket?.providers ?? []).map((provider) =>
         typeof provider === 'function' ? provider.name : String(provider)
@@ -682,7 +682,7 @@ describe('AppShellRoutes', () => {
    * and that the join screen sits at the top level rather than under the listing.
    */
   describe('the basket', () => {
-    const basketPath = 'shopping-lists/:generatedListId';
+    const basketPath = 'shopping-lists/:basketId';
     const joinPath = 's/:secret';
 
     function routeAt(path: string): Route | undefined {

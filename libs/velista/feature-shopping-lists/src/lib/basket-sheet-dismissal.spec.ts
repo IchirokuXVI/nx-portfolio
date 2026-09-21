@@ -137,14 +137,14 @@ function storeDouble() {
 
 /**
  * The two activated routes a sheet over the basket really has: the page, which owns
- * `:generatedListId`, and the sheet, which owns whatever its own path declares.
+ * `:basketId`, and the sheet, which owns whatever its own path declares.
  *
  * Two and not one, deliberately. Flattening every parameter onto the leaf would let
  * every sheet pass without walking up the tree, and walking up the tree is the whole of
  * how a sheet knows which basket it is covering.
  */
 function routeTree(params: Readonly<Record<string, string>>) {
-  const pageMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const pageMap = convertToParamMap({ basketId: BASKET_ID });
   const page = {
     paramMap: of(pageMap),
     snapshot: { paramMap: pageMap, parent: null },

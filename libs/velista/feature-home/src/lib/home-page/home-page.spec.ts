@@ -573,7 +573,7 @@ describe('HomePage', () => {
   // slot and it now comes from the server rather than from what the device remembered.
   //
   // The old block's whole "who is shopping it" section is gone with it and has no
-  // replacement here: `generatedList.listMine` answers summaries, which carry no
+  // replacement here: `basket.listMine` answers summaries, which carry no
   // participants, so there is no presence on this card to test. `0044`'s basket screen
   // is where the people on a basket are drawn.
   describe('the shopping list card', () => {

@@ -40,22 +40,22 @@ import { BasketStore } from './basket-store';
 class FakeSessions {
   private readonly _held = new Map<string, BasketSession>();
 
-  read(generatedListId: string): BasketSession | null {
-    return this._held.get(generatedListId) ?? null;
+  read(basketId: string): BasketSession | null {
+    return this._held.get(basketId) ?? null;
   }
 
   write(session: BasketSession): void {
-    this._held.set(session.generatedListId, session);
+    this._held.set(session.basketId, session);
   }
 
-  forget(generatedListId: string): void {
-    this._held.delete(generatedListId);
+  forget(basketId: string): void {
+    this._held.delete(basketId);
   }
 
   /** Seeds a credential, which is what a guest who has joined would hold. */
-  seed(generatedListId: string): void {
-    this._held.set(generatedListId, {
-      generatedListId,
+  seed(basketId: string): void {
+    this._held.set(basketId, {
+      basketId,
       participantId: 'p-guest-9',
       secret: 'secret',
       socketToken: 'socket',
@@ -88,8 +88,8 @@ class FakeSocket {
   readonly opened: string[] = [];
   closes = 0;
 
-  open(generatedListId: string): void {
-    this.opened.push(generatedListId);
+  open(basketId: string): void {
+    this.opened.push(basketId);
   }
 
   close(): void {
@@ -560,8 +560,8 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
 
       socket.events.next({
-        type: 'generatedList.lineRemoved',
-        generatedListId: 'basket-saturday',
+        type: 'basket.lineRemoved',
+        basketId: 'basket-saturday',
         lineId: 'line-eggs',
       });
 
@@ -574,8 +574,8 @@ describe('BasketStore', () => {
       const before = store.lines().length;
 
       socket.events.next({
-        type: 'generatedList.lineRemoved',
-        generatedListId: 'somebody-elses-basket',
+        type: 'basket.lineRemoved',
+        basketId: 'somebody-elses-basket',
         lineId: 'line-eggs',
       });
 
@@ -616,8 +616,8 @@ describe('BasketStore', () => {
 
       const line = await store.addLine({ content: 'Batteries' });
       socket.events.next({
-        type: 'generatedList.lineAdded',
-        generatedListId: 'basket-saturday',
+        type: 'basket.lineAdded',
+        basketId: 'basket-saturday',
         line: line as BasketLine,
       });
 
@@ -680,8 +680,8 @@ describe('BasketStore', () => {
       const before = store.lines().length;
 
       socket.events.next({
-        type: 'generatedList.lineAdded',
-        generatedListId: 'basket-saturday',
+        type: 'basket.lineAdded',
+        basketId: 'basket-saturday',
         line: { ...store.lines()[0], id: 'line-theirs', content: 'Ice' },
       });
 
@@ -695,8 +695,8 @@ describe('BasketStore', () => {
       const before = store.lines().length;
 
       socket.events.next({
-        type: 'generatedList.lineAdded',
-        generatedListId: 'basket-somebody-elses',
+        type: 'basket.lineAdded',
+        basketId: 'basket-somebody-elses',
         line: { ...store.lines()[0], id: 'line-theirs' },
       });
 
@@ -840,8 +840,8 @@ describe('BasketStore', () => {
         content: 'Ice',
       });
       socket.events.next({
-        type: 'generatedList.lineAdded',
-        generatedListId: 'basket-saturday',
+        type: 'basket.lineAdded',
+        basketId: 'basket-saturday',
         line: theirs,
       });
       expect(store.lines()).toHaveLength(before + 1);
@@ -992,7 +992,7 @@ describe('BasketStore', () => {
 
         memory.status = 'FINISHED';
         socket.events.next({
-          type: 'generatedList.updated',
+          type: 'basket.updated',
           list: { id: 'basket-saturday' },
         } as never);
 
@@ -1077,7 +1077,7 @@ describe('BasketStore', () => {
       // And the failure is still there to be named, rather than cleared by the read
       // that followed it.
       expect((store.error() as GatewayError).code).toBe(
-        'generated_list_finished'
+        'basket_finished'
       );
     });
 
@@ -1131,8 +1131,8 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
       const held = store.lines()[0];
       socket.events.next({
-        type: 'generatedList.lineSettled',
-        generatedListId: 'basket-saturday',
+        type: 'basket.lineSettled',
+        basketId: 'basket-saturday',
         line: { ...held, settled: held.settled + 1 },
       });
 
@@ -1150,8 +1150,8 @@ describe('BasketStore', () => {
 
       store.leave();
       socket.events.next({
-        type: 'generatedList.lineSettled',
-        generatedListId: 'basket-saturday',
+        type: 'basket.lineSettled',
+        basketId: 'basket-saturday',
         line: { ...held, settled: held.settled + 1 },
       });
 
@@ -1172,8 +1172,8 @@ describe('BasketStore', () => {
 
       const held = store.lines()[0];
       socket.events.next({
-        type: 'generatedList.lineSettled',
-        generatedListId: 'basket-saturday',
+        type: 'basket.lineSettled',
+        basketId: 'basket-saturday',
         line: { ...held, settled: held.settled + 1 },
       });
 
@@ -1199,8 +1199,8 @@ describe('BasketStore', () => {
       delete (redacted as { origins?: unknown }).origins;
 
       socket.events.next({
-        type: 'generatedList.lineSettled',
-        generatedListId: 'basket-saturday',
+        type: 'basket.lineSettled',
+        basketId: 'basket-saturday',
         line: redacted,
       });
 
@@ -1215,8 +1215,8 @@ describe('BasketStore', () => {
 
       const held = store.lines()[0];
       socket.events.next({
-        type: 'generatedList.lineUpdated',
-        generatedListId: 'somebody-elses-basket',
+        type: 'basket.lineUpdated',
+        basketId: 'somebody-elses-basket',
         line: { ...held, settled: held.settled + 5 },
       });
 
@@ -1267,8 +1267,8 @@ describe('BasketStore', () => {
       socket.connected.set(true);
 
       socket.events.next({
-        type: 'presence.generatedListUpdated',
-        generatedListId: 'basket-saturday',
+        type: 'presence.basketUpdated',
+        basketId: 'basket-saturday',
         present: [
           {
             participantId: 'p-1',
@@ -1302,8 +1302,8 @@ describe('BasketStore', () => {
         userId: 'u-1',
       };
       socket.events.next({
-        type: 'presence.generatedListUpdated',
-        generatedListId: 'basket-saturday',
+        type: 'presence.basketUpdated',
+        basketId: 'basket-saturday',
         present: [tab, { ...tab }, { ...tab, participantId: 'p-2' }],
       });
 
@@ -1854,8 +1854,8 @@ describe('BasketStore: sharing with people', () => {
     const { store } = build({}, sessions);
     await store.open('basket-saturday');
 
-    TestBed.inject(RealtimeMemory).emit('generatedList.unshared', {
-      generatedListId: 'basket-saturday',
+    TestBed.inject(RealtimeMemory).emit('basket.unshared', {
+      basketId: 'basket-saturday',
     });
 
     expect(store.state()).toBe('revoked');
@@ -1866,8 +1866,8 @@ describe('BasketStore: sharing with people', () => {
     const { store } = build();
     await store.open('basket-saturday');
 
-    TestBed.inject(RealtimeMemory).emit('generatedList.unshared', {
-      generatedListId: 'basket-sunday',
+    TestBed.inject(RealtimeMemory).emit('basket.unshared', {
+      basketId: 'basket-sunday',
     });
 
     expect(store.state()).toBe('ready');
@@ -1901,8 +1901,8 @@ describe('BasketStore: sharing with people', () => {
     await store.open('basket-saturday');
 
     await expect(store.leaveBasket()).resolves.toBe(true);
-    TestBed.inject(RealtimeMemory).emit('generatedList.unshared', {
-      generatedListId: 'basket-saturday',
+    TestBed.inject(RealtimeMemory).emit('basket.unshared', {
+      basketId: 'basket-saturday',
     });
 
     expect(leaveBasket).toHaveBeenCalledWith('basket-saturday');

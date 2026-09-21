@@ -49,7 +49,7 @@ interface World {
 async function render(world: World = {}) {
   TestBed.resetTestingModule();
 
-  const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const paramMap = convertToParamMap({ basketId: BASKET_ID });
   const unsettled: WritableSignal<number> = signal(world.unsettled ?? 0);
   const basket = {
     unsettled,

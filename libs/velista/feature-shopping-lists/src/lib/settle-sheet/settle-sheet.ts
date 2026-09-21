@@ -42,7 +42,7 @@ import {
 } from '@portfolio/velista/models';
 import {
   formatMoney,
-  generatedListIdOf,
+  basketIdOf,
   lineIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
@@ -228,7 +228,7 @@ export class SettleSheet {
   private readonly _session = inject(SessionStore);
 
   /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _generatedListId = generatedListIdOf(this._route);
+  private readonly _basketId = basketIdOf(this._route);
 
   /**
    * The line, as a signal and not a snapshot (velista `0084`).
@@ -853,7 +853,7 @@ export class SettleSheet {
         settleSheetPath(
           this._locale(),
           this._basePath,
-          this._generatedListId(),
+          this._basketId(),
           result.line.id
         )
       );
@@ -1124,7 +1124,7 @@ export class SettleSheet {
     // dismiss a second time for a line that went away as this sheet was leaving.
     this._left = true;
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._generatedListId())
+      basketPath(this._locale(), this._basePath, this._basketId())
     );
   }
 

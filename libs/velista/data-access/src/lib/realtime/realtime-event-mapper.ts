@@ -296,8 +296,8 @@ export function toRealtimeEvent(
       return profiles.length === 0 ? null : { type: name, profiles };
     }
 
-    case 'generatedList.created':
-    case 'generatedList.updated': {
+    case 'basket.created':
+    case 'basket.updated': {
       // The payload is the whole basket and only its summary is kept. A body this
       // build cannot read is dropped and counted rather than applied, which for these
       // two means the card keeps whatever the last read said instead of losing its
@@ -306,8 +306,8 @@ export function toRealtimeEvent(
       return list === null ? null : { type: name, list };
     }
 
-    case 'generatedList.lineSettled':
-    case 'generatedList.lineUpdated': {
+    case 'basket.lineSettled':
+    case 'basket.lineUpdated': {
       // **Both halves, because there are two listeners with different needs.** The
       // basket id is what `GeneratedListStore` wants: it holds summaries, and a
       // settled line cannot say whether `settledLineCount` should move, so it refetches.
@@ -320,17 +320,17 @@ export function toRealtimeEvent(
       if (!isRecord(payload)) {
         return null;
       }
-      const movedIn = str(payload['generatedListId']);
+      const movedIn = str(payload['basketId']);
       return movedIn === null
         ? null
         : {
             type: name,
-            generatedListId: movedIn,
+            basketId: movedIn,
             line: toBasketLine(payload['line']),
           };
     }
 
-    case 'generatedList.lineAdded': {
+    case 'basket.lineAdded': {
       // **Both halves are required here**, which is the difference from the two
       // above. There the id alone is worth something, because a summary store
       // refetches from it; here the line is the entire content of the event, and an
@@ -341,60 +341,60 @@ export function toRealtimeEvent(
       if (!isRecord(payload)) {
         return null;
       }
-      const addedIn = str(payload['generatedListId']);
+      const addedIn = str(payload['basketId']);
       const added = toBasketLine(payload['line']);
       return addedIn === null || added === null
         ? null
-        : { type: name, generatedListId: addedIn, line: added };
+        : { type: name, basketId: addedIn, line: added };
     }
 
-    case 'generatedList.lineRemoved': {
+    case 'basket.lineRemoved': {
       // Both ids are required: a removal that cannot say which line would remove
       // nothing, and one that cannot say which basket could remove the wrong one.
       if (!isRecord(payload)) {
         return null;
       }
-      const removedFrom = str(payload['generatedListId']);
+      const removedFrom = str(payload['basketId']);
       const removed = str(payload['lineId']);
       return removedFrom === null || removed === null
         ? null
-        : { type: name, generatedListId: removedFrom, lineId: removed };
+        : { type: name, basketId: removedFrom, lineId: removed };
     }
 
-    case 'generatedList.participantJoined':
-    case 'generatedList.participantLeft': {
+    case 'basket.participantJoined':
+    case 'basket.participantLeft': {
       // The bare participant view, with no basket id on it, and it needs none: it
       // arrives only on a connection pinned to one basket.
       const participant = toBasketParticipant(payload);
       return participant === null ? null : { type: name, participant };
     }
 
-    case 'generatedList.deleted': {
+    case 'basket.deleted': {
       if (!isRecord(payload)) {
         return null;
       }
-      const generatedListId = str(payload['id']);
-      return generatedListId === null ? null : { type: name, generatedListId };
+      const basketId = str(payload['id']);
+      return basketId === null ? null : { type: name, basketId };
     }
 
-    case 'generatedList.shared':
-    case 'generatedList.unshared': {
-      // `{ generatedListId }` rather than the `{ id }` a deletion carries: the
+    case 'basket.shared':
+    case 'basket.unshared': {
+      // `{ basketId }` rather than the `{ id }` a deletion carries: the
       // reader is in no room that may read more than the id (backend `0114`).
       if (!isRecord(payload)) {
         return null;
       }
-      const accessTo = str(payload['generatedListId']);
+      const accessTo = str(payload['basketId']);
       return accessTo === null
         ? null
-        : { type: name, generatedListId: accessTo };
+        : { type: name, basketId: accessTo };
     }
 
-    case 'presence.generatedListUpdated': {
+    case 'presence.basketUpdated': {
       if (!isRecord(payload)) {
         return null;
       }
-      const presentIn = str(payload['generatedListId']);
+      const presentIn = str(payload['basketId']);
       if (presentIn === null) {
         return null;
       }
@@ -404,7 +404,7 @@ export function toRealtimeEvent(
       // a shop that is full.
       return {
         type: name,
-        generatedListId: presentIn,
+        basketId: presentIn,
         present: mapArray(payload['present'], toBasketPresenceEntry),
       };
     }
