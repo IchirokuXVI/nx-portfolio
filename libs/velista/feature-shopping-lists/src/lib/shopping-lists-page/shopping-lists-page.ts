@@ -15,8 +15,8 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  GatewayError,
   BasketListStore,
+  GatewayError,
   NetworkError,
   SharedListStore,
 } from '@portfolio/velista/data-access';
@@ -180,7 +180,13 @@ export class ShoppingListsPage {
       return { kind: 'loading' };
     }
 
-    const lists = this._generated.lists();
+    // The permanent basket is never a row here (velista `0091`, section 6). The
+    // server already leaves it out of "mine", and this drops it anyway, in one
+    // place, because of what a row **is**: a date, a Finished badge and a delete,
+    // over the one basket that has no date, is never finished and cannot go away.
+    const lists = this._generated
+      .lists()
+      .filter((list) => list.kind !== 'LIVE');
     if (lists.length === 0) {
       return { kind: 'empty' };
     }
@@ -231,6 +237,20 @@ export class ShoppingListsPage {
       kind: 'populated',
       rows: lists.map((list) => ({
         ...rowOf(list, names),
+        // Whose everything to buy this is (velista `0091`, section 6). A shared
+        // permanent basket has no name and no date, so the owner's name is the
+        // only thing that tells two of them apart, and `displayNames` would have
+        // titled it by the day the server made it.
+        ...(list.kind === 'LIVE'
+          ? {
+              name: this._translator.t(
+                'basket.live.titleOf',
+                undefined,
+                locale,
+                { name: list.owner.name }
+              ),
+            }
+          : {}),
         ownerName: list.owner.name,
         sharedAt: list.sharedAt,
         sharedOn: formatGeneratedDate(list.sharedAt, locale),
@@ -437,5 +457,6 @@ function rowOf(
     // here tells those two apart and nothing should: the row says the trip is
     // over, which is true either way (velista `0057`, section 9).
     finished: list.status === 'FINISHED',
+    live: list.kind === 'LIVE',
   };
 }

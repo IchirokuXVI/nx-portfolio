@@ -9,6 +9,7 @@ import type {
   ProductCategory,
   SettlementOutcome,
 } from './enums';
+import { isOpenBasket } from './enums';
 import type { LocalizedName } from './shopping-profile';
 
 /**
@@ -672,3 +673,214 @@ export type BasketLoad =
   | 'failed'
   /** The participant was revoked, or the link they held was cascaded. */
   | 'revoked';
+
+// --- The two surfaces one basket page draws (velista `0091`) ---------------
+
+/**
+ * Which basket a URL names: the caller's own `LIVE` one, or one by id.
+ *
+ * It lives in `models` rather than beside the paths that build from it, because
+ * `BasketStore` holds the address of the basket it opened and a store in
+ * `data-access` cannot import a feature library. The segments themselves stay in
+ * `feature-shopping-lists`, where the route table's paths are written down.
+ *
+ * `'live'` is not an id and never becomes one. Every **request** uses
+ * {@link Basket.id}, which the server hands back on the first read; this type is
+ * about URLs and nothing else.
+ */
+export type BasketAddress = 'live' | { readonly basketId: string };
+
+/**
+ * What to put in the basket page's heading.
+ *
+ * Two shapes rather than a resolved string, because one of them cannot be
+ * resolved without a locale: a `GENERATED` basket with no name is titled by its
+ * date, which `Intl` formats in the reader's language, and this file is pure so
+ * that it needs neither a translator nor a clock.
+ */
+export type BasketTitle =
+  /** The basket's own name, and its date where it has none. */
+  | { readonly kind: 'basket' }
+  /** Words this app owns, with whatever they interpolate. */
+  | {
+      readonly kind: 'key';
+      readonly key: string;
+      readonly args?: Record<string, string>;
+    };
+
+/**
+ * The sentence above the rows, as a key and its arguments.
+ *
+ * `unavailable` is carried beside them rather than folded in, because it is a
+ * different claim from a purchase and the template appends it as its own clause:
+ * a sentence that merged the two would report a shop that had none of something
+ * as shopping done. Zero draws no clause.
+ */
+export interface BasketProgressSentence {
+  readonly key: string;
+  readonly args: Record<string, number>;
+  readonly unavailable: number;
+}
+
+/** Where the back chevron goes when there is nothing to pop. */
+export type BasketBackFallback = 'history' | 'home';
+
+/**
+ * Everything the basket page draws differently for a `LIVE` basket (velista
+ * `0091`, section 3).
+ *
+ * **One computed, read by the template**, and never a `kind` check scattered
+ * through it. There is one basket page and there will be one: the two kinds
+ * differ in a heading, a sentence, four absent controls and two words of an
+ * empty state, which is a view model rather than a second screen.
+ */
+export interface BasketSurface {
+  readonly title: BasketTitle;
+  /** One line under the heading, or null where the kind has nothing to explain. */
+  readonly hintKey: string | null;
+  readonly progress: BasketProgressSentence;
+  /** Whether to offer ending the trip. Never on a basket that is never finished. */
+  readonly finish: boolean;
+  /** Whether to ask "all done?", which is all the last settle does. */
+  readonly allDone: boolean;
+  /** Whether to draw the finished banner and, for the owner, Reopen. */
+  readonly finishedBanner: boolean;
+  /** Whether faces and the people glyph are drawn at all. */
+  readonly presence: boolean;
+  /** Whether the share and people entries are offered. The owner's, on both. */
+  readonly share: boolean;
+  readonly emptyTitleKey: string;
+  readonly emptyBodyKey: string;
+  readonly back: BasketBackFallback;
+}
+
+/**
+ * The sentence above the rows, for either kind (section 4).
+ *
+ * A `GENERATED` basket counts a trip that has an end, so "3 of 12 got" is the
+ * progress through it. A `LIVE` basket has no end: its `done` runs over the
+ * current shopping session alone (backend `0130`, section 4), so "3 of 40 got"
+ * would be true and would read as a failure. It says what is **left** first,
+ * because that is the question the screen exists to answer.
+ *
+ * Every number is the server's. "This trip" is the session the server computed,
+ * by the six hour gap and by its own clock, and nothing here decides where one
+ * session ends.
+ *
+ * The fourth case, nothing left and nothing got, is a basket whose every row the
+ * shop had none of. It says "0 to buy" beside the unavailable clause, which is
+ * the honest pair: "nothing got this trip" would be a sentence about a trip that
+ * did happen.
+ */
+export function basketProgressSentence(
+  kind: BasketKind,
+  progress: BasketProgress,
+  pending: number
+): BasketProgressSentence {
+  const unavailable = progress.unavailable;
+
+  if (kind === 'GENERATED') {
+    return {
+      key: 'basket.progress',
+      args: { done: progress.done, total: progress.total },
+      unavailable,
+    };
+  }
+
+  const done = progress.done;
+
+  if (pending > 0) {
+    return done > 0
+      ? { key: 'basket.live.leftAndGot', args: { pending, done }, unavailable }
+      : { key: 'basket.live.left', args: { pending }, unavailable };
+  }
+
+  return done > 0
+    ? { key: 'basket.live.allGot', args: { done }, unavailable }
+    : { key: 'basket.live.left', args: { pending }, unavailable };
+}
+
+/**
+ * The page, by the kind of basket it is drawing (section 3).
+ *
+ * `me` is the reader's own participant row, which decides the three things that
+ * are the owner's: finishing, the prompt that offers it, and sharing.
+ *
+ * **A kind this build does not recognise is drawn as `LIVE`**, with the
+ * `GENERATED` title. That is rule D4's least capable surface: everything it
+ * withholds is a control that would change a basket, and a heading falling back
+ * to a name the basket may not have is a heading rather than a write.
+ */
+export function selectBasketSurface(
+  basket: Basket,
+  me: BasketParticipant
+): BasketSurface {
+  const generated = basket.kind === 'GENERATED';
+  const owner = me.kind === 'OWNER';
+  const open = isOpenBasket(basket.status);
+
+  return {
+    // The one column an unrecognised kind does **not** take from `LIVE`: a
+    // heading is not a control, and a basket's own name is the more useful of
+    // the two whenever the basket has one.
+    title:
+      basket.kind === 'LIVE' ? liveTitle(basket, owner) : { kind: 'basket' },
+    hintKey: generated ? null : 'basket.live.hint',
+    progress: basketProgressSentence(
+      basket.kind,
+      basket.progress,
+      basket.pending
+    ),
+    finish: generated && owner && open,
+    allDone:
+      generated &&
+      owner &&
+      open &&
+      basket.rows.length > 0 &&
+      // The server's count, never a subtraction here: a `SKIPPED` row is
+      // pending, and this side has no way to know that.
+      basket.pending === 0,
+    finishedBanner: generated && !open,
+    presence: generated,
+    share: owner,
+    emptyTitleKey: generated ? 'basket.empty' : 'basket.live.empty',
+    emptyBodyKey: generated ? 'basket.emptyHint' : 'basket.live.emptyHint',
+    back: generated && owner ? 'history' : 'home',
+  };
+}
+
+/**
+ * "Everything to buy", or whose everything it is.
+ *
+ * The owner's name comes from their **participant row**, which is the only place
+ * this screen has one, and a basket whose owner has neither a display name nor a
+ * username is titled as though the reader owned it: a heading reading
+ * "undefined: everything to buy" is worse than one that is merely less specific.
+ */
+function liveTitle(basket: Basket, owner: boolean): BasketTitle {
+  if (owner) {
+    return { kind: 'key', key: 'basket.live.title' };
+  }
+
+  const holder = basket.participants.find((person) => person.kind === 'OWNER');
+  const name = holder?.displayName ?? holder?.username ?? '';
+
+  return name === ''
+    ? { kind: 'key', key: 'basket.live.title' }
+    : { kind: 'key', key: 'basket.live.titleOf', args: { name } };
+}
+
+/**
+ * The three numbers the dashboard card draws, with no rows behind them
+ * (`GET /v1/baskets/live/summary`).
+ *
+ * Its own read rather than the whole basket with its rows dropped, because the
+ * card must not pay for a thousand rows and a catalog composition to draw one
+ * sentence.
+ */
+export interface LiveBasketSummary {
+  readonly id: string;
+  readonly progress: BasketProgress;
+  /** `total - done - unavailable`, by the server, as {@link Basket.pending} is. */
+  readonly pending: number;
+}

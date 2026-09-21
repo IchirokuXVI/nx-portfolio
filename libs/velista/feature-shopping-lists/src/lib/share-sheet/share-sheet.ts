@@ -22,11 +22,7 @@ import {
   APP_STANDALONE_ORIGIN,
   groupContacts,
 } from '@portfolio/velista/models';
-import {
-  BrowserFacade,
-  basketIdOf,
-  SheetNavigation,
-} from '@portfolio/velista/platform';
+import { BrowserFacade, SheetNavigation } from '@portfolio/velista/platform';
 import {
   PeoplePicker,
   ShareIcon,
@@ -97,8 +93,14 @@ export class ShareSheet {
   private readonly _contacts = inject(ContactStore);
   private readonly _zones = inject(ZoneStore);
 
-  /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _basketId = basketIdOf(this._route);
+  /**
+   * The basket underneath, which is where closing this sheet goes.
+   *
+   * From the **store** and not from `paramMap` since velista `0091`: the same
+   * page is routed at `shopping-lists/live`, where there is no id in the URL at
+   * all, and a sheet that read one there would dismiss to `/shopping-lists/`.
+   */
+  private readonly _address = this._store.address;
 
   private readonly _pane = signal<Pane>('link');
   private readonly _busy = signal(false);
@@ -353,7 +355,7 @@ export class ShareSheet {
    */
   protected close(): void {
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._basketId())
+      basketPath(this._locale(), this._basePath, this._address())
     );
   }
 }

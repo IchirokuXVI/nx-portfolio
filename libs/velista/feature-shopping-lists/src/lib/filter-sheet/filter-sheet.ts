@@ -5,12 +5,13 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BasketStore,
   BasketViewStore,
   type BasketChosenShop,
 } from '@portfolio/velista/data-access';
@@ -19,10 +20,7 @@ import {
   type BasketGrouping,
   type BasketOrder,
 } from '@portfolio/velista/models';
-import {
-  basketIdOf,
-  SheetNavigation,
-} from '@portfolio/velista/platform';
+import { SheetNavigation } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
 import { basketPath, shopPickerPath } from '../basket-paths';
 
@@ -77,12 +75,17 @@ export class FilterSheet {
   private readonly _view = inject(BasketViewStore);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _router = inject(Router);
-  private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _locale = inject(RokuLocaleStore).locale;
 
-  /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _basketId = basketIdOf(this._route);
+  /**
+   * The basket underneath, which is where closing this sheet goes.
+   *
+   * From the **store** and not from `paramMap` since velista `0091`: the same
+   * page is routed at `shopping-lists/live`, where there is no id in the URL at
+   * all, and a sheet that read one there would dismiss to `/shopping-lists/`.
+   */
+  private readonly _address = inject(BasketStore).address;
 
   protected readonly order = this._view.order;
   protected readonly grouping = this._view.grouping;
@@ -219,7 +222,7 @@ export class FilterSheet {
    */
   protected openPicker(): void {
     void this._router.navigateByUrl(
-      shopPickerPath(this._locale(), this._basePath, this._basketId())
+      shopPickerPath(this._locale(), this._basePath, this._address())
     );
   }
 
@@ -236,7 +239,7 @@ export class FilterSheet {
    */
   protected close(): void {
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._basketId())
+      basketPath(this._locale(), this._basePath, this._address())
     );
   }
 }

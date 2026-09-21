@@ -134,6 +134,8 @@ function build(
     previewLink: (secret) => memory.previewLink(secret),
     join: (secret, name) => memory.join(secret, name),
     getBasket: () => memory.getBasket(),
+    getLiveBasket: () => memory.getLiveBasket(),
+    getLiveSummary: () => memory.getLiveSummary(),
     settle: (id, rowKey, body) => memory.settle(id, rowKey, body),
     revert: (id, rowKey, body) => memory.revert(id, rowKey, body),
     renameRow: (id, rowKey, body) => memory.renameRow(id, rowKey, body),
@@ -1493,5 +1495,103 @@ describe('BasketStore: sharing with people', () => {
     await store.open('basket-saturday');
 
     await expect(store.leaveBasket()).resolves.toBe(false);
+  });
+
+  /**
+   * The basket that is always there (velista `0091`, section 2.4).
+   *
+   * The one read in this store that has **no id to ask with**: the route is a
+   * word, the server creates the basket the first time anybody reads it, and the
+   * id arrives on the answer. Everything after it is an ordinary basket.
+   */
+  describe('opening the caller’s own', () => {
+    it('takes the id from the answer and connects to it', async () => {
+      const { store, socket } = build();
+
+      await store.openLive();
+
+      expect(store.state()).toBe('ready');
+      expect(store.basket()?.kind).toBe('LIVE');
+      // The id nothing asked for, on the socket that needed it.
+      expect(socket.opened).toEqual(['basket-live']);
+    });
+
+    it('remembers that the URL names it by a word, not by that id', async () => {
+      // What every sheet over the page builds its own address from. A sheet that
+      // read `paramMap` instead would dismiss to `/shopping-lists/`, because
+      // there is no id in this URL at all.
+      const { store } = build();
+
+      await store.openLive();
+
+      expect(store.address()).toBe('live');
+    });
+
+    it('says so before the answer arrives, for a sheet loaded cold', async () => {
+      // A sheet over this page is constructed while the first read is still out,
+      // and it needs the address then rather than a beat later.
+      const { store } = build({
+        getLiveBasket: () => new Promise(() => undefined),
+      });
+
+      void store.openLive();
+
+      expect(store.address()).toBe('live');
+    });
+
+    it('reads by id from then on, so a refresh is an ordinary read', async () => {
+      const ids: string[] = [];
+      const memory = new BasketMemory();
+      const { store } = build({
+        getBasket: (id) => {
+          ids.push(id);
+          return memory.getBasket();
+        },
+      });
+
+      await store.openLive();
+      await store.refresh();
+
+      expect(ids).toEqual(['basket-live']);
+    });
+
+    it('lands in the failed state with no connection when the read fails', async () => {
+      const { store, socket } = build({
+        getLiveBasket: () => Promise.reject(new Error('offline')),
+      });
+
+      await store.openLive();
+
+      expect(store.state()).toBe('failed');
+      expect(socket.opened).toEqual([]);
+    });
+
+    it('never offers the join screen, because there is no participant to be', async () => {
+      // A 401 here is an account session that has ended, which the interceptor
+      // answers for the whole app. Neither reading of the participant surface's
+      // 401 is about this reader, and `needsJoin` on the caller's own basket
+      // would offer a link nobody has.
+      const { store } = build({
+        getLiveBasket: () =>
+          Promise.reject(
+            Object.assign(new Error('unauthorized'), { status: 401 })
+          ),
+      });
+
+      await store.openLive();
+
+      expect(store.state()).toBe('failed');
+    });
+
+    it('lets it go like any other basket', async () => {
+      const { store, socket } = build();
+      await store.openLive();
+
+      store.leave();
+
+      expect(socket.closes).toBe(1);
+      expect(store.basket()).toBeNull();
+      expect(store.address()).toBeNull();
+    });
   });
 });

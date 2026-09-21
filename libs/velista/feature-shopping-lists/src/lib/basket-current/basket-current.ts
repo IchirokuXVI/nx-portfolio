@@ -11,8 +11,8 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  GatewayError,
   BasketListStore,
+  GatewayError,
   NetworkError,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
@@ -137,7 +137,7 @@ export class BasketCurrentPage {
       }
 
       void this._router.navigateByUrl(
-        basketPath(this._locale(), this._basePath, live.id),
+        basketPath(this._locale(), this._basePath, { basketId: live.id }),
         { replaceUrl: true }
       );
     });

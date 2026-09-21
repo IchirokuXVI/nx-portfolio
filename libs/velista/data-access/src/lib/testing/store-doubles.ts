@@ -1,13 +1,14 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
   AddPostalCodeRequest,
+  BasketSummary,
   CatalogItem,
   Comment,
-  BasketSummary,
   Identity,
   Line,
   LineApprovalStatus,
   LineSettlement,
+  LiveBasketSummary,
   Membership,
   MembershipStatus,
   MyZone,
@@ -39,10 +40,11 @@ import {
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
+import { BasketListStore } from '../baskets/basket-list-store';
+import { LiveBasketStore } from '../baskets/live-basket-store';
+import { SharedListStore } from '../baskets/shared-list-store';
 import { GroupNames } from '../catalog/group-names';
 import { ItemNames } from '../catalog/item-names';
-import { BasketListStore } from '../baskets/basket-list-store';
-import { SharedListStore } from '../baskets/shared-list-store';
 import { LineStore, type LineLoadState } from '../lines/line-store';
 import { ListStore, type ListLoadState } from '../lists/list-store';
 import { MemberNames } from '../memberships/member-names';
@@ -2245,6 +2247,55 @@ export function provideFakeBasketListStore(
   store: FakeBasketListStore = fakeBasketListStore()
 ): Provider {
   return { provide: BasketListStore, useValue: store };
+}
+
+/**
+ * A `LiveBasketStore` in whatever state a spec needs (velista `0091`).
+ *
+ * **Loaded with nothing by default**, which is the ordinary dashboard: an
+ * account with no lines has a permanent basket saying "0 to buy", and the card
+ * is drawn for it. A spec about the skeleton passes `state: 'loading'` with no
+ * summary; a spec about a failed read passes `'failed'`.
+ */
+export function fakeLiveBasketStore(
+  initial: LiveBasketSummary | null = {
+    id: 'basket-live',
+    progress: { done: 0, unavailable: 0, total: 0 },
+    pending: 0,
+  },
+  options: { state?: ShoppingListsLoad } = {}
+) {
+  const summary = signal<LiveBasketSummary | null>(initial);
+  const state = signal<ShoppingListsLoad>(
+    options.state ?? (initial === null ? 'loading' : 'loaded')
+  );
+
+  /** What the page asked for, so a spec can assert the read happened at all. */
+  const calls: string[] = [];
+
+  return {
+    summary: summary.asReadonly(),
+    state: state.asReadonly(),
+
+    load: async () => {
+      calls.push('load');
+    },
+
+    calls: calls as readonly string[],
+
+    /** Move the store while a fixture is mounted, to test a live update. */
+    set: (next: LiveBasketSummary | null) => summary.set(next),
+    setState: (next: ShoppingListsLoad) => state.set(next),
+  };
+}
+
+export type FakeLiveBasketStore = ReturnType<typeof fakeLiveBasketStore>;
+
+/** {@link fakeLiveBasketStore} bound to the real token. */
+export function provideFakeLiveBasketStore(
+  store: FakeLiveBasketStore = fakeLiveBasketStore()
+): Provider {
+  return { provide: LiveBasketStore, useValue: store };
 }
 
 /**

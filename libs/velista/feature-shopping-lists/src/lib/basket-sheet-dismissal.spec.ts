@@ -7,11 +7,11 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BasketListStore,
   BasketStore,
   BasketViewStore,
   ContactStore,
   fakeZoneStore,
-  BasketListStore,
   LINE_SERVICE,
   provideFakeZoneStore,
   SessionStore,
@@ -93,6 +93,11 @@ const FROM_FILTER: readonly {
 function storeDouble() {
   return {
     basket: signal(null),
+    // How every sheet over this page addresses its own basket since velista
+    // `0091`: off the store, never off `paramMap`, which has no id at all under
+    // `shopping-lists/live`. That is what these tests are about, so it is the one
+    // member of this double that is not a placeholder.
+    address: signal({ basketId: BASKET_ID }),
     // The three members the two line sheets and the basket page read. They are here
     // rather than in each plan's own double so that a sheet added by either plan can
     // rely on the same store shape this file already provides.

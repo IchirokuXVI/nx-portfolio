@@ -164,6 +164,22 @@
         The card draws the rule above itself, and the bar under it draws its own, so the
         seam is right whether or not there is a basket to show.
       -->
+      <!--
+        The basket that is always there, **first** in the dock (velista `0091`,
+        section 5.1).
+
+        Above the strip below it because it is the one that is always relevant:
+        the strip is a trip somebody composed and will finish, and this is what
+        anybody needs at any moment. It is drawn for every reader, including at
+        "0 to buy" and including while its numbers are still out, because it is
+        the way into the screen and a way in that disappears is a bug report.
+      -->
+      <lib-live-basket-card
+        (open)="openLiveBasket()"
+        [loading]="liveBasketLoading()"
+        [summary]="page.liveBasket"
+      />
+
       @if (page.shoppingList; as shoppingList) {
         <lib-shopping-list-card
           (open)="openShoppingList($event)"

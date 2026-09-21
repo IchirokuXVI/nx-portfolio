@@ -5,6 +5,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   AccountNotice,
   fakeBasketListStore,
+  fakeLiveBasketStore,
   fakeMemberNames,
   fakePresenceStore,
   fakeProfileStore,
@@ -13,6 +14,7 @@ import {
   provideAccountNotice,
   provideFakeAuthService,
   provideFakeBasketListStore,
+  provideFakeLiveBasketStore,
   provideFakeMemberNames,
   provideFakePresenceStore,
   provideFakeProfileStore,
@@ -22,6 +24,7 @@ import {
   ZoneStore,
   type FakeBasketListStore,
   type FakeIdentity,
+  type FakeLiveBasketStore,
   type FakePresenceOptions,
   type FakeProfileStore,
   type FakeZoneStore,
@@ -74,6 +77,8 @@ interface Options {
   presence?: FakePresenceOptions;
   /** The caller's generated shopping lists, for the dashboard card (plan 0045). */
   generated?: FakeBasketListStore;
+  /** The permanent basket's summary, for the card above it (velista `0091`). */
+  live?: FakeLiveBasketStore;
   /** User id to the name they go by in the zone, since presence carries ids alone. */
   names?: Readonly<Record<string, string>>;
   /** Where this tab is, and what the browser can do, for the invite link tests. */
@@ -130,9 +135,11 @@ async function render(
       provideFakeZoneStore(store),
       // Plan 0045: the dashboard's shopping list card reads the listing. A double, so
       // a spec states "there is one active basket" rather than driving a request.
-      provideFakeBasketListStore(
-        options.generated ?? fakeBasketListStore()
-      ),
+      provideFakeBasketListStore(options.generated ?? fakeBasketListStore()),
+      // Velista `0091`: the permanent basket's card reads its own summary, out of
+      // its own store, because the server leaves that basket out of the listing
+      // above. Loaded with nothing by default, which draws "0 to buy".
+      provideFakeLiveBasketStore(options.live ?? fakeLiveBasketStore()),
       provideFakeSessionStore(options.identity ?? 'REGISTERED'),
       // Both arrived with plan 0009: the page reports what just happened to the
       // account, and offers another confirmation email once there is an endpoint.
@@ -583,9 +590,7 @@ describe('HomePage', () => {
   // participants, so there is no presence on this card to test. `0044`'s basket screen
   // is where the people on a basket are drawn.
   describe('the shopping list card', () => {
-    const basket = (
-      overrides: Partial<BasketSummary> = {}
-    ): BasketSummary => ({
+    const basket = (overrides: Partial<BasketSummary> = {}): BasketSummary => ({
       id: 'gl1',
       kind: 'GENERATED',
       name: 'Saturday big shop',
@@ -1088,5 +1093,94 @@ describe('HomePage', () => {
 
       expect(copied).toEqual(['https://velista.app/join/HK7M2QPD']);
     });
+  });
+});
+
+/**
+ * The basket that is always there, at the top of the dock (velista `0091`,
+ * section 5.1).
+ *
+ * The strip below it is a trip somebody composed and will finish, and it is
+ * absent when there is none. This one is the **door**: always drawn, always
+ * tappable, and first, because it is the one that is relevant at any moment.
+ */
+describe('HomePage: the live basket card', () => {
+  const card = (fixture: ComponentFixture<HomePage>) =>
+    query(fixture, 'lib-live-basket-card');
+
+  it('reads its own summary when the dashboard opens', async () => {
+    const live = fakeLiveBasketStore();
+    await render({ live });
+
+    expect(live.calls).toEqual(['load']);
+  });
+
+  it('is drawn for a person with nothing to buy', async () => {
+    const fixture = await render();
+
+    expect(card(fixture)).not.toBeNull();
+  });
+
+  it('leads the dock, above the trip somebody composed', async () => {
+    const fixture = await render({
+      generated: fakeBasketListStore([
+        {
+          id: 'gl1',
+          kind: 'GENERATED',
+          name: 'Saturday big shop',
+          status: 'OPEN',
+          generatedAt: new Date('2026-08-21T10:00:00.000Z'),
+          lineCount: 12,
+          settledLineCount: 4,
+          boughtLineCount: 3,
+          notAvailableLineCount: 1,
+          presentCount: 0,
+        } as BasketSummary,
+      ]),
+    });
+
+    const dock = card(fixture)?.parentElement;
+    const order = Array.from(dock?.children ?? []).map((child) =>
+      child.tagName.toLowerCase()
+    );
+    expect(order.indexOf('lib-live-basket-card')).toBeLessThan(
+      order.indexOf('lib-shopping-list-card')
+    );
+  });
+
+  it('is docked at the foot rather than left in the scroll', async () => {
+    const fixture = await render();
+
+    expect(query(fixture, '.content lib-live-basket-card')).toBeNull();
+    expect(card(fixture)).not.toBeNull();
+  });
+
+  it('holds a skeleton while its first read is out', async () => {
+    const fixture = await render({
+      live: fakeLiveBasketStore(null, { state: 'loading' }),
+    });
+
+    expect(query(fixture, '.meta-skeleton')).not.toBeNull();
+  });
+
+  it('stays tappable after a read that failed, with no sentence', async () => {
+    const fixture = await render({
+      live: fakeLiveBasketStore(null, { state: 'failed' }),
+    });
+
+    expect(card(fixture)).not.toBeNull();
+    expect(query(fixture, '.meta-skeleton')).toBeNull();
+  });
+
+  it('opens the one URL that is the same for every reader', async () => {
+    const fixture = await render();
+    const router = TestBed.inject(Router);
+    const navigate = jest
+      .spyOn(router, 'navigateByUrl')
+      .mockResolvedValue(true);
+
+    (query(fixture, 'lib-live-basket-card button') as HTMLElement).click();
+
+    expect(navigate).toHaveBeenCalledWith('/en/shopping-lists/live');
   });
 });

@@ -340,6 +340,9 @@
     "section": {
       "zones": "Tus grupos"
     },
+    "liveBasket": {
+      "open": "Todo por comprar, quedan {{pending}}"
+    },
     "shoppingList": {
       "open": "{{name}}, faltan {{count}}",
       "more_one": "y {{count}} más",
@@ -1045,6 +1048,16 @@
     "failed": "Esta lista no se ha podido cargar",
     "retry": "Inténtalo de nuevo",
     "back": "Atrás",
+    "live": {
+      "title": "Todo por comprar",
+      "titleOf": "{{name}}: todo por comprar",
+      "hint": "Todas las listas en las que puedes añadir, en un sitio.",
+      "left": "{{pending}} por comprar",
+      "leftAndGot": "{{pending}} por comprar, {{done}} en esta compra",
+      "allGot": "No queda nada, {{done}} en esta compra",
+      "empty": "Nada por comprar",
+      "emptyHint": "Las líneas que se añadan a tus listas aparecen aquí."
+    },
     "unnamed": "Lista de la compra",
     "notLive": "No se está actualizando ahora",
     "revoked": {

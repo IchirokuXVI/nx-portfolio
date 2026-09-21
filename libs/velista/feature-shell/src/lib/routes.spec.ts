@@ -769,6 +769,81 @@ describe('AppShellRoutes', () => {
       );
     });
 
+    /**
+     * The basket that is always there (velista `0091`, section 2).
+     *
+     * Five assertions and each guards a different mistake: a path nothing links to,
+     * an order that makes the word readable as an id, a guard that would refuse the
+     * only reader this route has, a sheet that exists over one basket and not the
+     * other, and a `finish` that would offer to end a trip with no end.
+     */
+    describe('the basket that is always there', () => {
+      const livePath = 'shopping-lists/live';
+
+      it('is the path the app builds its links from', () => {
+        // Written out on both sides, here and in `BASKET_PATHS.live`, because
+        // naming that constant in this project is a static import of a lazy
+        // loaded library: eslint refuses it, and it would pull every basket
+        // screen into the shell's initial payload. So the two are kept in step
+        // the way the history's path already is, by both being asserted.
+        expect(routeAt(livePath)).toBeDefined();
+        expect(routeAt(livePath)?.path).toBe('shopping-lists/live');
+      });
+
+      it('is declared before the id it would otherwise be read as', () => {
+        const paths = pages.map((route) => route.path);
+
+        expect(paths.indexOf(livePath)).toBeLessThan(paths.indexOf(basketPath));
+      });
+
+      it('demands an account, unlike the basket reached by a link', () => {
+        // The opposite of the route below it, and for the same reason: a guest
+        // holding a link has no basket of their own to open, and the basket they
+        // were sent is reached by its id.
+        expect(routeAt(livePath)?.canActivate).toHaveLength(1);
+        expect(routeAt(basketPath)?.canActivate).toBeUndefined();
+      });
+
+      it('draws the same page, with the same stores', () => {
+        expect(routeAt(livePath)?.loadComponent).toBeDefined();
+        expect(
+          (routeAt(livePath)?.providers ?? []).map(
+            (provider) => (provider as { name?: string }).name
+          )
+        ).toEqual(['BasketSocket', 'BasketStore', 'BasketViewStore']);
+        // How the page knows which basket to open, since the URL holds no id.
+        expect(routeAt(livePath)?.data?.['basket']).toBe('live');
+      });
+
+      it('carries every sheet the other route has, except finish', () => {
+        // One function builds both lists, so a sheet added later cannot exist over
+        // one basket and not the other. `finish` is the single difference, and it
+        // is a rule rather than an omission: a `LIVE` basket is never finished.
+        const live = (routeAt(livePath)?.children ?? []).map(
+          (route) => route.path
+        );
+        const byId = (routeAt(basketPath)?.children ?? []).map(
+          (route) => route.path
+        );
+
+        expect(live).toEqual(byId.filter((path) => path !== 'sheet/finish'));
+        expect(live).not.toContain('sheet/finish');
+      });
+
+      it('addresses every one of them under the marker, and guards the fall', () => {
+        for (const entry of routeAt(livePath)?.children ?? []) {
+          expect((entry.path ?? '').split('/')[0]).toBe(SHEET_SEGMENT);
+          expect(entry.canDeactivate).toHaveLength(1);
+        }
+      });
+
+      it('is not itself addressed under the marker', () => {
+        // No page may take a `sheet` segment, or a sheet over it could collide with
+        // a sheet over its parent again.
+        expect(livePath.split('/')).not.toContain(SHEET_SEGMENT);
+      });
+    });
+
     it('resolves the units sheet to nothing at all', () => {
       // Asserted rather than left to the list above, because the failure it guards
       // against is a URL somebody bookmarked resolving to a component that no longer
@@ -922,7 +997,11 @@ describe('the sheets and their exit animation', () => {
     // back to twenty eight, and `0078` added the shop picker beside it. `0082` added
     // the zone list's filter sheet, and `0083` deleted the edit sheet, whose fields are
     // on the detail sheet now.
-    expect(sheets).toHaveLength(29);
+    //
+    // `0091` added five, and added no sheet at all: the basket is drawn at a second
+    // route, and every sheet over it is declared over both. The five are the six
+    // minus `finish`, which a basket that is never finished must not offer.
+    expect(sheets).toHaveLength(34);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

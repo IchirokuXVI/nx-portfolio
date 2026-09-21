@@ -158,6 +158,16 @@ export interface ShoppingListRowVm {
    * to check what came home.
    */
   readonly finished: boolean;
+  /**
+   * Whether this is the permanent basket (velista `0091`, section 6).
+   *
+   * Only ever true on the **Shared lists** tab: the reader's own is dropped from
+   * the listing entirely, and one somebody shared is a real thing to open. It is
+   * what takes the date off the row, because that basket has none: `generatedAt`
+   * is the moment the server first made it, which is nothing a shopper has ever
+   * thought about.
+   */
+  readonly live: boolean;
 }
 
 /**

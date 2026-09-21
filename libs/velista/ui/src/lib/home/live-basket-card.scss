@@ -1,0 +1,103 @@
+// The top strip of the dock, drawn as the strip below it is (velista `0091`,
+// section 5.1): the same ground, the same top rule, no raised surface and no
+// radius. The two are one surface read top to bottom, and the rule this element
+// draws becomes the divider between them when both are there.
+//
+// Every value here is a token, and there is no colour of its own. The card says
+// what is left to buy; it is not a warning, and amber is not attention.
+:host {
+  display: block;
+  background: var(--app-surface-ground);
+  border-top: 1px solid var(--app-border-subtle);
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-3) var(--app-space-5);
+  background: transparent;
+  border: none;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-surface-raised);
+  }
+
+  &:active {
+    background: var(--app-surface-sunken);
+  }
+
+  // Inside the element rather than around it: the strip runs to both edges of
+  // the screen, so a ring drawn outside is clipped by the viewport and appears
+  // as two stray verticals.
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(-1 * var(--app-focus-ring-width));
+  }
+}
+
+.titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.name {
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45em;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// The height of the line it stands in for, so the dock does not grow when the
+// numbers land. A slow, low-contrast pulse, matching `ZoneSkeleton`: anything
+// faster reads as a glitch on a screen that is about to change shape.
+.meta-skeleton {
+  display: block;
+  inline-size: 40%;
+  block-size: var(--app-space-3);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-sunken);
+  animation: pulse 1.6s var(--app-motion-ease) infinite;
+}
+
+.chevron {
+  flex-shrink: 0;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meta-skeleton {
+    animation: none;
+  }
+}

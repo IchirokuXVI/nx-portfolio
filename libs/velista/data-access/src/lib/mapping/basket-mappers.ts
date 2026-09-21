@@ -28,6 +28,7 @@ import {
   type BasketRowResult,
   type BasketSession,
   type BasketShareLink,
+  type LiveBasketSummary,
   type ScopeLocation,
 } from '@portfolio/velista/models';
 import { toLocalizedName, toProductOffer } from './mappers';
@@ -630,6 +631,38 @@ export function toBasket(raw: unknown): Basket | null {
 }
 
 /**
+ * From the gateway's `GET /v1/baskets/live/summary` (velista `0091`).
+ *
+ * Null when there is no id and null when there is no progress, for
+ * {@link toBasket}'s reason: the card's whole content is the sentence those
+ * numbers make, and a card drawn from defaults would say "0 to buy" to somebody
+ * with a full basket. The dashboard draws the card with its title and no
+ * sentence instead, which is what a failed read already produces.
+ *
+ * `pending` is lifted out of the wire's `progress` exactly as {@link Basket}'s
+ * is, so the two reads of one number cannot drift.
+ */
+export function toLiveBasketSummary(raw: unknown): LiveBasketSummary | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  const progress = toBasketProgress(raw['progress']);
+  if (id === null || progress === null) {
+    return null;
+  }
+
+  return {
+    id,
+    progress,
+    pending: isRecord(raw['progress'])
+      ? atLeastZero(raw['progress']['pending'])
+      : 0,
+  };
+}
+
+/**
  * From `BasketLinkPreview` (`GET /v1/share-links/:secret`).
  *
  * **Never null**, because the route never fails by design: a link that never
@@ -670,11 +703,7 @@ export function toBasketSession(raw: unknown): BasketSession | null {
   const participant = toBasketParticipant(raw['participant']);
   const socketToken = str(raw['socketToken']);
 
-  if (
-    basketId === null ||
-    participant === null ||
-    socketToken === null
-  ) {
+  if (basketId === null || participant === null || socketToken === null) {
     return null;
   }
 

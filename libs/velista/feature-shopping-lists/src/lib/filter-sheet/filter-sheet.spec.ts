@@ -125,6 +125,9 @@ function render(options: {
   ];
   const store = {
     rows: signal(options.lines),
+    // How a sheet addresses its own basket since velista `0091`: off the store,
+    // never off `paramMap`, which has no id under `shopping-lists/live`.
+    address: signal({ basketId: BASKET_ID }),
     products: signal(new Map()),
     me: signal(null),
     basket: computed(() => ({ scopes: scopes() })),

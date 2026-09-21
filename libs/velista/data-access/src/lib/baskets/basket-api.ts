@@ -12,6 +12,7 @@ import type {
   BasketSettleRequest,
   BasketShareLink,
   CatalogSuggestion,
+  LiveBasketSummary,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
@@ -24,6 +25,7 @@ import {
   toBasketRowResult,
   toBasketSession,
   toBasketShareLink,
+  toLiveBasketSummary,
 } from '../mapping/basket-mappers';
 import { toCatalogSuggestion } from '../mapping/mappers';
 import { isRecord, mapArray } from '../mapping/primitives';
@@ -155,6 +157,36 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasket(body), 'basket.get');
+  }
+
+  /**
+   * The caller's own permanent basket, created by the server on the first read.
+   *
+   * **No participant options.** This route is account authenticated, and the
+   * ordinary auth interceptor attaches the bearer token; sending a stored secret
+   * here would be a credential for a different basket entirely. Every later
+   * request about this basket goes out by its id, through the participant
+   * surface, where the owner arrives as their own participant row.
+   */
+  async getLiveBasket(): Promise<Basket> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(this._live(), {
+        context: operation('basket.live'),
+      })
+    );
+
+    return required(toBasket(body), 'basket.live');
+  }
+
+  /** The three numbers the dashboard card draws, with no rows behind them. */
+  async getLiveSummary(): Promise<LiveBasketSummary> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(`${this._live()}/summary`, {
+        context: operation('basket.live.summary'),
+      })
+    );
+
+    return required(toLiveBasketSummary(body), 'basket.live.summary');
   }
 
   /**
@@ -454,6 +486,16 @@ export class BasketApi implements BasketServiceI {
    */
   private _basket(basketId: string): string {
     return this._urls.gateway(`${BASKETS}/${encodeURIComponent(basketId)}`);
+  }
+
+  /**
+   * The caller's own permanent basket, addressed by a word rather than an id.
+   *
+   * The gateway registers this literal before `:id` for the same reason the route
+   * table does: both match, and the first match runs.
+   */
+  private _live(): string {
+    return this._urls.gateway(`${BASKETS}/live`);
   }
 
   /** One row of a basket, which every write addresses. */

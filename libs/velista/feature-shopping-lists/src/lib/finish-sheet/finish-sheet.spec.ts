@@ -5,10 +5,7 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import {
-  BasketStore,
-  BasketListStore,
-} from '@portfolio/velista/data-access';
+import { BasketListStore, BasketStore } from '@portfolio/velista/data-access';
 import {
   provideVelistaTesting,
   SheetNavigation,
@@ -56,6 +53,11 @@ async function render(world: World = {}) {
     // `SKIPPED` row is pending and this side has no way to know that (velista
     // `0090`, section 6).
     pending: unsettled,
+    // What the sheet writes to and dismisses to, both off the store since velista
+    // `0091`: the same page is routed at `shopping-lists/live`, where the URL
+    // carries no id at all.
+    basket: signal({ id: BASKET_ID }),
+    address: signal({ basketId: BASKET_ID }),
     refresh: jest.fn().mockResolvedValue(undefined),
   };
   const generated = {

@@ -1,3 +1,4 @@
+import type { BasketAddress } from '@portfolio/velista/models';
 import {
   shareUrl as absoluteShareUrl,
   appPath,
@@ -24,6 +25,16 @@ export const BASKET_PATHS = {
   /** One basket, the screen `0044` is about. Takes a generated list id. */
   basket: 'shopping-lists/:basketId',
   /**
+   * The caller's own permanent basket (velista `0091`, section 2.1).
+   *
+   * **One stable URL that is the same for every person**, which is what a
+   * dashboard card and an installed app's shortcut need. It is an alias for "my
+   * own": the page behind it is the same page `basket` reaches, and a `LIVE`
+   * basket somebody **else** owns is still opened by its id, from a link or from
+   * the shared tab.
+   */
+  live: 'shopping-lists/live',
+  /**
    * The guest join screen, on a short segment because it is the one path in this
    * app that gets pasted into a group chat and read aloud.
    *
@@ -34,13 +45,32 @@ export const BASKET_PATHS = {
   join: 's/:secret',
 } as const;
 
-/** The path to one basket. `appPath` puts the mount and the locale in front. */
+/**
+ * The path to one basket. `appPath` puts the mount and the locale in front.
+ *
+ * It takes a {@link BasketAddress} rather than an id since velista `0091`, so
+ * that one call site serves both routes: a sheet over the permanent basket
+ * dismisses to `shopping-lists/live` and the same code over a generated one
+ * dismisses to its id.
+ *
+ * **Null is the store letting the basket go**, which is the page being left, and
+ * it lands on the history. Nothing navigates there in practice — a sheet is
+ * destroyed with the page it covers — and it is a destination rather than a
+ * thrown error because a dismissal that cannot fail is worth more here than a
+ * report of a state nobody can reach.
+ */
 export function basketPath(
   locale: string,
   basePath: string,
-  basketId: string
+  address: BasketAddress | null
 ): string {
-  return appPath(locale, basePath, BASKET_PATHS.list, basketId);
+  if (address === null) {
+    return appPath(locale, basePath, BASKET_PATHS.list);
+  }
+
+  return address === 'live'
+    ? appPath(locale, basePath, BASKET_PATHS.live)
+    : appPath(locale, basePath, BASKET_PATHS.list, address.basketId);
 }
 
 /**
@@ -57,10 +87,10 @@ export function basketPath(
 export function settleSheetPath(
   locale: string,
   basePath: string,
-  basketId: string,
+  address: BasketAddress | null,
   rowKey: string
 ): string {
-  return `${basketPath(locale, basePath, basketId)}/${sheetSegments(
+  return `${basketPath(locale, basePath, address)}/${sheetSegments(
     'rows',
     rowKey,
     'settle'
@@ -78,9 +108,9 @@ export function settleSheetPath(
 export function filterSheetPath(
   locale: string,
   basePath: string,
-  basketId: string
+  address: BasketAddress | null
 ): string {
-  return `${basketPath(locale, basePath, basketId)}/${sheetSegments(
+  return `${basketPath(locale, basePath, address)}/${sheetSegments(
     'filter'
   ).join('/')}`;
 }
@@ -89,9 +119,9 @@ export function filterSheetPath(
 export function shopPickerPath(
   locale: string,
   basePath: string,
-  basketId: string
+  address: BasketAddress | null
 ): string {
-  return `${basketPath(locale, basePath, basketId)}/${sheetSegments(
+  return `${basketPath(locale, basePath, address)}/${sheetSegments(
     'filter',
     'shop'
   ).join('/')}`;

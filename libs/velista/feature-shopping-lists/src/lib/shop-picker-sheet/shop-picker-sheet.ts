@@ -5,12 +5,11 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketViewStore } from '@portfolio/velista/data-access';
+import { BasketStore, BasketViewStore } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   foldForSearch,
@@ -19,10 +18,7 @@ import {
   type FranchiseButton,
   type ScopeLocation,
 } from '@portfolio/velista/models';
-import {
-  basketIdOf,
-  SheetNavigation,
-} from '@portfolio/velista/platform';
+import { SheetNavigation } from '@portfolio/velista/platform';
 import {
   ChevronLeftIcon,
   FranchiseButtons,
@@ -104,12 +100,17 @@ interface PickerShop {
 export class ShopPickerSheet {
   private readonly _view = inject(BasketViewStore);
   private readonly _sheet = inject(SheetNavigation);
-  private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _locale = inject(RokuLocaleStore).locale;
 
-  /** The basket underneath, which is what both ways out of here are built on. */
-  private readonly _basketId = basketIdOf(this._route);
+  /**
+   * The basket underneath, which is what both ways out of here are built on.
+   *
+   * From the **store** and not from `paramMap` since velista `0091`: the same
+   * page is routed at `shopping-lists/live`, where there is no id in the URL at
+   * all, and a sheet that read one there would dismiss to `/shopping-lists/`.
+   */
+  private readonly _address = inject(BasketStore).address;
 
   /** Which chain's shops are open, or null when none is. */
   protected readonly openChain = signal<string | null>(null);
@@ -360,11 +361,7 @@ export class ShopPickerSheet {
   }
 
   private _filterUrl(): string {
-    return filterSheetPath(
-      this._locale(),
-      this._basePath,
-      this._basketId()
-    );
+    return filterSheetPath(this._locale(), this._basePath, this._address());
   }
 }
 
