@@ -14,8 +14,10 @@ import { CoreEventsPublisher, NATS_EVENTS } from './core-events.publisher';
  * other is a cycle, and lifting the shared half into a module neither owns is what
  * resolves it rather than a `forwardRef` or a second NATS connection.
  *
- * `ZonesModule` still exports {@link CoreEventsPublisher}, so every module that
- * reaches for it through that import keeps working and nothing else moved.
+ * `ZonesModule` re-exports **this module**, so every module that reaches for the
+ * publisher through that import keeps working and nothing else moved. It cannot
+ * re-export the provider itself: Nest refuses to export what a module does not
+ * provide, and it refuses at boot, where no build and no unit spec sees it.
  */
 @Module({
   imports: [

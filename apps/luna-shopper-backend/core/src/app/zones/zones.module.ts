@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BasketCoverageModule } from '../baskets/basket-coverage.module';
 import { Zone, ZoneMembership } from '../entities';
 import { CoreEventsModule } from '../events/core-events.module';
-import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { SharedListGrantModule } from '../lists/shared-list-grant.module';
 import { MemberListingService } from './member-listing.service';
 import { MembershipController } from './membership.controller';
@@ -53,10 +52,16 @@ import { ZoneService } from './zone.service';
   // classes, so the write an operator makes is the write a zone's own admins
   // make. Exporting them is what stops that module from reaching for the
   // repositories and reimplementing the effect.
+  //
+  // The publisher is re-exported as its **module**, which is the only way since
+  // plan 0139 moved it out of here: Nest refuses to export a provider a module
+  // does not itself provide, and it refuses it at boot rather than at build, so
+  // no amount of compiling or unit testing finds it. Re-exporting the module
+  // hands importers the same `CoreEventsPublisher` they always got.
   exports: [
     ZoneAuthzService,
     ZoneCountsService,
-    CoreEventsPublisher,
+    CoreEventsModule,
     ZoneService,
     MembershipService,
   ],
