@@ -10,8 +10,8 @@ import { toRealtimeEvent } from './realtime-event-mapper';
  * why every payload here is written the way core actually emits it.
  *
  * The names come from `RealtimeEvent` in `@portfolio/luna-shopper/contracts`, and the
- * shapes from `basket-basket.service.ts`, `basket-settle.service.ts`
- * and `basket-sharing.service.ts`. Written out rather than imported, because
+ * shapes from core's basket services, which plan 0136 rewrote and plan 0144
+ * renamed. Written out rather than imported, because
  * rule D4 keeps every contracts import in this app type only: the barrel re-exports
  * ajv, and a string constant is not a type.
  */

@@ -1165,10 +1165,10 @@ VOICE_COMMENT_MAX_BYTES=2097152
 VOICE_COMMENT_CONTENT_TYPES=
 # One number, two readers (plans 0052 and 0059): a live basket older than this
 # claims none of its lines, and the sweep finishes it at the same age.
-GENERATED_LIST_CLAIM_WINDOW=60h
-GENERATED_LIST_SWEEP_ENABLED=true
-GENERATED_LIST_SWEEP_INTERVAL=1h
-GENERATED_LIST_SWEEP_BATCH=100
+BASKET_CLAIM_WINDOW=60h
+BASKET_SWEEP_ENABLED=true
+BASKET_SWEEP_INTERVAL=1h
+BASKET_SWEEP_BATCH=100
 # The zone reaper, the other scheduled job core runs. Stated for the same reason
 # as auth's orphan reaper: it deletes rows from this slot's database on a timer,
 # so the switch belongs in the file that configures the service and not only in a
