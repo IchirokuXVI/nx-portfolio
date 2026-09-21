@@ -201,19 +201,38 @@ describe('BasketApi.join', () => {
  * **A rename asks before it merges** (velista `0084`). The first request carries no
  * `confirmMerge` at all, and only the Merge button's request carries `true`.
  */
-describe('BasketApi.renameLine', () => {
+describe('BasketApi.renameRow', () => {
   let api: BasketApi;
   let httpMock: HttpTestingController;
 
-  const LINE_VIEW = {
-    id: 'line-1',
+  /** The row every write on this surface answers with (backend `0136`). */
+  const ROW_VIEW = {
+    rowKey: 'zl-1',
     content: 'Leche entera',
-    quantity: 3,
-    settledQuantity: 0,
-    itemId: null,
-    options: [],
-    position: 0,
+    left: 3,
+    bought: 0,
+    asked: 3,
+    state: 'WANTED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
+    optionIds: [],
+    touchedBy: null,
+    touchedAt: null,
+    entries: [
+      {
+        lineId: 'zl-1',
+        left: 3,
+        bought: 0,
+        state: 'WANTED',
+        approvalStatus: 'APPROVED',
+        demandEditable: true,
+      },
+    ],
   };
+
+  const PROGRESS = { done: 0, unavailable: 0, total: 1, pending: 1 };
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -242,21 +261,23 @@ describe('BasketApi.renameLine', () => {
 
   afterEach(() => httpMock.verify());
 
-  const url = `${GATEWAY}/v1/generated-lists/${BASKET}/basket/lines/line-1`;
+  // The row writes moved to the basket's own path with backend `0136`. The
+  // sharing half stayed on `/v1/generated-lists` until backend `0144`.
+  const url = `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1`;
 
-  it('patches the basket route and leaves confirmMerge off the first request', async () => {
-    const done = api.renameLine(BASKET, 'line-1', { content: 'Leche entera' });
+  it('patches the row route and leaves confirmMerge off the first request', async () => {
+    const done = api.renameRow(BASKET, 'zl-1', { content: 'Leche entera' });
     const req = httpMock.expectOne(url);
 
     expect(req.request.method).toBe('PATCH');
     expect(req.request.body).toEqual({ content: 'Leche entera' });
-    req.flush({ line: LINE_VIEW });
+    req.flush({ row: ROW_VIEW, progress: PROGRESS });
 
-    expect((await done).absorbedLineId).toBeNull();
+    expect((await done).absorbedRowKey).toBeNull();
   });
 
-  it('sends confirmMerge only when it is true, and reads the absorbed line', async () => {
-    const done = api.renameLine(BASKET, 'line-1', {
+  it('sends confirmMerge only when it is true, and reads the absorbed row', async () => {
+    const done = api.renameRow(BASKET, 'zl-1', {
       content: 'Leche entera',
       confirmMerge: true,
     });
@@ -266,8 +287,14 @@ describe('BasketApi.renameLine', () => {
       content: 'Leche entera',
       confirmMerge: true,
     });
-    req.flush({ line: LINE_VIEW, absorbedLineId: 'line-2' });
+    req.flush({
+      row: ROW_VIEW,
+      progress: PROGRESS,
+      replacedRowKey: 'zl-2',
+    });
 
-    expect((await done).absorbedLineId).toBe('line-2');
+    // The wire's `replacedRowKey`, named for what a rename did with it: the row
+    // the request addressed was the one absorbed.
+    expect((await done).absorbedRowKey).toBe('zl-2');
   });
 });

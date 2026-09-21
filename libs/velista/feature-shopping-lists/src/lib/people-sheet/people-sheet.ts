@@ -104,7 +104,9 @@ export class PeopleSheet {
     viewChild<ElementRef<HTMLElement>>('leaveQuestion');
 
   protected readonly busy = this._busy.asReadonly();
-  protected readonly seesZoneData = this._store.seesZoneData;
+  protected readonly seesDevices = computed(() =>
+    this._store.participants().some((person) => 'device' in person)
+  );
 
   /** Whether the reader owns this basket, which is who may remove somebody. */
   protected readonly isOwner = computed(
@@ -131,9 +133,9 @@ export class PeopleSheet {
     if (basket.name !== null && basket.name !== '') {
       return basket.name;
     }
-    return basket.generatedAt === null
+    return basket.createdAt === null
       ? ''
-      : formatGeneratedDate(basket.generatedAt, this._locale());
+      : formatGeneratedDate(basket.createdAt, this._locale());
   });
 
   /**

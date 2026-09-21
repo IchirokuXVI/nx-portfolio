@@ -13,7 +13,7 @@
 -->
 <div
   [attr.aria-busy]="busy() ? 'true' : null"
-  [class.is-done]="state() === 'done'"
+  [class.is-done]="state() === 'DONE' || state() === 'NOT_AVAILABLE'"
   class="row"
 >
   <!--
@@ -26,12 +26,11 @@
 
     Four shapes and never four colours (`0044`, section 7): empty, half, filled with
     a tick, and a stroke through. The fourth exists for the reason `touchedCaption`
-    has a sentence of its own for it — `NOT_AVAILABLE` closes the outstanding amount
-    exactly as a purchase does, so a tick on it would claim a purchase that never
-    happened.
+    has a sentence of its own for it — `NOT_AVAILABLE` closes a row without anything
+    being bought, so a tick on it would claim a purchase that never happened.
 
     Drawn for **everybody**. Every participant may settle and every participant may
-    reopen (luna `0054`, section 3.5), so there is no reader for whom this is drawn
+    revert (luna `0054`, section 3.5), so there is no reader for whom this is drawn
     and refused, and no `@if` guarding it.
   -->
   @if (statusIsButton()) {
@@ -46,12 +45,15 @@
     </button>
   } @else {
     <!--
-      Two ways to have nothing to press, and one treatment. A finished line with no
-      reopen route behind it: `BASKET_REOPEN_AVAILABLE` is false until luna `0054`
-      ships, so pressing would 404. Or the whole trip is finished (velista 0057),
-      where every write on every line is refused at once. Either way this says what
-      the line **is** and offers no act, which is the absence rule again (`0030`).
-      The settle direction above works in full whenever it is drawn.
+      Two ways to have nothing to press, and one treatment. The whole trip is
+      finished (velista `0057`), where every write on every row is refused at once.
+      Or the row is `REMOVED`, which is information about the basket rather than a
+      thing to act on. Either way this says what the row **is** and offers no act,
+      which is the absence rule again (`0030`).
+
+      The third way is gone with the route behind it: `BASKET_REOPEN_AVAILABLE`
+      guarded a reopen backend `0136` replaced with a revert that is always
+      available.
 
       A `span` with `role="img"` rather than a disabled button, because there is no
       control here to disable: nothing has been taken away from this reader, and a
@@ -89,7 +91,7 @@
         ><mark class="match">{{ parts.match }}</mark
         ><span>{{ parts.after }}</span>
       } @else {
-        {{ line().content }}
+        {{ row().content }}
       }
     </span>
 
@@ -118,14 +120,14 @@
         }
         @if (markCaption(); as mark) {
           <span
-            [class.is-cheaper]="this.mark()?.kind === 'cheaper'"
-            [class.is-unlisted]="this.mark()?.kind === 'unlisted'"
+            [class.is-cheaper]="this.priceMark()?.kind === 'cheaper'"
+            [class.is-unlisted]="this.priceMark()?.kind === 'unlisted'"
           >
             · {{ mark }}</span
           >
         }
       </span>
-    } @else if (line().optionIds.length > 0) {
+    } @else if (row().optionIds.length > 0) {
       <span class="product is-missing">{{
         'basket.product.none' | rokuT
       }}</span>
@@ -140,21 +142,8 @@
     }
 
     <!--
-      Who put this here, for a line nobody has touched yet (plan 0053, section 5).
-      Mutually exclusive with the caption above by construction rather than by an
-      `@else`: once somebody settles a line, "who got the bread" is the more urgent
-      of the two and `addedCaption` yields to it.
-
-      Absent on every line the run composed, which is all of them until somebody
-      types one in an aisle: the data decides, exactly as it does below.
-    -->
-    @if (added(); as caption) {
-      <span class="touched">{{ caption }}</span>
-    }
-
-    <!--
-      Which household this came from. Drawn only when `origins` is present, which
-      it is not for a guest: the data decides, so there is no flag here to get
+      Which household this came from. Drawn only for a list this reader was served,
+      which a guest never is: the data decides, so there is no flag here to get
       wrong (section 4.1).
     -->
     @if (from(); as origins) {
@@ -165,8 +154,8 @@
       Right after the "from" caption, because it is about the same thing: which
       household's list this line reaches, and whether it has got there yet.
     -->
-    @if (awaitingApproval()) {
-      <span class="from">{{ 'basket.send.pending' | rokuT }}</span>
+    @if (row().awaitingApproval) {
+      <span class="from">{{ 'basket.units.pending' | rokuT }}</span>
     }
   </button>
 
@@ -196,7 +185,7 @@
 
         This is what the row drew before plan 0054 made it a control: how many are
         still to get, read and not moved. A reel here would be a gesture the server
-        refuses on every line of the basket at once, and `0030` does not draw one of
+        refuses on every row of the basket at once, and `0030` does not draw one of
         those. The count keeps the reel's own accessible name, because the question
         it answers has not changed, only whether it can be answered again.
       -->
@@ -229,21 +218,18 @@
     -->
     @if (caption(); as said) {
       <span aria-hidden="true" class="preview">{{ said }}</span>
-    } @else if (origin() !== null) {
+    } @else if (progressCaption() !== '') {
       <!--
-        Which household's share this row's number is (velista `0077`, section 4.1).
+        What was got out of what was asked for, so somebody can see what is left
+        without arithmetic. **The entry's under a list heading** and the row's
+        everywhere else, which is one caption rather than two: backend `0136` gives
+        an entry its own numbers and its own state, so a household's row answers for
+        itself and needs no sentence explaining which number it is.
 
-        Drawn on every row under a list heading and not only on a partly settled one,
-        because the number above it is one list's and the glyph beside it is the
-        whole line's, and this sentence is the only thing on the row that says so.
+        Empty on a wanted row of one, which draws nothing: there is no arithmetic to
+        spare anybody, and the reel above already says the number.
       -->
       <span aria-hidden="true" class="progress">{{ progressCaption() }}</span>
-    } @else if (state() === 'partly') {
-      <!--
-        Both numbers, so somebody can see what is left without arithmetic. A
-        partly settled line is the whole reason settling is cumulative.
-      -->
-      <span aria-hidden="true" class="progress">{{ quantity() }}</span>
     }
 
     @if (busy()) {

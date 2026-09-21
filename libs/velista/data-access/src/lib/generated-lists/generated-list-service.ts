@@ -6,7 +6,7 @@ import type {
   GeneratedListSummary,
   Page,
   SharedGeneratedListSummary,
-  WritableGeneratedListStatus,
+  WritableBasketStatus,
 } from '@portfolio/velista/models';
 import { GeneratedListApi } from './generated-list-api';
 
@@ -78,7 +78,7 @@ export interface GeneratedListServiceI {
    */
   setStatus(
     generatedListId: string,
-    status: WritableGeneratedListStatus
+    status: WritableBasketStatus
   ): Promise<void>;
 }
 

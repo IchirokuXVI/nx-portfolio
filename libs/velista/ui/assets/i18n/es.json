@@ -1056,14 +1056,11 @@
       "open": "Registrar {{name}}",
       "outstanding_one": "queda {{count}}",
       "outstanding_other": "quedan {{count}}",
-      "partly": "{{settled}} de {{total}} conseguidos",
       "wanted": "×{{count}}",
       "free": "Sin producto elegido",
       "busy": "Guardando",
       "takenBack_one": "1 devuelto",
-      "takenBack_other": "{{count}} devueltos",
-      "listShare": "esta lista pidió {{asked}} de {{total}}",
-      "listPartly": "{{settled}} de {{asked}} conseguidos"
+      "takenBack_other": "{{count}} devueltos"
     },
     "outstanding": {
       "label": "{{name}}, aún por conseguir",
@@ -1076,10 +1073,6 @@
       "gotSome": "{{name}} consiguió {{count}}",
       "none": "{{name}} dice que no había",
       "you": "tú"
-    },
-    "added": {
-      "by": "Añadido por {{name}}",
-      "announced": "{{content}} añadido"
     },
     "from": {
       "one": "de {{first}}",
@@ -1154,15 +1147,14 @@
       "notListedAt": "no está en {{chain}}"
     },
     "group": {
-      "noList": "Todavía en ninguna lista",
-      "noListHint": "añadido en la tienda",
       "notListed": "No está en {{chain}}",
       "notListedHint": "sigue pendiente",
       "noCategory": "Sin categoría",
       "noCategoryHint": "líneas sin producto",
       "progress": "{{done}} de {{total}} conseguidos",
       "unavailable_one": "{{count}} no disponible",
-      "unavailable_other": "{{count}} no disponibles"
+      "unavailable_other": "{{count}} no disponibles",
+      "otherLists": "Otras listas"
     },
     "settle": {
       "title": "{{name}}",
@@ -1186,14 +1178,7 @@
       "title": "¿Cuáles has cogido?",
       "hint": "Reparte las unidades entre los que has cogido. {{name}} se queda con el resto.",
       "hintNone": "Reparte las unidades entre los que has cogido. El resto se queda sin producto.",
-      "rest": "se queda con el resto",
-      "noneRest": "sin producto elegido, se queda con el resto",
       "units": "{{name}}, unidades",
-      "less": "Una unidad menos de {{name}}",
-      "more": "Una unidad más de {{name}}",
-      "apply": "Aplicar",
-      "notBought": "Esto cambia qué filas hay que comprar. Aquí no se marca nada como comprado.",
-      "split": "{{name}} se ha dividido en {{count}} filas",
       "none": "Esta línea no nombra ningún producto",
       "cheapest": "Más barato",
       "noPrice": "Sin precio",
@@ -1201,32 +1186,11 @@
       "asOfStale": "Precios de {{when}}, y alguno puede estar desactualizado"
     },
     "units": {
-      "extra": "{{lists}} para estas listas y {{extra}} de más",
-      "lists": "Listas que han pedido esto",
       "askedFor": "Pedido",
       "got": "Conseguido",
       "askedLabel": "{{name}}, pedido",
       "gotLabel": "{{name}}, conseguido",
-      "more_one": "1 lista más",
-      "more_other": "{{count}} listas más",
-      "listAsks": "en su lista pide {{count}}",
-      "listNow": "ahora su lista pide {{count}}",
-      "pending": "esperando a que la lista lo acepte",
-      "noAccess": "Ya no puedes cambiar esta lista",
-      "rejected": "esa lista ha dicho que no a esta línea",
-      "cannotTake": "esta línea no se puede añadir a esa lista",
-      "cameHome": "Añadido a {{name}}. Ahí constan {{count}} como comprados",
-      "stillWaiting_one": "1 comprado y todavía en ninguna lista",
-      "stillWaiting_other": "{{count}} comprados y todavía en ninguna lista",
-      "alreadyHere": "esta lista ya lo tiene, vuelve a leer",
-      "byName": "coincide por el nombre: «{{content}}»",
-      "loading": "Leyendo las listas",
-      "failed": "No se han podido leer las listas",
-      "retry": "Reintentar",
-      "empty": "No hay ninguna lista en la que puedas poner esto"
-    },
-    "send": {
-      "pending": "Esperando a que esa lista lo acepte"
+      "pending": "esperando a que la lista lo acepte"
     },
     "people": {
       "title": "En esta lista",
@@ -1390,6 +1354,17 @@
         "make": "Crear mi lista",
         "older": "Ver listas anteriores"
       }
+    },
+    "entries": {
+      "title": "Listas que lo piden",
+      "otherList": "Otra lista",
+      "asks": "pide {{count}}",
+      "got": "{{count}} conseguidos",
+      "gotLabel": "{{name}}, conseguidos"
+    },
+    "row": {
+      "boughtOf": "{{bought}} de {{asked}}",
+      "gone": "Esa línea ya no está en esta lista."
     }
   },
   "getList": {

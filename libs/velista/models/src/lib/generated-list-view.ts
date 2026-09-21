@@ -1,4 +1,4 @@
-import type { BasketKind, GeneratedListStatus } from './enums';
+import type { BasketKind, BasketStatus } from './enums';
 
 /**
  * A generated shopping list: the basket somebody carries around the shop (plan 0045;
@@ -34,7 +34,7 @@ export interface GeneratedListSummary {
   /** What this basket is (backend `0133`, section 2). */
   readonly kind: BasketKind;
   readonly name: string | null;
-  readonly status: GeneratedListStatus;
+  readonly status: BasketStatus;
   /** When the run composed it. The history is ordered by this, newest first. */
   readonly generatedAt: Date;
   readonly lineCount: number;

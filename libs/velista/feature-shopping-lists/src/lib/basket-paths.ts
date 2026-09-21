@@ -44,14 +44,12 @@ export function basketPath(
 }
 
 /**
- * The settle sheet's own URL, which is where the two sheets over it go back to.
+ * The settle sheet's own URL, addressed by the **row key** (velista `0090`).
  *
- * A line's units sheet (`0055`) and its send sheet (`0056`) are both reached from
- * the settle sheet, so dismissing one of them onto the basket would take the person
- * two screens back from one gesture. They name this instead, in full, for the reason
- * every dismissal in this app names its page in full: a relative climb makes a
- * component's correctness depend on how many segments some other file's path
- * happens to have (plan 0031).
+ * Every caller that opens the sheet goes through it, and so does the sheet itself
+ * when its row is re-keyed underneath it: a row's key is its anchor's line id, and
+ * the anchor moves when a rename merges two rows or the anchor is bought to zero.
+ * One function means the replacement URL and the opening URL cannot differ.
  *
  * The `sheet` marker is stamped by {@link sheetSegments} rather than typed, because
  * a URL written by hand is the one that can quietly opt out of the rule.
@@ -59,12 +57,12 @@ export function basketPath(
 export function settleSheetPath(
   locale: string,
   basePath: string,
-  generatedListId: string,
-  lineId: string
+  basketId: string,
+  rowKey: string
 ): string {
-  return `${basketPath(locale, basePath, generatedListId)}/${sheetSegments(
-    'lines',
-    lineId,
+  return `${basketPath(locale, basePath, basketId)}/${sheetSegments(
+    'rows',
+    rowKey,
     'settle'
   ).join('/')}`;
 }

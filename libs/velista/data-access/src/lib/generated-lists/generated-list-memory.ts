@@ -5,7 +5,7 @@ import type {
   GeneratedListSummary,
   Page,
   SharedGeneratedListSummary,
-  WritableGeneratedListStatus,
+  WritableBasketStatus,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import type { GeneratedListServiceI } from './generated-list-service';
@@ -140,7 +140,7 @@ export class GeneratedListMemory implements GeneratedListServiceI {
    */
   async setStatus(
     generatedListId: string,
-    status: WritableGeneratedListStatus
+    status: WritableBasketStatus
   ): Promise<void> {
     const at = this._lists.findIndex((list) => list.id === generatedListId);
     if (at < 0) {

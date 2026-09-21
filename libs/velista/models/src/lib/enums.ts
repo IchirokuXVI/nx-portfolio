@@ -257,21 +257,20 @@ export const BASKET_KIND_FALLBACK: BasketKind = 'UNKNOWN';
  * `ZONE_STATUSES`: an unrecognised value must not read as open, because that would put
  * a basket the server considers finished back on the dashboard.
  */
-export const GENERATED_LIST_STATUSES = [
+export const BASKET_STATUSES = [
   'OPEN',
   'FINISHED',
   'ARCHIVED',
   'UNKNOWN',
 ] as const;
-export type GeneratedListStatus = (typeof GENERATED_LIST_STATUSES)[number];
-export const GENERATED_LIST_STATUS_FALLBACK: GeneratedListStatus = 'UNKNOWN';
+export type BasketStatus = (typeof BASKET_STATUSES)[number];
+export const BASKET_STATUS_FALLBACK: BasketStatus = 'UNKNOWN';
 
 /**
  * Whether this basket still takes writes.
  *
- * Takes a `string` rather than a {@link GeneratedListStatus} so a caller holding a raw
- * status off the wire can ask without a cast, which is the shape {@link basketTakesLines}
- * already had and the reason it can delegate here.
+ * Takes a `string` rather than a {@link BasketStatus} so a caller holding a raw
+ * status off the wire can ask without a cast.
  *
  * `UNKNOWN` is outside it, which is the safe direction: a status this build has never
  * heard of costs a card, where the other way round would offer somebody a way back into
@@ -282,63 +281,74 @@ export function isOpenBasket(status: string): boolean {
 }
 
 /**
+ * Where one row of a basket has got to (backend `0130`, section 4).
+ *
+ * The server computes it on every read out of the row's entries and the purchases
+ * in scope, and **nothing in this scope derives it from the numbers beside it**.
+ * That is the whole reason the union is read rather than written here: `left`,
+ * `bought` and `asked` each answer a different question, and a client deciding the
+ * state from them would be a second arithmetic that drifts from the server's the
+ * first time a close or a skip lands. `basketLineState` was that second
+ * arithmetic, and plan 0090 removed it.
+ *
+ * All six are declared although a backend with plan `0136` alone produces four.
+ * `SKIPPED` arrives with backend `0137` and `REMOVED` with `0138`, so those plans
+ * change which value a row carries rather than changing this shape.
+ *
+ * `WANTED` is the fallback because it is the one state that hides nothing. A row
+ * this build cannot classify is still a thing to buy, and drawing it as wanted
+ * costs a caption where reading it as `DONE` would take it off somebody's screen.
+ */
+export const BASKET_ROW_STATES = [
+  'WANTED',
+  'PARTLY',
+  'DONE',
+  'NOT_AVAILABLE',
+  'SKIPPED',
+  'REMOVED',
+] as const;
+export type BasketRowState = (typeof BASKET_ROW_STATES)[number];
+export const BASKET_ROW_STATE_FALLBACK: BasketRowState = 'WANTED';
+
+/**
+ * A fact about a row's past worth saying beside it (backend `0130`, section 4).
+ *
+ * One value today, and a union rather than a boolean so the wire shape does not
+ * move when a second one arrives.
+ *
+ * **There is no fallback**, unlike {@link BASKET_ROW_STATES}, and the difference is
+ * the point: a state every row has must resolve to something, while a note is a
+ * caption some rows carry. A note this build does not know maps to `null`, which
+ * draws nothing, where a guess would put a sentence under a row that does not
+ * deserve it.
+ */
+export const BASKET_ROW_NOTES = ['SKIPPED_EARLIER'] as const;
+export type BasketRowNote = (typeof BASKET_ROW_NOTES)[number];
+
+/**
+ * What changed about a row since this reader last looked (backend `0138`).
+ *
+ * Carried by the model from plan 0090 and drawn by velista `0093`, so the mapper
+ * and the store are written once rather than twice. Null on every row until the
+ * backend plan that produces it lands, which draws as a row with no mark.
+ *
+ * Named a **change** mark because the price marks of velista `0078` are also
+ * marks and a row can carry both. `BasketPriceMark` is the other one.
+ */
+export const BASKET_CHANGE_MARKS = ['ADDED', 'CHANGED', 'REMOVED'] as const;
+export type BasketChangeMark = (typeof BASKET_CHANGE_MARKS)[number];
+
+/**
  * The statuses this app ever asks the server to write (velista `0057`).
  *
  * Two of the four, because there are two gestures: Finish ends the trip and Reopen
  * takes it back, and nothing in velista archives a basket. Narrower than
- * {@link GeneratedListStatus} on purpose, and `UNKNOWN` is why: it is this build's
+ * {@link BasketStatus} on purpose, and `UNKNOWN` is why: it is this build's
  * fallback for a status it does not recognise, not a value the server has ever heard
  * of, so a write signature that accepted it would let a round trip turn "I could not
  * read this" into a request the gateway refuses.
  */
-export type WritableGeneratedListStatus = 'OPEN' | 'FINISHED';
-
-/**
- * Where a basket line came from (backend `0055`, section 3; velista `0056`).
- *
- * `DERIVED` is a line the run composed out of the zone lists it drew from, and
- * `ADDED` is one a participant typed into the basket in an aisle. The difference
- * is not decoration: an `ADDED` line claims no household's line and can be sent to
- * one, and a `DERIVED` line already has its lists and cannot be sent anywhere.
- *
- * The mapper reads an absent or unrecognised value as `DERIVED`, which is the quiet
- * direction: a line the run composed offers no send control, so an unknown value
- * costs a gesture rather than offering one the server would refuse. It is stated at
- * the mapper rather than as a constant here because it is also what an **older
- * backend** means by omitting the field, and those are the same answer.
- */
-export const BASKET_LINE_KINDS = ['DERIVED', 'ADDED'] as const;
-export type BasketLineKind = (typeof BASKET_LINE_KINDS)[number];
-
-/**
- * Why a list holding the same thing cannot be taken onto a basket line (backend
- * `0057` section 4.3, as `0092` section 3.2 revised it).
- *
- * `REJECTED` is a line the household said no to, and it is the only reason the
- * server answers.
- *
- * **`NOT_APPROVED`, `SETTLED` and `CLAIMED` are gone.** Backend `0092` made a pending
- * line and a line at zero adoptable, and backend `0133` section 7 made a line another
- * basket carries adoptable too: that refusal was about two frozen copies of one line
- * and is false of two views of it. None of the three is answered any more and none is
- * drawn (velista `0068`, section 4.3). A build reading one off an older backend gets
- * {@link BASKET_ORIGIN_UNAVAILABLE_REASONS}' catch-all instead of a caption that is
- * no longer true.
- *
- * `UNAVAILABLE` is this model's own, and the wire never carries it: it is where the
- * mapper puts a reason it does not recognise, so an unreadable refusal costs the row
- * its reel rather than drawing one the server refuses (velista `0068`, section 7).
- *
- * There is no member for "it is fine", which is what the wire omitting the field
- * means. Null is the adoptable case, and it is a real value here rather than a
- * missing one.
- */
-export const BASKET_ORIGIN_UNAVAILABLE_REASONS = [
-  'REJECTED',
-  'UNAVAILABLE',
-] as const;
-export type BasketOriginUnavailableReason =
-  (typeof BASKET_ORIGIN_UNAVAILABLE_REASONS)[number];
+export type WritableBasketStatus = 'OPEN' | 'FINISHED';
 
 /**
  * How much a shopping profile draws from when it generates a basket (backend `0049`,

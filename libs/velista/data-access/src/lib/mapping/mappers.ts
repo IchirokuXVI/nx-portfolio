@@ -1,10 +1,10 @@
 import {
   BASKET_KIND_FALLBACK,
   BASKET_KINDS,
+  BASKET_STATUS_FALLBACK,
+  BASKET_STATUSES,
   COMMENT_TRANSCRIPTION_FALLBACK,
   COMMENT_TRANSCRIPTIONS,
-  GENERATED_LIST_STATUS_FALLBACK,
-  GENERATED_LIST_STATUSES,
   GENERATION_SCOPE_FALLBACK,
   GENERATION_SCOPES,
   LINE_APPROVAL_STATUS_FALLBACK,
@@ -1226,11 +1226,7 @@ export function toGeneratedListSummary(
     id,
     kind: oneOf(raw['kind'], BASKET_KINDS, BASKET_KIND_FALLBACK),
     name: nullableStr(raw['name']),
-    status: oneOf(
-      raw['status'],
-      GENERATED_LIST_STATUSES,
-      GENERATED_LIST_STATUS_FALLBACK
-    ),
+    status: oneOf(raw['status'], BASKET_STATUSES, BASKET_STATUS_FALLBACK),
     generatedAt,
     lineCount: numOr(raw['lineCount'], 0),
     settledLineCount: numOr(raw['settledLineCount'], 0),

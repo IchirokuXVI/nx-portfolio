@@ -96,7 +96,7 @@ export class FinishSheet {
    * substituted into it, and a test that read the sentence would be testing the
    * translator (the house rule for every interpolated string in this app).
    */
-  protected readonly unsettled = this._basket.unsettled;
+  protected readonly unsettled = this._basket.pending;
 
   /**
    * End the trip.

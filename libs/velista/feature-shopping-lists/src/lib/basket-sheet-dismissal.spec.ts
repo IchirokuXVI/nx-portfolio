@@ -53,8 +53,8 @@ const SHEETS: readonly {
   {
     name: 'SettleSheet',
     component: SettleSheet,
-    path: 'lines/:lineId/settle',
-    params: { lineId: LINE_ID },
+    path: 'rows/:rowKey/settle',
+    params: { rowKey: LINE_ID },
   },
   { name: 'PeopleSheet', component: PeopleSheet, path: 'people', params: {} },
   { name: 'ShareSheet', component: ShareSheet, path: 'share', params: {} },
@@ -96,38 +96,35 @@ function storeDouble() {
     // The three members the two line sheets and the basket page read. They are here
     // rather than in each plan's own double so that a sheet added by either plan can
     // rely on the same store shape this file already provides.
-    pendingTargets: signal(new Set<string>()),
-    rememberListNames: jest.fn(),
     state: signal('loaded'),
     error: signal(null),
     shareLink: signal(null),
-    busyLines: signal(new Set<string>()),
-    lines: signal([]),
-    // What `BasketViewStore` composes the page's sections from, and what its effect
-    // watches to clear the search when the reader's own line lands. Empty, because
+    busyRows: signal(new Set<string>()),
+    // What `BasketViewStore` composes the page's sections from. Empty, because
     // these tests are about the URL a sheet leaves on, and that URL is the same
-    // whether the basket has thirty lines or none.
+    // whether the basket has thirty rows or none.
+    rows: signal([]),
     products: signal(new Map()),
-    lastAdded: signal(null),
-    seesZoneData: signal(false),
-    listNames: signal(new Map<string, string>()),
+    lists: signal(new Map()),
     participants: signal([]),
     me: signal(null),
     participantsById: signal(new Map()),
-    progress: signal({ settled: 0, total: 0, spent: 0 }),
+    progress: signal({ done: 0, unavailable: 0, total: 0 }),
     // The finish sheet's two readings of the basket underneath (velista `0057`).
     finished: signal(false),
-    unsettled: signal(0),
+    pending: signal(0),
+    // A sheet that cannot find its row dismisses itself and the page says so
+    // once (velista `0090`, section 7.3).
+    rowGone: signal(0),
+    sayRowGone: jest.fn(),
+    rowFor: () => null,
     open: jest.fn().mockResolvedValue(undefined),
     refresh: jest.fn().mockResolvedValue(undefined),
     settle: jest.fn().mockResolvedValue(null),
-    splitLine: jest.fn().mockResolvedValue(null),
-    setOutstanding: jest.fn().mockResolvedValue(null),
-    loadLineOrigins: jest.fn().mockResolvedValue(null),
-    setOriginQuantity: jest.fn().mockResolvedValue(null),
-    loadLineTargets: jest.fn().mockResolvedValue(null),
-    bindLine: jest.fn().mockResolvedValue(null),
-    apply: jest.fn(),
+    revert: jest.fn().mockResolvedValue(null),
+    setLeft: jest.fn().mockResolvedValue(null),
+    renameRow: jest.fn().mockResolvedValue(null),
+    suggest: jest.fn().mockResolvedValue([]),
     loadShareLink: jest.fn().mockResolvedValue(undefined),
     share: jest.fn().mockResolvedValue(null),
     revokeLink: jest.fn().mockResolvedValue(undefined),
@@ -243,8 +240,8 @@ async function close(fixture: Awaited<ReturnType<typeof render>>['fixture']) {
  * ## The defect this exists for
  *
  * `SettleSheet` closed with `navigate(['..'])`. Its route's path is **three** segments,
- * `lines/:lineId/settle`, and `..` climbs exactly one, so closing it left the URL on
- * `lines/:lineId`, a path no route under the basket declares, and the sheet dismissed
+ * `rows/:rowKey/settle`, and `..` climbs exactly one, so closing it left the URL on
+ * `rows/:rowKey`, a path no route under the basket declares, and the sheet dismissed
  * onto the app's own 404. Nothing about the sheet read as wrong: what was wrong was the
  * number of segments in a path it does not contain.
  *

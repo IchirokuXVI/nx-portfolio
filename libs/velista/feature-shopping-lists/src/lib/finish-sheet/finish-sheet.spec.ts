@@ -52,7 +52,10 @@ async function render(world: World = {}) {
   const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
   const unsettled: WritableSignal<number> = signal(world.unsettled ?? 0);
   const basket = {
-    unsettled,
+    // The **server's** count, which the store reads rather than works out: a
+    // `SKIPPED` row is pending and this side has no way to know that (velista
+    // `0090`, section 6).
+    pending: unsettled,
     refresh: jest.fn().mockResolvedValue(undefined),
   };
   const generated = {

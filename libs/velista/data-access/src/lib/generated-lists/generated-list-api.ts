@@ -6,7 +6,7 @@ import type {
   GeneratedListSummary,
   Page,
   SharedGeneratedListSummary,
-  WritableGeneratedListStatus,
+  WritableBasketStatus,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
@@ -130,7 +130,7 @@ export class GeneratedListApi implements GeneratedListServiceI {
    */
   async setStatus(
     generatedListId: string,
-    status: WritableGeneratedListStatus
+    status: WritableBasketStatus
   ): Promise<void> {
     await firstValueFrom(
       this._http.patch<unknown>(

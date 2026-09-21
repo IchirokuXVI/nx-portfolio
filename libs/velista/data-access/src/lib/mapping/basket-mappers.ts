@@ -1,37 +1,33 @@
 import {
+  BASKET_CHANGE_MARKS,
   BASKET_KIND_FALLBACK,
   BASKET_KINDS,
-  BASKET_LINE_KINDS,
-  BASKET_ORIGIN_UNAVAILABLE_REASONS,
-  LINE_APPROVAL_STATUS_FALLBACK,
-  LINE_APPROVAL_STATUSES,
+  BASKET_ROW_NOTES,
+  BASKET_ROW_STATE_FALLBACK,
+  BASKET_ROW_STATES,
+  BASKET_STATUS_FALLBACK,
+  BASKET_STATUSES,
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
   PRODUCT_CATEGORIES,
   PRODUCT_CATEGORY_FALLBACK,
-  type BasketLine,
-  type BasketLineOrigin,
-  type BasketLineOriginDetail,
-  type BasketLineOrigins,
+  type Basket,
   type BasketLinkPreview,
   type BasketListRef,
   type BasketMergeRequired,
   type BasketMergeRequiredBasket,
   type BasketMergeRequiredList,
-  type BasketOriginCandidate,
-  type BasketOriginQuantityResult,
-  type BasketOriginSettledResult,
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketPriceScope,
   type BasketProduct,
+  type BasketProgress,
   type BasketRenameResult,
+  type BasketRow,
+  type BasketRowEntry,
+  type BasketRowResult,
   type BasketSession,
-  type BasketSettleResult,
-  type BasketSettleSkip,
   type BasketShareLink,
-  type BasketSplitResult,
-  type BasketView,
   type ScopeLocation,
 } from '@portfolio/velista/models';
 import { toLocalizedName, toProductOffer } from './mappers';
@@ -43,6 +39,7 @@ import {
   nullableStr,
   numOr,
   oneOf,
+  oneOfOrNull,
   str,
   strOr,
 } from './primitives';
@@ -53,24 +50,28 @@ import {
  * A file of its own rather than more of `mappers.ts`, which is already long, and
  * because everything here shares one rule that applies nowhere else in the app.
  *
- * ## Absent is not empty, and it is not null
+ * ## Redaction is a list the reader was served
  *
- * Backend `0051` section 5.2 redacts **by omission**: a reader who does not hold
- * `WRITE` on every source list of the run receives no `origins` key, no
- * `targetListId`, no `userAgent` and no `skipped`, rather
- * than receiving them empty. These mappers preserve that distinction with `in`
- * checks rather than collapsing everything to a default, because the screen draws
- * three genuinely different things:
+ * Backend `0051` redacted **by omission**, key by key, and these mappers kept the
+ * difference between absent, empty and null with `in` checks. Backend `0136`
+ * replaced the whole of that with one collection: {@link Basket.lists} holds the
+ * covered lists this reader holds `WRITE` on, and an entry naming a list that is
+ * not in it is one this reader may not place. So there is one question here and
+ * one answer, and {@link toBasketRowEntry} drops an unserved list id to null
+ * rather than leaving a name the rest of the client would have to gate again.
  *
- * - **absent** — you may not see this, so no caption is drawn at all
- * - **empty** — you may see it and there is nothing, so an empty state is drawn
- * - **null** — you may see it and it is unset
+ * `userAgent` is the one field still redacted by omission, on a participant, and
+ * it keeps its `in` check.
  *
- * Flattening the first two is the bug that would show a guest a "from" caption
- * with nothing after it, or show a privileged reader nothing where a household
- * name belongs. Rule D4 applies as everywhere else: every parameter is `unknown`,
- * nothing throws, and a row that will not map is dropped rather than costing the
- * page.
+ * ## Nothing here counts
+ *
+ * `left`, `bought`, `asked`, the state, the note and the progress are all read
+ * (backend `0130`, section 4). No mapper derives one from another, and a basket
+ * whose `progress` will not map is **refused**: the alternative is to recount,
+ * and recounting is what velista `0090` removed.
+ *
+ * Rule D4 applies as everywhere else: every parameter is `unknown`, nothing
+ * throws, and a row that will not map is dropped rather than costing the page.
  */
 
 /**
@@ -147,329 +148,261 @@ export function toBasketPresenceEntry(
 }
 
 /**
- * From `GeneratedListLineOriginView`.
+ * From `BasketRowEntryView`: one covered list line inside a row.
  *
- * Every id is required rather than defaulted: an origin exists to caption a row
- * with the household it came from, and half of one renders as "from " with
- * nothing after it.
+ * `listId` is whatever the server sent. {@link restrictRowToServedLists} is what
+ * drops one the basket served no ref for, and it is applied once per row by
+ * whoever holds the refs: {@link toBasket} as it reads them, and the store as it
+ * folds a write's answer.
+ *
+ * The numbers are clamped at zero. A negative `left` is a server defect this
+ * client does not draw, and zero is the state that offers nothing rather than the
+ * state that offers the wrong thing.
  */
-function toBasketLineOrigin(raw: unknown): BasketLineOrigin | null {
+function toBasketRowEntry(raw: unknown): BasketRowEntry | null {
   if (!isRecord(raw)) {
     return null;
   }
 
-  const id = str(raw['id']);
-  const zoneId = str(raw['zoneId']);
-  const listId = str(raw['listId']);
   const lineId = str(raw['lineId']);
-
-  if (id === null || zoneId === null || listId === null || lineId === null) {
+  if (lineId === null) {
     return null;
   }
+
+  const bought = atLeastZero(raw['bought']);
+  const left = atLeastZero(raw['left']);
 
   return {
-    id,
-    zoneId,
-    listId,
     lineId,
-    quantity: numOr(raw['quantity'], 0),
-    // Required on the wire since luna `0109`, and defaulted exactly as `quantity`
-    // above it is. Zero on an unreadable value is the safe direction rather than an
-    // honest one: the row would draw a full reel, and the write it sends carries
-    // that zero as its `from`, which the server refuses as stale instead of
-    // applying as the opposite act (backend `0056`, section 3.2).
-    settled: numOr(raw['settled'], 0),
+    listId: str(raw['listId']),
+    left,
+    bought,
+    // Not on the wire: the entry view carries `left` and `bought` and backend
+    // `0130` section 4 defines the sum. It is stated once here rather than at the
+    // reel that needs a ceiling, which is the one arithmetic this file does and
+    // the only one the plan leaves it.
+    asked: bought + left,
+    state: oneOf(raw['state'], BASKET_ROW_STATES, BASKET_ROW_STATE_FALLBACK),
+    // `APPROVED` or `PENDING`, and never `REJECTED`: a rejected line is not
+    // covered, so it is never an entry. Anything else reads as approved, which is
+    // the quiet direction — an unreadable value costs a caption rather than
+    // putting one under a row the household already agreed to.
+    awaitingApproval: raw['approvalStatus'] === 'PENDING',
+    // False on anything but an explicit true. The server owns this rule and asks
+    // it of the basket's owner, so a value this client cannot read means it has
+    // not been told the control is allowed, and velista `0092` draws none.
+    demandEditable: raw['demandEditable'] === true,
   };
-}
-
-/** From `GeneratedListBasketLineView`. */
-export function toBasketLine(raw: unknown): BasketLine | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const id = str(raw['id']);
-  if (id === null) {
-    return null;
-  }
-
-  const line: BasketLine = {
-    id,
-    content: strOr(raw['content'], ''),
-    quantity: numOr(raw['quantity'], 0),
-    settled: numOr(raw['settledQuantity'], 0),
-    // Zero against a backend from before luna `0093`, which is the truth about
-    // one: it wrote no waiting row, so nothing on its lines is unplaced.
-    waitingSettled: numOr(raw['waitingSettled'], 0),
-    pickId: nullableStr(raw['itemId']),
-    optionIds: mapArray(raw['options'], str),
-    position: numOr(raw['position'], 0),
-    // Absent on a basket served by a backend from before luna `0055`, and null on
-    // every line a run composed. Both read as null and draw the same nothing,
-    // which is what lets the two sides ship in either order.
-    createdBy: nullableStr(raw['createdByParticipantId']),
-    touchedBy: nullableStr(raw['lastEditedByParticipantId']),
-    touchedAt: date(raw['lastEditedAt']),
-    // No fallback: null is a real value here, meaning nobody has settled this
-    // line yet, and guessing either outcome would put a sentence on the row
-    // about a purchase that has not happened.
-    lastOutcome:
-      raw['lastOutcome'] === 'BOUGHT' || raw['lastOutcome'] === 'NOT_AVAILABLE'
-        ? raw['lastOutcome']
-        : null,
-    // Absent on a basket served by a backend from before luna `0055`, where every
-    // line was composed by a run, so `DERIVED` is both the fallback for a value this
-    // build does not know and the truth for an older server. Not gated by the all or
-    // nothing rule, unlike the two fields below it: every reader is told what kind of
-    // line they are looking at, and what is withheld is which household it touches.
-    kind: oneOf(raw['origin'], BASKET_LINE_KINDS, 'DERIVED'),
-  };
-
-  const withOrigins =
-    'origins' in raw
-      ? { ...line, origins: mapArray(raw['origins'], toBasketLineOrigin) }
-      : line;
-
-  // An `in` check for `origins`' reason and not for its convenience. Absent is a
-  // reader who may not have it, and null is a line that has been sent nowhere; the
-  // send control is offered over the second and never over the first, so collapsing
-  // them would draw it for a guest.
-  return 'targetListId' in raw
-    ? { ...withOrigins, targetListId: nullableStr(raw['targetListId']) }
-    : withOrigins;
 }
 
 /**
- * From `LineOriginDetail`: one list already on a line, with everything the units
- * sheet draws (velista `0055`).
+ * From `BasketRowView`: one thing to buy, however many households asked for it.
  *
- * The four ids are required and the two names are not, which is the same split
- * {@link toBasketLineOrigin} makes and for the same reason: a row with half an
- * identity cannot be written back to, while a row with no name is a list deleted
- * since the run and still has a number worth showing.
+ * Refused without a `rowKey`, without a `content` and without an `entries` array,
+ * because each of the three is something the screen cannot draw a row without: no
+ * key means no sheet and no write, no content means a blank row, and no entries
+ * array means the wire sent something this build does not understand.
+ *
+ * **A row with no entry is refused, unless its state is `REMOVED`.** Every entry
+ * of such a row left the coverage, which is exactly what that state means, so an
+ * empty `entries` there is the truth rather than a failure to read one.
  */
-function toBasketLineOriginDetail(raw: unknown): BasketLineOriginDetail | null {
+export function toBasketRow(raw: unknown): BasketRow | null {
   if (!isRecord(raw)) {
     return null;
   }
 
-  const originId = str(raw['originId']);
-  const listId = str(raw['listId']);
-  const lineId = str(raw['lineId']);
-  const zoneId = str(raw['zoneId']);
-
-  if (
-    originId === null ||
-    listId === null ||
-    lineId === null ||
-    zoneId === null
-  ) {
+  const rowKey = str(raw['rowKey']);
+  const content = str(raw['content']);
+  if (rowKey === null || content === null || !Array.isArray(raw['entries'])) {
     return null;
   }
 
+  const state = oneOf(
+    raw['state'],
+    BASKET_ROW_STATES,
+    BASKET_ROW_STATE_FALLBACK
+  );
+  const entries = mapArray(raw['entries'], toBasketRowEntry);
+  if (entries.length === 0 && state !== 'REMOVED') {
+    return null;
+  }
+
+  const note = oneOfOrNull(raw['note'], BASKET_ROW_NOTES);
+  const bought = atLeastZero(raw['bought']);
+  const left = atLeastZero(raw['left']);
+
   return {
-    originId,
-    listId,
-    lineId,
-    zoneId,
-    listName: nullableStr(raw['listName']),
-    zoneName: nullableStr(raw['zoneName']),
-    contributed: numOr(raw['contributed'], 0),
-    listQuantity: numOr(raw['listQuantity'], 0),
-    settledHere: numOr(raw['settledHere'], 0),
-    // False unless the server said otherwise, which is the safe direction: a row
-    // this build could not read the flag on draws no editor rather than one whose
-    // every write the gateway refuses.
-    writable: raw['writable'] === true,
-    // False unless the server said so, which costs the row its place at the top of
-    // the sheet and nothing else. An unreadable flag must not remove a list.
-    fromRun: raw['fromRun'] === true,
-    // `PENDING` is the fallback the enum names, and it is the loud direction here on
-    // purpose: a row that says "waiting for the list to agree" about a line already
-    // on the list is a caption to read past, and the silent version is somebody
-    // believing a household has agreed to something it has not.
-    approvalStatus: oneOf(
-      raw['approvalStatus'],
-      LINE_APPROVAL_STATUSES,
-      LINE_APPROVAL_STATUS_FALLBACK
+    rowKey,
+    content,
+    left,
+    bought,
+    // Read where the wire states it, and the sum where it does not, which is the
+    // same arithmetic backend `0130` section 4 defines it by. Never `bought`
+    // plus something this client worked out.
+    asked: 'asked' in raw ? atLeastZero(raw['asked']) : bought + left,
+    state,
+    note,
+    // Null exactly when the note is, which the server promises and this enforces:
+    // a time with no fact behind it is a caption with nothing to say.
+    noteAt: note === null ? null : date(raw['noteAt']),
+    // Null on every row until backend `0138` produces one, and null for a value
+    // this build does not know. Velista `0093` draws it; nothing draws it yet.
+    mark: oneOfOrNull(raw['mark'], BASKET_CHANGE_MARKS),
+    awaitingApproval: raw['awaitingApproval'] === true,
+    optionIds: mapArray(raw['optionIds'], str),
+    touchedBy: nullableStr(raw['touchedBy']),
+    touchedAt: date(raw['touchedAt']),
+    entries,
+  };
+}
+
+/**
+ * From `BasketListRef`: a covered list this reader holds `WRITE` on.
+ *
+ * Every field is required. A ref exists to head a section and to caption an
+ * entry, and half of one renders as a heading with no words in it.
+ */
+/**
+ * Drop every entry's list id the reader was not served a ref for.
+ *
+ * **The whole of this scope's redaction rule, in one function.** A guest is served
+ * no refs, so every entry they hold is unplaceable; a co shopper is served their
+ * own. Doing it here rather than at each call site is what stops the filter, the
+ * grouping and the entries pane from answering "may I name this list" three ways.
+ *
+ * By identity when nothing is dropped, which is the ordinary case: the server
+ * redacts consistently per reader, so a row whose ids all have refs comes back as
+ * the same object and nothing above it re-renders.
+ */
+export function restrictRowToServedLists(
+  row: BasketRow,
+  served: ReadonlySet<string>
+): BasketRow {
+  const unserved = row.entries.some(
+    (entry) => entry.listId !== null && !served.has(entry.listId)
+  );
+  if (!unserved) {
+    return row;
+  }
+
+  return {
+    ...row,
+    entries: row.entries.map((entry) =>
+      entry.listId !== null && !served.has(entry.listId)
+        ? { ...entry, listId: null }
+        : entry
     ),
   };
 }
 
-/**
- * From `OriginCandidate`: a list holding the same thing that is not on the line.
- *
- * **`unavailable` is absent when the candidate is adoptable**, which is the one
- * place in this file where absence is folded onto null rather than kept apart from
- * it. There are only two answers here, "you may take this" and a reason you may not,
- * and the wire spends a key on the first rather than a value; the model spends a
- * value, so the sheet has one field to branch on.
- */
-function toBasketOriginCandidate(raw: unknown): BasketOriginCandidate | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const listId = str(raw['listId']);
-  const lineId = str(raw['lineId']);
-  const zoneId = str(raw['zoneId']);
-
-  if (listId === null || lineId === null || zoneId === null) {
-    return null;
-  }
-
-  const unavailable = raw['unavailable'];
-
-  return {
-    listId,
-    lineId,
-    zoneId,
-    listName: nullableStr(raw['listName']),
-    zoneName: nullableStr(raw['zoneName']),
-    listQuantity: numOr(raw['listQuantity'], 0),
-    content: strOr(raw['content'], ''),
-    matchedOnText: raw['matchedOnText'] === true,
-    fromRun: raw['fromRun'] === true,
-    // A reason this build has never heard of still means "not adoptable", so it
-    // reads as `UNAVAILABLE`, which says only that (velista `0068`, section 7). The
-    // absence rule fails safe: offering a reel anyway would be a control the server
-    // refuses, and reading it as `CLAIMED` would put a sentence about somebody
-    // else's shopping under a row nobody said that about.
-    unavailable:
-      unavailable === null || unavailable === undefined
-        ? null
-        : oneOf(unavailable, BASKET_ORIGIN_UNAVAILABLE_REASONS, 'UNAVAILABLE'),
-  };
-}
-
-/**
- * From `ListRef`: a list this reader may write that holds no matching line
- * (backend `0092`, section 3).
- *
- * The thinnest of the three collections, and it degrades the same way the other two
- * do: a row whose ids cannot be read is dropped rather than drawn nameless, because
- * every row here is a control that writes to the list it names.
- */
 function toBasketListRef(raw: unknown): BasketListRef | null {
   if (!isRecord(raw)) {
     return null;
   }
 
   const listId = str(raw['listId']);
+  const name = str(raw['name']);
   const zoneId = str(raw['zoneId']);
+  const zoneName = str(raw['zoneName']);
 
-  return listId === null || zoneId === null
-    ? null
-    : {
-        listId,
-        zoneId,
-        listName: nullableStr(raw['listName']),
-        zoneName: nullableStr(raw['zoneName']),
-        fromRun: raw['fromRun'] === true,
-      };
+  if (
+    listId === null ||
+    name === null ||
+    zoneId === null ||
+    zoneName === null
+  ) {
+    return null;
+  }
+
+  return { listId, name, zoneId, zoneName };
 }
 
 /**
- * From `msg.generatedList.lineOrigins.response` (`GET .../lines/:lineId/origins`).
+ * From `BasketProgress`: what the basket comes to, by the server.
  *
- * Null only when the line id is unreadable, because the sheet is about one line and
- * a report that cannot say which is not one. All three arrays degrade to empty, which
- * is a real state on each: a line whose lists were all taken off it, a basket whose
- * zones hold nothing else like it, and a reader with no other list to send it to.
+ * Null rather than a zeroed default when it cannot be read, and the two callers
+ * both refuse on that null. Counting the rows instead would be a second
+ * arithmetic, and a second arithmetic is what velista `0090` exists to remove.
  *
- * `others` is empty against a backend from before luna `0092`, and that reads
- * correctly rather than as a gap: such a backend has a send sheet's route for the
- * same lists, and this build no longer draws one. The sheet then offers what that
- * backend can serve.
+ * `pending` is lifted out by the caller rather than kept here, because a
+ * {@link BasketProgress} is also what `basketRowsProgress` answers for a section,
+ * and a section has no honest pending to state.
  */
-export function toBasketLineOrigins(raw: unknown): BasketLineOrigins | null {
+function toBasketProgress(raw: unknown): BasketProgress | null {
   if (!isRecord(raw)) {
     return null;
   }
 
-  const lineId = str(raw['lineId']);
-  return lineId === null
-    ? null
-    : {
-        lineId,
-        origins: mapArray(raw['origins'], toBasketLineOriginDetail),
-        candidates: mapArray(raw['candidates'], toBasketOriginCandidate),
-        others: mapArray(raw['others'], toBasketListRef),
-      };
+  return {
+    done: atLeastZero(raw['done']),
+    unavailable: atLeastZero(raw['unavailable']),
+    total: atLeastZero(raw['total']),
+  };
+}
+
+/** A count off the wire, floored at zero. A negative is a defect, not a number. */
+function atLeastZero(raw: unknown): number {
+  return Math.max(0, numOr(raw, 0));
 }
 
 /**
- * From `msg.generatedList.setOriginQuantity.response` (`POST .../origins`).
+ * From `BasketRowResult`: what every write on a row answers.
  *
- * `origin` is **null on purpose** rather than dropped: a contribution set to zero
- * takes the list off the line, and the sheet has to remove the row rather than leave
- * it drawn at its old number. So a null answer is applied and only an unreadable
- * line refuses the whole result.
+ * Refused when the row or the progress cannot be read, and both refusals mean the
+ * same thing: the store folds the answer whole and patches nothing, so an answer
+ * it cannot fold is one it must not half apply. The caller reads the basket again
+ * instead.
+ *
+ * `row` is never null on the wire — a row bought to zero stays as `DONE` — so
+ * there is no "the row went away" case here to represent.
+ *
+ * `replacedRowKey` and `skippedCount` are absent on the wire when nothing
+ * happened, and null and zero here, so a caller asks one question rather than
+ * two.
+ *
+ * The row's list ids are **not** gated here, because there are no refs in this
+ * answer to gate them against. The store applies
+ * {@link restrictRowToServedLists} with the basket's own refs as it folds.
  */
-export function toBasketOriginQuantityResult(
-  raw: unknown
-): BasketOriginQuantityResult | null {
+export function toBasketRowResult(raw: unknown): BasketRowResult | null {
   if (!isRecord(raw)) {
     return null;
   }
 
-  const line = toBasketLine(raw['line']);
-  return line === null
-    ? null
-    : {
-        line,
-        origin: toBasketLineOriginDetail(raw['origin']),
-        listQuantity: numOr(raw['listQuantity'], 0),
-      };
-}
-
-/**
- * From `msg.generatedList.splitLine.response` (`POST .../products`), velista
- * `0069` section 5.
- *
- * The three collections are mapped with {@link mapArray}, which drops a row it
- * cannot read rather than failing the whole answer: a sibling the client cannot
- * parse is a row missing from the screen until the next read, where a null result
- * would leave the original drawn at a quantity the server no longer holds.
- *
- * `line` is the one required field, for {@link toBasketOriginQuantityResult}'s
- * reason: it is the row the gesture was about, and an answer that cannot say what
- * happened to it says nothing worth applying.
- *
- * `removed` is mapped through {@link str} rather than trusted as a string array,
- * because an id that is not a string would delete nothing and hide the fact.
- */
-export function toBasketSplitResult(raw: unknown): BasketSplitResult | null {
-  if (!isRecord(raw)) {
+  const row = toBasketRow(raw['row']);
+  const progress = toBasketProgress(raw['progress']);
+  if (row === null || progress === null) {
     return null;
   }
 
-  const line = toBasketLine(raw['line']);
-  return line === null
-    ? null
-    : {
-        line,
-        created: mapArray(raw['created'], toBasketLine),
-        merged: mapArray(raw['merged'], toBasketLine),
-        removed: mapArray(raw['removed'], str),
-      };
+  return {
+    row,
+    progress,
+    // Lifted out of the wire's progress exactly as `Basket.pending` is, because
+    // the store puts it back on the basket after every write and nothing in this
+    // scope subtracts one count from another.
+    pending: isRecord(raw['progress'])
+      ? atLeastZero(raw['progress']['pending'])
+      : 0,
+    replacedRowKey: str(raw['replacedRowKey']),
+    skippedCount: atLeastZero(raw['skippedCount']),
+  };
 }
 
 /**
  * A rename's answer (velista `0084`, backend `0113`, section 7).
  *
- * `absorbedLineId` is absent on the wire when no basket line merged, and null here,
- * so a caller asks one question rather than two.
+ * The same shape every write on a row answers, read once, with the wire's
+ * `replacedRowKey` named for what a rename does with it: the earliest line
+ * survives a merge, so the row the request addressed can be the one that went
+ * away, and the sheet reads this to know whether its own row survived.
  */
 export function toBasketRenameResult(raw: unknown): BasketRenameResult | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const line = toBasketLine(raw['line']);
-  return line === null
+  const result = toBasketRowResult(raw);
+  return result === null
     ? null
-    : { line, absorbedLineId: str(raw['absorbedLineId']) };
+    : { ...result, absorbedRowKey: result.replacedRowKey };
 }
 
 /**
@@ -531,11 +464,13 @@ function toMergeRequiredBasket(raw: unknown): BasketMergeRequiredBasket | null {
   if (!isRecord(raw)) {
     return null;
   }
-  const otherLineId = str(raw['otherLineId']);
+  // The line id the refusal names is the other row's anchor, which is that row's
+  // key: the refusal is about a line on a list, and a row is keyed by one.
+  const otherRowKey = str(raw['otherLineId']);
   const otherQuantity = nullableNum(raw['otherQuantity']);
-  return otherLineId === null || otherQuantity === null
+  return otherRowKey === null || otherQuantity === null
     ? null
-    : { otherLineId, otherQuantity };
+    : { otherRowKey, otherQuantity };
 }
 
 /**
@@ -622,92 +557,75 @@ function toBasketPriceScope(raw: unknown): BasketPriceScope | null {
 }
 
 /**
- * From the gateway's `GET /v1/generated-lists/:id/basket`.
+ * From the gateway's `GET /v1/baskets/:id`.
  *
- * Null only when there is no reader: `me` is what every attribution on the screen
- * resolves against, and a basket that cannot say who is holding it cannot be
- * drawn at all. Everything else degrades rather than failing, which is what a
- * person standing in an aisle needs: a line that will not map is dropped, and a
- * catalog that was unreachable costs the product captions and not the page.
+ * Null when there is no reader and null when there is no progress, and the two
+ * refusals are the same kind of refusal. `me` is what every attribution on the
+ * screen resolves against, so a basket that cannot say who is holding it cannot
+ * be drawn. `progress` is what the sentence above the rows says, and the only
+ * other way to answer it is to count the rows, which is the arithmetic backend
+ * `0130` took over.
+ *
+ * Everything else degrades rather than failing, which is what a person standing
+ * in an aisle needs: a row that will not map is dropped, and a catalog that was
+ * unreachable costs the product captions and not the page.
+ *
+ * ## The lists are read first, and that is the order
+ *
+ * {@link toBasketRowEntry} drops a list id the basket served no ref for, so the
+ * refs have to exist before a single row is read. That is the whole of this
+ * scope's redaction, done once here rather than at every reader of an entry.
  */
-export function toBasketView(raw: unknown): BasketView | null {
+export function toBasket(raw: unknown): Basket | null {
   if (!isRecord(raw)) {
     return null;
   }
 
   const id = str(raw['id']);
   const me = toBasketParticipant(raw['me']);
-  if (id === null || me === null) {
+  const progress = toBasketProgress(raw['progress']);
+  if (id === null || me === null || progress === null) {
     return null;
   }
 
-  const view: BasketView = {
+  const lists = mapArray(raw['lists'], toBasketListRef);
+  const served = new Set(lists.map((list) => list.listId));
+
+  return {
     id,
     kind: oneOf(raw['kind'], BASKET_KINDS, BASKET_KIND_FALLBACK),
     name: nullableStr(raw['name']),
-    status: strOr(raw['status'], 'UNKNOWN'),
-    generatedAt: date(raw['generatedAt']),
-    lines: mapArray(raw['lines'], toBasketLine),
+    status: oneOf(raw['status'], BASKET_STATUSES, BASKET_STATUS_FALLBACK),
+    createdAt: date(raw['createdAt']),
+    rows: mapArray(raw['rows'], (row) => {
+      const mapped = toBasketRow(row);
+      return mapped === null ? null : restrictRowToServedLists(mapped, served);
+    }),
+    lists,
     participants: mapArray(raw['participants'], toBasketParticipant),
     me,
-    seesZoneData: raw['seesZoneData'] === true,
     products: new Map(
       mapArray(raw['products'], toBasketProduct).map((product) => [
         product.id,
         product,
       ])
     ),
-    // Empty when the key is missing, which is a backend from before luna `0066`
-    // or a gateway that priced the read and could not name the scopes. An offer
-    // whose scope is not in here resolves to no place and is still a price.
+    // Empty when the key is missing, which is a gateway that priced the read and
+    // could not name the scopes. An offer whose scope is not in here resolves to
+    // no place and is still a price.
     scopes: new Map(
       mapArray(raw['scopes'], toBasketPriceScope).map((scope) => [
         scope.priceScopeId,
         scope,
       ])
     ),
-    // Empty rather than absent, because a Map has no third state and the caption
-    // is already gated by the line's own `origins` being absent. A reader who may
-    // not see origins never reaches a lookup in here.
-    listNames: new Map(
-      mapArray(raw['sourceNames'], (entry) => {
-        if (!isRecord(entry)) {
-          return null;
-        }
-        const listId = str(entry['listId']);
-        const name = str(entry['name']);
-        if (listId === null || name === null) {
-          return null;
-        }
-        const zoneName = nullableStr(entry['zoneName']);
-        // "Weekly shop · Flat 3B", which is what the mock draws: the list alone
-        // is ambiguous when two households both keep one called "Groceries".
-        return [listId, zoneName ? `${name} · ${zoneName}` : name] as const;
-      })
-    ),
-  };
-
-  const sources = raw['sources'];
-  if (!Array.isArray(sources)) {
-    // Absent, which is the redacted case. `sources` stays undefined rather than
-    // becoming an empty array, so "you may not see this" and "the run drew from
-    // nothing" remain different answers.
-    return view;
-  }
-
-  return {
-    ...view,
-    sources: mapArray(sources, (entry) => {
-      if (!isRecord(entry)) {
-        return null;
-      }
-      const zoneId = str(entry['zoneId']);
-      // Null is a value here and not an absence: it says every list of that
-      // zone (backend `0133`, section 4).
-      return zoneId === null
-        ? null
-        : { zoneId, listId: nullableStr(entry['listId']) };
-    }),
+    progress,
+    // Lifted out of the wire's progress because the finish sheet and the home
+    // card read it on its own, and the alternative is for one of them to
+    // subtract three numbers the server already subtracted.
+    pending: isRecord(raw['progress'])
+      ? atLeastZero(raw['progress']['pending'])
+      : 0,
   };
 }
 
@@ -796,91 +714,5 @@ export function toBasketShareLink(raw: unknown): BasketShareLink | null {
         createdAt: date(link['createdAt']),
         expiresAt: date(link['expiresAt']),
         participantCount: numOr(link['participantCount'], 0),
-      };
-}
-
-/**
- * From `SetGeneratedListOriginSettledResult` (`POST .../lines/:lineId/origins/settled`),
- * velista `0073`, backend `0104` section 4.
- *
- * `skipped` is read unconditionally where {@link toBasketSettleResult} reads it only
- * when the key is there, and the difference is the contract rather than an oversight:
- * this route is refused outright to a reader who does not pass the all or nothing
- * rule, so an answer that arrived at all carries the names.
- *
- * `origin` is null on purpose rather than dropped, for
- * {@link toBasketOriginQuantityResult}'s reason: the zone line can have gone
- * underneath the basket, and the sheet has to redraw the row rather than leave it at
- * a number nothing stands behind.
- */
-export function toBasketOriginSettledResult(
-  raw: unknown
-): BasketOriginSettledResult | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const line = toBasketLine(raw['line']);
-  return line === null
-    ? null
-    : {
-        line,
-        origin: toBasketLineOriginDetail(raw['origin']),
-        skippedCount: numOr(raw['skippedCount'], 0),
-        skipped: mapArray(raw['skipped'], toBasketSettleSkip),
-      };
-}
-
-/**
- * From `GeneratedListSettleResult` (`POST .../lines/:lineId/settle`).
- *
- * `skippedCount` is always a number and `skipped` stays absent for a reader who
- * may not have it, which is how backend `0051` sections 6.4 and 5.2 both hold:
- * everybody is told that an origin was missed, and only a reader who passes the
- * rule is told whose it was.
- */
-export function toBasketSettleResult(raw: unknown): BasketSettleResult | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const line = toBasketLine(raw['line']);
-  if (line === null) {
-    return null;
-  }
-
-  const result: BasketSettleResult = {
-    line,
-    skippedCount: numOr(raw['skippedCount'], 0),
-  };
-
-  if (!('skipped' in raw)) {
-    return result;
-  }
-
-  return { ...result, skipped: mapArray(raw['skipped'], toBasketSettleSkip) };
-}
-
-/**
- * One entry of a skip report, for whichever of the two results carries one.
- *
- * The names come off the report and are never looked up (plan 0049, section 1.2).
- * `str` answers null for an absent or non string field, which is the same answer the
- * wire gives for a list deleted since the run, and the screen draws the bare count
- * for both.
- */
-function toBasketSettleSkip(raw: unknown): BasketSettleSkip | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const listId = str(raw['listId']);
-  return listId === null
-    ? null
-    : {
-        listId,
-        reason: strOr(raw['reason'], 'ACCESS_GONE'),
-        listName: str(raw['listName']),
-        zoneName: str(raw['zoneName']),
       };
 }

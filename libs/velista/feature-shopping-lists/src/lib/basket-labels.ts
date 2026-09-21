@@ -1,10 +1,8 @@
 import type { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
-import {
-  basketLineState,
-  outstanding,
-  type BasketLine,
-  type BasketLineOrigin,
-  type BasketParticipant,
+import type {
+  BasketListRef,
+  BasketParticipant,
+  BasketRow,
 } from '@portfolio/velista/models';
 
 /**
@@ -186,211 +184,98 @@ export function participantInitials(
     : initial;
 }
 
-/**
- * "Who got the bread", on the row, because that is the question in a shop where
- * four people are working one list and it should not cost a tap (section 4.3).
- *
- * Null when nobody has touched the line, which is the ordinary state of a full
- * basket and draws no caption at all rather than an empty one.
- *
- * The wording distinguishes the three outcomes a person actually cares about:
- * somebody finished it, somebody got some of it, and somebody found none. The
- * last is inferred from a line that is closed with nothing settled against its
- * quantity, which is exactly what a `NOT_AVAILABLE` settle leaves behind.
- *
- * ## The reader is named, not called "you"
- *
- * This used to draw "you got it" for a line the reader had settled, and plan 0052
- * section 2.1 takes that back. The screen is four people working one list in a shop
- * and reading it on **each other's phones** over a trolley: "you got it" is unreadable
- * when the phone in your hand is not yours, and it was the only caption here that
- * changed meaning depending on who was holding the device.
- *
- * So the reader is named like everybody else, and {@link ParticipantNameOptions.ownName}
- * is how: core keeps no `displayName` for an owner, so the reader's own account name is
- * the only thing that can name their own row on a basket generated before luna `0054`.
- * The caller passes it rather than resolving it, because this file has no account and a
- * row component rendered once per line should not gain a `SessionStore`.
- *
- * @param ownName the reader's own account name, or null for a guest, who has no
- *   account and whose own row the server does name.
- */
 export function touchedCaption(
-  line: BasketLine,
+  row: BasketRow,
   people: ReadonlyMap<string, BasketParticipant>,
   translator: RokuTranslatorService,
   locale: string,
   meId: string | null,
   ownName: string | null = null
 ): string | null {
-  if (line.touchedBy === null) {
+  if (row.touchedBy === null) {
     return null;
   }
 
-  const name = participantName(people.get(line.touchedBy), translator, locale, {
-    ownName: line.touchedBy === meId ? ownName : null,
+  const name = participantName(people.get(row.touchedBy), translator, locale, {
+    ownName: row.touchedBy === meId ? ownName : null,
   });
   if (name === '') {
     return null;
   }
 
-  // **The outcome and not the numbers.** `NOT_AVAILABLE` closes the outstanding
-  // amount exactly as a purchase does, so `settled` reaches `quantity` either
-  // way and a caption derived from it would say "Marc got it" about a shop that
-  // had none, which claims a purchase that never happened.
-  if (line.lastOutcome === 'NOT_AVAILABLE') {
+  // **The state and not the numbers.** `NOT_AVAILABLE` closes a row without
+  // anything being bought, so `bought` and `left` cannot tell the two apart and a
+  // caption derived from them would say "Marc got it" about a shop that had none,
+  // which claims a purchase that never happened. The server decides the state
+  // (backend `0130`, section 4) and this reads it.
+  if (row.state === 'NOT_AVAILABLE') {
     return translator.t('basket.touched.none', undefined, locale, { name });
   }
-  if (line.lastOutcome === null) {
-    // Edited rather than settled: somebody changed the line without buying
-    // anything, so there is no honest sentence about a purchase and there is
+  if (row.bought === 0) {
+    // Touched without anything being bought: a rename, or a purchase somebody has
+    // since taken back. There is no honest sentence about a purchase, so there is
     // none.
     return null;
   }
 
-  return basketLineState(line) === 'done'
+  return row.state === 'DONE'
     ? translator.t('basket.touched.got', undefined, locale, { name })
     : translator.t('basket.touched.gotSome', undefined, locale, {
         name,
-        count: line.settled,
+        count: row.bought,
       });
 }
 
-/**
- * "Who put this here", for a line nobody has touched yet (plan 0053, section 5).
- *
- * The question a shop asks about a row nobody recognises, and one the basket could
- * not answer until luna `0055` wrote {@link BasketLine.createdBy}: every line came
- * from the run, so there was nobody to name.
- *
- * ## It yields to {@link touchedCaption}, and does not sit beside it
- *
- * Null the moment anybody has touched the line, because the row has three short
- * lines and "who got the bread" is the more urgent of the two while somebody is
- * shopping. The **field** is still worth keeping past that point, which is the whole
- * argument for it being a second column: `touchedBy` moves on the first settle, so
- * after one the row could not go back to answering this. What the row does with the
- * answer is a layout decision and this is it.
- *
- * Null too for every line the run composed, which is the ordinary case in a full
- * basket and draws no caption rather than an empty one. Both nulls arrive here as
- * the same absent id, and both mean "there is nothing to say".
- *
- * A guest is visibly a guest, because {@link participantName} is what names them
- * here as it does everywhere else on this screen.
- *
- * @param ownName the reader's own account name, or null for a guest, exactly as
- *   {@link touchedCaption} takes it and for the same reason.
- */
-export function addedCaption(
-  line: BasketLine,
-  people: ReadonlyMap<string, BasketParticipant>,
-  translator: RokuTranslatorService,
-  locale: string,
-  meId: string | null,
-  ownName: string | null = null
-): string | null {
-  if (line.createdBy === null || line.touchedBy !== null) {
-    return null;
-  }
-
-  const name = participantName(people.get(line.createdBy), translator, locale, {
-    ownName: line.createdBy === meId ? ownName : null,
-  });
-  // An id this basket's participant list does not hold, which is a participant
-  // removed since the line was added. "Added by " with nothing after it is worse
-  // than nothing, and the row is complete without it.
-  return name === ''
-    ? null
-    : translator.t('basket.added.by', undefined, locale, { name });
-}
-
-/**
- * The quantity line: how many are wanted, or how far through it is.
- *
- * Two shapes rather than one, because a line nobody has touched should read as
- * plainly as possible ("×3") and a line half done has to show **both** numbers so
- * the person can see what is left without arithmetic (section 4.2).
- */
 export function quantityCaption(
-  line: BasketLine,
+  row: Pick<BasketRow, 'state' | 'bought' | 'asked' | 'left'>,
   translator: RokuTranslatorService,
   locale: string
 ): string {
-  const state = basketLineState(line);
-  if (state === 'partly') {
-    return translator.t('basket.line.partly', undefined, locale, {
-      settled: line.settled,
-      total: line.quantity,
+  if (row.state === 'PARTLY') {
+    return translator.t('basket.row.boughtOf', undefined, locale, {
+      bought: row.bought,
+      asked: row.asked,
     });
   }
-  if (state === 'done') {
-    return '';
+  if (row.state === 'DONE' || row.state === 'NOT_AVAILABLE') {
+    // Both are finished, and both say what was got out of what was asked for. A
+    // `NOT_AVAILABLE` row says "0 of 6", which is true and is the sentence the
+    // glyph beside it needs: the shop had none of the six.
+    return translator.t('basket.row.boughtOf', undefined, locale, {
+      bought: row.bought,
+      asked: row.asked,
+    });
   }
-  return line.quantity > 1
+  return row.left > 1
     ? translator.t('basket.line.wanted', undefined, locale, {
-        count: line.quantity,
+        count: row.left,
       })
     : '';
 }
 
 /**
- * What one list asked for and got, for a row drawn under that list's heading
- * (velista `0077`, section 4.1).
+ * The "from" caption naming the households a row came from.
  *
- * Two sentences and the origin decides which. A list that has got some of its share
- * says so, "2 of 6 got"; one that has got none says what it asked for instead, and
- * says it against the line's own total, "this list asked for 6 of the 12".
+ * **Null when this reader was served no list the row is on**, which is a guest,
+ * and null when the row's every entry is on a list the basket did not serve. Both
+ * are the same nothing to draw, and the entry's own null `listId` is what says so:
+ * there is one question here since backend `0136`, and one answer to it.
  *
- * The second half of that sentence is the point of it. The number beside the row is
- * this household's and the glyph is the whole line's, and without a sentence naming
- * both a shopper has no way to tell which of the two they are reading. A list that
- * has got none is exactly where that confusion would land, because the row then
- * looks like an untouched line.
- */
-export function listShareCaption(
-  line: BasketLine,
-  origin: BasketLineOrigin,
-  translator: RokuTranslatorService,
-  locale: string
-): string {
-  return origin.settled > 0
-    ? translator.t('basket.line.listPartly', undefined, locale, {
-        settled: origin.settled,
-        asked: origin.quantity,
-      })
-    : translator.t('basket.line.listShare', undefined, locale, {
-        asked: origin.quantity,
-        total: line.quantity,
-      });
-}
-
-/**
- * The "from" caption naming the households a line came from.
- *
- * **Returns null for a reader who may not see origins**, which is not the same as
- * a line with none: `origins` is absent for a guest and present-and-empty for a
- * privileged reader looking at a line typed straight into the basket. Collapsing
- * the two is the bug that draws "from " with nothing after it.
- *
- * Names come from a lookup the caller supplies, because list names live in the
- * zone stores and this file knows nothing about them; an id with no name is
- * dropped rather than printed.
+ * Names come from the basket's own served refs, which the caller supplies; an
+ * entry whose list is not among them is dropped rather than printed.
  */
 export function originsCaption(
-  line: BasketLine,
-  listNames: ReadonlyMap<string, string>,
+  row: BasketRow,
+  lists: ReadonlyMap<string, BasketListRef>,
   translator: RokuTranslatorService,
   locale: string
 ): string | null {
-  if (line.origins === undefined) {
-    return null;
-  }
-
   const names = [
     ...new Set(
-      line.origins
-        .map((origin) => listNames.get(origin.listId))
+      row.entries
+        .map((entry) =>
+          entry.listId === null ? undefined : lists.get(entry.listId)?.name
+        )
         .filter((name): name is string => name !== undefined && name !== '')
     ),
   ];
@@ -413,11 +298,6 @@ export function originsCaption(
     first: names[0],
     count: names.length - 1,
   });
-}
-
-/** How many are still to get, for the settle sheet's buttons. */
-export function outstandingOf(line: BasketLine): number {
-  return outstanding(line);
 }
 
 /**

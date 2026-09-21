@@ -4,9 +4,12 @@ import type {
   GeneratedListRun,
   GeneratedListSummary,
   Page,
-  WritableGeneratedListStatus,
+  WritableBasketStatus,
 } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  BrowserFacade,
+  provideVelistaTesting,
+} from '@portfolio/velista/platform';
 import { GatewayError } from '../errors';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import { RealtimeMemory } from '../realtime/realtime-memory';
@@ -91,7 +94,7 @@ function fakeService(options: FakeOptions = {}) {
     },
     setStatus: async (
       generatedListId: string,
-      status: WritableGeneratedListStatus
+      status: WritableBasketStatus
     ) => {
       calls.push({ method: 'setStatus', generatedListId, status });
       if (options.setStatusRejectsWith !== undefined) {
@@ -129,6 +132,9 @@ function harness(options: FakeOptions = {}) {
   return {
     store: TestBed.inject(GeneratedListStore),
     realtime: TestBed.inject(RealtimeMemory),
+    // What a resume is driven by: `AppResumed` counts the false to true edge of
+    // this signal, and the store reads the listing again when the count moves.
+    browser: TestBed.inject(BrowserFacade),
     calls: fake.calls,
   };
 }
@@ -384,12 +390,19 @@ describe('GeneratedListStore', () => {
    * about whether it was already finished and counted. So a settle triggers a refetch,
    * and these are the four properties that make a refetch safe to do on a broadcast.
    */
-  describe('a line being settled', () => {
-    const settled = (generatedListId: string) => ({
-      generatedListId,
-      line: { id: 'line-1', content: 'Milk', quantity: 2, settledQuantity: 2 },
-    });
-
+  /**
+   * The card, once the four line events went (velista `0090`, section 7.1).
+   *
+   * It used to hear a settle on the owner's own sessions, through an event that
+   * carried a line. A basket stores no lines since backend `0136`, so a settle no
+   * longer reaches this room with anything in it, and backend `0130` section 7
+   * names no successor.
+   *
+   * What is left is the basket's **header** moving, which is a rename, a finish or
+   * a reopen, and the app coming back. Both read the listing again, coalesced,
+   * because a burst of either would otherwise be a request each.
+   */
+  describe('coming back to the card', () => {
     beforeEach(() => {
       jest.useFakeTimers();
     });
@@ -398,8 +411,13 @@ describe('GeneratedListStore', () => {
       jest.useRealTimers();
     });
 
-    it('reads the listing again and moves the count', async () => {
-      const { store, realtime } = harness({
+    /**
+     * The card's only news of a purchase, now that no line event carries one. A
+     * phone in a pocket missed whatever happened while it was there, so coming
+     * back is a reason to ask.
+     */
+    it('reads the listing again when the app comes back', async () => {
+      const { store, browser } = harness({
         pages: [
           {
             items: [summary({ id: 'a', settledLineCount: 4 })],
@@ -414,7 +432,11 @@ describe('GeneratedListStore', () => {
       await store.load();
       expect(store.lists()[0]?.settledLineCount).toBe(4);
 
-      realtime.emit('generatedList.lineSettled', settled('a'));
+      browser.visible.set(false);
+      TestBed.flushEffects();
+      browser.visible.set(true);
+      TestBed.flushEffects();
+
       jest.advanceTimersByTime(2000);
       await Promise.resolve();
       await Promise.resolve();
@@ -423,41 +445,41 @@ describe('GeneratedListStore', () => {
     });
 
     /**
-     * Four people working through one basket settle lines seconds apart, and a request
-     * each would be a request per tin of tomatoes.
+     * Nothing to bring up to date until something has been read, which is what
+     * stops a resume on a page that never asked for the listing from asking.
      */
-    it('collapses a burst into one read', async () => {
-      const { store, realtime, calls } = harness({
+    it('reads nothing on a resume before anything was loaded', async () => {
+      const { browser, calls } = harness({
         pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
       });
-      await store.load();
-      const before = calls.filter((call) => call.method === 'listMine').length;
 
-      realtime.emit('generatedList.lineSettled', settled('a'));
-      jest.advanceTimersByTime(500);
-      realtime.emit('generatedList.lineSettled', settled('a'));
-      jest.advanceTimersByTime(500);
-      realtime.emit('generatedList.lineSettled', settled('a'));
+      browser.visible.set(false);
+      TestBed.flushEffects();
+      browser.visible.set(true);
+      TestBed.flushEffects();
+
       jest.advanceTimersByTime(2000);
       await Promise.resolve();
 
-      expect(
-        calls.filter((call) => call.method === 'listMine').length - before
-      ).toBe(1);
+      expect(calls.filter((call) => call.method === 'listMine')).toHaveLength(
+        0
+      );
     });
 
     /**
      * The pages render a skeleton for `loading`, so moving the state would blank the
-     * very card the update is about, every time somebody in the shop ticked something
-     * off. A live update must never do that.
+     * very card the update is about. A live update must never do that.
      */
     it('never moves the load state, so the card does not blank', async () => {
-      const { store, realtime } = harness({
+      const { store, browser } = harness({
         pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
       });
       await store.load();
 
-      realtime.emit('generatedList.lineSettled', settled('a'));
+      browser.visible.set(false);
+      TestBed.flushEffects();
+      browser.visible.set(true);
+      TestBed.flushEffects();
       expect(store.state()).toBe('loaded');
 
       jest.advanceTimersByTime(2000);
@@ -466,10 +488,10 @@ describe('GeneratedListStore', () => {
       expect(store.state()).toBe('loaded');
     });
 
-    // Somebody who has scrolled a year into their history should not watch it collapse
-    // to twenty rows because a flatmate settled a line.
+    // Somebody who has scrolled a year into their history should not watch it
+    // collapse to twenty rows because a flatmate renamed a basket.
     it('keeps the pages behind the first one', async () => {
-      const { store, realtime } = harness({
+      const { store, browser } = harness({
         pages: [
           { items: [summary({ id: 'a' })], nextCursor: 'c1' },
           { items: [summary({ id: 'old' })], nextCursor: null },
@@ -483,51 +505,19 @@ describe('GeneratedListStore', () => {
       await store.loadMore();
       expect(store.lists().map((list) => list.id)).toEqual(['a', 'old']);
 
-      realtime.emit('generatedList.lineSettled', settled('a'));
+      browser.visible.set(false);
+      TestBed.flushEffects();
+      browser.visible.set(true);
+      TestBed.flushEffects();
+
       jest.advanceTimersByTime(2000);
       await Promise.resolve();
       await Promise.resolve();
 
       expect(store.lists().map((list) => list.id)).toEqual(['a', 'old']);
-      // And the refresh did happen, rather than the rows surviving because nothing ran.
+      // And the refresh did happen, rather than the rows surviving because
+      // nothing ran.
       expect(store.lists()[0]?.settledLineCount).toBe(9);
-    });
-
-    // A settle on a basket that was never read changes nothing on screen, and letting
-    // it drive a request would let any basket in the account do so from a page that is
-    // not showing it.
-    it('ignores a settle on a basket it is not holding', async () => {
-      const { store, realtime, calls } = harness({
-        pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
-      });
-      await store.load();
-      const before = calls.filter((call) => call.method === 'listMine').length;
-
-      realtime.emit('generatedList.lineSettled', settled('somebody-elses'));
-      jest.advanceTimersByTime(2000);
-      await Promise.resolve();
-
-      expect(
-        calls.filter((call) => call.method === 'listMine').length - before
-      ).toBe(0);
-    });
-
-    // Rule D4 again: a payload with no basket id names nothing, so there is nothing to
-    // refresh and nothing to guess.
-    it('drops a payload with no basket id', async () => {
-      const { store, realtime, calls } = harness({
-        pages: [{ items: [summary({ id: 'a' })], nextCursor: null }],
-      });
-      await store.load();
-      const before = calls.filter((call) => call.method === 'listMine').length;
-
-      realtime.emit('generatedList.lineSettled', { line: { id: 'line-1' } });
-      jest.advanceTimersByTime(2000);
-      await Promise.resolve();
-
-      expect(
-        calls.filter((call) => call.method === 'listMine').length - before
-      ).toBe(0);
     });
   });
 

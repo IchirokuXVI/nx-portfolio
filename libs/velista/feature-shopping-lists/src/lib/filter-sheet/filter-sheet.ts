@@ -45,7 +45,7 @@ import { basketPath, shopPickerPath } from '../basket-paths';
  *
  * ## What a guest never sees, and how
  *
- * A guest gets ORDER and GROUP BY and nothing else. There is no `seesZoneData`
+ * A guest gets ORDER and GROUP BY and nothing else. There is no flag
  * branch in the template: the LISTS section is drawn from
  * {@link BasketViewStore.sourceLists}, which is empty for a reader the server sent
  * no sources to, and the "List" grouping is drawn from the same emptiness. The data

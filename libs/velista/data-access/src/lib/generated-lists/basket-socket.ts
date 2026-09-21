@@ -43,7 +43,7 @@ const KNOWN_EVENT_NAMES: ReadonlySet<string> = new Set(REALTIME_EVENT_NAMES);
  * Teaching that client a second credential would put "which of two identities am I"
  * inside every existing subscription, to serve one screen. So this is its own client,
  * with its own token source and its own lifetime, and the owner holds **both**: their
- * account room already carries `generatedList.lineSettled` so the dashboard's counts
+ * account room already carries `generatedList.updated` so the dashboard's counts
  * move, and the basket room carries the per line detail that room does not.
  *
  * ## There is nothing to subscribe to
@@ -100,6 +100,7 @@ export class BasketSocket {
   private readonly _connected = signal(false);
   private readonly _degraded = signal(false);
   private readonly _revoked = signal(false);
+  private readonly _reconnects = signal(0);
 
   /** Which basket this socket is for, or null before {@link open} and after close. */
   private _id: string | null = null;
@@ -120,6 +121,15 @@ export class BasketSocket {
   private _connecting = false;
   private _failures = 0;
 
+  /**
+   * Whether this visit has been connected once already.
+   *
+   * What makes {@link reconnects} count comings **back** rather than connects. A
+   * plain field and not a signal, because nothing reads it: it decides whether
+   * the signal moves.
+   */
+  private _hasConnected = false;
+
   private _retryTimer: ReturnType<typeof setTimeout> | null = null;
   private _healthyTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -128,6 +138,28 @@ export class BasketSocket {
 
   /** Whether the basket is live right now, which the screen says out loud. */
   readonly connected = this._connected.asReadonly();
+
+  /**
+   * How many times this socket has come **back** during one visit.
+   *
+   * Zero on the first connect and on every connect after a {@link close}, so it
+   * counts only the reconnections a basket on screen lived through.
+   *
+   * ## A counter, not a boolean, for `AppResumed.resumes`' reason
+   *
+   * Coming back is an **edge**, and an edge cannot be read out of a boolean: a
+   * reader that missed the transition has no way to tell "reconnected a moment
+   * ago" from "has been connected all along". A counter lets an effect run once
+   * per reconnection and lets one that has never seen one read zero.
+   *
+   * It matters because **the room is rejoined, not replayed**. Everything that
+   * happened while the socket was down was broadcast to a room this socket was
+   * not in, so a basket that reconnects is a basket that has to be read again
+   * (velista `0090`, section 7.1). Before that plan `_onConnected` set a flag and
+   * a health timer and nothing else, and a phone that spent ten minutes in a
+   * pocket showed the basket as it was.
+   */
+  readonly reconnects = this._reconnects.asReadonly();
 
   /**
    * Whether the client has given up.
@@ -191,6 +223,10 @@ export class BasketSocket {
     this._clearTimer('_healthyTimer');
     this._connecting = false;
     this._connected.set(false);
+    this._hasConnected = false;
+    // Reset with the visit, so the next basket's first connect is a first
+    // connect and not a reconnection somebody has to read again for.
+    this._reconnects.set(0);
 
     const socket = this._socket;
     this._socket = null;
@@ -290,6 +326,12 @@ export class BasketSocket {
   }
 
   private _onConnected(): void {
+    // Before the flag, so a reader of both sees the count move as the socket
+    // comes up rather than a frame after it.
+    if (this._hasConnected) {
+      this._reconnects.update((count) => count + 1);
+    }
+    this._hasConnected = true;
     this._connected.set(true);
 
     // Deliberately **not** `_failures = 0`. See HEALTHY_AFTER_MS: the server drops a

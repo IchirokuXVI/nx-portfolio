@@ -275,13 +275,10 @@ describe('BasketSocket', () => {
       client.open('basket-saturday');
       await settle();
       socket().driveConnect();
-      socket().driveEvent('generatedList.lineSettled', {
-        generatedListId: 'basket-saturday',
-        line: null,
-      });
+      socket().driveEvent('basket.linesChanged', { lineIds: ['zl-1'] });
 
       expect(seen).toHaveLength(1);
-      expect(seen[0].type).toBe('generatedList.lineSettled');
+      expect(seen[0].type).toBe('basket.linesChanged');
     });
 
     it('ignores an event this app does not know', async () => {
@@ -307,7 +304,7 @@ describe('BasketSocket', () => {
       socket().driveConnect();
 
       expect(() =>
-        socket().driveEvent('generatedList.lineSettled', 'not an object')
+        socket().driveEvent('basket.linesChanged', 'not an object')
       ).not.toThrow();
       expect(seen).toEqual([]);
     });

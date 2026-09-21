@@ -1,36 +1,33 @@
 import {
   computed,
   DestroyRef,
+  effect,
   inject,
   Injectable,
   signal,
+  untracked,
 } from '@angular/core';
 import {
-  basketLinesProgress,
-  basketTakesLines,
-  type BasketAddLineRequest,
-  type BasketLine,
-  type BasketLineOrigins,
+  isOpenBasket,
+  type Basket,
+  type BasketListRef,
   type BasketLoad,
-  type BasketOriginQuantityRequest,
-  type BasketOriginQuantityResult,
-  type BasketOriginSettledRequest,
-  type BasketOriginSettledResult,
   type BasketParticipant,
   type BasketPresenceEntry,
   type BasketProduct,
+  type BasketProgress,
   type BasketRenameRequest,
   type BasketRenameResult,
+  type BasketRevertRequest,
+  type BasketRow,
+  type BasketRowResult,
   type BasketSettleRequest,
-  type BasketSettleResult,
   type BasketShareLink,
-  type BasketSplitRequest,
-  type BasketSplitResult,
-  type BasketView,
   type CatalogSuggestion,
-  type LineApprovalStatus,
 } from '@portfolio/velista/models';
+import { AppResumed } from '@portfolio/velista/platform';
 import { GatewayError, hasResponse } from '../errors';
+import { restrictRowToServedLists } from '../mapping/basket-mappers';
 import {
   REALTIME_CLIENT,
   type RealtimeClientI,
@@ -50,49 +47,6 @@ import { BasketSocket } from './basket-socket';
 const REFRESH_DEBOUNCE_MS = 1500;
 
 /**
- * What the page's live region says about a split (velista `0069`, section 4).
- *
- * The two facts and not the sentence, because the sentence is an interpolated
- * key and this library holds no translator: the page hands both to the pipe.
- */
-export interface BasketSplitSaid {
-  /** The line's own words, which every row of the split shares. */
-  content: string;
-  /** How many rows the act left standing. Never less than two. */
-  rows: number;
-}
-
-/**
- * The names on a batch of origins, candidates or targets, keyed by list id.
- *
- * The **same** composition `toBasketView` gives the basket's own `listNames`, so a
- * household adopted onto a line reads exactly as one the run drew from: "Weekly shop
- * · Flat 3B", because a list alone is ambiguous when two households both keep one
- * called "Groceries". A row with no name at all is skipped rather than given an
- * empty string, which is what a list deleted since the run looks like, and the
- * caption falls back for it.
- */
-function namesOf(
-  rows: readonly {
-    listId: string;
-    listName: string | null;
-    zoneName: string | null;
-  }[]
-): ReadonlyMap<string, string> {
-  const names = new Map<string, string>();
-  for (const row of rows) {
-    if (row.listName === null || row.listName === '') {
-      continue;
-    }
-    names.set(
-      row.listId,
-      row.zoneName ? `${row.listName} · ${row.zoneName}` : row.listName
-    );
-  }
-  return names;
-}
-
-/**
  * One shared basket, as the screen in a shop reads and changes it (plan 0044).
  *
  * ## Why the whole basket is one signal
@@ -110,17 +64,27 @@ function namesOf(
  * The server joins it to the basket's room on connect, so two people working through
  * one list in a shop see each other's settles with no reload and no request.
  *
- * `0044` shipped this screen refetching, on its own writes and on resume, and that is
- * still what happens when the socket will not open: it is a working screen and the
- * page says it is not live rather than pretending. Refetching also remains the answer
- * for an event that arrives without a readable line, and for the two events that say
- * something moved without saying what.
+ * **Every event is a reason to read again, and none is a thing to merge.** That is
+ * the change velista `0090` made, and it follows from the basket storing no rows:
+ * a broadcast into a basket room is redacted to the least privileged reader in it,
+ * so it carries line ids and no numbers (backend `0130`, section 6), and a row is a
+ * group the server computes out of lines this client cannot see. There is nothing
+ * a client holding ids can honestly do but ask.
  *
- * **A line off the room is redacted to the least privileged reader in it**, because a
- * broadcast cannot be projected per socket, so it carries no `origins` even for
- * somebody entitled to them. {@link apply} merges by id and keeps what it holds, which
- * is what stops a redacted event downgrading a privileged reader's view. It was
- * written that way by `0044` so that this plan is a call rather than a redesign.
+ * ## The three reasons to read again
+ *
+ * A **write's** answer is folded, and that is the only path that does not read: it
+ * carries the row and the counts, so there is nothing to ask for.
+ *
+ * `basket.linesChanged`, `basket.updated` and a participant moving are **coalesced**,
+ * because four people in a shop produce a stream of them and the answer to all of
+ * them is the same one request.
+ *
+ * The socket coming **back** and the app coming back are read **at once**, because
+ * each is a single edge after a gap in which anything may have happened, and a
+ * second and a half of a stale basket after a phone wakes is the delay this exists
+ * to remove. Both are counters rather than flags, for the reason written on
+ * `AppResumed.resumes`: a reader that missed the edge cannot tell it happened.
  *
  * ## Revocation is learned, never predicted
  *
@@ -146,23 +110,17 @@ export class BasketStore {
    */
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
 
-  private readonly _basket = signal<BasketView | null>(null);
+  /** The app coming back, which is one of the two edges that read again. */
+  private readonly _resumed = inject(AppResumed);
+
+  private readonly _basket = signal<Basket | null>(null);
   private readonly _state = signal<BasketLoad>('loading');
   private readonly _error = signal<unknown>(null);
   private readonly _link = signal<BasketShareLink | null>(null);
-  private readonly _busyLines = signal<ReadonlySet<string>>(new Set());
+  private readonly _busyRows = signal<ReadonlySet<string>>(new Set());
   private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
-  private readonly _lastAdded = signal<BasketLine | null>(null);
-  /** See {@link lastSplit}. Cleared by an add, and cleared with the basket. */
-  private readonly _lastSplit = signal<BasketSplitSaid | null>(null);
-  /** Whether an add is in flight, so the composer's button can wait on it. */
-  private readonly _adding = signal(false);
-  /** See {@link pendingTargets}. Session local, and cleared with the basket. */
-  private readonly _pendingTargets = signal<ReadonlySet<string>>(new Set());
-  /** See {@link rememberListNames}. Session local, and cleared with the basket. */
-  private readonly _learnedNames = signal<ReadonlyMap<string, string>>(
-    new Map()
-  );
+  /** See {@link rowGone}. A counter, so the same sentence can be said twice. */
+  private readonly _rowGone = signal(0);
 
   /** Which basket this store is about, once it has been told. */
   private _id: string | null = null;
@@ -178,6 +136,18 @@ export class BasketStore {
 
   /** The pending coalesced refresh, or null. See {@link _scheduleRefresh}. */
   private _refreshAt: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * The counter values the resync effect last acted on.
+   *
+   * Compared rather than subscribed to, because both are counts of an **edge**
+   * and an edge has to be noticed rather than sampled: a reader that read the
+   * value alone could not tell "came back a moment ago" from "has been here all
+   * along". They start at zero, which is what both counters start at, so the
+   * effect's first run finds nothing moved.
+   */
+  private _actedOnReconnects = 0;
+  private _actedOnResumes = 0;
 
   /**
    * How many times this store has changed the basket by any path other than a
@@ -209,41 +179,16 @@ export class BasketStore {
     // store in this library says the same thing.
     const subscription = this._socket.events.subscribe((event) => {
       switch (event.type) {
-        case 'generatedList.lineSettled':
-        case 'generatedList.lineUpdated':
-          if (event.generatedListId !== this._id) {
-            // The socket is pinned to one basket, so this cannot normally happen. It
-            // is checked anyway, because the alternative to a cheap comparison is a
-            // row from another basket appearing in this one.
-            return;
-          }
-          if (event.line === null) {
-            // The event said which basket moved and not what moved, so the only honest
-            // answer is to go and look.
-            this._scheduleRefresh();
-            return;
-          }
-          this.apply(event.line);
-          return;
-
-        case 'generatedList.lineAdded':
-          if (event.generatedListId !== this._id) {
-            return;
-          }
-          // Its own case and not a fold into the two above, which is the whole
-          // reason the server gave it its own name: `apply` merges by id and does
-          // nothing at all for a line the basket does not hold, so an append that
-          // arrived as `lineUpdated` would be silently dropped.
-          this.append(event.line);
-          return;
-
-        case 'generatedList.lineRemoved':
-          // A rename merged this line into another one (backend `0113`, section 6).
-          // The survivor arrives beside it as `lineUpdated`, and the server sends
-          // this first, so the basket never draws two lines of one name.
-          if (event.generatedListId === this._id) {
-            this.drop(event.lineId);
-          }
+        case 'basket.linesChanged':
+          // Ids and nothing else (backend `0130`, section 6), so there is nothing
+          // to merge: a line id does not say which row holds it, and a row is a
+          // group the server computes. Coalesced, because a shop full of people
+          // settling rows is a stream of these and one read answers all of them.
+          //
+          // The event arrives only on a socket pinned to one basket, so it needs
+          // no id check: unlike the events it replaced, it carries no basket id
+          // to check against.
+          this._scheduleRefresh();
           return;
 
         case 'generatedList.participantJoined':
@@ -290,6 +235,34 @@ export class BasketStore {
       }
     });
 
+    // The two edges, in one effect, compared against what it last acted on
+    // (velista `0090`, section 7.1).
+    //
+    // An `effect` and not `toObservable`: `@angular/core/rxjs-interop` is a
+    // secondary entry point module federation does not dedupe, and a service
+    // several remotes provide throws `NG0203` from it with a perfectly correct DI
+    // graph. `effect` is core.
+    //
+    // The route injector is never destroyed by the router, so this outlives the
+    // page. It does nothing while `_id` is null, which {@link leave} guarantees,
+    // so a basket nobody is looking at is never read again.
+    effect(() => {
+      const reconnects = this._socket.reconnects();
+      const resumes = this._resumed.resumes();
+      untracked(() => {
+        const moved =
+          reconnects !== this._actedOnReconnects ||
+          resumes !== this._actedOnResumes;
+        this._actedOnReconnects = reconnects;
+        this._actedOnResumes = resumes;
+        // Both counters start at zero and this effect runs once on creation, so
+        // the first run moves nothing and reads nothing.
+        if (moved && this._id !== null) {
+          void this.refresh();
+        }
+      });
+    });
+
     inject(DestroyRef).onDestroy(() => {
       subscription.unsubscribe();
       access.unsubscribe();
@@ -314,17 +287,16 @@ export class BasketStore {
    */
   readonly shareLink = this._link.asReadonly();
 
-  /** Lines with a write in flight, so a row can show it without blocking a tap. */
-  readonly busyLines = this._busyLines.asReadonly();
-
   /**
-   * Whether an add is in flight.
+   * Rows with a write in flight, by `rowKey`, so a row can show it without
+   * blocking a tap.
    *
-   * The composer's field stays usable while this is true and only its button waits,
-   * which is what the run property in `0038` actually needs: somebody remembering
-   * three things in an aisle types the second while the first is on its way.
+   * Keyed by the row's own key and never by a line id, which is what the sheet and
+   * the reel both address a row by. A write on a row whose key changed underneath
+   * it clears the old key, which is right: the busy state belongs to the request,
+   * and the request named that key.
    */
-  readonly adding = this._adding.asReadonly();
+  readonly busyRows = this._busyRows.asReadonly();
 
   /**
    * Whether this basket is live, which the screen says out loud.
@@ -374,13 +346,24 @@ export class BasketStore {
     });
   });
 
-  /** The lines, in the order the basket holds them. */
-  readonly lines = computed<readonly BasketLine[]>(
-    () => this._basket()?.lines ?? []
+  /** The rows, in the order the server sent them, which is the order to walk. */
+  readonly rows = computed<readonly BasketRow[]>(
+    () => this._basket()?.rows ?? []
   );
 
   /**
-   * Every product the basket named, by id: the pick of a line and its options.
+   * The covered lists this reader was served, by list id.
+   *
+   * Empty for a reader served none, which is the same reader whose every entry
+   * names no list: one collection answers "may this be grouped by list", "may this
+   * entry be named" and "what is it called", so the three cannot disagree.
+   */
+  readonly lists = computed<ReadonlyMap<string, BasketListRef>>(
+    () => new Map((this._basket()?.lists ?? []).map((ref) => [ref.listId, ref]))
+  );
+
+  /**
+   * Every product the basket named, by id: every row's options.
    *
    * Here rather than composed again by each reader, which is what the page and
    * `BasketViewStore` were both doing: two identities for one map means a row is
@@ -390,118 +373,46 @@ export class BasketStore {
     () => this._basket()?.products ?? new Map()
   );
 
-  /**
-   * Whether this basket still takes lines, which is what draws the composer.
-   *
-   * False before anything has loaded, which is the safe direction and the same one
-   * {@link seesZoneData} takes: a field drawn for a frame over a basket that turns
-   * out to be finished is an invitation that cannot be honoured.
-   */
-  readonly takesLines = computed(() =>
-    basketTakesLines(this._basket()?.status ?? '')
-  );
+  /** What this basket is (backend `0133`, section 2). Velista `0091` reads it. */
+  readonly kind = computed(() => this._basket()?.kind ?? 'UNKNOWN');
 
   /**
-   * Whether the trip is over, which is what takes every control off the screen
-   * (velista `0057`, section 6).
+   * Whether this basket still takes writes, which is what draws every control.
    *
-   * **The negation of {@link takesLines} and not a status of its own**, once a basket
-   * has actually been read. There is one question here — may this basket still be
-   * changed — and it is asked by the composer, by every row, by the settle sheet and
-   * by the banner; two readings of it would eventually disagree, and the screen would
-   * draw a control beside a banner saying it cannot be used.
+   * False before anything has loaded, which is the safe direction: a control drawn
+   * for a frame over a basket that turns out to be finished is an invitation that
+   * cannot be honoured.
+   */
+  readonly isOpen = computed(() => isOpenBasket(this._basket()?.status ?? ''));
+
+  /**
+   * Whether the trip is over, which takes every control off the screen (velista
+   * `0057`, section 6).
+   *
+   * **The negation of {@link isOpen} and not a status of its own**, once a basket has
+   * actually been read. There is one question here — may this basket still be
+   * changed — and it is asked by every row, by the settle sheet and by the banner;
+   * two readings of it would eventually disagree, and the screen would draw a
+   * control beside a banner saying it cannot be used.
    *
    * The null check is what stops it claiming a finished trip during the first read,
-   * where `takesLines` is false because nothing has loaded rather than because
-   * anything is finished. A status this build does not recognise reads as finished,
-   * which is the same safe direction `takesLines` takes for the composer: the screen
-   * offers nothing it cannot promise, and the banner is a sentence rather than a
-   * refusal.
+   * where `isOpen` is false because nothing has loaded rather than because anything
+   * is finished. A status this build does not recognise reads as finished, which is
+   * the same safe direction: the screen offers nothing it cannot promise.
    */
-  readonly finished = computed(
-    () => this._basket() !== null && !this.takesLines()
-  );
+  readonly finished = computed(() => this._basket() !== null && !this.isOpen());
 
   /**
-   * How many lines still have something outstanding (velista `0057`, section 5).
+   * How many rows still have something to do, **by the server** (backend `0130`,
+   * section 4).
    *
-   * What the finish sheet warns about, and the third line of its question. Derived
-   * from the lines this store already holds rather than read from anywhere: a line
-   * with nothing left to get is finished however it got that way, which is exactly
-   * what {@link progress} counts, and the two must not be able to disagree about how
-   * many are left.
+   * What the finish sheet warns about and what `allSettled` reads. It used to be
+   * `total - done - unavailable` computed here, which is the same arithmetic the
+   * server now does and sends: a `SKIPPED` row is pending, and this side has no
+   * way to know that. Nothing in this scope subtracts one count from another
+   * (velista `0060`, section 4).
    */
-  readonly unsettled = computed(() => {
-    const { done, unavailable, total } = this.progress();
-    return total - done - unavailable;
-  });
-
-  /**
-   * The most recent line to arrive, however it arrived, for the page's live region.
-   *
-   * One signal rather than a queue, and that is what makes the announcement right
-   * when four people add at once: a polite region reads whatever the node last held,
-   * so simultaneous adds collapse into one sentence instead of talking over each
-   * other for the length of a shopping trip (plan 0053, section 8).
-   */
-  readonly lastAdded = this._lastAdded.asReadonly();
-
-  /**
-   * The most recent split, for the same live region (velista `0069`, section 4).
-   *
-   * The **same** region as {@link lastAdded} rather than one of its own, which is
-   * why the two clear each other: there is one thing to say about this basket at
-   * a time, and a second region would talk over the first while somebody is
-   * standing in an aisle. Whichever happened last is the one that is set.
-   *
-   * Null when a split left one row, which is a sibling folded back into the row
-   * it came from. Nothing was split, so nothing is announced.
-   */
-  readonly lastSplit = this._lastSplit.asReadonly();
-
-  /**
-   * Whether this reader may see zone data, as the **server** decided on the last
-   * read (backend `0051`, section 5.2).
-   *
-   * False before anything has loaded, which is the safe direction: a screen that
-   * guessed true for a moment would draw a household's list name and then take it
-   * away, and the flicker would be a real disclosure.
-   */
-  readonly seesZoneData = computed(() => this._basket()?.seesZoneData === true);
-
-  /**
-   * The source lists by name, for the row's "from" caption.
-   *
-   * Empty for a reader who may not see origins, which is the same reader whose
-   * lines carry no `origins` at all: the caption is gated on both sides at once,
-   * so neither alone has to be got right.
-   */
-  readonly listNames = computed<ReadonlyMap<string, string>>(() => {
-    const learned = this._learnedNames();
-    const served = this._basket()?.listNames ?? new Map<string, string>();
-    if (learned.size === 0) {
-      return served;
-    }
-    // The learned names go in **first**, so the basket's own overwrite them on a
-    // shared key. This map fills a gap in what the server names and never corrects
-    // it; when the gateway names every origin's list the merge is a no-op and both
-    // it and `rememberListNames` can go. See that method for the gap in full.
-    return new Map([...learned, ...served]);
-  });
-
-  /**
-   * Lines whose newly raised zone line is waiting for its list to approve it.
-   *
-   * **A stopgap for a backend gap, and session local.** `GeneratedListLineOriginView`
-   * carries no approval state, so after a reload the row cannot say a raised line is
-   * waiting (velista `0056`, section 5.1). What this holds is what *this* session's
-   * own write was told, through the origin the units sheet's write answers with
-   * (velista `0068`), which is exactly the case where somebody is standing there
-   * waiting to be told something, and is honestly empty everywhere else rather than
-   * guessing. When the view carries the state the row reads the line instead and this
-   * goes.
-   */
-  readonly pendingTargets = this._pendingTargets.asReadonly();
+  readonly pending = computed(() => this._basket()?.pending ?? 0);
 
   /** Everybody on the basket, for the presence row and for attribution. */
   readonly participants = computed<readonly BasketParticipant[]>(
@@ -521,11 +432,57 @@ export class BasketStore {
   /**
    * How much of this basket has been got, for the header's "4 of 12" line.
    *
-   * Lines and not units, matching how `0047` counts a zone list: "four things
-   * done out of twelve" is what somebody in a shop is tracking, and a basket of
-   * one line asking for twelve tins would otherwise read as almost finished.
+   * **The server's, never recounted** (backend `0130`, section 4). Rows and not
+   * units, which is how `0047` counts a zone list: "four things done out of
+   * twelve" is what somebody in a shop is tracking, and a basket of one row asking
+   * for twelve tins would otherwise read as almost finished.
+   *
+   * Zeroed before the first read, which draws as a basket with nothing in it for
+   * the moment there is nothing in it.
    */
-  readonly progress = computed(() => basketLinesProgress(this.lines()));
+  readonly progress = computed<BasketProgress>(
+    () => this._basket()?.progress ?? { done: 0, unavailable: 0, total: 0 }
+  );
+
+  /**
+   * How many times a sheet has closed because its row left the basket.
+   *
+   * A **counter** and not a flag, for `AppResumed.resumes`' reason: the page says
+   * one sentence when it moves, and a boolean could not say it twice in a row for
+   * two different rows. The page reads it, announces `basket.row.gone` once, and
+   * nothing clears it.
+   *
+   * Here rather than on the sheet, because the sheet is gone by the time the
+   * sentence is read: it dismisses itself and the page is what is left to say what
+   * happened (velista `0069` section 3.1, `0084` section 5).
+   */
+  readonly rowGone = this._rowGone.asReadonly();
+
+  /** Say that a sheet's row left the basket. See {@link rowGone}. */
+  sayRowGone(): void {
+    this._rowGone.update((count) => count + 1);
+  }
+
+  /**
+   * The row a key addresses: by its own key, then by any entry's line id.
+   *
+   * **The second lookup is the whole of velista `0090` section 7.3.** A row's key
+   * is its anchor's line id, and an anchor can change under an open sheet:
+   * somebody adds an earlier line of the same name on another list, a rename
+   * merges two, the anchor is deleted. The row is the same thing under a new key,
+   * and a sheet that could not find it would dismiss itself over nothing.
+   *
+   * Null is the third answer and a real one: the row left the basket, and the
+   * sheet says so once and closes.
+   */
+  rowFor(key: string): BasketRow | null {
+    const rows = this.rows();
+    return (
+      rows.find((row) => row.rowKey === key) ??
+      rows.find((row) => row.entries.some((entry) => entry.lineId === key)) ??
+      null
+    );
+  }
 
   /**
    * Load a basket, deciding first whether this browser may even ask.
@@ -534,8 +491,8 @@ export class BasketStore {
    * link, which is `needsJoin` rather than a failure: the join screen is the
    * answer, not an error.
    */
-  async open(generatedListId: string): Promise<void> {
-    this._id = generatedListId;
+  async open(basketId: string): Promise<void> {
+    this._id = basketId;
     this._state.set('loading');
     this._error.set(null);
     this._present.set([]);
@@ -543,7 +500,7 @@ export class BasketStore {
     // request of its own, so waiting for the basket would delay going live by a whole
     // round trip on the screen where being live is the point; and the socket needs
     // nothing the read produces, since the credential it presents is already held.
-    this._socket.open(generatedListId);
+    this._socket.open(basketId);
     await this.refresh();
   }
 
@@ -580,15 +537,9 @@ export class BasketStore {
     this._changed();
     this._link.set(null);
     this._present.set([]);
-    this._busyLines.set(new Set());
-    this._lastAdded.set(null);
-    this._lastSplit.set(null);
-    this._adding.set(false);
-    // Both stopgaps are about **this** basket and this session, so they go with it.
-    // Carrying either into the next basket would caption its rows with a household
-    // from the last one, or say a line of it is waiting for approval.
-    this._pendingTargets.set(new Set());
-    this._learnedNames.set(new Map());
+    this._busyRows.set(new Set());
+    // The sentence is about a row of **this** basket, so it goes with it.
+    this._rowGone.set(0);
     this._state.set('loading');
     this._error.set(null);
   }
@@ -652,7 +603,7 @@ export class BasketStore {
       const generation = this._generation;
       this._queued = false;
 
-      let basket: BasketView;
+      let basket: Basket;
       try {
         basket = await this._service.getBasket(id);
       } catch (error) {
@@ -693,184 +644,107 @@ export class BasketStore {
   }
 
   /**
-   * Settle a line: the whole outstanding amount, a number, or an allocation.
+   * Say what happened to a row at the shelf.
    *
-   * Answers the result rather than swallowing it, because the caller has to say
-   * something when an origin was missed: {@link BasketSettleResult.skippedCount}
-   * is the honest report a guest gets and the sheet has to render it (backend
-   * `0051`, section 6.4).
-   *
-   * The returned line is folded in immediately, so the row is right before the
-   * refresh that follows lands.
+   * The answer is folded immediately, so the row is right before anything else
+   * lands. It is answered to the caller rather than swallowed, because a sheet has
+   * to know what happened: `skippedCount` is the honest report of entries a write
+   * could not reach, and a rename's answer says whether the caller's own row
+   * survived.
    */
   async settle(
-    lineId: string,
+    rowKey: string,
     body: BasketSettleRequest
-  ): Promise<BasketSettleResult | null> {
-    return this._write(lineId, async (id) => {
-      const result = await this._service.settle(id, lineId, body);
-      this.apply(result.line);
+  ): Promise<BasketRowResult | null> {
+    return this._write(rowKey, async (id) => {
+      const result = await this._service.settle(id, rowKey, body);
+      this._fold(result, rowKey);
       return result;
     });
   }
 
   /**
-   * Take a finished line back to fully outstanding (luna `0054`, section 3).
+   * Take units, or a close, back off a row (backend `0136`, section 5.2).
    *
-   * The other direction of the row's status control, and it goes through the same
-   * {@link _write} as {@link settle} so the row is busy while the request is out and
-   * `aria-busy` is already handled.
-   *
-   * It answers the same shape for the same reason: an origin whose line has been
-   * deleted since cannot have its units put back, so a reopen can report a skip
-   * exactly as a settle can, and the caller has to be told something did not land.
+   * One method for both, because they are one gesture aimed at two things, and the
+   * request says which. It replaced `reopen`, which took a whole line back and had
+   * no way to take back less.
    */
-  async reopen(lineId: string): Promise<BasketSettleResult | null> {
-    return this._write(lineId, async (id) => {
-      const result = await this._service.reopen(id, lineId);
-      this.apply(result.line);
+  async revert(
+    rowKey: string,
+    body: BasketRevertRequest
+  ): Promise<BasketRowResult | null> {
+    return this._write(rowKey, async (id) => {
+      const result = await this._service.revert(id, rowKey, body);
+      this._fold(result, rowKey);
       return result;
     });
   }
 
   /**
-   * Give units of a line to other products, which splits it (velista `0069`).
+   * Move a row's reel, which is a settle or a revert depending on the direction.
    *
-   * Available to everybody, guests included: the options are catalog products and
-   * never zone data (backend `0051`, section 6.1). It replaces `setPick`, which
-   * this store carried until velista `0069`: moving every outstanding unit to one
-   * other product is this call with one share.
+   * **The row reel's one call**, so the control has one thing to call and cannot
+   * get the direction wrong. Below `from` the difference was bought; above it, the
+   * difference comes back. Equal is nothing, which is what a reel dropped where it
+   * was picked up means, and it costs no request.
    *
-   * ## The order the four collections are applied in
+   * `next` is an **absolute** number and `from` is where it started, which is
+   * velista `0054`'s bargain unchanged: a gesture whose meaning depends on where it
+   * started must be refused rather than reinterpreted when the number moved
+   * underneath it.
    *
-   * Merged rows first, then created ones, then the original, then the removals.
-   * The first three are all merges by id and could be in any order; the removals
-   * are last **on purpose**, because a row that a merge folded away is a row the
-   * survivor has just been raised for, and dropping it first would take the units
-   * off the screen for a frame before the row that now holds them was redrawn.
-   *
-   * The caller is answered the whole result rather than the line, because the
-   * sheet has to know whether its **own** row is among the removals: a sheet about
-   * a line that is gone dismisses itself, and it cannot read that from a line.
+   * The ceiling the reel offers is `row.asked`, which is read and never computed.
    */
-  async splitLine(
-    lineId: string,
-    body: BasketSplitRequest
-  ): Promise<BasketSplitResult | null> {
-    return this._write(lineId, async (id) => {
-      const result = await this._service.splitLine(id, lineId, body);
+  async setLeft(
+    rowKey: string,
+    next: number,
+    from: number
+  ): Promise<BasketRowResult | null> {
+    if (next === from) {
+      return null;
+    }
 
-      for (const row of result.merged) {
-        this.apply(row);
-      }
-      for (const row of result.created) {
-        this._insert(row);
-      }
-      this.apply(result.line);
-      for (const gone of result.removed) {
-        this.drop(gone);
-      }
-
-      // One sentence for the whole act, rather than one per sibling: a polite
-      // region reads whatever the node last held, so three appends would say
-      // "added" three times and never say what happened (section 4).
-      //
-      // Counted as the rows this act left standing rather than as the length of
-      // any one collection, because the original appears in two of them: it is
-      // `line`, and when a share folded it away it is `line` **and** a member of
-      // `removed`. A set minus the removals is the only reading that is right in
-      // both directions, including the one that folds a sibling back and leaves
-      // one row, which says nothing because nothing was split.
-      const standing = new Set(
-        [...result.merged, ...result.created, result.line].map((row) => row.id)
-      );
-      for (const gone of result.removed) {
-        standing.delete(gone);
-      }
-      this._lastSplit.set(
-        standing.size > 1
-          ? { content: result.line.content, rows: standing.size }
-          : null
-      );
-      this._lastAdded.set(null);
-
-      return result;
-    });
+    return next < from
+      ? this.settle(rowKey, {
+          outcome: 'BOUGHT',
+          quantity: from - next,
+          from,
+        })
+      : this.revert(rowKey, {
+          target: 'UNITS',
+          units: next - from,
+          // A revert names the row's `bought` and not its `left`, because that is
+          // the number it is taking from (backend `0136`, section 5.2). The caller
+          // holds the row, so it is read here rather than passed in and possibly
+          // read from a different frame than `from` was.
+          from: this.rowFor(rowKey)?.bought ?? 0,
+        });
   }
 
   /**
-   * Rename a line, and the zone lines it came from (velista `0084`, backend `0113`).
+   * Rename a row, and every list line inside it (velista `0084`, backend `0113`).
    *
-   * **From the answer and never optimistically**, for {@link addLine}'s reason, and
-   * for one of its own: a rename can merge, and a row renamed in place that the
-   * server then folds into another would draw two rows of one name for a moment.
-   *
-   * The absorbed line leaves first, then the survivor is merged by id. The survivor
-   * is a line this basket already holds, whichever of the two it is, so `apply`
-   * reaches it.
+   * **From the answer and never optimistically**: a rename can merge, and a row
+   * renamed in place that the server then folds into another would draw two rows of
+   * one name for a moment.
    *
    * Null on failure, and the store's {@link error} holds the refusal: a
    * `line_merge_required` there is the question the sheet asks next.
    */
-  async renameLine(
-    lineId: string,
+  async renameRow(
+    rowKey: string,
     body: BasketRenameRequest
   ): Promise<BasketRenameResult | null> {
-    return this._write(lineId, async (id) => {
-      const result = await this._service.renameLine(id, lineId, body);
-      if (result.absorbedLineId !== null) {
-        this.drop(result.absorbedLineId);
-      }
-      this.apply(result.line);
+    return this._write(rowKey, async (id) => {
+      const result = await this._service.renameRow(id, rowKey, body);
+      this._fold(result, rowKey);
       return result;
     });
   }
 
   /**
-   * Put a line in the basket (velista `0053`; luna `0055`, section 3).
-   *
-   * **Drawn from the server's answer and never optimistically**, which is the
-   * opposite of the choice on the list page, and the difference is the reader: four
-   * people are working this basket at once, and a row that appeared locally and then
-   * reordered when the server answered is a row somebody might tap in between. The
-   * wait is not felt while typing, because {@link adding} leaves the field alive and
-   * only the button waits.
-   *
-   * The socket carries the same line to everybody else through
-   * `generatedList.lineAdded`, and {@link append} is what both paths go through, so
-   * the person who typed it and the person standing next to them get the same row by
-   * the same route.
-   *
-   * **Null on failure**, and the caller has something to do with it: the text is
-   * still theirs to put back in the field. Losing six characters is nothing; losing
-   * the item somebody just remembered in an aisle is the failure this screen cannot
-   * afford (section 7).
-   */
-  async addLine(body: BasketAddLineRequest): Promise<BasketLine | null> {
-    const id = this._id;
-    if (id === null) {
-      return null;
-    }
-
-    this._adding.set(true);
-    try {
-      const line = await this._service.addLine(id, body);
-      this.append(line);
-      return line;
-    } catch (error) {
-      this._fail(id, error);
-      // The composer is a write like any other, and the one that most needs the
-      // screen to catch up: an add refused because the owner finished the trip
-      // leaves a field drawn over a basket that takes no lines (velista `0057`).
-      await this._rereadIfOvertaken(error);
-      return null;
-    } finally {
-      this._adding.set(false);
-    }
-  }
-
-  /**
-   * What the composer offers under the field, in the server's order.
+   * What a search offers, in the server's order.
    *
    * On the store rather than reached for directly by the page, unlike the list
    * page's catalog search: this one is **scoped to the basket**, so the id is part
@@ -878,7 +752,7 @@ export class BasketStore {
    * or counts characters, which stay the page's, for rule D1's reason.
    *
    * Empty on failure, because the service is: a dropdown is an offer, and the one
-   * thing this must never do is make adding a line fail because a search did.
+   * thing this must never do is make a search's failure fail something else.
    */
   async suggest(query: string): Promise<readonly CatalogSuggestion[]> {
     const id = this._id;
@@ -886,307 +760,74 @@ export class BasketStore {
   }
 
   /**
-   * Put a line in the basket, from wherever it came.
+   * Fold one write's answer into the basket. **The single place a write lands.**
    *
-   * **Idempotent by id**, which is not decoration: the add answers a line and the
-   * basket's own room broadcasts the same one, so the person who typed it appends it
-   * twice unless one of the two is a no-op. A refetch landing between the two does
-   * the same thing from the other direction.
+   * It replaces the row by key and takes the counts whole. It **never patches a
+   * number**: every number on this screen is one the server sent, so there is
+   * nothing here to add up and nothing to get wrong.
    *
-   * A line already held is merged rather than ignored, on {@link apply}'s reasoning:
-   * the broadcast is redacted to the least privileged reader in the room, so the copy
-   * that arrives second may know less than the copy already on screen.
+   * Three things it has to get right, and they are three:
+   *
+   * - **The answered row may carry a new key.** A rename that merged, or an anchor
+   *   that was bought to zero, moves it. So the row named by `rowKey` is dropped
+   *   and the answered row is put back in its place, which keeps the position the
+   *   shopper is looking at.
+   * - **`replacedRowKey` names a second row that went away**, which is the row a
+   *   rename folded this one into, or out of. It is dropped too.
+   * - **The row's list ids are gated here**, because the answer carries no refs to
+   *   gate them against. It is the same function `toBasket` uses, so a row that
+   *   arrived through a write and a row that arrived through a read cannot
+   *   disagree about which lists this reader may name.
    */
-  append(line: BasketLine): void {
-    if (!this._insert(line)) {
-      return;
-    }
-    // Set only for a line that was genuinely new, so the announcement follows what
-    // changed on screen rather than what arrived on the wire. A split announces its
-    // own sentence, so the two clear each other: one region says whatever happened
-    // last (velista `0069`, section 4).
-    this._lastAdded.set(line);
-    this._lastSplit.set(null);
-
-    // A line arrives bare, and the products it names do not come with it: the add
-    // answers the line alone and the broadcast carries the same shape, while
-    // `products` is composed once per basket read at the gateway. So a line added
-    // with a product drew "not linked to a product" until the next reload, because
-    // the row could not resolve a pick the map had never been told about. The
-    // basket is re-read, quietly, so the row names its product a moment later.
-    if (this._namesUnknownProducts(line)) {
-      void this.refresh();
-    }
-  }
-
-  /** Whether the line picks or offers a product this basket's map does not hold. */
-  private _namesUnknownProducts(line: BasketLine): boolean {
-    const products = this._basket()?.products;
-    if (products === undefined) {
-      return false;
-    }
-    const named = [...line.optionIds];
-    if (line.pickId !== null) {
-      named.push(line.pickId);
-    }
-    return named.some((id) => !products.has(id));
-  }
-
-  /**
-   * Put a line in the basket **at its own position**, or merge it if it is held.
-   *
-   * True when the line was genuinely new, which is what tells {@link append} it has
-   * something to announce.
-   *
-   * By position and not on the end, and that is what makes a split's siblings land
-   * under the row they came from (velista `0069`, section 4). The server gives each
-   * one the midpoint between the original and the next line, so ordering by that
-   * number puts them where the shopper is looking with no client rule about which
-   * row they belong to. For an ordinary add it is the same act as appending, since
-   * an added line takes a position past everything already held.
-   */
-  private _insert(line: BasketLine): boolean {
-    const held = this._basket();
-    if (held === null) {
-      // Nothing to insert into. The read that is on its way carries this line, so
-      // dropping it here costs nothing and inventing a basket around it would put a
-      // one line screen in front of somebody for a moment.
-      return false;
-    }
-
-    if (held.lines.some((row) => row.id === line.id)) {
-      this.apply(line);
-      return false;
-    }
-
-    const at = held.lines.findIndex((row) => row.position > line.position);
-    const lines =
-      at === -1
-        ? [...held.lines, line]
-        : [...held.lines.slice(0, at), line, ...held.lines.slice(at)];
-    this._basket.set({ ...held, lines });
-    this._changed();
-    return true;
-  }
-
-  /**
-   * Take a line off the basket, by id.
-   *
-   * The one way a row leaves this store without a refetch, and it exists because a
-   * split can fold one away: moving every unit of a sibling back to the product that
-   * already has a row leaves the sibling holding nothing, so the server deletes it
-   * and names it in `removed` (backend `0094`, section 5).
-   *
-   * Silent for an id the basket does not hold, which is the ordinary case rather
-   * than an error: the answer names every row that went, and a second phone may
-   * already have refetched without it.
-   */
-  drop(lineId: string): void {
+  private _fold(result: BasketRowResult, rowKey: string): void {
     const held = this._basket();
     if (held === null) {
       return;
     }
+
+    const served = new Set(held.lists.map((ref) => ref.listId));
+    const row = restrictRowToServedLists(result.row, served);
+    const gone = new Set(
+      [rowKey, result.replacedRowKey].filter(
+        (key): key is string => key !== null
+      )
+    );
+    gone.delete(row.rowKey);
+
+    let placed = false;
+    const rows: BasketRow[] = [];
+    for (const current of held.rows) {
+      if (current.rowKey === row.rowKey) {
+        rows.push(row);
+        placed = true;
+        continue;
+      }
+      if (gone.has(current.rowKey)) {
+        // The row the request named, under the key it had. The answered row takes
+        // its place, so the position the shopper is looking at is kept.
+        if (!placed) {
+          rows.push(row);
+          placed = true;
+        }
+        continue;
+      }
+      rows.push(current);
+    }
+
+    if (!placed) {
+      // A row this basket did not hold, which a re-key can produce: the read that
+      // would have carried it is still out. The end is the only honest place for
+      // it, and the read that follows puts it where the server says.
+      rows.push(row);
+    }
+
     this._basket.set({
       ...held,
-      lines: held.lines.filter((row) => row.id !== lineId),
+      rows,
+      progress: result.progress,
+      pending: result.pending,
     });
     this._changed();
-  }
-
-  /**
-   * Fold one changed line into the basket, in place.
-   *
-   * The join between a server answer and what is on screen, and the one method a
-   * realtime handler will call unchanged when the basket's room becomes reachable.
-   *
-   * **It merges rather than replacing.** A broadcast into a basket room is
-   * redacted to the least privileged reader in it, so a line arriving that way
-   * carries no `origins` even for somebody entitled to them. Those fields do not
-   * change when a line is settled or its pick swapped, so keeping the ones
-   * already held is both correct and what stops a privileged reader's captions
-   * disappearing when somebody else settles something.
-   */
-  apply(line: BasketLine): void {
-    const basket = this._basket();
-    if (basket === null) {
-      return;
-    }
-    this._basket.set({
-      ...basket,
-      lines: basket.lines.map((held) =>
-        held.id === line.id
-          ? { ...held, ...line, origins: line.origins ?? held.origins }
-          : held
-      ),
-    });
-    this._changed();
-  }
-
-  /**
-   * Say how many of a line are still to get (velista `0054`).
-   *
-   * Through {@link _write}, so the row is busy while the request is out, and it
-   * answers the same {@link BasketSettleResult} a settle does because the downward
-   * move genuinely is one: it can skip an origin whose access has gone, and the
-   * caller has to be told something did not land.
-   *
-   * ## The one thing this does that no other write here does
-   *
-   * **A `stale_quantity` refetches before it returns.** That code means the number
-   * this gesture was moving is not where the control believed it started, which is
-   * two phones in one shop dragging one line, and the honest answer is not a
-   * sentence saying so over a stale number: it is the number as it now stands, with
-   * the sentence beside it. So the refresh is awaited **before** null goes back, and
-   * the caller can read the true amount off the line the moment it has it.
-   */
-  async setOutstanding(
-    lineId: string,
-    outstanding: number,
-    from: number
-  ): Promise<BasketSettleResult | null> {
-    return this._write(lineId, async (id) => {
-      const result = await this._service.setOutstanding(id, lineId, {
-        outstanding,
-        from,
-      });
-      this.apply(result.line);
-      return result;
-    });
-  }
-
-  /**
-   * Which lists are on a line, and which could be (velista `0055`).
-   *
-   * A **read**, so it does not go through {@link _write}: nothing about the basket
-   * changes, and marking the row busy would grey a line somebody is still allowed to
-   * settle while a sheet is opening over it.
-   *
-   * Null on failure, with the failure recorded the way every other one is, so the
-   * sheet draws the sentence its own operation deserves.
-   *
-   * It also feeds {@link rememberListNames}, which is the stopgap for a backend gap:
-   * the basket read names only the run's **source** lists, so a household adopted
-   * onto a line here has an origin the row's "from" caption cannot name.
-   */
-  async loadLineOrigins(lineId: string): Promise<BasketLineOrigins | null> {
-    const id = this._id;
-    if (id === null) {
-      return null;
-    }
-
-    try {
-      const answer = await this._service.getLineOrigins(id, lineId);
-      // All three collections, because the row caption has to name a list this
-      // basket has never touched the moment somebody raises one of them.
-      this.rememberListNames(
-        namesOf([...answer.origins, ...answer.candidates, ...answer.others])
-      );
-      return answer;
-    } catch (error) {
-      this._fail(id, error);
-      return null;
-    }
-  }
-
-  /**
-   * Set what one list contributes to a line (velista `0055`).
-   *
-   * Through {@link _write}, and it refetches on a `stale_quantity` for
-   * {@link setOutstanding}'s reason: the sheet redraws the row at the contribution
-   * as it now stands rather than arguing with a number that moved.
-   *
-   * The origin that comes back is remembered by name, because an **adopted** list is
-   * exactly the one the basket read does not name.
-   *
-   * It is also what records the line as waiting: a raise creates or adopts a zone
-   * line under that list's own approval rule, and the answered origin's
-   * `approvalStatus` is the only thing that says so (velista `0068`, section 1). See
-   * {@link pendingTargets} for why the row cannot read it off the line.
-   */
-  async setOriginQuantity(
-    lineId: string,
-    body: BasketOriginQuantityRequest
-  ): Promise<BasketOriginQuantityResult | null> {
-    return this._write(lineId, async (id) => {
-      const result = await this._service.setOriginQuantity(id, lineId, body);
-      this.apply(result.line);
-      if (result.origin !== null) {
-        this.rememberListNames(namesOf([result.origin]));
-        this._recordApproval(lineId, result.origin.approvalStatus);
-      }
-      return result;
-    });
-  }
-
-  /**
-   * Set how many of a line one list has got (velista `0073`, backend `0104`).
-   *
-   * Through {@link _write} like every other write here, and it refetches on a
-   * `stale_quantity` for {@link setOutstanding}'s reason.
-   *
-   * **It settles**, which is the whole of what separates it from
-   * {@link setOriginQuantity}: raising records a purchase for that list and lowering
-   * takes one back, so the line it answers carries a new settled amount, a new
-   * outcome and possibly a skip report. The answered line is applied exactly as a
-   * settle's is, and callers must redraw from it rather than from the number they
-   * sent: taking back a `NOT_AVAILABLE` close has no units to divide, so the whole
-   * close comes back and what is outstanding lands above where the control was
-   * dragged.
-   */
-  async setOriginSettled(
-    lineId: string,
-    body: BasketOriginSettledRequest
-  ): Promise<BasketOriginSettledResult | null> {
-    return this._write(lineId, async (id) => {
-      const result = await this._service.setOriginSettled(id, lineId, body);
-      this.apply(result.line);
-      if (result.origin !== null) {
-        this.rememberListNames(namesOf([result.origin]));
-      }
-      return result;
-    });
-  }
-
-  /**
-   * Remember that a line's newly raised list has not agreed to it yet.
-   *
-   * One way only: a second list that accepts the line straight away does not clear
-   * the caption the first one earned, because both origins are real and one of them
-   * is still waiting. A fresh basket read is what forgets it, which is
-   * {@link pendingTargets}' session local rule intact.
-   */
-  private _recordApproval(lineId: string, status: LineApprovalStatus): void {
-    if (status !== 'PENDING') {
-      return;
-    }
-    this._pendingTargets.update((held) => new Set(held).add(lineId));
-  }
-
-  /**
-   * Learn a list's name from somewhere other than the basket read.
-   *
-   * **A stopgap, and it is written down as one.** `sourceNames` on the basket is
-   * built from the run's own snapshot, so it names the lists the run drew from and
-   * nothing else. A line adopted onto a household the run missed (`0055`) or sent to
-   * one (`0056`) therefore has an origin whose list the row cannot name, and the
-   * "from" caption would draw a word and then stop.
-   *
-   * The names are merged **under** the basket's own, so a key both know keeps the
-   * server's answer: this map is only ever filling a gap, never correcting one. When
-   * the gateway names every origin's list the merge becomes a no-op and this method
-   * and its signal can be deleted together, with nothing else changing shape.
-   */
-  rememberListNames(names: ReadonlyMap<string, string>): void {
-    if (names.size === 0) {
-      return;
-    }
-    this._learnedNames.update((held) => {
-      const next = new Map(held);
-      for (const [listId, name] of names) {
-        next.set(listId, name);
-      }
-      return next;
-    });
   }
 
   // --- The owner's share sheet ----------------------------------------------
@@ -1293,7 +934,7 @@ export class BasketStore {
   // --- Internals -------------------------------------------------------------
 
   /**
-   * Run one line write, marking the row busy and reporting a revocation.
+   * Run one row write, marking the row busy and reporting a revocation.
    *
    * Returns null rather than throwing when the write fails: the caller is a sheet
    * that has to close or stay open, and every failure this can suffer is already
@@ -1302,22 +943,22 @@ export class BasketStore {
    * ## Two failures are refetched before the caller hears about them
    *
    * `stale_quantity` says the number this write was moving is not where the control
-   * believed it started, which is two phones in one shop working one line. Every
+   * believed it started, which is two phones in one shop working one row. Every
    * screen that can raise it has the same answer: redraw at the number as it now
    * stands and say so beside it. So the refresh is awaited **here**, before null goes
-   * back, and the caller can read the true amount off the line the moment it has it.
+   * back, and the caller can read the true amount off the row the moment it has it.
    * Doing it in each caller would be the same three lines in two sheets, and the one
    * that forgot would draw a sentence over a stale number.
    *
    * `generated_list_finished` is the same shape of answer about the whole basket
-   * rather than one line (velista `0057`, section 7): the owner ended the trip while
+   * rather than one row (velista `0057`, section 7): the owner ended the trip while
    * this phone was in a shop, so the write that just refused is one of a screenful
    * that would all refuse the same way. Refetching turns the basket into the finished
    * one it now is, and the controls that refused go with it. A refusal that left them
    * sitting there would invite the same tap again.
    */
   private async _write<T>(
-    lineId: string,
+    rowKey: string,
     send: (id: string) => Promise<T>
   ): Promise<T | null> {
     const id = this._id;
@@ -1325,7 +966,7 @@ export class BasketStore {
       return null;
     }
 
-    this._busyLines.update((busy) => new Set(busy).add(lineId));
+    this._busyRows.update((busy) => new Set(busy).add(rowKey));
     try {
       return await send(id);
     } catch (error) {
@@ -1333,9 +974,9 @@ export class BasketStore {
       await this._rereadIfOvertaken(error);
       return null;
     } finally {
-      this._busyLines.update((busy) => {
+      this._busyRows.update((busy) => {
         const next = new Set(busy);
-        next.delete(lineId);
+        next.delete(rowKey);
         return next;
       });
     }
@@ -1395,7 +1036,7 @@ export class BasketStore {
    * moment, so the person is offered the join screen — where the link they still
    * have may let them back in — rather than a basket that refuses every tap.
    */
-  private _fail(generatedListId: string, error: unknown): void {
+  private _fail(basketId: string, error: unknown): void {
     this._error.set(error);
 
     if (hasResponse(error) && (error as { status: number }).status === 401) {
@@ -1404,8 +1045,8 @@ export class BasketStore {
       // person should be told so. No credential at all is a stranger who has
       // followed a link and simply has not joined yet, which is not a failure
       // and must not be reported as one.
-      const held = this._sessions.read(generatedListId);
-      this._sessions.forget(generatedListId);
+      const held = this._sessions.read(basketId);
+      this._sessions.forget(basketId);
       this._state.set(held === null ? 'needsJoin' : 'revoked');
       return;
     }

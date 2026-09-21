@@ -1,13 +1,12 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
-  outstanding,
-  type BasketAddLineRequest,
-  type BasketLine,
+  type Basket,
+  type BasketRow,
   type BasketSession,
   type BasketSettleRequest,
-  type BasketView,
 } from '@portfolio/velista/models';
+import { AppResumed } from '@portfolio/velista/platform';
 import { Subject } from 'rxjs';
 import { GatewayError } from '../errors';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
@@ -30,10 +29,16 @@ import { BasketStore } from './basket-store';
  * no visible symptom when it is wrong: both states render *something*, and the
  * wrong one is merely a lie.
  *
- * **`apply` merges rather than replaces**, because a line arriving from the
- * basket's room is redacted to the least privileged reader in it. Replacing
- * would take a privileged reader's "from" captions off the screen every time
- * somebody else settled something.
+ * **A write's answer is folded and never patched.** The store replaces the row by
+ * key and takes the counts whole, because every number on this screen is one the
+ * server sent (backend `0130`, section 4). `apply` and its merge are gone with the
+ * line events they existed for: a broadcast carries ids and no numbers now, so
+ * there is nothing to merge and the store reads again.
+ *
+ * **Three things make it read again**, and two of them are edges rather than
+ * events: the socket coming back and the app coming back. A reader that missed an
+ * edge cannot tell it happened, so both are counters and the store compares each
+ * against what it last acted on.
  */
 
 /** A session store over a plain object, so nothing here touches `localStorage`. */
@@ -84,6 +89,8 @@ class FakeSocket {
   readonly events = new Subject<RealtimeEvent>();
   readonly connected = signal(false);
   readonly revoked = signal(false);
+  /** Comings **back**, which the store reads as a reason to ask again. */
+  readonly reconnects = signal(0);
 
   readonly opened: string[] = [];
   closes = 0;
@@ -95,7 +102,13 @@ class FakeSocket {
   close(): void {
     this.closes += 1;
     this.connected.set(false);
+    this.reconnects.set(0);
   }
+}
+
+/** The app coming back, which the store reads the same way. */
+class FakeResumed {
+  readonly resumes = signal(0);
 }
 
 /**
@@ -108,25 +121,22 @@ class FakeSocket {
 function build(
   overrides: Partial<BasketServiceI> = {},
   sessions: FakeSessions = new FakeSessions(),
-  socket: FakeSocket = new FakeSocket()
-): { store: BasketStore; sessions: FakeSessions; socket: FakeSocket } {
+  socket: FakeSocket = new FakeSocket(),
+  resumed: FakeResumed = new FakeResumed()
+): {
+  store: BasketStore;
+  sessions: FakeSessions;
+  socket: FakeSocket;
+  resumed: FakeResumed;
+} {
   const memory = new BasketMemory();
   const service: BasketServiceI = {
     previewLink: (secret) => memory.previewLink(secret),
     join: (secret, name) => memory.join(secret, name),
     getBasket: () => memory.getBasket(),
-    settle: (id, lineId, body) => memory.settle(id, lineId, body),
-    reopen: (id, lineId) => memory.reopen(id, lineId),
-    splitLine: (id, lineId, body) => memory.splitLine(id, lineId, body),
-    renameLine: (id, lineId, body) => memory.renameLine(id, lineId, body),
-    setOutstanding: (id, lineId, body) =>
-      memory.setOutstanding(id, lineId, body),
-    getLineOrigins: (id, lineId) => memory.getLineOrigins(id, lineId),
-    setOriginQuantity: (id, lineId, body) =>
-      memory.setOriginQuantity(id, lineId, body),
-    setOriginSettled: (id, lineId, body) =>
-      memory.setOriginSettled(id, lineId, body),
-    addLine: (id, body) => memory.addLine(id, body),
+    settle: (id, rowKey, body) => memory.settle(id, rowKey, body),
+    revert: (id, rowKey, body) => memory.revert(id, rowKey, body),
+    renameRow: (id, rowKey, body) => memory.renameRow(id, rowKey, body),
     suggest: (id, query) => memory.suggest(id, query),
     listParticipants: () => memory.listParticipants(),
     refreshSocketToken: () => memory.refreshSocketToken(),
@@ -146,11 +156,21 @@ function build(
       { provide: BasketSessionStore, useValue: sessions },
       { provide: BASKET_SERVICE, useValue: service },
       { provide: BasketSocket, useValue: socket },
+      { provide: AppResumed, useValue: resumed },
       { provide: REALTIME_CLIENT, useExisting: RealtimeMemory },
     ],
   });
 
-  return { store: TestBed.inject(BasketStore), sessions, socket };
+  return { store: TestBed.inject(BasketStore), sessions, socket, resumed };
+}
+
+/** The row this basket holds under one name, which every write here addresses. */
+function rowOf(store: BasketStore, content: string): BasketRow {
+  const found = store.rows().find((row) => row.content === content);
+  if (found === undefined) {
+    throw new Error(`the fixture basket lost its ${content}`);
+  }
+  return found;
 }
 
 describe('BasketStore', () => {
@@ -160,56 +180,59 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
 
       expect(store.state()).toBe('ready');
-      expect(store.lines().length).toBeGreaterThan(0);
+      expect(store.rows().length).toBeGreaterThan(0);
       expect(store.me()).not.toBeNull();
     });
 
-    it('does not count a line the shop had none of as one somebody got', async () => {
-      // The header says "got", and got means bought. A NOT_AVAILABLE settle
-      // closes a line's outstanding amount without buying anything, so counting
-      // every finished line as one somebody got would claim a purchase that
-      // never happened — the same claim the row's caption is careful to avoid.
+    it('does not count a row the shop had none of as one somebody got', async () => {
+      // The header says "got", and got means bought. A `NOT_AVAILABLE` row is
+      // closed without anything being bought, so counting every finished row as
+      // one somebody got would claim a purchase that never happened — the same
+      // claim the row's caption is careful to avoid.
       const { store } = build();
       await store.open('basket-saturday');
 
-      const bread = store
-        .lines()
-        .find((line) => line.lastOutcome === 'NOT_AVAILABLE');
-      expect(bread).toBeDefined();
-      expect(outstanding(bread as BasketLine)).toBe(0);
-
+      expect(rowOf(store, 'Sourdough loaf').state).toBe('NOT_AVAILABLE');
       expect(store.progress().unavailable).toBe(1);
-      // Finished, and deliberately absent from `done`.
-      const finished = store
-        .lines()
-        .filter((line) => outstanding(line) === 0).length;
-      expect(store.progress().done).toBe(finished - 1);
+      expect(store.progress().done).toBe(0);
     });
 
-    it('counts progress in lines rather than in units', async () => {
-      // "Four things done out of twelve" is what somebody in a shop is tracking.
-      // A basket of one line asking for twelve tins would otherwise read as
-      // almost finished the moment one tin went in the trolley.
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      expect(store.progress().total).toBe(store.lines().length);
-    });
-
-    it('reports what the server said about zone data, never a guess', async () => {
+    /**
+     * The count is the **server's**, and this is what says so: the store reads it
+     * off the basket rather than walking the rows, which is the arithmetic backend
+     * `0130` section 4 took over.
+     */
+    it('takes the counts from the server rather than counting rows', async () => {
       const memory = new BasketMemory();
-      memory.seesZoneData = false;
       const { store } = build({
-        getBasket: () => memory.getBasket(),
+        getBasket: async () => ({
+          ...(await memory.getBasket()),
+          // Deliberately disagreeing with the rows, so a store that recounted
+          // would answer something else.
+          progress: { done: 7, unavailable: 0, total: 9 },
+          pending: 2,
+        }),
       });
       await store.open('basket-saturday');
 
-      expect(store.seesZoneData()).toBe(false);
-      // Redacted by omission, so the guest's line genuinely has no origins key
-      // rather than an empty one behind a flag.
-      expect(store.lines().every((line) => line.origins === undefined)).toBe(
-        true
-      );
+      expect(store.progress()).toEqual({ done: 7, unavailable: 0, total: 9 });
+      expect(store.pending()).toBe(2);
+    });
+
+    it('reports what the server served, never a guess', async () => {
+      const memory = new BasketMemory();
+      memory.servesLists = false;
+      const { store } = build({ getBasket: () => memory.getBasket() });
+      await store.open('basket-saturday');
+
+      // A guest is served no ref, so every entry they hold names no list: they
+      // know how much and never where.
+      expect(store.lists().size).toBe(0);
+      expect(
+        store
+          .rows()
+          .every((row) => row.entries.every((entry) => entry.listId === null))
+      ).toBe(true);
     });
   });
 
@@ -302,134 +325,107 @@ describe('BasketStore', () => {
       });
 
       await store.open('basket-saturday');
-      const before = store.lines().length;
+      const before = store.rows().length;
       await store.refresh();
 
       expect(store.state()).toBe('ready');
-      expect(store.lines()).toHaveLength(before);
+      expect(store.rows()).toHaveLength(before);
     });
   });
 
   describe('settling', () => {
-    it('folds the answer in, so the row is right before the refresh lands', async () => {
+    it('folds the answer in, so the row is right before any refresh lands', async () => {
       const { store } = build();
       await store.open('basket-saturday');
 
-      const milk = store.lines().find((line) => line.content === 'Milk');
-      if (milk === undefined) {
-        throw new Error('the fixture basket lost its milk');
-      }
-      await store.settle(milk.id, { outcome: 'BOUGHT' });
+      const milk = rowOf(store, 'Milk');
+      await store.settle(milk.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: milk.left,
+        from: milk.left,
+      });
 
-      const after = store.lines().find((line) => line.id === milk.id);
-      expect(after?.settled).toBe(milk.quantity);
+      const after = rowOf(store, 'Milk');
+      expect(after.bought).toBe(milk.left);
+      expect(after.left).toBe(0);
     });
 
-    it('reports a partial settle rather than swallowing it', async () => {
-      // Section 6.4: a shopper who has bought the thing has to be told an origin
-      // was missed, whether or not they may know whose it was.
+    /**
+     * **It takes the answer's counts whole and patches nothing.** Every number on
+     * this screen is one the server sent, so a store that added the units it just
+     * sent to the number it was holding would be a second arithmetic.
+     */
+    it('takes the counts from the answer rather than adjusting its own', async () => {
       const memory = new BasketMemory();
       const { store } = build({
         getBasket: () => memory.getBasket(),
-        settle: async (id, lineId, body) => {
-          const answered = await memory.settle(id, lineId, body);
-          return { ...answered, skippedCount: 1 };
-        },
+        settle: async (id, rowKey, body) => ({
+          ...(await memory.settle(id, rowKey, body)),
+          progress: { done: 5, unavailable: 1, total: 8 },
+          pending: 2,
+        }),
       });
       await store.open('basket-saturday');
 
-      const result = await store.settle(store.lines()[0].id, {
+      const milk = rowOf(store, 'Milk');
+      await store.settle(milk.rowKey, {
         outcome: 'BOUGHT',
+        quantity: 1,
+        from: milk.left,
+      });
+
+      expect(store.progress()).toEqual({ done: 5, unavailable: 1, total: 8 });
+      expect(store.pending()).toBe(2);
+    });
+
+    it('reports an entry a write could not reach rather than swallowing it', async () => {
+      // A shopper who has bought the thing has to be told something did not land,
+      // whether or not they may know whose list it was.
+      const memory = new BasketMemory();
+      const { store } = build({
+        getBasket: () => memory.getBasket(),
+        settle: async (id, rowKey, body) => ({
+          ...(await memory.settle(id, rowKey, body)),
+          skippedCount: 1,
+        }),
+      });
+      await store.open('basket-saturday');
+
+      const milk = rowOf(store, 'Milk');
+      const result = await store.settle(milk.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: milk.left,
       });
 
       expect(result?.skippedCount).toBe(1);
     });
 
-    it('marks the line busy while the write is out, and only that line', async () => {
+    it('marks the row busy while the write is out, and only that row', async () => {
       let release: (() => void) | undefined;
       const memory = new BasketMemory();
       const { store } = build({
         getBasket: () => memory.getBasket(),
-        settle: (id, lineId, body) =>
+        settle: (id, rowKey, body) =>
           new Promise((resolve) => {
-            release = () => resolve(memory.settle(id, lineId, body));
+            release = () => resolve(memory.settle(id, rowKey, body));
           }),
       });
       await store.open('basket-saturday');
 
-      const first = store.lines()[0];
-      const pending = store.settle(first.id, { outcome: 'BOUGHT' });
+      const first = store.rows()[0];
+      const pending = store.settle(first.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: first.left,
+      });
 
-      expect(store.busyLines().has(first.id)).toBe(true);
-      expect(store.busyLines().has(store.lines()[1].id)).toBe(false);
+      expect(store.busyRows().has(first.rowKey)).toBe(true);
+      expect(store.busyRows().has(store.rows()[1].rowKey)).toBe(false);
 
       release?.();
       await pending;
-      expect(store.busyLines().has(first.id)).toBe(false);
-    });
-  });
-
-  /**
-   * The merge that keeps a privileged reader's captions on screen.
-   *
-   * A broadcast into a basket room is redacted to the least privileged reader in
-   * it, because it cannot be projected per socket. The three gated fields do not
-   * move when a line is settled, so keeping the held ones is both correct and
-   * what stops the captions vanishing when somebody else settles something.
-   */
-  describe('apply', () => {
-    it('keeps the origins it already holds when a redacted line arrives', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      const held = store.lines().find((line) => line.origins !== undefined);
-      if (held === undefined) {
-        throw new Error('the fixture basket has no line with origins');
-      }
-
-      const redacted: BasketLine = { ...held, settled: 1 };
-      delete (redacted as { origins?: unknown }).origins;
-
-      store.apply(redacted);
-
-      const after = store.lines().find((line) => line.id === held.id);
-      expect(after?.settled).toBe(1);
-      expect(after?.origins).toEqual(held.origins);
-    });
-
-    it('takes newer origins when the line actually carries them', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      const held = store.lines().find((line) => line.origins !== undefined);
-      if (held === undefined) {
-        throw new Error('the fixture basket has no line with origins');
-      }
-      store.apply({ ...held, origins: [] });
-
-      expect(
-        store.lines().find((line) => line.id === held.id)?.origins
-      ).toEqual([]);
-    });
-
-    it('ignores a line for a basket that is not open', () => {
-      const { store } = build();
-      // Nothing loaded, so there is nothing to fold into. It must not invent a
-      // basket out of one line.
-      store.apply({
-        id: 'line-x',
-        content: 'Milk',
-        quantity: 1,
-        settled: 0,
-        pickId: null,
-        optionIds: [],
-        position: 0,
-        touchedBy: null,
-        touchedAt: null,
-        lastOutcome: null,
-      });
-
-      expect(store.basket()).toBeNull();
+      expect(store.busyRows().has(first.rowKey)).toBe(false);
     });
   });
 
@@ -498,244 +494,63 @@ describe('BasketStore', () => {
    * stopping that is what a live basket is for.
    */
   /**
-   * Renaming a line (velista `0084`, backend `0113`).
+   * Renaming a row (velista `0084`, backend `0113`).
    *
-   * The claim worth a spec is the merge: the line that goes away must leave the
-   * basket at once, whichever of the two it was, and so must a line another
-   * participant's rename took away.
+   * The claim worth a spec is the merge: the row that goes away must leave the
+   * basket at once, whichever of the two it was, and the answer's row is not
+   * always the row the rename addressed.
    */
-  describe('renaming a line', () => {
+  describe('renaming a row', () => {
     it('renames in place when the name is free', async () => {
       const { store } = build();
       await store.open('basket-saturday');
+      const eggs = rowOf(store, 'Eggs');
 
-      const result = await store.renameLine('line-eggs', {
+      const result = await store.renameRow(eggs.rowKey, {
         content: 'Free range eggs',
       });
 
-      expect(result?.absorbedLineId).toBeNull();
-      expect(store.lines().find((row) => row.id === 'line-eggs')?.content).toBe(
-        'Free range eggs'
-      );
+      expect(result?.absorbedRowKey).toBeNull();
+      expect(rowOf(store, 'Free range eggs').rowKey).toBe(eggs.rowKey);
     });
 
     it('answers null and keeps the question when the name is taken', async () => {
       const { store } = build();
       await store.open('basket-saturday');
-      const before = store.lines().length;
+      const before = store.rows().length;
 
-      const result = await store.renameLine('line-eggs', { content: 'milk' });
+      const result = await store.renameRow(rowOf(store, 'Eggs').rowKey, {
+        content: 'milk',
+      });
 
       expect(result).toBeNull();
-      expect(store.lines()).toHaveLength(before);
-      const error = store.error() as GatewayError;
-      expect(error.code).toBe('line_merge_required');
-      expect(error.details?.['basket']).toMatchObject({
-        otherLineId: 'line-milk',
-      });
+      expect(store.rows()).toHaveLength(before);
+      expect((store.error() as GatewayError).code).toBe('line_merge_required');
     });
 
-    it('removes the absorbed line at once and merges the survivor', async () => {
-      // Eggs sits after milk, so milk survives a merge and eggs is the one absorbed:
-      // the answer's line is not the line the rename addressed.
+    /**
+     * The earliest line survives, so the row the rename addressed can be the one
+     * that goes away: the answer names the survivor and `replacedRowKey` names the
+     * key the request used, and the store drops that one.
+     */
+    it('drops the absorbed row at once and folds the survivor', async () => {
       const { store } = build();
       await store.open('basket-saturday');
-      const milk = store.lines().find((row) => row.id === 'line-milk');
+      const eggs = rowOf(store, 'Eggs');
+      const before = store.rows().length;
 
-      const result = await store.renameLine('line-eggs', {
+      const result = await store.renameRow(eggs.rowKey, {
         content: 'milk',
         confirmMerge: true,
       });
 
-      expect(result?.absorbedLineId).toBe('line-eggs');
-      expect(result?.line.id).toBe('line-milk');
-      expect(store.lines().some((row) => row.id === 'line-eggs')).toBe(false);
-      expect(
-        store.lines().find((row) => row.id === 'line-milk')?.quantity
-      ).toBe((milk?.quantity ?? 0) + 12);
-    });
-
-    it('removes a line another participant’s rename took away', async () => {
-      const { store, socket } = build();
-      await store.open('basket-saturday');
-
-      socket.events.next({
-        type: 'generatedList.lineRemoved',
-        generatedListId: 'basket-saturday',
-        lineId: 'line-eggs',
-      });
-
-      expect(store.lines().some((row) => row.id === 'line-eggs')).toBe(false);
-    });
-
-    it('ignores a removal addressed to another basket', async () => {
-      const { store, socket } = build();
-      await store.open('basket-saturday');
-      const before = store.lines().length;
-
-      socket.events.next({
-        type: 'generatedList.lineRemoved',
-        generatedListId: 'somebody-elses-basket',
-        lineId: 'line-eggs',
-      });
-
-      expect(store.lines()).toHaveLength(before);
-    });
-  });
-
-  /**
-   * Plan 0053: a line added in a shop.
-   *
-   * Three claims, and each is a way the row could go wrong on somebody's phone: it
-   * arrives from the **server** rather than optimistically, it arrives **once**
-   * however many routes carried it, and somebody else's arrives at all.
-   */
-  describe('adding a line', () => {
-    it('appends what the server answered, at the end', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-      const before = store.lines().length;
-
-      const line = await store.addLine({ content: 'Batteries', quantity: 2 });
-
-      expect(line).not.toBeNull();
-      expect(store.lines()).toHaveLength(before + 1);
-      expect(store.lines()[before].content).toBe('Batteries');
-      // Written once, by the add, and it is what the row's caption reads.
-      expect(store.lines()[before].createdBy).not.toBeNull();
-    });
-
-    it('appends it once when the broadcast follows the answer', async () => {
-      // The add answers a line and the basket's room broadcasts the same one, so
-      // the person who typed it meets it twice. Without the id check they would
-      // have two rows for one thing, in a shop, on the screen they are working
-      // from.
-      const { store, socket } = build();
-      await store.open('basket-saturday');
-      const before = store.lines().length;
-
-      const line = await store.addLine({ content: 'Batteries' });
-      socket.events.next({
-        type: 'generatedList.lineAdded',
-        generatedListId: 'basket-saturday',
-        line: line as BasketLine,
-      });
-
-      expect(store.lines()).toHaveLength(before + 1);
-    });
-
-    /**
-     * The add answers the line alone, and the product map is composed per basket
-     * read, so a line added with a product drew "not linked to a product" until the
-     * next reload. The store re-reads when a line names a product it has not met.
-     */
-    it('re-reads the basket when the line names a product it has not been told about', async () => {
-      const inner = new BasketMemory();
-      let reads = 0;
-      const { store } = build({
-        getBasket: async () => {
-          reads += 1;
-          const basket = await inner.getBasket();
-          if (reads > 1) {
-            const [known] = basket.products.values();
-            basket.products.set('item-new', { ...known, id: 'item-new' });
-          }
-          return basket;
-        },
-        addLine: async (id, body) => ({
-          ...(await inner.addLine(id, body)),
-          pickId: body.itemId ?? null,
-          optionIds: [...(body.options ?? [])],
-        }),
-      });
-      await store.open('basket-saturday');
-      expect(reads).toBe(1);
-
-      // A product the first read already named: nothing to fetch.
-      const [known] = store.products().keys();
-      await store.addLine({
-        content: 'Milk',
-        itemId: known,
-        options: [known],
-      });
-      expect(reads).toBe(1);
-
-      await store.addLine({
-        content: 'Batteries',
-        itemId: 'item-new',
-        options: ['item-new'],
-      });
-
-      expect(reads).toBe(2);
-      // The re-read is not awaited by the add: the line is on screen already and
-      // the product follows it. Let the read land.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(store.products().has('item-new')).toBe(true);
-      expect(store.lines().at(-1)?.content).toBe('Batteries');
-    });
-
-    it('appends a line somebody else added, with no refetch', async () => {
-      const { store, socket } = build();
-      await store.open('basket-saturday');
-      const before = store.lines().length;
-
-      socket.events.next({
-        type: 'generatedList.lineAdded',
-        generatedListId: 'basket-saturday',
-        line: { ...store.lines()[0], id: 'line-theirs', content: 'Ice' },
-      });
-
-      expect(store.lines()).toHaveLength(before + 1);
-      expect(store.lastAdded()?.content).toBe('Ice');
-    });
-
-    it('ignores an append addressed to another basket', async () => {
-      const { store, socket } = build();
-      await store.open('basket-saturday');
-      const before = store.lines().length;
-
-      socket.events.next({
-        type: 'generatedList.lineAdded',
-        generatedListId: 'basket-somebody-elses',
-        line: { ...store.lines()[0], id: 'line-theirs' },
-      });
-
-      expect(store.lines()).toHaveLength(before);
-    });
-
-    it('answers null on a refusal, leaving the basket as it was', async () => {
-      // The caller has something to do with that null: put the text back in the
-      // field. Losing the item somebody just remembered in an aisle is the
-      // failure this screen cannot afford.
-      const memory = new BasketMemory();
-      memory.status = 'FINISHED';
-      const { store } = build({
-        addLine: (id, body) => memory.addLine(id, body),
-      });
-      await store.open('basket-saturday');
-      const before = store.lines().length;
-
-      const line = await store.addLine({ content: 'Batteries' });
-
-      expect(line).toBeNull();
-      expect(store.lines()).toHaveLength(before);
-    });
-
-    it('says a finished basket takes no lines', async () => {
-      const memory = new BasketMemory();
-      memory.status = 'FINISHED';
-      const { store } = build({ getBasket: () => memory.getBasket() });
-      await store.open('basket-saturday');
-
-      expect(store.takesLines()).toBe(false);
-    });
-
-    it('says nothing takes lines before anything has loaded', async () => {
-      // The safe direction: a field drawn for a frame over a basket that turns out
-      // to be finished is an invitation that cannot be honoured.
-      const { store } = build();
-
-      expect(store.takesLines()).toBe(false);
+      // The **survivor's** own spelling, which is the earliest line's: a merge
+      // folds the renamed row into the one already there rather than renaming it.
+      expect(result?.row.content).toBe('Milk');
+      expect(store.rows()).toHaveLength(before - 1);
+      expect(store.rows().some((row) => row.rowKey === eggs.rowKey)).toBe(
+        false
+      );
     });
   });
 
@@ -744,10 +559,10 @@ describe('BasketStore', () => {
    *
    * Found by the browser suite, in the order it happens in a shop: somebody joins,
    * the burst of events their arrival makes is coalesced into one re-read a second
-   * and a half later, and while that read is out the person holding the phone adds
-   * a line. The add answered first and its row was drawn. The read answered second,
-   * from before the add, and replaced the whole basket, so the row the shopper had
-   * just watched appear vanished with nothing on screen to say why.
+   * and a half later, and while that read is out the person holding the phone
+   * settles a row. The write answered first and its row was drawn. The read
+   * answered second, from before the write, and replaced the whole basket, so the
+   * row the shopper had just watched move went back to what it was.
    *
    * These drive it by hand rather than through the timer, because the timer is not
    * what makes the defect: a read that is out when something lands is.
@@ -767,10 +582,10 @@ describe('BasketStore', () => {
 
       return {
         counted,
-        getBasket: (): Promise<BasketView> => {
+        getBasket: (): Promise<Basket> => {
           counted.reads += 1;
           const answer = memory.getBasket();
-          return new Promise<BasketView>((resolve) => {
+          return new Promise<Basket>((resolve) => {
             waiting.push(() => resolve(answer));
           });
         },
@@ -786,140 +601,82 @@ describe('BasketStore', () => {
       };
     }
 
-    /** A store whose reads are held, opened and settled on its first answer. */
-    async function opened(overrides: Partial<BasketServiceI> = {}) {
+    it('asks again rather than applying an answer a write overtook', async () => {
       const memory = new BasketMemory();
-      const reads = holdReads(memory);
-      const built = build({
-        getBasket: reads.getBasket,
-        addLine: (id, body) => memory.addLine(id, body),
-        ...overrides,
-      });
-
-      const open = built.store.open('basket-saturday');
-      await reads.release();
-      await open;
-
-      return { ...built, memory, reads };
-    }
-
-    it('keeps a line the composer added, and asks again', async () => {
-      const { store, reads } = await opened();
-      const before = store.lines().length;
-
-      // The coalesced re-read goes out first, and is still out when the aisle line
-      // is typed.
-      const refreshed = store.refresh();
-      const line = await store.addLine({ content: 'Batteries' });
-      expect(line).not.toBeNull();
-      expect(store.lines()).toHaveLength(before + 1);
-
-      // The read answers, from before the add. Nothing of it is applied.
-      await reads.release();
-      expect(store.lines()).toHaveLength(before + 1);
-      expect(store.lines().at(-1)?.content).toBe('Batteries');
-      // And the store went back and asked again rather than living with an answer
-      // it knows is old.
-      expect(reads.counted.reads).toBe(3);
-
-      await reads.release();
-      await refreshed;
-      expect(store.lines().some((row) => row.content === 'Batteries')).toBe(
-        true
-      );
-    });
-
-    it('keeps a line somebody else added over the socket', async () => {
-      const { store, socket, memory, reads } = await opened();
-      const before = store.lines().length;
-
-      // The read goes out, and the other phone's add reaches the basket and then
-      // this screen while it is still out.
-      const refreshed = store.refresh();
-      const theirs = await memory.addLine('basket-saturday', {
-        content: 'Ice',
-      });
-      socket.events.next({
-        type: 'generatedList.lineAdded',
-        generatedListId: 'basket-saturday',
-        line: theirs,
-      });
-      expect(store.lines()).toHaveLength(before + 1);
-
-      await reads.release();
-      expect(store.lines().some((row) => row.id === theirs.id)).toBe(true);
-      expect(reads.counted.reads).toBe(3);
-
-      await reads.release();
-      await refreshed;
-      expect(store.lines().some((row) => row.id === theirs.id)).toBe(true);
-    });
-
-    it('asks once and applies the answer when nothing landed while it was out', async () => {
-      // The ordinary case, and the one the loop must not turn into a second
-      // request: a read that nothing overtook is the answer.
-      const { store, reads } = await opened();
-
-      const refreshed = store.refresh();
-      await reads.release();
-      await refreshed;
-
-      expect(reads.counted.reads).toBe(2);
-      expect(store.state()).toBe('ready');
-    });
-
-    it('resolves only once an answer that is not old has been applied', async () => {
-      // Several writes await this before they answer their caller, because the
-      // caller reads the true amount off the line the moment it has it (velista
-      // `0057`, section 6). A promise that resolved on the discarded answer would
-      // hand them the basket from before their own write.
-      const { store, reads } = await opened();
-      let settled = false;
-      const refreshed = store.refresh().then(() => {
-        settled = true;
-      });
-
-      await store.addLine({ content: 'Batteries' });
-      await reads.release();
-      expect(settled).toBe(false);
-
-      await reads.release();
-      await refreshed;
-      expect(settled).toBe(true);
-      expect(store.lines().some((row) => row.content === 'Batteries')).toBe(
-        true
-      );
-    });
-
-    it('ends the loop on a failure rather than asking forever', async () => {
-      const memory = new BasketMemory();
-      let reads = 0;
+      const held = holdReads(memory);
       const { store } = build({
-        getBasket: () => {
-          reads += 1;
-          return reads === 1
-            ? memory.getBasket()
-            : Promise.reject(
-                new GatewayError({
-                  code: 'internal',
-                  status: 500,
-                  correlationId: 'spec',
-                })
-              );
-        },
-        addLine: (id, body) => memory.addLine(id, body),
+        getBasket: held.getBasket,
+        settle: (id, rowKey, body) => memory.settle(id, rowKey, body),
       });
-      await store.open('basket-saturday');
 
-      await store.addLine({ content: 'Batteries' });
-      await store.refresh();
+      const opening = store.open('basket-saturday');
+      await held.release();
+      await opening;
 
-      expect(reads).toBe(2);
-      // The basket already drawn stays drawn, which is `_fail`'s rule untouched.
-      expect(store.state()).toBe('ready');
-      expect(store.lines().some((row) => row.content === 'Batteries')).toBe(
-        true
-      );
+      // A read goes out, and a settle lands while it is still out.
+      const reading = store.refresh();
+      const eggs = rowOf(store, 'Eggs');
+      await store.settle(eggs.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: eggs.left,
+      });
+
+      // The stale answer is dropped and the read goes round again.
+      const before = held.counted.reads;
+      await held.release();
+      expect(held.counted.reads).toBe(before + 1);
+
+      await held.release();
+      await reading;
+      expect(rowOf(store, 'Eggs').bought).toBe(eggs.bought + 1);
+    });
+
+    /**
+     * Two callers at once collapse into one read with at most one queued behind
+     * it, because a caller that arrived while a read was out is not served by that
+     * read: it left before they asked.
+     */
+    it('collapses two refreshes into one read and one queued behind it', async () => {
+      const memory = new BasketMemory();
+      const held = holdReads(memory);
+      const { store } = build({ getBasket: held.getBasket });
+
+      const opening = store.open('basket-saturday');
+      await held.release();
+      await opening;
+
+      const first = store.refresh();
+      const second = store.refresh();
+      await held.release();
+      await held.release();
+      await Promise.all([first, second]);
+
+      // The open's read, the first refresh, and one more for the caller that
+      // arrived while it was out.
+      expect(held.counted.reads).toBe(3);
+    });
+
+    /**
+     * A read that is still out was asked for the basket being let go, so `leave`
+     * disowns it: the next visit starts one of its own rather than waiting on an
+     * answer nothing will apply.
+     */
+    it('drops an answer for a basket the screen has since left', async () => {
+      const memory = new BasketMemory();
+      const held = holdReads(memory);
+      const { store } = build({ getBasket: held.getBasket });
+
+      const opening = store.open('basket-saturday');
+      await held.release();
+      await opening;
+
+      const reading = store.refresh();
+      store.leave();
+      await held.release();
+      await reading;
+
+      expect(store.basket()).toBeNull();
     });
   });
 
@@ -939,7 +696,7 @@ describe('BasketStore', () => {
       await store.open('basket-saturday');
 
       expect(store.finished()).toBe(true);
-      expect(store.takesLines()).toBe(false);
+      expect(store.isOpen()).toBe(false);
     });
 
     it('says nothing at all before the first read lands', async () => {
@@ -948,7 +705,7 @@ describe('BasketStore', () => {
       // a banner claiming a trip is over while it is still asking what the trip is.
       const { store } = build();
 
-      expect(store.takesLines()).toBe(false);
+      expect(store.isOpen()).toBe(false);
       expect(store.finished()).toBe(false);
     });
 
@@ -959,16 +716,19 @@ describe('BasketStore', () => {
       expect(store.finished()).toBe(false);
     });
 
-    it('counts the lines nobody settled, for the sheet warning', async () => {
-      const { store } = build();
+    /**
+     * **The server's count, read and never worked out.** A `SKIPPED` row is
+     * pending and this side has no way to know that, which is why the store reads
+     * `pending` rather than subtracting the three numbers beside it.
+     */
+    it('reads the pending count the server sent, for the sheet warning', async () => {
+      const memory = new BasketMemory();
+      const { store } = build({
+        getBasket: async () => ({ ...(await memory.getBasket()), pending: 7 }),
+      });
       await store.open('basket-saturday');
 
-      const stillOutstanding = store
-        .lines()
-        .filter((line) => outstanding(line) > 0).length;
-
-      expect(store.unsettled()).toBe(stillOutstanding);
-      expect(stillOutstanding).toBeGreaterThan(0);
+      expect(store.pending()).toBe(7);
     });
 
     /**
@@ -1011,17 +771,14 @@ describe('BasketStore', () => {
       }
     });
 
-    it('counts nothing outstanding once every line is finished', async () => {
-      const { store } = build();
+    it('counts nothing pending once the server says so', async () => {
+      const memory = new BasketMemory();
+      const { store } = build({
+        getBasket: async () => ({ ...(await memory.getBasket()), pending: 0 }),
+      });
       await store.open('basket-saturday');
 
-      for (const line of store.lines()) {
-        if (outstanding(line) > 0) {
-          await store.settle(line.id, { outcome: 'BOUGHT' });
-        }
-      }
-
-      expect(store.unsettled()).toBe(0);
+      expect(store.pending()).toBe(0);
     });
   });
 
@@ -1046,10 +803,13 @@ describe('BasketStore', () => {
             reads.push(1);
             return memory.getBasket();
           },
-          settle: (id: string, lineId: string, body: BasketSettleRequest) =>
-            memory.settle(id, lineId, body),
-          addLine: (id: string, body: BasketAddLineRequest) =>
-            memory.addLine(id, body),
+          settle: (id: string, rowKey: string, body: BasketSettleRequest) =>
+            memory.settle(id, rowKey, body),
+          revert: (
+            id: string,
+            rowKey: string,
+            body: Parameters<BasketMemory['revert']>[2]
+          ) => memory.revert(id, rowKey, body),
         },
       };
     }
@@ -1062,8 +822,13 @@ describe('BasketStore', () => {
       let told = -1;
 
       memory.status = 'FINISHED';
+      const milk = rowOf(store, 'Milk');
       const result = await store
-        .settle('line-milk', { outcome: 'BOUGHT' })
+        .settle(milk.rowKey, {
+          outcome: 'BOUGHT',
+          quantity: 1,
+          from: milk.left,
+        })
         .then((answer) => {
           told = reads.length;
           return answer;
@@ -1081,18 +846,23 @@ describe('BasketStore', () => {
       );
     });
 
-    it('does the same for the composer, which is a write like any other', async () => {
+    it('does the same for a revert, which is a write like any other', async () => {
       const { memory, reads, service } = underneath();
       const { store } = build(service);
       await store.open('basket-saturday');
       const readsAfterOpen = reads.length;
+      const eggs = rowOf(store, 'Eggs');
 
       memory.status = 'FINISHED';
-      const line = await store.addLine({ content: 'Batteries' });
+      const result = await store.revert(eggs.rowKey, {
+        target: 'UNITS',
+        units: 1,
+        from: eggs.bought,
+      });
 
-      expect(line).toBeNull();
+      expect(result).toBeNull();
       expect(reads.length).toBe(readsAfterOpen + 1);
-      expect(store.takesLines()).toBe(false);
+      expect(store.isOpen()).toBe(false);
     });
   });
 
@@ -1124,103 +894,137 @@ describe('BasketStore', () => {
       // The same instance is handed back on the next visit, since the injector holding
       // it was never destroyed. So leaving must not unsubscribe: a second basket with
       // a live socket and nothing listening to it is the same bug one screen later.
-      const { store, socket } = build();
-      await store.open('basket-saturday');
-      store.leave();
+      jest.useFakeTimers();
+      try {
+        let reads = 0;
+        const memory = new BasketMemory();
+        const { store, socket } = build({
+          getBasket: () => {
+            reads += 1;
+            return memory.getBasket();
+          },
+        });
+        await store.open('basket-saturday');
+        store.leave();
 
-      await store.open('basket-saturday');
-      const held = store.lines()[0];
-      socket.events.next({
-        type: 'generatedList.lineSettled',
-        generatedListId: 'basket-saturday',
-        line: { ...held, settled: held.settled + 1 },
-      });
+        await store.open('basket-saturday');
+        const readsAfterOpen = reads;
+        socket.events.next({
+          type: 'basket.linesChanged',
+          lineIds: ['zl-1'],
+        });
 
-      expect(socket.opened).toEqual(['basket-saturday', 'basket-saturday']);
-      expect(store.lines()[0].settled).toBe(held.settled + 1);
+        jest.advanceTimersByTime(2000);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(socket.opened).toEqual(['basket-saturday', 'basket-saturday']);
+        expect(reads).toBe(readsAfterOpen + 1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    /**
+     * A broadcast carries **ids and no numbers** (backend `0130`, section 6), and a
+     * row is a group the server computes, so a line id does not even say which row
+     * moved. There is nothing to merge and the only honest answer is to ask.
+     */
+    it('reads the basket again on basket.linesChanged rather than merging it', async () => {
+      jest.useFakeTimers();
+      try {
+        let reads = 0;
+        const memory = new BasketMemory();
+        const { store, socket } = build({
+          getBasket: () => {
+            reads += 1;
+            return memory.getBasket();
+          },
+        });
+        await store.open('basket-saturday');
+        const readsAfterOpen = reads;
+
+        socket.events.next({
+          type: 'basket.linesChanged',
+          lineIds: ['zl-1', 'zl-3'],
+        });
+
+        // Nothing at once: a shop full of people settling rows is a stream of
+        // these, and a request each would be a request per tin of tomatoes.
+        expect(reads).toBe(readsAfterOpen);
+
+        jest.advanceTimersByTime(2000);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(reads).toBe(readsAfterOpen + 1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('costs one read for a burst of three', async () => {
+      jest.useFakeTimers();
+      try {
+        let reads = 0;
+        const memory = new BasketMemory();
+        const { store, socket } = build({
+          getBasket: () => {
+            reads += 1;
+            return memory.getBasket();
+          },
+        });
+        await store.open('basket-saturday');
+        const readsAfterOpen = reads;
+
+        for (const lineId of ['zl-1', 'zl-2', 'zl-3']) {
+          socket.events.next({
+            type: 'basket.linesChanged',
+            lineIds: [lineId],
+          });
+        }
+
+        jest.advanceTimersByTime(2000);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(reads).toBe(readsAfterOpen + 1);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('drops an event that arrives after the screen was left', async () => {
       // A broadcast can be in flight while somebody walks out of the screen, and the
-      // socket is closed rather than instantly silent. Applying it would refetch a
+      // socket is closed rather than instantly silent. Acting on it would read a
       // basket nobody is looking at.
-      const { store, socket } = build();
-      await store.open('basket-saturday');
-      const held = store.lines()[0];
+      jest.useFakeTimers();
+      try {
+        let reads = 0;
+        const memory = new BasketMemory();
+        const { store, socket } = build({
+          getBasket: () => {
+            reads += 1;
+            return memory.getBasket();
+          },
+        });
+        await store.open('basket-saturday');
+        const readsAfterOpen = reads;
 
-      store.leave();
-      socket.events.next({
-        type: 'generatedList.lineSettled',
-        generatedListId: 'basket-saturday',
-        line: { ...held, settled: held.settled + 1 },
-      });
+        store.leave();
+        socket.events.next({
+          type: 'basket.linesChanged',
+          lineIds: ['zl-1'],
+        });
 
-      expect(store.basket()).toBeNull();
-    });
+        jest.advanceTimersByTime(2000);
+        await Promise.resolve();
 
-    it('merges a settled line off the room with no refetch', async () => {
-      let reads = 0;
-      const memory = new BasketMemory();
-      const { store, socket } = build({
-        getBasket: () => {
-          reads += 1;
-          return memory.getBasket();
-        },
-      });
-      await store.open('basket-saturday');
-      const readsAfterOpen = reads;
-
-      const held = store.lines()[0];
-      socket.events.next({
-        type: 'generatedList.lineSettled',
-        generatedListId: 'basket-saturday',
-        line: { ...held, settled: held.settled + 1 },
-      });
-
-      expect(store.lines()[0].settled).toBe(held.settled + 1);
-      // The whole point: one row moved and nothing was asked of the server.
-      expect(reads).toBe(readsAfterOpen);
-    });
-
-    it('keeps the origins it holds when the line off the room is redacted', async () => {
-      // `apply` is tested for this directly; this asserts it on the path a redacted
-      // line actually arrives on. A broadcast cannot be projected per socket, so it
-      // carries the least privileged reader's view of the line, and a privileged
-      // reader must not lose their "from" captions when somebody else settles.
-      const { store, socket } = build();
-      await store.open('basket-saturday');
-
-      const held = store.lines().find((line) => line.origins !== undefined);
-      if (held === undefined) {
-        throw new Error('the fixture basket has no line with origins');
+        expect(store.basket()).toBeNull();
+        expect(reads).toBe(readsAfterOpen);
+      } finally {
+        jest.useRealTimers();
       }
-
-      const redacted: BasketLine = { ...held, settled: 1 };
-      delete (redacted as { origins?: unknown }).origins;
-
-      socket.events.next({
-        type: 'generatedList.lineSettled',
-        generatedListId: 'basket-saturday',
-        line: redacted,
-      });
-
-      const after = store.lines().find((line) => line.id === held.id);
-      expect(after?.settled).toBe(1);
-      expect(after?.origins).toEqual(held.origins);
-    });
-
-    it('ignores an event about a different basket', async () => {
-      const { store, socket } = build();
-      await store.open('basket-saturday');
-
-      const held = store.lines()[0];
-      socket.events.next({
-        type: 'generatedList.lineUpdated',
-        generatedListId: 'somebody-elses-basket',
-        line: { ...held, settled: held.settled + 5 },
-      });
-
-      expect(store.lines()[0].settled).toBe(held.settled);
     });
 
     it('still settles and still refetches with no socket at all', async () => {
@@ -1241,24 +1045,132 @@ describe('BasketStore', () => {
 
       expect(store.live()).toBe(false);
 
-      const milk = store.lines().find((line) => line.content === 'Milk');
-      if (milk === undefined) {
-        throw new Error('the fixture basket lost its milk');
-      }
-      const result = await store.settle(milk.id, { outcome: 'BOUGHT' });
+      const milk = rowOf(store, 'Milk');
+      const result = await store.settle(milk.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: milk.left,
+        from: milk.left,
+      });
 
       expect(result).not.toBeNull();
-      expect(store.lines().find((line) => line.id === milk.id)?.settled).toBe(
-        milk.quantity
-      );
+      expect(rowOf(store, 'Milk').bought).toBe(milk.left);
 
-      // And the refetch `0035` makes on resume, which is the other half of what
-      // keeps a basket with no room current.
+      // And the read the resume makes, which is the other half of what keeps a
+      // basket with no room current.
       const before = reads;
       await store.refresh();
       expect(reads).toBe(before + 1);
       expect(store.state()).toBe('ready');
       expect(socket.opened).toEqual(['basket-saturday']);
+    });
+
+    /**
+     * Coming back, from a socket or from a pocket (velista `0090`, section 7.1).
+     *
+     * **The room is rejoined, not replayed.** Everything that happened while the
+     * socket was down was broadcast to a room this socket was not in, and a phone
+     * that spent ten minutes in a pocket missed the same window. So each is a
+     * single edge after a gap in which anything may have happened, and each reads
+     * **at once** rather than through the coalescing timer: a second and a half of
+     * a stale basket after a phone wakes is the delay this exists to remove.
+     *
+     * Before this plan `BasketSocket._onConnected` set a flag and a health timer
+     * and nothing else, and two comments claimed the screen read again on resume
+     * while no code did.
+     */
+    describe('coming back', () => {
+      function counting() {
+        let reads = 0;
+        const memory = new BasketMemory();
+        return {
+          reads: () => reads,
+          service: {
+            getBasket: () => {
+              reads += 1;
+              return memory.getBasket();
+            },
+          },
+        };
+      }
+
+      it('reads again when the socket comes back', async () => {
+        const counted = counting();
+        const { store, socket } = build(counted.service);
+        await store.open('basket-saturday');
+        const readsAfterOpen = counted.reads();
+
+        socket.reconnects.set(1);
+        TestBed.flushEffects();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(counted.reads()).toBe(readsAfterOpen + 1);
+      });
+
+      it('reads again when the app comes back', async () => {
+        const counted = counting();
+        const resumed = new FakeResumed();
+        const { store } = build(
+          counted.service,
+          new FakeSessions(),
+          new FakeSocket(),
+          resumed
+        );
+        await store.open('basket-saturday');
+        const readsAfterOpen = counted.reads();
+
+        resumed.resumes.set(1);
+        TestBed.flushEffects();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(counted.reads()).toBe(readsAfterOpen + 1);
+      });
+
+      /**
+       * Both counters start at zero, which is what stops the first frame of a
+       * visit from looking like a coming back: the effect's first run finds
+       * nothing moved.
+       */
+      it('reads nothing extra on the first connect', async () => {
+        const counted = counting();
+        const { store, socket } = build(counted.service);
+        await store.open('basket-saturday');
+        const readsAfterOpen = counted.reads();
+
+        socket.connected.set(true);
+        TestBed.flushEffects();
+        await Promise.resolve();
+
+        expect(counted.reads()).toBe(readsAfterOpen);
+      });
+
+      /**
+       * The route injector is never destroyed by the router, so this effect
+       * outlives the page. It must do nothing while no basket is open, or a
+       * resume would read a basket nobody is looking at.
+       */
+      it('reads nothing at all with no basket open', async () => {
+        const counted = counting();
+        const resumed = new FakeResumed();
+        const { store, socket } = build(
+          counted.service,
+          new FakeSessions(),
+          new FakeSocket(),
+          resumed
+        );
+        await store.open('basket-saturday');
+        store.leave();
+        const readsAfterLeave = counted.reads();
+
+        socket.reconnects.set(1);
+        resumed.resumes.set(1);
+        TestBed.flushEffects();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(counted.reads()).toBe(readsAfterLeave);
+      });
     });
 
     it('shows who is present only while the socket is up', async () => {
@@ -1323,526 +1235,192 @@ describe('BasketStore', () => {
    * caller hears about it**, the names learned from a sheet fill a gap in the basket
    * read without ever correcting it, and both stopgaps go when the basket does.
    */
-  describe('the line writes that carry a `from`', () => {
-    it('raises the amount without buying anything', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
+});
 
-      const before = store.lines().find((row) => row.id === 'line-milk');
-      const result = await store.setOutstanding('line-milk', 5, 3);
-
-      expect(result).not.toBeNull();
-      const after = store.lines().find((row) => row.id === 'line-milk');
-      expect(after?.quantity).toBe((before?.quantity ?? 0) + 2);
-      // Nothing was bought, so no outcome is written: raising what is still to get
-      // is not a purchase, and a bought indicator on it would claim one.
-      expect(after?.settled).toBe(before?.settled);
-      expect(after?.lastOutcome).toBeNull();
+/**
+ * The row reel's one call (velista `0090`, section 6).
+ *
+ * **The client never decides whether a drag was a purchase or a take back.** It
+ * sends where the gesture ended and where it believed it began, and `setLeft` is
+ * the one place that pair becomes a settle or a revert, so the row, the entries
+ * pane and the page cannot disagree about which.
+ */
+describe('BasketStore: moving a row’s reel', () => {
+  it('settles the difference when the reel goes down', async () => {
+    const sent: unknown[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      settle: (id, rowKey, body) => {
+        sent.push({ rowKey, body });
+        return memory.settle(id, rowKey, body);
+      },
     });
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
 
-    it('records the difference as bought when the amount goes down', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
+    await store.setLeft(milk.rowKey, milk.left - 2, milk.left);
 
-      await store.setOutstanding('line-milk', 1, 3);
-
-      const after = store.lines().find((row) => row.id === 'line-milk');
-      expect(after?.settled).toBe(2);
-      expect(after?.lastOutcome).toBe('BOUGHT');
-    });
-
-    it('refetches before it answers when the number moved underneath', async () => {
-      // The property with no visible symptom. `stale_quantity` means somebody else
-      // moved this line, and the screen's answer is the number as it now stands with
-      // a sentence beside it. If the refresh happened after the caller was told, the
-      // sentence would be drawn over the old number for a frame and read as a lie.
-      const memory = new BasketMemory();
-      const reads: number[] = [];
-      let told = -1;
-
-      const { store } = build({
-        getBasket: () => {
-          reads.push(1);
-          return memory.getBasket();
-        },
-        setOutstanding: (id, lineId, body) =>
-          memory.setOutstanding(id, lineId, body),
-      });
-      await store.open('basket-saturday');
-      const readsAfterOpen = reads.length;
-
-      // A `from` that is not what the line says, which is the whole of the refusal.
-      const result = await store
-        .setOutstanding('line-milk', 1, 99)
-        .then((answer) => {
-          told = reads.length;
-          return answer;
-        });
-
-      expect(result).toBeNull();
-      expect(told).toBe(readsAfterOpen + 1);
-      // And the failure is still there to be named, rather than cleared by the read
-      // that followed it.
-      expect(store.error()).toBeInstanceOf(GatewayError);
-      expect((store.error() as GatewayError).code).toBe('stale_quantity');
-    });
-
-    it('refuses a contribution under what has already been bought', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      // The eggs have two bought against their one origin, so one is under the floor.
-      const result = await store.setOriginQuantity('line-eggs', {
-        listId: 'list-weekly',
-        lineId: 'zl-3',
-        quantity: 1,
-        from: 12,
-      });
-
-      expect(result).toBeNull();
-      expect((store.error() as GatewayError).code).toBe('below_settled');
-    });
-
-    it('never records a purchase when a contribution changes', async () => {
-      // The rule the whole units sheet rests on: moving a household's share is not
-      // buying anything, either way.
-      const { store } = build();
-      await store.open('basket-saturday');
-      const before = store.lines().find((row) => row.id === 'line-eggs');
-
-      await store.setOriginQuantity('line-eggs', {
-        listId: 'list-weekly',
-        lineId: 'zl-3',
-        quantity: 14,
-        from: 12,
-      });
-
-      const after = store.lines().find((row) => row.id === 'line-eggs');
-      expect(after?.quantity).toBe((before?.quantity ?? 0) + 2);
-      expect(after?.settled).toBe(before?.settled);
-      expect(after?.lastOutcome).toBe(before?.lastOutcome);
-    });
+    expect(sent).toEqual([
+      {
+        rowKey: milk.rowKey,
+        body: { outcome: 'BOUGHT', quantity: 2, from: milk.left },
+      },
+    ]);
   });
 
   /**
-   * What one list **got** (velista `0073`, backend `0104` section 4).
-   *
-   * The opposite of the block above and asserted beside it, because the one thing a
-   * reader has to be able to see at a glance is that these two calls do opposite
-   * things to the same row: that one never buys and this one always does.
+   * A revert names the row's `bought` and not its `left`, because that is the
+   * number it takes from (backend `0136`, section 5.2).
    */
-  describe('setting what one list got', () => {
-    it('records the purchase and folds the answered line into the basket', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      const result = await store.setOriginSettled('line-eggs', {
-        lineId: 'zl-3',
-        settled: 5,
-        from: 2,
-      });
-
-      expect(result?.origin?.settledHere).toBe(5);
-      expect(store.lines().find((row) => row.id === 'line-eggs')?.settled).toBe(
-        5
-      );
+  it('reverts the difference when the reel goes up', async () => {
+    const sent: unknown[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      revert: (id, rowKey, body) => {
+        sent.push({ rowKey, body });
+        return memory.revert(id, rowKey, body);
+      },
     });
+    await store.open('basket-saturday');
+    const eggs = rowOf(store, 'Eggs');
 
-    it('refuses a `from` that is not where the number stands', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
+    await store.setLeft(eggs.rowKey, eggs.left + 1, eggs.left);
 
-      const result = await store.setOriginSettled('line-eggs', {
-        lineId: 'zl-3',
-        settled: 5,
-        from: 0,
-      });
-
-      expect(result).toBeNull();
-      expect((store.error() as GatewayError).code).toBe('stale_quantity');
-    });
-
-    it('marks the row busy while the write is out', async () => {
-      // Through `_write` like every other write here, which is what greys the row
-      // one screen up rather than letting two gestures race on one line.
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      const pending = store.setOriginSettled('line-eggs', {
-        lineId: 'zl-3',
-        settled: 3,
-        from: 2,
-      });
-      expect(store.busyLines().has('line-eggs')).toBe(true);
-
-      await pending;
-      expect(store.busyLines().has('line-eggs')).toBe(false);
-    });
+    expect(sent).toEqual([
+      {
+        rowKey: eggs.rowKey,
+        body: { target: 'UNITS', units: 1, from: eggs.bought },
+      },
+    ]);
   });
 
-  describe('the names a sheet learns', () => {
-    it('names a list the basket read never mentioned', async () => {
-      // The stopgap for the gap: `sourceNames` is built from the run's own snapshot,
-      // so a household the run did not draw from has no name on the basket at all
-      // and the row's "from" caption would draw a word and stop.
-      const { store } = build();
-      await store.open('basket-saturday');
-      expect(store.listNames().has('list-office')).toBe(false);
-
-      await store.loadLineOrigins('line-milk');
-
-      expect(store.listNames().get('list-office')).toBe(
-        'Office kitchen · The studio'
-      );
+  /** A reel dropped where it was picked up is not a gesture, and costs no request. */
+  it('sends nothing at all when the reel lands where it started', async () => {
+    let writes = 0;
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      settle: (id, rowKey, body) => {
+        writes += 1;
+        return memory.settle(id, rowKey, body);
+      },
+      revert: (id, rowKey, body) => {
+        writes += 1;
+        return memory.revert(id, rowKey, body);
+      },
     });
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
 
-    it('lets the basket win on a list they both name', async () => {
-      // It fills a gap and never corrects one. When the gateway names every origin's
-      // list the merge becomes a no-op, which is exactly what this asserts already.
-      const { store } = build();
-      await store.open('basket-saturday');
-      const served = store.listNames().get('list-weekly');
+    const result = await store.setLeft(milk.rowKey, milk.left, milk.left);
 
-      await store.loadLineOrigins('line-milk');
-
-      expect(store.listNames().get('list-weekly')).toBe(served);
-    });
-
-    it('learns the lists holding none of it as well', async () => {
-      // The third collection is the one the send sheet's picker used to read, and
-      // it is exactly the set the basket cannot name: raising one of them puts a
-      // household on the line that the run never drew from.
-      const { store } = build();
-      await store.open('basket-saturday');
-      const added = await store.addLine({ content: 'Foil' });
-
-      const answer = await store.loadLineOrigins(added?.id ?? '');
-
-      expect(answer?.others.length).toBeGreaterThan(2);
-      expect(store.listNames().get('list-shared')).toBe(
-        'Shared shelf · Housemates'
-      );
-    });
-
-    it('forgets both stopgaps when the basket is left', async () => {
-      // Carrying either into the next basket would caption its rows with a household
-      // from the last one, or say a line of it is waiting for approval.
-      const { store } = build();
-      await store.open('basket-saturday');
-      await store.loadLineOrigins('line-milk');
-      const added = await store.addLine({ content: 'Foil' });
-      await store.setOriginQuantity(added?.id ?? '', {
-        listId: 'list-groceries',
-        quantity: 1,
-        from: 0,
-      });
-
-      expect(store.pendingTargets().size).toBe(1);
-      expect(store.listNames().size).toBeGreaterThan(0);
-
-      store.leave();
-
-      expect(store.pendingTargets().size).toBe(0);
-      expect(store.listNames().size).toBe(0);
-    });
-  });
-
-  describe('raising a list that was asking for none', () => {
-    it('remembers that the line it created is waiting to be agreed to', async () => {
-      // Read off the answered origin's approval and nowhere else: no field of the
-      // line carries it, so this is the only moment anything can say so, and it is
-      // the moment somebody is standing there waiting to be told.
-      const { store } = build();
-      await store.open('basket-saturday');
-      const added = await store.addLine({ content: 'Foil' });
-
-      const result = await store.setOriginQuantity(added?.id ?? '', {
-        listId: 'list-groceries',
-        quantity: 1,
-        from: 0,
-      });
-
-      expect(result?.origin?.approvalStatus).toBe('PENDING');
-      expect(store.pendingTargets().has(added?.id ?? '')).toBe(true);
-    });
-
-    it('says nothing is waiting for a list that accepts on its own', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-      const added = await store.addLine({ content: 'Foil' });
-
-      const result = await store.setOriginQuantity(added?.id ?? '', {
-        listId: 'list-weekly',
-        quantity: 1,
-        from: 0,
-      });
-
-      expect(result?.origin?.approvalStatus).toBe('APPROVED');
-      expect(store.pendingTargets().size).toBe(0);
-    });
-
-    it('folds the line back in, so the basket carries the new origin', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-      const added = await store.addLine({ content: 'Foil', quantity: 2 });
-
-      await store.setOriginQuantity(added?.id ?? '', {
-        listId: 'list-weekly',
-        quantity: 2,
-        from: 0,
-      });
-
-      const after = store.lines().find((row) => row.id === added?.id);
-      expect(after?.origins?.map((origin) => origin.listId)).toEqual([
-        'list-weekly',
-      ]);
-    });
-
-    it('refuses a second raise of the same list, and says which refusal it was', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-      const added = await store.addLine({ content: 'Foil' });
-      await store.setOriginQuantity(added?.id ?? '', {
-        listId: 'list-weekly',
-        quantity: 1,
-        from: 0,
-      });
-
-      const result = await store.setOriginQuantity(added?.id ?? '', {
-        listId: 'list-weekly',
-        quantity: 1,
-        from: 0,
-      });
-
-      expect(result).toBeNull();
-      // Its own code, so the sheet can say "this list already has it, read again"
-      // rather than "that did not save".
-      expect((store.error() as GatewayError).code).toBe('stale_quantity');
-    });
+    expect(result).toBeNull();
+    expect(writes).toBe(0);
   });
 
   /**
-   * Splitting a line across the products that were actually got (velista `0069`;
-   * backend `0094`).
-   *
-   * The fixture's milk line is three units of Hacendado with three options, which
-   * is the shape the whole plan is about: one row, several milks on the shelf, and
-   * a shopper holding two of one and one of another.
-   *
-   * Every assertion here is about **the store's four collections**, not about the
-   * pane. What the sheet draws is `settle-sheet.spec.ts`; what the fake writes is
-   * asserted through the store because that is the only reader of it.
+   * **Neither direction patches a number**: the row on screen is the answer's, so
+   * a server that answered something other than the arithmetic the gesture implied
+   * is what the screen shows.
    */
-  describe('splitting a line by the products that were got', () => {
-    const MILK = 'line-milk';
-
-    /** The milk row as the store now holds it, or undefined once it is gone. */
-    const milk = (store: BasketStore) =>
-      store.lines().find((row) => row.id === MILK);
-
-    /** Every row named "Milk", in the order the store holds them. */
-    const milks = (store: BasketStore) =>
-      store.lines().filter((row) => row.content === 'Milk');
-
-    it('keeps the balance on the original and puts the sibling under it', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      const result = await store.splitLine(MILK, {
-        from: 3,
-        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
-      });
-
-      expect(result?.created).toHaveLength(1);
-      expect(result?.created[0].quantity).toBe(1);
-      expect(result?.created[0].pickId).toBe('item-milk-pascual');
-      // The balance is never typed: it is what the share left behind.
-      expect(milk(store)?.quantity).toBe(2);
-      expect(milk(store)?.pickId).toBe('item-milk-hacendado');
-
-      // Directly under the original and not on the end of the basket, which is
-      // the whole of section 4: the position the server gave it is between the
-      // original and the line after it, and the store inserts on that number.
-      const order = store.lines().map((row) => row.id);
-      expect(order.indexOf(result?.created[0].id ?? '')).toBe(
-        order.indexOf(MILK) + 1
-      );
+  it('draws the answer’s row rather than the number that was sent', async () => {
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      settle: async (id, rowKey, body) => {
+        const answered = await memory.settle(id, rowKey, body);
+        // A second shopper bought one more while this gesture was in flight.
+        return { ...answered, row: { ...answered.row, left: 99 } };
+      },
     });
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
 
-    it('reassigns the original when every unit moved, keeping its id', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
+    await store.setLeft(milk.rowKey, 0, milk.left);
 
-      const result = await store.splitLine(MILK, {
-        from: 3,
-        shares: [
-          { itemId: 'item-milk-pascual', quantity: 2 },
-          { itemId: 'item-milk-central', quantity: 1 },
-        ],
-      });
+    expect(rowOf(store, 'Milk').left).toBe(99);
+  });
 
-      // The first share takes the original rather than deleting it, so its id,
-      // its position and who put it there all survive (backend `0094`, 2.2).
-      expect(result?.line.id).toBe(MILK);
-      expect(result?.line.pickId).toBe('item-milk-pascual');
-      expect(result?.line.quantity).toBe(2);
-      expect(result?.created).toHaveLength(1);
-      expect(result?.created[0].pickId).toBe('item-milk-central');
-      expect(result?.removed).toEqual([]);
-      expect(milks(store).map((row) => row.quantity)).toEqual([2, 1]);
+  /**
+   * That code means the number this gesture was moving is not where the control
+   * believed it started, which is two phones in one shop. The store reads the
+   * basket again **before** it returns, so the caller can name the true amount.
+   */
+  it('reads the basket again once on a stale quantity, then answers null', async () => {
+    let reads = 0;
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: () => {
+        reads += 1;
+        return memory.getBasket();
+      },
+      settle: (id, rowKey, body) => memory.settle(id, rowKey, body),
     });
+    await store.open('basket-saturday');
+    const readsAfterOpen = reads;
+    const milk = rowOf(store, 'Milk');
 
-    it('raises the sibling that already has the product rather than making a twin', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-      await store.splitLine(MILK, {
-        from: 3,
-        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
-      });
+    const result = await store.setLeft(milk.rowKey, 0, milk.left + 5);
 
-      const again = await store.splitLine(MILK, {
-        from: 2,
-        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
-      });
+    expect(result).toBeNull();
+    expect(reads).toBe(readsAfterOpen + 1);
+    // And the failure is still there to be named, rather than cleared by the read
+    // that followed it.
+    expect((store.error() as GatewayError).code).toBe('stale_quantity');
+  });
+});
 
-      expect(again?.created).toEqual([]);
-      expect(again?.merged).toHaveLength(1);
-      expect(again?.merged[0].quantity).toBe(2);
-      // Still two rows: the sibling was raised, not duplicated.
-      expect(milks(store)).toHaveLength(2);
-      expect(milk(store)?.quantity).toBe(1);
-    });
+/**
+ * Finding a row again (velista `0090`, section 7.3).
+ *
+ * A row's key is its **anchor's** line id, and the anchor moves: somebody adds an
+ * earlier line of the same name on another list, a rename merges two rows, the
+ * anchor is deleted. `rowFor` is what lets a sheet follow its row through that
+ * rather than dismissing itself over nothing.
+ */
+describe('BasketStore: rowFor', () => {
+  it('finds a row by its own key', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
 
-    it('folds the original away when its last unit moves back, and drops it from the basket', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-      await store.splitLine(MILK, {
-        from: 3,
-        shares: [{ itemId: 'item-milk-pascual', quantity: 2 }],
-      });
+    expect(store.rowFor(milk.rowKey)?.rowKey).toBe(milk.rowKey);
+  });
 
-      const back = await store.splitLine(MILK, {
-        from: 1,
-        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
-      });
+  /**
+   * The second lookup, and the whole reason the method exists: a row whose anchor
+   * was just bought to zero must not turn the next tap on the same row into a
+   * sheet about nothing.
+   */
+  it('finds a row by any entry’s line id', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
+    const second = milk.entries[1];
 
-      expect(back?.removed).toEqual([MILK]);
-      // The answer is about the row the units went to, because the row it was
-      // asked of is gone.
-      expect(back?.line.pickId).toBe('item-milk-pascual');
-      expect(back?.line.quantity).toBe(3);
-      expect(milk(store)).toBeUndefined();
-      expect(milks(store)).toHaveLength(1);
-    });
+    expect(store.rowFor(second.lineId)?.rowKey).toBe(milk.rowKey);
+  });
 
-    it('says what happened once, and an add says its own thing instead', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
+  it('finds nothing for a key this basket does not hold', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
 
-      await store.splitLine(MILK, {
-        from: 3,
-        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
-      });
+    expect(store.rowFor('zl-nowhere')).toBeNull();
+  });
 
-      // One sentence for the whole act rather than one per sibling, and the
-      // count is the rows the act left standing.
-      expect(store.lastSplit()).toEqual({ content: 'Milk', rows: 2 });
-      expect(store.lastAdded()).toBeNull();
+  /** Said once per sheet that closed, so the page can announce it once. */
+  it('counts a row that left the basket, for the page’s sentence', async () => {
+    const { store } = build();
+    await store.open('basket-saturday');
 
-      await store.addLine({ content: 'Foil' });
-      // One region, so the two clear each other: whatever happened last is what
-      // it holds.
-      expect(store.lastSplit()).toBeNull();
-      expect(store.lastAdded()?.content).toBe('Foil');
-    });
+    expect(store.rowGone()).toBe(0);
+    store.sayRowGone();
+    expect(store.rowGone()).toBe(1);
 
-    it('says nothing for a split that folded a sibling back to one row', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-      await store.splitLine(MILK, {
-        from: 3,
-        shares: [{ itemId: 'item-milk-pascual', quantity: 3 }],
-      });
-
-      await store.splitLine(store.lines()[0].id, {
-        from: 3,
-        shares: [{ itemId: 'item-milk-hacendado', quantity: 3 }],
-      });
-
-      // Nothing was split, so nothing is announced: "split into 1 rows" would be
-      // a sentence about an act that did not happen.
-      expect(store.lastSplit()).toBeNull();
-    });
-
-    it('refuses a stale `from` and writes nothing', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      const result = await store.splitLine(MILK, {
-        from: 2,
-        shares: [{ itemId: 'item-milk-pascual', quantity: 1 }],
-      });
-
-      expect(result).toBeNull();
-      expect((store.error() as GatewayError).code).toBe('stale_quantity');
-      expect(milk(store)?.quantity).toBe(3);
-      expect(milks(store)).toHaveLength(1);
-    });
-
-    it('refuses a product that is not an option, and the line’s own product', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      expect(
-        await store.splitLine(MILK, {
-          from: 3,
-          shares: [{ itemId: 'item-eggs', quantity: 1 }],
-        })
-      ).toBeNull();
-      expect((store.error() as GatewayError).code).toBe('validation_failed');
-
-      expect(
-        await store.splitLine(MILK, {
-          from: 3,
-          // The line's own product is the balance, and naming it twice says two
-          // things about one number.
-          shares: [{ itemId: 'item-milk-hacendado', quantity: 1 }],
-        })
-      ).toBeNull();
-      expect(milk(store)?.quantity).toBe(3);
-    });
-
-    it('refuses shares that sum to more than is outstanding', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      const result = await store.splitLine(MILK, {
-        from: 3,
-        shares: [
-          { itemId: 'item-milk-pascual', quantity: 2 },
-          { itemId: 'item-milk-central', quantity: 2 },
-        ],
-      });
-
-      expect(result).toBeNull();
-      expect(milks(store)).toHaveLength(1);
-    });
-
-    it('writes nothing at all for a pane whose steppers are all at zero', async () => {
-      const { store } = build();
-      await store.open('basket-saturday');
-
-      const result = await store.splitLine(MILK, {
-        from: 3,
-        shares: [{ itemId: 'item-milk-pascual', quantity: 0 }],
-      });
-
-      // Not an error: a gesture that said nothing is not a refusal.
-      expect(result?.created).toEqual([]);
-      expect(result?.removed).toEqual([]);
-      expect(milk(store)?.quantity).toBe(3);
-      expect(store.lastSplit()).toBeNull();
-    });
+    store.leave();
+    expect(store.rowGone()).toBe(0);
   });
 });
 

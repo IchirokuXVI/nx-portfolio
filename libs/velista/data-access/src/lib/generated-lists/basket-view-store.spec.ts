@@ -2,10 +2,12 @@ import { computed, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import type {
-  BasketLine,
+  BasketListRef,
   BasketParticipant,
   BasketPriceScope,
   BasketProduct,
+  BasketRow,
+  BasketRowEntry,
 } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
@@ -28,24 +30,41 @@ import { BasketViewStore } from './basket-view-store';
  * screen. Everything below is one of those four sentences.
  */
 
-function line(
-  id: string,
+/** One row, with one entry on a list nobody was served unless a test says so. */
+function row(
+  rowKey: string,
   content: string,
-  pickId: string | null = null,
-  createdBy = 'p-guest'
-): BasketLine {
+  optionId: string | null = null,
+  entries: readonly BasketRowEntry[] = [entry(null, `zl-${rowKey}`)]
+): BasketRow {
   return {
-    id,
+    rowKey,
     content,
-    quantity: 1,
-    settled: 0,
-    pickId,
-    optionIds: [],
-    position: 0,
-    createdBy,
+    left: 1,
+    bought: 0,
+    asked: 1,
+    state: 'WANTED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
+    optionIds: optionId === null ? [] : [optionId],
     touchedBy: null,
     touchedAt: null,
-    lastOutcome: null,
+    entries,
+  };
+}
+
+function entry(listId: string | null, lineId: string): BasketRowEntry {
+  return {
+    lineId,
+    listId,
+    left: 1,
+    bought: 0,
+    asked: 1,
+    state: 'WANTED',
+    awaitingApproval: false,
+    demandEditable: true,
   };
 }
 
@@ -55,7 +74,16 @@ function product(
   es: string,
   brand: string | null = null
 ): BasketProduct {
-  return { id, name: { en, es }, brand, size: null, unit: null, offer: null };
+  return {
+    id,
+    name: { en, es },
+    brand,
+    size: null,
+    unit: null,
+    offer: null,
+    offers: [],
+    categories: ['OTHER'],
+  };
 }
 
 const ME: BasketParticipant = {
@@ -72,14 +100,10 @@ const ME: BasketParticipant = {
 
 interface Harness {
   readonly view: BasketViewStore;
-  readonly lines: WritableSignal<readonly BasketLine[]>;
-  readonly lastAdded: WritableSignal<BasketLine | null>;
+  readonly rows: WritableSignal<readonly BasketRow[]>;
   readonly locale: WritableSignal<string>;
-  /** What the run drew from, which is what the filter sheet offers (`0075`). */
-  readonly sources: WritableSignal<
-    readonly { zoneId: string; listId: string }[]
-  >;
-  readonly listNames: WritableSignal<ReadonlyMap<string, string>>;
+  /** The covered lists this reader was served, which the sheet offers (`0090`). */
+  readonly lists: WritableSignal<ReadonlyMap<string, BasketListRef>>;
   /** The scopes this basket is priced at, which a remembered shop is checked against. */
   readonly scopes: WritableSignal<ReadonlyMap<string, BasketPriceScope>>;
   /** This device's storage, so a spec can seed a record and read what was written. */
@@ -87,7 +111,7 @@ interface Harness {
 }
 
 function harness(
-  lines: readonly BasketLine[],
+  rows: readonly BasketRow[],
   products: ReadonlyMap<string, BasketProduct> = new Map(),
   storage: Map<string, string> = new Map(),
   /** What a storage that will not answer looks like from above the facade (`0076`). */
@@ -95,11 +119,9 @@ function harness(
 ): Harness {
   TestBed.resetTestingModule();
 
-  const held = signal(lines);
-  const lastAdded = signal<BasketLine | null>(null);
+  const held = signal(rows);
   const locale = signal('en');
-  const sources = signal<readonly { zoneId: string; listId: string }[]>([]);
-  const listNames = signal<ReadonlyMap<string, string>>(new Map());
+  const lists = signal<ReadonlyMap<string, BasketListRef>>(new Map());
   const scopes = signal<ReadonlyMap<string, BasketPriceScope>>(new Map());
 
   TestBed.configureTestingModule({
@@ -109,14 +131,13 @@ function harness(
       {
         provide: BasketStore,
         useValue: {
-          lines: held,
+          rows: held,
           products: signal(products),
-          lastAdded,
           me: signal<BasketParticipant | null>(ME),
-          // The run's own sources travel on the basket rather than on its lines, so
-          // the double answers the whole read the way the store reaches for it.
-          basket: computed(() => ({ sources: sources(), scopes: scopes() })),
-          listNames,
+          // The scopes travel on the basket rather than on its rows, so the double
+          // answers the whole read the way the store reaches for it.
+          basket: computed(() => ({ scopes: scopes() })),
+          lists,
         },
       },
       BasketViewStore,
@@ -125,58 +146,51 @@ function harness(
 
   return {
     view: TestBed.inject(BasketViewStore),
-    lines: held,
-    lastAdded,
+    rows: held,
     locale,
-    sources,
-    listNames,
+    lists,
     scopes,
     storage,
   };
 }
 
-/** A basket of three lists, for the filter section and its chips. */
+/** A basket of three served lists, for the filter section and its chips. */
 function withLists(harnessed: Harness): Harness {
-  harnessed.sources.set([
-    { zoneId: 'z1', listId: 'l-groceries' },
-    { zoneId: 'z1', listId: 'l-weekly' },
-    { zoneId: 'z2', listId: 'l-parents' },
-  ]);
-  harnessed.listNames.set(
+  harnessed.lists.set(
     new Map([
-      ['l-groceries', 'Groceries'],
-      ['l-weekly', 'Weekly shop'],
-      ['l-parents', 'Parents'],
+      ['l-groceries', ref('l-groceries', 'Groceries')],
+      ['l-weekly', ref('l-weekly', 'Weekly shop')],
+      ['l-parents', ref('l-parents', 'Parents')],
     ])
   );
   return harnessed;
 }
 
-function onLists(
-  id: string,
-  content: string,
-  listIds: readonly string[]
-): BasketLine {
-  return {
-    ...line(id, content),
-    origins: listIds.map((listId) => ({
-      id: `o-${id}-${listId}`,
-      zoneId: 'z1',
-      listId,
-      lineId: `zl-${id}`,
-      quantity: 1,
-    })),
-  };
+function ref(listId: string, name: string): BasketListRef {
+  return { listId, name, zoneId: 'z1', zoneName: 'Home' };
 }
 
-const contents = (lines: readonly BasketLine[]) =>
-  lines.map((row) => row.content);
+/** A row asked for by the named lists, one entry each. */
+function onLists(
+  rowKey: string,
+  content: string,
+  listIds: readonly string[]
+): BasketRow {
+  return row(
+    rowKey,
+    content,
+    null,
+    listIds.map((listId) => entry(listId, `zl-${rowKey}-${listId}`))
+  );
+}
+
+const contents = (rows: readonly BasketRow[]) => rows.map((row) => row.content);
 
 describe('BasketViewStore', () => {
-  const basket: readonly BasketLine[] = [
-    line('l-1', 'Milk', 'item-milk'),
-    line('l-2', 'Sourdough loaf'),
-    line('l-3', 'Plátano'),
+  const basket: readonly BasketRow[] = [
+    row('l-1', 'Milk', 'item-milk'),
+    row('l-2', 'Sourdough loaf'),
+    row('l-3', 'Plátano'),
   ];
 
   const products = new Map([
@@ -195,9 +209,9 @@ describe('BasketViewStore', () => {
    * wrappers per redraw is not a cost worth a second code path.
    */
   it('draws the whole basket until somebody searches', () => {
-    const { view, lines } = harness(basket);
+    const { view, rows } = harness(basket);
 
-    expect(view.visibleLines()).toEqual(lines());
+    expect(view.visibleRows()).toEqual(rows());
     expect(view.searching()).toBe(false);
   });
 
@@ -207,30 +221,27 @@ describe('BasketViewStore', () => {
 
     // Both matches, and the loaf is still before the plátano: the search hides
     // rows and never reorders, which is what `0075` goes on to decide.
-    expect(contents(view.visibleLines())).toEqual([
-      'Sourdough loaf',
-      'Plátano',
-    ]);
+    expect(contents(view.visibleRows())).toEqual(['Sourdough loaf', 'Plátano']);
   });
 
   it("matches a line through its pick's name and brand", () => {
     const { view } = harness(basket, products);
 
     view.search('hacendado');
-    expect(contents(view.visibleLines())).toEqual(['Milk']);
+    expect(contents(view.visibleRows())).toEqual(['Milk']);
 
     view.search('whole');
-    expect(contents(view.visibleLines())).toEqual(['Milk']);
+    expect(contents(view.visibleRows())).toEqual(['Milk']);
   });
 
   it('re-reads the names when the reader changes language', () => {
     const { view, locale } = harness(basket, products);
     view.search('leche');
 
-    expect(view.visibleLines()).toHaveLength(0);
+    expect(view.visibleRows()).toHaveLength(0);
 
     locale.set('es');
-    expect(contents(view.visibleLines())).toEqual(['Milk']);
+    expect(contents(view.visibleRows())).toEqual(['Milk']);
   });
 
   it('folds the query once, for the row to draw its mark from', () => {
@@ -240,32 +251,23 @@ describe('BasketViewStore', () => {
     expect(view.folded()).toBe('platano');
   });
 
-  it("clears itself when the reader's own line lands", () => {
-    const { view, lastAdded } = harness(basket);
-    view.search('yogurt');
+  /**
+   * The search is never remembered and never survives the screen (`0076`), which
+   * is the one thing `leave` is for.
+   *
+   * It used to clear itself when this reader's own line landed, because the thing
+   * somebody searched for and did not find is very often the next thing they add.
+   * The composer is velista `0092`'s, with a list to add to, and that rule comes
+   * back with it.
+   */
+  it('keeps what was typed while the basket moves underneath it', () => {
+    const { view, rows } = harness(basket);
+    view.search('milk');
 
-    lastAdded.set(line('l-4', 'Yogurt', null, ME.id));
-    // Effects are scheduled, not synchronous, so the arrival has to be flushed
-    // before the query can have answered it.
-    TestBed.tick();
+    rows.set([...basket, row('l-4', 'Yogurt')]);
 
-    // The thing somebody searched for and did not find is very often the next line
-    // they add, and a row that arrived hidden by the failed search is a row
-    // somebody types a second time.
-    expect(view.query()).toBe('');
-  });
-
-  it("does not clear itself when somebody else's line lands", () => {
-    const { view, lastAdded } = harness(basket);
-    view.search('yogurt');
-
-    // Four people are working this basket. Clearing the field because somebody
-    // across the shop typed something takes the screen out from under the person
-    // holding this phone.
-    lastAdded.set(line('l-5', 'Crisps', null, 'p-somebody-else'));
-    TestBed.tick();
-
-    expect(view.query()).toBe('yogurt');
+    expect(view.query()).toBe('milk');
+    expect(contents(view.visibleRows())).toEqual(['Milk']);
   });
 
   it('is given back on leaving, so a later basket does not start searched', () => {
@@ -288,11 +290,14 @@ describe('BasketViewStore', () => {
  * back finds what it set still set.
  */
 describe('BasketViewStore, the view state', () => {
-  const basket: readonly BasketLine[] = [
+  const basket: readonly BasketRow[] = [
     onLists('l-1', 'Milk', ['l-groceries']),
     onLists('l-2', 'Bread', ['l-groceries', 'l-weekly']),
     onLists('l-3', 'Cheese', ['l-weekly']),
-    onLists('l-4', 'Batteries', []),
+    // A row this reader cannot place. Its list is covered and not served, which
+    // `toBasket` maps to a null `listId`: there is one question here and one
+    // answer, so the fixture holds the shape the mapper produces.
+    row('l-4', 'Batteries'),
   ];
 
   const DEFAULTS = {
@@ -315,7 +320,7 @@ describe('BasketViewStore, the view state', () => {
     const { view } = withLists(harness(basket));
 
     view.setOrder('alpha');
-    expect(contents(view.visibleLines())).toEqual([
+    expect(contents(view.visibleRows())).toEqual([
       'Batteries',
       'Bread',
       'Cheese',
@@ -358,32 +363,45 @@ describe('BasketViewStore, the view state', () => {
   });
 
   describe('the source lists', () => {
-    it('offers every named source, counting the lines that reach it', () => {
+    /**
+     * **Every served list**, and not the lists its rows happen to name: a list this
+     * basket covers is still one of the households it is about when every row of it
+     * has been bought, and a checkbox that appeared and disappeared as rows were
+     * settled would be unusable.
+     *
+     * The group's name goes in beside the list's, because a list alone is
+     * ambiguous when two households both keep one called "Groceries".
+     */
+    it('offers every served list, counting the rows that reach it', () => {
       const { view } = withLists(harness(basket));
 
       expect(view.sourceLists()).toEqual([
-        { id: 'l-groceries', name: 'Groceries', lines: 2 },
-        { id: 'l-weekly', name: 'Weekly shop', lines: 2 },
-        { id: 'l-parents', name: 'Parents', lines: 0 },
+        { id: 'l-groceries', name: 'Groceries · Home', lines: 2 },
+        { id: 'l-weekly', name: 'Weekly shop · Home', lines: 2 },
+        { id: 'l-parents', name: 'Parents · Home', lines: 0 },
       ]);
     });
 
-    /** A checkbox with no words is a control nobody can act on. */
-    it('drops a source the basket never named', () => {
+    /**
+     * A list the basket served no ref for is one this reader may not name, and a
+     * checkbox with no words is a control nobody can act on.
+     */
+    it('offers only the lists the basket served', () => {
       const harnessed = withLists(harness(basket));
-      harnessed.listNames.set(new Map([['l-groceries', 'Groceries']]));
+      harnessed.lists.set(
+        new Map([['l-groceries', ref('l-groceries', 'Groceries')]])
+      );
 
       expect(harnessed.view.sourceLists().map((source) => source.id)).toEqual([
         'l-groceries',
       ]);
     });
 
-    it('draws one checkbox for a list two zones reach', () => {
+    it('draws one checkbox per list, however many rows reach it', () => {
       const harnessed = withLists(harness(basket));
-      harnessed.sources.set([
-        { zoneId: 'z1', listId: 'l-groceries' },
-        { zoneId: 'z2', listId: 'l-groceries' },
-      ]);
+      harnessed.lists.set(
+        new Map([['l-groceries', ref('l-groceries', 'Groceries')]])
+      );
 
       expect(harnessed.view.sourceLists()).toHaveLength(1);
     });
@@ -409,26 +427,27 @@ describe('BasketViewStore, the view state', () => {
       ]);
     });
 
-    it('narrows to the kept lists and sinks the line on no list', () => {
+    /**
+     * **A reader cannot filter out what they cannot name** (velista `0090`,
+     * section 8.2). A row with an unserved entry might well be on the very list
+     * they kept, and there is no way to ask, so it stays.
+     *
+     * There is no sink any more. Backend `0136` removed the thing it held: a line
+     * is on a list or it does not exist.
+     */
+    it('narrows to the kept lists and keeps what it cannot place', () => {
       const { view } = withLists(harness(basket));
 
       view.toggleList('l-weekly');
       view.toggleList('l-parents');
 
       const sections = view.sections();
-      expect(sections).toHaveLength(2);
-      expect(contents(sections[0].rows.map((row) => row.line))).toEqual([
+      expect(sections).toHaveLength(1);
+      expect(contents(sections[0].rows.map((drawn) => drawn.row))).toEqual([
         'Milk',
         'Bread',
-      ]);
-      expect(sections[1].heading).toEqual({
-        kind: 'key',
-        key: 'basket.group.noList',
-      });
-      expect(contents(sections[1].rows.map((row) => row.line))).toEqual([
         'Batteries',
       ]);
-      // The sunk line is one of the lines on the screen, so the count includes it.
       expect(view.visibleCount()).toBe(3);
     });
 
@@ -493,9 +512,9 @@ describe('BasketViewStore, the view state', () => {
     const harnessed = withLists(harness(basket));
     harnessed.view.setOrder('alpha');
 
-    harnessed.lines.set([...basket, onLists('l-5', 'Apples', ['l-groceries'])]);
+    harnessed.rows.set([...basket, onLists('l-5', 'Apples', ['l-groceries'])]);
 
-    expect(contents(harnessed.view.visibleLines())[0]).toBe('Apples');
+    expect(contents(harnessed.view.visibleRows())[0]).toBe('Apples');
   });
 
   it('gives the whole view state back on leaving, not only the search', () => {
@@ -521,7 +540,7 @@ describe('BasketViewStore, the view state', () => {
  * basket is very possibly one that can.
  */
 describe('BasketViewStore, what the sheet remembers', () => {
-  const basket: readonly BasketLine[] = [
+  const basket: readonly BasketRow[] = [
     onLists('l-1', 'Milk', ['l-groceries']),
     onLists('l-2', 'Bread', ['l-weekly']),
   ];
@@ -860,7 +879,7 @@ describe('BasketViewStore, what the sheet remembers', () => {
  * the reader's language changed.
  */
 describe('BasketViewStore: the chosen shop', () => {
-  const basket: readonly BasketLine[] = [
+  const basket: readonly BasketRow[] = [
     onLists('l-1', 'Milk', ['l-groceries']),
     onLists('l-2', 'Bread', ['l-weekly']),
   ];
