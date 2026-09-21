@@ -131,7 +131,7 @@ export function ApiProblemResponses(
     codes.push(ERROR_CODES.NOT_CONFIGURED);
   }
   if (options.finishedBasket) {
-    codes.push(ERROR_CODES.GENERATED_LIST_FINISHED);
+    codes.push(ERROR_CODES.BASKET_FINISHED);
   }
   if (options.lineMerge) {
     codes.push(

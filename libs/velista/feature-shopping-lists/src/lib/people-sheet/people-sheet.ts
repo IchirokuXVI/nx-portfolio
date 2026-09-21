@@ -23,7 +23,7 @@ import {
 } from '@portfolio/velista/models';
 import {
   appPath,
-  generatedListIdOf,
+  basketIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
@@ -82,7 +82,7 @@ export class PeopleSheet {
   private readonly _basePath = inject(APP_BASE_PATH);
 
   /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _generatedListId = generatedListIdOf(this._route);
+  private readonly _basketId = basketIdOf(this._route);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
   /** The account, for the owner's own row, which the basket carries unnamed. */
@@ -299,7 +299,7 @@ export class PeopleSheet {
    */
   protected close(): void {
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._generatedListId())
+      basketPath(this._locale(), this._basePath, this._basketId())
     );
   }
 }

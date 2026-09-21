@@ -33,7 +33,7 @@ export interface FakeLineSettlements {
     }): Promise<Partial<LineSettlement> | null>;
     find(options: {
       where: {
-        generatedListLineId?: string;
+        basketLineId?: string;
         basketId?: string;
         lineId?: string;
         outcome?: SettlementOutcome;

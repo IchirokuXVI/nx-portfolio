@@ -2,7 +2,7 @@ import type {
   LineApprovalStatus,
   LineChangeKind,
 } from '@portfolio/luna-shopper/contracts';
-import type { CoveredLineRow } from '../basket.sql';
+import type { CoveredLineRow } from '../basket-read.sql';
 
 /**
  * What changed on a basket's lists, and what this viewer has seen of it (plan
@@ -49,8 +49,8 @@ const VIEWER_CTES = `
   "scope" AS (
     SELECT GREATEST(p."joinedAt", gl."generatedAt") AS "start",
            p."userId" AS "userId"
-    FROM "generated_list_participants" p
-    JOIN "generated_lists" gl ON gl.id = p."generatedListId"
+    FROM "basket_participants" p
+    JOIN "baskets" gl ON gl.id = p."basketId"
     WHERE p.id = $1::uuid
   ),
   "viewer" AS (
@@ -244,8 +244,8 @@ export const CHANGE_LINES_SQL = `
  */
 export const VIEWER_START_SQL = `
   SELECT GREATEST(p."joinedAt", gl."generatedAt")::text AS "start"
-  FROM "generated_list_participants" p
-  JOIN "generated_lists" gl ON gl.id = p."generatedListId"
+  FROM "basket_participants" p
+  JOIN "baskets" gl ON gl.id = p."basketId"
   WHERE p.id = $1::uuid
 `;
 

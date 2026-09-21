@@ -1,6 +1,6 @@
 import type { BasketKind } from '../enums/basket.enums';
 import { RealtimeRoom } from '../enums/realtime.enums';
-import type { ParticipantPresenceEntry } from './generated-list-sharing.messages';
+import type { ParticipantPresenceEntry } from './basket-sharing.messages';
 
 /**
  * Realtime message and payload contracts (plan 0009). Two kinds live here: the
@@ -62,7 +62,7 @@ export function listPresenceRoom(listId: string): string {
 }
 
 /**
- * Builds the `generated:{generatedListId}` room name (plan 0051, section 7):
+ * Builds the `basket:{basketId}` room name (plan 0051, section 7):
  * everybody holding a live participant credential for one shared basket.
  *
  * The first room here whose members are **participants** rather than users, which
@@ -70,41 +70,21 @@ export function listPresenceRoom(listId: string): string {
  * {@link userRoom} could never address them and the owner's own room, which is
  * where plan 0050 put every basket event, reaches exactly one person.
  */
-export function generatedListRoom(generatedListId: string): string {
-  return `${RealtimeRoom.GeneratedList}:${generatedListId}`;
+export function basketRoom(basketId: string): string {
+  return `${RealtimeRoom.Basket}:${basketId}`;
 }
 
 /**
- * Builds the `generated:{generatedListId}:presence` room name (plan 0051,
+ * Builds the `basket:{basketId}:presence` room name (plan 0051,
  * section 7).
  *
- * Split from {@link generatedListRoom} for the same reason
+ * Split from {@link basketRoom} for the same reason
  * {@link listPresenceRoom} is split from {@link listRoom}: that room carries
  * every line edit and every settle, and a client that wants only to know who else
  * is in the shop should not have to take the traffic to find out.
  */
-export function generatedListPresenceRoom(generatedListId: string): string {
-  return `${generatedListRoom(generatedListId)}:presence`;
-}
-
-/**
- * The room of one basket, by the name a basket has now (plan 0139, section 1).
- *
- * The same string {@link generatedListRoom} returns, and deliberately so: the
- * room name itself is plan 0144's to change, together with the enum values and
- * the `generatedList.*` event names. No client ever sees it, because a
- * participant socket is joined to it server side, so renaming it is a rename of
- * one internal string and does not belong in the middle of a fan out change.
- *
- * New code calls this one. Nothing new calls {@link generatedListRoom}.
- */
-export function basketRoom(basketId: string): string {
-  return generatedListRoom(basketId);
-}
-
-/** The presence room of one basket. See {@link basketRoom} for the two names. */
 export function basketPresenceRoom(basketId: string): string {
-  return generatedListPresenceRoom(basketId);
+  return `${basketRoom(basketId)}:presence`;
 }
 
 /**
@@ -121,8 +101,8 @@ export type ParsedRoom =
   | { kind: 'zoneStaff'; zoneId: string }
   | { kind: 'list'; listId: string }
   | { kind: 'listPresence'; listId: string }
-  | { kind: 'generatedList'; generatedListId: string }
-  | { kind: 'generatedListPresence'; generatedListId: string };
+  | { kind: 'basket'; basketId: string }
+  | { kind: 'basketPresence'; basketId: string };
 
 /**
  * Read a room name back into the access question that gates it, or `undefined`
@@ -159,12 +139,12 @@ export function parseRoom(room: string): ParsedRoom | undefined {
   // `userRoom`, because both are claims a revocation can take back: revoking a
   // participant has to evict their socket, and section 3.3 promises there is no
   // cache to wait out.
-  if (parts[0] === RealtimeRoom.GeneratedList) {
+  if (parts[0] === RealtimeRoom.Basket) {
     if (parts.length === 2) {
-      return { kind: 'generatedList', generatedListId: parts[1] };
+      return { kind: 'basket', basketId: parts[1] };
     }
     if (parts.length === 3 && parts[2] === 'presence') {
-      return { kind: 'generatedListPresence', generatedListId: parts[1] };
+      return { kind: 'basketPresence', basketId: parts[1] };
     }
   }
   return undefined;
@@ -187,7 +167,7 @@ export const REALTIME_ACCESS_PATTERNS = {
   checkZoneStaff: 'realtime.checkZoneStaffAccess',
   checkList: 'realtime.checkListAccess',
   /**
-   * Gates the two `generated:{id}` rooms (plan 0051, section 7), and it is the
+   * Gates the two `basket:{id}` rooms (plan 0051, section 7), and it is the
    * one access check here that names a **participant** rather than a user.
    *
    * Asked by participant id because that is what the socket's token carries: a
@@ -223,7 +203,7 @@ export interface CheckListAccessRequest {
  */
 export interface CheckParticipantAccessRequest {
   participantId: string;
-  generatedListId: string;
+  basketId: string;
 }
 
 /** Whether the caller may join the requested room. */

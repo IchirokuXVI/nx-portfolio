@@ -2,14 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   BasketKind,
-  GeneratedListStatus,
+  BasketStatus,
   type BasketSummaryView,
   type BasketView,
   type GetLiveBasketRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { DataSource, Repository } from 'typeorm';
-import { GeneratedList } from '../entities';
-import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
+import { Basket } from '../entities';
+import { BasketSharingService } from '../baskets/basket-sharing.service';
 import { BasketReadService } from './basket-read.service';
 
 /**
@@ -30,7 +30,7 @@ import { BasketReadService } from './basket-read.service';
  *
  * ## It is not news
  *
- * Being born emits no `generatedList.created` and no `list.tripsChanged`. A
+ * Being born emits no `basket.created` and no `list.tripsChanged`. A
  * basket somebody opened for the first time is not an event any other screen
  * needs, and a trip it is not: `basket_sources` has no rows for it, the sweep
  * ignores it, the claim ignores it and the history ignores it, all of which plan
@@ -40,9 +40,9 @@ import { BasketReadService } from './basket-read.service';
 export class BasketLiveService {
   constructor(
     private readonly dataSource: DataSource,
-    @InjectRepository(GeneratedList)
-    private readonly baskets: Repository<GeneratedList>,
-    private readonly sharing: GeneratedListSharingService,
+    @InjectRepository(Basket)
+    private readonly baskets: Repository<Basket>,
+    private readonly sharing: BasketSharingService,
     private readonly read: BasketReadService
   ) {}
 
@@ -73,12 +73,12 @@ export class BasketLiveService {
   /**
    * The row, made if it is missing.
    *
-   * Idempotent through `uq_generated_lists_live_owner`, the partial unique index
+   * Idempotent through `uq_baskets_live_owner`, the partial unique index
    * plan 0133 declared over `LIVE` rows: two tabs opening the app at once make
    * one basket, and the loser reads the winner rather than failing. The route is
    * idempotent the way `create` is, by a constraint rather than by a lock.
    */
-  private async ensure(userId: string): Promise<GeneratedList> {
+  private async ensure(userId: string): Promise<Basket> {
     const held = await this.baskets.findOne({
       where: { ownerUserId: userId, kind: BasketKind.LIVE },
     });
@@ -88,18 +88,18 @@ export class BasketLiveService {
 
     try {
       return await this.dataSource.transaction(async (manager) => {
-        const repo = manager.getRepository(GeneratedList);
+        const repo = manager.getRepository(Basket);
         return repo.save(
           repo.create({
             ownerUserId: userId,
             kind: BasketKind.LIVE,
-            // Every one of these is `ck_generated_lists_live_shape`, stated
+            // Every one of these is `ck_baskets_live_shape`, stated
             // here so the message comes from the service before the constraint
             // has to refuse it: no name, open, no run behind it, and no profile
             // frozen, because a basket that never ends cannot freeze a profile
             // its owner goes on editing (plan 0136, section 4).
             name: null,
-            status: GeneratedListStatus.OPEN,
+            status: BasketStatus.OPEN,
             generatedAt: new Date(),
             pricingProfileId: null,
             idempotencyKey: null,
@@ -121,10 +121,10 @@ export class BasketLiveService {
 }
 
 /**
- * Postgres unique-violation, raised by `uq_generated_lists_live_owner`.
+ * Postgres unique-violation, raised by `uq_baskets_live_owner`.
  *
- * A third copy of the same two lines that `generated-list.service.ts` and
- * `generated-list-sharing.service.ts` already hold. It stays a copy rather than
+ * A third copy of the same two lines that `basket.service.ts` and
+ * `basket-sharing.service.ts` already hold. It stays a copy rather than
  * becoming a shared helper because plan 0136 adds no abstraction this plan does
  * not name, and because the two existing copies are private to files this series
  * is about to rewrite.

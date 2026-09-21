@@ -131,7 +131,7 @@ export enum CommentTranscription {
 /**
  * What kind of shopping trip touched a zone list (plan 0122, section 3).
  *
- * `BASKET` is a generated list that drew from the list. `SESSION` is a run of
+ * `BASKET` is a basket that drew from the list. `SESSION` is a run of
  * purchases that belong to no basket, grouped by elapsed time and never by a
  * calendar day.
  *

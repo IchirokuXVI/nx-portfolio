@@ -3,8 +3,8 @@ import {
   BASKET_KINDS,
   COMMENT_TRANSCRIPTION_FALLBACK,
   COMMENT_TRANSCRIPTIONS,
-  GENERATED_LIST_STATUS_FALLBACK,
-  GENERATED_LIST_STATUSES,
+  BASKET_STATUS_FALLBACK,
+  BASKET_STATUSES,
   GENERATION_SCOPE_FALLBACK,
   GENERATION_SCOPES,
   LINE_APPROVAL_STATUS_FALLBACK,
@@ -40,8 +40,8 @@ import {
   type CommentRecording,
   type CommentTranscription,
   type Contact,
-  type GeneratedListRun,
-  type GeneratedListSummary,
+  type BasketRun,
+  type BasketSummary,
   type Line,
   type LineSettlement,
   type ListAccessEntry,
@@ -62,7 +62,7 @@ import {
   type ProfilePostalCode,
   type ResolvedPostalCode,
   type SessionTokens,
-  type SharedGeneratedListSummary,
+  type SharedBasketSummary,
   type ShoppingList,
   type ShoppingListSummary,
   type ShoppingProfile,
@@ -1197,7 +1197,7 @@ export function toCatalogScope(raw: unknown): CatalogScope | null {
 }
 
 /**
- * From `GeneratedListSummaryView` (backend `0050` section 7).
+ * From `BasketHistoryView` (backend `0050` section 7).
  *
  * `name` is `nullableStr` for `toShoppingProfile`'s reason: null is a basket nobody
  * named, which this client displays as its localized generation date, and collapsing it
@@ -1209,9 +1209,9 @@ export function toCatalogScope(raw: unknown): CatalogScope | null {
  * fabricated `new Date()` would sort itself to the top of somebody's history and title
  * itself today. Dropping it costs one row and is counted, per rule D4.
  */
-export function toGeneratedListSummary(
+export function toBasketSummary(
   raw: unknown
-): GeneratedListSummary | null {
+): BasketSummary | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -1228,8 +1228,8 @@ export function toGeneratedListSummary(
     name: nullableStr(raw['name']),
     status: oneOf(
       raw['status'],
-      GENERATED_LIST_STATUSES,
-      GENERATED_LIST_STATUS_FALLBACK
+      BASKET_STATUSES,
+      BASKET_STATUS_FALLBACK
     ),
     generatedAt,
     lineCount: numOr(raw['lineCount'], 0),
@@ -1245,16 +1245,16 @@ export function toGeneratedListSummary(
 }
 
 /**
- * From `SharedGeneratedListView` (backend `0114`, section 8): a summary plus who
+ * From `SharedBasketHeaderView` (backend `0114`, section 8): a summary plus who
  * shared it and when.
  *
  * The owner and the date are required. A row with no owner could not say whose basket
  * it is, which is the one thing the Shared lists tab adds to a row.
  */
-export function toSharedGeneratedListSummary(
+export function toSharedBasketSummary(
   raw: unknown
-): SharedGeneratedListSummary | null {
-  const summary = toGeneratedListSummary(raw);
+): SharedBasketSummary | null {
+  const summary = toBasketSummary(raw);
   if (summary === null || !isRecord(raw)) {
     return null;
   }
@@ -1296,7 +1296,7 @@ export function toContact(raw: unknown): Contact | null {
 }
 
 /**
- * From `GeneratedListRunResult` (backend `0050` section 4), keeping the summary alone.
+ * From `BasketRunResult` (backend `0050` section 4), keeping the summary alone.
  *
  * The create answers the whole basket, lines and origins and options included, and this
  * client reads a summary out of it. That is deliberate: the sheet's next act is to
@@ -1308,17 +1308,17 @@ export function toContact(raw: unknown): Contact | null {
  * ago, and is read rather than assumed for the idempotent replay: the same key returns
  * the **first** run, which by then may have been half shopped.
  */
-export function toGeneratedListRun(raw: unknown): GeneratedListRun | null {
+export function toBasketRun(raw: unknown): BasketRun | null {
   if (!isRecord(raw)) {
     return null;
   }
 
-  const list = toGeneratedListFromView(raw['list']);
+  const list = toBasketFromView(raw['list']);
   return list === null ? null : { list };
 }
 
 /**
- * From `GeneratedListView`, the **whole** basket, keeping only what a summary holds.
+ * From `BasketHeaderView`, the **whole** basket, keeping only what a summary holds.
  *
  * The create answers one of these and so do the two owner realtime events, none of
  * which carry the two counts the summary listing serves, having sent the lines
@@ -1334,10 +1334,10 @@ export function toGeneratedListRun(raw: unknown): GeneratedListRun | null {
  * somebody worked through, and counting it would let an empty basket report itself
  * finished.
  */
-export function toGeneratedListFromView(
+export function toBasketFromView(
   raw: unknown
-): GeneratedListSummary | null {
-  const summary = toGeneratedListSummary(raw);
+): BasketSummary | null {
+  const summary = toBasketSummary(raw);
   if (summary === null || !isRecord(raw)) {
     return null;
   }

@@ -24,7 +24,7 @@ import {
 } from '@portfolio/velista/models';
 import {
   BrowserFacade,
-  generatedListIdOf,
+  basketIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import {
@@ -98,7 +98,7 @@ export class ShareSheet {
   private readonly _zones = inject(ZoneStore);
 
   /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _generatedListId = generatedListIdOf(this._route);
+  private readonly _basketId = basketIdOf(this._route);
 
   private readonly _pane = signal<Pane>('link');
   private readonly _busy = signal(false);
@@ -353,7 +353,7 @@ export class ShareSheet {
    */
   protected close(): void {
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._generatedListId())
+      basketPath(this._locale(), this._basePath, this._basketId())
     );
   }
 }

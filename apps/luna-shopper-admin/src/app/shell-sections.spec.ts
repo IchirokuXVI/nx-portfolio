@@ -131,7 +131,7 @@ describe('ADMIN_SECTIONS', () => {
     expect(at('lists')).toBe('shoppers/lists');
     expect(at('list-lines')).toBe('shoppers/list-lines');
     // `shopping-lists` is the baskets screen's segment, which is the gateway's
-    // own name for a generated list.
+    // own name for a basket.
     expect(at('baskets')).toBe('shoppers/shopping-lists');
     expect(at('postal-codes')).toBe('harvest/postal-codes');
     // Beside the suggested brands, which are keys the harvested queue carries.

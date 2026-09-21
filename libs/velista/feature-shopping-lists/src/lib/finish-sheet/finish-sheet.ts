@@ -11,11 +11,11 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BasketStore,
-  GeneratedListStore,
+  BasketListStore,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
 import {
-  generatedListIdOf,
+  basketIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
@@ -48,11 +48,11 @@ import { basketPath } from '../basket-paths';
  * It also does not revoke the link, evict a guest or drop anybody's socket
  * (section 6.1). Somebody in the shop when this lands keeps the basket open and keeps
  * their name on the rows they settled; their screen redraws in place from
- * `generatedList.updated`.
+ * `basket.updated`.
  *
  * ## Two stores, and why
  *
- * The **write** is on `GeneratedListStore`, whose every method is the owner's and
+ * The **write** is on `BasketListStore`, whose every method is the owner's and
  * whose transport is account authenticated: a guest holding a participant session
  * cannot reach that route with any token they have, which is what makes section 2's
  * "the owner and nobody else" a fact about the server rather than about this
@@ -73,14 +73,14 @@ import { basketPath } from '../basket-paths';
 })
 export class FinishSheet {
   private readonly _basket = inject(BasketStore);
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _locale = inject(RokuLocaleStore).locale;
 
   /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _generatedListId = generatedListIdOf(this._route);
+  private readonly _basketId = basketIdOf(this._route);
 
   private readonly _busy = signal(false);
   private readonly _failed = signal(false);
@@ -111,7 +111,7 @@ export class FinishSheet {
     this._failed.set(false);
 
     const landed = await this._generated.setStatus(
-      this._generatedListId(),
+      this._basketId(),
       'FINISHED'
     );
 
@@ -139,7 +139,7 @@ export class FinishSheet {
    */
   protected close(): void {
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._generatedListId())
+      basketPath(this._locale(), this._basePath, this._basketId())
     );
   }
 }

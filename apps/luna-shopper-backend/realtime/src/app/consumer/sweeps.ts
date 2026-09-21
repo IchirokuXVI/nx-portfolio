@@ -15,20 +15,14 @@ import type { RelayDirective } from '../relay/event-relay.service';
  * The baskets one envelope addresses, under either of the two names it can
  * carry (plan 0139, section 1).
  *
- * Core writes `basketIds` and nothing else. `generatedListId` is what every
- * envelope written before plan 0139 deployed carries, and both shapes can arrive
- * here in the same minute: staging deploys only the affected services, so a new
- * core can publish to an old realtime and the reverse, and the durable consumer
- * replays what the stream still holds. Reading one name alone would make the
- * other an envelope addressed to nobody, which is dropped as a fault.
- *
- * Plan 0144 deletes the second branch with the last of the old names.
+ * Core writes `basketIds` and nothing else. The single `generatedListId` every
+ * envelope written before plan 0139 carried was read here beside it for one
+ * release, because staging deploys only the affected services and the durable
+ * consumer replays what the stream still holds. Plan 0144 deleted that branch
+ * with the last of the old names, which is what that plan said would happen.
  */
 export function basketsOf(envelope: DomainEvent): readonly string[] {
-  return (
-    envelope.basketIds ??
-    (envelope.generatedListId ? [envelope.generatedListId] : [])
-  );
+  return envelope.basketIds ?? [];
 }
 
 /**
@@ -121,8 +115,8 @@ export function sweepsFor(envelope: DomainEvent): RelayDirective[] {
     // Both of these still name exactly one basket. The loop is here because the
     // envelope field is a list since plan 0139, not because either event grew a
     // second one.
-    case RealtimeEvent.GeneratedListParticipantLeft:
-    case RealtimeEvent.GeneratedListDeleted:
+    case RealtimeEvent.BasketParticipantLeft:
+    case RealtimeEvent.BasketDeleted:
       return basketsOf(envelope).map((basketId) => ({
         direction: 'evict' as const,
         rooms: [basketRoom(basketId), basketPresenceRoom(basketId)],

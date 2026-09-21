@@ -17,7 +17,7 @@ export * from './lib/contacts';
 export * from './lib/domain';
 export * from './lib/due-lines';
 export * from './lib/enums';
-export * from './lib/generated-list-view';
+export * from './lib/basket-summary';
 export * from './lib/home-view';
 export * from './lib/join-code';
 export * from './lib/limits';

@@ -29,7 +29,6 @@ import {
   gatewayConfiguration,
   gatewayValidationSchema,
 } from './config/app-config';
-import { GatewayGeneratedListsModule } from './generated-lists/generated-lists.module';
 import { GatewayHarvestModule } from './harvest/harvest.module';
 import { GatewayListsModule } from './lists/lists.module';
 import { GatewayMergeModule } from './merge/merge.module';
@@ -113,11 +112,9 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayMergeModule,
     // Account deletion endpoint (plan 0011).
     GatewayAccountModule,
-    // The basket a person carries around the shop (plan 0050).
-    GatewayGeneratedListsModule,
-    // The basket, read from the lists it covers (plan 0136). A module of its
-    // own because it is a different resource with a different path; it imports
-    // the one above for the participant guard alone.
+    // The basket a person carries around the shop (plans 0050 and 0051), read
+    // from the lists it covers (plan 0136). One module since plan 0144, where
+    // the two halves stopped being two names for one thing.
     GatewayBasketsModule,
     // What one person bought, with or without a basket (plan 0142). Its own
     // module because it is a different resource with a different path: the

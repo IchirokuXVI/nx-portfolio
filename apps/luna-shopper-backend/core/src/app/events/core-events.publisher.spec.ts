@@ -71,7 +71,7 @@ describe('an audience of baskets', () => {
     });
 
     expect(sent[0].basketIds).toEqual(['b1', 'b2']);
-    expect(sent[0].generatedListId).toBeUndefined();
+    expect(sent[0].basketId).toBeUndefined();
   });
 
   it('splits 450 baskets into three envelopes with three event ids', () => {

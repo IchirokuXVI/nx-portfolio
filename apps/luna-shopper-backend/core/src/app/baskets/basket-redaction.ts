@@ -1,5 +1,5 @@
 import { ParticipantKind } from '@portfolio/luna-shopper/contracts';
-import type { GeneratedListParticipant } from '../entities';
+import type { BasketParticipant } from '../entities';
 
 /**
  * What one reader of a basket is told about the households behind it (plan 0136,
@@ -50,14 +50,14 @@ export class BasketRedaction {
    * gives for refusing to be called without an access check.
    */
   static of(
-    participant: GeneratedListParticipant,
+    participant: BasketParticipant,
     writable: ReadonlySet<string>
   ): BasketRedaction {
     return new BasketRedaction(writable, servesLocations(participant));
   }
 
   /** A reader with no account, before anything is read. */
-  static none(participant: GeneratedListParticipant): BasketRedaction {
+  static none(participant: BasketParticipant): BasketRedaction {
     return new BasketRedaction(new Set(), servesLocations(participant));
   }
 
@@ -88,7 +88,7 @@ export class BasketRedaction {
  * price a settlement was paid at.
  */
 export function servesLocations(
-  participant: GeneratedListParticipant
+  participant: BasketParticipant
 ): boolean {
   return (
     participant.kind === ParticipantKind.OWNER || participant.invitedAt !== null

@@ -1,6 +1,6 @@
 import {
   BasketKind,
-  GeneratedListStatus,
+  BasketStatus,
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
@@ -18,7 +18,7 @@ import { DataSource, In } from 'typeorm';
 import {
   BasketSource,
   CORE_ENTITIES,
-  GeneratedList,
+  Basket,
   LineSettlement,
   ListLine,
   ShoppingList,
@@ -112,16 +112,16 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
   async function seedBasket(
     ownerUserId: string,
     kind = BasketKind.GENERATED,
-    status = GeneratedListStatus.OPEN
+    status = BasketStatus.OPEN
   ): Promise<string> {
-    const repo = dataSource.getRepository(GeneratedList);
+    const repo = dataSource.getRepository(Basket);
     const basket = await repo.save(
       repo.create({
         ownerUserId,
-        // `ck_generated_lists_live_shape` wants the permanent basket unnamed
+        // `ck_baskets_live_shape` wants the permanent basket unnamed
         // and open.
         name: kind === BasketKind.LIVE ? null : 'Saturday',
-        status: kind === BasketKind.LIVE ? GeneratedListStatus.OPEN : status,
+        status: kind === BasketKind.LIVE ? BasketStatus.OPEN : status,
         generatedAt: NOW,
         kind,
         idempotencyKey: null,
@@ -250,7 +250,7 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
       await dataSource
         .getRepository(LineSettlement)
         .delete({ basketId: In(baskets) });
-      await dataSource.getRepository(GeneratedList).delete({ id: In(baskets) });
+      await dataSource.getRepository(Basket).delete({ id: In(baskets) });
     }
     for (const zoneId of zones) {
       await dataSource.getRepository(Zone).delete({ id: zoneId });
@@ -578,9 +578,9 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
   describe('the rows the basket read answers (test 17)', () => {
     let read: BasketReadService;
 
-    /** A world of its own: `uq_generated_lists_live_owner` is one per person. */
+    /** A world of its own: `uq_baskets_live_owner` is one per person. */
     async function world(kind: BasketKind): Promise<{
-      basket: GeneratedList;
+      basket: Basket;
       listIds: string[];
     }> {
       const owner = randomUUID();
@@ -611,7 +611,7 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
 
       const basketId = await seedBasket(owner, kind);
       const basket = await dataSource
-        .getRepository(GeneratedList)
+        .getRepository(Basket)
         .findOneOrFail({ where: { id: basketId } });
       if (kind === BasketKind.GENERATED) {
         const sources = dataSource.getRepository(BasketSource);
@@ -621,7 +621,7 @@ describeIntegration('the order a shopper walks (real Postgres)', () => {
     }
 
     beforeAll(() => {
-      const repo = dataSource.getRepository(GeneratedList);
+      const repo = dataSource.getRepository(Basket);
       read = new BasketReadService(
         repo,
         new BasketCoverageService(repo),

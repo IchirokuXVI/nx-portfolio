@@ -160,7 +160,7 @@ export class JoinPage {
     try {
       const session = await this._service.join(this._secret, this.name());
       await this._router.navigateByUrl(
-        basketPath(this._locale(), this._basePath, session.generatedListId)
+        basketPath(this._locale(), this._basePath, session.basketId)
       );
     } catch {
       // A link that died between the preview and the tap lands here, and so does

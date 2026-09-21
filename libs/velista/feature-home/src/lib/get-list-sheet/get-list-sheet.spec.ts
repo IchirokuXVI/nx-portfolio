@@ -5,7 +5,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   ContactStore,
   fakeZoneStore,
-  GeneratedListStore,
+  BasketListStore,
   LIST_SERVICE,
   provideFakeSessionStore,
   provideFakeZoneStore,
@@ -16,8 +16,8 @@ import {
 } from '@portfolio/velista/data-access';
 import type {
   Contact,
-  CreateGeneratedListRequest,
-  GeneratedListRun,
+  CreateBasketRequest,
+  BasketRun,
   MyZone,
   ProfileGenerationScope,
   ShoppingListSummary,
@@ -129,7 +129,7 @@ function profile(
 }
 
 /** Records what the sheet asked the store to compose. */
-const created: CreateGeneratedListRequest[] = [];
+const created: CreateBasketRequest[] = [];
 
 /** Every `listLists` the sheet made, so the cursor test can see it followed one. */
 const listPages: { zoneId: string; cursor: string | null }[] = [];
@@ -173,7 +173,7 @@ async function render(
   };
 
   const generated = {
-    create: async (request: CreateGeneratedListRequest) => {
+    create: async (request: CreateBasketRequest) => {
       created.push(request);
       if (options.createRejects) {
         throw new Error('refused');
@@ -191,7 +191,7 @@ async function render(
           presentCount: 0,
         },
         skipped: [],
-      } as GeneratedListRun;
+      } as BasketRun;
     },
   };
 
@@ -237,7 +237,7 @@ async function render(
       { provide: SHOPPING_PROFILE_SERVICE, useValue: profileService },
       // The real store's own behaviour is covered by its spec; here it is a recorder,
       // so what is under test is what the sheet decides to send.
-      { provide: GeneratedListStore, useValue: generated },
+      { provide: BasketListStore, useValue: generated },
       // After `provideRouter`, so this wins: the sheet reads which page it covers from
       // its own route's data, and `provideRouter([])` has no route carrying any.
       {

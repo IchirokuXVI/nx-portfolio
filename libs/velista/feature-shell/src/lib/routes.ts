@@ -28,7 +28,7 @@ import {
 } from './auth-guards';
 import { APP_USABLE_LOCALES } from './usable-locales';
 import {
-  generatedListIdGuard,
+  basketIdGuard,
   listIdGuard,
   zoneIdGuard,
   zoneMemberGuard,
@@ -768,7 +768,7 @@ export const AppShellRoutes: Route[] = [
             /**
              * The third tab (velista `0097`, section 7).
              *
-             * **Declared before `shopping-lists/:generatedListId`**, so the word is not
+             * **Declared before `shopping-lists/:basketId`**, so the word is not
              * read as an id. That is the collision `SHEET_SEGMENT` exists to prevent one
              * level down, and `routes.spec.ts` asserts the order. The basket's
              * `canMatch` UUID guard keeps the pair unambiguous the other way round, so
@@ -800,7 +800,7 @@ export const AppShellRoutes: Route[] = [
              * plan exists for.
              *
              * Declared before the empty path, and before plan 0045's
-             * `shopping-lists` listing when that lands, with `generatedListIdGuard`
+             * `shopping-lists` listing when that lands, with `basketIdGuard`
              * so a future `shopping-lists/new` cannot be swallowed as a basket id
              * (rule G1).
              *
@@ -809,8 +809,8 @@ export const AppShellRoutes: Route[] = [
              * and which would pull these pages into the shell's initial payload.
              * `routes.spec.ts` asserts the path, so a rename cannot land half done.
              */
-            path: 'shopping-lists/:generatedListId',
-            canMatch: [generatedListIdGuard],
+            path: 'shopping-lists/:basketId',
+            canMatch: [basketIdGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-shopping-lists').then(
                 (m) => m.BasketPage
@@ -924,7 +924,7 @@ export const AppShellRoutes: Route[] = [
             // loads, so it would pull those pages into the shell's initial payload.
             // `routes.spec.ts` asserts the two still agree.
             //
-            // Declared **after** `shopping-lists/:generatedListId`, which is the one
+            // Declared **after** `shopping-lists/:basketId`, which is the one
             // ordering constraint on it, and it moved here the moment this route grew
             // a child. The two are siblings rather than parent and child, because the
             // basket screen is its own destination and not something drawn over this

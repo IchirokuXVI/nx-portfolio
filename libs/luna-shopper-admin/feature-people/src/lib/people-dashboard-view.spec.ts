@@ -84,7 +84,7 @@ describe('peopleTiles', () => {
 
   /**
    * The baskets tile opens the `baskets` resource, whose segment is
-   * `shopping-lists`: the gateway's own word for a generated list. It used to be
+   * `shopping-lists`: the gateway's own word for a basket. It used to be
    * that segment written out, which is a second copy of a fact the descriptor
    * already holds and is wrong the moment the screen moves into a section.
    */

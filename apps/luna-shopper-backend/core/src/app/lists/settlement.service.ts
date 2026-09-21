@@ -22,7 +22,7 @@ import { DataSource, IsNull, Repository } from 'typeorm';
 import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import { LineSettlement, ListLine, ListLineItem } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { LineClaimService } from '../generated-lists/line-claim.service';
+import { LineClaimService } from '../baskets/line-claim.service';
 import { toLineItemSet, type LineItemSet } from './line-item-set';
 import { ListAccessService } from './list-access.service';
 import { toLineSettlementView, toLineView } from './list.mappers';

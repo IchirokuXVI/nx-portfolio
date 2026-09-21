@@ -49,8 +49,8 @@ export function fakeCoreConfig(
         // Off, always. Every spec that wants the sweep calls `sweep()` itself,
         // which is why the service keeps the timer and the work apart.
         accessSweep: { enabled: false, intervalMs: 60_000, batchSize: 200 },
+        claimWindowMs: 60 * 60 * 60 * 1000,
       },
-      generatedList: { claimWindowMs: 60 * 60 * 60 * 1000 },
       listLineChange: {
         retentionMs: CHANGE_RETENTION_MS,
         sweep: { enabled: false, intervalMs: 60 * 60 * 1000, batchSize: 5000 },

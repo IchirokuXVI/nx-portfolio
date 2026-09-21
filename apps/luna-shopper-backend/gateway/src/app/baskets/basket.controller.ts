@@ -26,7 +26,7 @@ import {
   type BasketSummaryView,
   type BasketView,
   type CatalogSuggestResponse,
-  type GeneratedListParticipantContext,
+  type BasketParticipantContext,
   type GetBasketRequest,
   type GetLiveBasketRequest,
   type ItemPage,
@@ -53,16 +53,16 @@ import {
   ApiProblemResponses,
   componentRef,
 } from '../docs';
-import { BasketSuggestQueryDto } from '../generated-lists/generated-list-sharing.dto';
+import { BasketSuggestQueryDto } from '../baskets/basket-sharing.dto';
 import {
   PARTICIPANT_THROTTLE_LIMITS,
   ParticipantThrottle,
   ParticipantThrottlerGuard,
-} from '../generated-lists/participant-throttler.guard';
+} from '../baskets/participant-throttler.guard';
 import {
   Participant,
   ParticipantGuard,
-} from '../generated-lists/participant.guard';
+} from '../baskets/participant.guard';
 import { NatsClient } from '../messaging/nats-client';
 import { BasketCatalogService } from './basket-catalog.service';
 import {
@@ -187,7 +187,7 @@ export class BasketController {
   @ApiComposedResponse(BASKET_SCHEMA_IDS.result)
   @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async get(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string
   ): Promise<BasketResult> {
     const req: GetBasketRequest = {
@@ -233,7 +233,7 @@ export class BasketController {
     finishedBasket: true,
   })
   async settle(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string,
     @Param('rowKey') rowKey: string,
     @Body() dto: SettleBasketRowDto
@@ -273,7 +273,7 @@ export class BasketController {
    */
   private async paidFor(
     basketId: string,
-    participant: GeneratedListParticipantContext,
+    participant: BasketParticipantContext,
     dto: SettleBasketRowDto
   ): Promise<SettlementPaid | null> {
     if (!dto.priceScopeId) {
@@ -319,7 +319,7 @@ export class BasketController {
     finishedBasket: true,
   })
   revert(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string,
     @Param('rowKey') rowKey: string,
     @Body() dto: RevertBasketRowDto
@@ -365,7 +365,7 @@ export class BasketController {
     finishedBasket: true,
   })
   demand(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string,
     @Param('rowKey') rowKey: string,
     @Body() dto: SetBasketRowDemandDto
@@ -395,7 +395,7 @@ export class BasketController {
     lineMerge: true,
   })
   rename(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string,
     @Param('rowKey') rowKey: string,
     @Body() dto: RenameBasketRowDto
@@ -433,7 +433,7 @@ export class BasketController {
     finishedBasket: true,
   })
   skip(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string,
     @Param('rowKey') rowKey: string
   ): Promise<BasketRowResult> {
@@ -457,7 +457,7 @@ export class BasketController {
     finishedBasket: true,
   })
   unskip(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string,
     @Param('rowKey') rowKey: string
   ): Promise<BasketRowResult> {
@@ -491,7 +491,7 @@ export class BasketController {
     finishedBasket: true,
   })
   addLine(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string,
     @Body() dto: AddBasketLineDto
   ): Promise<BasketRowResult> {
@@ -519,7 +519,7 @@ export class BasketController {
   @ApiContractResponse(BASKET_PATTERNS.changesList)
   @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   changes(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string,
     @Query() query: BasketChangesQueryDto
   ): Promise<BasketChangePage> {
@@ -557,7 +557,7 @@ export class BasketController {
     notFound: true,
   })
   acknowledgeChanges(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string,
     @Body() dto: AcknowledgeBasketChangesDto
   ): Promise<BasketChangesAcknowledged> {
@@ -583,7 +583,7 @@ export class BasketController {
   })
   @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async suggest(
-    @Participant() participant: GeneratedListParticipantContext,
+    @Participant() participant: BasketParticipantContext,
     @Param('id') id: string,
     @Query() query: BasketSuggestQueryDto
   ): Promise<CatalogSuggestResponse> {
@@ -633,7 +633,7 @@ export class BasketController {
  * them**, so a guest is refused here rather than in core: they present a
  * session secret and hold no `WRITE` on anything.
  */
-function requireAccount(participant: GeneratedListParticipantContext): string {
+function requireAccount(participant: BasketParticipantContext): string {
   if (!participant.userId) {
     throw new ForbiddenException(
       'Only people with an account can do this on a basket'

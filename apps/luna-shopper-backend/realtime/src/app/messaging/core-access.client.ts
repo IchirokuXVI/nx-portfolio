@@ -228,11 +228,11 @@ export class CoreAccessClient {
    */
   async checkParticipant(
     participantId: string,
-    generatedListId: string
+    basketId: string
   ): Promise<ParticipantAdmission | undefined> {
     const req: CheckParticipantAccessRequest = {
       participantId,
-      generatedListId,
+      basketId,
     };
     const answer = await this.send(
       REALTIME_ACCESS_PATTERNS.checkParticipant,

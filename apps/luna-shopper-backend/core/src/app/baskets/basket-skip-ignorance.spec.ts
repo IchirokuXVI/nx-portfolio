@@ -1,7 +1,7 @@
 import {
   BASKET_TRIP_ROWS_FREEZE_SQL,
   BASKET_TRIP_ROWS_THAW_SQL,
-} from '../generated-lists/basket-trip-rows.sql';
+} from '../baskets/basket-trip-rows.sql';
 import {
   ITEM_SETTLEMENTS_SQL,
   LINE_SETTLEMENT_SUMMARY_SQL,

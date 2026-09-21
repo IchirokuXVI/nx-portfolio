@@ -4,9 +4,9 @@ import { BasketSource } from './basket-source.entity';
 import { BasketTripRow } from './basket-trip-row.entity';
 import { CommentAudio } from './comment-audio.entity';
 import { CoreAudit } from './core-audit.entity';
-import { GeneratedListParticipant } from './generated-list-participant.entity';
-import { GeneratedListShareLink } from './generated-list-share-link.entity';
-import { GeneratedList } from './generated-list.entity';
+import { BasketParticipant } from './basket-participant.entity';
+import { BasketShareLink } from './basket-share-link.entity';
+import { Basket } from './basket.entity';
 import { LineComment } from './line-comment.entity';
 import { LineSettlement } from './line-settlement.entity';
 import { ListAccess } from './list-access.entity';
@@ -36,9 +36,9 @@ export {
   CoreAuditAction,
   CoreAuditActorKind,
 } from './core-audit.entity';
-export { GeneratedListParticipant } from './generated-list-participant.entity';
-export { GeneratedListShareLink } from './generated-list-share-link.entity';
-export { GeneratedList } from './generated-list.entity';
+export { BasketParticipant } from './basket-participant.entity';
+export { BasketShareLink } from './basket-share-link.entity';
+export { Basket } from './basket.entity';
 export { LineComment } from './line-comment.entity';
 export { LineSettlement } from './line-settlement.entity';
 export { ListAccess } from './list-access.entity';
@@ -85,14 +85,14 @@ export const CORE_ENTITIES = [
   ProfileGenerationSource,
   // Generated shopping lists (plan 0050). The basket comes first: its lines
   // reference it, and the origins and options reference the lines.
-  GeneratedList,
+  Basket,
   // What the run was asked to draw from (plan 0133). After the basket it hangs
   // off, and it also references zones and lists, which are created far above.
   BasketSource,
   // Sharing a basket with people who have no account (plan 0051). The link comes
   // before the participants, which reference the link they arrived by.
-  GeneratedListShareLink,
-  GeneratedListParticipant,
+  BasketShareLink,
+  BasketParticipant,
   // What each finished trip asked of each zone line (plan 0135). After the
   // basket and the zone line it hangs off, since it references both.
   BasketTripRow,

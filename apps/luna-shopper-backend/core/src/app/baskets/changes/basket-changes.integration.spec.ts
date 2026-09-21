@@ -3,7 +3,7 @@ import {
   BasketKind,
   BasketRowMark,
   BasketRowState,
-  GeneratedListStatus,
+  BasketStatus,
   LineApprovalStatus,
   LineChangeKind,
   ListPermission,
@@ -22,8 +22,8 @@ import { DataSource, IsNull } from 'typeorm';
 import {
   BasketSource,
   CORE_ENTITIES,
-  GeneratedList,
-  GeneratedListParticipant,
+  Basket,
+  BasketParticipant,
   ListLine,
   ListLineChange,
   ShoppingList,
@@ -92,7 +92,7 @@ describeIntegration(
       });
       await dataSource.initialize();
 
-      const baskets = dataSource.getRepository(GeneratedList);
+      const baskets = dataSource.getRepository(Basket);
       const coverage = new BasketCoverageService(baskets);
       const resolver = new BasketRowResolver(baskets, fakeCoreConfig());
       marks = new BasketMarksReader(
@@ -107,17 +107,17 @@ describeIntegration(
           new Set(listIds.filter((listId) => writable.has(listId))),
         liveParticipantById: async (participantId: string) =>
           dataSource
-            .getRepository(GeneratedListParticipant)
+            .getRepository(BasketParticipant)
             .findOne({ where: { id: participantId } }),
         listParticipants: async ({
-          generatedListId,
+          basketId,
         }: {
-          generatedListId: string;
+          basketId: string;
         }) => ({
           participants: (
             await dataSource
-              .getRepository(GeneratedListParticipant)
-              .find({ where: { generatedListId, revokedAt: IsNull() } })
+              .getRepository(BasketParticipant)
+              .find({ where: { basketId, revokedAt: IsNull() } })
           ).map((row) => ({
             id: row.id,
             kind: row.kind,
@@ -268,14 +268,14 @@ describeIntegration(
         userId?: string | null;
         kind?: ParticipantKind;
       } = {}
-    ): Promise<{ basket: GeneratedList; participantId: string }> {
-      const repo = dataSource.getRepository(GeneratedList);
+    ): Promise<{ basket: Basket; participantId: string }> {
+      const repo = dataSource.getRepository(Basket);
       const saved = await repo.save(
         repo.create({
           ownerUserId: ids.owner,
           kind: BasketKind.GENERATED,
           name: 'Saturday',
-          status: GeneratedListStatus.OPEN,
+          status: BasketStatus.OPEN,
           // A day back by default, so a seeded change is inside the window a
           // viewer may be told about: `start` is the later of these two, and a
           // change before it is not theirs to see.
@@ -290,11 +290,11 @@ describeIntegration(
           sources.create({ basketId: saved.id, zoneId: ids.zone, listId })
         );
       }
-      const participants = dataSource.getRepository(GeneratedListParticipant);
+      const participants = dataSource.getRepository(BasketParticipant);
       const kind = options.kind ?? ParticipantKind.OWNER;
       const participant = await participants.save(
         participants.create({
-          generatedListId: saved.id,
+          basketId: saved.id,
           shareLinkId: null,
           kind,
           userId:
@@ -313,7 +313,7 @@ describeIntegration(
           lastSeenAt: new Date(),
           revokedAt: null,
           // A link visitor always carries one and the owner never does, which
-          // plan 0140's `ck_generated_list_participants_expiry` holds.
+          // plan 0140's `ck_basket_participants_expiry` holds.
           expiresAt:
             kind === ParticipantKind.OWNER
               ? null
@@ -380,9 +380,9 @@ describeIntegration(
     }
 
     /** The basket as one participant reads it, marks and all. */
-    async function view(held: GeneratedList, participantId: string) {
+    async function view(held: Basket, participantId: string) {
       const participant = await dataSource
-        .getRepository(GeneratedListParticipant)
+        .getRepository(BasketParticipant)
         .findOneByOrFail({ id: participantId });
       return read.view(held, participant);
     }

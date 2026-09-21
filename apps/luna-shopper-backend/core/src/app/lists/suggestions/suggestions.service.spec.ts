@@ -1,6 +1,6 @@
 import { PURCHASE_SESSION_GAP_MS } from '@portfolio/luna-shopper/contracts';
 import type { DataSource } from 'typeorm';
-import type { LineClaimService } from '../../generated-lists/line-claim.service';
+import type { LineClaimService } from '../../baskets/line-claim.service';
 import type { ListAccessService } from '../list-access.service';
 import {
   STAPLE_SESSION_MIN_LINES,

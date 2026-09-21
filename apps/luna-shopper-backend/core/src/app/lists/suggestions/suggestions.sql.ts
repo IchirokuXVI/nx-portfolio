@@ -1,4 +1,4 @@
-import { openBasketCoversLine } from '../../baskets/basket.sql';
+import { openBasketCoversLine } from '../../baskets/basket-read.sql';
 import { GENERATED_BASKET } from '../../baskets/open-basket.sql';
 import { basketAskedCte } from '../trips/basket-asked.sql';
 
@@ -175,7 +175,7 @@ export const SUGGESTION_RECENT_TRIPS_SQL = `
       ON ll.id = a."lineId"
      AND ll."listId" = $1::uuid
      AND ll."deletedAt" IS NULL
-    JOIN "generated_lists" gl ON gl.id = a."basketId"
+    JOIN "baskets" gl ON gl.id = a."basketId"
     WHERE gl."status" <> 'OPEN'
     GROUP BY a."basketId", gl."generatedAt"
   ),
@@ -186,7 +186,7 @@ export const SUGGESTION_RECENT_TRIPS_SQL = `
     WHERE s."listId" = $1::uuid
       AND s."revertedAt" IS NULL
       AND NOT EXISTS (
-        SELECT 1 FROM "generated_lists" gl
+        SELECT 1 FROM "baskets" gl
         WHERE gl.id = s."basketId" AND ${GENERATED_BASKET}
       )
   ),
@@ -254,7 +254,7 @@ export const SUGGESTION_LAST_ASKED_SQL = `
          a."basketId" AS "tripId",
          gl."generatedAt" AS "startedAt"
   FROM "basket_asked" a
-  JOIN "generated_lists" gl ON gl.id = a."basketId"
+  JOIN "baskets" gl ON gl.id = a."basketId"
   WHERE a."lineId" = ANY($2::uuid[])
     AND a."asked" > 0
     AND gl."status" <> 'OPEN'

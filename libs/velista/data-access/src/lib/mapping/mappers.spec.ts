@@ -3,9 +3,9 @@ import {
   toCatalogItem,
   toCatalogSuggestion,
   toComment,
-  toGeneratedListFromView,
-  toGeneratedListRun,
-  toGeneratedListSummary,
+  toBasketFromView,
+  toBasketRun,
+  toBasketSummary,
   toLine,
   toListAccessEntries,
   toListIdResult,
@@ -798,7 +798,7 @@ describe('toAssistantReply', () => {
  * Generated shopping lists (plan 0045), which is rule D4 applied to the two shapes the
  * listing and the create answer with.
  */
-describe('toGeneratedListSummary', () => {
+describe('toBasketSummary', () => {
   const wire = {
     id: 'gl1',
     kind: 'GENERATED',
@@ -813,7 +813,7 @@ describe('toGeneratedListSummary', () => {
   };
 
   it('maps the listing shape', () => {
-    expect(toGeneratedListSummary(wire)).toEqual({
+    expect(toBasketSummary(wire)).toEqual({
       id: 'gl1',
       kind: 'GENERATED',
       name: 'Saturday big shop',
@@ -837,7 +837,7 @@ describe('toGeneratedListSummary', () => {
    * breakdown would claim three purchases nobody made.
    */
   it('reads a summary with no breakdown as zeroes rather than dropping it', () => {
-    const mapped = toGeneratedListSummary({
+    const mapped = toBasketSummary({
       id: 'gl1',
       kind: 'GENERATED',
       name: null,
@@ -857,13 +857,13 @@ describe('toGeneratedListSummary', () => {
   // Collapsing it to an empty string would erase the difference between unnamed and
   // named nothing.
   it('keeps a null name as null rather than as an empty string', () => {
-    expect(toGeneratedListSummary({ ...wire, name: null })?.name).toBeNull();
+    expect(toBasketSummary({ ...wire, name: null })?.name).toBeNull();
   });
 
   it('drops a body that is not a record, and one with no id', () => {
-    expect(toGeneratedListSummary(null)).toBeNull();
-    expect(toGeneratedListSummary('gl1')).toBeNull();
-    expect(toGeneratedListSummary({ ...wire, id: undefined })).toBeNull();
+    expect(toBasketSummary(null)).toBeNull();
+    expect(toBasketSummary('gl1')).toBeNull();
+    expect(toBasketSummary({ ...wire, id: undefined })).toBeNull();
   });
 
   /**
@@ -873,20 +873,20 @@ describe('toGeneratedListSummary', () => {
    * history and title itself today.
    */
   it('drops a summary whose date cannot be read, rather than inventing one', () => {
-    expect(toGeneratedListSummary({ ...wire, generatedAt: 'soon' })).toBeNull();
-    expect(toGeneratedListSummary({ ...wire, generatedAt: null })).toBeNull();
+    expect(toBasketSummary({ ...wire, generatedAt: 'soon' })).toBeNull();
+    expect(toBasketSummary({ ...wire, generatedAt: null })).toBeNull();
   });
 
   // An unrecognised status must never read as ACTIVE, which would put a basket the
   // server considers finished back on the dashboard.
   it('falls back to UNKNOWN for a status this build does not know', () => {
-    expect(toGeneratedListSummary({ ...wire, status: 'PAUSED' })?.status).toBe(
+    expect(toBasketSummary({ ...wire, status: 'PAUSED' })?.status).toBe(
       'UNKNOWN'
     );
   });
 
   it('reads a missing count as zero rather than dropping the row', () => {
-    const mapped = toGeneratedListSummary({
+    const mapped = toBasketSummary({
       ...wire,
       lineCount: undefined,
       settledLineCount: undefined,
@@ -897,7 +897,7 @@ describe('toGeneratedListSummary', () => {
   });
 });
 
-describe('toGeneratedListFromView', () => {
+describe('toBasketFromView', () => {
   const line = (quantity: number, settled: number) => ({
     id: `l${quantity}${settled}`,
     content: 'Milk',
@@ -919,7 +919,7 @@ describe('toGeneratedListFromView', () => {
    * three call sites cannot disagree.
    */
   it('counts the lines and the finished ones off the basket itself', () => {
-    const mapped = toGeneratedListFromView(view);
+    const mapped = toBasketFromView(view);
 
     expect(mapped?.lineCount).toBe(3);
     expect(mapped?.settledLineCount).toBe(1);
@@ -928,7 +928,7 @@ describe('toGeneratedListFromView', () => {
   // A NOT_AVAILABLE outcome closes the outstanding amount without claiming anything was
   // bought, so the line is done and the card should say so.
   it('counts a line settled past what was asked for as finished', () => {
-    const mapped = toGeneratedListFromView({
+    const mapped = toBasketFromView({
       ...view,
       lines: [line(2, 5)],
     });
@@ -939,27 +939,27 @@ describe('toGeneratedListFromView', () => {
   // Zero is not an amount somebody worked through, and counting it would let an empty
   // basket report itself finished.
   it('does not count a line asking for nothing', () => {
-    const mapped = toGeneratedListFromView({ ...view, lines: [line(0, 0)] });
+    const mapped = toBasketFromView({ ...view, lines: [line(0, 0)] });
 
     expect(mapped?.lineCount).toBe(1);
     expect(mapped?.settledLineCount).toBe(0);
   });
 
   it('reads a basket with no lines as empty rather than dropping it', () => {
-    const mapped = toGeneratedListFromView({ ...view, lines: [] });
+    const mapped = toBasketFromView({ ...view, lines: [] });
 
     expect(mapped?.lineCount).toBe(0);
   });
 
   it('drops a body it cannot read at all', () => {
-    expect(toGeneratedListFromView(null)).toBeNull();
+    expect(toBasketFromView(null)).toBeNull();
     expect(
-      toGeneratedListFromView({ ...view, generatedAt: 'soon' })
+      toBasketFromView({ ...view, generatedAt: 'soon' })
     ).toBeNull();
   });
 });
 
-describe('toGeneratedListRun', () => {
+describe('toBasketRun', () => {
   const run = {
     list: {
       id: 'gl1',
@@ -977,7 +977,7 @@ describe('toGeneratedListRun', () => {
    * frozen copies of one line and false of two views of it.
    */
   it('keeps the basket the run made', () => {
-    const mapped = toGeneratedListRun(run);
+    const mapped = toBasketRun(run);
 
     expect(mapped).toEqual({ list: expect.objectContaining({ id: 'gl1' }) });
   });
@@ -985,7 +985,7 @@ describe('toGeneratedListRun', () => {
   it('reads an unknown kind as UNKNOWN rather than dropping the run', () => {
     // A kind this build has never heard of must not read as the permanent
     // basket, which is the safe direction the enum's fallback takes.
-    const mapped = toGeneratedListRun({
+    const mapped = toBasketRun({
       list: { ...run.list, kind: 'SOMETHING_NEW' },
     });
 
@@ -993,8 +993,8 @@ describe('toGeneratedListRun', () => {
   });
 
   it('drops a run whose basket cannot be read', () => {
-    expect(toGeneratedListRun({ ...run, list: null })).toBeNull();
-    expect(toGeneratedListRun(null)).toBeNull();
+    expect(toBasketRun({ ...run, list: null })).toBeNull();
+    expect(toBasketRun(null)).toBeNull();
   });
 });
 

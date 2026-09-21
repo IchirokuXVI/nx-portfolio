@@ -1,6 +1,6 @@
 import { toRealtimeEvent } from '../realtime/realtime-event-mapper';
 import { toBasketParticipant } from './basket-mappers';
-import { toContact, toSharedGeneratedListSummary } from './mappers';
+import { toContact, toSharedBasketSummary } from './mappers';
 
 /** The wire shapes backend `0114` added, mapped from `unknown` (velista `0085`). */
 
@@ -25,7 +25,7 @@ describe('toBasketParticipant without a join time', () => {
   });
 });
 
-describe('toSharedGeneratedListSummary', () => {
+describe('toSharedBasketSummary', () => {
   const view = {
     id: 'gl1',
     kind: 'GENERATED',
@@ -42,7 +42,7 @@ describe('toSharedGeneratedListSummary', () => {
   };
 
   it('keeps the summary and adds the owner and the shared date', () => {
-    const shared = toSharedGeneratedListSummary(view);
+    const shared = toSharedBasketSummary(view);
 
     expect(shared?.lineCount).toBe(4);
     expect(shared?.owner).toEqual({ userId: 'u-marta', name: 'Marta' });
@@ -51,10 +51,10 @@ describe('toSharedGeneratedListSummary', () => {
 
   it('refuses a row that cannot say whose basket it is', () => {
     expect(
-      toSharedGeneratedListSummary({ ...view, owner: undefined })
+      toSharedBasketSummary({ ...view, owner: undefined })
     ).toBeNull();
     expect(
-      toSharedGeneratedListSummary({ ...view, sharedAt: 'not a date' })
+      toSharedBasketSummary({ ...view, sharedAt: 'not a date' })
     ).toBeNull();
   });
 });
@@ -73,16 +73,16 @@ describe('toContact', () => {
 });
 
 describe('the access events', () => {
-  it('maps generatedList.shared and generatedList.unshared to their basket id', () => {
+  it('maps basket.shared and basket.unshared to their basket id', () => {
     expect(
-      toRealtimeEvent('generatedList.shared', { generatedListId: 'gl1' })
-    ).toEqual({ type: 'generatedList.shared', generatedListId: 'gl1' });
+      toRealtimeEvent('basket.shared', { basketId: 'gl1' })
+    ).toEqual({ type: 'basket.shared', basketId: 'gl1' });
     expect(
-      toRealtimeEvent('generatedList.unshared', { generatedListId: 'gl1' })
-    ).toEqual({ type: 'generatedList.unshared', generatedListId: 'gl1' });
+      toRealtimeEvent('basket.unshared', { basketId: 'gl1' })
+    ).toEqual({ type: 'basket.unshared', basketId: 'gl1' });
   });
 
   it('drops one that names no basket', () => {
-    expect(toRealtimeEvent('generatedList.unshared', { id: 'gl1' })).toBeNull();
+    expect(toRealtimeEvent('basket.unshared', { id: 'gl1' })).toBeNull();
   });
 });

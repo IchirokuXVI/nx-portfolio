@@ -2,7 +2,7 @@ import {
   BasketKind,
   BasketRowNote,
   BasketRowState,
-  GeneratedListStatus,
+  BasketStatus,
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
@@ -22,14 +22,14 @@ import {
   BasketLineSkip,
   BasketSource,
   CORE_ENTITIES,
-  GeneratedList,
-  GeneratedListParticipant,
+  Basket,
+  BasketParticipant,
   ListLine,
   ShoppingList,
   Zone,
   ZoneMembership,
 } from '../entities';
-import { LineClaimService } from '../generated-lists/line-claim.service';
+import { LineClaimService } from '../baskets/line-claim.service';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineChangeRecorder } from '../lists/changes/line-change.recorder';
 import { LineMergeService } from '../lists/line-merge.service';
@@ -102,7 +102,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
     });
     await dataSource.initialize();
 
-    const baskets = dataSource.getRepository(GeneratedList);
+    const baskets = dataSource.getRepository(Basket);
     const coverage = new BasketCoverageService(baskets);
     announcer = new BasketAnnouncer(
       coverage,
@@ -115,17 +115,17 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         new Set(listIds),
       liveParticipantById: async (participantId: string) =>
         dataSource
-          .getRepository(GeneratedListParticipant)
+          .getRepository(BasketParticipant)
           .findOne({ where: { id: participantId } }),
       listParticipants: async ({
-        generatedListId,
+        basketId,
       }: {
-        generatedListId: string;
+        basketId: string;
       }) => ({
         participants: (
           await dataSource
-            .getRepository(GeneratedListParticipant)
-            .find({ where: { generatedListId, revokedAt: IsNull() } })
+            .getRepository(BasketParticipant)
+            .find({ where: { basketId, revokedAt: IsNull() } })
         ).map((row) => ({
           id: row.id,
           kind: row.kind,
@@ -267,15 +267,15 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
   async function basket(
     options: { kind?: BasketKind; guest?: boolean } = {},
     ...listIds: string[]
-  ): Promise<{ basket: GeneratedList; participantId: string }> {
-    const repo = dataSource.getRepository(GeneratedList);
+  ): Promise<{ basket: Basket; participantId: string }> {
+    const repo = dataSource.getRepository(Basket);
     const kind = options.kind ?? BasketKind.GENERATED;
     const saved = await repo.save(
       repo.create({
         ownerUserId: ids.shopper,
         kind,
         name: kind === BasketKind.LIVE ? null : 'Saturday',
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
         generatedAt: new Date(),
         idempotencyKey: null,
       })
@@ -288,10 +288,10 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         );
       }
     }
-    const participants = dataSource.getRepository(GeneratedListParticipant);
+    const participants = dataSource.getRepository(BasketParticipant);
     const participant = await participants.save(
       participants.create({
-        generatedListId: saved.id,
+        basketId: saved.id,
         shareLinkId: null,
         // A guest is the point of test 6: both routes are open to any live
         // participant, and the permission is the owner's by construction.
@@ -306,7 +306,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         lastSeenAt: new Date(),
         revokedAt: null,
         // A link visitor always carries one and the owner never does, which
-        // plan 0140's `ck_generated_list_participants_expiry` holds.
+        // plan 0140's `ck_basket_participants_expiry` holds.
         expiresAt: options.guest
           ? new Date(Date.now() + 12 * 60 * 60 * 1000)
           : null,
@@ -316,7 +316,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
   }
 
   /** The row a key names, as the reader of the whole basket sees it. */
-  async function rowOf(held: GeneratedList, rowKey: string) {
+  async function rowOf(held: Basket, rowKey: string) {
     const listIds = (await coverageOf(held)).map((row) => row.listId);
     const { rows } = await read.rowsOf(
       held,
@@ -334,8 +334,8 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
     return row;
   }
 
-  const coverageOf = (held: GeneratedList) =>
-    new BasketCoverageService(dataSource.getRepository(GeneratedList)).listsOf(
+  const coverageOf = (held: Basket) =>
+    new BasketCoverageService(dataSource.getRepository(Basket)).listsOf(
       held
     );
 
@@ -457,15 +457,15 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
       const { basket: held, participantId } = await basket({}, listId);
       const row = await line(listId, 'Bread', 1);
       await dataSource
-        .getRepository(GeneratedList)
-        .update(held.id, { status: GeneratedListStatus.FINISHED });
+        .getRepository(Basket)
+        .update(held.id, { status: BasketStatus.FINISHED });
 
       const req = { basketId: held.id, participantId, rowKey: row.id };
       await expect(skipService.skip(req)).rejects.toMatchObject({
-        code: 'generated_list_finished',
+        code: 'basket_finished',
       });
       await expect(skipService.unskip(req)).rejects.toMatchObject({
-        code: 'generated_list_finished',
+        code: 'basket_finished',
       });
     });
   });
@@ -645,8 +645,8 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
       // The same row, the same database, a longer window. Nothing about the
       // spec's own clock is involved in either answer.
       const wider = new BasketReadService(
-        dataSource.getRepository(GeneratedList),
-        new BasketCoverageService(dataSource.getRepository(GeneratedList)),
+        dataSource.getRepository(Basket),
+        new BasketCoverageService(dataSource.getRepository(Basket)),
         {
           writableAmong: async (_u: string, ids: readonly string[]) =>
             new Set(ids),
@@ -805,7 +805,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
       });
       expect(await skipsOf(held.id)).toHaveLength(1);
 
-      await dataSource.getRepository(GeneratedList).delete({ id: held.id });
+      await dataSource.getRepository(Basket).delete({ id: held.id });
       expect(await skipsOf(held.id)).toHaveLength(0);
     });
 
@@ -820,14 +820,14 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         rowKey: row.id,
       });
       await dataSource
-        .getRepository(GeneratedList)
-        .update(held.id, { status: GeneratedListStatus.FINISHED });
+        .getRepository(Basket)
+        .update(held.id, { status: BasketStatus.FINISHED });
 
       // Finishing does nothing with a standing skip: the frozen row says asked
       // and not bought, and the skip dies with nothing to say.
       expect(await skipsOf(held.id)).toHaveLength(1);
       const finished = await dataSource
-        .getRepository(GeneratedList)
+        .getRepository(Basket)
         .findOneByOrFail({ id: held.id });
       const { rows } = await read.rowsOf(
         finished,

@@ -1,7 +1,7 @@
 import {
   BasketKind,
   BasketRowState,
-  GeneratedListStatus,
+  BasketStatus,
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
@@ -19,8 +19,8 @@ import { DataSource, IsNull } from 'typeorm';
 import {
   BasketSource,
   CORE_ENTITIES,
-  GeneratedList,
-  GeneratedListParticipant,
+  Basket,
+  BasketParticipant,
   LineSettlement,
   ListLine,
   ShoppingList,
@@ -101,7 +101,7 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
     });
     await dataSource.initialize();
 
-    const baskets = dataSource.getRepository(GeneratedList);
+    const baskets = dataSource.getRepository(Basket);
     const coverage = new BasketCoverageService(baskets);
     announcer = new BasketAnnouncer(
       coverage,
@@ -117,20 +117,20 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         new Set(listIds),
       liveParticipantById: async (participantId: string) =>
         dataSource
-          .getRepository(GeneratedListParticipant)
+          .getRepository(BasketParticipant)
           .findOne({ where: { id: participantId } }),
       // The real rows, because the read looks its caller up in them: a
       // participant the list does not name is a revocation that landed between
       // the guard and the read, and the answer would be a refusal.
       listParticipants: async ({
-        generatedListId,
+        basketId,
       }: {
-        generatedListId: string;
+        basketId: string;
       }) => ({
         participants: (
           await dataSource
-            .getRepository(GeneratedListParticipant)
-            .find({ where: { generatedListId, revokedAt: IsNull() } })
+            .getRepository(BasketParticipant)
+            .find({ where: { basketId, revokedAt: IsNull() } })
         ).map((row) => ({
           id: row.id,
           kind: row.kind,
@@ -266,14 +266,14 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
    */
   async function basket(
     ...listIds: string[]
-  ): Promise<{ basket: GeneratedList; participantId: string }> {
-    const repo = dataSource.getRepository(GeneratedList);
+  ): Promise<{ basket: Basket; participantId: string }> {
+    const repo = dataSource.getRepository(Basket);
     const saved = await repo.save(
       repo.create({
         ownerUserId: ids.shopper,
         kind: BasketKind.GENERATED,
         name: 'Saturday',
-        status: GeneratedListStatus.OPEN,
+        status: BasketStatus.OPEN,
         generatedAt: new Date(),
         idempotencyKey: null,
       })
@@ -284,10 +284,10 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         sources.create({ basketId: saved.id, zoneId: ids.zone, listId })
       );
     }
-    const participants = dataSource.getRepository(GeneratedListParticipant);
+    const participants = dataSource.getRepository(BasketParticipant);
     const participant = await participants.save(
       participants.create({
-        generatedListId: saved.id,
+        basketId: saved.id,
         shareLinkId: null,
         kind: ParticipantKind.OWNER,
         userId: ids.shopper,

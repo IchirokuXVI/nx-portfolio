@@ -15,7 +15,7 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource } from 'typeorm';
-import { LineClaimService } from '../../generated-lists/line-claim.service';
+import { LineClaimService } from '../../baskets/line-claim.service';
 import { ListAccessService } from '../list-access.service';
 import { toTripRowView, toTripView } from './trips.mappers';
 import {
@@ -58,7 +58,7 @@ const UUID_PATTERN =
  *
  * ## Read only, and nothing is copied
  *
- * Every number is derived on read from `generated_list_line_origins` and
+ * Every number is derived on read from `basket_line_origins` and
  * `line_settlements`. Both stop changing when a basket ends, so an old trip's
  * rows freeze by themselves and never follow the line's live quantity.
  *

@@ -20,7 +20,7 @@ import {
   type ScopeLocation,
 } from '@portfolio/velista/models';
 import {
-  generatedListIdOf,
+  basketIdOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
 import {
@@ -109,7 +109,7 @@ export class ShopPickerSheet {
   private readonly _locale = inject(RokuLocaleStore).locale;
 
   /** The basket underneath, which is what both ways out of here are built on. */
-  private readonly _generatedListId = generatedListIdOf(this._route);
+  private readonly _basketId = basketIdOf(this._route);
 
   /** Which chain's shops are open, or null when none is. */
   protected readonly openChain = signal<string | null>(null);
@@ -363,7 +363,7 @@ export class ShopPickerSheet {
     return filterSheetPath(
       this._locale(),
       this._basePath,
-      this._generatedListId()
+      this._basketId()
     );
   }
 }

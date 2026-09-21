@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   ADMIN_DASHBOARD_ACTIVITY_LIMIT,
   BasketKind,
-  GeneratedListStatus,
+  BasketStatus,
   MembershipStatus,
   ZoneStatus,
   type AdminCoreDashboard,
@@ -15,7 +15,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository, type ObjectLiteral } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
-import { GeneratedList, ShoppingList, Zone, ZoneMembership } from '../entities';
+import { Basket, ShoppingList, Zone, ZoneMembership } from '../entities';
 import { CorePlatformAdminService } from './platform-admin.service';
 
 /**
@@ -38,8 +38,8 @@ export class CoreDashboardService {
     private readonly memberships: Repository<ZoneMembership>,
     @InjectRepository(ShoppingList)
     private readonly lists: Repository<ShoppingList>,
-    @InjectRepository(GeneratedList)
-    private readonly baskets: Repository<GeneratedList>,
+    @InjectRepository(Basket)
+    private readonly baskets: Repository<Basket>,
     private readonly gate: CorePlatformAdminService,
     private readonly audit: CoreAuditService
   ) {}
@@ -137,8 +137,8 @@ export class CoreDashboardService {
       .setParameters({
         generated: BasketKind.GENERATED,
         live: BasketKind.LIVE,
-        open: GeneratedListStatus.OPEN,
-        finished: GeneratedListStatus.FINISHED,
+        open: BasketStatus.OPEN,
+        finished: BasketStatus.FINISHED,
       })
       .getRawOne<{
         total: number;

@@ -3,7 +3,7 @@ import type {
   AddPostalCodeRequest,
   CatalogItem,
   Comment,
-  GeneratedListSummary,
+  BasketSummary,
   Identity,
   Line,
   LineApprovalStatus,
@@ -19,7 +19,7 @@ import type {
   ResolvedPostalCode,
   SessionTokens,
   SettlementOutcome,
-  SharedGeneratedListSummary,
+  SharedBasketSummary,
   ShoppingListsLoad,
   ShoppingListSummary,
   ShoppingProfile,
@@ -41,8 +41,8 @@ import {
 import { SessionStore } from '../auth/session-store';
 import { GroupNames } from '../catalog/group-names';
 import { ItemNames } from '../catalog/item-names';
-import { GeneratedListStore } from '../generated-lists/generated-list-store';
-import { SharedListStore } from '../generated-lists/shared-list-store';
+import { BasketListStore } from '../baskets/basket-list-store';
+import { SharedListStore } from '../baskets/shared-list-store';
 import { LineStore, type LineLoadState } from '../lines/line-store';
 import { ListStore, type ListLoadState } from '../lists/list-store';
 import { MemberNames } from '../memberships/member-names';
@@ -2153,7 +2153,7 @@ export function provideFakeShoppingProfileStore(
 }
 
 /**
- * A `GeneratedListStore` holding a fixed listing (plan 0045).
+ * A `BasketListStore` holding a fixed listing (plan 0045).
  *
  * A double rather than the real store over a fake service, for `fakeZoneStore`'s
  * reason: a page spec wants to state "there is one active basket" as a fact about the
@@ -2161,8 +2161,8 @@ export function provideFakeShoppingProfileStore(
  * is the paging, the merge on a further page and the realtime upsert, is covered
  * against the real thing in its own spec.
  */
-export function fakeGeneratedListStore(
-  initial: readonly GeneratedListSummary[] = [],
+export function fakeBasketListStore(
+  initial: readonly BasketSummary[] = [],
   options: {
     state?: ShoppingListsLoad;
     error?: unknown;
@@ -2171,7 +2171,7 @@ export function fakeGeneratedListStore(
     pagesLoaded?: number;
   } = {}
 ) {
-  const lists = signal<readonly GeneratedListSummary[]>(initial);
+  const lists = signal<readonly BasketSummary[]>(initial);
   const state = signal<ShoppingListsLoad>(options.state ?? 'loaded');
   const error = signal<unknown>(options.error ?? null);
   const loadingMore = signal(false);
@@ -2209,13 +2209,13 @@ export function fakeGeneratedListStore(
     },
     create: async () => {
       calls.push('create');
-      throw new Error('fakeGeneratedListStore.create is not configured');
+      throw new Error('fakeBasketListStore.create is not configured');
     },
 
     calls: calls as readonly string[],
 
     /** Move the store while a fixture is mounted, to test a live update. */
-    set: (next: readonly GeneratedListSummary[]) => lists.set(next),
+    set: (next: readonly BasketSummary[]) => lists.set(next),
     setState: (next: ShoppingListsLoad, cause: unknown = null) => {
       state.set(next);
       error.set(cause);
@@ -2231,31 +2231,31 @@ export function fakeGeneratedListStore(
      * refresh, which changes the rows and leaves the counter where it is. A spec about
      * that quiet case uses {@link set} on its own.
      */
-    landPage: (next: readonly GeneratedListSummary[]) => {
+    landPage: (next: readonly BasketSummary[]) => {
       lists.set(next);
       pagesLoaded.update((n) => n + 1);
     },
   };
 }
 
-export type FakeGeneratedListStore = ReturnType<typeof fakeGeneratedListStore>;
+export type FakeBasketListStore = ReturnType<typeof fakeBasketListStore>;
 
-/** {@link fakeGeneratedListStore} bound to the real token. */
-export function provideFakeGeneratedListStore(
-  store: FakeGeneratedListStore = fakeGeneratedListStore()
+/** {@link fakeBasketListStore} bound to the real token. */
+export function provideFakeBasketListStore(
+  store: FakeBasketListStore = fakeBasketListStore()
 ): Provider {
-  return { provide: GeneratedListStore, useValue: store };
+  return { provide: BasketListStore, useValue: store };
 }
 
 /**
  * A `SharedListStore` in whatever state a spec needs (velista `0085`).
  *
- * `fakeGeneratedListStore`'s shape, over the shared listing, and **idle with no pages
+ * `fakeBasketListStore`'s shape, over the shared listing, and **idle with no pages
  * by default**: the Shared lists tab is read only when it is first shown, so a store
  * that had already read something would hide the one thing a page spec checks.
  */
 export function fakeSharedListStore(
-  initial: readonly SharedGeneratedListSummary[] = [],
+  initial: readonly SharedBasketSummary[] = [],
   options: {
     state?: ShoppingListsLoad;
     error?: unknown;
@@ -2263,7 +2263,7 @@ export function fakeSharedListStore(
     pagesLoaded?: number;
   } = {}
 ) {
-  const lists = signal<readonly SharedGeneratedListSummary[]>(initial);
+  const lists = signal<readonly SharedBasketSummary[]>(initial);
   const state = signal<ShoppingListsLoad>(options.state ?? 'idle');
   const error = signal<unknown>(options.error ?? null);
   const loadingMore = signal(false);
@@ -2291,12 +2291,12 @@ export function fakeSharedListStore(
 
     calls: calls as readonly string[],
 
-    set: (next: readonly SharedGeneratedListSummary[]) => lists.set(next),
+    set: (next: readonly SharedBasketSummary[]) => lists.set(next),
     setState: (next: ShoppingListsLoad, cause: unknown = null) => {
       state.set(next);
       error.set(cause);
     },
-    landPage: (next: readonly SharedGeneratedListSummary[]) => {
+    landPage: (next: readonly SharedBasketSummary[]) => {
       lists.set(next);
       state.set('loaded');
       pagesLoaded.update((n) => n + 1);

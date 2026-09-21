@@ -14,11 +14,11 @@ import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
 import { ContactMemory } from './contacts/contact-memory';
 import { ContactStore } from './contacts/contact-store';
-import { BasketSessionStore } from './generated-lists/basket-session-store';
-import { BasketStore } from './generated-lists/basket-store';
-import { GeneratedListMemory } from './generated-lists/generated-list-memory';
-import { GeneratedListStore } from './generated-lists/generated-list-store';
-import { SharedListStore } from './generated-lists/shared-list-store';
+import { BasketSessionStore } from './baskets/basket-session-store';
+import { BasketStore } from './baskets/basket-store';
+import { BasketListMemory } from './baskets/basket-list-memory';
+import { BasketListStore } from './baskets/basket-list-store';
+import { SharedListStore } from './baskets/shared-list-store';
 import { LineMemory } from './lines/line-memory';
 import { LineStore } from './lines/line-store';
 import { ListMemory } from './lists/list-memory';
@@ -115,14 +115,14 @@ import { ZoneStore } from './zones/zone-store';
  * `ShoppingProfileMemory` joins for `AccountMemory`'s reason exactly, and
  * `ShoppingProfileApi` stays out like every other real transport.
  *
- * `GeneratedListStore` (plan 0045) joins for `ZoneStore`'s reason a sixth time: it
- * resolves `GENERATED_LIST_SERVICE` and `REALTIME_CLIENT`, so at the root it would list
+ * `BasketListStore` (plan 0045) joins for `ZoneStore`'s reason a sixth time: it
+ * resolves `BASKET_LIST_SERVICE` and `REALTIME_CLIENT`, so at the root it would list
  * fixture baskets beside a real account and would apply the owner's own basket events
  * from a socket nobody was connected to. It is app scoped rather than page scoped for
  * `ShoppingProfileStore`'s second reason: the dashboard card and the history page are
  * two routes reading one listing, and a page owned store would refetch it on every move
- * between them. `GeneratedListMemory` joins for `AccountMemory`'s reason exactly, and
- * `GeneratedListApi` stays out like every other real transport.
+ * between them. `BasketListMemory` joins for `AccountMemory`'s reason exactly, and
+ * `BasketListApi` stays out like every other real transport.
  *
  * `ItemNames` (plan 0047) joins for `MemberNames`' reason exactly: it resolves
  * `CATALOG_SERVICE`, so at the root it would name products from whatever that token's
@@ -184,8 +184,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ShoppingProfileMemory,
   ShoppingProfileStore,
   ShopMemory,
-  GeneratedListMemory,
-  GeneratedListStore,
+  BasketListMemory,
+  BasketListStore,
   SharedListStore,
   ContactMemory,
   ContactStore,

@@ -9,7 +9,7 @@ import { Injectable, signal, type Signal } from '@angular/core';
  * and the number is a fact about the caller's baskets, so the layer that already knows
  * it writes here and the bar reads it.
  *
- * `GeneratedListStore` is that writer. It holds every summary the account has and
+ * `BasketListStore` is that writer. It holds every summary the account has and
  * filters the live ones for the dashboard card already, so the count costs nothing and
  * cannot disagree with the card above it.
  */
