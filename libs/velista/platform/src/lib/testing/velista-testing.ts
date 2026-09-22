@@ -133,6 +133,11 @@ export function fakeBrowserFacade(
     location: null,
     document: globalThis.document,
     matchMedia: () => () => false,
+    // Observes nothing, like the real facade under a server render: a row is
+    // never reported on screen, so nothing is ever acknowledged by accident
+    // (velista `0093`, section 7). A spec that drives an intersection passes
+    // its own in `overrides` and keeps the callback.
+    observeIntersection: () => () => undefined,
     readStorage: (key: string) => storage.get(key) ?? null,
     writeStorage: (key: string, value: string) => void storage.set(key, value),
     removeStorage: (key: string) => void storage.delete(key),

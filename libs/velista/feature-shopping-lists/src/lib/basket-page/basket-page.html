@@ -271,8 +271,8 @@
           (queryChange)="search($event)"
           [activeCount]="activeCount()"
           [query]="searchQuery()"
-          [shown]="visibleLines().length"
-          [total]="rows().length"
+          [shown]="shownCount()"
+          [total]="countableRows().length"
           fieldId="basket-search"
         >
           <!--
@@ -320,6 +320,30 @@
             />
           }
         </lib-list-tools>
+
+        <!--
+          What changed on the lists while somebody was shopping (velista 0093,
+          section 5).
+
+          **Under the tools bar and above the prompt**, inside the scroll and
+          outside the sticky bar: the bar's height is velista 0079's and a
+          banner inside it would push the search and the chips down a phone
+          every time a line moved on somebody else's list.
+
+          The count is the server's, per viewer. It goes when a read says zero,
+          which is what follows an acknowledgement, and never because this page
+          decided somebody had read it.
+
+          Drawn on a finished basket too, with the same count: what changed is
+          still worth reading. Never in the loading, failed or revoked states,
+          which this branch of the switch already excludes.
+        -->
+        @if (unseenChanges() > 0) {
+          <lib-changes-banner
+            (opened)="openChanges()"
+            [count]="unseenChanges()"
+          />
+        }
 
         <!--
           Every line is settled, so the screen asks (plan 0057, section 4). The last
@@ -422,7 +446,13 @@
 
                 <ul class="lines">
                   @for (row of section.rows; track row.key) {
-                    <li>
+                    <!--
+                      A marked row tells the acknowledger when it is really on
+                      screen (velista 0093, section 7). Only while it is
+                      marked: an ordinary row observes nothing, so a basket of
+                      forty rows holds observers for the two that changed.
+                    -->
+                    <li [libSeenTarget]="row.row.mark !== null">
                       <lib-basket-row
                         (left)="setRowLeft(row, $event)"
                         (open)="openRow(row.row)"

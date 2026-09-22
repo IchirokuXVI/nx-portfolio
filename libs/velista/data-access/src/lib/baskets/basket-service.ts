@@ -3,6 +3,7 @@ import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   Basket,
   BasketAddLineRequest,
+  BasketChangePage,
   BasketDemandRequest,
   BasketLinkPreview,
   BasketParticipant,
@@ -16,6 +17,7 @@ import type {
   CatalogSuggestion,
   LiveBasketSummary,
 } from '@portfolio/velista/models';
+import type { BasketChangeContext } from '../mapping/basket-change-mappers';
 import { BasketApi } from './basket-api';
 
 /**
@@ -273,6 +275,47 @@ export interface BasketServiceI {
     basketId: string,
     query: string
   ): Promise<readonly CatalogSuggestion[]>;
+
+  /**
+   * What changed on the lists this basket covers, newest first
+   * (`GET /v1/baskets/:id/changes`), velista `0093`, backend `0138`.
+   *
+   * A **history** and not a nudge, so it includes the reader's own changes: the
+   * marks on the basket read are what leave those out. Every entry carries the
+   * server's own `unseen`, which is the only thing that says what is new to this
+   * viewer; nothing on this side compares a time to a clock.
+   *
+   * On the participant credential like every other read here, so a guest may
+   * call it and is served no list id and no actor they are not entitled to
+   * (backend `0130`, section 6).
+   *
+   * **`context` is an argument because this answer cannot be mapped without
+   * the basket.** Core serves no names, no list refs and no merge survivor
+   * text: an actor is an id, a list is an id, and the line a merge folded
+   * into is a row key. All three are resolved against the basket the caller
+   * already holds, at the moment the page is mapped, which is the only place
+   * that knows them.
+   */
+  changes(
+    basketId: string,
+    context: BasketChangeContext,
+    cursor?: string
+  ): Promise<BasketChangePage>;
+
+  /**
+   * Say which changes this viewer has drawn
+   * (`POST /v1/baskets/:id/changes/seen`), velista `0093`, section 7.
+   *
+   * `through` is the **id of the newest change the client drew**, never "up to
+   * now": a change that arrives between the render and this call stays unseen,
+   * and a cursor never carries a timestamp (backend `0130`, section 13).
+   *
+   * The rule about **when** to call it is the caller's and cannot be enforced
+   * here: only while the marked rows, or the changes sheet, were really on
+   * screen with the document visible. A background refetch acknowledges nothing.
+   * `ChangeAcknowledger` is the one thing in this app allowed to make this call.
+   */
+  acknowledgeChanges(basketId: string, through: string): Promise<void>;
 
   /** Everybody on the basket (`GET .../participants/mine`), for presence. */
   listParticipants(basketId: string): Promise<readonly BasketParticipant[]>;

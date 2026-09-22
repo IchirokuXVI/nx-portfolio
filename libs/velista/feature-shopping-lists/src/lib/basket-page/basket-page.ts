@@ -16,6 +16,7 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BasketChangeStore,
   BasketListStore,
   BasketStore,
   BasketTargetStore,
@@ -24,6 +25,7 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  countableBasketRows,
   selectBasketSurface,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
@@ -39,6 +41,7 @@ import {
   sheetSegments,
 } from '@portfolio/velista/platform';
 import {
+  ChangesBanner,
   ChevronLeftIcon,
   ChipRow,
   FlagIcon,
@@ -53,6 +56,8 @@ import { basketErrorKey } from '../basket-error-copy';
 import { outstandingCaption, participantInitials } from '../basket-labels';
 import { BASKET_PATHS } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
+import { ChangeAcknowledger } from './change-acknowledger';
+import { SeenTarget } from './seen-target';
 
 /**
  * The basket: a list of lines with quantities, which whoever is holding the
@@ -112,8 +117,10 @@ import { BasketRow } from '../basket-row/basket-row';
   selector: 'lib-basket-page',
   imports: [
     BasketRow,
+    ChangesBanner,
     ChevronLeftIcon,
     ChipRow,
+    SeenTarget,
     FlagIcon,
     LineComposer,
     ListTools,
@@ -126,6 +133,16 @@ import { BasketRow } from '../basket-row/basket-row';
   templateUrl: './basket-page.html',
   styleUrl: './basket-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // On the **component** and not on the route, which is the whole of velista
+  // `0093` section 7's placement rule: a route injector is never destroyed, so
+  // an acknowledger provided there would outlive this page with a dwell timer
+  // running and a set of rows that are not on screen any more. Provided here it
+  // dies with the page, and its `DestroyRef` really fires.
+  //
+  // `BasketChangeStore` is **not** here. It is on the route beside
+  // `BasketStore`, because the changes sheet is a child route that is
+  // constructed and destroyed while this page stays.
+  providers: [ChangeAcknowledger],
   host: {
     // Which element scrolls, for the stylesheet's sake: see `standalone`.
     '[class.standalone]': 'standalone',
@@ -148,6 +165,17 @@ export class BasketPage {
    * on this page because it outlives one render of the dock and because it reads
    * and writes this device's memory, which is not a page's business (rule D1).
    */
+  /**
+   * What changed on the covered lists, for the banner and for the sheet over
+   * this page (velista `0093`).
+   *
+   * Route provided beside {@link BasketStore}, so the sheet reaches the same
+   * instance this page reads. Injected here although the page draws none of the
+   * entries: the page is what lets it go, because a route provider's own
+   * `DestroyRef` never fires.
+   */
+  private readonly _changes = inject(BasketChangeStore);
+
   private readonly _target = inject(BasketTargetStore);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
@@ -200,6 +228,29 @@ export class BasketPage {
 
   protected readonly state = this._store.state;
   protected readonly rows = this._store.rows;
+
+  /**
+   * The rows every count on this page is over (velista `0093`, section 4).
+   *
+   * One selector, so the tools bar's pair and the chip row's pair cannot answer
+   * "how many rows are there" differently the day a `REMOVED` row arrives. It
+   * never touches the progress sentence, which is the server's numbers and is
+   * never recounted here.
+   */
+  protected readonly countableRows = computed(() =>
+    countableBasketRows(this.rows())
+  );
+
+  /**
+   * How many changes are new to this viewer, straight off the read.
+   *
+   * Zero draws no banner, and it reaches zero because a basket read said so:
+   * this page never decrements it and never hides the banner after a tap
+   * (velista `0093`, section 5).
+   */
+  protected readonly unseenChanges = computed(
+    () => this._store.basket()?.unseenChangeCount ?? 0
+  );
   protected readonly progress = this._store.progress;
 
   /**
@@ -579,6 +630,9 @@ export class BasketPage {
       // survives, which is the whole point of writing it down; what is dropped is
       // this page's hold on it.
       this._target.leave();
+      // The fourth one on this route, for the same reason: without this a
+      // basket opened later starts holding the previous basket's changes.
+      this._changes.reset();
     });
   }
 
@@ -933,6 +987,22 @@ export class BasketPage {
   protected readonly visibleCount = this._view.visibleCount;
 
   /**
+   * How many rows the tools bar says are shown.
+   *
+   * {@link visibleCount} with the `REMOVED` rows taken out, which is the same
+   * rule the total follows: a search or a filter treats such a row like any
+   * other and may well leave it standing, and a bar reading "13 of 12" is what
+   * counting it on one side alone produces.
+   *
+   * {@link visibleCount} itself stays as it is, because it answers a different
+   * question: whether there is anything on screen at all, which decides between
+   * the rows and the "nothing matched" block.
+   */
+  protected readonly shownCount = computed(
+    () => countableBasketRows(this.visibleLines()).length
+  );
+
+  /**
    * The scope every row quotes, or null for the cheapest anywhere (`0078`).
    *
    * Asked once for the whole basket and handed to each row, which is what this page
@@ -985,12 +1055,13 @@ export class BasketPage {
    * this says what it cost.
    */
   protected readonly chipCount = computed(() => {
-    const shown = this.visibleCount();
+    const shown = this.shownCount();
     // The rows a shopper is working through, which is every row that is not
     // `REMOVED`: one somebody took off the basket is information about it rather
     // than a thing the filter is hiding, and counting it would make an unfiltered
-    // basket report fewer rows than it holds.
-    const total = this.rows().filter((row) => row.state !== 'REMOVED').length;
+    // basket report fewer rows than it holds. One selector for every count on
+    // this page, so the two pairs cannot disagree (velista `0093`, section 4).
+    const total = this.countableRows().length;
     if (shown >= total) {
       return null;
     }
@@ -1012,6 +1083,13 @@ export class BasketPage {
     if (chip !== undefined) {
       this._view.resetProperty(chip.property);
     }
+  }
+
+  /** Read what changed, in words (velista `0093`, section 6). */
+  protected openChanges(): void {
+    void this._router.navigate(sheetSegments('changes'), {
+      relativeTo: this._route,
+    });
   }
 
   protected openFilter(): void {

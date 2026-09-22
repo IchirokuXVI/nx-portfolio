@@ -1,0 +1,55 @@
+:host {
+  display: block;
+}
+
+// One row, one control, inside the scroll and outside the sticky tools bar: the
+// bar's height is velista 0079's and this must not add to it (section 5).
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin-block: var(--app-space-3);
+  padding: var(--app-space-2) var(--app-space-3);
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-action-quiet-bg);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--app-action-quiet-fg);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The accent as a **shape**, beside a sentence that says the same thing. Never
+// the warning colour: amber is this app's accent and not its attention role
+// (`0002`, section 4.4), and something new on a list is not a fault.
+.dot {
+  flex: none;
+  inline-size: var(--app-space-3);
+  block-size: var(--app-space-3);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-fg);
+}
+
+.words {
+  flex: 1;
+  min-inline-size: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+  text-wrap: pretty;
+}
+
+.chevron {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}

@@ -7,6 +7,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { NotFoundComponent } from '@portfolio/shared/ui';
 import {
+  BasketChangeStore,
   BasketSocket,
   BasketStore,
   BasketTargetStore,
@@ -203,6 +204,21 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
     // which folded the units sheet into the settle sheet itself: its rows
     // are drawn under the product, where the shopper already is, rather
     // than behind a second navigation nobody found.
+    // What changed on the covered lists while somebody was shopping
+    // (velista `0093`, section 6). A sheet over **both** basket routes,
+    // because a basket follows its lists whichever way it was opened.
+    //
+    // Unguarded like its siblings: every participant may read it, a guest
+    // included, and what a guest is served is redacted by the server rather
+    // than by a guard here. It reads and writes nothing except the
+    // acknowledgement, which the page decides and not this route.
+    sheet({
+      path: 'changes',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-shopping-lists').then(
+          (m) => m.ChangesSheet
+        ),
+    }),
     sheet({
       path: 'people',
       loadComponent: () =>
@@ -943,11 +959,16 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-shopping-lists').then(
                 (m) => m.BasketPage
               ),
-            // The same three, scoped the same way, for the reason written out on the
+            // The same four, scoped the same way, for the reason written out on the
             // route below.
             providers: [
               BasketSocket,
               BasketStore,
+              // On the route and not on the page, because the changes sheet
+              // is a child route: it is constructed and destroyed while the
+              // page stays, and a store the page provided would be one the
+              // sheet reaches a second copy of (velista `0093`, section 2).
+              BasketChangeStore,
               BasketTargetStore,
               BasketViewStore,
             ],
@@ -1001,6 +1022,11 @@ export const AppShellRoutes: Route[] = [
             providers: [
               BasketSocket,
               BasketStore,
+              // On the route and not on the page, because the changes sheet
+              // is a child route: it is constructed and destroyed while the
+              // page stays, and a store the page provided would be one the
+              // sheet reaches a second copy of (velista `0093`, section 2).
+              BasketChangeStore,
               BasketTargetStore,
               BasketViewStore,
             ],

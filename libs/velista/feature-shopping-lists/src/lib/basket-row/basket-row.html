@@ -11,262 +11,318 @@
   not need to be opened for, "all of it", which is the common case in a shop and used
   to cost a tap, a sheet, a tap and a dismissal.
 -->
-<div
-  [attr.aria-busy]="busy() ? 'true' : null"
-  [class.is-done]="state() === 'DONE' || state() === 'NOT_AVAILABLE'"
-  class="row"
->
-  <!--
-    The state, at the **leading** edge, and that is decided by what is already
-    there: the quantity, the outstanding count and the progress caption are all at
-    the trailing edge, and a fourth thing in that column would make the one column
-    somebody scans in an aisle four things wide. The leading edge is empty, it is
-    where a state marker is expected in every list on a phone, and it is the side a
-    right handed thumb reaches when the device is held to read.
+<!--
+  A line that left its list while somebody was shopping (velista 0093,
+  section 4). The server still sends the row and the client does not keep it
+  alive: it goes when the read stops naming it, with no animation, because a
+  row that faded out under a thumb is a row somebody tried to tap.
 
-    Four shapes and never four colours (`0044`, section 7): empty, half, filled with
-    a tick, and a stroke through. The fourth exists for the reason `touchedCaption`
-    has a sentence of its own for it — `NOT_AVAILABLE` closes a row without anything
-    being bought, so a tick on it would claim a purchase that never happened.
+  **Plain text and not a control.** There is nothing on it to do: no reel, no
+  status glyph, no price, no chevron, and it opens no sheet. So it is not a
+  button, it is skipped by the Tab key, and a screen reader reads it in
+  document order with the rows around it. It is deliberately not
+  `aria-hidden`: the reason it is on screen at all is that somebody has to be
+  told.
 
-    Drawn for **everybody**. Every participant may settle and every participant may
-    revert (luna `0054`, section 3.5), so there is no reader for whom this is drawn
-    and refused, and no `@if` guarding it.
-  -->
-  @if (statusIsButton()) {
-    <button
-      (click)="toggle()"
-      [attr.aria-label]="statusLabel()"
-      [disabled]="busy()"
-      class="status"
-      type="button"
-    >
-      <ng-container [ngTemplateOutlet]="glyph" />
-    </button>
-  } @else {
-    <!--
-      Two ways to have nothing to press, and one treatment. The whole trip is
-      finished (velista `0057`), where every write on every row is refused at once.
-      Or the row is `REMOVED`, which is information about the basket rather than a
-      thing to act on. Either way this says what the row **is** and offers no act,
-      which is the absence rule again (`0030`).
+  Drawn **in place**, where the server's order puts it, at the ordinary row
+  height, so the list does not jump when it arrives or when it leaves.
 
-      The third way is gone with the route behind it: `BASKET_REOPEN_AVAILABLE`
-      guarded a reopen backend `0136` replaced with a revert that is always
-      available.
-
-      A `span` with `role="img"` rather than a disabled button, because there is no
-      control here to disable: nothing has been taken away from this reader, and a
-      dimmed button would say something about them that is not true.
-    -->
-    <span [attr.aria-label]="statusLabel()" class="status is-static" role="img">
-      <ng-container [ngTemplateOutlet]="glyph" />
-    </span>
-  }
-
-  <!--
-    The row proper, which still opens the sheet and still carries the whole line in
-    its accessible name: the quantity and the attribution are separate lines
-    visually, and a reader moving by button would otherwise hear only the content.
-  -->
-  <button
-    (click)="onBody()"
-    [attr.aria-label]="label()"
-    class="body"
-    type="button"
+  The strike is never alone. "No longer on the list" is under the name for
+  every reader who does not see a line through text, which is velista 0052
+  section 6.3 applied to the one row that has no glyph to carry it.
+-->
+@if (removed()) {
+  <div class="row is-removed">
+    <div class="removed-body">
+      <span class="content">{{ row().content }}</span>
+      <span class="removed-note">{{ 'basket.line.removed' | rokuT }}</span>
+    </div>
+  </div>
+} @else {
+  <div
+    [attr.aria-busy]="busy() ? 'true' : null"
+    [class.is-done]="state() === 'DONE' || state() === 'NOT_AVAILABLE'"
+    class="row"
   >
     <!--
-      The words, with the first match of a search painted (velista 0074, section
-      4.5). The `<mark>` is presentational: the row's accessible name is composed
-      from `line().content` and is unchanged, so a screen reader hears the line
-      rather than the fragment.
+      The state, at the **leading** edge, and that is decided by what is already
+      there: the quantity, the outstanding count and the progress caption are all at
+      the trailing edge, and a fourth thing in that column would make the one column
+      somebody scans in an aisle four things wide. The leading edge is empty, it is
+      where a state marker is expected in every list on a phone, and it is the side a
+      right handed thumb reaches when the device is held to read.
 
-      The three pieces are written with no space between them, because there is
-      none in the string: Angular collapses the whitespace around an interpolation
-      into a real space, so a line break here would put one inside the word.
+      Four shapes and never four colours (`0044`, section 7): empty, half, filled with
+      a tick, and a stroke through. The fourth exists for the reason `touchedCaption`
+      has a sentence of its own for it — `NOT_AVAILABLE` closes a row without anything
+      being bought, so a tick on it would claim a purchase that never happened.
+
+      Drawn for **everybody**. Every participant may settle and every participant may
+      revert (luna `0054`, section 3.5), so there is no reader for whom this is drawn
+      and refused, and no `@if` guarding it.
     -->
-    <span class="content">
-      @if (highlighted(); as parts) {
-        <span>{{ parts.before }}</span
-        ><mark class="match">{{ parts.match }}</mark
-        ><span>{{ parts.after }}</span>
+    @if (statusIsButton()) {
+      <button
+        (click)="toggle()"
+        [attr.aria-label]="statusLabel()"
+        [disabled]="busy()"
+        class="status"
+        type="button"
+      >
+        <ng-container [ngTemplateOutlet]="glyph" />
+      </button>
+    } @else {
+      <!--
+        Two ways to have nothing to press, and one treatment. The whole trip is
+        finished (velista `0057`), where every write on every row is refused at once.
+        Or the row is `REMOVED`, which is information about the basket rather than a
+        thing to act on. Either way this says what the row **is** and offers no act,
+        which is the absence rule again (`0030`).
+
+        The third way is gone with the route behind it: `BASKET_REOPEN_AVAILABLE`
+        guarded a reopen backend `0136` replaced with a revert that is always
+        available.
+
+        A `span` with `role="img"` rather than a disabled button, because there is no
+        control here to disable: nothing has been taken away from this reader, and a
+        dimmed button would say something about them that is not true.
+      -->
+      <span
+        [attr.aria-label]="statusLabel()"
+        class="status is-static"
+        role="img"
+      >
+        <ng-container [ngTemplateOutlet]="glyph" />
+      </span>
+    }
+
+    <!--
+      The row proper, which still opens the sheet and still carries the whole line in
+      its accessible name: the quantity and the attribution are separate lines
+      visually, and a reader moving by button would otherwise hear only the content.
+    -->
+    <button
+      (click)="onBody()"
+      [attr.aria-label]="label()"
+      class="body"
+      type="button"
+    >
+      <!--
+        The words, with the first match of a search painted (velista 0074, section
+        4.5). The `<mark>` is presentational: the row's accessible name is composed
+        from `line().content` and is unchanged, so a screen reader hears the line
+        rather than the fragment.
+
+        The three pieces are written with no space between them, because there is
+        none in the string: Angular collapses the whitespace around an interpolation
+        into a real space, so a line break here would put one inside the word.
+      -->
+      <span class="content">
+        @if (highlighted(); as parts) {
+          <span>{{ parts.before }}</span
+          ><mark class="match">{{ parts.match }}</mark
+          ><span>{{ parts.after }}</span>
+        } @else {
+          {{ row().content }}
+        }
+
+        <!--
+          What this viewer has not seen about this row (velista 0093, section 3).
+
+          At the **trailing end of the name line** and inside it, so a marked row
+          and an unmarked one are the same height and the order of the list does
+          not move: a marked row is never lifted to the top, because a list that
+          rearranges under a thumb is what velista 0053 section 7 refused.
+
+          A dot **and** a word, in the accent role, never the warning colour:
+          amber is this app's accent and not its attention role (0002, section
+          4.4), and a line somebody added is not a fault. The word is what
+          survives a monochrome screen.
+
+          `aria-hidden`, because the row's own accessible name already ends with
+          "new on the list": the tag is part of that one sentence rather than a
+          second thing to hear.
+        -->
+        @if (markWord(); as word) {
+          <span aria-hidden="true" class="mark">
+            <span class="mark-dot"></span>{{ word | rokuT }}
+          </span>
+        }
+      </span>
+
+      <!--
+        The picked product, named, and priced after the separator when the run's
+        scopes have a price for it (velista 0062, section 4). The pick is still the
+        first option added rather than the cheapest (backend 0050), so there is no
+        "best price" badge here; that comparison is the pick sheet's.
+      -->
+      @if (productName(); as product) {
+        <!--
+          The name, the price, and what this shop makes of it (velista 0078,
+          section 5). Three pieces on one caption line rather than three lines: a row
+          with a mark and a row without must be the same height, or the list jumps as
+          somebody switches shops.
+
+          The mark is **words** and the colour is never the only carrier. "Cheaper
+          elsewhere" is a decision the shopper faces rather than a fault, so it takes
+          the attention role (`0002`, section 4.4); "not listed" is a fact about the
+          shop, so it is only a shade brighter than the caption it sits in.
+        -->
+        <span class="product">
+          <span>{{ product }}</span>
+          @if (productPrice(); as price) {
+            <span> · {{ price }}</span>
+          }
+          @if (markCaption(); as mark) {
+            <span
+              [class.is-cheaper]="this.priceMark()?.kind === 'cheaper'"
+              [class.is-unlisted]="this.priceMark()?.kind === 'unlisted'"
+            >
+              · {{ mark }}</span
+            >
+          }
+        </span>
+      } @else if (productAbsence(); as absent) {
+        <!--
+          Two absences and two sentences (velista 0092, section 5). A row of
+          several options nobody has chosen from is a question waiting for an
+          answer; a row whose product the catalog can no longer name is nobody's
+          fault and nothing to do.
+
+          **No price either way**, which is the half that matters: quoting the
+          first option's price would put a number on a product nobody has picked
+          up, and the whole point of the pane behind this row is that the choice
+          is a person's.
+        -->
+        <span class="product is-missing">{{ absent | rokuT }}</span>
+      }
+
+      <!--
+        Who got the bread. Drawn on the row rather than behind a tap, because that
+        is the question in a shop where four people work one list.
+      -->
+      @if (touched(); as caption) {
+        <span class="touched">{{ caption }}</span>
+      }
+
+      <!--
+        Which household this came from. Drawn only for a list this reader was served,
+        which a guest never is: the data decides, so there is no flag here to get
+        wrong (section 4.1).
+      -->
+      @if (from(); as origins) {
+        <span class="from">{{ origins }}</span>
+      }
+
+      <!--
+        Right after the "from" caption, because it is about the same thing: which
+        household's list this line reaches, and whether it has got there yet.
+      -->
+      @if (row().awaitingApproval) {
+        <span class="from">{{ 'basket.units.pending' | rokuT }}</span>
+      }
+
+      <!--
+        Put off for now, or put off earlier and ordinary again (velista 0092,
+        section 3).
+
+        One slot for both, because they are one fact at two ages: the row is
+        skipped, or it was, and the second says when. The secondary text role and
+        never an attention one — a skip is a decision somebody made on purpose, not
+        a warning, and amber is not attention here (`0002`, section 4.4).
+
+        The **name is never struck through** (velista 0043). A skipped row is
+        still on a household's list and still a thing to buy tomorrow.
+      -->
+      @if (skipCaption(); as said) {
+        <span class="skipped">{{ said }}</span>
+      }
+    </button>
+
+    <!--
+      **The number, and the control** (plan 0054, section 1).
+
+      It was a readout with the outstanding count above the progress caption. It is
+      now the reel, bound to what is still to get: down records that many bought, up
+      says this basket will buy more than the households asked for, and the server
+      decides which of the two a move was (backend `0056`, section 3).
+
+      `min` is zero because zero is the whole line settled, which is what "got all"
+      already does. `max` comes off the resulting quantity rather than off this
+      number, so a partly settled line cannot be raised past the limit an unsettled
+      one has.
+
+      `readonly` while a write is out rather than disabled, which is what the input
+      was built for: the number is real and worth reading while it settles.
+
+      The two `stopPropagation`s are `line-row`'s, for the reason it has them: a drag
+      on the reel is not a tap on the line, and the row underneath must not hear it.
+    -->
+    <span class="numbers">
+      @if (finished() || !showsReel()) {
+        <!--
+          A number rather than a control, for three reasons that all end the same
+          way. The trip is over (velista 0057, section 6). Or the shop had none, or
+          somebody walked past it today (velista 0092, section 4): both of those
+          closed the row without a number, so a reel on either would be the one
+          control that could be dragged to zero and mean something the state does
+          not. Undoing them is the glyph at the leading edge.
+
+          This is what the row drew before plan 0054 made it a control: how many are
+          still to get, read and not moved. A reel here would be a gesture the server
+          refuses on every row of the basket at once, and `0030` does not draw one of
+          those. The count keeps the reel's own accessible name, because the question
+          it answers has not changed, only whether it can be answered again.
+        -->
+        <span [attr.aria-label]="reelLabel()" class="settled-count" role="img">
+          {{ stillToGet() }}
+        </span>
       } @else {
-        {{ row().content }}
+        <lib-quantity-reel
+          (autoClosed)="onReelAutoClosed()"
+          (click)="$event.stopPropagation()"
+          (committedTo)="onCommitted($event)"
+          (pointerdown)="$event.stopPropagation()"
+          (preview)="onPreview($event)"
+          [label]="reelLabel()"
+          [max]="ceiling()"
+          [min]="0"
+          [readonly]="busy()"
+          [value]="shownOutstanding()"
+        />
+      }
+
+      <!--
+        What the gesture is about to do, while the thumb is still down, and the
+        progress caption the rest of the time. One slot, because they answer the same
+        question a moment apart and two would make the row jump as the finger lands.
+
+        `aria-hidden`: the reel above announces its own value, and the sentence is
+        said once on the commit through the page's live region instead of being read
+        out on every unit the thumb passes over.
+      -->
+      @if (caption(); as said) {
+        <span aria-hidden="true" class="preview">{{ said }}</span>
+      } @else if (progressCaption() !== '') {
+        <!--
+          What was got out of what was asked for, so somebody can see what is left
+          without arithmetic. **The entry's under a list heading** and the row's
+          everywhere else, which is one caption rather than two: backend `0136` gives
+          an entry its own numbers and its own state, so a household's row answers for
+          itself and needs no sentence explaining which number it is.
+
+          Empty on a wanted row of one, which draws nothing: there is no arithmetic to
+          spare anybody, and the reel above already says the number.
+        -->
+        <span aria-hidden="true" class="progress">{{ progressCaption() }}</span>
+      }
+
+      @if (busy()) {
+        <span class="visually-hidden">{{ 'basket.line.busy' | rokuT }}</span>
       }
     </span>
-
-    <!--
-      The picked product, named, and priced after the separator when the run's
-      scopes have a price for it (velista 0062, section 4). The pick is still the
-      first option added rather than the cheapest (backend 0050), so there is no
-      "best price" badge here; that comparison is the pick sheet's.
-    -->
-    @if (productName(); as product) {
-      <!--
-        The name, the price, and what this shop makes of it (velista 0078,
-        section 5). Three pieces on one caption line rather than three lines: a row
-        with a mark and a row without must be the same height, or the list jumps as
-        somebody switches shops.
-
-        The mark is **words** and the colour is never the only carrier. "Cheaper
-        elsewhere" is a decision the shopper faces rather than a fault, so it takes
-        the attention role (`0002`, section 4.4); "not listed" is a fact about the
-        shop, so it is only a shade brighter than the caption it sits in.
-      -->
-      <span class="product">
-        <span>{{ product }}</span>
-        @if (productPrice(); as price) {
-          <span> · {{ price }}</span>
-        }
-        @if (markCaption(); as mark) {
-          <span
-            [class.is-cheaper]="this.priceMark()?.kind === 'cheaper'"
-            [class.is-unlisted]="this.priceMark()?.kind === 'unlisted'"
-          >
-            · {{ mark }}</span
-          >
-        }
-      </span>
-    } @else if (productAbsence(); as absent) {
-      <!--
-        Two absences and two sentences (velista 0092, section 5). A row of
-        several options nobody has chosen from is a question waiting for an
-        answer; a row whose product the catalog can no longer name is nobody's
-        fault and nothing to do.
-
-        **No price either way**, which is the half that matters: quoting the
-        first option's price would put a number on a product nobody has picked
-        up, and the whole point of the pane behind this row is that the choice
-        is a person's.
-      -->
-      <span class="product is-missing">{{ absent | rokuT }}</span>
-    }
-
-    <!--
-      Who got the bread. Drawn on the row rather than behind a tap, because that
-      is the question in a shop where four people work one list.
-    -->
-    @if (touched(); as caption) {
-      <span class="touched">{{ caption }}</span>
-    }
-
-    <!--
-      Which household this came from. Drawn only for a list this reader was served,
-      which a guest never is: the data decides, so there is no flag here to get
-      wrong (section 4.1).
-    -->
-    @if (from(); as origins) {
-      <span class="from">{{ origins }}</span>
-    }
-
-    <!--
-      Right after the "from" caption, because it is about the same thing: which
-      household's list this line reaches, and whether it has got there yet.
-    -->
-    @if (row().awaitingApproval) {
-      <span class="from">{{ 'basket.units.pending' | rokuT }}</span>
-    }
-
-    <!--
-      Put off for now, or put off earlier and ordinary again (velista 0092,
-      section 3).
-
-      One slot for both, because they are one fact at two ages: the row is
-      skipped, or it was, and the second says when. The secondary text role and
-      never an attention one — a skip is a decision somebody made on purpose, not
-      a warning, and amber is not attention here (`0002`, section 4.4).
-
-      The **name is never struck through** (velista 0043). A skipped row is
-      still on a household's list and still a thing to buy tomorrow.
-    -->
-    @if (skipCaption(); as said) {
-      <span class="skipped">{{ said }}</span>
-    }
-  </button>
-
-  <!--
-    **The number, and the control** (plan 0054, section 1).
-
-    It was a readout with the outstanding count above the progress caption. It is
-    now the reel, bound to what is still to get: down records that many bought, up
-    says this basket will buy more than the households asked for, and the server
-    decides which of the two a move was (backend `0056`, section 3).
-
-    `min` is zero because zero is the whole line settled, which is what "got all"
-    already does. `max` comes off the resulting quantity rather than off this
-    number, so a partly settled line cannot be raised past the limit an unsettled
-    one has.
-
-    `readonly` while a write is out rather than disabled, which is what the input
-    was built for: the number is real and worth reading while it settles.
-
-    The two `stopPropagation`s are `line-row`'s, for the reason it has them: a drag
-    on the reel is not a tap on the line, and the row underneath must not hear it.
-  -->
-  <span class="numbers">
-    @if (finished() || !showsReel()) {
-      <!--
-        A number rather than a control, for three reasons that all end the same
-        way. The trip is over (velista 0057, section 6). Or the shop had none, or
-        somebody walked past it today (velista 0092, section 4): both of those
-        closed the row without a number, so a reel on either would be the one
-        control that could be dragged to zero and mean something the state does
-        not. Undoing them is the glyph at the leading edge.
-
-        This is what the row drew before plan 0054 made it a control: how many are
-        still to get, read and not moved. A reel here would be a gesture the server
-        refuses on every row of the basket at once, and `0030` does not draw one of
-        those. The count keeps the reel's own accessible name, because the question
-        it answers has not changed, only whether it can be answered again.
-      -->
-      <span [attr.aria-label]="reelLabel()" class="settled-count" role="img">
-        {{ stillToGet() }}
-      </span>
-    } @else {
-      <lib-quantity-reel
-        (autoClosed)="onReelAutoClosed()"
-        (click)="$event.stopPropagation()"
-        (committedTo)="onCommitted($event)"
-        (pointerdown)="$event.stopPropagation()"
-        (preview)="onPreview($event)"
-        [label]="reelLabel()"
-        [max]="ceiling()"
-        [min]="0"
-        [readonly]="busy()"
-        [value]="shownOutstanding()"
-      />
-    }
-
-    <!--
-      What the gesture is about to do, while the thumb is still down, and the
-      progress caption the rest of the time. One slot, because they answer the same
-      question a moment apart and two would make the row jump as the finger lands.
-
-      `aria-hidden`: the reel above announces its own value, and the sentence is
-      said once on the commit through the page's live region instead of being read
-      out on every unit the thumb passes over.
-    -->
-    @if (caption(); as said) {
-      <span aria-hidden="true" class="preview">{{ said }}</span>
-    } @else if (progressCaption() !== '') {
-      <!--
-        What was got out of what was asked for, so somebody can see what is left
-        without arithmetic. **The entry's under a list heading** and the row's
-        everywhere else, which is one caption rather than two: backend `0136` gives
-        an entry its own numbers and its own state, so a household's row answers for
-        itself and needs no sentence explaining which number it is.
-
-        Empty on a wanted row of one, which draws nothing: there is no arithmetic to
-        spare anybody, and the reel above already says the number.
-      -->
-      <span aria-hidden="true" class="progress">{{ progressCaption() }}</span>
-    }
-
-    @if (busy()) {
-      <span class="visually-hidden">{{ 'basket.line.busy' | rokuT }}</span>
-    }
-  </span>
-</div>
+  </div>
+}
 
 <!--
   What the last move of the number came to, when it did not land (plan 0054,

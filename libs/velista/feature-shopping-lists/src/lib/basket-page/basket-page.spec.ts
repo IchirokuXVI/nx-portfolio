@@ -8,6 +8,8 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BASKET_SERVICE,
+  BasketChangeStore,
   BasketListStore,
   BasketStore,
   BasketTargetStore,
@@ -171,6 +173,14 @@ interface Options {
    * found nothing apart from one that broke (`0059` section 7).
    */
   readonly echoValues?: boolean;
+  /**
+   * How many changes are new to this viewer (velista `0093`, section 5).
+   *
+   * Zero by default, which is a basket nobody has changed under the reader, and
+   * draws no banner. The number is the **server's**: the page never counts it
+   * and never takes it down after a tap.
+   */
+  readonly unseenChanges?: number;
 }
 
 function guest(
@@ -410,6 +420,9 @@ async function render(options: Options = {}): Promise<{
               total: 0,
             },
             pending: options.unsettled ?? options.lines?.length ?? 0,
+            unseenChangeCount: options.unseenChanges ?? 0,
+            newestUnseenChangeId:
+              (options.unseenChanges ?? 0) > 0 ? 'chg-newest' : null,
           }),
           state: signal('ready'),
           rows: store.rows,
@@ -512,6 +525,20 @@ async function render(options: Options = {}): Promise<{
       // `provideVelistaTesting` already supplies, and its whole job is to answer
       // where the composer's next line goes (velista `0092`, section 7.2).
       BasketTargetStore,
+      // The fourth store the route provides (velista `0093`). The page never
+      // draws an entry from it and still lets it go on the way out, so the
+      // instance has to exist; the banner's count comes off the basket read.
+      BasketChangeStore,
+      // The one thing it reaches past `BasketStore` for. This file fakes the
+      // store rather than the gateway, so the real token behind it is not
+      // provided anywhere; the sheet is what exercises these two calls.
+      {
+        provide: BASKET_SERVICE,
+        useValue: {
+          changes: jest.fn().mockResolvedValue({ items: [], nextCursor: null }),
+          acknowledgeChanges: jest.fn().mockResolvedValue(undefined),
+        },
+      },
       // ...except this device's storage, which `0076` gave it. A fresh `Map` per
       // test and not the real facade: jsdom hands every test in this file the same
       // `localStorage`, so a test that chose an order would hand it to the next
@@ -2077,6 +2104,157 @@ describe('the basket that is always there', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelectorAll('.lines li')
     ).toHaveLength(2);
+  });
+});
+
+/**
+ * What changed while the shopper was not looking (velista `0093`).
+ *
+ * Three things this page owns and each is a different mistake. The **banner**
+ * is the server's count and sits under the sticky bar rather than inside it, so
+ * the bar keeps its height. The **counts** leave a `REMOVED` row out, in one
+ * selector, so the tools bar and the chip row cannot disagree. And the prompt
+ * does not congratulate anybody over a basket of rows that have all left.
+ */
+describe('what changed on the lists', () => {
+  const banner = (fixture: ComponentFixture<BasketPage>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('lib-changes-banner');
+
+  it('says how many are new to this viewer', async () => {
+    const { fixture } = await render({
+      lines: [line('zl-1')],
+      unseenChanges: 3,
+    });
+
+    expect(banner(fixture)).not.toBeNull();
+    expect(banner(fixture)?.textContent).toContain('basket.changes.banner');
+  });
+
+  it('draws nothing at all when the server says nothing is new', async () => {
+    const { fixture } = await render({ lines: [line('zl-1')] });
+
+    expect(banner(fixture)).toBeNull();
+  });
+
+  it('sits under the tools bar and outside it, so the bar keeps its height', async () => {
+    // Inside the sticky bar the banner would push the search and the chips
+    // down a phone every time a line moved on somebody else's list (velista
+    // `0079`, sections 2 and 3).
+    const { fixture } = await render({
+      lines: [line('zl-1')],
+      unseenChanges: 1,
+    });
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('lib-list-tools lib-changes-banner')).toBeNull();
+    const tools = host.querySelector('lib-list-tools');
+    expect(
+      tools?.compareDocumentPosition(banner(fixture) as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('opens the sheet at the basket’s own sheet URL', async () => {
+    const { fixture, store } = await render({
+      lines: [line('zl-1')],
+      unseenChanges: 2,
+    });
+
+    (
+      (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-changes-banner button'
+      ) as HTMLButtonElement
+    ).click();
+
+    expect(store.navigate).toHaveBeenCalledWith(
+      ['sheet', 'changes'],
+      expect.anything()
+    );
+  });
+
+  it('is drawn on a finished basket too, because what changed is still worth reading', async () => {
+    const { fixture } = await render({
+      lines: [line('zl-1')],
+      finished: true,
+      unseenChanges: 1,
+    });
+
+    expect(banner(fixture)).not.toBeNull();
+  });
+
+  it('is drawn on no basket that failed to load', async () => {
+    // The whole rows branch is behind `ready`, and the banner is inside it:
+    // a count over a basket nobody can see is a sentence about nothing.
+    const { fixture } = await render({ revoked: true, unseenChanges: 4 });
+
+    expect(banner(fixture)).toBeNull();
+  });
+
+  it('leaves a REMOVED row out of the tools bar’s two numbers', async () => {
+    const { fixture } = await render({
+      lines: [
+        line('zl-1'),
+        { ...line('zl-2'), state: 'REMOVED', entries: [] },
+        line('zl-3'),
+      ],
+      echoValues: true,
+    });
+
+    // The bar draws its pair only while the field is open, which is where the
+    // numbers can be read at all.
+    const tool = (fixture.nativeElement as HTMLElement).querySelector<
+      HTMLElement
+    >('.tool');
+    tool?.click();
+    fixture.detectChanges();
+
+    // Two countable rows of three drawn: a row somebody took off the basket is
+    // information about it rather than a thing to buy, and counting it on one
+    // side alone is what produces "3 of 2".
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.search-count')
+        ?.textContent
+    ).toContain('{"shown":2,"total":2}');
+  });
+
+  it('still draws the removed row, so nobody wonders where the line went', async () => {
+    const { fixture } = await render({
+      lines: [line('zl-1'), { ...line('zl-2'), state: 'REMOVED', entries: [] }],
+    });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('lib-basket-row')
+    ).toHaveLength(2);
+  });
+
+  it('leaves the progress sentence exactly as the server counted it', async () => {
+    // Never recounted here (velista `0060`, section 4). The server's progress
+    // already excludes a `REMOVED` row, and a second count on this side is how
+    // one screen comes to disagree with itself.
+    const { fixture } = await render({
+      lines: [line('zl-1'), { ...line('zl-2'), state: 'REMOVED', entries: [] }],
+      progress: { done: 1, unavailable: 0, total: 1 },
+      unsettled: 0,
+      echoValues: true,
+    });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.progress')
+        ?.textContent
+    ).toContain('"total":1');
+  });
+
+  it('asks nothing of a basket whose rows have all left', async () => {
+    // "All done?" over a basket holding nothing but rows that left its coverage
+    // would congratulate somebody for shopping nobody did.
+    const { fixture } = await render({
+      lines: [{ ...line('zl-1'), state: 'REMOVED', entries: [] }],
+      unsettled: 0,
+    });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.prompt')
+    ).toBeNull();
   });
 });
 

@@ -543,6 +543,44 @@ export class BasketRow {
   }
 
   /**
+   * Whether this row is one whose lines all left the coverage (velista `0093`,
+   * section 4).
+   *
+   * **A whole second shape of row**, and that is why it is asked here rather
+   * than folded into the controls one by one. Nothing on it is a control: no
+   * reel, no status glyph, no price, no sheet. It is a `li` with text, read in
+   * document order by a screen reader and skipped by the Tab key, because there
+   * is nothing on it to do and somebody still has to be told it happened.
+   *
+   * The row's own state and never the entry's: a `REMOVED` row has no entries
+   * at all, which is what that state means.
+   */
+  protected readonly removed = computed(() => this.row().state === 'REMOVED');
+
+  /**
+   * The word on the tag at the end of the name line, or null (velista `0093`,
+   * section 3).
+   *
+   * Two of the three marks draw one. `REMOVED` draws none, because that row is
+   * the whole of {@link removed} above and says so in a sentence rather than in
+   * a tag.
+   *
+   * Read off the row and **never off the entry**, and never computed: a mark is
+   * the server's answer to "what has this viewer not seen", and this side holds
+   * no clock and no memory of what it drew last time.
+   */
+  protected readonly markWord = computed<string | null>(() => {
+    switch (this.row().mark) {
+      case 'ADDED':
+        return 'basket.mark.added';
+      case 'CHANGED':
+        return 'basket.mark.changed';
+      default:
+        return null;
+    }
+  });
+
+  /**
    * Which of the five shapes to draw, from the state the server sent.
    *
    * `REMOVED` falls through to `wanted`, which is what velista `0090` section 9.1
@@ -895,7 +933,26 @@ export class BasketRow {
       this.row().awaitingApproval
         ? this._translator.t('basket.units.pending', undefined, this._locale())
         : '',
+      // "Milk, new on the list" (velista `0093`, section 3). Inside the row's
+      // one name rather than a second focus stop: the tag is four letters, and
+      // a control beside every changed row would be a dozen extra Tab presses
+      // down a basket for a thing nobody can press.
+      this._markLabel(),
     ];
     return parts.filter((part) => part !== '').join('. ');
   });
+
+  /** The tag, said in full, or the empty string on a row with no mark. */
+  private _markLabel(): string {
+    const mark = this.row().mark;
+    if (mark !== 'ADDED' && mark !== 'CHANGED') {
+      return '';
+    }
+    return this._translator.t(
+      mark === 'ADDED' ? 'basket.mark.addedLabel' : 'basket.mark.changedLabel',
+      undefined,
+      this._locale(),
+      { name: this.row().content }
+    );
+  }
 }

@@ -376,6 +376,32 @@ export function basketRowPick(
   return first === undefined ? undefined : products.get(first);
 }
 
+/**
+ * The rows every count on the basket page is over: everything but `REMOVED`.
+ *
+ * **One selector, read by every count**, which is the whole of it (velista
+ * `0093`, section 4). A row whose lines all left the coverage is information
+ * about the basket rather than a thing to buy, so the tools bar's total, its
+ * shown, the chip row's pair and "all done" each leave it out; before this each
+ * of them counted array elements, and an arriving `REMOVED` row made an
+ * unfiltered basket report more rows than it holds.
+ *
+ * It does **not** touch the progress numbers. Those are the server's
+ * {@link Basket.progress}, which already excludes these rows, and this side
+ * never recounts them (velista `0060`, section 4).
+ *
+ * By identity when nothing is dropped, which is the ordinary case: no basket
+ * carries a `REMOVED` row until somebody edits a list under it, so a page that
+ * asks this on every render re-renders nothing.
+ */
+export function countableBasketRows(
+  rows: readonly BasketRow[]
+): readonly BasketRow[] {
+  return rows.some((row) => row.state === 'REMOVED')
+    ? rows.filter((row) => row.state !== 'REMOVED')
+    : rows;
+}
+
 export function offerAt(
   product: BasketProduct | undefined,
   priceScopeId: string
@@ -456,6 +482,25 @@ export interface Basket {
    * the drift this plan removed.
    */
   readonly pending: number;
+  /**
+   * How many changes to the covered lists this **viewer** has not seen
+   * (velista `0093`, section 5; backend `0138`, section 7).
+   *
+   * The banner's whole input, and the server's number: capped at 99 by the
+   * gateway, where it means "this many or more", and never counting a change
+   * this reader made themselves. Zero draws no banner, and it reaches zero
+   * because a read said so and never because the client decremented it.
+   */
+  readonly unseenChangeCount: number;
+  /**
+   * The newest unseen change's id, which is what an acknowledgement sends as
+   * `through`. Null when there is nothing unseen.
+   *
+   * An **id** and never a time, which is the whole of velista `0093` section 7:
+   * a change that arrives between the render and the request stays unseen,
+   * because the request names what was drawn rather than when it was drawn.
+   */
+  readonly newestUnseenChangeId: string | null;
 }
 
 /**
@@ -898,7 +943,10 @@ export function selectBasketSurface(
       generated &&
       owner &&
       open &&
-      basket.rows.length > 0 &&
+      // The rows somebody is working through, which is what "all done" is
+      // about: a basket holding nothing but rows that left its coverage has
+      // nothing to congratulate anybody for (velista `0093`, section 4).
+      countableBasketRows(basket.rows).length > 0 &&
       // The server's count, never a subtraction here: a `SKIPPED` row is
       // pending, and this side has no way to know that.
       basket.pending === 0,

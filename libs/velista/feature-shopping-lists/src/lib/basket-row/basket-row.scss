@@ -150,6 +150,78 @@
   overflow-wrap: anywhere;
 }
 
+// What this viewer has not seen about the row (velista 0093, section 3).
+//
+// `inline-flex` inside the name's own span, so it sits at the trailing end of
+// the words and wraps with them: a marked row and an unmarked one are the same
+// height, which is what keeps the list from moving as marks arrive and go.
+//
+// The accent role, and **never** the attention one. Amber is this app's accent
+// rather than its warning colour (`0002`, section 4.4), and a line somebody
+// added to a shared list is not a fault. The dot beside the word is the shape
+// half of "never colour alone" (`0052`, section 6.3), and the word is what a
+// monochrome screen is left with.
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin-inline-start: var(--app-space-2);
+  padding-inline: var(--app-space-2);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-bg);
+  font-size: var(--app-text-2xs);
+  color: var(--app-action-quiet-fg);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.mark-dot {
+  inline-size: var(--app-space-2);
+  block-size: var(--app-space-2);
+  border-radius: var(--app-radius-full);
+  background: currentcolor;
+}
+
+// A row whose lines all left the coverage (velista 0093, section 4).
+//
+// The **ordinary row height**, deliberately: it arrives and leaves while
+// somebody is reading, and a shorter row would move every line below it twice.
+// `min-block-size` is the touch target the two controls of a live row give it,
+// so the two kinds of row sit at the same pitch although this one has nothing
+// to press.
+//
+// No hover, because there is nothing here to point at.
+.is-removed {
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  cursor: default;
+}
+
+.removed-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-1);
+  flex: 1;
+  min-inline-size: 0;
+}
+
+// The strike, and the sentence that says the same thing.
+//
+// **Both**, never the line alone: a strikethrough is shape and colour with no
+// words in it, and this is the one row of the basket with no glyph beside it to
+// carry the meaning. The name stays readable, muted rather than hidden, because
+// the reason the row is on screen at all is that somebody has to read it.
+.is-removed .content {
+  color: var(--app-text-muted);
+  text-decoration: line-through;
+}
+
+.removed-note {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+}
+
 // The name, the price and the mark, as **inline** spans rather than flex items.
 // The separator travels inside each piece, so the caption reads "name · 2.49 € ·
 // 1.99 € at Dia" however many of the three are present, and a flex item would have

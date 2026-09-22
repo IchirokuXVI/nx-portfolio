@@ -285,13 +285,95 @@ describe('BasketRowComponent: a finished row', () => {
   });
 
   /**
-   * Information about the basket rather than a thing to act on, so its glyph
-   * states what it is. Velista `0093` draws the rest of it.
+   * A row whose lines all left the coverage (velista `0093`, section 4).
+   *
+   * Every control is gone, which is the whole of it: no status glyph, no reel,
+   * no body button and so no sheet. What is left is words, because the reason
+   * the row is on screen at all is that somebody has to be told.
    */
-  it('states what a REMOVED row is, and offers nothing', async () => {
+  it('offers nothing at all on a REMOVED row, and still says what it is', async () => {
     const fixture = await render(line({ state: 'REMOVED', entries: [] }));
+    const host = fixture.nativeElement as HTMLElement;
 
-    expect(status(fixture)?.tagName).toBe('SPAN');
+    expect(host.querySelector('.status')).toBeNull();
+    expect(host.querySelector('lib-quantity-reel')).toBeNull();
+    // Nothing focusable at all, which is what "skipped by Tab" means for a row
+    // whose only elements are spans: a query for every natively focusable tag
+    // finds none, so there is no stop here to pass over.
+    expect(host.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(
+      0
+    );
+    expect(host.textContent).toContain('Milk');
+    expect(host.textContent).toContain('basket.line.removed');
+  });
+});
+
+/**
+ * What this viewer has not seen about a row (velista `0093`, section 3).
+ *
+ * Two of the three marks draw a tag. `REMOVED` is a whole second shape of row
+ * and is asserted above, beside the other states.
+ *
+ * The tag is inside the row's **one** accessible name rather than a second
+ * focus stop, and nothing about the row moves: a marked row is drawn exactly
+ * where the server's order put it, because a list that rearranges under a thumb
+ * is what velista `0053` section 7 refused.
+ */
+describe('BasketRowComponent: the change mark', () => {
+  it('tags a row somebody added, and says so in the row’s own name', async () => {
+    const fixture = await render(line({ mark: 'ADDED' }));
+
+    expect(text(fixture, '.mark')).toContain('basket.mark.added');
+    expect(body(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.mark.addedLabel'
+    );
+  });
+
+  it('tags a row somebody changed, with its own word', async () => {
+    const fixture = await render(line({ mark: 'CHANGED' }));
+
+    expect(text(fixture, '.mark')).toContain('basket.mark.changed');
+    expect(body(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.mark.changedLabel'
+    );
+  });
+
+  it('draws no tag on a row with no mark', async () => {
+    const fixture = await render(line());
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.mark')
+    ).toBeNull();
+  });
+
+  it('keeps the tag out of the accessible tree, because the row already says it', async () => {
+    // Said once. The tag is four letters at the end of the name line, and a
+    // second announcement of it is a row read twice.
+    const fixture = await render(line({ mark: 'ADDED' }));
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('.mark')?.getAttribute('aria-hidden')).toBe(
+      'true'
+    );
+  });
+
+  it('adds no control, so a marked row is the row it was', async () => {
+    const marked = await render(line({ mark: 'CHANGED' }));
+    const plain = await render(line());
+    const count = (fixture: Awaited<ReturnType<typeof render>>) =>
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button').length;
+
+    expect(count(marked)).toBe(count(plain));
+  });
+
+  it('puts the tag inside the name, so the row keeps its height', async () => {
+    // Inside `.content` and not a sibling of it: a tag on a line of its own
+    // would make a marked row taller than the rows around it, and the list
+    // would jump as marks arrive and go.
+    const fixture = await render(line({ mark: 'ADDED' }));
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('.content .mark')).not.toBeNull();
   });
 });
 

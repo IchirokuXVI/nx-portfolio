@@ -1073,7 +1073,8 @@
       "free": "No product chosen",
       "busy": "Saving",
       "takenBack_one": "1 taken back",
-      "takenBack_other": "{{count}} taken back"
+      "takenBack_other": "{{count}} taken back",
+      "removed": "No longer on the list"
     },
     "outstanding": {
       "label": "{{name}}, still to get",
@@ -1402,6 +1403,38 @@
     },
     "added": {
       "announced": "{{content}} added"
+    },
+    "mark": {
+      "added": "New",
+      "changed": "Changed",
+      "addedLabel": "{{name}}, new on the list",
+      "changedLabel": "{{name}}, changed"
+    },
+    "changes": {
+      "banner_one": "{{count}} change on your lists",
+      "banner_other": "{{count}} changes on your lists",
+      "title": "What changed",
+      "loading": "Loading what changed",
+      "failed": "That would not load",
+      "retry": "Try again",
+      "empty": "Nothing changed on your lists lately",
+      "more": "Show more",
+      "loaded_one": "{{count}} more change loaded",
+      "loaded_other": "{{count}} more changes loaded",
+      "close": "Close",
+      "entry": {
+        "added": "“{{name}}” was added, asking for {{count}}",
+        "quantity": "“{{name}}” asks for {{after}} instead of {{before}}",
+        "notNeeded": "“{{name}}” is no longer needed",
+        "renamed": "“{{before}}” is now called “{{name}}”",
+        "merged": "“{{before}}” was merged into “{{name}}”",
+        "deleted": "“{{name}}” was removed",
+        "pendingAgain": "“{{name}}” is waiting for approval again",
+        "rejected": "“{{name}}” was turned down",
+        "approved": "“{{name}}” was approved",
+        "unknown": "“{{name}}” changed",
+        "inList": "in {{list}}"
+      }
     }
   },
   "getList": {
