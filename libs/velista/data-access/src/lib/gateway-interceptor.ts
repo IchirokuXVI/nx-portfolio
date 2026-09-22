@@ -125,12 +125,21 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
         // Refreshing and retrying would be refused the same way, and that second
         // refusal is what `reportRejected` reads as a dead account, so a removed
         // member was signed out of the whole app. It goes straight to the caller.
+        //
+        // `participant_expired` is the same fact one reason further on (backend
+        // `0140`, section 8): a visit that ran out. It is listed beside the
+        // other because the account behind it is in perfect health, and signing
+        // somebody out of velista because their twelve hours on a flatmate's
+        // basket elapsed is exactly the bug above with a different cause.
         const refused = toGatewayError(
           error.error,
           error.status,
           correlationId
         );
-        if (refused.code === 'not_a_participant') {
+        if (
+          refused.code === 'not_a_participant' ||
+          refused.code === 'participant_expired'
+        ) {
           return throwError(() => refused);
         }
 

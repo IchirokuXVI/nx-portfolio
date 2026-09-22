@@ -68,6 +68,18 @@
 }
 
 .people {
+  margin: 0 0 var(--app-space-2);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// How long the link buys them, under the invitation and above the name field.
+//
+// The same muted treatment as the head count above it: both are facts about
+// what they are being handed, said quietly, and neither is a warning. Amber is
+// this app's accent rather than its attention role, and twelve hours is what
+// every link does.
+.for-hours {
   margin: 0 0 var(--app-space-4);
   font-size: var(--app-text-sm);
   color: var(--app-text-muted);

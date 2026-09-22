@@ -24,6 +24,22 @@ export const ERROR_CODES = [
    * instead of refreshing, and `BasketStore` reads the 401 as it always has.
    */
   'not_a_participant',
+  /**
+   * The credential named a participant whose **time ran out** (backend plan
+   * 0140, section 8), as a 401.
+   *
+   * The same status and the same treatment as `not_a_participant`: not a
+   * statement about the account, passed straight to the caller by
+   * `gatewayInterceptor` instead of refreshing, and read by `BasketStore` as a
+   * whole screen rather than a sentence. It exists so that screen can say "your
+   * time has ended" instead of "you were removed", which are two different
+   * things to whoever is holding the phone.
+   *
+   * It leaks nothing. The caller presented a credential that **was** good for
+   * this basket, so being told it ran out tells them nothing they did not hold.
+   * The preview and the join, which carry no credential, stay silent as ever.
+   */
+  'participant_expired',
   'forbidden',
   'not_found',
   'conflict',

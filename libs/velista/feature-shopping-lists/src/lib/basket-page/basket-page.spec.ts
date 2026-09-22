@@ -18,6 +18,7 @@ import {
   SessionStore,
 } from '@portfolio/velista/data-access';
 import type {
+  BasketAccessEnded,
   BasketListRef,
   BasketParticipant,
   BasketPresenceEntry,
@@ -64,6 +65,21 @@ import { BasketPage } from './basket-page';
 interface FakeStore {
   readonly live: WritableSignal<boolean>;
   readonly revoked: WritableSignal<boolean>;
+  /**
+   * Why the reader is off the basket, once they are (velista `0094`).
+   *
+   * Null while they are still on it, which is every spec that is not about the
+   * ended state. `UNKNOWN` and `REMOVED` draw one sentence and `EXPIRED` draws
+   * another.
+   */
+  readonly accessEnded: WritableSignal<BasketAccessEnded | null>;
+  /**
+   * How the read has got on, writable so a spec can put the page on the state a
+   * refusal leaves it in.
+   *
+   * Ready everywhere else, which is what nearly every test on this page wants.
+   */
+  readonly state: WritableSignal<string>;
   readonly present: WritableSignal<readonly BasketPresenceEntry[]>;
   readonly participants: WritableSignal<readonly BasketParticipant[]>;
   readonly opened: string[];
@@ -123,6 +139,8 @@ interface FakeStore {
 interface Options {
   readonly live?: boolean;
   readonly revoked?: boolean;
+  /** Why the reader lost the basket, for the two endings of velista `0094`. */
+  readonly accessEnded?: BasketAccessEnded | null;
   readonly present?: readonly BasketPresenceEntry[];
   readonly participants?: readonly BasketParticipant[];
   /** Who the reader is on this basket. The owner alone gets the share control. */
@@ -299,6 +317,22 @@ function participant(entry: BasketPresenceEntry): BasketParticipant {
     joinedAt: null,
     lastSeenAt: null,
     shareLinkId: null,
+    // Nobody in these fixtures is on the basket with a link unless a spec says
+    // so: an expiry is what makes the visit notice appear, and it would
+    // otherwise be drawn over every test on this page.
+    expiresAt: null,
+  };
+}
+
+/** Somebody a link let in, whose time on the basket runs out (velista `0094`). */
+function visitor(
+  entry: BasketPresenceEntry,
+  endsInMinutes: number
+): BasketParticipant {
+  return {
+    ...participant(entry),
+    shareLinkId: 'sl1',
+    expiresAt: new Date(Date.now() + endsInMinutes * 60 * 1000),
   };
 }
 
@@ -313,6 +347,8 @@ async function render(options: Options = {}): Promise<{
   const store: FakeStore = {
     live: signal(options.live ?? true),
     revoked: signal(options.revoked ?? false),
+    accessEnded: signal<BasketAccessEnded | null>(options.accessEnded ?? null),
+    state: signal<string>('ready'),
     present: signal(options.present ?? []),
     participants: signal(options.participants ?? []),
     opened: [],
@@ -424,7 +460,7 @@ async function render(options: Options = {}): Promise<{
             newestUnseenChangeId:
               (options.unseenChanges ?? 0) > 0 ? 'chg-newest' : null,
           }),
-          state: signal('ready'),
+          state: store.state,
           rows: store.rows,
           lists: store.lists,
           products: store.products,
@@ -436,6 +472,7 @@ async function render(options: Options = {}): Promise<{
           me: signal(me),
           live: store.live,
           revoked: store.revoked,
+          accessEnded: store.accessEnded,
           present: store.present,
           participants: store.participants,
           kind: signal(options.kind ?? 'GENERATED'),
@@ -1998,6 +2035,215 @@ describe('searching the basket', () => {
 });
 
 /**
+ * How long this reader has, and what they are told when it runs out (velista
+ * `0094`, sections 5 and 2).
+ *
+ * The clock is pinned throughout, because everything here is a comparison
+ * against it, and `whenStable` is never awaited under fake timers: that hangs,
+ * which is the house rule for every spec in this repo that pins the clock.
+ */
+describe('a visit that ends', () => {
+  /** The owner, named, so the "ask Marta" half of the sentence has a name. */
+  const namedOwner = (): BasketParticipant => ({
+    ...participant(owner()),
+    username: 'Marta',
+  });
+
+  const notice = (fixture: ComponentFixture<BasketPage>) =>
+    query(fixture, 'lib-visit-notice .words')?.textContent?.trim() ?? null;
+
+  const dismiss = (fixture: ComponentFixture<BasketPage>) =>
+    query(fixture, 'lib-visit-notice .dismiss') as HTMLButtonElement | null;
+
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
+    jest.setSystemTime(new Date('2026-09-22T10:00:00'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('tells an account holder when it ends and whom to ask', async () => {
+    const me = visitor(registered(), 240);
+    const { fixture } = await render({
+      me,
+      participants: [namedOwner(), me],
+    });
+
+    expect(notice(fixture)).toBe('basket.visit.account');
+  });
+
+  it('asks nobody by name when the basket carries none for the owner', async () => {
+    // A basket generated before luna `0054` backfilled usernames. "Ask Owner"
+    // would be worse than not naming anybody.
+    const me = visitor(registered(), 240);
+    const { fixture } = await render({
+      me,
+      participants: [participant(owner()), me],
+    });
+
+    expect(notice(fixture)).toBe('basket.visit.accountNameless');
+  });
+
+  it('tells a guest the time and nothing else', async () => {
+    // Rule C2: a guest is never shown register, and being kept takes an
+    // account, so the "ask to be added" half is not said to them at all.
+    const me = visitor(guest('p-9', 1), 240);
+    const { fixture } = await render({ me, participants: [namedOwner(), me] });
+
+    expect(notice(fixture)).toBe('basket.visit.guest');
+  });
+
+  it('says nothing at all to the owner or to a named person', async () => {
+    const owned = await render({ participants: [participant(owner())] });
+    expect(notice(owned.fixture)).toBeNull();
+
+    const named = participant(registered());
+    const invited = await render({
+      me: named,
+      participants: [namedOwner(), named],
+    });
+    expect(notice(invited.fixture)).toBeNull();
+  });
+
+  it('remembers a dismissal, for that basket, on that device', async () => {
+    const me = visitor(registered(), 240);
+    const { fixture } = await render({
+      me,
+      participants: [namedOwner(), me],
+    });
+
+    dismiss(fixture)?.click();
+    fixture.detectChanges();
+
+    expect(notice(fixture)).toBeNull();
+  });
+
+  it('insists under half an hour, and cannot be dismissed', async () => {
+    const me = visitor(registered(), 10);
+    const { fixture } = await render({
+      me,
+      participants: [namedOwner(), me],
+    });
+
+    expect(notice(fixture)).toBe('basket.visit.ending');
+    expect(dismiss(fixture)).toBeNull();
+  });
+
+  it('comes back at the threshold, even on a basket nobody touched', async () => {
+    // The whole reason there is a timer rather than a computed over the clock:
+    // nothing else on this screen moves while somebody reads it, so a derived
+    // value would cross the threshold silently.
+    const me = visitor(registered(), 45);
+    const { fixture } = await render({
+      me,
+      participants: [namedOwner(), me],
+    });
+
+    dismiss(fixture)?.click();
+    fixture.detectChanges();
+    expect(notice(fixture)).toBeNull();
+
+    jest.advanceTimersByTime(16 * 60 * 1000);
+    fixture.detectChanges();
+
+    expect(notice(fixture)).toBe('basket.visit.ending');
+  });
+
+  it('clears its timer when the page goes', async () => {
+    // Asserted against **this** timer's own handle rather than against the
+    // pending count, which is not this page's alone: the composer debounces and
+    // the acknowledger dwells, and both are running here too.
+    //
+    // The warning is set for thirty minutes before an end that is forty five
+    // minutes out, so it is the one timer armed for exactly a quarter of an
+    // hour.
+    const warningWait = 15 * 60 * 1000;
+    const realSetTimeout = globalThis.setTimeout;
+    const armed: unknown[] = [];
+
+    const setSpy = jest.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      handler: () => void,
+      wait?: number
+    ) => {
+      const handle = realSetTimeout(handler, wait);
+      if (wait === warningWait) {
+        armed.push(handle);
+      }
+      return handle;
+    }) as never);
+    const clearSpy = jest.spyOn(globalThis, 'clearTimeout');
+
+    try {
+      const me = visitor(registered(), 45);
+      const { fixture } = await render({
+        me,
+        participants: [namedOwner(), me],
+      });
+      expect(armed).toHaveLength(1);
+
+      fixture.destroy();
+
+      // A route provider's `DestroyRef` never fires in this app, so a timer set
+      // anywhere but the component would still be pending here.
+      expect(clearSpy.mock.calls.flat()).toContain(armed[0]);
+    } finally {
+      setSpy.mockRestore();
+      clearSpy.mockRestore();
+    }
+  });
+
+  describe('after it has ended', () => {
+    const title = (fixture: ComponentFixture<BasketPage>) =>
+      query(fixture, '.notice .notice-title')?.textContent?.trim() ?? null;
+    const body = (fixture: ComponentFixture<BasketPage>) =>
+      query(fixture, '.notice .notice-body')?.textContent?.trim() ?? null;
+
+    /** The store answering a refusal: the state, and the reason behind it. */
+    const ended = async (reason: BasketAccessEnded, me: BasketParticipant) => {
+      const rendered = await render({
+        me,
+        participants: [namedOwner(), me],
+        accessEnded: reason,
+      });
+      rendered.store.state.set('revoked');
+      rendered.fixture.detectChanges();
+      return rendered.fixture;
+    };
+
+    it('says the time ran out, and whom to ask, to an account holder', async () => {
+      const fixture = await ended('EXPIRED', visitor(registered(), 240));
+
+      expect(title(fixture)).toBe('basket.ended.title');
+      expect(body(fixture)).toBe('basket.ended.bodyAccount');
+    });
+
+    it('asks a guest for a new link and never for an account', async () => {
+      const fixture = await ended('EXPIRED', visitor(guest('p-9', 1), 240));
+
+      expect(body(fixture)).toBe('basket.ended.bodyGuest');
+    });
+
+    it('says it was taken back when somebody was removed', async () => {
+      const fixture = await ended('REMOVED', participant(registered()));
+
+      expect(title(fixture)).toBe('basket.revoked.title');
+      expect(body(fixture)).toBe('basket.revoked.body');
+    });
+
+    it('says the same when the refusal named no reason', async () => {
+      // `UNKNOWN` is the socket being swept: the eviction event carries no
+      // reason, so the ordinary sentence is the honest one.
+      const fixture = await ended('UNKNOWN', visitor(registered(), 240));
+
+      expect(title(fixture)).toBe('basket.revoked.title');
+      expect(body(fixture)).toBe('basket.revoked.body');
+    });
+  });
+});
+
+/**
  * The same page, drawing the basket that is always there (velista `0091`,
  * section 3).
  *
@@ -2058,7 +2304,22 @@ describe('the basket that is always there', () => {
     });
 
     expect(query(fixture, '.faces')).toBeNull();
-    expect(query(fixture, '.people')).toBeNull();
+  });
+
+  it('keeps the way into the people sheet, which it can still answer', async () => {
+    // Velista `0094` section 7. The faces are a claim about who is here right
+    // now and a `LIVE` basket has no presence room to make it from, but it can
+    // be shared and can have named people on it, so the sheet has something to
+    // say and the header keeps the door to it. This used to be gated on
+    // presence, which left the basket that is always there with no way in at
+    // all.
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      participants: [participant(owner())],
+    });
+
+    expect(query(fixture, '.people')).not.toBeNull();
   });
 
   it('still offers the owner the share sheet: both kinds are shareable', async () => {
@@ -2202,9 +2463,9 @@ describe('what changed on the lists', () => {
 
     // The bar draws its pair only while the field is open, which is where the
     // numbers can be read at all.
-    const tool = (fixture.nativeElement as HTMLElement).querySelector<
-      HTMLElement
-    >('.tool');
+    const tool = (
+      fixture.nativeElement as HTMLElement
+    ).querySelector<HTMLElement>('.tool');
     tool?.click();
     fixture.detectChanges();
 

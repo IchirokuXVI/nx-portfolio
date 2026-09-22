@@ -856,6 +856,19 @@ describe('AppShellRoutes', () => {
         }
       });
 
+      it('has the share and people sheets by name (velista `0094`)', () => {
+        // Named rather than left to the set comparison above, because velista
+        // `0094` turns on these two in particular: the basket that is always
+        // there can be shared and can have named people on it, so both sheets
+        // have to be reachable over it and not only over a trip.
+        const live = (routeAt(livePath)?.children ?? []).map(
+          (route) => route.path
+        );
+
+        expect(live).toContain(`${SHEET_SEGMENT}/share`);
+        expect(live).toContain(`${SHEET_SEGMENT}/people`);
+      });
+
       it('is not itself addressed under the marker', () => {
         // No page may take a `sheet` segment, or a sheet over it could collide with
         // a sheet over its parent again.

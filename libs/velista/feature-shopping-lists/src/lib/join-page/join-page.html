@@ -9,7 +9,9 @@
     @case ('checking') {
       <div aria-live="polite" class="checking" role="status">
         <span aria-hidden="true" class="spinner"></span>
-        <span class="visually-hidden">{{ 'basket.join.checking' | rokuT }}</span>
+        <span class="visually-hidden">{{
+          'basket.join.checking' | rokuT
+        }}</span>
       </div>
     }
 
@@ -51,12 +53,29 @@
         }
 
         <!--
+          How long they get, said before they decide (velista 0094, section 4).
+          One muted line, and it mentions no account, no name to ask and no
+          register: rule C2 is that a guest is never shown register, and
+          somebody reading this has no account to be told what an account would
+          buy them.
+
+          The number comes from LINK_VISIT_HOURS rather than the sentence,
+          because this is the one screen that says it before there is a
+          participant with an `expiresAt` to read.
+        -->
+        <p class="for-hours">
+          {{ 'basket.join.forHours' | rokuT: { hours: visitHours } }}
+        </p>
+
+        <!--
           Optional, and it looks it: the word is on the field rather than in a
           hint somebody has to read to discover the field can be skipped.
         -->
         <label class="name-label" for="join-name">
           <span class="name-text">{{ 'basket.join.nameLabel' | rokuT }}</span>
-          <span class="name-optional">{{ 'basket.join.optional' | rokuT }}</span>
+          <span class="name-optional">{{
+            'basket.join.optional' | rokuT
+          }}</span>
         </label>
         <input
           (input)="name.set($any($event.target).value)"

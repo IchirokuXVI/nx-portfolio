@@ -7,9 +7,14 @@
   @switch (pane()) {
     @case ('link') {
       <h2 class="title" id="share-title">{{ 'basket.share.title' | rokuT }}</h2>
-      <p class="body">{{ 'basket.share.body' | rokuT }}</p>
+      <!--
+        What the link hands over, which is a whole different answer on the
+        basket that is always there: every list the owner can write, now and
+        later (velista 0094, section 7).
+      -->
+      <p class="body">{{ bodyKey() | rokuT }}</p>
 
-      @if (link(); as live) {
+      @if (linkState() === 'working') {
         <!--
           The link itself, readable and selectable. A basket has zero links or
           one, and this one can be copied again tomorrow from any device, which
@@ -43,18 +48,74 @@
           </p>
         }
 
+        <!--
+          When it stops accepting people. **Text beside the URL and not a
+          tooltip** (section 9), and it carries its day whenever the day is not
+          today, so "07:15" is never ambiguous to somebody who cannot glance at
+          a clock.
+        -->
+        @if (worksUntil(); as until) {
+          <p class="works-until">{{ until.key | rokuT: until.args }}</p>
+        }
+
         <p class="note">{{ 'basket.share.note' | rokuT }}</p>
-      } @else {
-        <p aria-live="polite" class="minting" role="status">
-          {{ 'basket.share.minting' | rokuT }}
+      } @else if (linkState() === 'unknown') {
+        <!--
+          The basket has not answered yet, which a cold load straight onto this
+          sheet's URL really does reach: under `shopping-lists/live` the id
+          arrives with the basket. Neither sentence below is safe to say here,
+          because both are claims about a link nobody has asked about.
+        -->
+        <p aria-live="polite" class="checking" role="status">
+          {{ 'basket.share.checking' | rokuT }}
         </p>
+      } @else {
+        <!--
+          No link, or one whose time is up. The two differ by one sentence and
+          one word on the button, and neither draws a URL: an ended link opens
+          nothing, so showing it would be offering somebody a dead string to
+          paste into a chat.
+
+          A press makes one. The server revokes the ended link and mints in the
+          same request, so there is nothing to confirm and nothing to undo
+          first.
+        -->
+        <p class="none">
+          {{
+            (linkState() === 'ended'
+              ? 'basket.share.ended'
+              : 'basket.share.none'
+            ) | rokuT
+          }}
+        </p>
+
+        <button
+          (click)="makeLink()"
+          [attr.aria-busy]="busy() ? 'true' : null"
+          class="make"
+          type="button"
+        >
+          {{
+            (linkState() === 'ended'
+              ? 'basket.share.makeNew'
+              : 'basket.share.make'
+            ) | rokuT
+          }}
+        </button>
       }
 
       <!--
-        The people from the owner's groups (velista 0085, section 4). A tick adds the
-        person and an untick removes them, each at once, so there is no Save. Somebody
-        who joined by link shows ticked, and their hint says before the untick that
-        removing them is for good.
+        The people from the owner's groups (velista 0085, section 4). A tick adds
+        the person and an untick removes them, each at once, so there is no Save.
+
+        **Ticked means named** since velista 0094. Somebody who is here with the
+        link shows unticked, with a line saying until when, because the box is
+        now the thing that would keep them: ticking it promotes the row they
+        already have and the expiry goes.
+
+        The footnote under the section is what the link joiner's hint used to
+        say. It is true of everybody in the list rather than of one kind of
+        person, so it is said once rather than repeated per row.
       -->
       @if (isOwner()) {
         <section aria-labelledby="share-people-title" class="people">
@@ -68,6 +129,7 @@
             [hints]="peopleHints()"
             [selected]="ticked()"
           />
+          <p class="people-note">{{ 'share.people.removeNote' | rokuT }}</p>
           @if (peopleError(); as key) {
             <p class="people-error" role="alert">{{ key | rokuT }}</p>
           }
@@ -78,7 +140,9 @@
     <!--
       A real question, because there are two answers and the wrong default is
       harmful. Revoking stops the link spreading; it does **not** evict the
-      people already shopping, whose own sessions authorize them.
+      people already shopping, whose own sessions authorize them. What it costs
+      them is the rest of their own twelve hours and no more, which is what the
+      body now says (velista 0094, section 8).
     -->
     @case ('revoke') {
       <h2 class="title" id="share-title">
@@ -159,7 +223,13 @@
   <div class="footer" sheetFooter>
     @switch (pane()) {
       @case ('link') {
-        @if (link()) {
+        <!--
+          Only over a link that is working. There is nothing to revoke on a
+          basket with no link, and nothing left to revoke on one whose time is
+          up: the next press replaces it, which is the act the owner wants
+          there.
+        -->
+        @if (linkState() === 'working') {
           <button (click)="askRevoke()" class="revoke" type="button">
             {{ 'basket.share.revoke' | rokuT }}
           </button>

@@ -15,6 +15,46 @@
   color: var(--app-text-muted);
 }
 
+// When a visitor's time is up, directly under how they arrived: a link let them
+// in, and a link is twelve hours, so the two lines are one fact.
+//
+// The margin above closes the gap `.how` leaves, so the pair reads as a block
+// rather than as two separate notes about the same person.
+.until {
+  margin: calc(var(--app-space-4) * -1 + var(--app-space-1)) 0
+    var(--app-space-4);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// Keeping somebody, which is the owner adding them by name.
+//
+// `secondary-button` rather than the destructive treatment below it: this is
+// the constructive act on this pane, and the two must not look alike on a
+// screen where the other one removes a person.
+.keep {
+  @include shared.secondary-button;
+
+  margin-block-end: var(--app-space-3);
+  color: var(--app-text-primary);
+}
+
+.keep-error {
+  margin: calc(var(--app-space-3) * -1) 0 var(--app-space-3);
+  font-size: var(--app-text-sm);
+  color: var(--app-status-danger-fg);
+}
+
+// Why a guest has no Keep. A sentence where the button would be, so the owner
+// is not left looking for a control that is missing.
+.cannot-stay {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+}
+
 .people {
   display: flex;
   flex-direction: column;

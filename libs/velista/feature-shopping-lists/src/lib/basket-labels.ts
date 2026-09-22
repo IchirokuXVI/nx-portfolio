@@ -1,8 +1,9 @@
 import type { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
-import type {
-  BasketListRef,
-  BasketParticipant,
-  BasketRow,
+import {
+  formatVisitMoment,
+  type BasketListRef,
+  type BasketParticipant,
+  type BasketRow,
 } from '@portfolio/velista/models';
 
 /**
@@ -136,6 +137,36 @@ export function participantName(
     );
   }
   return translator.t('basket.people.guest', undefined, locale);
+}
+
+/**
+ * When a visit or a link ends, as one string a sentence interpolates (velista
+ * `0094`).
+ *
+ * "18:40" today, and "tomorrow, 07:15" on any other day, which is section 9's
+ * rule: a bare time is ambiguous to somebody who cannot glance at a clock. The
+ * two halves come from {@link formatVisitMoment} and the join is a copy key, so
+ * a language that writes the day after the time can say so.
+ *
+ * The share sheet does **not** use this. It has a key per shape, because its
+ * sentence is built around the moment rather than interpolating it.
+ *
+ * @param now Passed in rather than read from the clock, so a spec can place the
+ *   moment on either side of midnight.
+ */
+export function visitTime(
+  at: Date,
+  translator: RokuTranslatorService,
+  locale: string,
+  now: Date = new Date()
+): string {
+  const moment = formatVisitMoment(at, locale, now);
+  return moment.day === null
+    ? moment.time
+    : translator.t('basket.time.dayAndTime', undefined, locale, {
+        day: moment.day,
+        time: moment.time,
+      });
 }
 
 /**

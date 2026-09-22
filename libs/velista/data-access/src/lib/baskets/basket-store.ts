@@ -8,8 +8,10 @@ import {
   untracked,
 } from '@angular/core';
 import {
+  BASKET_ACCESS_ENDED_FALLBACK,
   isOpenBasket,
   type Basket,
+  type BasketAccessEnded,
   type BasketAddLineRequest,
   type BasketAddress,
   type BasketDemandRequest,
@@ -29,7 +31,7 @@ import {
   type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import { AppResumed } from '@portfolio/velista/platform';
-import { GatewayError, hasResponse } from '../errors';
+import { endedReasonOf, GatewayError, hasResponse } from '../errors';
 import { restrictRowToServedLists } from '../mapping/basket-mappers';
 import {
   REALTIME_CLIENT,
@@ -120,6 +122,8 @@ export class BasketStore {
   private readonly _state = signal<BasketLoad>('loading');
   private readonly _error = signal<unknown>(null);
   private readonly _link = signal<BasketShareLink | null>(null);
+  /** See {@link accessEnded}. */
+  private readonly _accessEnded = signal<BasketAccessEnded | null>(null);
   private readonly _busyRows = signal<ReadonlySet<string>>(new Set());
   private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
   /** See {@link rowGone}. A counter, so the same sentence can be said twice. */
@@ -247,6 +251,12 @@ export class BasketStore {
       ) {
         this._cancelRefresh();
         this._sessions.forget(this._id);
+        // The event says the reader is off the basket and never why: its
+        // payload is the basket id alone (backend `0140`, section 7 emits it
+        // from the same `announceEnded` a removal does). So the reason is
+        // `UNKNOWN`, which draws the sentence a removal draws. Guessing
+        // `EXPIRED` from a clock here is the one thing section 5 forbids.
+        this._accessEnded.set(BASKET_ACCESS_ENDED_FALLBACK);
         this._state.set('revoked');
       }
     });
@@ -316,6 +326,34 @@ export class BasketStore {
    * authenticated, and nobody else's screen draws a share control at all.
    */
   readonly shareLink = this._link.asReadonly();
+
+  /**
+   * Why this reader stopped being on the basket, or null while they still are
+   * (velista `0094`, section 2).
+   *
+   * Beside {@link state} being `revoked` rather than inside it, because the
+   * state answers "what does this screen draw" and this answers "which sentence
+   * does it draw there". The two ended states are the same screen: what is on
+   * it stays readable and there is nothing to retry.
+   *
+   * The reason is whatever the refusal said. A 401 carries an error code, and
+   * `participant_expired` is the one that means a visit ran out; the eviction
+   * event carries no reason at all, so a socket that was swept lands on
+   * `UNKNOWN`, which draws the ordinary sentence. Under reporting the cause
+   * costs a reader the more precise of two true sentences. Over reporting it
+   * tells somebody who was removed that they can come back in twelve hours.
+   *
+   * The socket's own refusal is read here rather than copied into the signal,
+   * for the reason {@link revoked} exists beside `state`: the token refresh
+   * learns this first, ahead of the reader's next tap, and a screen drawing the
+   * sentence from one source and the state from another would say "removed"
+   * over a basket the socket already knows expired. The request's answer wins
+   * where there is one, because it carried a code about the act somebody just
+   * performed.
+   */
+  readonly accessEnded = computed<BasketAccessEnded | null>(
+    () => this._accessEnded() ?? this._socket.revokedReason()
+  );
 
   /**
    * Rows with a write in flight, by `rowKey`, so a row can show it without
@@ -619,6 +657,7 @@ export class BasketStore {
     this._address.set({ basketId });
     this._state.set('loading');
     this._error.set(null);
+    this._accessEnded.set(null);
     this._present.set([]);
     // Started beside the read rather than after it. The connection costs a token
     // request of its own, so waiting for the basket would delay going live by a whole
@@ -652,6 +691,7 @@ export class BasketStore {
     this._address.set('live');
     this._state.set('loading');
     this._error.set(null);
+    this._accessEnded.set(null);
     this._present.set([]);
     await this.refresh();
   }
@@ -691,6 +731,7 @@ export class BasketStore {
     this._queued = false;
     this._changed();
     this._link.set(null);
+    this._accessEnded.set(null);
     this._present.set([]);
     this._busyRows.set(new Set());
     this._adding.set(false);
@@ -1351,6 +1392,13 @@ export class BasketStore {
       // and must not be reported as one.
       const held = this._sessions.read(basketId);
       this._sessions.forget(basketId);
+      if (held !== null) {
+        // Which of the two endings it was, from the code the server put on the
+        // refusal (backend `0140`, section 8). Anything else, including a 401
+        // with no readable body, falls back to the reason that draws the
+        // ordinary sentence.
+        this._accessEnded.set(endedReasonOf(error));
+      }
       this._state.set(held === null ? 'needsJoin' : 'revoked');
       return;
     }

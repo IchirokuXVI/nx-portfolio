@@ -43,14 +43,29 @@ import { ShareSheet } from './share-sheet';
 
 const BASKET_ID = 'b4b1f0e2-1f5a-4c2e-9a4d-6f0e2b7c1d33';
 
-function link(): BasketShareLink {
+/**
+ * A link that is still accepting people.
+ *
+ * Its end is **relative to now** rather than a fixed date, and deliberately so:
+ * the sheet chooses between showing a URL and offering a new link by comparing
+ * that moment with the device's clock, so a fixed date would put every test on
+ * the ended pane the day after it was written (the memory note on fixed date
+ * specs being time bombs).
+ */
+function link(overrides: Partial<BasketShareLink> = {}): BasketShareLink {
   return {
     id: 'sl1',
     secret: 's3cr3t',
-    createdAt: new Date('2026-08-21T09:00:00.000Z'),
-    expiresAt: null,
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + 11 * 60 * 60 * 1000),
     participantCount: 2,
+    ...overrides,
   };
+}
+
+/** A link whose twelve hours are over. */
+function endedLink(): BasketShareLink {
+  return link({ expiresAt: new Date(Date.now() - 60 * 1000) });
 }
 
 /** Someone on the basket, as the participant list names them. */
@@ -67,8 +82,22 @@ function participant(
     joinedAt: null,
     lastSeenAt: null,
     shareLinkId: null,
+    // A named person by default, which is what the picker ticks.
+    expiresAt: null,
     ...overrides,
   };
+}
+
+/** Somebody a link let in, whose time on the basket runs out. */
+function visitor(
+  overrides: Partial<BasketParticipant> = {}
+): BasketParticipant {
+  return participant({
+    kind: 'REGISTERED',
+    shareLinkId: 'sl1',
+    expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
+    ...overrides,
+  });
 }
 
 const OWNER = participant();
@@ -87,6 +116,15 @@ interface PeopleOptions {
   readonly addSaves?: boolean;
   /** Whether `removeParticipant` rejects. */
   readonly removeFails?: boolean;
+  /** The link the sheet is opened over. Working by default. */
+  readonly link?: BasketShareLink | null;
+  /**
+   * Which basket is underneath, or `null` for one that has not answered yet.
+   *
+   * `null` is the cold load: a sheet built on its own URL under
+   * `shopping-lists/live`, where the id arrives with the basket.
+   */
+  readonly basket?: 'GENERATED' | 'LIVE' | null;
 }
 
 async function render(
@@ -98,13 +136,31 @@ async function render(
   const participants = signal<readonly BasketParticipant[]>(
     people.participants ?? [OWNER]
   );
+  const shareLink = signal<BasketShareLink | null>(
+    people.link === undefined ? link() : people.link
+  );
   const store = {
-    basket: signal(null),
+    // A basket with an id, because the sheet reads the link **when the id
+    // appears**: on the live route it arrives with the basket, so a sheet built
+    // before it has one must not claim the list has no link (velista `0094`).
+    // `kind` decides which body sentence is drawn.
+    basket: signal(
+      people.basket === null
+        ? null
+        : { id: BASKET_ID, kind: people.basket ?? 'GENERATED' }
+    ),
     state: signal('ready'),
     error: signal(null),
-    // Already minted, which is the pane the trigger lives on.
-    shareLink: signal(link()),
-    share: jest.fn().mockResolvedValue(link()),
+    // Where closing this sheet goes. From the store since velista `0091`,
+    // because the live route carries no id in its URL.
+    address: signal({ basketId: BASKET_ID }),
+    // Already minted and still working, which is the pane the trigger lives on.
+    shareLink,
+    share: jest.fn(async () => {
+      const minted = link();
+      shareLink.set(minted);
+      return minted;
+    }),
     revokeLink: jest.fn().mockResolvedValue(undefined),
     loadShareLink: jest.fn().mockResolvedValue(undefined),
     me: signal(OWNER),
@@ -114,8 +170,20 @@ async function render(
         return false;
       }
       participants.update((held) => [
-        ...held,
-        participant({ id: `p-${userId}`, kind: 'REGISTERED', userId }),
+        // A person already on the basket is **promoted** rather than added
+        // twice, which is what the server does to a live link visitor (backend
+        // `0140`, section 6): the row keeps its id and loses its expiry.
+        ...held.filter((person) => person.userId !== userId),
+        ...held
+          .filter((person) => person.userId === userId)
+          .map((person) => ({
+            ...person,
+            shareLinkId: null,
+            expiresAt: null,
+          })),
+        ...(held.some((person) => person.userId === userId)
+          ? []
+          : [participant({ id: `p-${userId}`, kind: 'REGISTERED', userId })]),
       ]);
       return true;
     }),
@@ -175,6 +243,13 @@ async function render(
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ShareSheet);
+  fixture.detectChanges();
+  // Let the link read come back, so the sheet has left `unknown` by the time a
+  // test looks at it. Microtasks rather than `whenStable`, because part of this
+  // file pins the clock and `whenStable` hangs under fake timers.
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
   fixture.detectChanges();
   return Object.assign(fixture, { store });
 }
@@ -318,6 +393,152 @@ describe('ShareSheet: sending the link', () => {
   });
 });
 
+/**
+ * Velista `0094`, section 3: the sheet reads, a press mints, and the link says
+ * when it stops working.
+ */
+describe('ShareSheet: the three link states', () => {
+  // The clock is pinned, because the sheet chooses its state and its sentence by
+  // comparing the link's end with the device's own now. Mid morning, so a link
+  // eleven hours out lands this evening rather than after midnight: "today" and
+  // "tomorrow" are two different sentences and each test says which it wants.
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
+    jest.setSystemTime(new Date('2026-09-22T10:00:00'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /**
+   * Let the pending promises run, without `whenStable`.
+   *
+   * `whenStable` hangs under fake timers, which is the house rule for every
+   * spec in this repo that pins the clock.
+   */
+  const settle = async (fixture: Awaited<ReturnType<typeof render>>) => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  };
+
+  const text = (fixture: Awaited<ReturnType<typeof render>>, css: string) =>
+    (fixture.nativeElement as HTMLElement)
+      .querySelector(css)
+      ?.textContent?.trim() ?? null;
+
+  const url = (fixture: Awaited<ReturnType<typeof render>>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('.link-url');
+
+  const make = (fixture: Awaited<ReturnType<typeof render>>) =>
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button.make'
+    );
+
+  it('opens without making a link', async () => {
+    // The whole point of the section. Opening this sheet to tick a flatmate must
+    // not mint a twelve hour invitation nobody asked for.
+    const fixture = await render();
+
+    expect(fixture.store.share).not.toHaveBeenCalled();
+    expect(fixture.store.loadShareLink).toHaveBeenCalled();
+  });
+
+  it('claims nothing about a basket that has not answered yet', async () => {
+    // A cold load on this sheet's own URL under `shopping-lists/live`, where the
+    // id arrives with the basket. `loadShareLink` addresses the basket by id and
+    // does nothing without one, so a sheet that read here would sit on "no link"
+    // for ever and offer a button that mints a second one.
+    const fixture = await render(undefined, { basket: null });
+
+    expect(fixture.store.loadShareLink).not.toHaveBeenCalled();
+    expect(text(fixture, '.checking')).toBe('basket.share.checking');
+    expect(text(fixture, '.none')).toBeNull();
+    expect(make(fixture)).toBeNull();
+    expect(url(fixture)).toBeNull();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.footer .revoke')
+    ).toBeNull();
+  });
+
+  it('reads the link as soon as the basket names itself', async () => {
+    const fixture = await render(undefined, { basket: null });
+    expect(fixture.store.loadShareLink).not.toHaveBeenCalled();
+
+    fixture.store.basket.set({ id: BASKET_ID, kind: 'LIVE' });
+    fixture.detectChanges();
+    await settle(fixture);
+
+    expect(fixture.store.loadShareLink).toHaveBeenCalledTimes(1);
+    expect(url(fixture)).not.toBeNull();
+  });
+
+  it('says what a LIVE basket’s link really hands over', async () => {
+    // Every list the owner can write, now and later, rather than the lines of
+    // one trip (velista `0094`, section 7).
+    const live = await render(undefined, { basket: 'LIVE' });
+    expect(text(live, '.body')).toBe('basket.share.bodyLive');
+
+    const trip = await render();
+    expect(text(trip, '.body')).toBe('basket.share.body');
+  });
+
+  it('offers to make one when the basket has none', async () => {
+    const fixture = await render(undefined, { link: null });
+
+    expect(text(fixture, '.none')).toBe('basket.share.none');
+    expect(make(fixture)?.textContent?.trim()).toBe('basket.share.make');
+    expect(url(fixture)).toBeNull();
+  });
+
+  it('draws the URL and when it stops working', async () => {
+    const fixture = await render();
+
+    expect(url(fixture)).not.toBeNull();
+    expect(text(fixture, '.works-until')).toBe('basket.share.worksUntil');
+  });
+
+  it('names the day when the link runs past midnight', async () => {
+    // Section 9: a bare "07:15" is ambiguous to somebody who cannot glance at a
+    // clock, so the day is printed whenever it is not today's.
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const fixture = await render(undefined, {
+      link: link({ expiresAt: tomorrow }),
+    });
+
+    expect(text(fixture, '.works-until')).toBe('basket.share.worksUntilDay');
+  });
+
+  it('offers a new link when the last one has ended, and no URL', async () => {
+    const fixture = await render(undefined, { link: endedLink() });
+
+    expect(text(fixture, '.ended' as string)).toBeNull();
+    expect(text(fixture, '.none')).toBe('basket.share.ended');
+    expect(make(fixture)?.textContent?.trim()).toBe('basket.share.makeNew');
+    // An ended link opens nothing, so offering it to paste into a chat would be
+    // handing somebody a dead string.
+    expect(url(fixture)).toBeNull();
+    // And there is nothing left to revoke: the press replaces it.
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.footer .revoke')
+    ).toBeNull();
+  });
+
+  it('mints once on a press, and never revokes first', async () => {
+    const fixture = await render(undefined, { link: endedLink() });
+
+    make(fixture)?.click();
+    await settle(fixture);
+
+    expect(fixture.store.share).toHaveBeenCalledTimes(1);
+    expect(fixture.store.revokeLink).not.toHaveBeenCalled();
+    expect(url(fixture)).not.toBeNull();
+  });
+});
+
 /** Velista `0085`, section 4, test 3: the owner's people, saved at every tick. */
 describe('ShareSheet: people', () => {
   const settle = async (fixture: Awaited<ReturnType<typeof render>>) => {
@@ -343,27 +564,53 @@ describe('ShareSheet: people', () => {
       .querySelector('.people-error')
       ?.textContent?.trim() ?? null;
 
-  it('ticks the live registered participants, one who joined by link included', async () => {
+  it('ticks named people only, and leaves a visiting contact unticked', async () => {
+    // Velista `0094` section 3 reverses `0085`. The tick means "stays until you
+    // untick them", so somebody who is here on the link is **not** ticked: the
+    // empty box is the thing that would keep them.
     const fixture = await render(undefined, {
       participants: [
         OWNER,
-        participant({
-          id: 'p-leo',
-          kind: 'REGISTERED',
-          userId: 'u-leo',
-          shareLinkId: 'sl1',
-        }),
+        visitor({ id: 'p-leo', userId: 'u-leo' }),
+        participant({ id: 'p-marta', kind: 'REGISTERED', userId: 'u-marta' }),
       ],
     });
 
-    expect(boxOf(fixture, 'Leo').checked).toBe(true);
-    expect(boxOf(fixture, 'Marta').checked).toBe(false);
+    expect(boxOf(fixture, 'Leo').checked).toBe(false);
+    expect(boxOf(fixture, 'Marta').checked).toBe(true);
 
-    // The link joiner is warned before the untick that it is for good.
+    // And the line beside the empty box says why it is empty.
     const hint = document.getElementById(
       boxOf(fixture, 'Leo').getAttribute('aria-describedby') ?? ''
     );
-    expect(hint?.textContent?.trim()).toBe('share.people.linkJoined');
+    expect(hint?.textContent).toContain('share.people.visiting');
+  });
+
+  it('keeps a visitor on a tick, and the visiting line goes', async () => {
+    const fixture = await render(undefined, {
+      participants: [OWNER, visitor({ id: 'p-leo', userId: 'u-leo' })],
+    });
+
+    boxOf(fixture, 'Leo').click();
+    fixture.detectChanges();
+    await settle(fixture);
+
+    // The same call as adding somebody new. The server promotes the row.
+    expect(fixture.store.addParticipant).toHaveBeenCalledWith('u-leo');
+    expect(boxOf(fixture, 'Leo').checked).toBe(true);
+    expect(boxOf(fixture, 'Leo').getAttribute('aria-describedby')).toBeNull();
+  });
+
+  it('says once, under the whole list, that a removal is for good', async () => {
+    // What `share.people.linkJoined` used to say about one kind of person, and
+    // was always true of everybody in the picker.
+    const fixture = await render();
+
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.people-note')
+        ?.textContent?.trim()
+    ).toBe('share.people.removeNote');
   });
 
   it('posts at once on a tick', async () => {
@@ -424,12 +671,16 @@ describe('ShareSheet: people', () => {
 
   it('reads the joined count again when the participants move', async () => {
     const fixture = await render();
-    expect(fixture.store.loadShareLink).not.toHaveBeenCalled();
+    // One read already, from the sheet opening: it reads the link rather than
+    // minting one since velista `0094`. What matters here is the **second**.
+    const onOpen = fixture.store.loadShareLink.mock.calls.length;
 
     boxOf(fixture, 'Marta').click();
     fixture.detectChanges();
     await settle(fixture);
 
-    expect(fixture.store.loadShareLink).toHaveBeenCalled();
+    expect(fixture.store.loadShareLink.mock.calls.length).toBeGreaterThan(
+      onOpen
+    );
   });
 });

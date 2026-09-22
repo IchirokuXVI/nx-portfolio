@@ -1,6 +1,8 @@
 import {
+  BASKET_ACCESS_ENDED_FALLBACK,
   ERROR_CODE_FALLBACK,
   ERROR_CODES,
+  type BasketAccessEnded,
   type ErrorCode,
   type ProblemDetails,
 } from '@portfolio/velista/models';
@@ -126,6 +128,35 @@ const REJECTION_STATUSES: readonly number[] = [401, 403];
 export function isCredentialRejection(error: unknown): boolean {
   const status = statusOf(error);
   return status !== null && REJECTION_STATUSES.includes(status);
+}
+
+/**
+ * Which of the two endings a refusal about a basket describes (velista `0094`,
+ * section 2).
+ *
+ * `participant_expired` is a visit that ran out (backend `0140`, section 8) and
+ * `not_a_participant` is somebody taken off the basket. Anything else is
+ * `UNKNOWN`, which is the honest answer for a 401 whose body could not be read
+ * at all: `toGatewayError` turns that into a plain `unauthorized`, and reading
+ * it as either named reason would be inventing one.
+ *
+ * Shared by `BasketStore` and `BasketSocket` because both learn the same fact
+ * from the same shape of failure, one on a request and the other on a token
+ * refresh, and two copies of this mapping would be two ways to answer it.
+ */
+export function endedReasonOf(error: unknown): BasketAccessEnded {
+  if (!(error instanceof GatewayError)) {
+    return BASKET_ACCESS_ENDED_FALLBACK;
+  }
+
+  switch (error.code) {
+    case 'participant_expired':
+      return 'EXPIRED';
+    case 'not_a_participant':
+      return 'REMOVED';
+    default:
+      return BASKET_ACCESS_ENDED_FALLBACK;
+  }
 }
 
 /** The HTTP status a failure carried, or null when it carried none. */

@@ -119,3 +119,22 @@ export function basketSessionKey(basketId: string): string {
 export function basketTargetKey(basketId: string): string {
   return `basket-target:${APP_KEY}:${basketId}`;
 }
+
+/**
+ * That this device has already read the notice saying when a visit ends
+ * (velista `0094`, section 5).
+ *
+ * One per basket, following {@link basketTargetKey}, because a visit is per
+ * basket: somebody shopping two shared lists in a week has two of them, and
+ * dismissing one says nothing about the other.
+ *
+ * In **`sessionStorage`**, where `updateAttempt` is and for a related reason,
+ * though the balance is the other way round. It is a convenience and never a
+ * rule: nothing is granted or refused by it, so losing it costs a sentence
+ * somebody has already read, and a tab that outlives the twelve hours it is
+ * about is not the case worth optimizing for. `localStorage` would keep it for
+ * the next visit too, where the sentence is new again.
+ */
+export function visitNoticeKey(basketId: string): string {
+  return `visit-notice:${APP_KEY}:${basketId}`;
+}

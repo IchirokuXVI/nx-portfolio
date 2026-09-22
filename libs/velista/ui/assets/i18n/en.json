@@ -1062,8 +1062,23 @@
     "notLive": "Not updating right now",
     "revoked": {
       "title": "You are no longer on this list",
-      "body": "Whoever shared it has taken it back. If you still have the link, you can join again.",
-      "rejoin": "Use the link again"
+      "body": "Whoever shared it took it back."
+    },
+    "ended": {
+      "title": "Your time on this list has ended",
+      "bodyAccount": "A link lasts 12 hours. Ask {{name}} for a new one, or to add you so you stay.",
+      "bodyAccountNameless": "A link lasts 12 hours. Ask for a new one, or to be added so you stay.",
+      "bodyGuest": "A link lasts 12 hours. Ask whoever sent it for a new one."
+    },
+    "visit": {
+      "account": "You are on this list until {{time}}. Ask {{name}} to add you to keep it.",
+      "accountNameless": "You are on this list until {{time}}. Ask whoever shared it to add you to keep it.",
+      "guest": "You are on this list until {{time}}.",
+      "ending": "Your time on this list ends at {{time}}.",
+      "dismiss": "Got it"
+    },
+    "time": {
+      "dayAndTime": "{{day}}, {{time}}"
     },
     "line": {
       "open": "Settle {{name}}",
@@ -1225,7 +1240,12 @@
       "close": "Close",
       "joinedUnknown": "Not known",
       "leave": "Leave this list",
-      "leaveQuestion": "Leave “{{name}}”? You can come back with the link if you have it.",
+      "leaveNamed": "Leave “{{name}}”? Only whoever made it can add you again.",
+      "leaveVisitor": "Leave “{{name}}”? You can come back while its link still works.",
+      "until": "with the link, until {{time}}",
+      "keep": "Keep on this list",
+      "keepFailed": "That did not go through. Try again.",
+      "guestCannotStay": "A guest is here until the time above. To stay longer they need to be added from your groups.",
       "leaveConfirm": "Leave",
       "stay": "Stay",
       "leaveFailed": "That did not go through. Try again.",
@@ -1241,16 +1261,23 @@
       "joinedWith_one": "{{count}} person joined with it",
       "joinedWith_other": "{{count}} people joined with it",
       "made": "made {{date}}",
-      "note": "This is the list’s one link. Copy it again whenever you need it, for as many people as you like. It stops working when the list is done or when you revoke it.",
+      "note": "Anyone who opens it can shop this list for 12 hours. Add people from your groups to keep them on it.",
+      "bodyLive": "Anyone with the link can shop everything on your lists, no account needed. They see the lines, never your groups.",
+      "none": "This list has no link right now.",
+      "ended": "The last link has ended. Links last 12 hours.",
+      "make": "Make a link",
+      "makeNew": "Make a new link",
+      "worksUntil": "Works until {{time}}",
+      "worksUntilDay": "Works until {{day}}, {{time}}",
+      "checking": "Checking the link",
       "revoke": "Revoke the link",
-      "close": "Close",
-      "minting": "Making a link"
+      "close": "Close"
     },
     "revoke": {
       "title": "Revoke the link?",
-      "body_one": "Nobody new will be able to join, and the list will have no link until you share it again. The {{count}} person already shopping keeps working.",
-      "body_other": "Nobody new will be able to join, and the list will have no link until you share it again. The {{count}} people already shopping keep working.",
-      "bodyNone": "Nobody new will be able to join, and the list will have no link until you share it again.",
+      "body_one": "Nobody new will be able to join. The {{count}} person already shopping keeps working until their time ends.",
+      "body_other": "Nobody new will be able to join. The {{count}} people already shopping keep working until their time ends.",
+      "bodyNone": "Nobody new will be able to join.",
       "cascade_one": "Also remove the {{count}} guest who joined with it",
       "cascade_other": "Also remove the {{count}} guests who joined with it",
       "cascadeHint": "They lose the list on their next action. Only tick this if the link reached the wrong hands.",
@@ -1279,6 +1306,7 @@
       "people_other": "{{count}} people are on it",
       "nameLabel": "Your name",
       "optional": "Optional",
+      "forHours": "You can shop this list for {{hours}} hours.",
       "nameHint": "So people know who got the bread",
       "continue": "Continue as guest",
       "or": "or, if you use Velista",
@@ -1503,7 +1531,8 @@
     "people": {
       "title": "People",
       "none": "Nobody else is in your groups yet.",
-      "linkJoined": "Joined with the link. Removing them also stops the link working for them.",
+      "visiting": "Here with the link until {{time}}",
+      "removeNote": "Somebody you remove cannot come back with a link.",
       "failed": "That did not save. Try again."
     }
   }

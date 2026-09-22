@@ -1,7 +1,8 @@
 import { DestroyRef, inject, Injectable, signal } from '@angular/core';
+import type { BasketAccessEnded } from '@portfolio/velista/models';
 import { Subject, type Observable } from 'rxjs';
 import { ApiUrl } from '../api-url';
-import { hasResponse } from '../errors';
+import { endedReasonOf, hasResponse } from '../errors';
 import { toRealtimeEvent } from '../realtime/realtime-event-mapper';
 import {
   REALTIME_EVENT_NAMES,
@@ -100,6 +101,8 @@ export class BasketSocket {
   private readonly _connected = signal(false);
   private readonly _degraded = signal(false);
   private readonly _revoked = signal(false);
+  /** See {@link revokedReason}. */
+  private readonly _revokedReason = signal<BasketAccessEnded | null>(null);
   private readonly _reconnects = signal(0);
 
   /** Which basket this socket is for, or null before {@link open} and after close. */
@@ -181,6 +184,16 @@ export class BasketSocket {
    */
   readonly revoked = this._revoked.asReadonly();
 
+  /**
+   * Why the renewal was refused, once {@link revoked} has latched, and null
+   * before it has (velista `0094`, section 2).
+   *
+   * Two signals and not one, because {@link revoked} is what stops the
+   * reconnect loop and this is only what the screen calls it. Nothing branches
+   * on this.
+   */
+  readonly revokedReason = this._revokedReason.asReadonly();
+
   constructor() {
     // A backstop, and **not** what closes this socket when the shopper leaves. This
     // class is provided by the basket route, and Angular caches a route's environment
@@ -211,6 +224,7 @@ export class BasketSocket {
     this._id = basketId;
     this._degraded.set(false);
     this._revoked.set(false);
+    this._revokedReason.set(null);
     this._failures = 0;
     this._start();
   }
@@ -284,6 +298,11 @@ export class BasketSocket {
         // Not a transient. The credential this browser holds no longer names a live
         // participant, and no number of retries changes that answer, so this latches
         // rather than backing off.
+        //
+        // The refusal also says which ending it was, and the socket is where the
+        // reader usually learns it first: this refresh runs ahead of their next
+        // tap (velista `0094`, section 5).
+        this._revokedReason.set(endedReasonOf(error));
         this._revoked.set(true);
         this._degraded.set(true);
         return;
