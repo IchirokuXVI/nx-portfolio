@@ -146,7 +146,9 @@
     <button
       (click)="press()"
       [attr.aria-label]="buttonLabel() | rokuT"
-      [disabled]="busy() || (button() === 'add' && !canSubmit())"
+      [disabled]="
+        busy() || submitDisabled() || (button() === 'add' && !canSubmit())
+      "
       [type]="button() === 'add' ? 'submit' : 'button'"
       class="send"
     >

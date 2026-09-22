@@ -32,6 +32,7 @@ import { formatMoney } from '@portfolio/velista/platform';
 import {
   CheckFilledIcon,
   CircleIcon,
+  ClockIcon,
   HalfCircleIcon,
   QuantityReel,
   SlashCircleIcon,
@@ -40,22 +41,31 @@ import {
   originsCaption,
   outstandingCaption,
   quantityCaption,
+  skipCaption,
   touchedCaption,
 } from '../basket-labels';
 
 /**
- * Which of the four shapes the status control draws.
+ * Which of the five shapes the status control draws.
  *
- * Four and not six, although a row has six states. `SKIPPED` draws as `wanted` in
- * this plan and `REMOVED` draws as `wanted` with every control off; velista `0092`
- * and `0093` give each its own treatment, and a glyph invented for them here would
- * be a shape those plans have to take back.
+ * Five and not six, although a row has six states. `REMOVED` still draws as
+ * `wanted` with every control off; velista `0093` gives it its own treatment, and
+ * a glyph invented for it here would be a shape that plan has to take back.
  *
- * `NOT_AVAILABLE` keeps a glyph of its own, because it closes a row without
- * anything being bought: a tick on one would claim a purchase that never happened,
- * which is the same distinction `touchedCaption` keeps a separate sentence for.
+ * **Three of the five say a row is closed, and they have to be three** (velista
+ * `0092`, section 4). A tick claims a purchase; a stroke through says the shop
+ * had none, which is a close with nothing bought; a clock says somebody walked
+ * past it today, which closes nothing at all. A shopper standing at a shelf reads
+ * these at arm's length, so they are told apart by shape and never by colour
+ * (velista `0052`, section 6.3), and the words beside each of them say the same
+ * thing again.
  */
-export type BasketStatusGlyph = 'wanted' | 'partly' | 'bought' | 'unavailable';
+export type BasketStatusGlyph =
+  | 'wanted'
+  | 'partly'
+  | 'bought'
+  | 'unavailable'
+  | 'skipped';
 
 /**
  * What pressing the status control does, per shape, for its accessible name.
@@ -71,6 +81,11 @@ const ACTS_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
   partly: 'basket.status.rest',
   bought: 'basket.status.undoGot',
   unavailable: 'basket.status.undoNone',
+  // The same act as on a wanted row, and that is the point: a person who skipped
+  // the bread and then found it presses this, and the server ends the skip with
+  // the purchase (velista `0092`, section 3.1). Taking the skip back without
+  // buying is a different act with a button of its own, on the sheet.
+  skipped: 'basket.status.got',
 };
 
 /**
@@ -86,6 +101,7 @@ const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
   partly: 'basket.status.isPartly',
   bought: 'basket.status.isGot',
   unavailable: 'basket.status.isNone',
+  skipped: 'basket.skip.state',
 };
 
 /**
@@ -150,6 +166,7 @@ const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
   imports: [
     CheckFilledIcon,
     CircleIcon,
+    ClockIcon,
     HalfCircleIcon,
     NgTemplateOutlet,
     QuantityReel,
@@ -225,6 +242,19 @@ export class BasketRow {
    * and velista `0093` draws. Two marks on one row need two names.
    */
   readonly priceMark = input<BasketPriceMark | null>(null);
+
+  /**
+   * Which product somebody said they got on this row, or null (velista `0092`,
+   * section 5).
+   *
+   * An input beside {@link meId} and {@link ownName} rather than a store read,
+   * for their reason: this component is constructed once per row of the basket,
+   * and the page already holds the answer.
+   *
+   * **The row draws it and never stores it.** The choice lives in memory for the
+   * visit, because a product is recorded when it is bought and not before.
+   */
+  readonly chosenId = input<string | null>(null);
 
   /** The reader's own participant id, so their own edits can be named. */
   readonly meId = input<string | null>(null);
@@ -513,13 +543,13 @@ export class BasketRow {
   }
 
   /**
-   * Which of the four shapes to draw, from the state the server sent.
+   * Which of the five shapes to draw, from the state the server sent.
    *
-   * `SKIPPED` and `REMOVED` fall through to `wanted` in this plan, which is what
-   * section 9.1 says they draw until velista `0092` and `0093` give each its own
-   * treatment. A state this build has never heard of does the same, which is the
-   * direction the model's own fallback takes and for the same reason: a row this
-   * build cannot classify is still a thing to buy.
+   * `REMOVED` falls through to `wanted`, which is what velista `0090` section 9.1
+   * says it draws until `0093` gives it its own treatment. A state this build has
+   * never heard of does the same, which is the direction the model's own fallback
+   * takes and for the same reason: a row this build cannot classify is still a
+   * thing to buy.
    */
   protected readonly statusGlyph = computed<BasketStatusGlyph>(() => {
     const state = this.state();
@@ -532,8 +562,45 @@ export class BasketRow {
     if (state === 'NOT_AVAILABLE') {
       return 'unavailable';
     }
+    if (state === 'SKIPPED') {
+      return 'skipped';
+    }
     return 'wanted';
   });
+
+  /**
+   * Whether the reel is drawn at all (velista `0092`, section 4).
+   *
+   * **The shape that tells a closed row from a wanted one at arm's length.** A
+   * skip and a close are both "nothing more is happening to this row today", and
+   * neither was reached by a number: a skip has no number, and a close is an
+   * outcome rather than a quantity. So a reel on either would be the one control
+   * that could be dragged to zero and mean something the state does not.
+   *
+   * A row bought to zero keeps its reel, at zero, because that is the gesture
+   * that put it there and the one that takes it back.
+   *
+   * Undoing a close is the status glyph beside it, unchanged since velista
+   * `0044`: press it, and the reel comes back with the row.
+   */
+  protected readonly showsReel = computed(
+    () => this.state() !== 'SKIPPED' && this.state() !== 'NOT_AVAILABLE'
+  );
+
+  /**
+   * The quiet line under the name about this row having been put off, or null.
+   *
+   * **The row's and never the entry's**, unlike the state and the numbers above
+   * it: a skip covers the row, so every entry of a skipped row draws the same
+   * caption under the same words (velista `0092`, section 3.2).
+   */
+  protected readonly skipCaption = computed<string | null>(() =>
+    skipCaption(
+      { ...this.row(), state: this.state() },
+      this._translator,
+      this._locale()
+    )
+  );
 
   /**
    * Whether the glyph is a control, or only a statement of what the row is.
@@ -621,16 +688,58 @@ export class BasketRow {
   });
 
   /**
-   * The product this row means, or null for a free text row and for one catalog
-   * can no longer resolve.
+   * The product this row means, or null (velista `0092`, section 5).
    *
-   * The **row's** and never the entry's, because a row is one thing to pick off one
-   * shelf however many households asked for it. `basketRowPick` is the one place
-   * that decision lives, so the search, the price mark and this agree.
+   * The **row's** and never the entry's, because a row is one thing to pick off
+   * one shelf however many households asked for it.
+   *
+   * Three answers, and the middle one is the change. Somebody chose, and the
+   * choice is still one of the row's options. Or the row has exactly one option,
+   * which is not a choice at all: there was nothing to choose between. Or the row
+   * has several and nobody has chosen, and then it draws **no product and no
+   * price**, because quoting the first of them would put a name and a number on
+   * something nobody has picked up.
+   *
+   * `basketRowPick` stays what the search and the price mark ask, and this is
+   * deliberately not that question: those two ask "what is this row about", which
+   * is answered by the anchor's own product whether anybody has chosen or not.
+   * This one asks "what is in the trolley", which only a person can answer.
    */
-  private readonly _product = computed<BasketProduct | null>(
-    () => basketRowPick(this.row(), this.products()) ?? null
-  );
+  private readonly _product = computed<BasketProduct | null>(() => {
+    const row = this.row();
+    const products = this.products();
+
+    const chosen = this.chosenId();
+    if (chosen !== null && row.optionIds.includes(chosen)) {
+      return products.get(chosen) ?? null;
+    }
+
+    return row.optionIds.length === 1
+      ? (basketRowPick(row, products) ?? null)
+      : null;
+  });
+
+  /**
+   * Why there is no product to name, as a key, or null when there is one.
+   *
+   * **Two absences and two sentences**, because they are different facts. A row
+   * of several options nobody has chosen from says "No product chosen", which is
+   * a question waiting for an answer; a row whose one product the catalog can no
+   * longer name says "This line names no product", which is nobody's fault and
+   * nothing to do. Drawing the first over the second would ask somebody to choose
+   * from a list of one thing that cannot be drawn.
+   *
+   * Null for a row that names no product at all, which is free text somebody
+   * typed: there is nothing absent, so there is nothing to say about it.
+   */
+  protected readonly productAbsence = computed<string | null>(() => {
+    if (this._product() !== null || this.row().optionIds.length === 0) {
+      return null;
+    }
+    return this.row().optionIds.length > 1 && this.chosenId() === null
+      ? 'basket.line.free'
+      : 'basket.product.none';
+  });
 
   /**
    * The price after the product's name, or null where there is none.
@@ -776,6 +885,11 @@ export class BasketRow {
       this.markCaption() ?? '',
       this.touched() ?? '',
       this.from() ?? '',
+      // Said with the rest of the row, because a reader moving by button hears
+      // this string and nothing else about it. On a skipped row it repeats what
+      // the glyph's own name already says, which is deliberate: the two are read
+      // in different ways and neither should be the only carrier.
+      this.skipCaption() ?? '',
       // Announced with the rest of the row rather than only drawn, because a reader
       // moving by button hears this string and nothing else about the row.
       this.row().awaitingApproval

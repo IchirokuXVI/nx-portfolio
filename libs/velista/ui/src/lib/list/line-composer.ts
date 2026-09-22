@@ -149,6 +149,26 @@ export class LineComposer {
   readonly busy = input(false);
 
   /**
+   * Whether the container is not ready to receive a line (velista `0092`,
+   * section 7.2).
+   *
+   * One input and no knowledge of why. The basket's composer sets it while no
+   * target list has been chosen, because every line added there names a list
+   * now; the list page's never sets it, because a line added on a list is
+   * already on one. A composer that knew which of those it was would be a
+   * component that knows about baskets.
+   *
+   * **The field stays usable**, which is the whole point of this being separate
+   * from {@link busy}: somebody in an aisle types the thing they just remembered
+   * and chooses where it goes second, rather than losing it to a sheet.
+   *
+   * It holds the suggestion list too. Choosing a suggestion **is** the submit
+   * (section 6), so a live dropdown over a disabled button would be one way in
+   * that works and one that does not.
+   */
+  readonly submitDisabled = input(false);
+
+  /**
    * Whether to take focus on creation.
    *
    * True on an empty list, where there is exactly one thing to do and the composer is
@@ -416,8 +436,10 @@ export class LineComposer {
    * decides which brand later, on the line page, by trimming a set it already has.
    */
   choose(suggestion: CatalogSuggestion): void {
-    // Held like the button while a submit is out. See `busy`.
-    if (this.busy()) {
+    // Held like the button while a submit is out, and while the container is not
+    // ready for a line: choosing **is** the submit, so the two have to be held
+    // by the same conditions or one way in would work and the other would not.
+    if (this.busy() || this.submitDisabled()) {
       return;
     }
 

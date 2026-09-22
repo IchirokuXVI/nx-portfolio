@@ -10,7 +10,9 @@ import {
 import {
   isOpenBasket,
   type Basket,
+  type BasketAddLineRequest,
   type BasketAddress,
+  type BasketDemandRequest,
   type BasketListRef,
   type BasketLoad,
   type BasketParticipant,
@@ -122,6 +124,16 @@ export class BasketStore {
   private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
   /** See {@link rowGone}. A counter, so the same sentence can be said twice. */
   private readonly _rowGone = signal(0);
+  /** See {@link adding}. */
+  private readonly _adding = signal(false);
+  /** See {@link chosen}. */
+  private readonly _chosen = signal<ReadonlyMap<string, string>>(new Map());
+  /** See {@link handedOver}. The counter is what lets one sentence be said twice. */
+  private readonly _handedOver = signal<{
+    readonly text: string;
+    readonly seq: number;
+  } | null>(null);
+  private _handedOverSeq = 0;
 
   /** Which basket this store is about, once it has been told. */
   private _id: string | null = null;
@@ -317,6 +329,74 @@ export class BasketStore {
   readonly busyRows = this._busyRows.asReadonly();
 
   /**
+   * Whether an add is out (velista `0092`, section 7.4).
+   *
+   * Its own flag rather than a member of {@link busyRows}, because an add names
+   * no row: it is a write about the basket, and which row it lands on is the
+   * answer rather than the request. The composer's button waits on it and the
+   * field does not, so somebody can keep typing the next thing.
+   */
+  readonly adding = this._adding.asReadonly();
+
+  /**
+   * Which product somebody said they got, per row (velista `0092`, section 5).
+   *
+   * **In memory for the visit, and never stored.** Backend `0136` deleted the
+   * stored pick: a basket holds no lines, so there is nowhere to keep one, and
+   * the only place a product belongs is on the purchase it was bought as. This is
+   * what replaces it on the screen, and it is deliberately as short lived as the
+   * page: a choice made in one aisle is not a fact about the household's list.
+   *
+   * Keyed on the row key, which can move under an open sheet. A choice lost to a
+   * re-key is a choice somebody makes again, which is cheaper than a choice
+   * quietly attached to a row it was not made on.
+   */
+  readonly chosen = this._chosen.asReadonly();
+
+  /**
+   * Say which product was got, for this row, for this visit.
+   *
+   * It writes nothing to the server, and that is the whole design: a product is
+   * recorded when it is **bought**, as `itemId` on the settle, and never before
+   * (velista `0092`, section 5).
+   */
+  choose(rowKey: string, itemId: string): void {
+    const next = new Map(this._chosen());
+    next.set(rowKey, itemId);
+    this._chosen.set(next);
+  }
+
+  /**
+   * The product id a `BOUGHT` settle on this row carries, or undefined.
+   *
+   * **The one place the rule lives**, because three controls send a settle: the
+   * row's glyph, the row's reel and the sheet's three buttons. A rule copied
+   * three times is three chances for one of them to record a purchase against no
+   * product while the screen says otherwise.
+   *
+   * Two ways to have one. Somebody chose, and the choice is still one of the
+   * row's own options, which a re-key or a refetch can end. Or the row has
+   * exactly one option, which is not a choice at all: there was nothing to
+   * choose between, and the row has been drawing that product all along.
+   *
+   * Undefined otherwise, which is a row of several options nobody has chosen
+   * from, and a free text row. The settle then names no product, which is the
+   * honest record: nobody said which.
+   */
+  itemIdFor(rowKey: string): string | undefined {
+    const row = this.rowFor(rowKey);
+    if (row === null) {
+      return undefined;
+    }
+
+    const held = this._chosen().get(rowKey);
+    if (held !== undefined && row.optionIds.includes(held)) {
+      return held;
+    }
+    return row.optionIds.length === 1 ? row.optionIds[0] : undefined;
+  }
+
+  /**
    * Whether this basket is live, which the screen says out loud.
    *
    * A live basket and a refetching one look identical while nobody else is shopping,
@@ -482,6 +562,31 @@ export class BasketStore {
   }
 
   /**
+   * A sentence a sheet composed for the **page** to say, after the sheet has
+   * gone (velista `0092`, section 6.2).
+   *
+   * Here for {@link rowGone}'s reason and no other: a demand taken to zero takes
+   * the row out of the basket, the sheet over it dismisses itself, and the page
+   * is what is left with a live region to say it in. One region per screen is
+   * the rule this keeps (velista `0054`, section 7); a second one on a sheet
+   * that is closing would talk over it and then leave.
+   *
+   * **A rendered sentence and not a key.** The sheet holds the translator and
+   * the name of the row it was about, so it is what can compose the sentence;
+   * a store that held copy keys would be a store that has to be translated.
+   *
+   * The sequence number is what lets the same sentence be said twice in a row,
+   * which is {@link rowGone}'s counter in another shape: two rows emptied one
+   * after the other are two announcements, not one.
+   */
+  readonly handedOver = this._handedOver.asReadonly();
+
+  /** Hand one sentence to the page. See {@link handedOver}. */
+  handOver(text: string): void {
+    this._handedOver.set({ text, seq: (this._handedOverSeq += 1) });
+  }
+
+  /**
    * The row a key addresses: by its own key, then by any entry's line id.
    *
    * **The second lookup is the whole of velista `0090` section 7.3.** A row's key
@@ -588,8 +693,13 @@ export class BasketStore {
     this._link.set(null);
     this._present.set([]);
     this._busyRows.set(new Set());
+    this._adding.set(false);
+    // The choices are about **this** basket's rows, and they were never stored:
+    // they go with it rather than following the next one into a shop.
+    this._chosen.set(new Map());
     // The sentence is about a row of **this** basket, so it goes with it.
     this._rowGone.set(0);
+    this._handedOver.set(null);
     this._state.set('loading');
     this._error.set(null);
   }
@@ -821,6 +931,94 @@ export class BasketStore {
   }
 
   /**
+   * Put a row off for now, and take that back (velista `0092`, section 3).
+   *
+   * Two methods and not one toggle, for the reason the screen draws two buttons:
+   * a toggle is a control whose meaning depends on a state somebody has to read
+   * first, and this one is pressed in an aisle at arm's length.
+   *
+   * **Neither patches a state.** The answer is folded whole, exactly as a
+   * settle's is, so whether the row came back `SKIPPED` or `WANTED` with a note
+   * is the server's answer rather than this side's arithmetic.
+   */
+  async skip(rowKey: string): Promise<BasketRowResult | null> {
+    return this._write(rowKey, async (id) => {
+      const result = await this._service.skip(id, rowKey);
+      this._fold(result, rowKey);
+      return result;
+    });
+  }
+
+  /** The same fact, unset. See {@link skip}. */
+  async unskip(rowKey: string): Promise<BasketRowResult | null> {
+    return this._write(rowKey, async (id) => {
+      const result = await this._service.unskip(id, rowKey);
+      this._fold(result, rowKey);
+      return result;
+    });
+  }
+
+  /**
+   * Change what one list asks for (velista `0092`, section 6).
+   *
+   * The one write here that changes a household's list rather than recording
+   * what a trip did, and the answer is folded like any other: the row comes back
+   * with new numbers, or `null` when nothing is left to buy of it and nothing
+   * was bought this trip, in which case {@link _fold} drops it.
+   *
+   * The caller reads `result.row === null` to know which happened. It is not a
+   * failure: the list now asks for nothing, which is what was asked for.
+   */
+  async setDemand(
+    rowKey: string,
+    body: BasketDemandRequest
+  ): Promise<BasketRowResult | null> {
+    return this._write(rowKey, async (id) => {
+      const result = await this._service.setDemand(id, rowKey, body);
+      this._fold(result, rowKey);
+      return result;
+    });
+  }
+
+  /**
+   * Add a line onto one of the covered lists (velista `0092`, section 7).
+   *
+   * **Not optimistic**, which is the opposite of the list page and is velista
+   * `0053` section 7 unchanged: four people work this screen at once, and a row
+   * that appeared locally and then moved when the server answered is a row
+   * somebody might tap in between.
+   *
+   * It is folded rather than appended, because the add goes through the target
+   * list's ordinary rules and can land on a line the list already held (backend
+   * `0091`). So the answer is a row that may already be on the screen, under a
+   * key nobody named, and {@link _fold} puts it where it belongs. The key it is
+   * folded against is the answer's own: there is no earlier row for this write
+   * to replace.
+   */
+  async addLine(body: BasketAddLineRequest): Promise<BasketRowResult | null> {
+    const id = this._id;
+    if (id === null) {
+      return null;
+    }
+
+    this._adding.set(true);
+    try {
+      const result = await this._service.addLine(id, body);
+      // Folded against the answer's **own** key, because there is no earlier row
+      // this write replaces: an add either makes a row or raises one that was
+      // already there, and either way the answer names it.
+      this._fold(result, result.row?.rowKey ?? '');
+      return result;
+    } catch (error) {
+      this._fail(id, error);
+      await this._rereadIfOvertaken(error);
+      return null;
+    } finally {
+      this._adding.set(false);
+    }
+  }
+
+  /**
    * What a search offers, in the server's order.
    *
    * On the store rather than reached for directly by the page, unlike the list
@@ -859,6 +1057,28 @@ export class BasketStore {
   private _fold(result: BasketRowResult, rowKey: string): void {
     const held = this._basket();
     if (held === null) {
+      return;
+    }
+
+    if (result.row === null) {
+      // **The write took the row out of the basket**, which only a demand
+      // lowered to zero can do (velista `0092`, section 6.2). It is dropped by
+      // the key the request used, and by `replacedRowKey` where the server
+      // named a second one, exactly as a surviving row's old keys are dropped
+      // below. The counts still come from the answer: the row going away is
+      // what changed them.
+      const dropped = new Set(
+        [rowKey, result.replacedRowKey].filter(
+          (key): key is string => key !== null
+        )
+      );
+      this._basket.set({
+        ...held,
+        rows: held.rows.filter((current) => !dropped.has(current.rowKey)),
+        progress: result.progress,
+        pending: result.pending,
+      });
+      this._changed();
       return;
     }
 

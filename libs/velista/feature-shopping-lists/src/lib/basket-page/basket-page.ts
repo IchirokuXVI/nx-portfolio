@@ -3,8 +3,11 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
   signal,
+  untracked,
+  viewChild,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -15,16 +18,20 @@ import {
 import {
   BasketListStore,
   BasketStore,
+  BasketTargetStore,
   BasketViewStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   selectBasketSurface,
+  SUGGEST_DEBOUNCE_MS,
+  SUGGEST_MIN_CHARS,
   type BasketProgressSentence,
   type BasketRow as BasketRowModel,
   type BasketViewRow,
   type BasketViewSection,
+  type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -35,6 +42,7 @@ import {
   ChevronLeftIcon,
   ChipRow,
   FlagIcon,
+  LineComposer,
   ListTools,
   OfflineIcon,
   PersonIcon,
@@ -107,6 +115,7 @@ import { BasketRow } from '../basket-row/basket-row';
     ChevronLeftIcon,
     ChipRow,
     FlagIcon,
+    LineComposer,
     ListTools,
     OfflineIcon,
     PersonIcon,
@@ -131,6 +140,15 @@ export class BasketPage {
    * reach the same instance the page reads. See the class comment there.
    */
   private readonly _view = inject(BasketViewStore);
+
+  /**
+   * Where the composer's next line goes (velista `0092`, section 7.2).
+   *
+   * The fourth store this route provides, and it is a store rather than a signal
+   * on this page because it outlives one render of the dock and because it reads
+   * and writes this device's memory, which is not a page's business (rule D1).
+   */
+  private readonly _target = inject(BasketTargetStore);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
@@ -525,7 +543,18 @@ export class BasketPage {
      */
     void (
       this._live ? this._store.openLive() : this._store.open(this._id)
-    ).then(() => this._view.restore());
+    ).then(() => {
+      this._view.restore();
+      // The target is checked against the refs that just arrived, for the same
+      // reason and at the same moment: a remembered list this reader no longer
+      // writes is not in `Basket.lists` any more, and the chip must stop naming
+      // it. `restore` drops it silently and keeps the record, because the list
+      // may come back on the next read.
+      const basket = this._store.basket();
+      if (basket !== null) {
+        this._target.restore(basket);
+      }
+    });
 
     /**
      * The socket is closed from **here**, and it has to be.
@@ -545,6 +574,11 @@ export class BasketPage {
       // on whatever the last one was searched for, and the search is the one thing
       // on this screen that is never remembered (section 4.7).
       this._view.leave();
+      // The third one on this route, let go in the same place for the same
+      // reason: a route provider's own `DestroyRef` never fires. The **record**
+      // survives, which is the whole point of writing it down; what is dropped is
+      // this page's hold on it.
+      this._target.leave();
     });
   }
 
@@ -763,6 +797,27 @@ export class BasketPage {
     this.outstandingSaid.set(sentence);
   }
 
+  /**
+   * Say what a sheet handed over on its way out (velista `0092`, section 6.2).
+   *
+   * A demand taken to zero takes the row out of the basket, the sheet over it
+   * dismisses itself, and this page is what is left with a live region. The
+   * sheet composed the sentence, because it held the name of the row it was
+   * about; this only says it, in the **same** region every other sentence on
+   * this screen goes through, so two of them cannot talk over each other while
+   * somebody is standing in an aisle.
+   *
+   * An effect rather than a computed, because saying something is an act: the
+   * region already holds whatever was said last, and a computed folded into it
+   * would re-say the old sentence every time anything else on the page moved.
+   */
+  private readonly _handOver = effect(() => {
+    const said = this._store.handedOver();
+    if (said !== null) {
+      untracked(() => this._say(said.text));
+    }
+  });
+
   protected openPeople(): void {
     void this._router.navigate(sheetSegments('people'), {
       relativeTo: this._route,
@@ -965,7 +1020,202 @@ export class BasketPage {
     });
   }
 
-  // --- The composer (plan 0053) ---------------------------------------------
+  // --- The composer (plan 0053, velista `0092` section 7) --------------------
+
+  /**
+   * Whether the field at the bottom is drawn, and **who no longer gets one**.
+   *
+   * Three conditions, and the middle one is velista `0092` reversing velista
+   * `0053` section 2:
+   *
+   * - the basket is open, because a finished one refuses the add and a field
+   *   that cannot submit is the invitation `0038` section 2.1 will not draw;
+   * - the reader holds an **account**, which is `OWNER` or `REGISTERED`;
+   * - `Basket.lists` is not empty, which is the covered lists this reader may
+   *   write.
+   *
+   * A guest was given the composer because "an added line has no target, so it
+   * changes nothing shared". Every line has a target now, so that safety argument
+   * is gone and the control goes with it. **No dock, no field and no sentence
+   * about it**: `0038` section 2.1 refuses to draw an invitation that cannot be
+   * accepted, and the product rule that a guest is never pushed to register
+   * forbids explaining why.
+   *
+   * The third condition is not a second way of saying the second. A registered
+   * co shopper on somebody else's basket may hold `WRITE` on none of its lists,
+   * and then there is nowhere for their line to go.
+   */
+  protected readonly canAdd = computed(() => {
+    const kind = this._store.me()?.kind;
+    return (
+      !this.finished() &&
+      (kind === 'OWNER' || kind === 'REGISTERED') &&
+      this._store.lists().size > 0
+    );
+  });
+
+  /** Whether an add is in flight. The field stays usable; only the button waits. */
+  protected readonly adding = this._store.adding;
+
+  /**
+   * The list the next line goes to, or null while none is chosen.
+   *
+   * Null is reachable only on a basket covering more than one list this reader
+   * writes: one list chooses itself, which is `BasketTargetStore.restore`'s
+   * business rather than this page's.
+   */
+  protected readonly target = this._target.target;
+
+  /**
+   * Whether the chip above the field is a button.
+   *
+   * With one list in `Basket.lists` it is **text**: there is nothing to pick
+   * between, and a button opening a sheet with one row on it would be asking a
+   * question with one answer (`0030`).
+   */
+  protected readonly canRetarget = computed(() => this._store.lists().size > 1);
+
+  protected openTarget(): void {
+    void this._router.navigate(sheetSegments('add', 'list'), {
+      relativeTo: this._route,
+    });
+  }
+
+  /**
+   * What the composer offers under the field, in the **server's** order.
+   *
+   * Never re-sorted here, for the reason written on `CatalogApi.suggest`: the
+   * client holds none of the prices, scopes or synonyms that decided it.
+   */
+  protected readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
+
+  /**
+   * What arrived, said once, in the **same** region every other sentence on this
+   * screen goes through.
+   *
+   * One region rather than one per line, which is what makes it bearable when
+   * four people add at the same time: a polite region reads whatever the node
+   * last held, so simultaneous adds collapse into one sentence.
+   *
+   * The split's sentence is gone from it along with the split (velista `0069`,
+   * removed by `0090`), which is why there is no second branch here any more.
+   */
+  private readonly _composer = viewChild(LineComposer);
+
+  /** The last thing typed, which the effect below watches. */
+  private readonly _query = signal('');
+
+  protected onComposerQuery(query: string): void {
+    this._query.set(query);
+  }
+
+  /**
+   * Ask the catalog, at most once per {@link SUGGEST_DEBOUNCE_MS} of quiet.
+   *
+   * **Identical in behaviour to the list page's, deliberately**: somebody who has
+   * used velista's list screen must not have to learn a second search. The
+   * container owns the debounce, the three character floor and the sequence
+   * number, and the composer emits raw keystrokes and knows nothing about
+   * requests (rule D1).
+   *
+   * The sequence number is what makes this correct rather than merely debounced:
+   * two requests can be in flight when somebody types through the beat and they
+   * can answer out of order, so an older answer must not replace a newer one.
+   * Comparing against the query the effect was started for is not enough, since
+   * the same text can be typed twice.
+   *
+   * The request goes to the **participant surface**, because the reader may hold
+   * no account token, and it is scoped to the basket's own shopping profile
+   * rather than to the reader's. Both of those are the store's business.
+   */
+  private _suggestSeq = 0;
+
+  private readonly _suggestEffect = effect((onCleanup) => {
+    const query = this._query().trim();
+
+    if (query.length < SUGGEST_MIN_CHARS) {
+      // Cleared synchronously rather than after the debounce: a dropdown that
+      // lingered over a field somebody has just emptied is offering matches for
+      // nothing.
+      untracked(() => this.suggestions.set([]));
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const seq = (this._suggestSeq += 1);
+      void this._store.suggest(query).then((found) => {
+        if (seq === this._suggestSeq) {
+          this.suggestions.set(found);
+        }
+      });
+    }, SUGGEST_DEBOUNCE_MS);
+
+    onCleanup(() => clearTimeout(timer));
+  });
+
+  /**
+   * Add a line, from the field or from a suggestion (velista `0092`,
+   * section 7.4).
+   *
+   * **It names a list, and the add goes through that list's own rules.** So it
+   * can land on a line the list already held (backend `0091`), and it can land
+   * unapproved on a list that does not auto approve — in which case the row is
+   * drawn with its caption, is buyable, and differs in nothing else. The person
+   * who typed "batteries" sees batteries.
+   *
+   * **Not optimistic**, which is the opposite of the list page and is velista
+   * `0053` section 7 unchanged: four people are working this basket at once, and
+   * a row that appeared locally and then moved when the server answered is a row
+   * somebody might tap in between. The store folds the answered row.
+   *
+   * A failed add puts the text back in the field. Losing six characters is
+   * nothing; losing the item somebody just remembered in an aisle is the failure
+   * this screen cannot afford.
+   */
+  protected async add(entry: {
+    content: string;
+    quantity: number;
+    itemIds?: readonly string[];
+  }): Promise<void> {
+    const target = this.target();
+    if (target === null) {
+      // The submit is disabled without one, so this is the belt: an add with no
+      // list is a line with nowhere to be.
+      return;
+    }
+
+    const itemIds = entry.itemIds ?? [];
+    const result = await this._store.addLine({
+      targetListId: target.listId,
+      content: entry.content,
+      quantity: entry.quantity,
+      ...(itemIds.length > 0 ? { itemIds } : {}),
+    });
+
+    // The dropdown goes with the words that produced it, whichever way the add
+    // went. Clearing it here rather than in the composer keeps the two from
+    // disagreeing about whether a list is open.
+    this._query.set('');
+    this.suggestions.set([]);
+
+    if (result === null) {
+      this._composer()?.restore(entry.content);
+      this._say(
+        this._translator.t(
+          basketErrorKey(this._store.error(), 'basket.addLine'),
+          undefined,
+          this._locale()
+        )
+      );
+      return;
+    }
+
+    this._say(
+      this._translator.t('basket.added.announced', undefined, this._locale(), {
+        content: result.row?.content ?? entry.content,
+      })
+    );
+  }
 
   /**
    * Back to wherever this was opened from.

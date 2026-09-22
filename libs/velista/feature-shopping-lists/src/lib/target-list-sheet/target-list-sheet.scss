@@ -1,0 +1,86 @@
+@use '../basket-shared' as shared;
+
+.title {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+// One card holding every household's lists, because it is one question. A
+// fieldset per household would be four groups of one option each to a screen
+// reader, where this is one group of seven.
+.group {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+}
+
+// The household's name, above its lists. The uppercase label treatment the filter
+// sheet's legends take, so the two sheets over this page read the same way.
+.zone {
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-3) var(--app-space-1);
+  color: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lists {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// The whole label is the target, so the tap area is the option and not the dot.
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-2) var(--app-space-3);
+  cursor: pointer;
+
+  // The ring goes on the label, because the control inside it is the real one:
+  // `:focus-within` puts the outline around what a keyboard reader is on.
+  &:focus-within {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// A rule between rows of one household, and none above the first: the heading
+// above it is the separator.
+.lists li + li .choice {
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+// The chosen option is tinted **and** carries a checked control, so nothing here
+// is signalled by colour alone.
+.picked {
+  background: var(--app-status-attention-bg);
+}
+
+// The native radio, kept: it is what makes this a group to a screen reader and to
+// the arrow keys. `accent-color` tints it without replacing it with a span that
+// would have neither behaviour.
+.control {
+  flex: none;
+  margin: 0;
+  accent-color: var(--app-action-bg);
+}
+
+.choice-title {
+  flex: 1;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.visually-hidden {
+  @include shared.visually-hidden;
+}

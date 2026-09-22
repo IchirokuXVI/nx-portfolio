@@ -1378,6 +1378,30 @@
     "row": {
       "boughtOf": "{{bought}} de {{asked}}",
       "gone": "Esa línea ya no está en esta lista."
+    },
+    "skip": {
+      "action": "Hoy no",
+      "undo": "Volver a ponerlo",
+      "caption": "Saltado por ahora",
+      "earlierOn": "Saltado el {{date}}",
+      "earlier": "Saltado antes",
+      "state": "saltado por ahora"
+    },
+    "demand": {
+      "label": "La lista pide",
+      "askLabel": "{{name}}, pide",
+      "apply": "Cambiar la lista",
+      "everybody": "Esto cambia la lista para todos.",
+      "nothingLeft": "Ya no se pide {{name}}.",
+      "refused": "Solo quien aprueba líneas en esa lista puede cambiarlo."
+    },
+    "add": {
+      "to": "Para: {{list}}",
+      "choose": "Elige una lista",
+      "sheetTitle": "¿Para qué lista es?"
+    },
+    "added": {
+      "announced": "{{content}} añadido"
     }
   },
   "getList": {

@@ -355,8 +355,19 @@ function atLeastZero(raw: unknown): number {
  * it cannot fold is one it must not half apply. The caller reads the basket again
  * instead.
  *
- * `row` is never null on the wire — a row bought to zero stays as `DONE` — so
- * there is no "the row went away" case here to represent.
+ * ## The row the write emptied
+ *
+ * `row` is never null **on the wire**: the server answers a row carrying the
+ * requested key, an empty `entries` array and zeros where the write took the row
+ * out of the basket, which only a demand lowered to zero can do (velista `0092`,
+ * section 6.2). {@link toBasketRow} already refuses an entryless row that is not
+ * `REMOVED`, so that answer is read here as `row: null` rather than as an answer
+ * this build could not read.
+ *
+ * The two are told apart by whether the wire held a row shaped record at all:
+ * a record with an `entries` array is an answer, and its emptiness is the
+ * server's way of saying the row is gone. Anything else is a body this build
+ * cannot fold, and the caller reads the basket again instead.
  *
  * `replacedRowKey` and `skippedCount` are absent on the wire when nothing
  * happened, and null and zero here, so a caller asks one question rather than
@@ -371,9 +382,13 @@ export function toBasketRowResult(raw: unknown): BasketRowResult | null {
     return null;
   }
 
-  const row = toBasketRow(raw['row']);
   const progress = toBasketProgress(raw['progress']);
-  if (row === null || progress === null) {
+  if (progress === null) {
+    return null;
+  }
+
+  const row = toBasketRow(raw['row']);
+  if (row === null && !isEmptiedRow(raw['row'])) {
     return null;
   }
 
@@ -389,6 +404,25 @@ export function toBasketRowResult(raw: unknown): BasketRowResult | null {
     replacedRowKey: str(raw['replacedRowKey']),
     skippedCount: atLeastZero(raw['skippedCount']),
   };
+}
+
+/**
+ * Whether the wire's `row` is the server's "this row is gone" answer.
+ *
+ * A record with an `entries` array holding nothing. That is the shape
+ * `BasketWriteContext.result` answers when the lines a write touched left the
+ * view, and it is deliberately not a missing key: the server states the row it
+ * was asked about and says it is empty, so a build that reads neither the
+ * emptiness nor the key is a build that misread the body rather than one that
+ * met a gone row.
+ *
+ * Nothing else about the record is checked. `toBasketRow` has already refused
+ * it, so this only has to tell "the row went away" from "this is not a row".
+ */
+function isEmptiedRow(raw: unknown): boolean {
+  return (
+    isRecord(raw) && Array.isArray(raw['entries']) && raw['entries'].length === 0
+  );
 }
 
 /**

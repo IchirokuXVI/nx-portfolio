@@ -298,3 +298,211 @@ describe('BasketApi.renameRow', () => {
     expect((await done).absorbedRowKey).toBe('zl-2');
   });
 });
+
+/**
+ * The four routes velista `0092` reaches: a skip, taking it back, what a list
+ * asks for, and an add that names a list.
+ *
+ * Asserted here rather than only through the store, because what each of them
+ * gets wrong is invisible above this layer. A skip on the wrong verb reads as a
+ * write that silently did nothing; a demand with the `lineId` left off moves
+ * whichever list the server picked; an add with an empty `itemIds` array is a
+ * product set somebody chose where an absent key is free text.
+ */
+describe('BasketApi, the writes of velista 0092', () => {
+  let api: BasketApi;
+  let httpMock: HttpTestingController;
+
+  const ROW_VIEW = {
+    rowKey: 'zl-1',
+    content: 'Milk',
+    left: 2,
+    bought: 0,
+    asked: 2,
+    state: 'SKIPPED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
+    optionIds: [],
+    touchedBy: null,
+    touchedAt: null,
+    entries: [
+      {
+        lineId: 'zl-1',
+        listId: 'list-weekly',
+        left: 2,
+        bought: 0,
+        state: 'SKIPPED',
+        approvalStatus: 'APPROVED',
+        demandEditable: true,
+      },
+    ],
+  };
+
+  const PROGRESS = { done: 0, unavailable: 0, total: 1, pending: 1 };
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(withInterceptors([gatewayInterceptor])),
+        provideHttpClientTesting(),
+        provideFakeBrowserFacade(new Map<string, string>()),
+        {
+          provide: APP_API_CONFIG,
+          useValue: {
+            gatewayBaseUrl: GATEWAY,
+            realtimeBaseUrl: 'https://realtime.example',
+          },
+        },
+        { provide: RokuTranslatorService, useValue: { getLocale: () => 'en' } },
+        { provide: APP_VERSION, useValue: '1.4.0' },
+        { provide: AppUpdates, useValue: { checkNow: jest.fn() } },
+        ...VELISTA_DATA_ACCESS_PROVIDERS,
+        BasketApi,
+      ],
+    });
+
+    api = TestBed.inject(BasketApi);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  const skipUrl = `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1/skip`;
+
+  it('puts a skip on the row\u2019s skip route and folds the answer', async () => {
+    const done = api.skip(BASKET, 'zl-1');
+    const req = httpMock.expectOne(skipUrl);
+
+    // `PUT` and not `POST`: skipping an already skipped row is the state that
+    // was asked for rather than a second act.
+    expect(req.request.method).toBe('PUT');
+    req.flush({ row: ROW_VIEW, progress: PROGRESS });
+
+    const result = await done;
+    // Read and never patched: the state is whatever the server answered.
+    expect(result.row?.state).toBe('SKIPPED');
+  });
+
+  it('carries no from on a skip, because a skip has no number', async () => {
+    const done = api.skip(BASKET, 'zl-1');
+    const req = httpMock.expectOne(skipUrl);
+
+    // Every other write on a row names the number it started from. A skip has
+    // none to be stale about; the server refuses a row with nothing left to get
+    // instead (backend `0137`, section 5).
+    expect(req.request.body).toEqual({});
+    req.flush({ row: ROW_VIEW, progress: PROGRESS });
+    await done;
+  });
+
+  it('takes a skip back with DELETE on the same route', async () => {
+    const done = api.unskip(BASKET, 'zl-1');
+    const req = httpMock.expectOne(skipUrl);
+
+    expect(req.request.method).toBe('DELETE');
+    req.flush({ row: { ...ROW_VIEW, state: 'WANTED' }, progress: PROGRESS });
+
+    expect((await done).row?.state).toBe('WANTED');
+  });
+
+  it('sends lineId, quantity and from on a demand', async () => {
+    const done = api.setDemand(BASKET, 'zl-1', {
+      lineId: 'zl-1',
+      quantity: 5,
+      from: 2,
+    });
+    const req = httpMock.expectOne(
+      `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1/demand`
+    );
+
+    expect(req.request.method).toBe('POST');
+    // `lineId` always, although the server requires it only on a row of several
+    // entries: the control is drawn per entry, so there is one to name.
+    expect(req.request.body).toEqual({ lineId: 'zl-1', quantity: 5, from: 2 });
+    req.flush({ row: { ...ROW_VIEW, left: 5 }, progress: PROGRESS });
+
+    expect((await done).row?.left).toBe(5);
+  });
+
+  it('reads the server\u2019s emptied row as no row at all', async () => {
+    // A demand taken to zero on a row nothing was bought of. The server states
+    // the row it was asked about with no entries and zeros, which is its way of
+    // saying the row left the view; the client has one answer for that, null.
+    const done = api.setDemand(BASKET, 'zl-1', {
+      lineId: 'zl-1',
+      quantity: 0,
+      from: 2,
+    });
+    httpMock
+      .expectOne(`${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1/demand`)
+      .flush({
+        row: {
+          rowKey: 'zl-1',
+          content: '',
+          left: 0,
+          bought: 0,
+          asked: 0,
+          state: 'WANTED',
+          note: null,
+          noteAt: null,
+          mark: null,
+          awaitingApproval: false,
+          optionIds: [],
+          touchedBy: null,
+          touchedAt: null,
+          entries: [],
+        },
+        progress: { done: 0, unavailable: 0, total: 0, pending: 0 },
+      });
+
+    const result = await done;
+    expect(result.row).toBeNull();
+    // The counts still land: the row going away is what changed them.
+    expect(result.progress.total).toBe(0);
+  });
+
+  it('posts an add to the basket\u2019s lines, naming its list', async () => {
+    const done = api.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Batteries',
+      quantity: 1,
+    });
+    const req = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}/lines`);
+
+    expect(req.request.method).toBe('POST');
+    // No `itemIds` key at all for free text, rather than an empty array: an
+    // empty array is a product set somebody chose.
+    expect(req.request.body).toEqual({
+      targetListId: 'list-weekly',
+      content: 'Batteries',
+      quantity: 1,
+    });
+    req.flush({
+      row: { ...ROW_VIEW, rowKey: 'zl-9', content: 'Batteries' },
+      progress: PROGRESS,
+    });
+
+    expect((await done).row?.content).toBe('Batteries');
+  });
+
+  it('sends a suggestion\u2019s product set as itemIds', async () => {
+    const done = api.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 2,
+      itemIds: ['item-a', 'item-b'],
+    });
+    const req = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}/lines`);
+
+    expect(req.request.body).toEqual({
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 2,
+      itemIds: ['item-a', 'item-b'],
+    });
+    req.flush({ row: ROW_VIEW, progress: PROGRESS });
+    await done;
+  });
+});

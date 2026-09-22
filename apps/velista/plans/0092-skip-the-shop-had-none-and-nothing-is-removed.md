@@ -1,3 +1,5 @@
+> **PR:** [#439](https://github.com/IchirokuXVI/nx-portfolio/pull/439)
+
 # 0092: skip, the shop had none, and nothing is removed
 
 > Needs velista `0090`. Backend halves: `apps/luna-shopper-backend/plans/0137` (skip),

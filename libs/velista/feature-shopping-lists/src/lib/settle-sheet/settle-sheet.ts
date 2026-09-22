@@ -20,6 +20,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   BasketStore,
+  BasketViewStore,
   GatewayError,
   LINE_SERVICE,
   SessionStore,
@@ -28,18 +29,23 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
-  basketRowPick,
   inLocale,
   LINE_CONTENT_MAX_LENGTH,
+  offerAt,
   toSettlementRow,
   type BasketParticipant,
   type BasketPriceScope,
+  type BasketProduct,
   type BasketRow as BasketRowModel,
   type BasketRowResult,
   type SettlementOutcome,
   type SettlementRowVm,
 } from '@portfolio/velista/models';
-import { rowKeyOf, SheetNavigation } from '@portfolio/velista/platform';
+import {
+  formatMoney,
+  rowKeyOf,
+  SheetNavigation,
+} from '@portfolio/velista/platform';
 import {
   CheckIcon,
   QuantityReel,
@@ -94,7 +100,25 @@ function placeOf(
  * make the precise ones two taps and a navigation away from the number they were
  * about to type.
  */
-type Pane = 'settle' | 'quantity' | 'history' | 'merge';
+type Pane = 'settle' | 'quantity' | 'product' | 'history' | 'merge';
+
+/**
+ * One option on the product pane: what it is, what it costs here, and whether it
+ * is the one somebody said they got.
+ *
+ * Composed rather than drawn from the product, because two of the three are
+ * decided outside it: the price depends on which shop the screen is pricing at,
+ * and the tick depends on a choice held for this visit and never stored.
+ */
+interface ProductOption {
+  readonly itemId: string;
+  readonly name: string;
+  /** The chosen shop's price, or null where there is none to quote. */
+  readonly price: string | null;
+  /** Where that price is from, or null when prices come from anywhere. */
+  readonly place: string | null;
+  readonly chosen: boolean;
+}
 
 /**
  * One row of the merge question (velista `0084`, section 4): a place the name is
@@ -243,6 +267,17 @@ export class SettleSheet {
   private get _rowKey(): string {
     return this._rowKeyParam();
   }
+
+  /**
+   * What the screen is pricing at (velista `0078`), so the options on the product
+   * pane are quoted at the shop the row underneath is quoted at.
+   *
+   * A sheet may inject a store (rule D1), and this is the second one it injects:
+   * the page's own filter decided this, and a pane that read the cheapest price
+   * anywhere while the row above it read Mercadona's would be two numbers for one
+   * product on one screen.
+   */
+  private readonly _view = inject(BasketViewStore);
 
   private readonly _injector = inject(Injector);
   private readonly _pane = signal<Pane>('settle');
@@ -481,13 +516,114 @@ export class SettleSheet {
     }
   }
 
+  /**
+   * The product somebody said they got, or null (velista `0092`, section 5).
+   *
+   * The same three answers the row underneath draws, from the same store: a
+   * choice that is still one of this row's options, or a row with exactly one
+   * option, or nothing. `BasketStore.itemIdFor` is where that rule lives, so the
+   * row, this line and the `itemId` on the settle cannot disagree about which
+   * product is in the trolley.
+   */
+  private readonly _product = computed<BasketProduct | null>(() => {
+    const row = this.row();
+    if (row === null) {
+      return null;
+    }
+    const chosen = this._store.itemIdFor(row.rowKey);
+    return chosen === undefined
+      ? null
+      : (this._store.products().get(chosen) ?? null);
+  });
+
   /** The product's name, for the line under the title. */
   protected readonly productName = computed<string | null>(() => {
-    const row = this.row();
-    const product =
-      row === null ? undefined : basketRowPick(row, this._store.products());
-    return product ? inLocale(product.name, this._locale()) : null;
+    const product = this._product();
+    return product === null ? null : inLocale(product.name, this._locale());
   });
+
+  /**
+   * Whether the way into the product pane is drawn at all.
+   *
+   * More than one option, and nothing else. A row with one option has nothing to
+   * choose between, and a free text row has nothing at all; a control that opens
+   * a pane with one row on it is an invitation to make a decision that has
+   * already been made (`0030`).
+   */
+  protected readonly canChooseProduct = computed(
+    () => (this.row()?.optionIds.length ?? 0) > 1
+  );
+
+  /**
+   * The options this row offers, **in the server's order**, each with its price
+   * at the shop the screen is pricing at.
+   *
+   * Never re-sorted here, and never sorted by price: the order is the anchor's
+   * own product first and then the rest as the entries named them, which is the
+   * order the row above has been drawing all along. Putting the cheapest first
+   * would make the list rearrange itself every time somebody changed shops.
+   *
+   * A product the catalog can no longer name is dropped rather than drawn as a
+   * blank row: it is not something anybody can recognise on a shelf.
+   */
+  protected readonly options = computed<readonly ProductOption[]>(() => {
+    const row = this.row();
+    if (row === null) {
+      return [];
+    }
+
+    const locale = this._locale();
+    const products = this._store.products();
+    const shop = this._view.shop();
+    const scopes = this._store.basket()?.scopes;
+    const chosen = this._store.itemIdFor(row.rowKey);
+
+    const drawn: ProductOption[] = [];
+    for (const itemId of row.optionIds) {
+      const product = products.get(itemId);
+      if (product === undefined) {
+        continue;
+      }
+
+      // The chosen shop's price when there is one, and the cheapest anywhere
+      // otherwise, which is exactly what the row above quotes (velista `0078`,
+      // section 5).
+      const offer = shop === null ? product.offer : offerAt(product, shop);
+      drawn.push({
+        itemId,
+        name: inLocale(product.name, locale),
+        price:
+          offer === null || offer.price === null
+            ? null
+            : formatMoney(offer.price, offer.currency, locale),
+        place:
+          offer === null
+            ? null
+            : placeOf(scopes?.get(offer.priceScopeId), locale),
+        chosen: itemId === chosen,
+      });
+    }
+    return drawn;
+  });
+
+  /**
+   * Say which one was got, and go back to where the settle buttons are.
+   *
+   * **It writes nothing.** The choice is recorded when the row is bought, as
+   * `itemId` on the settle, and never before: backend `0136` deleted the stored
+   * pick, and a pane that wrote one would be putting it back.
+   *
+   * Closing the pane on the choice is the whole gesture, for the reason the
+   * composer's suggestion list has: somebody who has answered the question is
+   * left looking at their own answer with a second button still to press.
+   */
+  protected chooseProduct(itemId: string): void {
+    const row = this.row();
+    if (row !== null) {
+      this._store.choose(row.rowKey, itemId);
+    }
+    this.openPane('settle');
+  }
 
   /**
    * Whether this reader may read what happened to the line (plan 0049, section 1.1).
@@ -667,15 +803,21 @@ export class SettleSheet {
       rowKey,
       confirmMerge ? { content, confirmMerge: true } : { content }
     );
+    // A rename never empties a basket of a row: it changes what a line is called
+    // and can fold two into one, and either way a row survives. The null is
+    // there for the one write that can, which is a demand taken to zero
+    // (velista `0092`, section 6.2), so here it is read as a refusal — the
+    // honest reading of an answer this sheet cannot act on.
+    const renamed = result?.row ?? null;
 
-    if (result !== null && result.row.rowKey !== rowKey) {
+    if (renamed !== null && renamed.rowKey !== rowKey) {
       // Before `saving` drops, so the dismissal effect never sees this line gone
       // and unheld.
       this._following.set(true);
     }
     this.saving.set(false);
 
-    if (result === null) {
+    if (renamed === null) {
       this._refused(this._store.error(), content);
       return;
     }
@@ -684,10 +826,10 @@ export class SettleSheet {
     this._pane.set('settle');
     this.saved.set(true);
     // From the answer: a merge keeps the survivor's own spelling.
-    this.name.set(result.row.content);
-    this._shown = result.row.content;
+    this.name.set(renamed.content);
+    this._shown = renamed.content;
 
-    if (result.row.rowKey !== rowKey) {
+    if (renamed.rowKey !== rowKey) {
       // This row was absorbed, or its anchor moved. The reader stays on the row
       // that remains, at the key it now has.
       await this._sheet.leaveTo(
@@ -695,7 +837,7 @@ export class SettleSheet {
           this._locale(),
           this._basePath,
           this._address(),
-          result.row.rowKey
+          renamed.rowKey
         )
       );
       this._following.set(false);
@@ -829,7 +971,12 @@ export class SettleSheet {
    */
   protected async settleAll(): Promise<void> {
     const from = this.outstanding();
-    await this._send({ outcome: 'BOUGHT', quantity: from, from });
+    await this._send({
+      outcome: 'BOUGHT',
+      quantity: from,
+      from,
+      ...this._got(),
+    });
   }
 
   /** A number the person chose. Asks nothing about lists, so guests may use it. */
@@ -838,8 +985,79 @@ export class SettleSheet {
       outcome: 'BOUGHT',
       quantity: this.typed(),
       from: this.outstanding(),
+      ...this._got(),
     });
   }
+
+  /**
+   * The product this settle names, as a body fragment to spread (velista `0092`,
+   * section 5).
+   *
+   * **Omitted rather than sent undefined**, which is the rule the gateway follows
+   * too: the server validates `itemId` as one of the row's own options, so a key
+   * present and empty is a refusal where an absent one is "nobody said which".
+   *
+   * Spread into every `BOUGHT` here and nowhere else decided, because the rule is
+   * `BasketStore.itemIdFor`'s: a choice that is still one of this row's options,
+   * or a row with exactly one option and therefore nothing to choose between.
+   *
+   * Two products on one row are **two settles**, which is the shape this replaced
+   * the split with: "Got some, 2" with the whole milk chosen, then "Got it" with
+   * the skimmed. Each settlement names one product, and the purchase history ends
+   * up truer than a split ever made it.
+   */
+  private _got(): { itemId?: string } {
+    const itemId = this._store.itemIdFor(this._rowKey);
+    return itemId === undefined ? {} : { itemId };
+  }
+
+  /**
+   * Not today (velista `0092`, section 3.1).
+   *
+   * **A state of the row on this trip, and no list moves.** It is not an outcome
+   * of a settle and never will be: `SETTLEMENT_OUTCOMES` has no `SKIPPED` member
+   * on purpose, because a settlement is a record of what was bought and this
+   * records that nothing was.
+   *
+   * Every participant may, a guest included: it is a smaller act than a settle,
+   * which every participant already may.
+   */
+  protected async skip(): Promise<void> {
+    await this._run(() => this._store.skip(this._rowKey));
+  }
+
+  /**
+   * Back on the list, which is the same fact unset.
+   *
+   * Two buttons and never one toggle (section 11). A toggle is a control whose
+   * meaning depends on a state somebody has to read first, and these are pressed
+   * in an aisle at arm's length.
+   *
+   * It leads the pane on a skipped row, and the three buying actions stay under
+   * it: a person who skipped the bread and then found it buys it, and the server
+   * ends the skip with the purchase rather than asking for this first.
+   */
+  protected async unskip(): Promise<void> {
+    await this._run(() => this._store.unskip(this._rowKey));
+  }
+
+  /**
+   * Whether "Not today" is offered.
+   *
+   * A row that still has something to get, on a basket that is still open. A row
+   * the shop had none of is already closed for today, and one bought out has
+   * nothing to walk past; the server refuses both, and a control it refuses is
+   * not drawn (`0030`).
+   */
+  protected readonly canSkip = computed(() => {
+    const state = this.row()?.state;
+    return !this.basketFinished() && (state === 'WANTED' || state === 'PARTLY');
+  });
+
+  /** Whether this row is put off for now, which leads the pane with its undo. */
+  protected readonly isSkipped = computed(
+    () => !this.basketFinished() && this.row()?.state === 'SKIPPED'
+  );
 
   /**
    * The shop did not have it.
@@ -848,6 +1066,9 @@ export class SettleSheet {
    * bought. It carries `from` like every other write on a row.
    */
   protected async settleNone(): Promise<void> {
+    // **No `itemId`**, and that is not an omission: a close buys nothing, so
+    // there is no product to record against it. Naming one would put a product
+    // in a purchase history that has no purchase in it.
     await this._send({
       outcome: 'NOT_AVAILABLE',
       from: this.outstanding(),
@@ -882,6 +1103,7 @@ export class SettleSheet {
         allocations: [
           { lineId: change.lineId, quantity: change.to - change.from },
         ],
+        ...this._got(),
       });
       return;
     }
@@ -891,6 +1113,69 @@ export class SettleSheet {
       units: change.from - change.to,
       from: this.row()?.bought ?? 0,
     });
+  }
+
+  /**
+   * What one list asks for was changed (velista `0092`, section 6).
+   *
+   * Not `_send`'s path, and the difference is the whole of section 6: every other
+   * write on this sheet records what a trip did, and this one rewrites a
+   * household's list for everybody. So it has its own failures, its own sentence
+   * and its own ending.
+   *
+   * Three endings:
+   *
+   * - the row came back, and the sheet closes like any write that landed;
+   * - the row is **gone**, which is a demand taken to zero on a row nothing was
+   *   bought of. The list now asks for nothing, which is what was asked for, so
+   *   the page is handed a sentence and the sheet closes over a row that is no
+   *   longer there;
+   * - it was refused, and the store has already read the basket again. The
+   *   sentence is then about the row as it now stands.
+   */
+  protected async demand(change: {
+    lineId: string;
+    from: number;
+    to: number;
+  }): Promise<void> {
+    const name = this.row()?.content ?? '';
+
+    this._settling.set(true);
+    this._failedOp.set(null);
+    const result = await this._store.setDemand(this._rowKey, {
+      lineId: change.lineId,
+      quantity: change.to,
+      from: change.from,
+    });
+    this._settling.set(false);
+
+    if (result === null) {
+      // `stale_quantity` and `forbidden` each get their own sentence, keyed on
+      // the operation as well as the code: a refused demand is the owner's
+      // standing having moved between the read and the tap, which is a different
+      // fact from a refused settle.
+      this._failedOp.set('basket.demand');
+      return;
+    }
+
+    if (result.row === null) {
+      // The sentence is the **page's** to say, because this sheet is about to
+      // stop existing: its row left the basket, and one live region per screen
+      // is the rule (velista `0054`, section 7).
+      this._store.handOver(
+        this._translator.t(
+          'basket.demand.nothingLeft',
+          undefined,
+          this._locale(),
+          {
+            name,
+          }
+        )
+      );
+      this._left = true;
+    }
+
+    this.close();
   }
 
   protected openPane(pane: Pane): void {

@@ -5,12 +5,13 @@ import {
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import {
   RokuLocaleStore,
+  RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type {
   BasketListRef,
   BasketRow,
@@ -25,6 +26,8 @@ interface DrawnEntry {
   readonly name: string;
   readonly asked: number;
   readonly bought: number;
+  /** What this list still asks for, which is what the demand control moves. */
+  readonly left: number;
   /**
    * Whether the "got" number is a reel rather than text.
    *
@@ -34,8 +37,29 @@ interface DrawnEntry {
    * (`0030`).
    */
   readonly editable: boolean;
+  /**
+   * Whether "asks for" is a reel and a button rather than text (velista `0092`,
+   * section 6.2).
+   *
+   * Three conditions, all of them the server's or the row's, and none of them a
+   * rule this client could write:
+   *
+   * - the basket is open,
+   * - `demandEditable`, which asks the rule of the basket's **owner** on this
+   *   entry's list and is the one field no client can compute,
+   * - the entry's list was served to this reader, **or** the row has exactly one
+   *   entry. A reader who cannot tell two entries apart is never asked to choose
+   *   between them, which is backend `0130`'s "single entry rows only".
+   *
+   * An entry that fails any of them keeps the plain number. **Nothing explains
+   * why a control is absent** (`0030`): the person reading has no standing to
+   * change it and no use for the reason.
+   */
+  readonly demandEditable: boolean;
   /** The reel's accessible name, which names the list: two reels look alike. */
   readonly label: string;
+  /** The demand reel's own name, which has to differ from the one beside it. */
+  readonly askLabel: string;
 }
 
 /**
@@ -61,11 +85,21 @@ interface DrawnEntry {
  * units against that household alone and lowering it takes them back, which is the
  * per household half of the shopping somebody does at a shelf.
  *
- * "Asks for" is **text** here. Changing what a household asks for is a different act
- * with a different permission behind it — the rule of the basket's owner, which only
- * the server can answer (`BasketRowEntry.demandEditable`) — and velista `0092` draws
- * the control for it. Drawing two reels that look alike and mean opposite things is
- * what `0073` was careful to avoid, and this keeps that.
+ * "Asks for" is a **reel and an explicit button** since velista `0092`, and only
+ * where the server says it may be (`BasketRowEntry.demandEditable`). It is not the
+ * same kind of control as the one beside it, and the difference is deliberate
+ * rather than decorative:
+ *
+ * - "Got" **commits on release**, because a shopper at a shelf moves it a dozen
+ *   times a trip and a confirmation on each would be the dialog `0043` took off
+ *   the list page.
+ * - "Asks for" **does not**. It rewrites a household's list for everybody, on
+ *   every screen the list appears on. The gesture is rare, and a number that a
+ *   thumb brushed is not a decision.
+ *
+ * That is what keeps `0073`'s rule alive in a pane that now has two reels on one
+ * row: they no longer look alike, because one of them is followed by a button and
+ * a sentence saying what pressing it does.
  */
 @Component({
   selector: 'lib-row-entries',
@@ -103,16 +137,62 @@ export class RowEntries {
   }>();
 
   /**
+   * What one household asks for was changed (velista `0092`, section 6.2).
+   *
+   * Emitted by the **button** and never by the reel, which is the whole of the
+   * difference from {@link allocated}: this rewrites a list for everybody, and a
+   * number that a thumb brushed is not a decision.
+   *
+   * `from` is the `left` the person was looking at, which is velista `0054`'s
+   * bargain: a write whose starting number has moved is refused rather than
+   * applied to a number that moved underneath it.
+   */
+  readonly demanded = output<{
+    readonly lineId: string;
+    readonly from: number;
+    readonly to: number;
+  }>();
+
+  /**
    * Whether the pane is drawn at all.
    *
-   * More than one entry, or one whose list this reader was served. A row with a
-   * single unserved entry has nothing to say that the row above it does not say
-   * already.
+   * More than one entry, or one whose list this reader was served, **or** one
+   * the owner may change the demand on (velista `0092`, section 6.2). The third
+   * is what the plan adds: a guest is served no list refs at all, so their every
+   * entry is unplaceable, and on a single entry row they may still change what
+   * the household asks for. A pane that stayed hidden would hide the only
+   * control they have.
+   *
+   * A row with a single unserved entry nobody may change still says nothing that
+   * the row above it does not say already — "another list asks for 2" on a row
+   * that asks for 2 — so it stays hidden.
    */
   readonly shows = computed(() => {
     const entries = this.row().entries;
-    return entries.length > 1 || entries[0]?.listId !== null;
+    if (entries.length > 1) {
+      return true;
+    }
+    const only = entries[0];
+    return (
+      only !== undefined && (only.listId !== null || this._mayDemand(only))
+    );
   });
+
+  /**
+   * Whether this entry's demand is a control, by the three conditions of
+   * section 6.2.
+   *
+   * Here rather than inline in {@link _draw} because {@link shows} asks it too,
+   * and the pane appearing for a control it then does not draw would be the two
+   * answering differently.
+   */
+  private _mayDemand(entry: BasketRowEntry): boolean {
+    return (
+      !this.finished() &&
+      entry.demandEditable &&
+      (entry.listId !== null || this.row().entries.length === 1)
+    );
+  }
 
   protected readonly entries = computed<readonly DrawnEntry[]>(() =>
     this.row().entries.map((entry) => this._draw(entry))
@@ -120,7 +200,8 @@ export class RowEntries {
 
   private _draw(entry: BasketRowEntry): DrawnEntry {
     const locale = this._locale();
-    const ref = entry.listId === null ? undefined : this.lists().get(entry.listId);
+    const ref =
+      entry.listId === null ? undefined : this.lists().get(entry.listId);
     // A list this reader was not served, and a list id the basket served no ref
     // for, are the same nothing to name: the mapper already collapsed the second
     // onto the first, so there is one case here.
@@ -136,13 +217,22 @@ export class RowEntries {
       name,
       asked: entry.asked,
       bought: entry.bought,
+      left: entry.left,
       editable: ref !== undefined && !this.finished(),
-      label: this._translator.t(
-        'basket.entries.gotLabel',
-        undefined,
-        locale,
-        { name }
-      ),
+      demandEditable: this._mayDemand(entry),
+      label: this._translator.t('basket.entries.gotLabel', undefined, locale, {
+        name,
+      }),
+      // The list's own name, so two reels on one row are told apart by somebody
+      // who hears them rather than seeing which column they sit in. A single
+      // unserved entry has no name to give, and takes the plain label instead:
+      // there is one list in the row and no ambiguity to resolve.
+      askLabel:
+        ref === undefined
+          ? this._translator.t('basket.demand.label', undefined, locale)
+          : this._translator.t('basket.demand.askLabel', undefined, locale, {
+              name,
+            }),
     };
   }
 
@@ -151,5 +241,46 @@ export class RowEntries {
     change: { from: number; to: number }
   ): void {
     this.allocated.emit({ lineId, from: change.from, to: change.to });
+  }
+
+  /**
+   * Where each demand reel has been moved to, before anybody pressed the button.
+   *
+   * **The reel's value is held here and committed nowhere**, which is the whole
+   * of section 6.2's second paragraph: this control rewrites a household's list
+   * for everybody, and a number a thumb brushed on the way past is not a
+   * decision. Cleared per line once the write has gone out, so the reel goes back
+   * to reading the row.
+   */
+  private readonly _asking = signal<ReadonlyMap<string, number>>(new Map());
+
+  /** What this entry's demand reel shows: the moved value, or the list's own. */
+  protected asking(entry: DrawnEntry): number {
+    return this._asking().get(entry.lineId) ?? entry.left;
+  }
+
+  /** Whether the button has anything to send, which is whether the reel moved. */
+  protected moved(entry: DrawnEntry): boolean {
+    const held = this._asking().get(entry.lineId);
+    return held !== undefined && held !== entry.left;
+  }
+
+  protected onAsked(lineId: string, change: { to: number }): void {
+    const next = new Map(this._asking());
+    next.set(lineId, change.to);
+    this._asking.set(next);
+  }
+
+  /** The button. The reel does not commit; this does. */
+  protected applyDemand(entry: DrawnEntry): void {
+    const to = this._asking().get(entry.lineId);
+    if (to === undefined || to === entry.left) {
+      return;
+    }
+
+    const next = new Map(this._asking());
+    next.delete(entry.lineId);
+    this._asking.set(next);
+    this.demanded.emit({ lineId: entry.lineId, from: entry.left, to });
   }
 }

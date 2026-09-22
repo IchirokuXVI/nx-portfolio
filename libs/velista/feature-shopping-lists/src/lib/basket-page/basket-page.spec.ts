@@ -10,6 +10,7 @@ import {
 import {
   BasketListStore,
   BasketStore,
+  BasketTargetStore,
   BasketViewStore,
   GatewayError,
   SessionStore,
@@ -29,6 +30,8 @@ import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { of } from 'rxjs';
 import { BasketRow as BasketRowComponent } from '../basket-row/basket-row';
 import { BasketPage } from './basket-page';
@@ -100,6 +103,19 @@ interface FakeStore {
     unavailable: number;
     total: number;
   }>;
+  /**
+   * The sentence a sheet handed the page on its way out (velista `0092`,
+   * section 6.2).
+   *
+   * Writable, because what a spec is asserting is that the page **says** it: the
+   * sheet that composed it is gone by then, so a spec stands in for it.
+   */
+  readonly handedOver: WritableSignal<{ text: string; seq: number } | null>;
+  readonly handOver: jest.Mock;
+  /** Whether an add is out, which the composer's button waits on. */
+  readonly adding: WritableSignal<boolean>;
+  /** Every line added from the dock, and what it answered. */
+  readonly addLine: jest.Mock;
 }
 
 interface Options {
@@ -168,6 +184,24 @@ function guest(
     displayName,
     guestNumber,
     userId: null,
+  };
+}
+
+/**
+ * Somebody with an account who is not the owner (velista `0092`, section 7.1).
+ *
+ * The composer's rule turns on holding an account rather than on being the
+ * owner, so this is the reader that tells the two conditions apart: they get the
+ * field where a guest does not, and they lose it when the basket covers no list
+ * they may write.
+ */
+function registered(participantId = 'p-dana'): BasketPresenceEntry {
+  return {
+    participantId,
+    kind: 'REGISTERED',
+    displayName: 'Dana',
+    guestNumber: null,
+    userId: 'u-2',
   };
 }
 
@@ -305,6 +339,17 @@ async function render(options: Options = {}): Promise<{
       new Map((options.served ?? []).map((held) => [held.listId, held]))
     ),
     progress: signal(options.progress ?? { done: 0, unavailable: 0, total: 0 }),
+    handedOver: signal<{ text: string; seq: number } | null>(null),
+    handOver: jest.fn(),
+    adding: signal(false),
+    // An add answers the row it landed on, exactly as the store folds it: the row
+    // on screen is the answer's and never the words that were typed.
+    addLine: jest.fn(
+      (body: { content: string }): Promise<BasketRowResult | null> =>
+        Promise.resolve(
+          rowResult({ ...line('zl-added'), content: body.content })
+        )
+    ),
   };
 
   const paramMap = convertToParamMap({ basketId: 'basket-saturday' });
@@ -387,6 +432,19 @@ async function render(options: Options = {}): Promise<{
           // A sheet that could not find its row says so once, through the page.
           rowGone: signal(0),
           sayRowGone: jest.fn(),
+          // A sentence a sheet composed on its way out, for this page to say in
+          // the one live region this screen has (velista `0092`, section 6.2).
+          handedOver: store.handedOver,
+          handOver: store.handOver,
+          // What the composer needs: whether an add is out, and the add itself.
+          adding: store.adding,
+          addLine: store.addLine,
+          chosen: signal(new Map<string, string>()),
+          choose: jest.fn(),
+          itemIdFor: () => undefined,
+          skip: jest.fn().mockResolvedValue(null),
+          unskip: jest.fn().mockResolvedValue(null),
+          setDemand: jest.fn().mockResolvedValue(null),
           rowFor: (key: string) =>
             store.rows().find((row) => row.rowKey === key) ??
             store
@@ -449,6 +507,11 @@ async function render(options: Options = {}): Promise<{
       // needs nothing this harness does not already stand in for, since everything
       // it reads comes off `BasketStore` and the locale store above.
       BasketViewStore,
+      // The real one, beside `BasketViewStore`: the route provides both, it
+      // reads the faked `BasketStore` above and a `BrowserFacade`
+      // `provideVelistaTesting` already supplies, and its whole job is to answer
+      // where the composer's next line goes (velista `0092`, section 7.2).
+      BasketTargetStore,
       // ...except this device's storage, which `0076` gave it. A fresh `Map` per
       // test and not the real facade: jsdom hands every test in this file the same
       // `localStorage`, so a test that chose an order would hand it to the next
@@ -2014,5 +2077,278 @@ describe('the basket that is always there', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelectorAll('.lines li')
     ).toHaveLength(2);
+  });
+});
+
+/**
+ * The composer, back with a list to put things on (velista `0092`, section 7).
+ *
+ * Two things are worth asserting and the rest is the list page's composer
+ * unchanged.
+ *
+ * **Who gets one**, which is the rule velista `0053` section 2 is reversed by: a
+ * guest was given the field because an added line had no target and changed
+ * nothing shared. Every line has a target now, so the safety argument is gone and
+ * the control goes with it. A sentence explaining that would be an invitation to
+ * register, which the product rule forbids, so the dock is simply absent.
+ *
+ * **That the add names a list**, because a line with no list is a line with
+ * nowhere to be.
+ */
+describe('the composer and the list it adds to', () => {
+  const served = [
+    {
+      listId: 'l-weekly',
+      name: 'Weekly shop',
+      zoneId: 'z1',
+      zoneName: 'Flat',
+    },
+    {
+      listId: 'l-parents',
+      name: 'Groceries',
+      zoneId: 'z2',
+      zoneName: 'Home',
+    },
+  ];
+
+  const dock = (fixture: ComponentFixture<BasketPage>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('.composer-dock');
+
+  const chip = (fixture: ComponentFixture<BasketPage>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('.target');
+
+  describe('who gets one', () => {
+    it('draws it for the owner with a list to write', async () => {
+      const { fixture } = await render({ served: [served[0]] });
+      expect(dock(fixture)).not.toBeNull();
+    });
+
+    it('draws it for a registered participant with a list to write', async () => {
+      const { fixture } = await render({
+        me: participant(registered()),
+        served: [served[0]],
+      });
+
+      expect(dock(fixture)).not.toBeNull();
+    });
+
+    it('draws nothing at all for a guest', async () => {
+      // No dock, no field and **no sentence about it**: velista `0038` section
+      // 2.1 refuses to draw an invitation that cannot be accepted, and the
+      // product rule that a guest is never pushed to register forbids the
+      // explanation.
+      const { fixture } = await render({
+        me: participant(guest('p-guest-1', 1)),
+        served: [],
+      });
+
+      expect(dock(fixture)).toBeNull();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-line-composer'
+        )
+      ).toBeNull();
+    });
+
+    it('draws nothing for an account holder with nowhere to put a line', async () => {
+      // Not a second way of saying the condition above. A registered co shopper
+      // on somebody else's basket may hold `WRITE` on none of its lists.
+      const { fixture } = await render({
+        me: participant(registered()),
+        served: [],
+      });
+
+      expect(dock(fixture)).toBeNull();
+    });
+
+    it('draws nothing on a finished trip', async () => {
+      const { fixture } = await render({ finished: true, served: [served[0]] });
+      expect(dock(fixture)).toBeNull();
+    });
+  });
+
+  describe('the target', () => {
+    it('is text when the basket covers one list this reader writes', async () => {
+      // Nothing to pick between, so nobody is asked a question with one answer.
+      const { fixture } = await render({ served: [served[0]] });
+
+      expect(chip(fixture)?.tagName.toLowerCase()).toBe('p');
+      expect(chip(fixture)?.textContent).toContain('basket.add.to');
+    });
+
+    it('is a button when there is more than one', async () => {
+      const { fixture } = await render({ served });
+
+      expect(chip(fixture)?.tagName.toLowerCase()).toBe('button');
+      expect(chip(fixture)?.textContent).toContain('basket.add.choose');
+    });
+
+    it('holds the submit while none is chosen, and not the field', async () => {
+      // A person in an aisle types the thing they just remembered and chooses
+      // where it goes second, rather than losing it to a sheet.
+      const { fixture } = await render({ served });
+      const composer = (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-line-composer'
+      );
+
+      expect(
+        composer?.querySelector<HTMLButtonElement>('.send')?.disabled
+      ).toBe(true);
+      expect(
+        composer?.querySelector<HTMLInputElement>('input[type="text"]')
+          ?.disabled
+      ).toBeFalsy();
+    });
+  });
+
+  describe('adding a line', () => {
+    it('names the list, and sends the words and the amount', async () => {
+      const { fixture, store } = await render({ served: [served[0]] });
+
+      const page = fixture.componentInstance as unknown as {
+        add(entry: { content: string; quantity: number }): Promise<void>;
+      };
+      await page.add({ content: 'Batteries', quantity: 2 });
+
+      expect(store.addLine).toHaveBeenCalledWith({
+        targetListId: 'l-weekly',
+        content: 'Batteries',
+        quantity: 2,
+      });
+    });
+
+    it('sends a suggestion’s product set as itemIds', async () => {
+      const { fixture, store } = await render({ served: [served[0]] });
+
+      const page = fixture.componentInstance as unknown as {
+        add(entry: {
+          content: string;
+          quantity: number;
+          itemIds?: readonly string[];
+        }): Promise<void>;
+      };
+      await page.add({
+        content: 'Milk',
+        quantity: 1,
+        itemIds: ['i-1', 'i-2'],
+      });
+
+      expect(store.addLine).toHaveBeenCalledWith(
+        expect.objectContaining({ itemIds: ['i-1', 'i-2'] })
+      );
+    });
+
+    it('sends nothing without a target', async () => {
+      // The submit is disabled without one, so this is the belt: an add with no
+      // list is a line with nowhere to be.
+      const { fixture, store } = await render({ served });
+
+      const page = fixture.componentInstance as unknown as {
+        add(entry: { content: string; quantity: number }): Promise<void>;
+      };
+      await page.add({ content: 'Batteries', quantity: 1 });
+
+      expect(store.addLine).not.toHaveBeenCalled();
+    });
+
+    it('says what arrived, once, in the screen’s own region', async () => {
+      const { fixture } = await render({ served: [served[0]] });
+
+      const page = fixture.componentInstance as unknown as {
+        add(entry: { content: string; quantity: number }): Promise<void>;
+      };
+      await page.add({ content: 'Batteries', quantity: 1 });
+      fixture.detectChanges();
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.said')
+          ?.textContent
+      ).toContain('basket.added.announced');
+    });
+
+    it('says what went wrong, and keeps the words', async () => {
+      const { fixture, store } = await render({ served: [served[0]] });
+      store.addLine.mockResolvedValueOnce(null);
+
+      const page = fixture.componentInstance as unknown as {
+        add(entry: { content: string; quantity: number }): Promise<void>;
+      };
+      await page.add({ content: 'Batteries', quantity: 1 });
+      fixture.detectChanges();
+
+      // Losing six characters is nothing; losing the item somebody just
+      // remembered in an aisle is the failure this screen cannot afford.
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.said')
+          ?.textContent
+      ).toContain('basket.error');
+    });
+  });
+
+  describe('a sentence a sheet handed over', () => {
+    it('says it in the one region this screen has', async () => {
+      // A demand taken to zero takes the row out of the basket, the sheet over it
+      // dismisses itself, and this page is what is left with a live region
+      // (velista `0092`, section 6.2).
+      const { fixture, store } = await render({ served: [served[0]] });
+
+      store.handedOver.set({
+        text: 'Sourdough loaf is no longer asked for.',
+        seq: 1,
+      });
+      fixture.detectChanges();
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.said')
+          ?.textContent
+      ).toContain('Sourdough loaf is no longer asked for.');
+    });
+  });
+});
+
+/**
+ * **Nothing on the basket removes a row** (velista `0092`, section 2).
+ *
+ * A basket has nothing of its own to remove: it holds no lines, and a row is the
+ * covered lines that share a name. Removing one is an act on a **list**, on the
+ * list page, behind that page's own rule; a `REMOVED` row is how the basket shows
+ * that somebody did it, and drawing that row is velista `0093`.
+ *
+ * So this scans the scope's own templates rather than asserting about one screen.
+ * A delete control is the kind of thing that arrives by analogy with the list
+ * page, in a component nobody thought to write a test for, and the honest guard
+ * is the one that reads every file.
+ */
+describe('no control on the basket removes a row', () => {
+  const scope = join(__dirname, '..');
+
+  function templates(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((held) => {
+      const path = join(dir, held.name);
+      if (held.isDirectory()) {
+        return templates(path);
+      }
+      return held.isFile() && held.name.endsWith('.html') ? [path] : [];
+    });
+  }
+
+  it('draws no delete or trash glyph anywhere in the scope', () => {
+    const offenders = templates(scope).filter((path) => {
+      const html = readFileSync(path, 'utf8');
+      return /<lib-trash-icon|<lib-delete-icon/.test(html);
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('calls no store method that would take a row away', () => {
+    // The store has none of these and never had: the names are asserted so that
+    // adding one is a red spec rather than a quiet capability.
+    const offenders = templates(scope).filter((path) => {
+      const html = readFileSync(path, 'utf8');
+      return /\b(removeRow|deleteRow|hideRow|dropRow)\s*\(/.test(html);
+    });
+
+    expect(offenders).toEqual([]);
   });
 });

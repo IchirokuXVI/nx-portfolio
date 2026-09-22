@@ -504,3 +504,57 @@ lib-line-composer {
   flex-shrink: 0;
   font-size: var(--app-icon-sm);
 }
+
+// The composer, docked at the foot of the page (velista 0053, back with a target
+// list in 0092).
+//
+// `sticky` rather than `fixed`, so it sits inside the page's own scroll
+// container and the rows scroll under it. Above the rows it floats over: the
+// composer paints its own surface, and without a stacking order a row's raised
+// background shows through it.
+.composer-dock {
+  display: block;
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 1;
+}
+
+// Where the next line goes, above the field (velista 0092, section 7.2).
+//
+// A chip in the quiet action role, sized and padded the same whether it is a
+// button or the static line that stands in for it on a basket covering one list:
+// the dock must not change height when a second household joins the basket.
+//
+// The surface is the composer's own, so the chip reads as part of the dock rather
+// than as a row floating over the last line of the basket.
+.target {
+  @include shared.tap-target;
+
+  display: block;
+  inline-size: 100%;
+  margin: 0;
+  padding: var(--app-space-2) var(--app-space-4);
+  border: none;
+  border-block-end: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+  font-family: inherit;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  color: var(--app-action-quiet-fg);
+  text-align: start;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+}
+
+// One list, which chose itself: a statement rather than a control, so it takes
+// no pointer, no quiet accent and no target height it cannot honour.
+.target.is-static {
+  min-block-size: 0;
+  color: var(--app-text-muted);
+  font-weight: 500;
+  cursor: default;
+}

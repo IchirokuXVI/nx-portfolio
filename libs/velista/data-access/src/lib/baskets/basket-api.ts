@@ -2,6 +2,8 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
   Basket,
+  BasketAddLineRequest,
+  BasketDemandRequest,
   BasketLinkPreview,
   BasketParticipant,
   BasketRenameRequest,
@@ -265,6 +267,98 @@ export class BasketApi implements BasketServiceI {
     );
 
     return required(toBasketRowResult(answer), 'basket.revert');
+  }
+
+  /**
+   * Put a row off for now, and take that back (backend `0137`).
+   *
+   * **No body on either**, which is not an omission: a skip is a fact with no
+   * parameters. It carries no `from` because it has no number to be stale
+   * about, and `PUT` rather than `POST` because skipping an already skipped row
+   * is the state that was asked for and not a second act.
+   *
+   * The participant credential, because every participant may skip, a guest
+   * included: it is a smaller act than a settle, which every participant
+   * already may.
+   */
+  async skip(basketId: string, rowKey: string): Promise<BasketRowResult> {
+    const answer = await firstValueFrom(
+      this._http.put<unknown>(
+        `${this._row(basketId, rowKey)}/skip`,
+        {},
+        this._participantOptions(basketId, 'basket.skip')
+      )
+    );
+
+    return required(toBasketRowResult(answer), 'basket.skip');
+  }
+
+  /** The same route, the opposite verb. See {@link skip}. */
+  async unskip(basketId: string, rowKey: string): Promise<BasketRowResult> {
+    const answer = await firstValueFrom(
+      this._http.delete<unknown>(
+        `${this._row(basketId, rowKey)}/skip`,
+        this._participantOptions(basketId, 'basket.skip')
+      )
+    );
+
+    return required(toBasketRowResult(answer), 'basket.skip');
+  }
+
+  /**
+   * Change what one list asks for (velista `0092`, section 6).
+   *
+   * `lineId` always goes out, although the server requires it only on a row of
+   * several entries: the control is drawn per entry, so there is always one to
+   * name, and leaving the server to guess on a single entry row would be one
+   * entry away from moving a list nobody pointed at.
+   */
+  async setDemand(
+    basketId: string,
+    rowKey: string,
+    body: BasketDemandRequest
+  ): Promise<BasketRowResult> {
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._row(basketId, rowKey)}/demand`,
+        { lineId: body.lineId, quantity: body.quantity, from: body.from },
+        this._participantOptions(basketId, 'basket.demand')
+      )
+    );
+
+    return required(toBasketRowResult(answer), 'basket.demand');
+  }
+
+  /**
+   * Add a line onto one of the basket's covered lists (velista `0092`,
+   * section 7).
+   *
+   * `itemIds` is **omitted rather than sent empty**, this file's rule
+   * everywhere: the server validates each element as a uuid, and an empty array
+   * is a product set somebody chose where an absent key is free text.
+   */
+  async addLine(
+    basketId: string,
+    body: BasketAddLineRequest
+  ): Promise<BasketRowResult> {
+    const request: Record<string, unknown> = {
+      targetListId: body.targetListId,
+      content: body.content,
+      quantity: body.quantity,
+    };
+    if (body.itemIds !== undefined && body.itemIds.length > 0) {
+      request['itemIds'] = [...body.itemIds];
+    }
+
+    const answer = await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._basket(basketId)}/lines`,
+        request,
+        this._participantOptions(basketId, 'basket.addLine')
+      )
+    );
+
+    return required(toBasketRowResult(answer), 'basket.addLine');
   }
 
   /**

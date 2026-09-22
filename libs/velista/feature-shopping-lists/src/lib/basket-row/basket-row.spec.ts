@@ -700,3 +700,134 @@ describe('the searched fragment', () => {
     expect(body(fixture)?.getAttribute('aria-label')).toContain('Skimmed milk');
   });
 });
+
+/**
+ * Three ways for a row to be finished with, and they have to be three (velista
+ * `0092`, section 4).
+ *
+ * "I got it", "they had none" and "not today" are different facts, and the
+ * acceptance criterion is that a shopper cannot mistake one for another in either
+ * theme, in greyscale. So what is asserted here is the **shape**: which glyph,
+ * whether the reel is drawn, and what the words under the name say. Colour is
+ * asserted nowhere, deliberately, because it is never the carrier.
+ */
+describe('BasketRowComponent: skipped, unavailable and bought to zero', () => {
+  const skipped = () => line({ state: 'SKIPPED' });
+
+  it('draws a clock on a skipped row and no reel', async () => {
+    const fixture = await render(skipped());
+    const html = fixture.nativeElement as HTMLElement;
+
+    expect(html.querySelector('lib-clock-icon')).not.toBeNull();
+    // The shape that tells it from a wanted row at arm's length. A skip was not
+    // reached by a number, so there is no number to take back.
+    expect(html.querySelector('lib-quantity-reel')).toBeNull();
+  });
+
+  it('says it is skipped for now, in words under the name', async () => {
+    const fixture = await render(skipped());
+    expect(text(fixture, '.skipped')).toContain('basket.skip.caption');
+  });
+
+  it('never strikes the name through', async () => {
+    // velista `0043`: a skipped row is still on a household's list and still a
+    // thing to buy tomorrow.
+    const fixture = await render(skipped());
+    const html = fixture.nativeElement as HTMLElement;
+
+    expect(html.querySelector('.content s')).toBeNull();
+    expect(html.querySelector('.content del')).toBeNull();
+    // `is-done` is what mutes a finished row's words, and a skipped one is not
+    // finished: it counts as pending and its name keeps its ordinary weight.
+    expect(html.querySelector('.row')?.classList.contains('is-done')).toBe(
+      false
+    );
+  });
+
+  it('names a skipped row by what it is, and offers to buy it', async () => {
+    const fixture = await render(skipped());
+
+    // What the glyph promises is the same act a wanted row's promises: a person
+    // who skipped the bread and then found it presses this, and the server ends
+    // the skip with the purchase.
+    expect(status(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.status.got'
+    );
+    // And what the row **is** reaches a reader who hears it rather than sees it.
+    expect(body(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.skip.state'
+    );
+  });
+
+  it('draws three different glyphs for the three ways of being finished with', async () => {
+    const one = (fixture: Awaited<ReturnType<typeof render>>) => {
+      const html = fixture.nativeElement as HTMLElement;
+      return html.querySelector('.status-glyph')?.tagName.toLowerCase() ?? '';
+    };
+
+    expect(one(await render(bought()))).toBe('lib-check-filled-icon');
+    expect(one(await render(unavailable()))).toBe('lib-slash-circle-icon');
+    expect(one(await render(skipped()))).toBe('lib-clock-icon');
+  });
+
+  it('keeps the reel on a row bought to zero and takes it off the other two', async () => {
+    const hasReel = (fixture: Awaited<ReturnType<typeof render>>) =>
+      (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-quantity-reel'
+      ) !== null;
+
+    // The gesture that put a row at zero is the gesture that takes it back.
+    expect(hasReel(await render(bought()))).toBe(true);
+    // Neither of the other two was reached by a number, and a reel on either
+    // would be one control that could be dragged to zero and mean something the
+    // state does not.
+    expect(hasReel(await render(unavailable()))).toBe(false);
+    expect(hasReel(await render(skipped()))).toBe(false);
+  });
+});
+
+/**
+ * After the window (velista `0092`, section 3.3).
+ *
+ * The row arrives `WANTED` with a note, which is the server saying twelve hours
+ * have passed. **This side never counts hours**, so what is asserted is that the
+ * row reads the note and the date it came with, and nothing more.
+ */
+describe('BasketRowComponent: a row skipped earlier', () => {
+  const earlier = (noteAt: Date | null) =>
+    line({ state: 'WANTED', note: 'SKIPPED_EARLIER', noteAt });
+
+  it('is an ordinary row again, with its reel back', async () => {
+    const fixture = await render(earlier(new Date('2026-09-01T09:00:00.000Z')));
+    const html = fixture.nativeElement as HTMLElement;
+
+    expect(html.querySelector('lib-quantity-reel')).not.toBeNull();
+    expect(html.querySelector('lib-circle-icon')).not.toBeNull();
+  });
+
+  it('draws the dated sentence when the server sent a date', async () => {
+    const fixture = await render(earlier(new Date('2026-09-01T09:00:00.000Z')));
+
+    // Which sentence, and not how it reads: the testing translator echoes a key
+    // without its values, so the date itself is asserted where it is composed,
+    // in `basket-labels.spec.ts`.
+    expect(text(fixture, '.skipped')).toContain('basket.skip.earlierOn');
+  });
+
+  it('says it plainly when the server sent no date', async () => {
+    // A guard rather than a case anybody meets, and it draws the undated
+    // sentence rather than a sentence with a hole in it.
+    const fixture = await render(earlier(null));
+
+    const said = text(fixture, '.skipped');
+    expect(said).toContain('basket.skip.earlier');
+    expect(said).not.toContain('basket.skip.earlierOn');
+  });
+
+  it('says nothing about a skip on a row that carries no note', async () => {
+    const fixture = await render(line());
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.skipped')
+    ).toBeNull();
+  });
+});

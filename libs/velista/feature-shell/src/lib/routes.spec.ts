@@ -746,7 +746,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the six sheets over the basket, and no units sheet', () => {
+    it('offers the seven sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -765,6 +765,10 @@ describe('AppShellRoutes', () => {
           'sheet/finish',
           'sheet/filter/shop',
           'sheet/filter',
+          // Which list the composer adds to (velista `0092`, section 7.3).
+          // Every line added from the basket names a list now, so there has to
+          // be somewhere to say which.
+          'sheet/add/list',
         ]
       );
     });
@@ -810,7 +814,15 @@ describe('AppShellRoutes', () => {
           (routeAt(livePath)?.providers ?? []).map(
             (provider) => (provider as { name?: string }).name
           )
-        ).toEqual(['BasketSocket', 'BasketStore', 'BasketViewStore']);
+        ).toEqual([
+          'BasketSocket',
+          'BasketStore',
+          // Where the composer's next line goes, per basket (velista `0092`,
+          // section 7.2). A store and not a signal on the page, because it
+          // reads and writes this device's memory.
+          'BasketTargetStore',
+          'BasketViewStore',
+        ]);
         // How the page knows which basket to open, since the URL holds no id.
         expect(routeAt(livePath)?.data?.['basket']).toBe('live');
       });
@@ -862,14 +874,14 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(6);
+      expect(sheets).toHaveLength(7);
       for (const entry of sheets) {
         expect(entry.canActivate).toBeUndefined();
       }
     });
 
     it('provides the stores and the socket on the page, not on the app', () => {
-      // All three scoped here, which is what makes the connection's lifetime the
+      // All four scoped here, which is what makes the connection's lifetime the
       // screen's: two baskets are never open at once, and presence answers "who is
       // here" rather than "who has ever opened this" precisely because leaving the
       // route destroys the socket (plan 0048, section 4).
@@ -877,7 +889,8 @@ describe('AppShellRoutes', () => {
       // `BasketViewStore` is here rather than on the component because the sheets
       // that set its controls are **child routes** of this page (velista `0074`,
       // section 4.3), and a store the component provided is not one a sibling route
-      // can be sure to reach.
+      // can be sure to reach. `BasketTargetStore` is here for exactly that reason
+      // too: the sheet that sets it is `sheet/add/list` (velista `0092`).
       //
       // Asserted by name rather than by counting, because a count says nothing about
       // *which* provider went missing, and the socket is the one whose absence would
@@ -889,6 +902,7 @@ describe('AppShellRoutes', () => {
       expect(provided).toEqual([
         'BasketSocket',
         'BasketStore',
+        'BasketTargetStore',
         'BasketViewStore',
       ]);
     });
@@ -1001,7 +1015,11 @@ describe('the sheets and their exit animation', () => {
     // `0091` added five, and added no sheet at all: the basket is drawn at a second
     // route, and every sheet over it is declared over both. The five are the six
     // minus `finish`, which a basket that is never finished must not offer.
-    expect(sheets).toHaveLength(34);
+    //
+    // `0092` added one sheet and therefore two entries, for that same reason: a
+    // line added from the basket names a list now, and `sheet/add/list` is where
+    // somebody says which, over both baskets.
+    expect(sheets).toHaveLength(36);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

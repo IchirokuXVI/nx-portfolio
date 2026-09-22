@@ -110,9 +110,46 @@
         </p>
       }
 
+      <!--
+        Which one is in the trolley (velista 0092, section 5).
+
+        The pane behind this used to **split** the row between products. It asks
+        one question now: which did you get? The answer travels with the settle as
+        `itemId` and is stored nowhere before it, because a product belongs on the
+        purchase it was bought as.
+
+        Three shapes, and they are the three answers. A chosen product, or a row
+        with one option, is its name; either way, a row of several options offers
+        the way in. A row of several with nothing chosen says so and offers no
+        price, because quoting the first would name a product nobody picked up.
+      -->
       @if (productName(); as product) {
         <div class="product">
           <span class="product-name">{{ product }}</span>
+          @if (canChooseProduct()) {
+            <button
+              (click)="openPane('product')"
+              [disabled]="busy()"
+              class="product-change"
+              type="button"
+            >
+              {{ 'basket.product.change' | rokuT }}
+            </button>
+          }
+        </div>
+      } @else if (canChooseProduct()) {
+        <div class="product">
+          <span class="product-name is-missing">
+            {{ 'basket.line.free' | rokuT }}
+          </span>
+          <button
+            (click)="openPane('product')"
+            [disabled]="busy()"
+            class="product-change"
+            type="button"
+          >
+            {{ 'basket.product.change' | rokuT }}
+          </button>
         </div>
       }
 
@@ -131,6 +168,7 @@
       @if (canSeeEntries()) {
         <lib-row-entries
           (allocated)="allocate($event)"
+          (demanded)="demand($event)"
           [busy]="busy()"
           [finished]="basketFinished()"
           [lists]="lists()"
@@ -159,6 +197,27 @@
         **trip** is. The second takes the controls off every line at once, including
         the ones nobody settled, which stay on their households' lists as they are.
       -->
+      <!--
+        Back on the list (velista 0092, section 3.1).
+
+        **Above** the buying actions on a skipped row, because it is the one thing
+        that is specifically about the state this row is in. The three below it
+        stay: a person who skipped the bread and then found it buys it, and the
+        server ends the skip with the purchase rather than asking for this first.
+      -->
+      @if (isSkipped()) {
+        <div class="actions">
+          <button
+            (click)="unskip()"
+            [disabled]="busy()"
+            class="secondary"
+            type="button"
+          >
+            {{ 'basket.skip.undo' | rokuT }}
+          </button>
+        </div>
+      }
+
       @if (canSettle()) {
         <div class="actions">
           <button
@@ -194,6 +253,29 @@
           >
             {{ 'basket.settle.none' | rokuT }}
           </button>
+
+          <!--
+            Not today (velista 0092, section 3.1).
+
+            After "They had none" and in the same quiet role, because the two
+            neighbours are the two things a shopper says about a row they are not
+            buying — and they are **two buttons with two names, never one
+            toggle** (section 11): the shop had none of it, or they walked past
+            it. The first is a fact about the shop and the second is a decision,
+            and only the second is theirs to take back.
+
+            No list moves either way. A skip is recorded against the trip.
+          -->
+          @if (canSkip()) {
+            <button
+              (click)="skip()"
+              [disabled]="busy()"
+              class="quiet"
+              type="button"
+            >
+              {{ 'basket.skip.action' | rokuT }}
+            </button>
+          }
         </div>
       }
 
@@ -252,6 +334,62 @@
           {{ 'basket.settle.cancel' | rokuT }}
         </button>
       </div>
+    }
+
+    <!--
+      Which one did you get? (velista 0092, section 5.)
+
+      A radio group and not a list of buttons: it is one choice among several with
+      one of them current, which is exactly what a radio group is, and it is what
+      gives a keyboard the arrow keys through the options for free.
+
+      The order is the **server's** and is never re-sorted here, least of all by
+      price: it is the anchor's product first and then the rest as the entries
+      named them, which is the order the row above has been drawing. Sorting by
+      price would rearrange the list every time somebody changed shops.
+    -->
+    @case ('product') {
+      <fieldset class="options">
+        <legend class="pane-title">{{ 'basket.product.title' | rokuT }}</legend>
+
+        @for (option of options(); track option.itemId) {
+          <label class="option">
+            <input
+              (change)="chooseProduct(option.itemId)"
+              [checked]="option.chosen"
+              [disabled]="busy()"
+              name="settle-product"
+              type="radio"
+            />
+            <span class="option-body">
+              <span class="option-name">{{ option.name }}</span>
+              <!--
+                The price, and where it is from. Both are absent where the shop
+                this screen is pricing at does not list the product, which is the
+                same blank the row above leaves: there is no way to say "listed,
+                price unknown" in the space, and a placeholder would be a number
+                shaped hole.
+              -->
+              @if (option.price; as price) {
+                <span class="option-price">
+                  {{ price }}
+                  @if (option.place; as place) {
+                    <span class="option-place">· {{ place }}</span>
+                  }
+                </span>
+              } @else {
+                <span class="option-price is-missing">
+                  {{ 'basket.product.noPrice' | rokuT }}
+                </span>
+              }
+            </span>
+          </label>
+        }
+      </fieldset>
+
+      <button (click)="openPane('settle')" class="quiet" type="button">
+        {{ 'basket.settle.cancel' | rokuT }}
+      </button>
     }
 
     @case ('merge') {

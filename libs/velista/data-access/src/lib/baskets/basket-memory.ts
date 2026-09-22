@@ -8,11 +8,14 @@ import {
   type BasketPriceScope,
   type BasketProduct,
   type BasketProgress,
+  type BasketAddLineRequest,
+  type BasketDemandRequest,
   type BasketRenameRequest,
   type BasketRenameResult,
   type BasketRevertRequest,
   type BasketRow,
   type BasketRowEntry,
+  type BasketRowNote,
   type BasketRowResult,
   type BasketRowState,
   type BasketSession,
@@ -248,6 +251,15 @@ const LISTS: readonly BasketListRef[] = [
  */
 const UNSERVED_LIST_ID = 'list-office';
 
+/**
+ * How long a skip stands before the row is ordinary again (backend `0137`).
+ *
+ * Twelve hours, by the **server's** clock. It is here because this class stands
+ * in for the server; nothing above it counts hours, and the note the row carries
+ * afterwards is a field the server sets rather than a deadline a screen watches.
+ */
+const SKIP_WINDOW_MS = 12 * 60 * 60 * 1000;
+
 const OWNER: BasketParticipant = {
   id: 'p-owner',
   kind: 'OWNER',
@@ -307,6 +319,14 @@ interface StoredLine {
   demandEditable: boolean;
   /** Set when the line leaves the coverage, which is what makes a row `REMOVED`. */
   deleted: boolean;
+  /**
+   * When this basket last put the line off for now, or null (backend `0137`).
+   *
+   * On the line and not on the row, because the server keeps it per line and a
+   * row is a group read out of lines on every request. Within the window the row
+   * is `SKIPPED`; past it the row is ordinary again and carries the note.
+   */
+  skippedAt: Date | null;
 }
 
 /**
@@ -380,6 +400,19 @@ export class BasketMemory implements BasketServiceI {
    */
   status = 'OPEN';
 
+  /**
+   * What this fake believes the time is.
+   *
+   * A knob rather than `Date.now`, because the one thing a skip does that no
+   * other write does is **expire**: twelve hours later the row is ordinary again
+   * and carries a note saying when it was put off. A spec that could not move
+   * the clock could only test the half of the feature that happens immediately.
+   *
+   * It is the server's clock and not the browser's, which is the rule the screen
+   * follows too: nothing above this class counts hours.
+   */
+  now: () => Date = () => new Date();
+
   /** The catalog behind the composer's dropdown. See {@link suggest}. */
   private readonly _catalog = new CatalogMemory();
 
@@ -406,6 +439,7 @@ export class BasketMemory implements BasketServiceI {
       approved: true,
       demandEditable: true,
       deleted: false,
+      skippedAt: null,
     },
     {
       id: 'zl-2',
@@ -418,6 +452,7 @@ export class BasketMemory implements BasketServiceI {
       approved: false,
       demandEditable: true,
       deleted: false,
+      skippedAt: null,
     },
     {
       id: 'zl-3',
@@ -428,6 +463,7 @@ export class BasketMemory implements BasketServiceI {
       approved: true,
       demandEditable: true,
       deleted: false,
+      skippedAt: null,
     },
     {
       id: 'zl-4',
@@ -438,6 +474,7 @@ export class BasketMemory implements BasketServiceI {
       approved: true,
       demandEditable: true,
       deleted: false,
+      skippedAt: null,
     },
     {
       // A list the reader is not served, so this entry can be named by nobody and
@@ -453,6 +490,7 @@ export class BasketMemory implements BasketServiceI {
       // for, which is the one field no client can compute.
       demandEditable: false,
       deleted: false,
+      skippedAt: null,
     },
   ];
 
@@ -703,6 +741,148 @@ export class BasketMemory implements BasketServiceI {
     return this._result(rowKey);
   }
 
+  /**
+   * Put a row off for now (backend `0137`).
+   *
+   * Stamped on every live entry of the row, because a skip covers the row: a
+   * shopper walking past the bread is walking past both households' bread.
+   *
+   * **Refused on a row with nothing left to get**, which is what stands in for
+   * the `from` every other write carries: a row already bought or already closed
+   * is not one anybody is walking past.
+   */
+  async skip(_basketId: string, rowKey: string): Promise<BasketRowResult> {
+    this._requireLive();
+    const row = this._requireRow(rowKey);
+    if (row.left === 0) {
+      throw this._refuse(
+        'conflict',
+        409,
+        'There is nothing left to get on this row'
+      );
+    }
+
+    const at = this.now();
+    for (const line of this._livesOf(row)) {
+      line.skippedAt = at;
+    }
+
+    return this._result(rowKey);
+  }
+
+  /** Take the skip back. The same fact, unset. */
+  async unskip(_basketId: string, rowKey: string): Promise<BasketRowResult> {
+    this._requireLive();
+    const row = this._requireRow(rowKey);
+    for (const line of this._livesOf(row)) {
+      line.skippedAt = null;
+    }
+
+    return this._result(rowKey);
+  }
+
+  /**
+   * Change what one list asks for (backend `0131`, velista `0092` section 6).
+   *
+   * Three refusals, and each stands for a rule the screen rests on: a `from`
+   * that moved is `stale_quantity`, an entry the owner may not change is
+   * `forbidden`, and a quantity that is not a whole number is a validation
+   * failure. A kinder fake would let a screen ship that never drew any of them.
+   *
+   * A row whose every entry asks for nothing, and which nothing was bought of,
+   * **leaves the basket**. The answer's row is null there, which is what
+   * `toBasketRowResult` reads out of the server's emptied row.
+   */
+  async setDemand(
+    _basketId: string,
+    rowKey: string,
+    body: BasketDemandRequest
+  ): Promise<BasketRowResult> {
+    this._requireLive();
+    const row = this._requireRow(rowKey);
+    const entry = row.entries.find((held) => held.lineId === body.lineId);
+    const line = this._lines.find((held) => held.id === body.lineId);
+    if (entry === undefined || line === undefined) {
+      throw this._refuse('validation_failed', 400, 'That line is not here');
+    }
+    if (!entry.demandEditable) {
+      throw this._refuse(
+        'forbidden',
+        403,
+        'This list does not allow its quantity to be changed from here'
+      );
+    }
+    if (!Number.isInteger(body.quantity) || body.quantity < 0) {
+      throw this._refuse(
+        'validation_failed',
+        400,
+        'quantity must be a whole number'
+      );
+    }
+    this._requireFrom(body.from, entry.left);
+
+    line.quantity = body.quantity;
+    return this._result(rowKey);
+  }
+
+  /**
+   * Add a line onto one of the covered lists (backend `0136`, velista `0092`
+   * section 7).
+   *
+   * **It merges**, because the list's own add does (backend `0091`): a line
+   * whose normalized content matches one the target list already holds raises
+   * that line rather than making a second. So the answer can be a row that was
+   * already on the screen, under a key the caller never named, which is exactly
+   * what the store has to fold correctly.
+   *
+   * A list this reader was not served is refused, which is the redaction being a
+   * rule rather than a caption: a target you were not told about is one you may
+   * not write.
+   */
+  async addLine(
+    _basketId: string,
+    body: BasketAddLineRequest
+  ): Promise<BasketRowResult> {
+    this._requireLive();
+    const content = body.content.trim();
+    if (content === '') {
+      throw this._refuse('validation_failed', 400, 'A line needs a name');
+    }
+    if (!LISTS.some((ref) => ref.listId === body.targetListId)) {
+      throw this._refuse('forbidden', 403, 'You cannot write that list');
+    }
+
+    const quantity = Math.max(1, Math.trunc(body.quantity));
+    const key = normalizeContent(content);
+    const held = this._lines.find(
+      (line) =>
+        !line.deleted &&
+        line.listId === body.targetListId &&
+        normalizeContent(line.content) === key
+    );
+
+    if (held !== undefined) {
+      held.quantity += quantity;
+      return this._result(held.id);
+    }
+
+    const line: StoredLine = {
+      id: `zl-${this._lines.length + 1}-${key.replace(/\s+/g, '-')}`,
+      listId: body.targetListId,
+      content,
+      quantity,
+      optionIds: body.itemIds === undefined ? [] : [...body.itemIds],
+      // Every list this fake serves auto approves, which is the ordinary case.
+      // The `zl-2` fixture is where a screen meets a line waiting for one.
+      approved: true,
+      demandEditable: true,
+      deleted: false,
+      skippedAt: null,
+    };
+    this._lines.push(line);
+    return this._result(line.id);
+  }
+
   async renameRow(
     _basketId: string,
     rowKey: string,
@@ -887,6 +1067,17 @@ export class BasketMemory implements BasketServiceI {
       const left = entries.reduce((sum, entry) => sum + entry.left, 0);
       const newest = this._newestOn(lines);
 
+      // **A row nothing asks for and nothing was bought of is not a thing to
+      // buy**, so it leaves the view (backend `0136`). That is what a demand
+      // taken to zero produces, and it is the one way a write empties a basket
+      // of a row: a row bought to zero has `bought`, so it stays as `DONE`.
+      //
+      // A `REMOVED` row is the other way round and stays: its lines left the
+      // coverage, which is information about the basket rather than nothing.
+      if (live.length > 0 && left === 0 && bought === 0) {
+        continue;
+      }
+
       rows.push({
         rowKey: anchor.id,
         content: anchor.content,
@@ -894,10 +1085,11 @@ export class BasketMemory implements BasketServiceI {
         bought,
         asked: bought + left,
         state: this._state(lines, left, bought),
-        // The window and the skip that fills these are backend `0137`'s, which
-        // this fake does not model: nothing here is ever put off for now.
-        note: null,
-        noteAt: null,
+        // What a skip leaves behind once its window has passed (backend `0137`).
+        // Inside the window the state says it and there is no note; outside it
+        // the row is ordinary again and the note is the only trace.
+        note: this._note(lines, bought),
+        noteAt: this._note(lines, bought) === null ? null : this._skippedAt(lines),
         // Backend `0138`'s, and null until it lands, which is what the real
         // server answers today too.
         mark: null,
@@ -952,7 +1144,12 @@ export class BasketMemory implements BasketServiceI {
     if (lines.every((line) => line.deleted)) {
       return 'REMOVED';
     }
-    // `SKIPPED` is tested here, once backend `0137` writes a skip.
+    // Above `NOT_AVAILABLE` and above the two bought states, which is where the
+    // table puts it: a skip is the newest thing said about a row that still has
+    // something left to get, and it covers the row.
+    if (this._skipStands(lines) && left > 0) {
+      return 'SKIPPED';
+    }
     const newest = this._newestOn(lines);
     if (newest?.outcome === 'NOT_AVAILABLE') {
       return 'NOT_AVAILABLE';
@@ -979,6 +1176,48 @@ export class BasketMemory implements BasketServiceI {
       return 'PARTLY';
     }
     return 'WANTED';
+  }
+
+  /**
+   * Whether a skip on these lines is still inside its window.
+   *
+   * The newest skip across the group, because a skip covers the row: a second
+   * one on either entry starts the window again.
+   */
+  private _skipStands(lines: readonly StoredLine[]): boolean {
+    const at = this._skippedAt(lines);
+    return (
+      at !== null && this.now().getTime() - at.getTime() < SKIP_WINDOW_MS
+    );
+  }
+
+  /** The newest skip across these lines, or null if none was skipped. */
+  private _skippedAt(lines: readonly StoredLine[]): Date | null {
+    const times = lines
+      .filter((line) => !line.deleted && line.skippedAt !== null)
+      .map((line) => (line.skippedAt as Date).getTime());
+    return times.length === 0 ? null : new Date(Math.max(...times));
+  }
+
+  /**
+   * The note a row carries, which is `SKIPPED_EARLIER` and nothing else.
+   *
+   * Set once the window has passed and while nothing has been bought since: the
+   * purchase is what ends a skip, so the note goes with it (backend `0137`).
+   * The fake reads `bought` rather than comparing timestamps, which is the same
+   * answer here because every fixture purchase predates every skip a spec makes.
+   */
+  private _note(
+    lines: readonly StoredLine[],
+    bought: number
+  ): BasketRowNote | null {
+    const at = this._skippedAt(lines);
+    if (at === null || bought > 0) {
+      return null;
+    }
+    return this.now().getTime() - at.getTime() < SKIP_WINDOW_MS
+      ? null
+      : 'SKIPPED_EARLIER';
   }
 
   /** The newest standing act of this basket on any of these lines. */
@@ -1093,18 +1332,29 @@ export class BasketMemory implements BasketServiceI {
     return shares;
   }
 
-  /** What every write answers: the row as it now stands, and the counts. */
+  /** The stored lines behind a row's live entries. */
+  private _livesOf(row: BasketRow): StoredLine[] {
+    const ids = new Set(row.entries.map((entry) => entry.lineId));
+    return this._lines.filter((line) => ids.has(line.id));
+  }
+
+  /**
+   * What every write answers: the row as it now stands, and the counts.
+   *
+   * **A row that is no longer there answers null rather than a 404.** A demand
+   * taken to zero on a row nothing was bought of takes the row out of the view,
+   * and that is the write succeeding: the list now asks for nothing, which is
+   * what was asked for. A 404 here would report a failure to somebody whose
+   * change landed.
+   */
   private async _result(rowKey: string): Promise<BasketRowResult> {
     const rows = this._rows();
     const row =
       rows.find((held) => held.rowKey === rowKey) ??
       rows.find((held) =>
         held.entries.some((entry) => entry.lineId === rowKey)
-      );
-
-    if (row === undefined) {
-      throw this._refuse('not_found', 404, 'That row is no longer here');
-    }
+      ) ??
+      null;
 
     return {
       row,
