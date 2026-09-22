@@ -56,7 +56,12 @@ function scopeCss(css, id) {
     .map((chunk) => {
       const at = chunk.indexOf('{');
       if (at === -1) return '';
-      const selector = chunk.slice(0, at).trim();
+      // Comments go before the comma split, not after. A comment above a rule is
+      // part of that rule's selector text here, so a comma inside one read as a
+      // second selector and took a prefix of its own, which wrote `#ab-Name` into
+      // the middle of the sentence. The artboards keep the comments; the output
+      // does not need them.
+      const selector = chunk.slice(0, at).replace(/\/\*[\s\S]*?\*\//g, '').trim();
       const body = chunk.slice(at + 1).trim();
       if (!selector || !body) return '';
       if (selector === 'body') return '';
