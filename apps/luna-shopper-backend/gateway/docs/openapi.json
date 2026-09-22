@@ -12561,6 +12561,19 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "name": "soldBy",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable. Only the products these chains sell, which is not where the prices come from: that is supermarketId. A chain sells a product when it holds an available row for it, priced or not. Empty and absent both mean every chain.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
           }
         ],
         "responses": {

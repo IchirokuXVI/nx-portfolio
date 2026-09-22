@@ -15,6 +15,7 @@ import { Brands1757300000000 } from './1757300000000-Brands';
 import { PriceScopeLocalAreaRename1757400000000 } from './1757400000000-PriceScopeLocalAreaRename';
 import { ScopeCopies1757500000000 } from './1757500000000-ScopeCopies';
 import { BrandLinks1757600000000 } from './1757600000000-BrandLinks';
+import { ItemsSoldByChain1757700000000 } from './1757700000000-ItemsSoldByChain';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -43,4 +44,5 @@ export const CATALOG_MIGRATIONS = [
   PriceScopeLocalAreaRename1757400000000,
   ScopeCopies1757500000000,
   BrandLinks1757600000000,
+  ItemsSoldByChain1757700000000,
 ];

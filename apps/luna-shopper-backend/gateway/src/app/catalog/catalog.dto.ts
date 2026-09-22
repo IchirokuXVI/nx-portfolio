@@ -941,6 +941,16 @@ export class PriceScopedQueryDto extends SearchOrderQueryDto {
   profileId?: string;
 }
 
+/**
+ * The catalog browse read (plan 0048), with the chain filter plan 0146 added.
+ *
+ * **Two parameters here name a supermarket and they are not the same thing.**
+ * `supermarketId`, inherited from {@link PriceScopedQueryDto}, says where the
+ * caller shops and therefore where a price is quoted from; `soldBy` says which
+ * products to list. Sending `supermarketId` alone lists the whole catalog priced
+ * at that chain, most of it unpriced, which is the answer the chain chips on
+ * velista's catalog screen are not asking for.
+ */
 export class SearchItemsQueryDto extends PriceScopedQueryDto {
   @ApiPropertyOptional({
     description:
@@ -964,6 +974,20 @@ export class SearchItemsQueryDto extends PriceScopedQueryDto {
   @IsOptional()
   @IsUUID()
   productGroupId?: string;
+
+  @ApiPropertyOptional({
+    name: 'soldBy',
+    type: [String],
+    format: 'uuid',
+    description:
+      'Repeatable. Only the products these chains sell, which is not where the prices come from: that is supermarketId. A chain sells a product when it holds an available row for it, priced or not. Empty and absent both mean every chain.',
+  })
+  @IsOptional()
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMaxSize(MAX_SELECTORS)
+  @IsUUID('4', { each: true })
+  soldBy?: string[];
 }
 
 /** The composer's own read: ranked groups, priced (plan 0048, section 3). */

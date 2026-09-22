@@ -1364,6 +1364,26 @@ export interface SearchItemsRequest extends PageQuery {
    * states the caller is in is read from `coverage` on the scope view.
    */
   priceScopeIds?: string[];
+  /**
+   * Only the products these chains sell (plan 0146).
+   *
+   * **This is the assortment and not the prices.** A supermarket reaches this
+   * read twice, and the two mean different things: `priceScopeIds` decides where
+   * a price is quoted from, and this decides which products are listed at all. A
+   * chain chip on the catalog screen asks this one; a shopping profile asks the
+   * other.
+   *
+   * A chain sells a product when it holds an available source row for it, at any
+   * of its scopes. A product it sells with no price row is still listed, every
+   * price field null, because plan 0069's rule holds here too: having no price
+   * is not the same as not existing.
+   *
+   * **Absent and empty both mean every chain**, which is the reading
+   * `priceScopeIds` above already has, so a client that sends an empty array
+   * after the person cleared the chips gets the catalog rather than nothing. Two
+   * ids list what either chain sells.
+   */
+  soldBy?: string[];
 }
 
 /**

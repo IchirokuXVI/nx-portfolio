@@ -372,6 +372,10 @@ export class CatalogItemsController {
         user.userId,
         toScopeQuery(query)
       ),
+      // Plan 0146: which chains sell the products, passed through untouched. It
+      // is deliberately not resolved through `toScopeQuery` above: that answers
+      // where a price comes from, and this answers what is listed.
+      soldBy: query.soldBy,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
