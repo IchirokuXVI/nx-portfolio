@@ -1,3 +1,5 @@
+> **PR:** [#440](https://github.com/IchirokuXVI/nx-portfolio/pull/440)
+
 # 0146: the products one chain sells
 
 > Frontend half: velista `0100` (the catalog tab), which is blocked on this one.
