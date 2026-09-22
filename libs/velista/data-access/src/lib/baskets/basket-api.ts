@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import type {
   Basket,
   BasketAddLineRequest,
+  BasketChangePage,
   BasketDemandRequest,
   BasketLinkPreview,
   BasketParticipant,
@@ -19,6 +20,10 @@ import type {
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { anonymous, operation } from '../auth/http-context';
+import {
+  toBasketChangePage,
+  type BasketChangeContext,
+} from '../mapping/basket-change-mappers';
 import {
   toBasket,
   toBasketLinkPreview,
@@ -422,6 +427,57 @@ export class BasketApi implements BasketServiceI {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * What changed on the lists this basket covers, newest first (velista `0093`).
+   *
+   * The cursor is **omitted rather than sent empty** on the first page, this
+   * file's rule everywhere: the gateway validates it as an opaque string, and a
+   * present but empty one is a cursor where an absent one is the beginning.
+   *
+   * No limit goes out. The server's default page is what the sheet draws, and a
+   * number here would be a second answer to a question the gateway already has
+   * a considered one for.
+   */
+  async changes(
+    basketId: string,
+    context: BasketChangeContext,
+    cursor?: string
+  ): Promise<BasketChangePage> {
+    const options = this._participantOptions(basketId, 'basket.changes');
+    const body = await firstValueFrom(
+      this._http.get<unknown>(`${this._basket(basketId)}/changes`, {
+        ...options,
+        ...(cursor === undefined
+          ? {}
+          : { params: new HttpParams().set('cursor', cursor) }),
+      })
+    );
+
+    // Never `required`: a page that could not be read is an empty page with no
+    // cursor, which the sheet draws as "nothing changed lately". The mapper
+    // already drops one bad entry without failing the nineteen beside it.
+    return toBasketChangePage(body, context);
+  }
+
+  /**
+   * Say which changes this viewer has drawn (velista `0093`, section 7).
+   *
+   * **The answer is discarded on purpose.** It carries the count as it now
+   * stands and how long the acknowledged marks stay drawn, and this client uses
+   * neither: the count and the marks come from the basket read the caller makes
+   * next, and a duration held here would be a clock on the client deciding what
+   * is new, which is the one thing this whole plan forbids.
+   */
+  async acknowledgeChanges(basketId: string, through: string): Promise<void> {
+    await firstValueFrom(
+      this._http.post<unknown>(
+        `${this._basket(basketId)}/changes/seen`,
+        { through },
+        this._participantOptions(basketId, 'basket.changes.seen')
+      )
+    );
   }
 
   async listParticipants(

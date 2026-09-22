@@ -1,0 +1,45 @@
+:host {
+  display: block;
+  padding-block: var(--app-space-3);
+}
+
+.what {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+  text-wrap: pretty;
+}
+
+// New to this reader, said the way a marked row says it: a dot and a word, in
+// the accent role and never the warning one. Amber is this app's accent, not
+// its attention colour (`0002`, section 4.4), and something new on a list is
+// not a fault.
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin-inline-start: var(--app-space-2);
+  padding-inline: var(--app-space-2);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-bg);
+  font-size: var(--app-text-2xs);
+  color: var(--app-action-quiet-fg);
+  white-space: nowrap;
+}
+
+.tag-dot {
+  inline-size: var(--app-space-2);
+  block-size: var(--app-space-2);
+  border-radius: var(--app-radius-full);
+  background: currentcolor;
+}
+
+// Who, which list and when. Takes no room at all when the reader is served none
+// of the three, which is the ordinary case for a guest.
+.meta {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+}

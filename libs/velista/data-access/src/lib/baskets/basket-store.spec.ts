@@ -144,6 +144,9 @@ function build(
     setDemand: (id, rowKey, body) => memory.setDemand(id, rowKey, body),
     addLine: (id, body) => memory.addLine(id, body),
     suggest: (id, query) => memory.suggest(id, query),
+    changes: (id, ctx, cursor) => memory.changes(id, ctx, cursor),
+    acknowledgeChanges: (id, through) =>
+      memory.acknowledgeChanges(id, through),
     listParticipants: () => memory.listParticipants(),
     refreshSocketToken: () => memory.refreshSocketToken(),
     ensureShareLink: () => memory.ensureShareLink(),
@@ -993,6 +996,12 @@ describe('BasketStore', () => {
         await Promise.resolve();
 
         expect(reads).toBe(readsAfterOpen + 1);
+        // And the event set nothing by itself (velista `0093`, section 11).
+        // It carries ids and no marks, so every mark on screen is one the
+        // read that followed it answered with.
+        expect(store.rows().map((row) => row.mark)).toEqual(
+          (await memory.getBasket()).rows.map((row) => row.mark)
+        );
       } finally {
         jest.useRealTimers();
       }

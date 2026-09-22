@@ -144,6 +144,47 @@ export class BrowserFacade {
   }
 
   /**
+   * Watch whether one element is on screen, and by how much.
+   *
+   * The one reader is velista `0093` section 7, which may only tell the server
+   * that somebody saw a change when the row carrying it was really in front of
+   * their eyes. That question is `IntersectionObserver`'s and nothing else's: a
+   * scroll listener plus `getBoundingClientRect` answers it at the cost of a
+   * layout on every frame, on the one screen somebody is holding in a shop.
+   *
+   * Here for {@link matchMedia}'s reason, which is rule D2: `window` is never
+   * touched outside this class, so a component asks for the fact and never for
+   * the global. Under a server render, and in any environment with no
+   * `IntersectionObserver`, it observes nothing and the callback never fires,
+   * which is the quiet direction: nothing is acknowledged rather than
+   * everything.
+   *
+   * Returns the teardown, which the caller **must** run. One observer per call
+   * rather than a shared one keyed by options, because a basket row registers
+   * only while it is marked and unregisters the moment the mark goes.
+   *
+   * @param onChange called with whether the element currently meets `threshold`.
+   */
+  observeIntersection(
+    element: Element,
+    onChange: (intersecting: boolean) => void,
+    options?: IntersectionObserverInit
+  ): () => void {
+    const win = this.window;
+    if (!win || typeof win.IntersectionObserver !== 'function') {
+      return () => undefined;
+    }
+
+    const observer = new win.IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        onChange(entry.isIntersecting);
+      }
+    }, options);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }
+
+  /**
    * Read a persisted value. Returns null when there is no storage *and* when
    * storage throws, which it does in private mode and with site data blocked —
    * a caller must never have to care which.

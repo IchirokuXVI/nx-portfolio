@@ -746,7 +746,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the seven sheets over the basket, and no units sheet', () => {
+    it('offers the eight sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -760,6 +760,10 @@ describe('AppShellRoutes', () => {
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
         [
           'sheet/rows/:rowKey/settle',
+          // What changed on the covered lists while somebody was shopping
+          // (velista `0093`, section 6). Over both basket routes, because a
+          // basket follows its lists whichever way it was opened.
+          'sheet/changes',
           'sheet/people',
           'sheet/share',
           'sheet/finish',
@@ -817,6 +821,9 @@ describe('AppShellRoutes', () => {
         ).toEqual([
           'BasketSocket',
           'BasketStore',
+          // What changed on the covered lists, read by a child route of this
+          // page, so the store is the route's (velista `0093`, section 2).
+          'BasketChangeStore',
           // Where the composer's next line goes, per basket (velista `0092`,
           // section 7.2). A store and not a signal on the page, because it
           // reads and writes this device's memory.
@@ -874,7 +881,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(7);
+      expect(sheets).toHaveLength(8);
       for (const entry of sheets) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -902,6 +909,7 @@ describe('AppShellRoutes', () => {
       expect(provided).toEqual([
         'BasketSocket',
         'BasketStore',
+        'BasketChangeStore',
         'BasketTargetStore',
         'BasketViewStore',
       ]);
@@ -1019,7 +1027,10 @@ describe('the sheets and their exit animation', () => {
     // `0092` added one sheet and therefore two entries, for that same reason: a
     // line added from the basket names a list now, and `sheet/add/list` is where
     // somebody says which, over both baskets.
-    expect(sheets).toHaveLength(36);
+    //
+    // `0093` added one sheet and therefore two entries again: what changed on the
+    // covered lists is read over both baskets, for the same reason.
+    expect(sheets).toHaveLength(38);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

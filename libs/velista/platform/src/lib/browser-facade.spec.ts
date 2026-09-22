@@ -32,6 +32,67 @@ describe('BrowserFacade', () => {
       expect(facade.readStorage('velista-test-key')).toBeNull();
     });
 
+    it('observes nothing where the browser has no IntersectionObserver', () => {
+      // jsdom ships none. The bias is `matchMedia`'s: the caller that reads
+      // this is the one deciding whether somebody has seen a change (velista
+      // `0093`, section 7), and nothing is the quiet answer.
+      const seen = jest.fn();
+      const stop = facade.observeIntersection(
+        document.createElement('li'),
+        seen
+      );
+
+      expect(seen).not.toHaveBeenCalled();
+      expect(() => stop()).not.toThrow();
+    });
+
+    it('reports an element coming into view, and disconnects on teardown', () => {
+      // The one thing a jsdom spec can hold this to: that it observes the
+      // element it was handed, passes the options through, reports what the
+      // browser said, and lets go.
+      const observed: Element[] = [];
+      const disconnect = jest.fn();
+      let announce: ((entries: IntersectionObserverEntry[]) => void) | null =
+        null;
+      let held: IntersectionObserverInit | undefined;
+
+      class FakeObserver {
+        constructor(
+          callback: (entries: IntersectionObserverEntry[]) => void,
+          options?: IntersectionObserverInit
+        ) {
+          announce = callback;
+          held = options;
+        }
+        observe(element: Element): void {
+          observed.push(element);
+        }
+        disconnect = disconnect;
+      }
+      Object.defineProperty(window, 'IntersectionObserver', {
+        value: FakeObserver,
+        configurable: true,
+      });
+
+      const element = document.createElement('li');
+      const seen = jest.fn();
+      const stop = facade.observeIntersection(element, seen, {
+        threshold: 0.5,
+      });
+
+      expect(observed).toEqual([element]);
+      expect(held).toEqual({ threshold: 0.5 });
+
+      announce?.([{ isIntersecting: true } as IntersectionObserverEntry]);
+      expect(seen).toHaveBeenLastCalledWith(true);
+
+      announce?.([{ isIntersecting: false } as IntersectionObserverEntry]);
+      expect(seen).toHaveBeenLastCalledWith(false);
+
+      stop();
+      expect(disconnect).toHaveBeenCalledTimes(1);
+    });
+
     it('answers false for a media query jsdom cannot evaluate', () => {
       // jsdom ships no `matchMedia`. The bias is deliberate: a caller phrases the
       // query so that false is the answer it wants when nothing can answer.

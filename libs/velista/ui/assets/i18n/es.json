@@ -1073,7 +1073,8 @@
       "free": "Sin producto elegido",
       "busy": "Guardando",
       "takenBack_one": "1 devuelto",
-      "takenBack_other": "{{count}} devueltos"
+      "takenBack_other": "{{count}} devueltos",
+      "removed": "Ya no está en la lista"
     },
     "outstanding": {
       "label": "{{name}}, aún por conseguir",
@@ -1402,6 +1403,38 @@
     },
     "added": {
       "announced": "{{content}} añadido"
+    },
+    "mark": {
+      "added": "Nueva",
+      "changed": "Cambiada",
+      "addedLabel": "{{name}}, nueva en la lista",
+      "changedLabel": "{{name}}, ha cambiado"
+    },
+    "changes": {
+      "banner_one": "{{count}} cambio en tus listas",
+      "banner_other": "{{count}} cambios en tus listas",
+      "title": "Qué ha cambiado",
+      "loading": "Cargando los cambios",
+      "failed": "No se ha podido cargar",
+      "retry": "Reintentar",
+      "empty": "No ha cambiado nada en tus listas últimamente",
+      "more": "Ver más",
+      "loaded_one": "{{count}} cambio más cargado",
+      "loaded_other": "{{count}} cambios más cargados",
+      "close": "Cerrar",
+      "entry": {
+        "added": "Se ha añadido «{{name}}», con {{count}}",
+        "quantity": "«{{name}}» pide {{after}} en vez de {{before}}",
+        "notNeeded": "«{{name}}» ya no hace falta",
+        "renamed": "«{{before}}» ahora se llama «{{name}}»",
+        "merged": "«{{before}}» se ha unido a «{{name}}»",
+        "deleted": "Se ha quitado «{{name}}»",
+        "pendingAgain": "«{{name}}» vuelve a esperar aprobación",
+        "rejected": "«{{name}}» se ha rechazado",
+        "approved": "«{{name}}» se ha aprobado",
+        "unknown": "«{{name}}» ha cambiado",
+        "inList": "en {{list}}"
+      }
     }
   },
   "getList": {

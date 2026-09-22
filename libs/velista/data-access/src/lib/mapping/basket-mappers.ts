@@ -421,7 +421,9 @@ export function toBasketRowResult(raw: unknown): BasketRowResult | null {
  */
 function isEmptiedRow(raw: unknown): boolean {
   return (
-    isRecord(raw) && Array.isArray(raw['entries']) && raw['entries'].length === 0
+    isRecord(raw) &&
+    Array.isArray(raw['entries']) &&
+    raw['entries'].length === 0
   );
 }
 
@@ -661,6 +663,13 @@ export function toBasket(raw: unknown): Basket | null {
     pending: isRecord(raw['progress'])
       ? atLeastZero(raw['progress']['pending'])
       : 0,
+    // Zero when absent, which is a gateway without backend `0138` behind it
+    // and draws no banner (velista `0093`, section 2). Never negative: the
+    // banner's whole content is this number in a sentence.
+    unseenChangeCount: atLeastZero(raw['unseenChangeCount']),
+    // The id an acknowledgement sends as `through`, and null whenever there
+    // is nothing unseen. An id and never a time (velista `0093`, section 7).
+    newestUnseenChangeId: nullableStr(raw['newestUnseenChangeId']),
   };
 }
 

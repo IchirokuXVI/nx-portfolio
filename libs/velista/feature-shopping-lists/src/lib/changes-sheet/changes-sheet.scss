@@ -1,0 +1,82 @@
+@use '../basket-shared' as shared;
+
+.title {
+  margin: 0 0 var(--app-space-4);
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+// A real list, with a hairline between entries rather than a card each: the
+// entries are one run of facts and a stack of boxes would read as a stack of
+// things to do (velista 0093, section 6).
+.entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  > li + li {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+}
+
+.hint {
+  margin: var(--app-space-1) 0 var(--app-space-4);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
+}
+
+.failed {
+  margin: var(--app-space-2) 0 var(--app-space-3);
+  font-size: var(--app-text-sm);
+  color: var(--app-status-danger-fg);
+}
+
+.secondary {
+  @include shared.secondary-button;
+
+  margin-block-start: var(--app-space-3);
+}
+
+.quiet {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  margin-block-start: var(--app-space-3);
+  padding: var(--app-space-2);
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--app-text-secondary);
+  }
+}
+
+// Three entries at the entry's own height, so the sheet does not resize under
+// the reader's hand when the real ones land.
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.skeleton-entry {
+  block-size: var(--app-space-9);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-sunken);
+}
+
+.visually-hidden {
+  @include shared.visually-hidden;
+}

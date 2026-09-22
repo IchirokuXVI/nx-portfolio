@@ -2,14 +2,18 @@ import { Injectable } from '@angular/core';
 import {
   isOpenBasket,
   type Basket,
+  type BasketAddLineRequest,
+  type BasketChange,
+  type BasketChangeKind,
+  type BasketChangeMark,
+  type BasketChangePage,
+  type BasketDemandRequest,
   type BasketLinkPreview,
   type BasketListRef,
   type BasketParticipant,
   type BasketPriceScope,
   type BasketProduct,
   type BasketProgress,
-  type BasketAddLineRequest,
-  type BasketDemandRequest,
   type BasketRenameRequest,
   type BasketRenameResult,
   type BasketRevertRequest,
@@ -23,11 +27,13 @@ import {
   type BasketShareLink,
   type CatalogSuggestion,
   type ErrorCode,
+  type LineApprovalStatus,
   type LiveBasketSummary,
   type ProductOffer,
 } from '@portfolio/velista/models';
 import { CatalogMemory } from '../catalog/catalog-memory';
 import { GatewayError } from '../errors';
+import type { BasketChangeContext } from '../mapping/basket-change-mappers';
 import type { BasketServiceI } from './basket-service';
 
 /** The one link this fake knows. Anything else is dead, like most links are. */
@@ -330,6 +336,32 @@ interface StoredLine {
 }
 
 /**
+ * One change to a covered list, as backend `0138` records it.
+ *
+ * Keyed by the **line** and never by the basket, exactly as the server's table
+ * is: one write to a list serves every basket that covers it. What a basket
+ * contributes is the coverage the change is read through, which is why the read
+ * below resolves a line id into a row key and the record does not store one.
+ */
+interface StoredChange {
+  readonly id: string;
+  readonly kind: BasketChangeKind;
+  /** The line it is about. Resolved to a row key on every read. */
+  readonly lineId: string;
+  readonly contentBefore: string | null;
+  readonly contentAfter: string | null;
+  readonly quantityBefore: number | null;
+  readonly quantityAfter: number | null;
+  readonly approvalBefore: LineApprovalStatus | null;
+  readonly approvalAfter: LineApprovalStatus | null;
+  /** Served only where the reader holds `WRITE`, which {@link servesLists} decides. */
+  readonly listId: string | null;
+  /** A participant of this basket, or null for somebody this reader may not know. */
+  readonly actorParticipantId: string | null;
+  readonly at: Date;
+}
+
+/**
  * One standing act of this basket on one line.
  *
  * A settlement and not a number on the line, because that is what the server
@@ -492,6 +524,25 @@ export class BasketMemory implements BasketServiceI {
       deleted: false,
       skippedAt: null,
     },
+    {
+      // A line that left its list while somebody was shopping, which is the one
+      // way to get a `REMOVED` row (velista `0093`, section 4). Seeded rather
+      // than left to a write, because no write on this surface deletes a list
+      // line: it happens on the list page or on somebody else's phone, so the
+      // screen could otherwise ship having never drawn the row.
+      //
+      // It counts toward no number. `_progress` already excludes the state, and
+      // `countableBasketRows` is what keeps it out of the tools bar.
+      id: 'zl-6',
+      listId: 'list-weekly',
+      content: 'Olive oil',
+      quantity: 1,
+      optionIds: [],
+      approved: true,
+      demandEditable: true,
+      deleted: true,
+      skippedAt: null,
+    },
   ];
 
   /**
@@ -530,6 +581,104 @@ export class BasketMemory implements BasketServiceI {
     expiresAt: null,
     participantCount: 2,
   };
+
+  /**
+   * What changed on the covered lists, **newest first** (backend `0138`).
+   *
+   * Seeded rather than empty, for the reason the settlements above are: the
+   * marks, the banner and the changes sheet are otherwise unreachable without
+   * arranging an edit on another phone first, and a screen nobody can see is a
+   * screen that ships wrong.
+   *
+   * One of each kind the sentences of velista `0093` section 6 cover, so a
+   * developer scrolling the sheet reads every branch of the table.
+   */
+  private _changes: StoredChange[] = [
+    {
+      id: 'chg-5',
+      kind: 'ADDED',
+      lineId: 'zl-4',
+      contentBefore: null,
+      contentAfter: 'Sourdough loaf',
+      quantityBefore: null,
+      quantityAfter: 1,
+      approvalBefore: null,
+      approvalAfter: 'APPROVED',
+      listId: 'list-weekly',
+      actorParticipantId: REGISTERED.id,
+      at: new Date('2026-09-01T09:40:00.000Z'),
+    },
+    {
+      id: 'chg-4',
+      kind: 'QUANTITY_CHANGED',
+      lineId: 'zl-3',
+      contentBefore: 'Eggs',
+      contentAfter: 'Eggs',
+      quantityBefore: 6,
+      quantityAfter: 10,
+      approvalBefore: null,
+      approvalAfter: null,
+      listId: 'list-weekly',
+      actorParticipantId: OWNER.id,
+      at: new Date('2026-09-01T09:30:00.000Z'),
+    },
+    {
+      id: 'chg-3',
+      kind: 'DELETED',
+      lineId: 'zl-6',
+      contentBefore: 'Olive oil',
+      contentAfter: null,
+      quantityBefore: 1,
+      quantityAfter: null,
+      approvalBefore: null,
+      approvalAfter: null,
+      listId: 'list-weekly',
+      actorParticipantId: REGISTERED.id,
+      at: new Date('2026-09-01T09:20:00.000Z'),
+    },
+    {
+      // Somebody this reader cannot name, which is the case the sheet draws as
+      // "Someone": the actor is on no participant row of this basket.
+      id: 'chg-2',
+      kind: 'RENAMED',
+      lineId: 'zl-2',
+      contentBefore: 'Leche',
+      contentAfter: 'Milk',
+      quantityBefore: 1,
+      quantityAfter: 1,
+      approvalBefore: null,
+      approvalAfter: null,
+      listId: 'list-groceries',
+      actorParticipantId: null,
+      at: new Date('2026-09-01T09:10:00.000Z'),
+    },
+    {
+      id: 'chg-1',
+      kind: 'APPROVAL_CHANGED',
+      lineId: 'zl-2',
+      contentBefore: 'Leche',
+      contentAfter: 'Leche',
+      quantityBefore: 1,
+      quantityAfter: 1,
+      approvalBefore: 'APPROVED',
+      approvalAfter: 'PENDING',
+      listId: 'list-groceries',
+      actorParticipantId: GUEST.id,
+      at: new Date('2026-09-01T09:00:00.000Z'),
+    },
+  ];
+
+  /**
+   * The newest change this viewer has acknowledged, or null for none.
+   *
+   * A **cursor over the log** and not a time, which is the whole shape of the
+   * real thing: the acknowledgement names the newest change the client drew, so
+   * everything above it in the list stays unseen however long ago it happened.
+   *
+   * Public and mutable for {@link servesLists}'s reason, so a spec can put a
+   * viewer at any point in the log without replaying the acknowledgement.
+   */
+  seenThrough: string | null = null;
 
   private _participants: BasketParticipant[] = [OWNER, REGISTERED, GUEST];
 
@@ -618,6 +767,11 @@ export class BasketMemory implements BasketServiceI {
       ),
       progress: this._progress(rows),
       pending: this._pending(rows),
+      // The server's count and the server's id, both read off the log this
+      // fake keeps. Capped at 99 like the gateway's, where the cap means
+      // "this many or more".
+      unseenChangeCount: Math.min(this._unseen().length, 99),
+      newestUnseenChangeId: this._unseen()[0]?.id ?? null,
     };
   }
 
@@ -941,6 +1095,62 @@ export class BasketMemory implements BasketServiceI {
 
   // --- Presence and the socket ----------------------------------------------
 
+  /**
+   * What changed on the covered lists, newest first (velista `0093`).
+   *
+   * Resolved through the same {@link BasketChangeContext} the real client
+   * resolves through, so the fake cannot be kinder than the gateway: a name, a
+   * list and a merge survivor's text all come from the basket the caller holds,
+   * and a reader served no list refs is genuinely served no list here.
+   *
+   * One page of five, which is every change this fake knows, so `nextCursor` is
+   * always null. Paging is the server's arithmetic and there is nothing here to
+   * learn from a second page of a five row log.
+   */
+  async changes(
+    _basketId: string,
+    context: BasketChangeContext,
+    _cursor?: string
+  ): Promise<BasketChangePage> {
+    const unseen = new Set(this._unseen().map((change) => change.id));
+    // Once, and handed down: resolving a line id into a row key is a walk of
+    // the groups, and doing it per change would be that walk five times.
+    const rows = this._rows();
+
+    return {
+      items: this._changes.map((change) =>
+        this._toChange(change, context, unseen, rows)
+      ),
+      nextCursor: null,
+    };
+  }
+
+  /**
+   * Move this viewer's cursor to the change they drew (velista `0093`).
+   *
+   * **Forward only.** A `through` at or before the cursor writes nothing, which
+   * is why the route is a `POST` rather than a `PUT`: it moves a cursor rather
+   * than stating where one is, and a cursor that could move backwards would
+   * make a slow request un-see what a fast one had seen.
+   */
+  async acknowledgeChanges(_basketId: string, through: string): Promise<void> {
+    const asked = this._changes.findIndex((change) => change.id === through);
+    if (asked === -1) {
+      // A change this log does not know. Nothing to move to, and nothing to
+      // refuse over: the cursor stays where it is.
+      return;
+    }
+
+    const held = this._changes.findIndex(
+      (change) => change.id === this.seenThrough
+    );
+    // Newest first, so a **lower** index is newer. A cursor already at or past
+    // the change asked for does not move.
+    if (held === -1 || asked < held) {
+      this.seenThrough = through;
+    }
+  }
+
   async listParticipants(): Promise<readonly BasketParticipant[]> {
     return this._participants.map((person) =>
       this.servesLists ? person : this._withoutDevice(person)
@@ -1089,9 +1299,11 @@ export class BasketMemory implements BasketServiceI {
         // Inside the window the state says it and there is no note; outside it
         // the row is ordinary again and the note is the only trace.
         note: this._note(lines, bought),
-        noteAt: this._note(lines, bought) === null ? null : this._skippedAt(lines),
-        // Backend `0138`'s, and null until it lands, which is what the real
-        // server answers today too.
+        noteAt:
+          this._note(lines, bought) === null ? null : this._skippedAt(lines),
+        // Filled below, once every row exists: a mark is decided by the
+        // unseen changes that resolve to this row, and resolving one needs
+        // the row it names to have been built.
         mark: null,
         awaitingApproval: entries.some((entry) => entry.awaitingApproval),
         // First seen order, anchor first, which is what the server promises and
@@ -1103,7 +1315,111 @@ export class BasketMemory implements BasketServiceI {
       });
     }
 
-    return rows;
+    return this._marked(rows);
+  }
+
+  /**
+   * Put this viewer's marks on the rows the unseen changes touched.
+   *
+   * A second pass rather than a field written while the rows are built, because
+   * a change names a **line** and a row is a group: the row a line is in is not
+   * known until every group exists.
+   *
+   * Three rules, in this order. A row whose lines all left the coverage is
+   * `REMOVED`, whatever the change said, because that is what the reader has to
+   * be told about it. Otherwise an `ADDED` change makes an `ADDED` row, and
+   * everything else makes a `CHANGED` one. A row with no unseen change keeps its
+   * null and draws no tag.
+   */
+  private _marked(rows: readonly BasketRow[]): readonly BasketRow[] {
+    const marks = new Map<string, BasketChangeMark>();
+    for (const change of this._unseen()) {
+      const key = this._rowKeyOf(change.lineId, rows);
+      if (key === null || marks.has(key)) {
+        continue;
+      }
+      const row = rows.find((candidate) => candidate.rowKey === key);
+      marks.set(
+        key,
+        row?.state === 'REMOVED'
+          ? 'REMOVED'
+          : change.kind === 'ADDED'
+            ? 'ADDED'
+            : 'CHANGED'
+      );
+    }
+
+    return rows.map((row) => {
+      const mark = marks.get(row.rowKey) ?? null;
+      return mark === row.mark ? row : { ...row, mark };
+    });
+  }
+
+  /** The row one line ended up in, by the anchor rule, or null when it is gone. */
+  private _rowKeyOf(lineId: string, rows: readonly BasketRow[]): string | null {
+    const line = this._lines.find((held) => held.id === lineId);
+    if (line === undefined) {
+      return null;
+    }
+
+    const key = normalizeContent(line.content);
+    const row = rows.find(
+      (candidate) => normalizeContent(candidate.content) === key
+    );
+    return row?.rowKey ?? null;
+  }
+
+  /**
+   * The changes this viewer has not acknowledged, newest first.
+   *
+   * Everything above the cursor in the log. A cursor naming a change the log
+   * does not hold counts everything as unseen, which is the safe direction: a
+   * mark too many costs a tag, and a mark too few loses the one thing the
+   * reader opened the screen to find out.
+   */
+  private _unseen(): readonly StoredChange[] {
+    const held = this._changes.findIndex(
+      (change) => change.id === this.seenThrough
+    );
+    return held === -1 ? this._changes : this._changes.slice(0, held);
+  }
+
+  /** One stored change, resolved against the basket the caller holds. */
+  private _toChange(
+    change: StoredChange,
+    context: BasketChangeContext,
+    unseen: ReadonlySet<string>,
+    rows: readonly BasketRow[]
+  ): BasketChange {
+    const rowKey = this._rowKeyOf(change.lineId, rows);
+    // Redacted here rather than by the caller, exactly as the gateway redacts
+    // it: a reader served no refs is served no list id at all, so there is
+    // nothing for the sheet to resolve and nothing for it to leak.
+    const listId = this.servesLists ? change.listId : null;
+
+    return {
+      id: change.id,
+      kind: change.kind,
+      rowKey,
+      contentBefore: change.contentBefore,
+      contentAfter: change.contentAfter,
+      quantityBefore: change.quantityBefore,
+      quantityAfter: change.quantityAfter,
+      approvalBefore: change.approvalBefore,
+      approvalAfter: change.approvalAfter,
+      rowContent: rowKey === null ? null : context.contentFor(rowKey),
+      actor:
+        change.actorParticipantId === null
+          ? null
+          : {
+              participantId: change.actorParticipantId,
+              userId: null,
+              name: context.nameFor(change.actorParticipantId, null),
+            },
+      list: listId === null ? null : context.listFor(listId),
+      at: change.at,
+      unseen: unseen.has(change.id),
+    };
   }
 
   /** One entry, with the numbers read off the line and the settlements. */
@@ -1186,9 +1502,7 @@ export class BasketMemory implements BasketServiceI {
    */
   private _skipStands(lines: readonly StoredLine[]): boolean {
     const at = this._skippedAt(lines);
-    return (
-      at !== null && this.now().getTime() - at.getTime() < SKIP_WINDOW_MS
-    );
+    return at !== null && this.now().getTime() - at.getTime() < SKIP_WINDOW_MS;
   }
 
   /** The newest skip across these lines, or null if none was skipped. */
