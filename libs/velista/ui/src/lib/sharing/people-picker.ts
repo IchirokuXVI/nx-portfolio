@@ -62,7 +62,14 @@ export class PeoplePicker {
   /** The user ids whose change is still being saved. */
   readonly busy = input<ReadonlySet<string>>(new Set());
 
-  /** A hint under a person's name, as a translation key per user id. */
+  /**
+   * A line under a person's name, **already translated**, per user id.
+   *
+   * A finished sentence rather than a key since velista `0094`: the one hint
+   * this picker draws says when somebody's visit ends, so it interpolates a
+   * time the container formats. A key would have forced the time in here, where
+   * there is no locale and no reason to know what a visit is.
+   */
   readonly hints = input<ReadonlyMap<string, string>>(new Map());
 
   /** Whether every box is read only, while the container submits. */

@@ -1,3 +1,5 @@
+> **PR:** [#443](https://github.com/IchirokuXVI/nx-portfolio/pull/443)
+
 # 0094: a link for twelve hours
 
 > Backend half: `apps/luna-shopper-backend/plans/0140`, which must be on `dev` first, as

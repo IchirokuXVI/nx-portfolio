@@ -16,6 +16,7 @@ export * from './lib/auth/resend-sentence';
 export * from './lib/auth/success-note';
 export * from './lib/basket/change-entry';
 export * from './lib/basket/changes-banner';
+export * from './lib/basket/visit-notice';
 export * from './lib/brand/app-version';
 export * from './lib/brand/brand-mark';
 export * from './lib/brand/brand-wordmark';

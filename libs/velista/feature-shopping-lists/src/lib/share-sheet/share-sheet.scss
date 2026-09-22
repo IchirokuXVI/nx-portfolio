@@ -77,6 +77,47 @@
   color: var(--app-text-muted);
 }
 
+// When the link stops working, directly under the address it is about.
+//
+// The same weight as `.joined` above it, because the two are one block of facts
+// about this link rather than a fact and a warning. **Not the danger colour**: a
+// link that ends in twelve hours is what every link does, and colouring the
+// ordinary case as a fault leaves nothing to say when something is actually
+// wrong.
+.works-until {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// While the basket has not answered. Quiet, and it says what it is doing rather
+// than what it found, because it has not found anything yet.
+.checking {
+  margin: var(--app-space-4) 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// The sentence over "Make a link" and "Make a new link": there is no link, or
+// the last one has ended.
+//
+// Body weight rather than the muted footnote `.note` wears. It is the thing the
+// owner opened the sheet to find out, and the button under it is the answer.
+.none {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+// The one control that makes a link. `primary-button` because it is the reason
+// this pane exists when there is nothing to copy, and the only other control on
+// the pane is Close.
+.make {
+  @include shared.primary-button;
+}
+
 .note {
   margin: var(--app-space-4) 0;
   font-size: var(--app-text-xs);
@@ -232,6 +273,19 @@
   font-size: var(--app-text-base);
   font-weight: 600;
   color: var(--app-text-primary);
+}
+
+// The picker's one constant footnote: removing somebody is for good.
+//
+// Said once under the whole list rather than per row, which is what it replaced:
+// `share.people.linkJoined` hung this warning on link joiners alone, and it was
+// always true of everybody here.
+.people-note {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-wrap: pretty;
 }
 
 .people-error {

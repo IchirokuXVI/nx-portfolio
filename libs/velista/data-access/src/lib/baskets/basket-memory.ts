@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import {
   isOpenBasket,
+  LINK_VISIT_HOURS,
   type Basket,
   type BasketAddLineRequest,
   type BasketChange,
@@ -266,6 +267,22 @@ const UNSERVED_LIST_ID = 'list-office';
  */
 const SKIP_WINDOW_MS = 12 * 60 * 60 * 1000;
 
+/**
+ * How long a link accepts joins, and how long a visit it let in lasts (backend
+ * `0140`).
+ *
+ * By the **server's** clock, like {@link SKIP_WINDOW_MS}, which is why this
+ * class holds the number and multiplies it out rather than a screen doing so.
+ * The same count of hours as {@link LINK_VISIT_HOURS}, expressed in the units
+ * this file works in.
+ */
+const LINK_VISIT_MS = LINK_VISIT_HOURS * 60 * 60 * 1000;
+
+/** A moment {@link LINK_VISIT_MS} after another, which is every expiry here. */
+function visitEnd(from: Date): Date {
+  return new Date(from.getTime() + LINK_VISIT_MS);
+}
+
 const OWNER: BasketParticipant = {
   id: 'p-owner',
   kind: 'OWNER',
@@ -276,6 +293,9 @@ const OWNER: BasketParticipant = {
   joinedAt: new Date('2026-09-01T08:00:00.000Z'),
   lastSeenAt: new Date('2026-09-01T10:30:00.000Z'),
   shareLinkId: null,
+  // The owner's visit never ends: they arrived by owning the basket rather than
+  // by a link (backend `0140`, section 4).
+  expiresAt: null,
 };
 
 const REGISTERED: BasketParticipant = {
@@ -288,6 +308,11 @@ const REGISTERED: BasketParticipant = {
   joinedAt: new Date('2026-09-01T10:05:00.000Z'),
   lastSeenAt: new Date('2026-09-01T10:31:00.000Z'),
   shareLinkId: 'link-1',
+  // A signed in person a link let in, so their time runs out like a guest's.
+  // Seeded rather than null on purpose: this is the row the owner is offered
+  // "Keep on this list" over, and a fake with no visitor in it would ship a
+  // control nobody had seen drawn.
+  expiresAt: visitEnd(new Date('2026-09-01T10:05:00.000Z')),
 };
 
 const GUEST: BasketParticipant = {
@@ -301,6 +326,7 @@ const GUEST: BasketParticipant = {
   joinedAt: new Date('2026-09-01T10:41:00.000Z'),
   lastSeenAt: new Date('2026-09-01T10:42:00.000Z'),
   shareLinkId: 'link-1',
+  expiresAt: visitEnd(new Date('2026-09-01T10:41:00.000Z')),
 };
 
 /**
@@ -578,7 +604,11 @@ export class BasketMemory implements BasketServiceI {
     id: 'link-1',
     secret: LIVE_SECRET,
     createdAt: new Date('2026-09-01T09:00:00.000Z'),
-    expiresAt: null,
+    // Seeded **live** rather than at the fixed date above plus twelve hours,
+    // which is long past. The share sheet has three link states and the ended
+    // one is reached by pressing Revoke and then Make a new link; a seed that
+    // opened on the ended state would hide the one this sheet is mostly about.
+    expiresAt: visitEnd(new Date()),
     participantCount: 2,
   };
 
@@ -725,6 +755,10 @@ export class BasketMemory implements BasketServiceI {
       joinedAt: new Date(),
       lastSeenAt: new Date(),
       shareLinkId: this._link.id,
+      // Twelve hours from **their own** join and not from the link's making
+      // (backend `0140`, section 4): the last person through a link that is
+      // nearly over still gets a whole visit.
+      expiresAt: visitEnd(new Date()),
     };
     this._participants = [...this._participants, joined];
 
@@ -1169,12 +1203,24 @@ export class BasketMemory implements BasketServiceI {
 
   // --- The owner's share sheet ----------------------------------------------
 
+  /**
+   * Hand back the working link, or mint one (backend `0140`, section 4).
+   *
+   * A link whose time is up is replaced rather than returned, which is what
+   * makes "Make a new link" one press on the sheet: the client never revokes
+   * first, so an ended link has to be swept aside here.
+   */
   async ensureShareLink(): Promise<BasketShareLink> {
-    this._link ??= {
+    const now = new Date();
+    if (this._link !== null && this._link.expiresAt > now) {
+      return this._link;
+    }
+
+    this._link = {
       id: 'link-1',
       secret: LIVE_SECRET,
-      createdAt: new Date(),
-      expiresAt: null,
+      createdAt: now,
+      expiresAt: visitEnd(now),
       participantCount: 0,
     };
     return this._link;
@@ -1213,13 +1259,30 @@ export class BasketMemory implements BasketServiceI {
     );
   }
 
+  /**
+   * Put somebody on the basket by name, or **keep** somebody a link let in
+   * (backend `0140`, section 6).
+   *
+   * The promotion is the second half and is the same call: a row that is
+   * already here keeps its id, loses its link and loses its expiry, which is
+   * what makes the person's past attributions survive being kept. A row that is
+   * already a named person is left exactly as it is.
+   */
   async addParticipant(
     _basketId: string,
     userId: string
   ): Promise<BasketParticipant> {
     const held = this._participants.find((person) => person.userId === userId);
     if (held !== undefined) {
-      return held;
+      const kept: BasketParticipant = {
+        ...held,
+        shareLinkId: null,
+        expiresAt: null,
+      };
+      this._participants = this._participants.map((person) =>
+        person.id === held.id ? kept : person
+      );
+      return kept;
     }
 
     const added: BasketParticipant = {
@@ -1232,6 +1295,7 @@ export class BasketMemory implements BasketServiceI {
       joinedAt: new Date(),
       lastSeenAt: null,
       shareLinkId: null,
+      expiresAt: null,
     };
     this._participants = [...this._participants, added];
     return added;

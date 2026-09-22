@@ -1062,8 +1062,23 @@
     "notLive": "No se está actualizando ahora",
     "revoked": {
       "title": "Ya no estás en esta lista",
-      "body": "Quien la compartió ha retirado el acceso. Si aún tienes el enlace, puedes volver a unirte.",
-      "rejoin": "Usar el enlace otra vez"
+      "body": "Quien la compartió la ha retirado."
+    },
+    "ended": {
+      "title": "Tu tiempo en esta lista ha acabado",
+      "bodyAccount": "Un enlace dura 12 horas. Pide a {{name}} uno nuevo, o que te añada para quedarte.",
+      "bodyAccountNameless": "Un enlace dura 12 horas. Pide uno nuevo, o que te añadan para quedarte.",
+      "bodyGuest": "Un enlace dura 12 horas. Pide uno nuevo a quien te lo envió."
+    },
+    "visit": {
+      "account": "Estás en esta lista hasta las {{time}}. Pide a {{name}} que te añada para quedarte.",
+      "accountNameless": "Estás en esta lista hasta las {{time}}. Pide a quien la compartió que te añada para quedarte.",
+      "guest": "Estás en esta lista hasta las {{time}}.",
+      "ending": "Tu tiempo en esta lista acaba a las {{time}}.",
+      "dismiss": "Entendido"
+    },
+    "time": {
+      "dayAndTime": "{{day}}, {{time}}"
     },
     "line": {
       "open": "Registrar {{name}}",
@@ -1225,7 +1240,12 @@
       "close": "Cerrar",
       "joinedUnknown": "No consta",
       "leave": "Salir de esta lista",
-      "leaveQuestion": "¿Salir de «{{name}}»? Puedes volver con el enlace si lo tienes.",
+      "leaveNamed": "¿Salir de «{{name}}»? Solo quien la creó puede volver a añadirte.",
+      "leaveVisitor": "¿Salir de «{{name}}»? Puedes volver mientras su enlace funcione.",
+      "until": "con el enlace, hasta las {{time}}",
+      "keep": "Mantener en esta lista",
+      "keepFailed": "No se ha podido. Inténtalo de nuevo.",
+      "guestCannotStay": "Un invitado está hasta la hora de arriba. Para quedarse hay que añadirlo desde tus grupos.",
       "leaveConfirm": "Salir",
       "stay": "Quedarme",
       "leaveFailed": "No se pudo completar. Inténtalo de nuevo.",
@@ -1241,16 +1261,23 @@
       "joinedWith_one": "{{count}} persona se ha unido con él",
       "joinedWith_other": "{{count}} personas se han unido con él",
       "made": "creado el {{date}}",
-      "note": "Este es el único enlace de la lista. Cópialo cuando quieras, para tanta gente como quieras. Deja de funcionar cuando la lista termina o cuando lo revocas.",
+      "note": "Quien lo abra puede comprar esta lista durante 12 horas. Añade a gente de tus grupos para que se quede.",
+      "bodyLive": "Quien tenga el enlace puede comprar todo lo de tus listas, sin cuenta. Ve las líneas, nunca tus grupos.",
+      "none": "Esta lista no tiene enlace ahora mismo.",
+      "ended": "El último enlace ha caducado. Los enlaces duran 12 horas.",
+      "make": "Crear un enlace",
+      "makeNew": "Crear un enlace nuevo",
+      "worksUntil": "Funciona hasta las {{time}}",
+      "worksUntilDay": "Funciona hasta {{day}}, {{time}}",
+      "checking": "Comprobando el enlace",
       "revoke": "Revocar el enlace",
-      "close": "Cerrar",
-      "minting": "Creando un enlace"
+      "close": "Cerrar"
     },
     "revoke": {
       "title": "¿Revocar el enlace?",
-      "body_one": "Nadie nuevo podrá unirse, y la lista se quedará sin enlace hasta que la vuelvas a compartir. La {{count}} persona que ya está comprando sigue igual.",
-      "body_other": "Nadie nuevo podrá unirse, y la lista se quedará sin enlace hasta que la vuelvas a compartir. Las {{count}} personas que ya están comprando siguen igual.",
-      "bodyNone": "Nadie nuevo podrá unirse, y la lista se quedará sin enlace hasta que la vuelvas a compartir.",
+      "body_one": "Nadie más podrá entrar. La {{count}} persona que ya está comprando sigue hasta que acabe su tiempo.",
+      "body_other": "Nadie más podrá entrar. Las {{count}} personas que ya están comprando siguen hasta que acabe su tiempo.",
+      "bodyNone": "Nadie más podrá entrar.",
       "cascade_one": "Quitar también al {{count}} invitado que se unió con él",
       "cascade_other": "Quitar también a los {{count}} invitados que se unieron con él",
       "cascadeHint": "Pierden la lista en su siguiente acción. Marca esto solo si el enlace ha llegado a quien no debía.",
@@ -1279,6 +1306,7 @@
       "people_other": "{{count}} personas están en ella",
       "nameLabel": "Tu nombre",
       "optional": "Opcional",
+      "forHours": "Puedes comprar esta lista durante {{hours}} horas.",
       "nameHint": "Para que sepan quién ha cogido el pan",
       "continue": "Continuar como invitado",
       "or": "o, si usas Velista",
@@ -1503,7 +1531,8 @@
     "people": {
       "title": "Personas",
       "none": "Aún no hay nadie más en tus grupos.",
-      "linkJoined": "Entró con el enlace. Si lo quitas, el enlace deja de servirle.",
+      "visiting": "Aquí con el enlace hasta las {{time}}",
+      "removeNote": "Quien quites no podrá volver con un enlace.",
       "failed": "No se ha guardado. Inténtalo de nuevo."
     }
   }

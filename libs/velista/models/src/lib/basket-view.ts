@@ -96,6 +96,182 @@ export interface BasketParticipant {
    * rule (plan 0051, section 5.2). Guests do not get to inspect each other.
    */
   device?: string | null;
+  /**
+   * When this person's visit ends, and null when it does not (backend `0140`,
+   * section 8).
+   *
+   * Null for the owner and for a person the owner added by name. Set, to
+   * {@link LINK_VISIT_HOURS} after their own join, for everybody a link let in,
+   * guest or signed in alike.
+   *
+   * **A moment to display and never a decision.** Whether it has passed is the
+   * server's answer, read by asking again, so every comparison of this with the
+   * device clock chooses a sentence and none of them grants or refuses anything.
+   * Read it through {@link isNamedPerson} and {@link isLinkVisitor} rather than
+   * by hand, so the two words this whole series is written in have one
+   * definition.
+   */
+  expiresAt: Date | null;
+}
+
+/**
+ * How long a link accepts joins, and how long a visit it let in lasts (backend
+ * `0130`, section 11, decision 6).
+ *
+ * A constant rather than a `12` inside a sentence, so the day the number moves
+ * it moves in one place per side. The join page's offer screen is the one
+ * screen that says it before there is a participant to read an `expiresAt`
+ * from.
+ */
+export const LINK_VISIT_HOURS = 12;
+
+/**
+ * How long before a visit ends the basket stops being quiet about it (velista
+ * `0094`, section 5).
+ */
+export const VISIT_WARNING_MINUTES = 30;
+
+/**
+ * Somebody the owner put on this basket **by name**, who stays until they are
+ * removed (backend `0130`, section 3).
+ *
+ * The owner is not one. They arrived by owning the basket, and no screen offers
+ * to keep them on it.
+ */
+export function isNamedPerson(participant: BasketParticipant): boolean {
+  return participant.expiresAt === null && participant.kind !== 'OWNER';
+}
+
+/**
+ * Somebody a link let in, whose time on this basket runs out.
+ *
+ * One field tells the two apart, which is why both words are derived here
+ * rather than by each screen: a guest and a signed in visitor are the same case
+ * to every sentence in velista `0094`, and the owner is neither.
+ *
+ * A **type predicate**, so the screens that go on to print the moment get it
+ * narrowed rather than asserting it back. Every caller wants the date
+ * immediately after asking the question, and a cast there would be the same
+ * rule written twice, once in a place nothing checks.
+ */
+export function isLinkVisitor(
+  participant: BasketParticipant
+): participant is BasketParticipant & { expiresAt: Date } {
+  return participant.expiresAt !== null && participant.kind !== 'OWNER';
+}
+
+/**
+ * Why this reader is no longer on a basket (velista `0094`, section 2).
+ *
+ * `REMOVED` is somebody taking the basket back, `EXPIRED` is a visit running
+ * out, and `UNKNOWN` is a refusal that named neither. `UNKNOWN` draws what
+ * `REMOVED` draws, because the ordinary sentence is the safer one to be wrong
+ * with: the eviction event carries no reason at all, so a socket that was swept
+ * always lands here and must not claim a cause it was not told.
+ */
+export const BASKET_ACCESS_ENDED_REASONS = [
+  'REMOVED',
+  'EXPIRED',
+  'UNKNOWN',
+] as const;
+
+export type BasketAccessEnded = (typeof BASKET_ACCESS_ENDED_REASONS)[number];
+
+export const BASKET_ACCESS_ENDED_FALLBACK: BasketAccessEnded = 'UNKNOWN';
+
+/**
+ * A moment velista `0094` prints: a clock time, and the day when that time is
+ * not today's.
+ *
+ * Two fields rather than one string because the sentences around them differ.
+ * The share sheet has a key per shape ("Works until 18:40" against "Works until
+ * tomorrow, 07:15") and the notices have one key that interpolates whichever
+ * applies, so the join belongs to the caller and the formatting belongs here.
+ */
+export interface VisitMoment {
+  /** "18:40", in the reader's language. */
+  readonly time: string;
+  /** "tomorrow", or "3 September". Null when the moment is today. */
+  readonly day: string | null;
+}
+
+/**
+ * When something ends, written the way section 9 asks for it.
+ *
+ * The day is included whenever it is not today's, so "07:15" is never ambiguous
+ * to somebody who cannot glance at a clock. Tomorrow is named rather than
+ * dated, through `Intl.RelativeTimeFormat` with `numeric: 'auto'`, which is the
+ * one form of it a language writes as a word; anything further out takes the
+ * date, because "in 2 days" is harder to act on than "5 September".
+ *
+ * **`Intl` and never `DatePipe`**, for `formatGeneratedDate`'s reason: the pipe
+ * needs `registerLocaleData` and a `LOCALE_ID` this app never sets, because its
+ * language is runtime state rather than the shell's build time locale.
+ *
+ * Comparing this with the device's clock decides a sentence and nothing else.
+ * Whether the visit or the link has actually ended is the server's answer.
+ *
+ * @param now Passed in rather than read from the clock, so "tomorrow" is
+ *   testable without waiting for midnight.
+ */
+export function formatVisitMoment(
+  at: Date,
+  locale: string,
+  now: Date = new Date()
+): VisitMoment {
+  const time = formatOrIso(at, () =>
+    new Intl.DateTimeFormat(locale, { timeStyle: 'short' }).format(at)
+  );
+
+  const days = calendarDaysBetween(now, at);
+  if (days === 0) {
+    return { time, day: null };
+  }
+
+  const day =
+    days === 1
+      ? formatOrIso(at, () =>
+          new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(
+            1,
+            'day'
+          )
+        )
+      : formatOrIso(at, () =>
+          new Intl.DateTimeFormat(locale, {
+            day: 'numeric',
+            month: 'long',
+          }).format(at)
+        );
+
+  return { time, day };
+}
+
+/**
+ * Whole calendar days from one moment to another, in the device's own zone.
+ *
+ * By the calendar and not by elapsed hours, which is `isSameDay`'s reason: a
+ * visit ending at one in the morning ends tomorrow even though it is four hours
+ * away, and one ending at eleven tonight ends today even though it is eleven.
+ */
+function calendarDaysBetween(from: Date, to: Date): number {
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000);
+}
+
+/**
+ * Format, or fall back to something ugly and true.
+ *
+ * `Intl` throws a `RangeError` on a tag it does not recognise, and this feeds a
+ * notice drawn over a working screen: a throw here would take the screen with
+ * it over a language tag.
+ */
+function formatOrIso(at: Date, format: () => string): string {
+  try {
+    return format();
+  } catch {
+    return at.toISOString();
+  }
 }
 
 /**
@@ -552,7 +728,16 @@ export interface BasketShareLink {
   /** The invitation itself, served on every read so it can be copied tomorrow. */
   secret: string;
   createdAt: Date | null;
-  expiresAt: Date | null;
+  /**
+   * When the link stops accepting people: {@link LINK_VISIT_HOURS} after
+   * {@link createdAt} (backend `0140`, section 4).
+   *
+   * **Required**, unlike every other moment on this type, because the server no
+   * longer mints a link without one. A link carrying no date is malformed
+   * rather than open ended, and the mapper refuses it, so the share sheet can
+   * never draw a URL whose end it cannot say.
+   */
+  expiresAt: Date;
   /** How many people arrived through it, so the sheet can say so. */
   participantCount: number;
 }

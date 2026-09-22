@@ -17,6 +17,7 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  LINK_VISIT_HOURS,
   type BasketLinkPreview,
 } from '@portfolio/velista/models';
 import { appPath, InstallStore } from '@portfolio/velista/platform';
@@ -99,6 +100,15 @@ export class JoinPage {
 
   /** Whether an install can be offered at all, which most browsers answer no to. */
   protected readonly canInstall = this._install.canPrompt;
+
+  /**
+   * How long the link buys whoever opens it (velista `0094`, section 4).
+   *
+   * From the constant rather than written into the sentence, so the day the
+   * number changes it changes in one place. A plain field: it is a fact about
+   * the product and never moves while this page is open.
+   */
+  protected readonly visitHours = LINK_VISIT_HOURS;
 
   /**
    * The head count, only when the link is live.

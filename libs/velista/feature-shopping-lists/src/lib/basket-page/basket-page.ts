@@ -26,9 +26,13 @@ import {
 import {
   APP_BASE_PATH,
   countableBasketRows,
+  isLinkVisitor,
+  LINK_VISIT_HOURS,
   selectBasketSurface,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
+  VISIT_WARNING_MINUTES,
+  type BasketParticipant,
   type BasketProgressSentence,
   type BasketRow as BasketRowModel,
   type BasketViewRow,
@@ -37,8 +41,10 @@ import {
 } from '@portfolio/velista/models';
 import {
   appPath,
+  BrowserFacade,
   PageNavigation,
   sheetSegments,
+  visitNoticeKey,
 } from '@portfolio/velista/platform';
 import {
   ChangesBanner,
@@ -50,14 +56,30 @@ import {
   OfflineIcon,
   PersonIcon,
   ShareIcon,
+  VisitNotice,
   type ChipRowItem,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
-import { outstandingCaption, participantInitials } from '../basket-labels';
+import {
+  outstandingCaption,
+  participantInitials,
+  visitTime,
+} from '../basket-labels';
 import { BASKET_PATHS } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
 import { ChangeAcknowledger } from './change-acknowledger';
 import { SeenTarget } from './seen-target';
+
+/**
+ * The longest wait `setTimeout` can actually hold.
+ *
+ * The delay is a signed 32 bit integer, so anything past about twenty five days
+ * overflows and the callback runs **immediately** instead of never. That is the
+ * failure worth guarding: an expiry further off than this is not a visit at all,
+ * and a timer that fired at once would draw "your time is ending" over a basket
+ * with weeks left on it.
+ */
+const MAX_TIMEOUT_MS = 2_147_483_647;
 
 /**
  * The basket: a list of lines with quantities, which whoever is holding the
@@ -129,6 +151,7 @@ import { SeenTarget } from './seen-target';
     RokuTranslatorPipe,
     RouterOutlet,
     ShareIcon,
+    VisitNotice,
   ],
   templateUrl: './basket-page.html',
   styleUrl: './basket-page.scss',
@@ -183,6 +206,8 @@ export class BasketPage {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+  /** For the one thing this page remembers per device: a dismissed notice. */
+  private readonly _browser = inject(BrowserFacade);
 
   /**
    * Whether this is the standalone build, where the document scrolls and not `.page`.
@@ -475,6 +500,225 @@ export class BasketPage {
   /** Whether this participant has been removed while the phone was in their hand. */
   protected readonly revoked = this._store.revoked;
 
+  // --- The visit, while it runs and after it ends (velista `0094`) -----------
+
+  /**
+   * Whether this reader is on the basket with the link, and until when.
+   *
+   * Null for the owner and for anybody the owner added by name, which is most
+   * readers on most screens: nothing below is drawn for them at all.
+   */
+  private readonly _visit = computed<Date | null>(() => {
+    const me = this._store.me();
+    return me !== null && isLinkVisitor(me) ? me.expiresAt : null;
+  });
+
+  /**
+   * Whether the arrival notice has been dismissed on this device, for this
+   * basket.
+   *
+   * A signal mirroring `sessionStorage` rather than reading it in the computed,
+   * because a read there would not re-run when the value is written. It is a
+   * **convenience and never a rule**: storage that is blocked, cleared or
+   * simply empty means the notice is drawn again, which costs a sentence
+   * somebody has already read.
+   */
+  private readonly _visitDismissed = signal(false);
+
+  /**
+   * Whether the end is near enough to insist on (section 5).
+   *
+   * A signal rather than a computed over the clock, because there is no signal
+   * for "time passed": a computed reading `Date.now()` is recomputed only when
+   * something else it reads moves, so a basket nobody touches would cross the
+   * threshold silently. {@link _armWarning} is what moves it.
+   */
+  private readonly _visitEnding = signal(false);
+
+  /**
+   * The timer that moves {@link _visitEnding}, held so it can be cleared.
+   *
+   * **Owned by this component**, which is the whole reason it lives here rather
+   * than in the store: a route provider's `DestroyRef` never fires in this app,
+   * and a timer set in one would outlive the screen it belongs to. A component
+   * is destroyed for certain.
+   */
+  private _warningAt: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * The owner's name, for the half of the sentence that says whom to ask.
+   *
+   * Null when the basket carries no name for them, which is a basket generated
+   * before luna `0054` backfilled usernames. The nameless form of each sentence
+   * exists for exactly that, rather than printing "Ask Owner".
+   */
+  private readonly _ownerName = computed<string | null>(() => {
+    const owner = this._store
+      .participants()
+      .find((person: BasketParticipant) => person.kind === 'OWNER');
+    const name = owner?.username?.trim() || owner?.displayName?.trim();
+    return name === undefined || name === '' ? null : name;
+  });
+
+  /**
+   * The notice under the header while a visit is running, or null.
+   *
+   * Four sentences and one component. An account holder is told whom to ask,
+   * because being added by name is what would keep them; a guest is told the
+   * time and nothing else, because keeping it takes an account and **rule C2 is
+   * that a guest is never shown register**. The warning is the same sentence
+   * one shape on, and it carries no dismiss label, which is what makes it
+   * insistent.
+   */
+  protected readonly visitNotice = computed<{
+    readonly text: string;
+    readonly dismissLabel: string | null;
+  } | null>(() => {
+    const endsAt = this._visit();
+    if (endsAt === null) {
+      return null;
+    }
+
+    const ending = this._visitEnding();
+    if (!ending && this._visitDismissed()) {
+      return null;
+    }
+
+    const locale = this._locale();
+    const time = visitTime(endsAt, this._translator, locale);
+    const name = this._ownerName();
+    const guest = this._store.me()?.kind === 'GUEST';
+
+    const key = ending
+      ? 'basket.visit.ending'
+      : guest
+        ? 'basket.visit.guest'
+        : name === null
+          ? 'basket.visit.accountNameless'
+          : 'basket.visit.account';
+
+    return {
+      text: this._translator.t(key, undefined, locale, {
+        time,
+        ...(name === null ? {} : { name }),
+      }),
+      // The warning cannot be dismissed. It is the last thing said before
+      // somebody loses the basket they are shopping from.
+      dismissLabel: ending
+        ? null
+        : this._translator.t('basket.visit.dismiss', undefined, locale),
+    };
+  });
+
+  /**
+   * Which sentence the ended state says (section 5).
+   *
+   * `REMOVED` and `UNKNOWN` share one, which is the reason `UNKNOWN` exists: a
+   * refusal that named no cause draws the ordinary one rather than claiming a
+   * visit ran out. `EXPIRED` splits again on whether the reader has an account,
+   * because only an account can be added by name, and offering that to a guest
+   * would be rule C2's invitation by another route.
+   */
+  protected readonly endedNotice = computed<{
+    readonly titleKey: string;
+    readonly bodyKey: string;
+    readonly args: Readonly<Record<string, string | undefined>>;
+  }>(() => {
+    const removed = {
+      titleKey: 'basket.revoked.title',
+      bodyKey: 'basket.revoked.body',
+      args: {},
+    };
+
+    if (this._store.accessEnded() !== 'EXPIRED') {
+      return removed;
+    }
+
+    if (this._store.me()?.kind === 'GUEST') {
+      return {
+        titleKey: 'basket.ended.title',
+        bodyKey: 'basket.ended.bodyGuest',
+        args: {},
+      };
+    }
+
+    const name = this._ownerName();
+    return {
+      titleKey: 'basket.ended.title',
+      bodyKey:
+        name === null
+          ? 'basket.ended.bodyAccountNameless'
+          : 'basket.ended.bodyAccount',
+      args: name === null ? {} : { name },
+    };
+  });
+
+  /** How long a link lasts, for the sentences that name the number. */
+  protected readonly visitHours = LINK_VISIT_HOURS;
+
+  /** Forget the arrival notice for this basket, on this device only. */
+  protected dismissVisit(): void {
+    this._visitDismissed.set(true);
+    const key = this._visitNoticeKey();
+    if (key !== null) {
+      this._browser.writeSessionStorage(key, '1');
+    }
+  }
+
+  /**
+   * Where this basket's dismissal is remembered, or null before the id is
+   * known.
+   *
+   * Per basket rather than one key for the app, following `basketTargetKey`'s
+   * reasoning: somebody shopping two shared baskets in a week has two visits,
+   * and dismissing one says nothing about the other.
+   */
+  private _visitNoticeKey(): string | null {
+    const id = this._store.basket()?.id ?? null;
+    return id === null ? null : visitNoticeKey(id);
+  }
+
+  /**
+   * Set the one timer that turns the warning on, and clear any earlier one.
+   *
+   * Recomputed on every basket read, because an expiry moves: keeping somebody
+   * clears it entirely, and rejoining pushes it out. A moment already past arms
+   * nothing and sets the flag, and a moment further off than a timer can hold
+   * is left alone rather than firing immediately, which is what a naive
+   * `setTimeout` of more than about twenty five days does.
+   */
+  private _armWarning(endsAt: Date | null): void {
+    this._clearWarning();
+
+    if (endsAt === null) {
+      this._visitEnding.set(false);
+      return;
+    }
+
+    const warnAt = endsAt.getTime() - VISIT_WARNING_MINUTES * 60 * 1000;
+    const wait = warnAt - Date.now();
+    if (wait <= 0) {
+      this._visitEnding.set(true);
+      return;
+    }
+
+    this._visitEnding.set(false);
+    if (wait > MAX_TIMEOUT_MS) {
+      return;
+    }
+    this._warningAt = setTimeout(() => {
+      this._warningAt = null;
+      this._visitEnding.set(true);
+    }, wait);
+  }
+
+  private _clearWarning(): void {
+    if (this._warningAt !== null) {
+      clearTimeout(this._warningAt);
+      this._warningAt = null;
+    }
+  }
+
   /**
    * What the last move of a row's number came to, for the live region.
    *
@@ -570,10 +814,17 @@ export class BasketPage {
    * and when everybody has gone home, and in both cases the sheet still answers
    * something worth knowing — everybody who *can* open this basket — so the way into
    * it has to survive the face row going away.
+   *
+   * **No longer asks about presence** (velista `0094`, section 7). It used to,
+   * which meant the basket that is always there had no way into the sheet at
+   * all: a `LIVE` basket has no presence room, so the condition was false for
+   * it whatever its participant list said. A `LIVE` basket can be shared and can
+   * have named people on it, so the sheet has an answer worth reading and the
+   * header keeps the door to it. What is gated on presence is the **faces**,
+   * which are a claim about who is here right now.
    */
   protected readonly hasPeople = computed(
-    () =>
-      this.surface()?.presence === true && this._store.participants().length > 0
+    () => this._store.participants().length > 0
   );
 
   /** The overflow count, collapsing into a stacked chip like the price display. */
@@ -618,7 +869,32 @@ export class BasketPage {
      * is destroyed on leaving for certain, which makes it the only honest place to say
      * the shopper has gone.
      */
+    /**
+     * The visit, re-read on every basket read (velista `0094`, section 5).
+     *
+     * An expiry **moves**: the owner keeping somebody clears it, and opening
+     * the link again pushes it out, so the one timer is set from whatever the
+     * last read said rather than once on arrival. The dismissal is read here
+     * too, because the basket's id is what the key is built from and under
+     * `live` that id arrives with the answer.
+     */
+    effect(() => {
+      const endsAt = this._visit();
+      const id = this._store.basket()?.id ?? null;
+      untracked(() => {
+        this._armWarning(endsAt);
+        const key = id === null ? null : visitNoticeKey(id);
+        this._visitDismissed.set(
+          key !== null && this._browser.readSessionStorage(key) !== null
+        );
+      });
+    });
+
     inject(DestroyRef).onDestroy(() => {
+      // The one timer this page owns. A route provider's `DestroyRef` never
+      // fires in this app, so a timer set in the store would outlive the screen
+      // and flip a signal for a basket nobody is looking at.
+      this._clearWarning();
       this._store.leave();
       // The view store is provided on the same route and has the same problem, so
       // it is let go in the same place. Without this a basket opened later starts

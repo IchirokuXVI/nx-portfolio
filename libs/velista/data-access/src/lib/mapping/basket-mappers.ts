@@ -107,6 +107,12 @@ export function toBasketParticipant(raw: unknown): BasketParticipant | null {
     joinedAt: date(raw['joinedAt']),
     lastSeenAt: date(raw['lastSeenAt']),
     shareLinkId: nullableStr(raw['shareLinkId']),
+    // When their visit ends (backend `0140`, section 8). Null for the owner and
+    // for a named person, and null on a backend before that plan, which reads
+    // as "this person does not expire" and is the safe way to be wrong: the
+    // screens it feeds say a sentence and grant nothing, so the worst a missing
+    // date costs is a warning nobody was shown.
+    expiresAt: date(raw['expiresAt']),
   };
 
   return 'userAgent' in raw
@@ -768,6 +774,15 @@ export function toBasketSession(raw: unknown): BasketSession | null {
  * wrapper is unwrapped here rather than at both call sites. Null means the basket
  * is not shared right now, which is an ordinary state and not a failure: a basket
  * has zero links or one.
+ *
+ * ## A link with no end is refused
+ *
+ * `expiresAt` joins the id and the secret as required (backend `0140`, section
+ * 4). The server mints none without one, so a link that arrives without it is
+ * malformed rather than open ended, and the two readings are not equally safe:
+ * the share sheet draws "works until" beside the URL and chooses between
+ * showing the URL and offering a new link, and a date invented here would make
+ * both of those sentences lies. Null is the one answer that draws neither.
  */
 export function toBasketShareLink(raw: unknown): BasketShareLink | null {
   if (!isRecord(raw)) {
@@ -778,13 +793,14 @@ export function toBasketShareLink(raw: unknown): BasketShareLink | null {
 
   const id = str(link['id']);
   const secret = str(link['secret']);
-  return id === null || secret === null
+  const expiresAt = date(link['expiresAt']);
+  return id === null || secret === null || expiresAt === null
     ? null
     : {
         id,
         secret,
         createdAt: date(link['createdAt']),
-        expiresAt: date(link['expiresAt']),
+        expiresAt,
         participantCount: numOr(link['participantCount'], 0),
       };
 }

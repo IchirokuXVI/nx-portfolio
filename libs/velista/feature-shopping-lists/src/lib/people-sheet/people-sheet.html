@@ -15,7 +15,12 @@
       id="people-title"
       tabindex="-1"
     >
-      {{ 'basket.people.leaveQuestion' | rokuT: { name: basketName() } }}
+      <!--
+        Two questions, because leaving means two different things (velista 0094,
+        section 6). A named person cannot come back on their own; a visitor can,
+        while the link they came by still works.
+      -->
+      {{ leaveQuestionKey() | rokuT: { name: basketName() } }}
     </h2>
 
     @if (leaveError(); as key) {
@@ -56,6 +61,18 @@
       }
     </p>
 
+    <!--
+      And until when, for somebody who is here on the link (velista 0094,
+      section 6). Under how they arrived, because it is the second half of the
+      same fact: a link let them in, and a link is twelve hours.
+
+      Drawn for a named person as nothing at all rather than as "no end", which
+      would be a sentence about a thing that does not happen to them.
+    -->
+    @if (openUntil(); as until) {
+      <p class="until">{{ 'basket.people.until' | rokuT: { time: until } }}</p>
+    }
+
     <dl class="facts">
       <dt>{{ 'basket.people.joined' | rokuT }}</dt>
       <!--
@@ -79,6 +96,39 @@
       <button (click)="askLeave()" class="destructive" type="button">
         {{ 'basket.people.leave' | rokuT }}
       </button>
+    }
+
+    <!--
+      Keeping somebody who is here on the link (velista 0094, section 6). The
+      owner's, on a visitor who has an account, because keeping means being
+      added by name and a guest has no name to be added by.
+
+      `aria-busy` rather than `disabled` alone while the call is out, which is
+      the house pattern: a control that goes flat under a thumb tells a screen
+      reader nothing about why.
+    -->
+    @if (canKeep()) {
+      <button
+        (click)="keep()"
+        [attr.aria-busy]="busy() ? 'true' : null"
+        class="keep"
+        type="button"
+      >
+        {{ 'basket.people.keep' | rokuT }}
+      </button>
+
+      @if (keepError(); as key) {
+        <p class="keep-error" role="alert">{{ key | rokuT }}</p>
+      }
+    }
+
+    <!--
+      And why there is no such control over a guest. Said to the owner, who is
+      the one deciding; never to the guest about themselves, which would be an
+      invitation to register wearing an explanation (rule C2).
+    -->
+    @if (showsGuestCannotStay()) {
+      <p class="cannot-stay">{{ 'basket.people.guestCannotStay' | rokuT }}</p>
     }
 
     <!--
