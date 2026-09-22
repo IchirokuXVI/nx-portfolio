@@ -1,3 +1,5 @@
+> **PR:** [#441](https://github.com/IchirokuXVI/nx-portfolio/pull/441)
+
 # 0093: what changed while you were not looking
 
 > Backend halves: `apps/luna-shopper-backend/plans/0138` (the change log, the cursor, the
