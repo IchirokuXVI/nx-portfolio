@@ -1094,6 +1094,9 @@ const searchItemsRequest = object(
     // Plan 0073: the back office's "what has curation not reached yet".
     withoutProductGroup: boolean(),
     priceScopeIds: array(nonEmptyString()),
+    // Plan 0146: which chains sell the products, which is not what the scopes
+    // above decide. Absent and empty both mean every chain.
+    soldBy: array(nonEmptyString()),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),

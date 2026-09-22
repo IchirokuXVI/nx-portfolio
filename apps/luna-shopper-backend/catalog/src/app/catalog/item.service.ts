@@ -84,6 +84,38 @@ function params() {
 }
 
 /**
+ * The products the named chains sell (plan 0146, section 2), written once for
+ * both branches of the search.
+ *
+ * The caller hands in the placeholder that names its own bound list, because the
+ * two branches bind differently: the ranked one assembles positional parameters
+ * and the listing one goes through the query builder's named ones. What must not
+ * differ is the rule itself, which is why it is a function here and not a string
+ * in each of them.
+ *
+ * **An `EXISTS` rather than a join**, so a product the chain sells at nine of its
+ * scopes is still one row rather than nine.
+ *
+ * **`available` is part of the meaning and not an optimization.** A source row
+ * saying the chain does not stock the product is exactly the row that must not
+ * put it in that chain's catalog, and `bestOffer` and the `scopes` array already
+ * exclude it for the same reason (plan 0109, section 2).
+ *
+ * It says nothing about price. A product the chain sells with no price row is
+ * listed with its price fields null, as it would be with no filter at all.
+ */
+function soldByChainSql(placeholder: string): string {
+  return `EXISTS (
+        SELECT 1
+        FROM "supermarket_items" si
+        JOIN "price_scopes" ps ON ps."id" = si."priceScopeId"
+        WHERE si."itemId" = i."id"
+          AND ps."supermarketId" = ANY(${placeholder})
+          AND si."available"
+      )`;
+}
+
+/**
  * Global products (plan 0012), and the search over them (plan 0048).
  *
  * Writes are owner only; reads are open to any authenticated user.
@@ -877,6 +909,12 @@ export class ItemService {
     if (req.withoutProductGroup) {
       filters.push('i."productGroupId" IS NULL');
     }
+    // Plan 0146: which chains sell the product, which is not what the scopes
+    // below decide. Empty is the same as absent, so a person who cleared the
+    // chain chips reads the catalog rather than an empty page.
+    if (req.soldBy?.length) {
+      filters.push(soldByChainSql(p.bind(req.soldBy)));
+    }
     // Unit price is the last ranking key, so it is joined even when the caller
     // asked for no prices in the answer: with no scopes there is nothing to join
     // and every row sorts as unpriced, which is the same order.
@@ -1005,6 +1043,11 @@ export class ItemService {
       // group filter rather than instead of it, so asking for both answers with
       // nothing, which is what the two clauses together mean.
       qb.andWhere('i."productGroupId" IS NULL');
+    }
+    if (req.soldBy?.length) {
+      // The same rule the ranked branch applies, from the same function: the
+      // chain chips must not stop narrowing the moment somebody types a word.
+      qb.andWhere(soldByChainSql(':soldBy'), { soldBy: req.soldBy });
     }
     this.applyOrder(qb, order, locale, cursor);
     return qb.getMany();
