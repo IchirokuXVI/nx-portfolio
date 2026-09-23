@@ -57,6 +57,7 @@ export const BASKET_SCHEMA_IDS = {
   rowResult: schemaId('basket/BasketRowResult'),
   searchScope: schemaId('basket/BasketSearchScope'),
   getRequest: schemaId('msg/basket.get/request'),
+  searchScopeRequest: schemaId('msg/basket.searchScope/request'),
   liveRequest: schemaId('msg/basket.live/request'),
   settleRequest: schemaId('msg/basket.row.settle/request'),
   revertRequest: schemaId('msg/basket.row.revert/request'),
@@ -284,6 +285,9 @@ const searchScope = object(
     // of plan 0143 reads it here rather than reading a whole basket for one
     // boolean.
     servesLocations: boolean(),
+    // Only when the request named a row: which product a settle that names
+    // none records there, answered by core, which writes it (plan 0151).
+    pick: ref(LIST_SCHEMA_IDS.settlePick),
   },
   ['ownerUserId', 'profileId', 'servesLocations']
 );
@@ -293,6 +297,16 @@ const getRequest = object(
   {
     basketId: nonEmptyString(),
     participantId: nonEmptyString(),
+  },
+  ['basketId', 'participantId']
+);
+
+const searchScopeRequest = object(
+  BASKET_SCHEMA_IDS.searchScopeRequest,
+  {
+    basketId: nonEmptyString(),
+    participantId: nonEmptyString(),
+    rowKey: nonEmptyString(),
   },
   ['basketId', 'participantId']
 );
@@ -600,6 +614,7 @@ export const basketSchemas: JsonSchema[] = [
   rowResult,
   searchScope,
   getRequest,
+  searchScopeRequest,
   liveRequest,
   settleRequest,
   revertRequest,
@@ -671,7 +686,7 @@ export const basketMessageContracts: Record<
     response: BASKET_SCHEMA_IDS.rowResult,
   },
   [BASKET_PATTERNS.searchScope]: {
-    request: BASKET_SCHEMA_IDS.getRequest,
+    request: BASKET_SCHEMA_IDS.searchScopeRequest,
     response: BASKET_SCHEMA_IDS.searchScope,
   },
   [BASKET_PATTERNS.create]: {

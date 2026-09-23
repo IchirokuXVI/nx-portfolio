@@ -79,7 +79,7 @@ export class SettleBasketRowDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The product actually in the trolley, when it is not what the row suggests. Must be one of the row’s own `optionIds`.',
+      'The product actually in the trolley, when it is not what the row suggests. Must be one of the row’s own `optionIds`. Left out, a row with one option records that option, and its price is read for it. Required with `priceScopeId` on a row with several options: without it the settle answers 400 `validation_failed` on `itemId`.',
   })
   @IsOptional()
   @IsUUID()

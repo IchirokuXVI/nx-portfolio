@@ -320,7 +320,7 @@ export class SettleLineDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards.",
+      "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards. Left out, a line with one product records that product, and its price is read for it. Required with `priceScopeId` on a line with several products: without it the settle answers 400 `validation_failed` on `itemId`.",
   })
   @IsOptional()
   @IsUUID()

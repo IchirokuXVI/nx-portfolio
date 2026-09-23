@@ -23861,7 +23861,7 @@
           "itemId": {
             "type": "string",
             "format": "uuid",
-            "description": "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards."
+            "description": "Which of the line's products was bought. Recorded on the settlement as it was at the time, because the line's product set can change afterwards. Left out, a line with one product records that product, and its price is read for it. Required with `priceScopeId` on a line with several products: without it the settle answers 400 `validation_failed` on `itemId`."
           },
           "priceScopeId": {
             "type": "string",
@@ -24016,7 +24016,7 @@
           "itemId": {
             "type": "string",
             "format": "uuid",
-            "description": "The product actually in the trolley, when it is not what the row suggests. Must be one of the row’s own `optionIds`."
+            "description": "The product actually in the trolley, when it is not what the row suggests. Must be one of the row’s own `optionIds`. Left out, a row with one option records that option, and its price is read for it. Required with `priceScopeId` on a row with several options: without it the settle answers 400 `validation_failed` on `itemId`."
           },
           "priceScopeId": {
             "type": "string",
@@ -33196,6 +33196,12 @@
             "type": "string",
             "minLength": 1
           },
+          "settledByParticipantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "settledAt": {
             "type": "string",
             "format": "date-time"
@@ -33225,6 +33231,12 @@
               "string",
               "null"
             ]
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -33235,11 +33247,13 @@
           "outcome",
           "quantity",
           "settledByUserId",
+          "settledByParticipantId",
           "settledAt",
           "revertedAt",
           "pricePaidCents",
           "pricePaidCurrency",
-          "priceScopeId"
+          "priceScopeId",
+          "supermarketLocationId"
         ],
         "additionalProperties": false
       },

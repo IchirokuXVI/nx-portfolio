@@ -36,6 +36,7 @@ export const LIST_SCHEMA_IDS = {
   lineClaimRef: schemaId('list/LineClaimRef'),
   lineClaimChangedEvent: schemaId('list/LineClaimChangedEvent'),
   settlementPaid: schemaId('list/SettlementPaid'),
+  settlePick: schemaId('list/SettlePick'),
   lineSettlementView: schemaId('list/LineSettlementView'),
   lineSettlementResult: schemaId('list/LineSettlementResult'),
   lineSettlementPage: schemaId('list/LineSettlementPage'),
@@ -58,6 +59,7 @@ export const LIST_SCHEMA_IDS = {
   updateLineRequest: schemaId('msg/line.update/request'),
   setApprovalRequest: schemaId('msg/line.setApproval/request'),
   settleLineRequest: schemaId('msg/line.settle/request'),
+  settlePickRequest: schemaId('msg/line.settlePick/request'),
   lineSettlementsRequest: schemaId('msg/line.settlements/request'),
   itemSettlementsRequest: schemaId('msg/line.itemSettlements/request'),
   listHoldingItemView: schemaId('list/ListHoldingItemView'),
@@ -252,12 +254,23 @@ const settlementPaid = object(
   ]
 );
 
+// Core's answer to "which product does a settle that names none record" (plan
+// 0151). The rule is core's, so the gateway prices this and never its own guess.
+const settlePick = object(
+  LIST_SCHEMA_IDS.settlePick,
+  {
+    pickedItemId: nullableString(),
+    optionCount: integer({ minimum: 0 }),
+  },
+  ['pickedItemId', 'optionCount']
+);
+
 // One origin line touched by one settling act (plan 0047, section 3).
 // `basketLineId` is deliberately absent: it is stored and never served, so
 // a reader learns that something was bought and not which basket it came out of
-// (section 3.1). `supermarketLocationId` is absent for the same reason since plan
-// 0143: the price of a tin at a chain is a product fact, and a street and a time
-// are a fact about where somebody was standing (section 6).
+// (section 3.1). `settledByParticipantId` and `supermarketLocationId` are served
+// since plan 0151 section 5, which reverses plan 0051 section 6 and plan 0143
+// section 6 for these two fields: the view has to say who settled and where.
 const lineSettlementView = object(
   LIST_SCHEMA_IDS.lineSettlementView,
   {
@@ -270,6 +283,9 @@ const lineSettlementView = object(
     // buying more than was asked for is recorded as it happened (section 4.2).
     quantity: integer({ minimum: 0 }),
     settledByUserId: nonEmptyString(),
+    // Exactly one of this and `settledByUserId` is set: a basket settle names
+    // the participant, the list page names the account.
+    settledByParticipantId: nullableString(),
     settledAt: string({ format: 'date-time' }),
     // Null while the settlement stands, and set once somebody took it back
     // (plan 0054, section 3.3). The row is kept and served either way: a
@@ -282,6 +298,8 @@ const lineSettlementView = object(
     pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
     pricePaidCurrency: { type: ['string', 'null'], maxLength: 3 },
     priceScopeId: nullableString(),
+    // The one shop, set only by a settler who was served shops.
+    supermarketLocationId: nullableString(),
   },
   [
     'id',
@@ -291,11 +309,13 @@ const lineSettlementView = object(
     'outcome',
     'quantity',
     'settledByUserId',
+    'settledByParticipantId',
     'settledAt',
     'revertedAt',
     'pricePaidCents',
     'pricePaidCurrency',
     'priceScopeId',
+    'supermarketLocationId',
   ]
 );
 
@@ -597,6 +617,14 @@ const settleLineRequest = object(
   },
   ['userId', 'lineId', 'outcome']
 );
+const settlePickRequest = object(
+  LIST_SCHEMA_IDS.settlePickRequest,
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+  },
+  ['userId', 'lineId']
+);
 const lineSettlementsRequest = object(
   LIST_SCHEMA_IDS.lineSettlementsRequest,
   {
@@ -869,6 +897,7 @@ export const listSchemas: JsonSchema[] = [
   lineClaimRef,
   lineClaimChangedEvent,
   settlementPaid,
+  settlePick,
   lineSettlementView,
   lineSettlementResult,
   commentRecording,
@@ -891,6 +920,7 @@ export const listSchemas: JsonSchema[] = [
   updateLineRequest,
   setApprovalRequest,
   settleLineRequest,
+  settlePickRequest,
   lineSettlementsRequest,
   itemSettlementsRequest,
   listHoldingItemView,
@@ -983,6 +1013,10 @@ export const listMessageContracts: Record<
   [LINE_PATTERNS.settle]: {
     request: LIST_SCHEMA_IDS.settleLineRequest,
     response: LIST_SCHEMA_IDS.lineSettlementResult,
+  },
+  [LINE_PATTERNS.settlePick]: {
+    request: LIST_SCHEMA_IDS.settlePickRequest,
+    response: LIST_SCHEMA_IDS.settlePick,
   },
   [LINE_PATTERNS.settlements]: {
     request: LIST_SCHEMA_IDS.lineSettlementsRequest,

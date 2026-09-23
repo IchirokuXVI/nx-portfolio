@@ -3,18 +3,24 @@ import { validate } from 'class-validator';
 
 import {
   BASKET_PATTERNS,
+  ITEM_PATTERNS,
   LINE_PATTERNS,
   ParticipantKind,
   SettlementOutcome,
   type BasketParticipantContext,
+  type BasketSearchScopeRequest,
   type SettleBasketRowRequest,
   type SettleLineRequest,
+  type SettlePick,
 } from '@portfolio/luna-shopper/contracts';
 import { LinesController } from '../lists/list.controller';
 import { SettleLineDto } from '../lists/list.dto';
 import { BasketController } from './basket.controller';
 import { SettleBasketRowDto } from './basket.dto';
-import type { SettlePriceInput } from './settle-price.service';
+import {
+  SettlePriceService,
+  type SettlePriceInput,
+} from './settle-price.service';
 
 /**
  * How a price reaches a settle, at the two routes that make one (plan 0143,
@@ -266,6 +272,220 @@ describe('the list page settle route', () => {
     } as SettleLineDto);
 
     expect(w.sent[0].subject).toBe(LINE_PATTERNS.settle);
+  });
+});
+
+/**
+ * A settle that names no `itemId` is priced for the product core records (plan
+ * 0151).
+ *
+ * The real {@link SettlePriceService} runs here, over a catalog that quotes
+ * ITEM at 0.95 in SCOPE, so each case follows a request all the way to the
+ * `paid` on the message core receives. Core's answer is faked as `pick`, and
+ * the gateway is checked for pricing exactly that and nothing it worked out
+ * for itself.
+ */
+describe('a settle with no itemId (plan 0151)', () => {
+  const resolution = {
+    priceScopeIds: [SCOPE],
+    scopes: [
+      {
+        priceScopeId: SCOPE,
+        supermarketId: 'mercadona',
+        postalCode: '14013',
+        origin: 'POSTAL_CODE',
+        approximate: false,
+      },
+    ],
+    coverage: [],
+    approximate: false,
+    profileId: OWNER_PROFILE,
+    explicit: false,
+  };
+
+  /** Core answers `pick`, catalog quotes ITEM, and everything is recorded. */
+  function wire(pick: SettlePick) {
+    const sent: { subject: string; payload: unknown }[] = [];
+    const send = jest.fn(async (subject: string, payload: unknown) => {
+      sent.push({ subject, payload });
+      switch (subject) {
+        case BASKET_PATTERNS.searchScope:
+          return {
+            ownerUserId: OWNER,
+            profileId: OWNER_PROFILE,
+            servesLocations: false,
+            ...((payload as BasketSearchScopeRequest).rowKey === undefined
+              ? {}
+              : { pick }),
+          };
+        case LINE_PATTERNS.settlePick:
+          return pick;
+        case ITEM_PATTERNS.getMany:
+          return {
+            items: [
+              {
+                id: ITEM,
+                offers: [
+                  {
+                    itemId: ITEM,
+                    priceScopeId: SCOPE,
+                    price: 0.95,
+                    currency: 'EUR',
+                  },
+                ],
+              },
+            ],
+          };
+        case BASKET_PATTERNS.rowSettle:
+          return { row: {}, progress: {} };
+        default:
+          return { line: {}, settlement: {} };
+      }
+    });
+    const nats = { send } as never;
+    const prices = new SettlePriceService(nats, {
+      describe: jest.fn(async () => resolution),
+    } as never);
+    return {
+      basket: new BasketController(nats, {} as never, prices),
+      lines: new LinesController(nats, {} as never, prices),
+      sent,
+      payloadOf: <T>(subject: string) =>
+        sent.find((call) => call.subject === subject)?.payload as T,
+    };
+  }
+
+  const ONE_OPTION: SettlePick = { pickedItemId: ITEM, optionCount: 1 };
+  const TWO_OPTIONS: SettlePick = { pickedItemId: null, optionCount: 2 };
+  const FREE_TEXT: SettlePick = { pickedItemId: null, optionCount: 0 };
+
+  describe('on a basket row', () => {
+    it('no itemId, single option row, scope with a price, stores the price', async () => {
+      const w = wire(ONE_OPTION);
+
+      await w.basket.settle(
+        actor(ParticipantKind.OWNER, OWNER),
+        BASKET,
+        'row-1',
+        body({ itemId: undefined })
+      );
+
+      // The row went with the scope question, so core answered the pick on
+      // the round trip the settle already made.
+      expect(
+        w.payloadOf<BasketSearchScopeRequest>(BASKET_PATTERNS.searchScope)
+      ).toEqual({ basketId: BASKET, participantId: 'p-1', rowKey: 'row-1' });
+      expect(
+        w.payloadOf<SettleBasketRowRequest>(BASKET_PATTERNS.rowSettle).paid
+      ).toEqual(PAID);
+    });
+
+    it('no itemId, several options, refuses with a 400 on itemId and writes nothing', async () => {
+      const w = wire(TWO_OPTIONS);
+
+      await expect(
+        w.basket.settle(
+          actor(ParticipantKind.OWNER, OWNER),
+          BASKET,
+          'row-1',
+          body({ itemId: undefined })
+        )
+      ).rejects.toMatchObject({
+        code: 'validation_failed',
+        messageArgs: { field: 'itemId' },
+      });
+      expect(w.sent.map((call) => call.subject)).not.toContain(
+        BASKET_PATTERNS.rowSettle
+      );
+    });
+
+    it('no itemId on a free text row keeps the scope and records no price', async () => {
+      const w = wire(FREE_TEXT);
+
+      await w.basket.settle(
+        actor(ParticipantKind.OWNER, OWNER),
+        BASKET,
+        'row-1',
+        body({ itemId: undefined })
+      );
+
+      expect(
+        w.payloadOf<SettleBasketRowRequest>(BASKET_PATTERNS.rowSettle).paid
+      ).toEqual({ ...PAID, pricePaidCents: null, pricePaidCurrency: null });
+    });
+
+    it('does not send the row when the caller named the product', async () => {
+      const w = wire(TWO_OPTIONS);
+
+      await w.basket.settle(
+        actor(ParticipantKind.OWNER, OWNER),
+        BASKET,
+        'row-1',
+        body()
+      );
+
+      expect(
+        w.payloadOf<BasketSearchScopeRequest>(BASKET_PATTERNS.searchScope)
+      ).not.toHaveProperty('rowKey');
+      expect(
+        w.payloadOf<SettleBasketRowRequest>(BASKET_PATTERNS.rowSettle).paid
+      ).toEqual(PAID);
+    });
+  });
+
+  describe('on a list line', () => {
+    const settleBody = (extra: Partial<SettleLineDto> = {}) =>
+      ({
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 1,
+        priceScopeId: SCOPE,
+        ...extra,
+      }) as SettleLineDto;
+
+    it('no itemId, single product line, scope with a price, stores the price', async () => {
+      const w = wire(ONE_OPTION);
+
+      await w.lines.settle({ userId: ACTOR } as never, 'line-1', settleBody());
+
+      expect(w.payloadOf(LINE_PATTERNS.settlePick)).toEqual({
+        userId: ACTOR,
+        lineId: 'line-1',
+      });
+      expect(w.payloadOf<SettleLineRequest>(LINE_PATTERNS.settle).paid).toEqual(
+        PAID
+      );
+    });
+
+    it('no itemId, several products, refuses with a 400 on itemId and writes nothing', async () => {
+      const w = wire(TWO_OPTIONS);
+
+      await expect(
+        w.lines.settle({ userId: ACTOR } as never, 'line-1', settleBody())
+      ).rejects.toMatchObject({
+        code: 'validation_failed',
+        messageArgs: { field: 'itemId' },
+      });
+      expect(w.sent.map((call) => call.subject)).not.toContain(
+        LINE_PATTERNS.settle
+      );
+    });
+
+    it('asks core nothing when the caller named the product', async () => {
+      const w = wire(TWO_OPTIONS);
+
+      await w.lines.settle(
+        { userId: ACTOR } as never,
+        'line-1',
+        settleBody({ itemId: ITEM })
+      );
+
+      expect(w.sent.map((call) => call.subject)).not.toContain(
+        LINE_PATTERNS.settlePick
+      );
+      expect(w.payloadOf<SettleLineRequest>(LINE_PATTERNS.settle).paid).toEqual(
+        PAID
+      );
+    });
   });
 });
 

@@ -1,3 +1,5 @@
+> **PR:** [#452](https://github.com/IchirokuXVI/nx-portfolio/pull/452), built by Claude Opus 5.5
+
 # 0151: a settlement is priced as core records it
 
 > Found by `0150` (report finding 2, shopper F14). Prerequisite reading: `0143` section 4.2

@@ -56,6 +56,11 @@ export const LINE_PATTERNS = {
    * longer carries.
    */
   settle: 'line.settle',
+  /**
+   * The product a settle on a line records when it names none (plan 0151). The
+   * gateway asks before it reads a price, so it prices what core will write.
+   */
+  settlePick: 'line.settlePick',
   /** One line's own settlements, newest first (plan 0047, section 6.1). */
   settlements: 'line.settlements',
   /**
@@ -843,6 +848,33 @@ export interface SettlementPaid {
 }
 
 /**
+ * Which product a settle that names none records, answered by core before the
+ * gateway reads the price (plan 0151, section 1).
+ *
+ * Core owns the rule, and the gateway prices exactly what core will write: a
+ * row or line offering one product records that one, and anything else records
+ * null. The gateway never works the answer out of an item list of its own,
+ * because two copies of one rule are how a price and a settlement came to
+ * disagree.
+ */
+export interface SettlePick {
+  /** The product a settle with no `itemId` records, or null. */
+  pickedItemId: string | null;
+  /**
+   * How many products the row or line offers. Several and no `itemId` is
+   * refused when the caller named a scope (section 2), because a price cannot
+   * be read for a product nobody named.
+   */
+  optionCount: number;
+}
+
+/** Which product a settle on this line records when it names none (plan 0151). */
+export interface LineSettlePickRequest {
+  userId: string;
+  lineId: string;
+}
+
+/**
  * Say what happened to one line on a trip (plan 0047, section 4).
  *
  * `BOUGHT` writes a settlement for the units bought and decrements the line by
@@ -912,16 +944,20 @@ export interface LineSettlementView {
    *
    * Null does not mean nobody. It means the settle came off a basket, where the
    * actor is a participant rather than a user and may be a guest with no account
-   * at all. The participant id is deliberately **not** served here, for the same
-   * reason `basketLineId` is not: a participant id is meaningless to a
-   * zone reader who cannot resolve it, and serving one would hand the zone a
-   * handle on a private basket's membership in exchange for nothing.
-   *
-   * What a zone reader learns from a null is that somebody shopping on a basket
-   * got it, which is the disclosure plan 0051 section 5.3 already makes
-   * deliberately and plan 0050 section 8 already called acceptable.
+   * at all, and {@link settledByParticipantId} names them instead. Exactly one
+   * of the two is set, which is `ck_line_settlements_actor`.
    */
   settledByUserId: string | null;
+  /**
+   * The basket participant who settled it, and null when the list page did
+   * (plan 0151, section 5).
+   *
+   * **This reverses plan 0051 section 6**, which kept the participant id off
+   * this view as meaningless to a zone reader. Without it a basket settle
+   * answered "nobody" for who settled, and the view could not say what the
+   * trips read already resolves through `COALESCE(settledByUserId, p.userId)`.
+   */
+  settledByParticipantId: string | null;
   /** ISO 8601 UTC. */
   settledAt: string;
   /**
@@ -936,9 +972,8 @@ export interface LineSettlementView {
    * signs; a nullable timestamp changes each of those by one `WHERE` clause.
    *
    * Null on every row written before that plan, and on every row a settle
-   * writes. Who reverted it is a participant id and is deliberately not served,
-   * for the reason {@link settledByUserId} explains: it is meaningless to a zone
-   * reader who cannot resolve it.
+   * writes. Who reverted it is not served: plan 0151 added only the settling
+   * participant.
    */
   revertedAt: string | null;
   /**
@@ -960,14 +995,18 @@ export interface LineSettlementView {
   /**
    * The price scope the shopper was looking at: a chain's catchment, not a
    * shop.
-   *
-   * **`supermarketLocationId` is deliberately absent**, and its absence is the
-   * point (plan 0143, section 6). A shop and a time say where a named member of
-   * the household was standing at 18:40, which is not a fact about the milk. It
-   * is stored, and it is served in exactly one place: a person's own history,
-   * where the reader is the person it is about.
    */
   priceScopeId: string | null;
+  /**
+   * The one shop the settle was made in, or null (plan 0151, section 5).
+   *
+   * **This reverses plan 0143 section 6**, which served the shop only in a
+   * person's own history, on the ground that a shop and a time say where a
+   * member of the household was standing. Plan 0151 serves it beside the
+   * scope. It is only ever set by a settler who was served shops (plan 0143
+   * section 4.4), and null on every row written before that plan.
+   */
+  supermarketLocationId: string | null;
 }
 
 /**
