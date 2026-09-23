@@ -505,4 +505,91 @@ describe('BasketApi, the writes of velista 0092', () => {
     req.flush({ row: ROW_VIEW, progress: PROGRESS });
     await done;
   });
+
+  describe('a settle names a scope and never money (velista 0095, test 9)', () => {
+    const rowUrl = `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-1`;
+
+    /** Every key of a body, nested ones included. */
+    function keysOf(value: unknown): string[] {
+      if (Array.isArray(value)) {
+        return value.flatMap(keysOf);
+      }
+      if (value === null || typeof value !== 'object') {
+        return [];
+      }
+      return Object.entries(value).flatMap(([key, inner]) => [
+        key,
+        ...keysOf(inner),
+      ]);
+    }
+
+    async function settleBody(
+      body: Parameters<BasketApi['settle']>[2]
+    ): Promise<Record<string, unknown>> {
+      const done = api.settle(BASKET, 'zl-1', body);
+      const req = httpMock.expectOne(`${rowUrl}/settle`);
+      const sent = req.request.body as Record<string, unknown>;
+      req.flush({ row: ROW_VIEW, progress: PROGRESS });
+      await done;
+      return sent;
+    }
+
+    async function revertBody(
+      body: Parameters<BasketApi['revert']>[2]
+    ): Promise<Record<string, unknown>> {
+      const done = api.revert(BASKET, 'zl-1', body);
+      const req = httpMock.expectOne(`${rowUrl}/revert`);
+      const sent = req.request.body as Record<string, unknown>;
+      req.flush({ row: ROW_VIEW, progress: PROGRESS });
+      await done;
+      return sent;
+    }
+
+    it('sends the scope on a purchase, and none on a close or a revert', async () => {
+      const bought = await settleBody({
+        outcome: 'BOUGHT',
+        quantity: 2,
+        from: 2,
+        itemId: 'item-1',
+        priceScopeId: 'scope-1',
+      });
+      expect(bought['priceScopeId']).toBe('scope-1');
+
+      const none = await settleBody({
+        outcome: 'NOT_AVAILABLE',
+        from: 2,
+        priceScopeId: 'scope-1',
+      });
+      expect(none).not.toHaveProperty('priceScopeId');
+
+      const unpriced = await settleBody({ outcome: 'BOUGHT', quantity: 1, from: 2 });
+      expect(unpriced).not.toHaveProperty('priceScopeId');
+
+      const units = await revertBody({ target: 'UNITS', units: 1, from: 1 });
+      const close = await revertBody({ target: 'CLOSE' });
+      expect(units).not.toHaveProperty('priceScopeId');
+      expect(close).not.toHaveProperty('priceScopeId');
+    });
+
+    it('carries no key that names money in any settle or revert body', async () => {
+      const bodies = [
+        await settleBody({
+          outcome: 'BOUGHT',
+          quantity: 2,
+          from: 2,
+          itemId: 'item-1',
+          priceScopeId: 'scope-1',
+          allocations: [{ lineId: 'zl-1', quantity: 2 }],
+        }),
+        await settleBody({ outcome: 'NOT_AVAILABLE', from: 2 }),
+        await revertBody({ target: 'UNITS', units: 1, from: 1 }),
+        await revertBody({ target: 'CLOSE' }),
+      ];
+
+      const money = bodies
+        .flatMap(keysOf)
+        .filter((key) => key !== 'priceScopeId' && /price|cents|amount/i.test(key));
+      expect(money).toEqual([]);
+    });
+  });
 });

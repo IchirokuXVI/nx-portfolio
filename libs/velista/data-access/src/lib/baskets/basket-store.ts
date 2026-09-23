@@ -923,11 +923,15 @@ export class BasketStore {
    * underneath it.
    *
    * The ceiling the reel offers is `row.asked`, which is read and never computed.
+   *
+   * `priceScopeId` is the scope of the price the row drew (velista `0095`, section
+   * 6). Only the settling direction sends it: a revert names no scope.
    */
   async setLeft(
     rowKey: string,
     next: number,
-    from: number
+    from: number,
+    priceScopeId?: string
   ): Promise<BasketRowResult | null> {
     if (next === from) {
       return null;
@@ -938,6 +942,7 @@ export class BasketStore {
           outcome: 'BOUGHT',
           quantity: from - next,
           from,
+          ...(priceScopeId === undefined ? {} : { priceScopeId }),
         })
       : this.revert(rowKey, {
           target: 'UNITS',

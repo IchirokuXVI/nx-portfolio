@@ -590,6 +590,58 @@ export function offerAt(
   );
 }
 
+/**
+ * The product a basket row prices: what is in the trolley.
+ *
+ * A choice that is still one of the row's options, or the row's only option, or none.
+ * One function, so the row that draws a price and the settle that names its scope
+ * resolve the same product.
+ */
+export function basketRowProduct(
+  row: Pick<BasketRow, 'optionIds'>,
+  products: ReadonlyMap<string, BasketProduct>,
+  chosenId: string | null
+): BasketProduct | null {
+  if (chosenId !== null && row.optionIds.includes(chosenId)) {
+    return products.get(chosenId) ?? null;
+  }
+  return row.optionIds.length === 1
+    ? (basketRowPick(row, products) ?? null)
+    : null;
+}
+
+/**
+ * The offer a basket row draws for its product (velista `0078`, section 5).
+ *
+ * **The chosen shop's**, when one is in use, and the cheapest at the run's scopes
+ * otherwise. Null when there is no offer, and null for an offer with no number on it,
+ * which draws the same blank.
+ */
+export function shownOffer(
+  product: BasketProduct | null | undefined,
+  shop: string | null
+): ProductOffer | null {
+  if (product === null || product === undefined) {
+    return null;
+  }
+  const offer = shop === null ? product.offer : offerAt(product, shop);
+  return offer === null || offer.price === null ? null : offer;
+}
+
+/**
+ * The price scope a settle names (velista `0095`, section 6): exactly the scope of the
+ * offer the row drew, or undefined when it drew no price.
+ *
+ * Read through {@link shownOffer}, which the row draws from, so what is sent is what
+ * was drawn by construction.
+ */
+export function shownPriceScope(
+  product: BasketProduct | null | undefined,
+  shop: string | null
+): string | undefined {
+  return shownOffer(product, shop)?.priceScopeId ?? undefined;
+}
+
 /** How a run of lines is progressing: got, had none, and how many there are. */
 export interface BasketProgress {
   readonly done: number;
@@ -775,6 +827,14 @@ export interface BasketSettleRequest {
    * sends when somebody says which household got what.
    */
   readonly allocations?: readonly { lineId: string; quantity: number }[];
+  /**
+   * The price scope of the offer the row was drawing (velista `0095`, section 6).
+   * Absent when it drew no price, and on every `NOT_AVAILABLE`.
+   *
+   * **Never an amount.** No settle body carries money: the gateway reads the price
+   * itself, as the basket's owner, at this scope (backend `0143`).
+   */
+  readonly priceScopeId?: string;
 }
 
 /**

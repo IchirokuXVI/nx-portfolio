@@ -889,7 +889,75 @@ describe('the number on a row', () => {
     row(fixture).left.emit({ from: 5, to: 3 });
     await settleWrites(fixture);
 
-    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5);
+    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, undefined);
+  });
+
+  describe('the price scope (velista 0095, section 6)', () => {
+    const priced = new Map<string, BasketProduct>([
+      [
+        'item-milk',
+        {
+          id: 'item-milk',
+          name: { en: 'Whole milk', es: 'Leche entera' },
+          brand: null,
+          size: null,
+          unit: null,
+          offer: {
+            price: 0.95,
+            currency: 'EUR',
+            unitPrice: null,
+            unitPriceLabel: null,
+            observedAt: null,
+            sourceKind: 'OFFICIAL_WEB',
+            stale: false,
+            priceScopeId: 's-dia',
+          },
+          offers: [],
+          categories: ['DAIRY'],
+        },
+      ],
+    ]);
+    const pricedMilk = () =>
+      line('Milk', { left: 5, optionIds: ['item-milk'] });
+
+    it('the reel names the scope of the price the row draws', async () => {
+      const { fixture, store } = await render({
+        lines: [pricedMilk()],
+        products: priced,
+      });
+
+      row(fixture).left.emit({ from: 5, to: 3 });
+      await settleWrites(fixture);
+
+      expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, 's-dia');
+    });
+
+    it('the status control names it too, and never an amount', async () => {
+      const { fixture, store } = await render({
+        lines: [pricedMilk()],
+        products: priced,
+      });
+
+      row(fixture).settle.emit();
+      await settleWrites(fixture);
+
+      const [, body] = store.settle.mock.calls[0];
+      expect(body).toEqual({
+        outcome: 'BOUGHT',
+        quantity: 5,
+        from: 5,
+        priceScopeId: 's-dia',
+      });
+    });
+
+    it('names no scope for a row that draws no price', async () => {
+      const { fixture, store } = await render({ lines: [milk()] });
+
+      row(fixture).settle.emit();
+      await settleWrites(fixture);
+
+      expect(store.settle.mock.calls[0][1]).not.toHaveProperty('priceScopeId');
+    });
   });
 
   it('says which of the two happened, once, in the live region', async () => {
@@ -2008,7 +2076,7 @@ describe('searching the basket', () => {
       rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 1 });
       await settleWrites(fixture);
 
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4);
+      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4, undefined);
     });
 
     it('commits an ungrouped row through the same call', async () => {
@@ -2017,7 +2085,7 @@ describe('searching the basket', () => {
       rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 0 });
       await settleWrites(fixture);
 
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4);
+      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4, undefined);
     });
 
     /**

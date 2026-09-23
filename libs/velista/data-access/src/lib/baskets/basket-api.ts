@@ -223,6 +223,10 @@ export class BasketApi implements BasketServiceI {
     if (body.itemId !== undefined) {
       request['itemId'] = body.itemId;
     }
+    // The scope and never an amount (velista `0095`, section 6).
+    if (body.priceScopeId !== undefined && body.outcome === 'BOUGHT') {
+      request['priceScopeId'] = body.priceScopeId;
+    }
     if (body.allocations !== undefined && body.allocations.length > 0) {
       request['allocations'] = body.allocations.map((allocation) => ({
         lineId: allocation.lineId,
