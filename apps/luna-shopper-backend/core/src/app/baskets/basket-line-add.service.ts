@@ -5,7 +5,7 @@ import {
   type AddBasketLineRequest,
   type BasketRowResult,
   type BasketSearchScope,
-  type GetBasketRequest,
+  type BasketSearchScopeRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
@@ -15,6 +15,8 @@ import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineService } from '../lists/line.service';
 import { ProfileService } from '../profiles/profile.service';
 import { servesLocations } from './basket-redaction';
+import { optionIdsOf } from './basket-rows';
+import { resolvePick } from './basket-settle.service';
 import { BasketWriteContext } from './basket-write.context';
 
 /**
@@ -120,10 +122,17 @@ export class BasketLineAddService {
    * stores none and resolves the owner's default on every request, because a
    * basket that never ends cannot freeze a profile its owner goes on editing.
    */
-  async searchScope(req: GetBasketRequest): Promise<BasketSearchScope> {
+  async searchScope(
+    req: BasketSearchScopeRequest
+  ): Promise<BasketSearchScope> {
     // Resolved rather than read straight off the row, so a revoked participant
     // cannot use the basket as an open catalog proxy after being thrown out.
     const opened = await this.context.open(req);
+    // The product a settle on this row records when it names none, which is
+    // what the gateway has to price (plan 0151, section 1). `resolvePick` is
+    // the settle's own rule, called the way the settle calls it, so the price
+    // and the settlement cannot name two different products.
+    const row = req.rowKey === undefined ? null : await opened.row(req.rowKey);
     return {
       ownerUserId: opened.basket.ownerUserId,
       profileId:
@@ -139,6 +148,14 @@ export class BasketLineAddService {
       // paid, learns whether this reader may record the shop they named without
       // reading a whole basket for one boolean.
       servesLocations: servesLocations(opened.participant),
+      ...(row === null
+        ? {}
+        : {
+            pick: {
+              pickedItemId: resolvePick(row, undefined),
+              optionCount: optionIdsOf(row.entries).length,
+            },
+          }),
     };
   }
 }

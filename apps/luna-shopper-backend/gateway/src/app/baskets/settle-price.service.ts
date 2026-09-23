@@ -7,10 +7,14 @@ import {
   type GetItemsResult,
   type ItemOfferView,
   type ListSupermarketLocationsRequest,
+  type SettlePick,
   type SettlementPaid,
   type SupermarketLocationPage,
 } from '@portfolio/luna-shopper/contracts';
-import { MAX_PAGE_SIZE } from '@portfolio/luna-shopper/platform';
+import {
+  MAX_PAGE_SIZE,
+  ValidationException,
+} from '@portfolio/luna-shopper/platform';
 import { ScopeResolutionService } from '../catalog/scope-resolution.service';
 import { NatsClient } from '../messaging/nats-client';
 
@@ -35,6 +39,50 @@ const NO_SCOPES: CatalogScopeView = {
   profileId: null,
   explicit: false,
 };
+
+/**
+ * How far one lookup got, read by the timeout (plan 0151, section 4).
+ *
+ * A mutable object rather than a value the lookup returns, because the
+ * timeout answers while the lookup is still running and has to know whether
+ * step 2 already passed.
+ */
+interface LookupProgress {
+  scopeResolved: boolean;
+}
+
+/**
+ * The product a settle's price is read for (plan 0151, sections 1 and 2).
+ *
+ * What the caller named, when it named one. Otherwise core's answer in `pick`,
+ * which is the product core will record, so the price and the settlement name
+ * the same thing. The gateway never works that answer out itself: core owns
+ * the rule.
+ *
+ * **Several products and none named is refused**, and only when the caller
+ * also named a scope, which is the one case a pick is asked for. A price
+ * cannot be read for a product nobody named, and a settlement with a scope and
+ * no product says less than the caller knows. It is a `validation_failed` on
+ * `itemId` and not a code of its own: the caller fixes it by sending the field.
+ */
+export function pricedItemId(
+  named: string | undefined,
+  pick: SettlePick | undefined
+): string | undefined {
+  if (named !== undefined) {
+    return named;
+  }
+  if (pick === undefined) {
+    return undefined;
+  }
+  if (pick.optionCount > 1) {
+    throw new ValidationException(
+      'itemId is required to settle with a priceScopeId when there are several products to choose from',
+      { messageArgs: { field: 'itemId' } }
+    );
+  }
+  return pick.pickedItemId ?? undefined;
+}
 
 /** What the gateway needs in order to price one settle. */
 export interface SettlePriceInput {
@@ -101,22 +149,30 @@ export class SettlePriceService {
     }
 
     const timer = new Budget(SETTLE_PRICE_BUDGET_MS);
+    const progress: LookupProgress = { scopeResolved: false };
     try {
-      return await timer.race(this.lookup(input, priceScopeId), () => {
-        this.log.debug(
-          `Settle price lookup gave up after ${SETTLE_PRICE_BUDGET_MS}ms`
-        );
-        // The scope alone. It is what the client said and it needed no round
-        // trip to believe, so a slow catalog costs the amount and not the
-        // place. The lookup that lost the race is left to finish and its
-        // result is dropped.
-        return {
-          priceScopeId,
-          supermarketLocationId: null,
-          pricePaidCents: null,
-          pricePaidCurrency: null,
-        };
-      });
+      return await timer.race(
+        this.lookup(input, priceScopeId, progress),
+        () => {
+          this.log.debug(
+            `Settle price lookup gave up after ${SETTLE_PRICE_BUDGET_MS}ms`
+          );
+          // The scope alone, and only once step 2 has said it is one of the
+          // owner's (plan 0151, section 4; plan 0143 section 4.2 step 5). A
+          // slow catalog then costs the amount and not the place. Before
+          // that, the scope is only what the client said, and a scope nobody
+          // checked is not written into a household's history. The lookup
+          // that lost the race is left to finish and its result is dropped.
+          return progress.scopeResolved
+            ? {
+                priceScopeId,
+                supermarketLocationId: null,
+                pricePaidCents: null,
+                pricePaidCurrency: null,
+              }
+            : null;
+        }
+      );
     } finally {
       timer.stop();
     }
@@ -125,7 +181,8 @@ export class SettlePriceService {
   /** Steps 2 to 4, which share the one budget above. */
   private async lookup(
     input: SettlePriceInput,
-    priceScopeId: string
+    priceScopeId: string,
+    progress: LookupProgress
   ): Promise<SettlementPaid | null> {
     // Step 2. The cached pair of round trips the basket read already made a
     // moment ago. A scope outside the resolution is refused by answering null
@@ -134,6 +191,7 @@ export class SettlePriceService {
     if (!resolved.priceScopeIds.includes(priceScopeId)) {
       return null;
     }
+    progress.scopeResolved = true;
 
     // Steps 3 and 4 in parallel: neither needs the other, and a settle is made
     // standing in a shop.
@@ -188,9 +246,10 @@ export class SettlePriceService {
    * is the whole definition of the column: this records what was paid as far as
    * anybody knew at the shelf, not what the newest crawl says.
    *
-   * No `itemId` is a free text line, or a shopper who did not say which product
-   * they took. Catalog is not asked, the scope is kept, and the price is null:
-   * something was bought and the record does not claim to know what it cost.
+   * No `itemId` here is a free text line: the caller named none and core, asked
+   * through {@link pricedItemId}, picked none either. Catalog is not asked, the
+   * scope is kept, and the price is null: something was bought and the record
+   * does not claim to know what it cost.
    */
   private async offerOf(
     itemId: string | undefined,

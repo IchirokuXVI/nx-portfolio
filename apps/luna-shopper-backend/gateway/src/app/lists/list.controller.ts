@@ -37,6 +37,7 @@ import {
   type LinePage,
   type LineSettlementPage,
   type LineSettlementResult,
+  type LineSettlePickRequest,
   type LineSuggestionPage,
   type LineView,
   type ListAccessView,
@@ -48,6 +49,7 @@ import {
   type ListTripsRequest,
   type ListView,
   type SettleLineRequest,
+  type SettlePick,
   type TripKind,
   type TripPage,
   type TripRowPage,
@@ -61,7 +63,10 @@ import type { Request, Response } from 'express';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
-import { SettlePriceService } from '../baskets/settle-price.service';
+import {
+  pricedItemId,
+  SettlePriceService,
+} from '../baskets/settle-price.service';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { CommentTranscriptionService } from './comment-transcription.service';
@@ -562,11 +567,18 @@ export class LinesController {
     // What the screen said one of it costs (plan 0143). Here the caller is the
     // account the price is read as, their own default profile supplies the
     // scopes, and `servedLocations` is true: they are the caller's own shops.
+    // With no `itemId`, core says which product the line records and that is
+    // the product priced (plan 0151, section 3).
     const paid = dto.priceScopeId
       ? await this.prices.read({
           userId: user.userId,
           profileId: undefined,
-          itemId: dto.itemId,
+          itemId: pricedItemId(
+            dto.itemId,
+            dto.itemId === undefined
+              ? await this.settlePick(user.userId, id)
+              : undefined
+          ),
           priceScopeId: dto.priceScopeId,
           supermarketLocationId: dto.supermarketLocationId,
           servedLocations: true,
@@ -581,6 +593,26 @@ export class LinesController {
       paid: paid ?? undefined,
     };
     return this.nats.send<LineSettlementResult>(LINE_PATTERNS.settle, req);
+  }
+
+  /**
+   * The product a settle that names none records on this line, as core answers
+   * it (plan 0151, section 3).
+   *
+   * Undefined when core cannot answer. The settle is about to ask core about the
+   * same line and will fail or succeed on its own terms, which is how the basket
+   * route treats the same question.
+   */
+  private async settlePick(
+    userId: string,
+    lineId: string
+  ): Promise<SettlePick | undefined> {
+    const req: LineSettlePickRequest = { userId, lineId };
+    try {
+      return await this.nats.send<SettlePick>(LINE_PATTERNS.settlePick, req);
+    } catch {
+      return undefined;
+    }
   }
 
   /**

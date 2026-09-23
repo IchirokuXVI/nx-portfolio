@@ -13,7 +13,7 @@ import type { Paginated } from '../pagination';
 import type { UserUsernameView } from './auth.messages';
 import type { BasketParticipantView } from './basket-sharing.messages';
 import type { ItemView, LocalizedText } from './catalog.messages';
-import type { SettlementPaid } from './list.messages';
+import type { SettlePick, SettlementPaid } from './list.messages';
 
 /**
  * The basket, read rather than stored (plan 0136).
@@ -427,6 +427,18 @@ export interface RenameBasketRowRequest {
   confirmMerge?: boolean;
 }
 
+/**
+ * Where a search inside this basket is priced, and, for a settle, which
+ * product the row records when the settle names none (plan 0151, section 1).
+ */
+export interface BasketSearchScopeRequest extends GetBasketRequest {
+  /**
+   * The row a settle is about to write on. Sent only by a settle that named a
+   * scope and no `itemId`, and answered in {@link BasketSearchScope.pick}.
+   */
+  rowKey?: string;
+}
+
 /** Where a search inside this basket is priced. */
 export interface BasketSearchScope {
   ownerUserId: string;
@@ -445,6 +457,17 @@ export interface BasketSearchScope {
    * basket's; that is why it is documented and not merely added.
    */
   servesLocations: boolean;
+  /**
+   * The product a settle on the requested row records when it names none, and
+   * how many the row offers (plan 0151). Present exactly when the request
+   * named a `rowKey`.
+   *
+   * It rides here for the reason {@link servesLocations} does: the settle
+   * already asks this question to price what was paid, so the gateway learns
+   * which product to price without a second round trip, and it learns it from
+   * core, which is the one service that writes the answer.
+   */
+  pick?: SettlePick;
 }
 
 // --- Results ----------------------------------------------------------------

@@ -23,6 +23,7 @@ import {
   type BasketResult,
   type BasketRowResult,
   type BasketSearchScope,
+  type BasketSearchScopeRequest,
   type BasketSummaryView,
   type BasketView,
   type CatalogSuggestResponse,
@@ -74,7 +75,7 @@ import {
   SetBasketRowDemandDto,
   SettleBasketRowDto,
 } from './basket.dto';
-import { SettlePriceService } from './settle-price.service';
+import { pricedItemId, SettlePriceService } from './settle-price.service';
 
 /**
  * The basket that is always there (plan 0136, section 4).
@@ -251,7 +252,7 @@ export class BasketController {
       // client (plan 0143). It runs **before** the write and not after it: a
       // second message attaching a price to a settlement already written would
       // have to find its rows again after a revert split them.
-      paid: (await this.paidFor(id, participant, dto)) ?? undefined,
+      paid: (await this.paidFor(id, rowKey, participant, dto)) ?? undefined,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowSettle, req);
   }
@@ -270,20 +271,31 @@ export class BasketController {
    * It costs one catalog round trip more than a settle used to, at most the
    * service's own budget and usually a few milliseconds, and only when the
    * client named a scope.
+   *
+   * A settle that names no `itemId` also sends the `rowKey`, and core answers
+   * which product that row records (plan 0151). That is the product priced
+   * here, so the price and the settlement cannot disagree, and it costs no
+   * extra round trip.
    */
   private async paidFor(
     basketId: string,
+    rowKey: string,
     participant: BasketParticipantContext,
     dto: SettleBasketRowDto
   ): Promise<SettlementPaid | null> {
     if (!dto.priceScopeId) {
       return null;
     }
+    const req: BasketSearchScopeRequest = {
+      basketId,
+      participantId: participant.participantId,
+      ...(dto.itemId === undefined ? { rowKey } : {}),
+    };
     let scope: BasketSearchScope;
     try {
       scope = await this.nats.send<BasketSearchScope>(
         BASKET_PATTERNS.searchScope,
-        { basketId, participantId: participant.participantId }
+        req
       );
     } catch {
       // Core could not say whose basket this is, so there is no owner to price
@@ -294,7 +306,7 @@ export class BasketController {
     return this.prices.read({
       userId: scope.ownerUserId,
       profileId: scope.profileId ?? undefined,
-      itemId: dto.itemId,
+      itemId: pricedItemId(dto.itemId, scope.pick),
       priceScopeId: dto.priceScopeId,
       supermarketLocationId: dto.supermarketLocationId,
       servedLocations: scope.servesLocations,

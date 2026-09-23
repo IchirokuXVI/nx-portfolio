@@ -6,7 +6,9 @@ import {
   type ItemOfferView,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
+import { ValidationException } from '@portfolio/luna-shopper/platform';
 import {
+  pricedItemId,
   SETTLE_PRICE_BUDGET_MS,
   SettlePriceService,
   type SettlePriceInput,
@@ -79,8 +81,8 @@ const resolution = (): CatalogScopeView => ({
 interface World {
   /** What catalog answers the priced lookup with, a throw, or silence. */
   readonly items?: ItemView[] | 'throws' | 'never answers';
-  /** What the resolver answers with, or a throw. */
-  readonly resolves?: CatalogScopeView | 'throws';
+  /** What the resolver answers with, a throw, or silence. */
+  readonly resolves?: CatalogScopeView | 'throws' | 'never answers';
   /** What the shop listing answers with, or a throw. */
   readonly shops?: string[] | 'throws';
 }
@@ -116,6 +118,9 @@ function build(world: World = {}) {
   const describe = jest.fn(async () => {
     if (world.resolves === 'throws') {
       throw new Error('core slow');
+    }
+    if (world.resolves === 'never answers') {
+      return new Promise<CatalogScopeView>(() => undefined);
     }
     return world.resolves ?? resolution();
   });
@@ -223,8 +228,13 @@ describe('the price a settle records (plan 0143, section 4.2)', () => {
       });
     });
 
-    // A free text line, or a shopper who did not say which product they took.
-    it('when there is no itemId, without asking catalog', async () => {
+    // Plan 0151 moved this case. It used to cover a caller that left `itemId`
+    // out on a row of one product as well, which is what the DTO tells a
+    // caller to do, and that settle stored the product and no price. The
+    // routes now ask core which product the row records (`pricedItemId`,
+    // below), so an undefined `itemId` reaches this service only when core
+    // picked none either: a free text row. That record still has no price.
+    it('when no product was named or picked (a free text row), without asking catalog', async () => {
       const w = build();
 
       const paid = await w.service.read(input({ itemId: undefined }));
@@ -326,5 +336,67 @@ describe('the price a settle records (plan 0143, section 4.2)', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  // Plan 0151, section 4: before step 2 passed, the scope is only what the
+  // client said, and plan 0143 step 5 says "null otherwise".
+  it('gives up with nothing at all when the scope was not resolved in time', async () => {
+    jest.useFakeTimers();
+    try {
+      const w = build({ resolves: 'never answers' });
+
+      const pending = w.service.read(input());
+      jest.advanceTimersByTime(SETTLE_PRICE_BUDGET_MS);
+
+      expect(await pending).toBe(null);
+      expect(w.calls).not.toContain(ITEM_PATTERNS.getMany);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+/**
+ * The product a settle's price is read for (plan 0151, sections 1 and 2).
+ *
+ * Core answers `pick` with its own rule, so these cases check only what the
+ * gateway does with the answer, and never how a row reaches one.
+ */
+describe('pricedItemId', () => {
+  it('prices the product the caller named, whatever core picked', () => {
+    expect(pricedItemId(ITEM, { pickedItemId: null, optionCount: 3 })).toBe(
+      ITEM
+    );
+  });
+
+  it('prices the product core records when the caller named none', () => {
+    expect(
+      pricedItemId(undefined, { pickedItemId: ITEM, optionCount: 1 })
+    ).toBe(ITEM);
+  });
+
+  it('prices nothing on a free text row', () => {
+    expect(
+      pricedItemId(undefined, { pickedItemId: null, optionCount: 0 })
+    ).toBeUndefined();
+  });
+
+  it('prices nothing when core was not asked or did not answer', () => {
+    expect(pricedItemId(undefined, undefined)).toBeUndefined();
+  });
+
+  it('refuses several products with none named, as validation_failed on itemId', () => {
+    let thrown: unknown;
+    try {
+      pricedItemId(undefined, { pickedItemId: null, optionCount: 2 });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ValidationException);
+    expect((thrown as ValidationException).code).toBe('validation_failed');
+    expect((thrown as ValidationException).messageArgs).toEqual({
+      field: 'itemId',
+    });
   });
 });

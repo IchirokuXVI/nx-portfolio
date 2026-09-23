@@ -8,8 +8,10 @@ import {
   type LineSettlementResult,
   type LineSettlementView,
   type ListItemSettlementsRequest,
+  type LineSettlePickRequest,
   type ListLineSettlementsRequest,
   type SettleLineRequest,
+  type SettlePick,
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
@@ -129,6 +131,28 @@ export class SettlementService {
    * draws its own connection from the pool and asking it a question from inside a
    * transaction means one request holding two.
    */
+  /**
+   * The product a settle on this line records when it names none (plan 0151,
+   * section 3).
+   *
+   * The gateway asks before it reads a price, so the price it reads is the
+   * price of the product {@link settle} writes. Both answer through
+   * `resolveItemId`, and the access check is the settle's own, so a caller who
+   * could not settle the line learns nothing about its products here either.
+   */
+  async settlePick(req: LineSettlePickRequest): Promise<SettlePick> {
+    const found = await this.listAccess.getLine(req.lineId);
+    await this.listAccess.requireSettle(found.listId, req.userId);
+    const { itemIds } = await this.itemSetOf(
+      this.dataSource.getRepository(ListLineItem),
+      req.lineId
+    );
+    return {
+      pickedItemId: this.resolveItemId(undefined, itemIds),
+      optionCount: itemIds.length,
+    };
+  }
+
   async settle(req: SettleLineRequest): Promise<LineSettlementResult> {
     const quantity = this.validateSettleQuantity(req);
     this.validateItemId(req.itemId);

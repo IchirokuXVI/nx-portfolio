@@ -166,6 +166,10 @@ function build(options: {
           return entity === LineSettlement ? settlementRepo : lineRepo;
         },
       } as unknown as EntityManager),
+    // `line.settlePick` reads the product set outside any transaction (plan
+    // 0151), from the same rows the settle locks and reads.
+    getRepository: (entity: unknown) =>
+      entity === ListLineItem ? lineItems.repo : lineRepo,
   } as unknown as DataSource;
 
   const publisher = {
@@ -693,5 +697,44 @@ describe('line.settle (plan 0047, section 4)', () => {
       expect(w.written).toHaveLength(0);
       expect(w.saved).toHaveLength(0);
     });
+  });
+});
+
+/**
+ * Which product a settle that names none records, asked before the price is
+ * read (plan 0151, section 3).
+ *
+ * The gateway prices this answer, so it has to be the product `line.settle`
+ * then writes. Each case here mirrors one in "the product it records" above.
+ */
+describe('line.settlePick (plan 0151)', () => {
+  const ask = (w: Harness) =>
+    w.service.settlePick({ userId: SHOPPER, lineId: 'li1' });
+
+  it('answers the only product of a line that carries one', async () => {
+    const w = build({ itemIds: [MILK_ITEM] });
+
+    expect(await ask(w)).toEqual({ pickedItemId: MILK_ITEM, optionCount: 1 });
+  });
+
+  it('answers no product, and how many there are, for a line with several', async () => {
+    const w = build({ itemIds: [MILK_ITEM, BREAD_ITEM] });
+
+    expect(await ask(w)).toEqual({ pickedItemId: null, optionCount: 2 });
+  });
+
+  it('answers no product for a free text line', async () => {
+    const w = build({});
+
+    expect(await ask(w)).toEqual({ pickedItemId: null, optionCount: 0 });
+  });
+
+  it('is refused for a caller who could not settle the line', async () => {
+    const w = build({
+      permissions: [ListPermission.READ],
+      itemIds: [MILK_ITEM],
+    });
+
+    await expect(ask(w)).rejects.toThrow();
   });
 });

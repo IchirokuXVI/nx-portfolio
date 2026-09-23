@@ -36,6 +36,7 @@ export const LIST_SCHEMA_IDS = {
   lineClaimRef: schemaId('list/LineClaimRef'),
   lineClaimChangedEvent: schemaId('list/LineClaimChangedEvent'),
   settlementPaid: schemaId('list/SettlementPaid'),
+  settlePick: schemaId('list/SettlePick'),
   lineSettlementView: schemaId('list/LineSettlementView'),
   lineSettlementResult: schemaId('list/LineSettlementResult'),
   lineSettlementPage: schemaId('list/LineSettlementPage'),
@@ -58,6 +59,7 @@ export const LIST_SCHEMA_IDS = {
   updateLineRequest: schemaId('msg/line.update/request'),
   setApprovalRequest: schemaId('msg/line.setApproval/request'),
   settleLineRequest: schemaId('msg/line.settle/request'),
+  settlePickRequest: schemaId('msg/line.settlePick/request'),
   lineSettlementsRequest: schemaId('msg/line.settlements/request'),
   itemSettlementsRequest: schemaId('msg/line.itemSettlements/request'),
   listHoldingItemView: schemaId('list/ListHoldingItemView'),
@@ -250,6 +252,17 @@ const settlementPaid = object(
     'pricePaidCents',
     'pricePaidCurrency',
   ]
+);
+
+// Core's answer to "which product does a settle that names none record" (plan
+// 0151). The rule is core's, so the gateway prices this and never its own guess.
+const settlePick = object(
+  LIST_SCHEMA_IDS.settlePick,
+  {
+    pickedItemId: nullableString(),
+    optionCount: integer({ minimum: 0 }),
+  },
+  ['pickedItemId', 'optionCount']
 );
 
 // One origin line touched by one settling act (plan 0047, section 3).
@@ -597,6 +610,14 @@ const settleLineRequest = object(
   },
   ['userId', 'lineId', 'outcome']
 );
+const settlePickRequest = object(
+  LIST_SCHEMA_IDS.settlePickRequest,
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+  },
+  ['userId', 'lineId']
+);
 const lineSettlementsRequest = object(
   LIST_SCHEMA_IDS.lineSettlementsRequest,
   {
@@ -869,6 +890,7 @@ export const listSchemas: JsonSchema[] = [
   lineClaimRef,
   lineClaimChangedEvent,
   settlementPaid,
+  settlePick,
   lineSettlementView,
   lineSettlementResult,
   commentRecording,
@@ -891,6 +913,7 @@ export const listSchemas: JsonSchema[] = [
   updateLineRequest,
   setApprovalRequest,
   settleLineRequest,
+  settlePickRequest,
   lineSettlementsRequest,
   itemSettlementsRequest,
   listHoldingItemView,
@@ -983,6 +1006,10 @@ export const listMessageContracts: Record<
   [LINE_PATTERNS.settle]: {
     request: LIST_SCHEMA_IDS.settleLineRequest,
     response: LIST_SCHEMA_IDS.lineSettlementResult,
+  },
+  [LINE_PATTERNS.settlePick]: {
+    request: LIST_SCHEMA_IDS.settlePickRequest,
+    response: LIST_SCHEMA_IDS.settlePick,
   },
   [LINE_PATTERNS.settlements]: {
     request: LIST_SCHEMA_IDS.lineSettlementsRequest,

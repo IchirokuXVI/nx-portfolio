@@ -5,7 +5,7 @@ import {
   type AddBasketLineRequest,
   type BasketRowResult,
   type BasketSearchScope,
-  type GetBasketRequest,
+  type BasketSearchScopeRequest,
   type RenameBasketRowRequest,
   type RevertBasketRowRequest,
   type SetBasketRowDemandRequest,
@@ -79,7 +79,9 @@ export class BasketWriteController {
 
   /** Where a search inside this basket is priced (section 5.4). */
   @MessagePattern(BASKET_PATTERNS.searchScope)
-  searchScope(@Payload() req: GetBasketRequest): Promise<BasketSearchScope> {
+  searchScope(
+    @Payload() req: BasketSearchScopeRequest
+  ): Promise<BasketSearchScope> {
     return this.addService.searchScope(req);
   }
 }

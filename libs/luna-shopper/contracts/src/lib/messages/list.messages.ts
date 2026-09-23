@@ -56,6 +56,11 @@ export const LINE_PATTERNS = {
    * longer carries.
    */
   settle: 'line.settle',
+  /**
+   * The product a settle on a line records when it names none (plan 0151). The
+   * gateway asks before it reads a price, so it prices what core will write.
+   */
+  settlePick: 'line.settlePick',
   /** One line's own settlements, newest first (plan 0047, section 6.1). */
   settlements: 'line.settlements',
   /**
@@ -840,6 +845,33 @@ export interface SettlementPaid {
    * the price was not known.
    */
   pricePaidCurrency: string | null;
+}
+
+/**
+ * Which product a settle that names none records, answered by core before the
+ * gateway reads the price (plan 0151, section 1).
+ *
+ * Core owns the rule, and the gateway prices exactly what core will write: a
+ * row or line offering one product records that one, and anything else records
+ * null. The gateway never works the answer out of an item list of its own,
+ * because two copies of one rule are how a price and a settlement came to
+ * disagree.
+ */
+export interface SettlePick {
+  /** The product a settle with no `itemId` records, or null. */
+  pickedItemId: string | null;
+  /**
+   * How many products the row or line offers. Several and no `itemId` is
+   * refused when the caller named a scope (section 2), because a price cannot
+   * be read for a product nobody named.
+   */
+  optionCount: number;
+}
+
+/** Which product a settle on this line records when it names none (plan 0151). */
+export interface LineSettlePickRequest {
+  userId: string;
+  lineId: string;
 }
 
 /**
