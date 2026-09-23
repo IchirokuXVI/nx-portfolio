@@ -447,19 +447,19 @@ describe('ItemService', () => {
    */
   describe('a barcode the catalog already holds', () => {
     /** What the driver raises on `uq_items_ean`, as the service reads it. */
-    function duplicateEan() {
+    function duplicateEan(detail?: string) {
       const error = new QueryFailedError('insert', [], new Error('duplicate'));
-      (error as unknown as { driverError: { code: string } }).driverError = {
-        code: '23505',
-      };
+      (
+        error as unknown as { driverError: { code: string; detail?: string } }
+      ).driverError = { code: '23505', detail };
       return error;
     }
 
-    function refusingItems() {
+    function refusingItems(detail?: string) {
       return {
         create: jest.fn((x) => x),
         save: jest.fn(async () => {
-          throw duplicateEan();
+          throw duplicateEan(detail);
         }),
         findOne: jest.fn(async () => ({
           id: 'i1',
@@ -518,6 +518,26 @@ describe('ItemService', () => {
           ],
         })
       ).rejects.toThrow(/none of them were created/);
+    });
+
+    it('names the barcode in the batch refusal (plan 0158)', async () => {
+      const { service } = build({
+        items: refusingItems('Key (ean)=(8480000123456) already exists.'),
+      });
+
+      await expect(
+        service.createMany({
+          userId: ADMIN,
+          items: [
+            {
+              name: { es: 'Leche' },
+              category: ItemCategory.DAIRY,
+              defaultUnit: UnitOfMeasure.LITER,
+              ean: '8480000123456',
+            },
+          ],
+        })
+      ).rejects.toThrow(/EAN 8480000123456/);
     });
 
     it('leaves an error that is not a duplicate barcode alone', async () => {

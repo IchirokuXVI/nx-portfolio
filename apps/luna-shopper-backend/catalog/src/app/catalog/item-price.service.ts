@@ -1,15 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type {
-  AddItemPriceBatchRequest,
-  AddItemPriceBatchResult,
-  AddItemPriceRequest,
-  DeleteItemPricesByRunRequest,
-  DeleteItemPricesByRunResult,
-  ItemPriceIdRequest,
-  ItemPricePage,
-  ItemPriceView,
-  ListItemPricesRequest,
+import {
+  PriceSourceKind,
+  type AddItemPriceBatchRequest,
+  type AddItemPriceBatchResult,
+  type AddItemPriceRequest,
+  type DeleteItemPricesByRunRequest,
+  type DeleteItemPricesByRunResult,
+  type ItemPriceIdRequest,
+  type ItemPricePage,
+  type ItemPriceView,
+  type ListItemPricesRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
@@ -22,6 +23,7 @@ import { Repository, type EntityManager } from 'typeorm';
 import { Item, ItemPrice, PriceScope } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import { toItemPriceView } from './catalog.mappers';
+import { AUTOMATED_KINDS } from './effective-price';
 import {
   EffectivePriceService,
   type PriceKey,
@@ -61,6 +63,19 @@ export class ItemPriceService {
   /** One row. An `ADMIN` add computes its override snapshot server side. */
   async add(req: AddItemPriceRequest): Promise<ItemPriceView> {
     const actor = await this.admin.requireAdmin(req);
+    if (
+      req.sourceKind !== PriceSourceKind.ADMIN &&
+      !AUTOMATED_KINDS.includes(req.sourceKind)
+    ) {
+      // Backlog 0008 opens the user kinds, and until then nothing writes one
+      // through here (plan 0158). Not in the writer: the reference seed
+      // writes USER_RECEIPT through it on purpose, with no run.
+      throw new ValidationException(
+        `sourceKind ${req.sourceKind} is not accepted here. A price typed ` +
+          'through the back office is ADMIN or one of the automated kinds.',
+        { messageArgs: { field: 'sourceKind' } }
+      );
+    }
     const scope = await this.requireItemAndScope(req.itemId, req.priceScopeId);
     const now = new Date();
 

@@ -42,6 +42,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
+  UuidParam,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
@@ -189,7 +190,7 @@ export class BasketController {
   @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async get(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<BasketResult> {
     const req: GetBasketRequest = {
       basketId: id,
@@ -235,7 +236,7 @@ export class BasketController {
   })
   async settle(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Param('rowKey') rowKey: string,
     @Body() dto: SettleBasketRowDto
   ): Promise<BasketRowResult> {
@@ -332,7 +333,7 @@ export class BasketController {
   })
   revert(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Param('rowKey') rowKey: string,
     @Body() dto: RevertBasketRowDto
   ): Promise<BasketRowResult> {
@@ -378,7 +379,7 @@ export class BasketController {
   })
   demand(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Param('rowKey') rowKey: string,
     @Body() dto: SetBasketRowDemandDto
   ): Promise<BasketRowResult> {
@@ -408,7 +409,7 @@ export class BasketController {
   })
   rename(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Param('rowKey') rowKey: string,
     @Body() dto: RenameBasketRowDto
   ): Promise<BasketRowResult> {
@@ -446,7 +447,7 @@ export class BasketController {
   })
   skip(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Param('rowKey') rowKey: string
   ): Promise<BasketRowResult> {
     const req: SkipBasketRowRequest = {
@@ -470,7 +471,7 @@ export class BasketController {
   })
   unskip(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Param('rowKey') rowKey: string
   ): Promise<BasketRowResult> {
     const req: SkipBasketRowRequest = {
@@ -504,7 +505,7 @@ export class BasketController {
   })
   addLine(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddBasketLineDto
   ): Promise<BasketRowResult> {
     const req: AddBasketLineRequest = {
@@ -532,7 +533,7 @@ export class BasketController {
   @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   changes(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: BasketChangesQueryDto
   ): Promise<BasketChangePage> {
     const req: ListBasketChangesRequest = {
@@ -570,7 +571,7 @@ export class BasketController {
   })
   acknowledgeChanges(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AcknowledgeBasketChangesDto
   ): Promise<BasketChangesAcknowledged> {
     const req: AcknowledgeBasketChangesRequest = {
@@ -596,7 +597,7 @@ export class BasketController {
   @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async suggest(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: BasketSuggestQueryDto
   ): Promise<CatalogSuggestResponse> {
     const scope = await this.nats.send<BasketSearchScope>(

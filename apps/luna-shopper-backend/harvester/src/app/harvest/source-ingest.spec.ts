@@ -788,7 +788,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
     expect(priceRows[0].details).toEqual(extra);
   });
 
-  it('counts the batch result as updated and unchanged, as a refresh did', async () => {
+  it('counts new prices as updated, and unchanged as products only', async () => {
     const { ingest, context, reported } = build({
       rows: [
         {
@@ -810,8 +810,15 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
       ],
     });
 
-    // A new row is "the source said something new"; a confirmed row is not.
-    expect(reported).toContainEqual({ updated: 2, unchanged: 1 });
+    // A new row is "the source said something new". A confirmed price moves
+    // no progress counter: `unchanged` is the one product the ladder left
+    // alone, and the confirmed price is `pricesConfirmed` (plan 0158).
+    expect(reported).toContainEqual({ updated: 2 });
+    const unchanged = reported.reduce(
+      (sum, counters) => sum + (counters.unchanged ?? 0),
+      0
+    );
+    expect(unchanged).toBe(1);
     expect(result.counters).toMatchObject({
       pricesWritten: 2,
       pricesConfirmed: 1,
@@ -1164,7 +1171,7 @@ describe('SourceIngest, a price copied to other scopes (plan 0118)', () => {
     expect(copies.pricedScopes).toEqual(new Set([SCOPE]));
     expect(copies.pricesCopied).toEqual(new Map([[SCOPE, 2]]));
     expect(reported.filter((each) => !('processed' in each))).toEqual([
-      { updated: 1, unchanged: 0 },
+      { updated: 1 },
     ]);
   });
 

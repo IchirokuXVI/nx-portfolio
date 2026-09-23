@@ -884,10 +884,12 @@ export class SourceIngest {
   /**
    * Step 4: the prices the `ACTIVE` rows are owed, in batches, as this run.
    *
-   * The counters map onto what the batch answers, exactly as a refresh's did: a
-   * new row is `updated`, because the source said something new, and a confirmed
-   * row is `unchanged`. Nothing is `created` here, because the row a shopper
-   * reads is derived and the run never sees it (plan 0080).
+   * A new row is `updated`, because the source said something new. A confirmed
+   * row moves no progress counter: `unchanged` counts products the ladder left
+   * alone, and adding confirmed prices to it read 6,324 for a walk of 4,246
+   * products (plan 0158). Confirmed prices are reported as `pricesConfirmed`.
+   * Nothing is `created` here, because the row a shopper reads is derived and
+   * the run never sees it (plan 0080).
    *
    * `details` is a **translation** of the observation's `extra` rather than a
    * pass through: `extra` is free and catalog's `item_price_details` is not, so
@@ -920,10 +922,7 @@ export class SourceIngest {
       // A copy moves no progress counter, for the reason `pricesRecorded`
       // leaves it out: the run's numbers describe what the chain stated.
       if (copiedFromScopeId === null) {
-        await context.report({
-          updated: result.inserted,
-          unchanged: result.confirmed,
-        });
+        await context.report({ updated: result.inserted });
       }
     }
     return { inserted, confirmed };

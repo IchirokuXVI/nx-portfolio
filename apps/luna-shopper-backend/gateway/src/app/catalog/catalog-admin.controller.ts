@@ -57,7 +57,7 @@ import {
   type SupermarketView,
   type UpdateBrandResult,
 } from '@portfolio/luna-shopper/contracts';
-import { MAX_PAGE_SIZE } from '@portfolio/luna-shopper/platform';
+import { MAX_PAGE_SIZE, UuidParam } from '@portfolio/luna-shopper/platform';
 import { adminCredential } from '../admin/admin-credential';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import type { CurrentAdmin } from '../admin/admin-jwt.strategy';
@@ -187,7 +187,7 @@ export class AdminCatalogSupermarketsController {
   @ApiContractResponse(SUPERMARKET_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<SupermarketView> {
     return this.nats.send<SupermarketView>(SUPERMARKET_PATTERNS.get, {
       userId: admin.adminId,
@@ -200,7 +200,7 @@ export class AdminCatalogSupermarketsController {
   @ApiProblemResponses({ body: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateSupermarketDto
   ): Promise<SupermarketView> {
     return this.nats.send<SupermarketView>(SUPERMARKET_PATTERNS.update, {
@@ -214,7 +214,7 @@ export class AdminCatalogSupermarketsController {
   @ApiContractResponse(SUPERMARKET_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(SUPERMARKET_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -229,7 +229,7 @@ export class AdminCatalogSupermarketsController {
   @ApiProblemResponses({ body: true, conflict: true })
   createLocation(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: CreateSupermarketLocationDto
   ): Promise<SupermarketLocationView> {
     return this.nats.send<SupermarketLocationView>(
@@ -251,7 +251,7 @@ export class AdminCatalogSupermarketsController {
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.list)
   listLocations(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: AdminListLocationsQueryDto
   ): Promise<SupermarketLocationPage> {
     return this.nats.send<SupermarketLocationPage>(
@@ -281,7 +281,7 @@ export class AdminCatalogLocationsController {
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<SupermarketLocationView> {
     return this.nats.send<SupermarketLocationView>(
       SUPERMARKET_LOCATION_PATTERNS.get,
@@ -299,7 +299,7 @@ export class AdminCatalogLocationsController {
   @ApiProblemResponses({ body: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateSupermarketLocationDto
   ): Promise<SupermarketLocationView> {
     return this.nats.send<SupermarketLocationView>(
@@ -312,7 +312,7 @@ export class AdminCatalogLocationsController {
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(SUPERMARKET_LOCATION_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -407,7 +407,7 @@ export class AdminCatalogItemsController {
   @ApiContractResponse(ITEM_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ItemView> {
     return this.nats.send<ItemView>(ITEM_PATTERNS.get, {
       userId: admin.adminId,
@@ -421,7 +421,7 @@ export class AdminCatalogItemsController {
   @ApiProblemResponses({ body: true, conflict: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateItemDto
   ): Promise<ItemView> {
     return this.nats.send<ItemView>(ITEM_PATTERNS.update, {
@@ -435,7 +435,7 @@ export class AdminCatalogItemsController {
   @ApiContractResponse(ITEM_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(ITEM_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -513,7 +513,7 @@ export class AdminCatalogProductGroupsController {
   @ApiContractResponse(PRODUCT_GROUP_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ProductGroupView> {
     return this.nats.send<ProductGroupView>(PRODUCT_GROUP_PATTERNS.get, {
       userId: admin.adminId,
@@ -526,7 +526,7 @@ export class AdminCatalogProductGroupsController {
   @ApiProblemResponses({ body: true, conflict: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateProductGroupDto
   ): Promise<ProductGroupView> {
     return this.nats.send<ProductGroupView>(PRODUCT_GROUP_PATTERNS.update, {
@@ -544,7 +544,7 @@ export class AdminCatalogProductGroupsController {
   @ApiContractResponse(PRODUCT_GROUP_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(PRODUCT_GROUP_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -663,7 +663,7 @@ export class AdminCatalogBrandsController {
   })
   async spellings(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<BrandSpellingsResult> {
     const brand = await this.nats.send<BrandView>(BRAND_PATTERNS.get, {
       userId: admin.adminId,
@@ -687,7 +687,7 @@ export class AdminCatalogBrandsController {
   @ApiContractResponse(BRAND_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<BrandView> {
     return this.nats.send<BrandView>(BRAND_PATTERNS.get, {
       userId: admin.adminId,
@@ -710,7 +710,7 @@ export class AdminCatalogBrandsController {
   @ApiProblemResponses({ body: true, conflict: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateBrandDto
   ): Promise<UpdateBrandResult> {
     return this.nats.send<UpdateBrandResult>(BRAND_PATTERNS.update, {
@@ -735,7 +735,7 @@ export class AdminCatalogBrandsController {
   @ApiProblemResponses({ conflict: true })
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<DeleteBrandResult> {
     return this.nats.send<DeleteBrandResult>(BRAND_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -919,7 +919,7 @@ export class AdminCatalogItemPricesController {
   @ApiContractResponse(ITEM_PRICE_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(ITEM_PRICE_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -1015,7 +1015,7 @@ export class AdminCatalogPriceScopesController {
   @ApiProblemResponses({ body: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdatePriceScopeDto
   ): Promise<PriceScopeView> {
     return this.nats.send<PriceScopeView>(PRICE_SCOPE_PATTERNS.update, {
@@ -1030,7 +1030,7 @@ export class AdminCatalogPriceScopesController {
   @ApiProblemResponses({ conflict: true })
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(PRICE_SCOPE_PATTERNS.delete, {
       ...adminCredential(admin),

@@ -11,6 +11,7 @@ import {
   HarvestRunStatus,
   HarvestRunTrigger,
 } from '@portfolio/luna-shopper/contracts';
+import { describeError } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
 import type { PostalCodeDiscoveryRequest } from '../entities';
 import { ActiveRunExistsError, HarvestRunStore } from './harvest-run.store';
@@ -137,7 +138,9 @@ export class PostalCodeDiscoveryWorker
     } catch (error) {
       // The drain runs on a timer with no caller to return an error to, so it
       // must never take the process down.
-      this.logger.error(`Discovery queue drain failed: ${String(error)}`);
+      this.logger.error(
+        `Discovery queue drain failed: ${describeError(error).message}`
+      );
     } finally {
       this.draining = false;
     }
@@ -174,7 +177,7 @@ export class PostalCodeDiscoveryWorker
       // alternative is a row that spins on every tick.
       await this.queue.markAttemptFailed(
         row,
-        String(error),
+        describeError(error).message,
         settings.discoveryMaxAttempts,
         null
       );
@@ -306,7 +309,7 @@ export class PostalCodeDiscoveryWorker
         );
         return null;
       }
-      return { runId, failure: String(error) };
+      return { runId, failure: describeError(error).message };
     }
   }
 }

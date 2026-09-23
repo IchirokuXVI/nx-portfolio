@@ -58,6 +58,7 @@ import {
 import {
   PageQueryDto,
   THROTTLE_LIMITS,
+  UuidParam,
 } from '@portfolio/luna-shopper/platform';
 import type { Request, Response } from 'express';
 import { AuthUser } from '../auth/current-user.decorator';
@@ -106,7 +107,7 @@ export class ZoneListsController {
   @ApiProblemResponses({ body: true })
   create(
     @AuthUser() user: CurrentUser,
-    @Param('zoneId') zoneId: string,
+    @UuidParam('zoneId') zoneId: string,
     @Body() dto: CreateListDto
   ): Promise<ListView> {
     return this.nats.send<ListView>(LIST_PATTERNS.create, {
@@ -121,7 +122,7 @@ export class ZoneListsController {
   @ApiContractResponse(LIST_PATTERNS.list)
   list(
     @AuthUser() user: CurrentUser,
-    @Param('zoneId') zoneId: string,
+    @UuidParam('zoneId') zoneId: string,
     @Query() query: ListQueryDto
   ): Promise<ListPage> {
     return this.nats.send<ListPage>(LIST_PATTERNS.list, {
@@ -156,7 +157,7 @@ export class ItemHistoryController {
   @ApiContractResponse(LINE_PATTERNS.itemSettlements)
   settlements(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: PageQueryDto
   ): Promise<LineSettlementPage> {
     return this.nats.send<LineSettlementPage>(LINE_PATTERNS.itemSettlements, {
@@ -195,7 +196,7 @@ export class ItemHistoryController {
   @ApiProblemResponses({ body: true })
   holdingLists(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query('excludeListId') excludeListId?: string
   ): Promise<ListsHoldingItemResult> {
     const req: ListsHoldingItemRequest = {
@@ -224,7 +225,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   update(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateListDto
   ): Promise<ListView> {
     return this.nats.send<ListView>(LIST_PATTERNS.update, {
@@ -240,7 +241,7 @@ export class ListsController {
   @ApiContractResponse(LIST_PATTERNS.delete)
   remove(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(LIST_PATTERNS.delete, {
       userId: user.userId,
@@ -253,7 +254,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   setAccess(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: SetListAccessDto
   ): Promise<{ listId: string }> {
     return this.nats.send(LIST_PATTERNS.setAccess, {
@@ -275,7 +276,7 @@ export class ListsController {
   @ApiContractResponse(LIST_PATTERNS.getAccess)
   getAccess(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ListAccessView> {
     return this.nats.send<ListAccessView>(LIST_PATTERNS.getAccess, {
       userId: user.userId,
@@ -301,7 +302,7 @@ export class ListsController {
   @ApiContractResponse(LIST_PATTERNS.trips)
   listTrips(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: PageQueryDto
   ): Promise<TripPage> {
     const req: ListTripsRequest = {
@@ -330,7 +331,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   listTripRows(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Param('kind') kind: string,
     @Param('tripId') tripId: string,
     @Query() query: PageQueryDto
@@ -361,7 +362,7 @@ export class ListsController {
   @ApiContractResponse(LIST_PATTERNS.suggestions)
   listSuggestions(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<LineSuggestionPage> {
     const req: ListSuggestionsRequest = { userId: user.userId, listId: id };
     return this.nats.send<LineSuggestionPage>(LIST_PATTERNS.suggestions, req);
@@ -371,7 +372,7 @@ export class ListsController {
   @ApiContractResponse(LINE_PATTERNS.list)
   listLines(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: LineQueryDto
   ): Promise<LinePage> {
     return this.nats.send<LinePage>(LINE_PATTERNS.list, {
@@ -388,7 +389,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   addLine(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddLineDto
   ): Promise<AddLineResult> {
     return this.nats.send<AddLineResult>(LINE_PATTERNS.add, {
@@ -419,7 +420,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   addLines(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddLinesDto
   ): Promise<AddLineResult[]> {
     return this.nats.send<AddLineResult[]>(LINE_PATTERNS.addMany, {
@@ -434,7 +435,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   reorder(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: ReorderLinesDto
   ): Promise<{ listId: string }> {
     return this.nats.send(LINE_PATTERNS.reorder, {
@@ -473,7 +474,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true, lineMerge: true })
   update(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateLineDto
   ): Promise<UpdateLineResult> {
     return this.nats.send<UpdateLineResult>(LINE_PATTERNS.update, {
@@ -511,7 +512,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true })
   addQuantity(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddLineQuantityDto
   ): Promise<LineView> {
     return this.nats.send<LineView>(LINE_PATTERNS.addQuantity, {
@@ -528,7 +529,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true })
   setApproval(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: SetApprovalDto
   ): Promise<LineView> {
     return this.nats.send<LineView>(LINE_PATTERNS.setApproval, {
@@ -561,7 +562,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true })
   async settle(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: SettleLineDto
   ): Promise<LineSettlementResult> {
     // What the screen said one of it costs (plan 0143). Here the caller is the
@@ -626,7 +627,7 @@ export class LinesController {
   @ApiContractResponse(LINE_PATTERNS.settlements)
   settlements(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: PageQueryDto
   ): Promise<LineSettlementPage> {
     return this.nats.send<LineSettlementPage>(LINE_PATTERNS.settlements, {
@@ -641,7 +642,7 @@ export class LinesController {
   @ApiContractResponse(LINE_PATTERNS.delete)
   remove(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(LINE_PATTERNS.delete, {
       userId: user.userId,
@@ -653,7 +654,7 @@ export class LinesController {
   @ApiContractResponse(COMMENT_PATTERNS.list)
   listComments(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: ListQueryDto
   ): Promise<CommentPage> {
     return this.nats.send<CommentPage>(COMMENT_PATTERNS.list, {
@@ -669,7 +670,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true })
   addComment(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddCommentDto
   ): Promise<CommentView> {
     return this.nats.send<CommentView>(COMMENT_PATTERNS.add, {
@@ -717,7 +718,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true })
   async addVoiceComment(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Req() request: Request,
     @Body() dto: AddVoiceCommentDto
   ): Promise<CommentView> {
@@ -807,7 +808,7 @@ export class CommentsController {
   })
   async getCommentAudio(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Res() response: Response
   ): Promise<void> {
     const audio = await this.nats.send<CommentAudioView>(

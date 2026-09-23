@@ -25,6 +25,7 @@ import {
   decodeCursor,
   encodeCursor,
   ForbiddenException,
+  isUuid,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import {
@@ -56,14 +57,6 @@ import {
   SharedListGrantService,
   type GrantedAccess,
 } from './shared-list-grant.service';
-
-/**
- * Canonical UUID shape, for validating the cross-service catalog `itemId` (plan
- * 0053, section 3). The same check `SettlementService` applies to the same field,
- * for the same reason: core does not hold the catalog and cannot ask it.
- */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ListCursor {
   order: ListOrder;
@@ -762,7 +755,7 @@ export class ListService {
   async holdingItem(
     req: ListsHoldingItemRequest
   ): Promise<ListsHoldingItemResult> {
-    if (!UUID_PATTERN.test(req.itemId ?? '')) {
+    if (!isUuid(req.itemId ?? '')) {
       throw new ValidationException('itemId must be a valid item reference', {
         messageArgs: { field: 'itemId' },
       });

@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   HttpStatus,
-  Param,
   Patch,
   Post,
   Query,
@@ -20,6 +19,7 @@ import {
   type SharedBasketCorePage,
   type SharedBasketPage,
 } from '@portfolio/luna-shopper/contracts';
+import { UuidParam } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
@@ -202,7 +202,7 @@ export class BasketsController {
   @ApiProblemResponses({ auth: true, body: true, notFound: true })
   update(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateBasketDto
   ): Promise<BasketHeaderView> {
     return this.nats.send<BasketHeaderView>(BASKET_PATTERNS.update, {
@@ -221,7 +221,7 @@ export class BasketsController {
   @ApiProblemResponses({ auth: true, notFound: true })
   remove(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send<{ id: string }>(BASKET_PATTERNS.delete, {
       userId: user.userId,

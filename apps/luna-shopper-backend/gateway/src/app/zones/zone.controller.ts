@@ -26,7 +26,7 @@ import {
   type ZonePage,
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
-import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
+import { THROTTLE_LIMITS, UuidParam } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
@@ -253,7 +253,7 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true })
   get(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<MyZoneView> {
     return this.nats.send<MyZoneView>(ZONE_PATTERNS.get, {
       userId: user.userId,
@@ -268,7 +268,7 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true })
   listMembers(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: ListMembersQueryDto
   ): Promise<MembershipPage> {
     return this.nats.send<MembershipPage>(MEMBERSHIP_PATTERNS.list, {
@@ -288,7 +288,7 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true, body: true })
   update(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateZoneDto
   ): Promise<ZoneView> {
     return this.nats.send<ZoneView>(ZONE_PATTERNS.update, {
@@ -306,7 +306,7 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true })
   remove(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(ZONE_PATTERNS.delete, {
       userId: user.userId,
@@ -323,7 +323,7 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true })
   regenerateCode(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ZoneView> {
     return this.nats.send<ZoneView>(ZONE_PATTERNS.regenerateJoinCode, {
       userId: user.userId,
@@ -340,7 +340,7 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true, conflict: true })
   claimOwnership(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ZoneView> {
     return this.nats.send<ZoneView>(ZONE_PATTERNS.claimOwnership, {
       userId: user.userId,
@@ -355,8 +355,8 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true, body: true })
   setRole(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string,
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string,
     @Body() dto: SetRoleDto
   ): Promise<MembershipView> {
     return this.nats.send<MembershipView>(ZONE_PATTERNS.setRole, {
@@ -376,8 +376,8 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true })
   transferOwnership(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<ZoneView> {
     return this.nats.send<ZoneView>(ZONE_PATTERNS.transferOwnership, {
       userId: user.userId,
@@ -395,8 +395,8 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true })
   approve(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<MembershipView> {
     return this.nats.send<MembershipView>(MEMBERSHIP_PATTERNS.approve, {
       userId: user.userId,
@@ -414,8 +414,8 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true })
   reject(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<{ id: string }> {
     return this.nats.send(MEMBERSHIP_PATTERNS.reject, {
       userId: user.userId,
@@ -431,8 +431,8 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true })
   kick(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<MembershipView> {
     return this.nats.send<MembershipView>(MEMBERSHIP_PATTERNS.kick, {
       userId: user.userId,
@@ -455,8 +455,8 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true, body: true })
   setMembershipUsername(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string,
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string,
     @Body() dto: SetMembershipUsernameDto
   ): Promise<MembershipView> {
     return this.nats.send<MembershipView>(MEMBERSHIP_PATTERNS.setUsername, {
@@ -474,8 +474,8 @@ export class ZoneController {
   @ApiProblemResponses({ auth: true, membership: true })
   ban(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<MembershipView> {
     return this.nats.send<MembershipView>(MEMBERSHIP_PATTERNS.ban, {
       userId: user.userId,

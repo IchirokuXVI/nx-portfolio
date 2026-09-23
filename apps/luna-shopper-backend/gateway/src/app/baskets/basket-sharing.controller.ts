@@ -35,6 +35,7 @@ import {
   type UserProfileView,
   type UserUsernameView,
 } from '@portfolio/luna-shopper/contracts';
+import { UuidParam } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard, OptionalJwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
@@ -161,7 +162,7 @@ export class BasketShareController {
   @ApiProblemResponses({ auth: true, notFound: true })
   async ensureLink(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<BasketShareLinkView> {
     const req: EnsureShareLinkRequest = {
       userId: user.userId,
@@ -183,7 +184,7 @@ export class BasketShareController {
   @ApiProblemResponses({ auth: true, notFound: true })
   getLink(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<BasketShareLinkResult> {
     return this.nats.send<BasketShareLinkResult>(
       BASKET_SHARING_PATTERNS.linkGet,
@@ -203,7 +204,7 @@ export class BasketShareController {
   @ApiProblemResponses({ auth: true, notFound: true })
   revokeLink(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: RevokeShareLinkDto
   ): Promise<{ revoked: number }> {
     return this.nats.send<{ revoked: number }>(
@@ -222,7 +223,7 @@ export class BasketShareController {
   @ApiProblemResponses({ auth: true, notFound: true })
   async listParticipants(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<BasketParticipantListResult> {
     // No `asParticipantId`: the owner passes section 5.2 by construction, so the
     // device strings are theirs to see.
@@ -263,7 +264,7 @@ export class BasketShareController {
   })
   async addParticipant(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddBasketParticipantDto
   ): Promise<BasketParticipantView> {
     const [named] = await resolveUsernames(this.nats, [dto.userId]);
@@ -285,8 +286,8 @@ export class BasketShareController {
   @ApiProblemResponses({ auth: true, notFound: true })
   revokeParticipant(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
-    @Param('participantId') participantId: string
+    @UuidParam('id') id: string,
+    @UuidParam('participantId') participantId: string
   ): Promise<{ id: string }> {
     return this.nats.send<{ id: string }>(
       BASKET_SHARING_PATTERNS.participantRevoke,
@@ -410,7 +411,7 @@ export class BasketParticipantController {
   @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   listParticipants(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<BasketParticipantListResult> {
     // The asker is named, so core decides whether the device strings are theirs
     // to see rather than the gateway guessing (section 7).
@@ -446,7 +447,7 @@ export class BasketParticipantController {
   })
   leave(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     const req: LeaveBasketRequest = {
       basketId: id,
@@ -475,7 +476,7 @@ export class BasketParticipantController {
   @ApiProblemResponses({ auth: true, participant: true, notFound: true })
   async refreshToken(
     @Participant() participant: BasketParticipantContext,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ParticipantTokenResult> {
     const req: MintParticipantTokenRequest = {
       participantId: participant.participantId,
