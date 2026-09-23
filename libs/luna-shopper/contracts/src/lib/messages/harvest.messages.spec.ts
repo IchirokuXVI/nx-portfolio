@@ -4,7 +4,19 @@ import {
   ADAPTER_CAPABILITIES,
   ADAPTER_KEYS,
   adapterCapabilities,
+  SOURCE_ADAPTER_KEYS,
 } from './harvest.messages';
+
+describe('SOURCE_ADAPTER_KEYS', () => {
+  it('offers every adapter but OpenStreetMap to a source row (plan 0153)', () => {
+    // OpenStreetMap is asked for every postal code, so a row for it would
+    // switch nothing on. Its key stays in ADAPTER_KEYS for places and old rows.
+    expect(SOURCE_ADAPTER_KEYS).not.toContain('osm-places');
+    expect([...SOURCE_ADAPTER_KEYS, 'osm-places'].sort()).toEqual(
+      [...ADAPTER_KEYS].sort()
+    );
+  });
+});
 
 /**
  * What an adapter is able to tell us, and what language it says it in (plan

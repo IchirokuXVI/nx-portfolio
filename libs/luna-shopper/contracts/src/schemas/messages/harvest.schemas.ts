@@ -11,6 +11,7 @@ import {
   SourceEntryStatus,
   SourceLocationStatus,
 } from '../../lib/enums/harvest.enums';
+import { CONTENT_LOCALES } from '../../lib/messages/catalog.messages';
 import {
   ADAPTER_CAPABILITIES,
   ADAPTER_KEYS,
@@ -962,6 +963,16 @@ const importPlaceRequest = object(
     priceScopeId: string(),
     // Create a new shop although the catalog holds one it may be (plan 0152).
     force: boolean(),
+    // The chain to create when none matches (plan 0153).
+    newChain: {
+      type: 'object',
+      properties: {
+        name: nonEmptyString(),
+        locale: { type: 'string', enum: [...CONTENT_LOCALES] },
+      },
+      required: ['name', 'locale'],
+      additionalProperties: false,
+    },
   },
   ['userId', 'placeId']
 );

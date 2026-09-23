@@ -258,6 +258,77 @@ describe('DiscoveredPlaceService import, the chain it resolves', () => {
     );
   });
 
+  it('creates the chain an operator names for an OSM place (plan 0153)', async () => {
+    // The operator supplies the language OpenStreetMap cannot. Catalog gives
+    // the chain its NATIONAL default, so the harvester asks for the chain only.
+    const harness = build();
+    harness.add(place({ id: 'p1', provider: 'OSM', brandKey: 'Q6135982' }));
+
+    await harness.service.import({
+      userId: ADMIN,
+      placeId: 'p1',
+      newChain: { name: ' El Jamón ', locale: 'es' },
+    });
+
+    expect(harness.catalog.createSupermarket).toHaveBeenCalledTimes(1);
+    expect(harness.catalog.createSupermarket).toHaveBeenCalledWith({
+      name: { es: 'El Jamón' },
+      externalBrandKey: 'Q6135982',
+    });
+    const created =
+      await harness.catalog.createSupermarket.mock.results[0].value;
+    expect(harness.catalog.createLocation).toHaveBeenCalledWith(
+      expect.objectContaining({ supermarketId: created.id })
+    );
+  });
+
+  it('reuses a chain of the name the operator typed rather than making a second', async () => {
+    const harness = build({ known: [chain('chain-jamon', 'El Jamón')] });
+    harness.add(place({ id: 'p1', provider: 'OSM' }));
+
+    await harness.service.import({
+      userId: ADMIN,
+      placeId: 'p1',
+      newChain: { name: 'el jamón', locale: 'es' },
+    });
+
+    expect(harness.catalog.createSupermarket).not.toHaveBeenCalled();
+    expect(harness.catalog.createLocation).toHaveBeenCalledWith(
+      expect.objectContaining({ supermarketId: 'chain-jamon' })
+    );
+  });
+
+  it('keeps the chain the place itself matches over the one named', async () => {
+    const harness = build({ known: [chain('chain-lidl', 'LIDL')] });
+    harness.add(place({ id: 'p1', provider: 'OSM' }));
+
+    await harness.service.import({
+      userId: ADMIN,
+      placeId: 'p1',
+      newChain: { name: 'Lidl Supermercados', locale: 'es' },
+    });
+
+    expect(harness.catalog.createSupermarket).not.toHaveBeenCalled();
+    expect(harness.catalog.createLocation).toHaveBeenCalledWith(
+      expect.objectContaining({ supermarketId: 'chain-lidl' })
+    );
+  });
+
+  it('refuses newChain beside supermarketId', async () => {
+    const harness = build({ known: [chain('chain-lidl', 'LIDL')] });
+    harness.add(place({ id: 'p1', provider: 'OSM' }));
+
+    await expect(
+      harness.service.import({
+        userId: ADMIN,
+        placeId: 'p1',
+        supermarketId: 'chain-lidl',
+        newChain: { name: 'LIDL', locale: 'es' },
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(harness.catalog.createLocation).not.toHaveBeenCalled();
+  });
+
   it('creates one chain when four imports overlap', async () => {
     const harness = build();
     const ids = ['p1', 'p2', 'p3', 'p4'];

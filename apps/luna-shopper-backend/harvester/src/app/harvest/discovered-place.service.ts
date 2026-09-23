@@ -13,6 +13,8 @@ import {
   type ImportDiscoveredPlaceRequest,
   type LinkDiscoveredPlaceRequest,
   type ListDiscoveredPlacesRequest,
+  type LocalizedText,
+  type NewChainInput,
   type SupermarketLocationView,
   type SupermarketView,
   type UpdateSupermarketLocationRequest,
@@ -161,6 +163,24 @@ function matchChain(
     return keyed;
   }
   return name ? known.byName.get(chainNameKey(name)) : undefined;
+}
+
+/**
+ * {@link matchChain}, then the name an operator gave for a new chain (plan
+ * 0153). The operator's name is tried last, so a place whose own key or name
+ * finds a chain keeps that chain, and a chain the operator typed again under
+ * its existing name is reused rather than created twice.
+ */
+function matchNamedChain(
+  known: KnownChains,
+  place: Pick<DiscoveredPlace, 'brandKey'>,
+  name: string | null,
+  newChain?: NewChainInput
+): SupermarketView | undefined {
+  return (
+    matchChain(known, place, name) ??
+    (newChain ? known.byName.get(chainNameKey(newChain.name)) : undefined)
+  );
 }
 
 function alreadyImported(): PlaceAlreadyImportedException {
@@ -585,8 +605,14 @@ export class DiscoveredPlaceService {
       throw alreadyImported();
     }
 
+    if (req.supermarketId && req.newChain) {
+      throw new ValidationException(
+        'Name the chain with supermarketId or with newChain, not both.'
+      );
+    }
     const supermarketId =
-      req.supermarketId ?? (await this.resolveSupermarket(place)).id;
+      req.supermarketId ??
+      (await this.resolveSupermarket(place, req.newChain)).id;
     if (!req.force) {
       const candidates = matchLocations(
         place,
@@ -776,10 +802,11 @@ export class DiscoveredPlaceService {
    * easily.
    */
   private async resolveSupermarket(
-    place: DiscoveredPlace
+    place: DiscoveredPlace,
+    newChain?: NewChainInput
   ): Promise<SupermarketView> {
     const name = place.brandName ?? place.name;
-    if (!place.brandKey && !name) {
+    if (!place.brandKey && !name && !newChain) {
       throw new ConflictException(
         'That place carries neither a brand nor a name, so there is nothing to ' +
           'call the chain. Pass an explicit supermarketId to attach it to one.'
@@ -788,14 +815,16 @@ export class DiscoveredPlaceService {
 
     const identity = place.brandKey
       ? `key:${place.brandKey}`
-      : `name:${chainNameKey(name ?? '')}`;
+      : `name:${chainNameKey(name ?? newChain?.name ?? '')}`;
     const inflight = this._resolving.get(identity);
     if (inflight) {
       return inflight;
     }
-    const resolving = this.findOrCreateChain(place, name).finally(() => {
-      this._resolving.delete(identity);
-    });
+    const resolving = this.findOrCreateChain(place, name, newChain).finally(
+      () => {
+        this._resolving.delete(identity);
+      }
+    );
     this._resolving.set(identity, resolving);
     return resolving;
   }
@@ -815,11 +844,25 @@ export class DiscoveredPlaceService {
    */
   private async findOrCreateChain(
     place: DiscoveredPlace,
-    name: string | null
+    name: string | null,
+    newChain?: NewChainInput
   ): Promise<SupermarketView> {
-    const existing = matchChain(await this.knownChains(), place, name);
+    const existing = matchNamedChain(
+      await this.knownChains(),
+      place,
+      name,
+      newChain
+    );
     if (existing) {
       return existing;
+    }
+    // The operator named the chain and its language (plan 0153). That is the
+    // one thing an OpenStreetMap place cannot say for itself, so it is the
+    // way such a place gets a chain without one being created first by hand.
+    if (newChain) {
+      return this.createChain(place, name, newChain, {
+        [newChain.locale]: newChain.name.trim(),
+      });
     }
     if (!name) {
       throw new ConflictException(
@@ -845,19 +888,40 @@ export class DiscoveredPlaceService {
         `Places from ${place.provider} do not say what language they name ` +
           'things in, so this chain cannot be created with a name in one. ' +
           'Create the chain and pass an explicit supermarketId to attach ' +
-          'this place to it.'
+          'this place to it, or pass newChain with a name and its language.'
       );
     }
+    return this.createChain(place, name, undefined, printed);
+  }
+
+  /**
+   * Create the chain, and answer the one that won when another call created
+   * it first.
+   *
+   * Catalog gives the new chain its NATIONAL scope as the default in the same
+   * transaction (plan 0153), so nothing here creates a scope.
+   */
+  private async createChain(
+    place: DiscoveredPlace,
+    name: string | null,
+    newChain: NewChainInput | undefined,
+    chainName: LocalizedText
+  ): Promise<SupermarketView> {
     try {
       return await this.catalog.createSupermarket({
-        name: printed,
+        name: chainName,
         externalBrandKey: place.brandKey,
       });
     } catch (error) {
       // Somebody else created it between the read and the write. Reporting a
       // failure here would name the one place whose call happened to lose,
       // over a chain that now exists and is the right one to attach to.
-      const created = matchChain(await this.knownChains(), place, name);
+      const created = matchNamedChain(
+        await this.knownChains(),
+        place,
+        name,
+        newChain
+      );
       if (created) {
         return created;
       }

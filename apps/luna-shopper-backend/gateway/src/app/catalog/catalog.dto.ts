@@ -237,6 +237,17 @@ export class UpdateSupermarketDto {
   @IsString()
   @MaxLength(64)
   externalBrandKey?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The scope quoted for this chain when the caller names no place (plan 0049, section 3.1, and plan 0153). It must be a scope of this chain, or the answer is 400. Null clears it. A chain is created with a NATIONAL scope as its default.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  defaultPriceScopeId?: string | null;
 }
 
 // --- Supermarket locations -------------------------------------------------

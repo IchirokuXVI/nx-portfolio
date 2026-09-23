@@ -1,9 +1,10 @@
 import {
   DEFAULT_SCOPE_PRIORITY,
+  PriceScopeKind,
   PriceSourceKind,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
-import { In } from 'typeorm';
+import { In, IsNull } from 'typeorm';
 import {
   inheritLessSpecificPrices,
   recomputeEffectivePrices,
@@ -24,12 +25,13 @@ import {
   authoredItemId,
   groupId,
   locationId,
+  nationalScopeId,
   priceScopeId,
   supermarketId,
 } from './ids';
 import { MERCADONA_ITEMS } from './mercadona';
 import { REFERENCE_STORES } from './stores';
-import type { AuthoredItem } from './types';
+import type { AuthoredItem, ReferenceStore } from './types';
 
 /** What one run changed, so the caller can print it and a test can assert it. */
 export interface ReferenceSeedReport {
@@ -98,36 +100,33 @@ export async function seedReferenceCatalog(
     for (const store of REFERENCE_STORES) {
       const sId = supermarketId(store.slug);
       const scId = priceScopeId(store.slug);
+      const rows = referenceChainRows(store);
+      // A cluster may already hold a NATIONAL scope for the chain that an
+      // operator made by hand (plan 0150 did, for El Jamón). The unique index
+      // treats a null key as distinct, so upserting ours beside it would give
+      // the chain two. That one is kept and made the default instead.
+      const held = await m.getRepository(PriceScope).findOne({
+        where: {
+          supermarketId: sId,
+          kind: PriceScopeKind.NATIONAL,
+          externalKey: IsNull(),
+        },
+        order: { createdAt: 'ASC' },
+      });
+      const handMade = held && held.id !== rows.national.id ? held : null;
       await m.getRepository(Supermarket).upsert(
         [
           {
-            id: sId,
-            name: store.name,
-            websiteUrl: store.websiteUrl ?? null,
-            externalBrandKey: store.externalBrandKey ?? null,
-            // The chain has one scope, so it is unambiguously the default;
-            // without it "show me El Jamón" with no location has no answer.
-            defaultPriceScopeId: scId,
+            ...rows.supermarket,
+            externalBrandKey: await brandKeyToWrite(m, rows.supermarket),
+            defaultPriceScopeId: (handMade ?? rows.national).id,
           },
         ],
         ['id']
       );
-      await m.getRepository(PriceScope).upsert(
-        [
-          {
-            id: scId,
-            supermarketId: sId,
-            kind: store.scopeKind,
-            // A STORE scope is keyed by the shop it prices (plan 0116, section
-            // 5), which is how the catalog recognises a shop's own scope. It was
-            // the slug, and this upsert by id rewrites the key in place.
-            externalKey: locationId(store.slug),
-            label: store.scopeLabel,
-            priority: DEFAULT_SCOPE_PRIORITY[store.scopeKind],
-          },
-        ],
-        ['id']
-      );
+      await m
+        .getRepository(PriceScope)
+        .upsert(handMade ? [rows.store] : [rows.store, rows.national], ['id']);
       await m.getRepository(SupermarketLocation).upsert(
         [
           {
@@ -159,6 +158,94 @@ export async function seedReferenceCatalog(
     return report;
   });
 }
+
+/**
+ * The rows one receipt chain is written as, before any lookup in the database.
+ *
+ * Each chain has two scopes (plan 0153). The `STORE` scope holds the receipt
+ * prices of its one shop, and the `NATIONAL` scope is the chain's default, the
+ * same shape a chain created through catalog starts with. The default used to
+ * be the `STORE` scope, because it was the only one, which made one shop's
+ * scope answer for the whole chain.
+ */
+export function referenceChainRows(store: ReferenceStore): {
+  supermarket: Pick<
+    Supermarket,
+    'id' | 'name' | 'websiteUrl' | 'externalBrandKey' | 'defaultPriceScopeId'
+  >;
+  store: ReferenceScopeRow;
+  national: ReferenceScopeRow;
+} {
+  const sId = supermarketId(store.slug);
+  const national: ReferenceScopeRow = {
+    id: nationalScopeId(store.slug),
+    supermarketId: sId,
+    kind: PriceScopeKind.NATIONAL,
+    externalKey: null,
+    label: store.name,
+    priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.NATIONAL],
+  };
+  return {
+    supermarket: {
+      id: sId,
+      name: store.name,
+      websiteUrl: store.websiteUrl ?? null,
+      externalBrandKey: store.externalBrandKey ?? null,
+      defaultPriceScopeId: national.id,
+    },
+    store: {
+      id: priceScopeId(store.slug),
+      supermarketId: sId,
+      kind: store.scopeKind,
+      // A STORE scope is keyed by the shop it prices (plan 0116, section 5),
+      // which is how the catalog recognises a shop's own scope. It was the
+      // slug, and the upsert by id rewrites the key in place.
+      externalKey: locationId(store.slug),
+      label: store.scopeLabel,
+      priority: DEFAULT_SCOPE_PRIORITY[store.scopeKind],
+    },
+    national,
+  };
+}
+
+/**
+ * The brand key the seed may write for a chain without failing the deploy.
+ *
+ * `uq_supermarkets_external_brand_key` allows one chain per key, and the seed
+ * runs as a pre-upgrade hook, so a key another chain already holds would stop
+ * the release. That happens when the seed corrects a key (plan 0153 moved El
+ * Jamón to Q6135982) in a cluster where an import already created a second
+ * chain under the right key. The chain then keeps the key it has, and the
+ * warning names both rows so an operator can merge them.
+ */
+async function brandKeyToWrite(
+  m: EntityManager,
+  chain: Pick<Supermarket, 'id' | 'externalBrandKey'>
+): Promise<string | null> {
+  if (!chain.externalBrandKey) {
+    return null;
+  }
+  const holder = await m.getRepository(Supermarket).findOne({
+    where: { externalBrandKey: chain.externalBrandKey },
+  });
+  if (!holder || holder.id === chain.id) {
+    return chain.externalBrandKey;
+  }
+  const own = await m.getRepository(Supermarket).findOne({
+    where: { id: chain.id },
+  });
+  console.warn(
+    `Reference seed: brand key ${chain.externalBrandKey} is held by chain ` +
+      `${holder.id}, so chain ${chain.id} keeps ` +
+      `${own?.externalBrandKey ?? 'no key'}. Merge the two chains by hand.`
+  );
+  return own?.externalBrandKey ?? null;
+}
+
+type ReferenceScopeRow = Pick<
+  PriceScope,
+  'id' | 'supermarketId' | 'kind' | 'externalKey' | 'label' | 'priority'
+>;
 
 function storeItems(slug: string): AuthoredItem[] {
   return slug === 'el-jamon' ? EL_JAMON_ITEMS : SUPERCASH_ITEMS;

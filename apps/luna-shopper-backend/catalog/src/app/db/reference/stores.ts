@@ -10,6 +10,9 @@ import type { ReferenceStore } from './types';
  * harvester can read, so every price they carry came off a till receipt and
  * always will until someone writes a source for them.
  *
+ * Each also gets a `NATIONAL` scope, which is its default (plan 0153). The
+ * seeder writes it, so it is not stated here.
+ *
  * Mercadona is deliberately absent. It already exists, with a LOCAL_AREA scope
  * per warehouse, and the reference catalog attaches to what the harvest created
  * rather than creating a second Mercadona beside it.
@@ -18,8 +21,11 @@ export const REFERENCE_STORES: ReferenceStore[] = [
   {
     slug: 'el-jamon',
     name: { en: 'El Jamón', es: 'El Jamón' },
-    // Grupo Empresarial El Jamón, S.L., the operator named on the receipts.
-    externalBrandKey: 'Q116893318',
+    // Supermercados El Jamón, the chain, which is also the `brand:wikidata`
+    // key OpenStreetMap puts on its shops (plan 0153). It was Q116893318,
+    // meant as the operator on the receipts, but on Wikidata that QID is
+    // VANS CENTRE, a Czech company, so no place ever matched it.
+    externalBrandKey: 'Q6135982',
     scopeKind: PriceScopeKind.STORE,
     scopeLabel: { en: 'Córdoba — Ronda', es: 'Córdoba — Ronda' },
     location: {

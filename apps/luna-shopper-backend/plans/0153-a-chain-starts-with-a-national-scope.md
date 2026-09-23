@@ -1,3 +1,5 @@
+> **PR:** [#454](https://github.com/IchirokuXVI/nx-portfolio/pull/454)
+
 # 0153: a chain starts with a national scope
 
 > Found by `0150` (report item P1.2, "Things I did that the plan did not script", and

@@ -254,6 +254,20 @@ export const ADAPTER_KEYS = [
 export type AdapterKey = (typeof ADAPTER_KEYS)[number];
 
 /**
+ * The adapters a source row may be written with (plan 0153).
+ *
+ * Every key but `osm-places`. OpenStreetMap is asked for every postal code
+ * whatever the rows say, so a row for it switches nothing on, and an operator
+ * who enables one has been told something false. The key stays in
+ * {@link ADAPTER_KEYS}, because a place still names it as its provider and a
+ * row written before this list existed still has to read.
+ */
+export const SOURCE_ADAPTER_KEYS = ADAPTER_KEYS.filter(
+  (key): key is Exclude<AdapterKey, 'osm-places'> => key !== 'osm-places'
+);
+export type SourceAdapterKey = (typeof SOURCE_ADAPTER_KEYS)[number];
+
+/**
  * What a source is able to tell us, stated once for every adapter (plan 0103,
  * section 4).
  *
@@ -1121,6 +1135,19 @@ export interface ImportDiscoveredPlaceRequest extends AdminCredential {
    * `place_matches_location` and writes nothing.
    */
   force?: boolean;
+  /**
+   * The chain to create when no chain matches the place (plan 0153). The
+   * operator names it and says which language the name is in, which is what
+   * an OpenStreetMap place cannot say for itself. A chain that already
+   * matches, by the place or by this name, is used instead.
+   */
+  newChain?: NewChainInput;
+}
+
+/** A chain an import creates, named by the operator (plan 0153). */
+export interface NewChainInput {
+  name: string;
+  locale: ContentLocale;
 }
 
 /** Bind a place to a shop the catalog already holds (plan 0152, section 3). */

@@ -382,6 +382,7 @@ export type ImportDiscoveredPlaceDto = {
   supermarketId?: string;
   priceScopeId?: string;
   force?: boolean;
+  newChain?: NewChainDto;
 };
 
 /**
@@ -474,6 +475,14 @@ export type LookupItemsDto = {
  */
 export type MapSourceLocationDto = {
   supermarketLocationId: string;
+};
+
+/**
+ * `NewChainDto` in the gateway's OpenAPI document.
+ */
+export type NewChainDto = {
+  name: string;
+  locale: 'en' | 'es';
 };
 
 /**
@@ -1030,6 +1039,7 @@ export type UpdateSupermarketDto = {
   logoUrl?: string | null;
   websiteUrl?: string | null;
   externalBrandKey?: string | null;
+  defaultPriceScopeId?: string | null;
 };
 
 /**

@@ -4,6 +4,8 @@ import {
   authoredItemId,
   groupId,
   itemId,
+  nationalScopeId,
+  priceScopeId,
   supermarketItemId,
 } from './ids';
 import {
@@ -13,6 +15,7 @@ import {
   REFERENCE_STORES,
   SUPERCASH_ITEMS,
 } from './index';
+import { referenceChainRows } from './seed-reference-catalog';
 import type { AuthoredItem } from './types';
 
 const ALL_ITEMS: [string, AuthoredItem[]][] = [
@@ -251,6 +254,33 @@ describe('reference catalog', () => {
       expect(demoWorld.catalog.supermarkets[0].externalBrandKey).toBe(
         'Q377705'
       );
+    });
+
+    it('gives every chain a NATIONAL default beside its STORE scope', () => {
+      // Plan 0153: the default used to be the one STORE scope, so one shop
+      // answered for the whole chain.
+      for (const s of REFERENCE_STORES) {
+        const rows = referenceChainRows(s);
+        expect(rows.national).toMatchObject({
+          id: nationalScopeId(s.slug),
+          supermarketId: rows.supermarket.id,
+          kind: 'NATIONAL',
+          externalKey: null,
+          label: s.name,
+        });
+        expect(rows.supermarket.defaultPriceScopeId).toBe(rows.national.id);
+        expect(rows.store).toMatchObject({
+          id: priceScopeId(s.slug),
+          supermarketId: rows.supermarket.id,
+          kind: 'STORE',
+        });
+        expect(rows.store.id).not.toBe(rows.national.id);
+      }
+    });
+
+    it("keys El Jamón on the chain's Wikidata item, the one OpenStreetMap uses", () => {
+      const elJamon = REFERENCE_STORES.find((s) => s.slug === 'el-jamon');
+      expect(elJamon?.externalBrandKey).toBe('Q6135982');
     });
 
     it('leaves Mercadona to the seeder', () => {
