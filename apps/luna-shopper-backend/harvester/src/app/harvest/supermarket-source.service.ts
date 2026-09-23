@@ -1,13 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import type {
-  ListSupermarketSourcesRequest,
-  SetSupermarketSourceEnabledRequest,
-  SupermarketSourceIdRequest,
-  SupermarketSourcePage,
-  SupermarketSourceView,
-  UpsertSupermarketSourceRequest,
+import {
+  SOURCE_ADAPTER_KEYS,
+  type AdapterKey,
+  type ListSupermarketSourcesRequest,
+  type SetSupermarketSourceEnabledRequest,
+  type SourceAdapterKey,
+  type SupermarketSourceIdRequest,
+  type SupermarketSourcePage,
+  type SupermarketSourceView,
+  type UpsertSupermarketSourceRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
@@ -15,6 +18,7 @@ import {
   decodeCursor,
   encodeCursor,
   NotFoundException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
@@ -54,6 +58,15 @@ export class SupermarketSourceService {
     req: UpsertSupermarketSourceRequest
   ): Promise<SupermarketSourceView> {
     await this.admin.requireAdmin(req);
+    // OpenStreetMap is asked for every postal code whatever the rows say
+    // (plan 0153), so a row for it switches nothing on. An existing one can
+    // still be disabled and deleted, which are separate calls.
+    if (!isSourceAdapterKey(req.adapterKey)) {
+      throw new ValidationException(
+        `${req.adapterKey} cannot be a source row. OpenStreetMap is asked ` +
+          'for every postal code without one.'
+      );
+    }
     const defaults = this.defaults();
 
     const existing = await this.sources.findOne({
@@ -225,4 +238,8 @@ export class SupermarketSourceService {
     }
     await this.sources.save(source);
   }
+}
+
+function isSourceAdapterKey(key: AdapterKey): key is SourceAdapterKey {
+  return (SOURCE_ADAPTER_KEYS as readonly AdapterKey[]).includes(key);
 }

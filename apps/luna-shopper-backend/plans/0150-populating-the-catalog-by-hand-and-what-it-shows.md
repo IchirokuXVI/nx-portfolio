@@ -175,7 +175,7 @@ file of `responses/` does not count.
    the reason.
 2. **Configure the sources.** For each chain you will use, upsert its source row with the right
    `adapterKey` and `autoImportPlaces: false`, then enable it. Record each answer. Enable
-   `osm-places` too, because the queue asks OpenStreetMap for every code.
+   OpenStreetMap needs no row: the queue asks it for every code (plan `0153`).
 3. **Register the postal codes** with `discoverNow: true`. Then only watch: poll the queue and
    `GET /v1/admin/harvest/runs?mode=STORE_DISCOVERY` until every code is `DONE` or `FAILED`.
    Record which sources the worker asked for each code, how long it took, and every run's

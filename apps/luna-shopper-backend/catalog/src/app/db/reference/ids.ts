@@ -66,6 +66,9 @@ export const authoredItemId = (
 export const supermarketId = (slug: string): string =>
   derive('supermarket', slug);
 export const priceScopeId = (slug: string): string => derive('scope', slug);
+/** A reference chain's NATIONAL scope, its default (plan 0153). */
+export const nationalScopeId = (slug: string): string =>
+  derive('scope', `${slug}/national`);
 export const locationId = (slug: string): string => derive('location', slug);
 export const supermarketItemId = (store: string, slug: string): string =>
   derive('supermarket-item', `${store}/${slug}`);

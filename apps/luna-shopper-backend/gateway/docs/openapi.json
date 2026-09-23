@@ -24376,6 +24376,12 @@
             "type": "string",
             "nullable": true,
             "description": "The chain's stable identity across discovery runs, the Wikidata QID (plan 0038, section 5.4). Owner editable: the QID splits `Carrefour` from `Carrefour Express`, which may or may not be wanted."
+          },
+          "defaultPriceScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The scope quoted for this chain when the caller names no place (plan 0049, section 3.1, and plan 0153). It must be a scope of this chain, or the answer is 400. Null clears it. A chain is created with a NATIONAL scope as its default."
           }
         }
       },
@@ -25823,6 +25829,27 @@
           "document"
         ]
       },
+      "NewChainDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "en",
+              "es"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "locale"
+        ]
+      },
       "ImportDiscoveredPlaceDto": {
         "type": "object",
         "properties": {
@@ -25839,6 +25866,14 @@
           "force": {
             "type": "boolean",
             "description": "Create a new shop although the catalog holds one the place may be. Without it, a match answers 409 `place_matches_location` and writes nothing."
+          },
+          "newChain": {
+            "description": "The chain to create when no chain matches the place (plan 0153), with the language its name is written in. An OpenStreetMap place states no language, so without this its import answers 409 when no chain matches. A chain that matches, by the place or by this name, is used instead. Not combined with `supermarketId`.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NewChainDto"
+              }
+            ]
           }
         }
       },
@@ -26073,7 +26108,8 @@
               "lidl-api",
               "osm-places",
               "manual"
-            ]
+            ],
+            "description": "`osm-places` is refused with 400: OpenStreetMap is asked for every postal code, so a source row for it switches nothing on."
           },
           "enabled": {
             "type": "boolean",
