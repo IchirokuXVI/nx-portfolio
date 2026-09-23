@@ -113,6 +113,15 @@ export class DiscoveredPlace extends BaseEntity {
   @Column({ type: 'jsonb', default: () => `'{}'::jsonb` })
   tags!: Record<string, string>;
 
+  /**
+   * The price scope key the run declared for this shop (plan 0152, section 1):
+   * a Mercadona warehouse or a LIDL offer region. Null when the source declares
+   * none, and on rows written before the column, which read it from
+   * {@link tags} instead (see `declaredScopeKey`).
+   */
+  @Column({ type: 'varchar', nullable: true })
+  scopeKey!: string | null;
+
   @Column({
     type: 'enum',
     enum: DiscoveredPlaceStatus,

@@ -56,8 +56,14 @@ describe('DiscoveredPlaceService.observe, the trusted path (plan 0107)', () => {
     } as SupermarketView;
   }
 
-  function build(options: { existing?: Partial<DiscoveredPlace> } = {}) {
+  function build(
+    options: {
+      existing?: Partial<DiscoveredPlace>;
+      locations?: SupermarketLocationView[];
+    } = {}
+  ) {
     const known: SupermarketView[] = [chain('chain-lidl', 'LIDL')];
+    const shops = [...(options.locations ?? [])];
     const stored: DiscoveredPlace[] = [];
     if (options.existing) {
       stored.push(options.existing as DiscoveredPlace);
@@ -104,11 +110,20 @@ describe('DiscoveredPlaceService.observe, the trusted path (plan 0107)', () => {
       createLocation: jest.fn(
         async (input: {
           supermarketId: string;
+          latitude?: number | null;
+          longitude?: number | null;
         }): Promise<SupermarketLocationView> =>
           ({
             id: `loc-${++locations}`,
             supermarketId: input.supermarketId,
+            latitude: input.latitude ?? null,
+            longitude: input.longitude ?? null,
+            externalRef: null,
+            externalProvider: null,
           }) as SupermarketLocationView
+      ),
+      listAllSupermarketLocations: jest.fn(async (supermarketId: string) =>
+        shops.filter((shop) => shop.supermarketId === supermarketId)
       ),
       // Never reached: every place here states its own postal code, and one
       // that does not is refused by the check rather than derived.
@@ -294,6 +309,61 @@ describe('DiscoveredPlaceService.observe, the trusted path (plan 0107)', () => {
     expect(result.imported).toBe(0);
     expect(result.blocked).toEqual([]);
     expect(harness.stored[0].status).toBe(DiscoveredPlaceStatus.NEW);
+  });
+
+  it('leaves a place the catalog may already hold in the queue (plan 0152)', async () => {
+    // A seeded shop 30 metres away. Nothing links a place to a shop without a
+    // person, and creating a second one is the duplicate matching prevents.
+    const harness = build({
+      locations: [
+        {
+          id: 'loc-seeded',
+          supermarketId: 'chain-lidl',
+          latitude: 37.8885,
+          longitude: -4.8035,
+          externalRef: null,
+          externalProvider: null,
+        } as SupermarketLocationView,
+      ],
+    });
+
+    const result = await harness.service.observe([observed()], options());
+
+    expect(harness.catalog.createLocation).not.toHaveBeenCalled();
+    expect(result.imported).toBe(0);
+    expect(harness.stored[0].status).toBe(DiscoveredPlaceStatus.NEW);
+    expect(harness.stored[0].supermarketLocationId).toBeFalsy();
+  });
+
+  it('lists a chain’s shops once per run, and matches the shops it created', async () => {
+    // Two places of one shop in one run: the second meets the shop the first
+    // created rather than creating another.
+    const harness = build();
+
+    const result = await harness.service.observe(
+      [
+        observed({ externalRef: 'lidl/1' }),
+        observed({ externalRef: 'lidl/2', latitude: 37.8883 }),
+      ],
+      options()
+    );
+
+    expect(harness.catalog.listAllSupermarketLocations).toHaveBeenCalledTimes(
+      1
+    );
+    expect(harness.catalog.createLocation).toHaveBeenCalledTimes(1);
+    expect(result.imported).toBe(1);
+  });
+
+  it('stores the scope key the run declared', async () => {
+    const harness = build();
+
+    await harness.service.observe(
+      [observed({ scopeKey: 'ES-12' })],
+      options({ autoImport: false })
+    );
+
+    expect(harness.stored[0].scopeKey).toBe('ES-12');
   });
 
   it('keeps the run when catalog refuses one shop', async () => {

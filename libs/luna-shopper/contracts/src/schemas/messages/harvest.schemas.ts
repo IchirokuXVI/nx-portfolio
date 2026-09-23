@@ -122,6 +122,7 @@ export const HARVEST_SCHEMA_IDS = {
   listPlacesRequest: schemaId('msg/place.list/request'),
   groupPlacesRequest: schemaId('msg/place.groups/request'),
   importPlaceRequest: schemaId('msg/place.import/request'),
+  linkPlaceRequest: schemaId('msg/place.link/request'),
   placeIdRequest: schemaId('msg/place.id/request'),
   listSourceLocationsRequest: schemaId('msg/sourceLocation.list/request'),
   mapSourceLocationRequest: schemaId('msg/sourceLocation.map/request'),
@@ -328,6 +329,9 @@ const discoveredPlaceView = object(
     website: nullableString(),
     openingHours: nullableString(),
     tags: stringMap(),
+    // The price scope key the run declared: a warehouse or an offer region
+    // (plan 0152, section 1). Import joins the chain's scope with this key.
+    scopeKey: nullableString(),
     status: ref(HARVEST_SCHEMA_IDS.discoveredPlaceStatus),
     supermarketLocationId: nullableString(),
     firstSeenAt: string({ format: 'date-time' }),
@@ -351,6 +355,7 @@ const discoveredPlaceView = object(
     'website',
     'openingHours',
     'tags',
+    'scopeKey',
     'status',
     'supermarketLocationId',
     'firstSeenAt',
@@ -955,8 +960,19 @@ const importPlaceRequest = object(
     placeId: nonEmptyString(),
     supermarketId: string(),
     priceScopeId: string(),
+    // Create a new shop although the catalog holds one it may be (plan 0152).
+    force: boolean(),
   },
   ['userId', 'placeId']
+);
+const linkPlaceRequest = object(
+  HARVEST_SCHEMA_IDS.linkPlaceRequest,
+  {
+    ...adminCredentialProperties,
+    placeId: nonEmptyString(),
+    supermarketLocationId: nonEmptyString(),
+  },
+  ['userId', 'placeId', 'supermarketLocationId']
 );
 const placeIdRequest = object(
   HARVEST_SCHEMA_IDS.placeIdRequest,
@@ -1344,6 +1360,7 @@ export const harvestSchemas: JsonSchema[] = [
   listPlacesRequest,
   groupPlacesRequest,
   importPlaceRequest,
+  linkPlaceRequest,
   placeIdRequest,
   listSourceLocationsRequest,
   mapSourceLocationRequest,
@@ -1433,6 +1450,10 @@ export const harvestMessageContracts: Record<
   },
   [DISCOVERED_PLACE_PATTERNS.import]: {
     request: HARVEST_SCHEMA_IDS.importPlaceRequest,
+    response: HARVEST_SCHEMA_IDS.discoveredPlaceView,
+  },
+  [DISCOVERED_PLACE_PATTERNS.link]: {
+    request: HARVEST_SCHEMA_IDS.linkPlaceRequest,
     response: HARVEST_SCHEMA_IDS.discoveredPlaceView,
   },
   [DISCOVERED_PLACE_PATTERNS.reject]: {

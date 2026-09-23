@@ -30,15 +30,15 @@ const MAX_METRES = 5_000;
 
 /**
  * Real Córdoba centroids from the shipped dataset, so a failure names a place.
- * 14010, 14012 and 14013 share one point in the GeoNames export, which is the
- * tie case; 14014 is about 2.4 km north. 28001 is Madrid, 300 km away, and is
- * what a store with no centroid anywhere near it falls back to not having.
+ * 14010 is alone at its point here. In the GeoNames export 14012 and 14013
+ * share it, and a tie derives no code at all (plan 0152, section 4), which
+ * `postal-code.service.spec.ts` covers. 14014 is about 2.4 km north. 28001 is
+ * Madrid, 300 km away, and is what a store with no centroid anywhere near it
+ * falls back to not having.
  */
 const CORDOBA = { latitude: 37.8916, longitude: -4.7727 };
 const CENTROIDS: PostalCodePoint[] = [
   { country: 'es', postalCode: '14010', ...CORDOBA },
-  { country: 'es', postalCode: '14012', ...CORDOBA },
-  { country: 'es', postalCode: '14013', ...CORDOBA },
   { country: 'es', postalCode: '14014', latitude: 37.9133, longitude: -4.7685 },
   { country: 'es', postalCode: '28001', latitude: 40.4255, longitude: -3.6834 },
 ];

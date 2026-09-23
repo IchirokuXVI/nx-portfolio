@@ -11,8 +11,11 @@ import {
   type DiscoveredPlaceView,
   type GroupDiscoveredPlacesRequest,
   type ImportDiscoveredPlaceRequest,
+  type LinkDiscoveredPlaceRequest,
   type ListDiscoveredPlacesRequest,
+  type SupermarketLocationView,
   type SupermarketView,
+  type UpdateSupermarketLocationRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { OSM_ATTRIBUTION } from '@portfolio/luna-shopper/osm-places';
 import {
@@ -21,6 +24,12 @@ import {
   decodeCursor,
   encodeCursor,
   NotFoundException,
+  PLACE_CANDIDATES_DETAIL,
+  PlaceAlreadyImportedException,
+  PlaceMatchesLocationException,
+  SCOPE_KEY_DETAIL,
+  ScopeNotFoundException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { DiscoveredPlace } from '../entities';
@@ -30,6 +39,7 @@ import {
   placeImportBlockers,
   type PlaceImportBlocker,
 } from './place-import-check';
+import { declaredScopeKey, matchLocations } from './place-matching';
 import { PlatformAdminService } from './platform-admin.service';
 import type { ObservedPlace } from './run-report';
 import { printedName, printedNameOrNull } from './source-entry-name';
@@ -98,6 +108,32 @@ export interface ObserveResult {
   blocked: BlockedPlace[];
 }
 
+/**
+ * A chain's shops, listed once per chain and kept for the rest of the call.
+ *
+ * A trusted run imports a whole chain, and listing its shops again for every
+ * place would be one listing per shop. A shop the call itself creates is added,
+ * so the next place of the same run is matched against it too.
+ */
+class ChainLocations {
+  private readonly held = new Map<string, Promise<SupermarketLocationView[]>>();
+
+  constructor(private readonly catalog: CatalogClient) {}
+
+  of(supermarketId: string): Promise<SupermarketLocationView[]> {
+    let held = this.held.get(supermarketId);
+    if (!held) {
+      held = this.catalog.listAllSupermarketLocations(supermarketId);
+      this.held.set(supermarketId, held);
+    }
+    return held;
+  }
+
+  async add(location: SupermarketLocationView): Promise<void> {
+    (await this.of(location.supermarketId)).push(location);
+  }
+}
+
 /** The chains catalog knows, read once and asked twice. */
 interface KnownChains {
   readonly byKey: ReadonlyMap<string, SupermarketView>;
@@ -125,6 +161,67 @@ function matchChain(
     return keyed;
   }
   return name ? known.byName.get(chainNameKey(name)) : undefined;
+}
+
+function alreadyImported(): PlaceAlreadyImportedException {
+  return new PlaceAlreadyImportedException(
+    'That place is already imported into the catalog'
+  );
+}
+
+/**
+ * The postal code a place sends catalog, with where it came from (plan 0152,
+ * section 4).
+ *
+ * A code the source stated keeps its provenance. A code the run derived from
+ * the nearest centroid is not sent at all: catalog derives it again with the
+ * same rule, and records it as derived. Sending it as `SOURCE` turned a guess
+ * into a statement that nothing would ever revisit.
+ */
+function postalCodeFields(
+  place: Pick<DiscoveredPlace, 'postalCode' | 'postalCodeSource'>
+): { postalCode?: string; postalCodeSource?: PostalCodeSource } {
+  if (
+    !place.postalCode ||
+    place.postalCodeSource === PostalCodeSource.DERIVED
+  ) {
+    return {};
+  }
+  return {
+    postalCode: place.postalCode,
+    postalCodeSource: place.postalCodeSource ?? PostalCodeSource.SOURCE,
+  };
+}
+
+/** The fields {@link missingFields} may write. */
+type LocationPatch = Omit<
+  UpdateSupermarketLocationRequest,
+  'userId' | 'supermarketLocationId'
+>;
+
+/**
+ * What a place can fill on a shop that lacks it (plan 0152, section 3). A field
+ * that already has a value is never in the patch.
+ */
+function missingFields(
+  place: DiscoveredPlace,
+  location: SupermarketLocationView
+): LocationPatch {
+  const patch: LocationPatch = {};
+  if (location.latitude === null || location.longitude === null) {
+    patch.latitude = place.latitude;
+    patch.longitude = place.longitude;
+  }
+  if (!location.externalRef) {
+    patch.externalRef = place.externalRef;
+    if (!location.externalProvider) {
+      patch.externalProvider = place.provider;
+    }
+  }
+  if (!location.postalCode) {
+    Object.assign(patch, postalCodeFields(place));
+  }
+  return patch;
 }
 
 /**
@@ -195,6 +292,7 @@ export class DiscoveredPlaceService {
     let refreshed = 0;
     let imported = 0;
     const blocked: BlockedPlace[] = [];
+    const shops = new ChainLocations(this.catalog);
 
     for (const place of places) {
       const located = await this.locate(place, options.deriveMaxMetres);
@@ -212,6 +310,7 @@ export class DiscoveredPlaceService {
         website: place.website,
         openingHours: place.openingHours,
         tags: place.tags,
+        scopeKey: place.scopeKey ?? null,
         runId: options.runId,
         lastSeenAt: seenAt,
       };
@@ -251,7 +350,7 @@ export class DiscoveredPlaceService {
         blocked.push({ externalRef: row.externalRef, missing });
         continue;
       }
-      if (await this.autoImport(row, place.scopeKey ?? null, options)) {
+      if (await this.autoImport(row, place.scopeKey ?? null, options, shops)) {
         imported += 1;
       }
     }
@@ -266,20 +365,39 @@ export class DiscoveredPlaceService {
    * still in the queue for a person, so the failure is logged and counted as
    * blocked rather than thrown: losing a store discovery over one address would
    * throw away every other shop it read.
+   *
+   * **A place the catalog may already hold is left in the queue** (plan 0152,
+   * section 2). Nothing links a place to a shop without a person saying so,
+   * and creating a second shop is the duplicate the matching exists to stop.
    */
   private async autoImport(
     row: DiscoveredPlace,
     scopeKey: string | null,
-    options: ObserveOptions
+    options: ObserveOptions,
+    shops: ChainLocations
   ): Promise<boolean> {
     try {
+      const supermarketId = (await this.resolveSupermarket(row)).id;
+      const candidates = matchLocations(row, await shops.of(supermarketId));
+      if (candidates.length > 0) {
+        this.logger.log(
+          `${row.provider}/${row.externalRef} may be a shop the catalog ` +
+            `already holds (${candidates.length} candidates), so it stays in ` +
+            'the queue for a person to link'
+        );
+        return false;
+      }
       // The scope the source declared for this shop, resolved through the run's
       // own resolver. Undefined when the source declared none, and catalog then
       // gives the location the `STORE` scope it gives any location that names
       // none (plan 0107, section 3.3).
       const priceScopeId =
         (scopeKey ? options.scopeIdFor?.(scopeKey) : null) ?? undefined;
-      await this.promote(row, { priceScopeId });
+      const { location } = await this.promote(row, {
+        supermarketId,
+        priceScopeId,
+      });
+      await shops.add(location);
       return true;
     } catch (error) {
       this.logger.warn(
@@ -446,10 +564,17 @@ export class DiscoveredPlaceService {
    * returns 17 brands, and creating a `Supermarket` row for every one of them
    * would clutter the catalog with chains the owner will never shop at.
    *
-   * The scope: a named one wins; otherwise the location gets a STORE scope of its
-   * own, which catalog creates for any location that names none. Resolving a
-   * warehouse from the store's postal code is a Mercadona specific step that
-   * belongs to the chain's own source configuration, not to a generic import.
+   * The scope: a named one wins. Otherwise the chain's scope whose
+   * `externalKey` is the key the run declared for the place, exactly as the
+   * trusted path resolves it (plan 0152, section 1), and a key the chain does
+   * not hold answers `scope_not_found` so the operator creates it first. A
+   * place that declares no key gets a STORE scope of its own, which catalog
+   * creates for any location that names none.
+   *
+   * **A shop the catalog may already hold stops the import** (plan 0152,
+   * section 2). The answer is `place_matches_location` with the candidates, and
+   * nothing is written: {@link link} binds the place to one of them, and
+   * `force` creates a new shop anyway.
    */
   async import(
     req: ImportDiscoveredPlaceRequest
@@ -457,26 +582,117 @@ export class DiscoveredPlaceService {
     await this.admin.requireAdmin(req);
     const place = await this.load(req.placeId);
     if (place.status === DiscoveredPlaceStatus.IMPORTED) {
-      throw new ConflictException(
-        'That place has already been imported into the catalog'
+      throw alreadyImported();
+    }
+
+    const supermarketId =
+      req.supermarketId ?? (await this.resolveSupermarket(place)).id;
+    if (!req.force) {
+      const candidates = matchLocations(
+        place,
+        await this.catalog.listAllSupermarketLocations(supermarketId)
+      );
+      if (candidates.length > 0) {
+        throw new PlaceMatchesLocationException(
+          'The catalog already holds a shop that may be this place. Link it, ' +
+            'or import with force to create a new shop anyway.',
+          { details: { [PLACE_CANDIDATES_DETAIL]: candidates } }
+        );
+      }
+    }
+    const priceScopeId =
+      req.priceScopeId ?? (await this.declaredScopeId(place, supermarketId));
+
+    const { place: imported } = await this.promote(place, {
+      supermarketId,
+      priceScopeId,
+    });
+    return toDiscoveredPlaceView(imported);
+  }
+
+  /**
+   * Bind a place to a shop the catalog already holds (plan 0152, section 3).
+   *
+   * **It fills only what the shop lacks**: coordinates, the provider's ref, and
+   * a postal code with its provenance. A field that has a value keeps it,
+   * because the seeded shop is the one somebody checked, and the place is what
+   * a source said about it. A derived postal code is not sent, the same rule
+   * {@link promote} follows.
+   *
+   * The shop must belong to the place's own chain, which is the chain an
+   * import of it would have used. A place whose chain the catalog does not
+   * know yet has no shop to be linked to.
+   */
+  async link(req: LinkDiscoveredPlaceRequest): Promise<DiscoveredPlaceView> {
+    await this.admin.requireAdmin(req);
+    const place = await this.load(req.placeId);
+    if (place.status === DiscoveredPlaceStatus.IMPORTED) {
+      throw alreadyImported();
+    }
+
+    const location = await this.catalog.getSupermarketLocation(
+      req.supermarketLocationId
+    );
+    const chain = matchChain(
+      await this.knownChains(),
+      place,
+      place.brandName ?? place.name
+    );
+    if (!chain || chain.id !== location.supermarketId) {
+      throw new ValidationException(
+        'supermarketLocationId names a shop of another chain. A place links ' +
+          'only to a shop of its own chain.'
       );
     }
 
-    return toDiscoveredPlaceView(
-      await this.promote(place, {
-        supermarketId: req.supermarketId,
-        priceScopeId: req.priceScopeId,
-      })
-    );
+    const patch = missingFields(place, location);
+    if (Object.keys(patch).length > 0) {
+      await this.catalog.updateLocation({
+        supermarketLocationId: location.id,
+        ...patch,
+      });
+    }
+
+    place.status = DiscoveredPlaceStatus.IMPORTED;
+    place.supermarketLocationId = location.id;
+    return toDiscoveredPlaceView(await this.places.save(place));
+  }
+
+  /**
+   * The id of the chain's scope the run declared for this place, or undefined
+   * when it declared none.
+   *
+   * The same lookup the run's resolver does: the chain's scopes, matched on
+   * `externalKey`. It never creates one. A run declaring a scope is a run
+   * reading the chain's own data, and a hand import is not.
+   */
+  private async declaredScopeId(
+    place: DiscoveredPlace,
+    supermarketId: string
+  ): Promise<string | undefined> {
+    const key = declaredScopeKey(place);
+    if (!key) {
+      return undefined;
+    }
+    const scopes = await this.catalog.listAllPriceScopes(supermarketId);
+    const scope = scopes.find((held) => held.externalKey === key);
+    if (!scope) {
+      throw new ScopeNotFoundException(
+        `The chain has no price scope with the key "${key}". Create it ` +
+          'first, or name a scope for this import.',
+        { details: { [SCOPE_KEY_DETAIL]: key } }
+      );
+    }
+    return scope.id;
   }
 
   /**
    * Create the location and mark the place ours.
    *
    * The whole of what an import does, in one place, because a run does it too
-   * now (plan 0107, section 3.3). The admin gate and the "already imported"
-   * refusal stay with the callers: a run skips such a row rather than reporting
-   * a conflict about it.
+   * now (plan 0107, section 3.3). The admin gate, the "already imported"
+   * refusal and the matching stay with the callers: a run skips such a row
+   * rather than reporting a conflict about it.
    *
    * The actor on the write is the harvester's provisioned `HARVESTER_ACTOR_ID`,
    * which `CatalogClient` stamps on every call, so the catalog audit says a run
@@ -484,13 +700,10 @@ export class DiscoveredPlaceService {
    */
   private async promote(
     place: DiscoveredPlace,
-    options: { supermarketId?: string; priceScopeId?: string }
-  ): Promise<DiscoveredPlace> {
-    const supermarketId =
-      options.supermarketId ?? (await this.resolveSupermarket(place)).id;
-
+    options: { supermarketId: string; priceScopeId?: string }
+  ): Promise<{ place: DiscoveredPlace; location: SupermarketLocationView }> {
     const location = await this.catalog.createLocation({
-      supermarketId,
+      supermarketId: options.supermarketId,
       priceScopeId: options.priceScopeId,
       // The shop's own name, written once under the language its provider
       // prints in (plan 0111, section 8). "Mercadona Alicante" is not English
@@ -511,10 +724,7 @@ export class DiscoveredPlaceService {
       // here (plan 0061, section 4). Catalog needs it to key the centroid
       // lookup that fills the postcode two thirds of these places lack.
       country: place.country,
-      postalCode: place.postalCode,
-      // A tag OSM gave us, so it is the source's and never overridden. A place
-      // with no tag sends nothing and catalog derives one, or does not.
-      postalCodeSource: place.postalCode ? PostalCodeSource.SOURCE : undefined,
+      ...postalCodeFields(place),
       latitude: place.latitude,
       longitude: place.longitude,
       externalRef: place.externalRef,
@@ -526,12 +736,22 @@ export class DiscoveredPlaceService {
     // Written back so a re-run recognizes the place as already ours rather than
     // offering it again.
     place.supermarketLocationId = location.id;
-    return this.places.save(place);
+    return { place: await this.places.save(place), location };
   }
 
+  /**
+   * Reject a place, which is a queue act (plan 0152, section 5).
+   *
+   * An imported place is refused. Its shop is live in the catalog, and a
+   * rejected row that still points at it would say the opposite of what is
+   * true. Removing that shop is a catalog act on the location.
+   */
   async reject(req: DiscoveredPlaceIdRequest): Promise<DiscoveredPlaceView> {
     await this.admin.requireAdmin(req);
     const place = await this.load(req.placeId);
+    if (place.status === DiscoveredPlaceStatus.IMPORTED) {
+      throw alreadyImported();
+    }
     place.status = DiscoveredPlaceStatus.REJECTED;
     return toDiscoveredPlaceView(await this.places.save(place));
   }

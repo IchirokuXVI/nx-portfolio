@@ -292,6 +292,20 @@ export enum DiscoveredPlaceStatus {
 }
 
 /**
+ * Which rung found a catalog shop a discovered place may be (plan 0152,
+ * section 2). The rungs are tried in this order, and the first that finds
+ * anything answers.
+ */
+export enum PlaceMatchRung {
+  /** The shop carries the place's own `externalRef`. */
+  EXTERNAL_REF = 'EXTERNAL_REF',
+  /** A shop of the same chain within 50 metres. */
+  NEARBY = 'NEARBY',
+  /** A shop with no coordinates, at the same postal code and address. */
+  ADDRESS = 'ADDRESS',
+}
+
+/**
  * Where one postal code stands in the discovery queue (plan 0063, section 3).
  *
  * The queue exists because a run cannot: the active run index treats PENDING and

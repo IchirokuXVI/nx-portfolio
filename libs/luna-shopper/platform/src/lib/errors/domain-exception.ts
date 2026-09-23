@@ -332,6 +332,42 @@ export class BrandNotLinkedException extends DomainException {
 }
 
 /**
+ * The discovered place is already imported (plan 0152, section 5). No details:
+ * the place is the one the client asked about.
+ */
+export class PlaceAlreadyImportedException extends DomainException {
+  readonly code = ERROR_CODES.PLACE_ALREADY_IMPORTED;
+}
+
+/**
+ * The catalog already holds a shop the place may be (plan 0152, section 2).
+ *
+ * It publishes its details, because the back office cannot offer a link
+ * without them: the candidates travel under {@link PLACE_CANDIDATES_DETAIL}.
+ * Nothing was written when this is thrown.
+ */
+export class PlaceMatchesLocationException extends DomainException {
+  readonly code = ERROR_CODES.PLACE_MATCHES_LOCATION;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link PlaceMatchesLocationException} lists its candidates under. */
+export const PLACE_CANDIDATES_DETAIL = 'candidates';
+
+/**
+ * The run declared a price scope the chain does not hold (plan 0152, section
+ * 1). It publishes the key under {@link SCOPE_KEY_DETAIL}, which is what the
+ * operator types when they create the scope.
+ */
+export class ScopeNotFoundException extends DomainException {
+  readonly code = ERROR_CODES.SCOPE_NOT_FOUND;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link ScopeNotFoundException} names the key under. */
+export const SCOPE_KEY_DETAIL = 'scopeKey';
+
+/**
  * The `details` key a {@link BrandLinkTooDeepException} names the brand that
  * breaks the one level rule under.
  *
