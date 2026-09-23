@@ -9,6 +9,7 @@ import {
   toLine,
   toListAccessEntries,
   toListIdResult,
+  toLineSettlement,
   toListPermissions,
   toMembership,
   toMyZone,
@@ -1271,5 +1272,41 @@ describe('toCatalogSuggestion', () => {
     const mapped = toCatalogSuggestion(offer);
 
     expect(mapped?.kind === 'group' ? mapped.offer : 'wrong kind').toBeNull();
+  });
+});
+
+describe('toLineSettlement, what one unit cost (velista 0095, section 7)', () => {
+  const RAW = {
+    id: 'st-1',
+    lineId: 'l-1',
+    listId: 'list-1',
+    itemId: null,
+    outcome: 'BOUGHT',
+    quantity: 3,
+    settledByUserId: null,
+    settledAt: '2026-09-20T10:00:00.000Z',
+    revertedAt: null,
+    pricePaidCents: 115,
+    pricePaidCurrency: 'EUR',
+    priceScopeId: 'scope-1',
+  };
+
+  it('maps the unit price and its currency', () => {
+    const settlement = toLineSettlement(RAW);
+
+    expect(settlement?.unitPriceCents).toBe(115);
+    expect(settlement?.currency).toBe('EUR');
+  });
+
+  it('maps a price with no currency, or none at all, to two nulls', () => {
+    for (const raw of [
+      { ...RAW, pricePaidCurrency: null },
+      { ...RAW, pricePaidCents: null, pricePaidCurrency: null },
+      { ...RAW, pricePaidCents: undefined, pricePaidCurrency: undefined },
+    ]) {
+      const settlement = toLineSettlement(raw);
+      expect(settlement?.unitPriceCents).toBeNull();
+      expect(settlement?.currency).toBeNull();
+    }
   });
 });

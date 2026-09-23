@@ -60,11 +60,6 @@ import { CheckIcon, XCircleIcon } from '../icons/icons';
             }
             {{ markKey() | rokuT: markArgs() }}
           </span>
-          @if (vm.nowAsks !== null) {
-            <span class="now-asks">
-              {{ 'list.trips.row.nowAsks' | rokuT: { count: vm.nowAsks } }}
-            </span>
-          }
         </span>
       </span>
 
@@ -85,7 +80,7 @@ export class TripRow {
   /** A tap, which opens the line detail sheet. */
   readonly opened = output<string>();
 
-  /** The outcome's words. A loose purchase names its buyer when one is known. */
+  /** The outcome's words. A session purchase names its buyer when one is known. */
   protected readonly markKey = computed(() => {
     const row = this.row();
     switch (row.mark) {
@@ -111,7 +106,7 @@ export class TripRow {
     return { name: (row.mark === 'claimed' ? row.claimedBy : row.buyer) ?? '' };
   });
 
-  /** "bought 3 of 6" on a basket row, "bought 3" on a loose one. */
+  /** "bought 3 of 6" on a basket row, "bought 3" on a session one. */
   protected readonly numbersKey = computed(() =>
     this.row().asked === null
       ? 'list.trips.row.bought'

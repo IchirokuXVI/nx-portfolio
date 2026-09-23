@@ -1,5 +1,6 @@
 import type { SettlementOutcome } from './enums';
 import type { LineIndicator } from './list-view';
+import { formatMinorMoney } from './purchases';
 
 /**
  * What the detail sheet and the line page draw, as plain data (velista plan
@@ -94,6 +95,17 @@ export interface SettlementRowVm {
    * strikes it through, which would read as deleted rather than as reversed.
    */
   readonly reverted: boolean;
+  /**
+   * What the purchase cost, unit price times quantity, formatted in the reader's
+   * locale (velista `0095`, section 7). Null on a row with no price and on every row
+   * that is not `BOUGHT`.
+   */
+  readonly price: string | null;
+  /**
+   * One unit's price, formatted, for the accessible "3 at 1,15 € each". Null when the
+   * row bought one unit or has no price.
+   */
+  readonly unitPrice: string | null;
 }
 
 /** One product on a line, as a removable chip. */
@@ -533,6 +545,9 @@ export function toSettlementRow(
     readonly settledAt: Date;
     /** When it was taken back, if it was. Absent for a caller that cannot revert. */
     readonly revertedAt?: Date | null;
+    /** One unit's price and its currency. Absent for a caller that has none. */
+    readonly unitPriceCents?: number | null;
+    readonly currency?: string | null;
   },
   input: {
     nameOf: (userId: string) => string | null;
@@ -544,6 +559,11 @@ export function toSettlementRow(
   const mine =
     settlement.settledByUserId !== null &&
     settlement.settledByUserId === input.callerUserId;
+
+  const cents = settlement.unitPriceCents ?? null;
+  const currency = settlement.currency ?? null;
+  const priced =
+    settlement.outcome === 'BOUGHT' && cents !== null && currency !== null;
 
   return {
     id: settlement.id,
@@ -561,5 +581,12 @@ export function toSettlementRow(
     // Optional on the argument rather than required, so the two callers that build a
     // settlement shaped object by hand are not made to state a fact they do not have.
     reverted: (settlement.revertedAt ?? null) !== null,
+    price: priced
+      ? formatMinorMoney(cents * settlement.quantity, currency, input.locale)
+      : null,
+    unitPrice:
+      priced && settlement.quantity > 1
+        ? formatMinorMoney(cents, currency, input.locale)
+        : null,
   };
 }

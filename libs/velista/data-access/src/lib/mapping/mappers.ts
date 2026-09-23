@@ -479,7 +479,23 @@ export function toLineSettlement(raw: unknown): LineSettlement | null {
     // Absent against a backend before luna `0054`, which reads as null: a history
     // with nothing marked is exactly what a deployment that cannot revert produces.
     revertedAt: date(raw['revertedAt']),
+    // Both or neither: an amount in no currency cannot be printed honestly.
+    ...paidOf(raw['pricePaidCents'], raw['pricePaidCurrency']),
   };
+}
+
+/** A unit price and its currency, or two nulls when either is missing. */
+function paidOf(
+  cents: unknown,
+  currency: unknown
+): { unitPriceCents: number | null; currency: string | null } {
+  const code = str(currency);
+  return typeof cents === 'number' &&
+    Number.isFinite(cents) &&
+    code !== null &&
+    code.trim() !== ''
+    ? { unitPriceCents: Math.round(cents), currency: code }
+    : { unitPriceCents: null, currency: null };
 }
 
 /**

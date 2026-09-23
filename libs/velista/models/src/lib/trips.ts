@@ -1,9 +1,10 @@
 /**
  * The shopping trips of a zone list (velista `0088`, backend `0122`).
  *
- * A trip is a basket that drew from the list, or a run of purchases settled by hand
- * with no basket behind them, which the page calls "Loose buys". The page reads the
- * heads a page at a time and the rows of one trip only when somebody opens it.
+ * A trip is a basket that drew from the list, or a session: a run of purchases with no
+ * named basket behind them, labelled by its date alone (velista `0095`, section 4). The
+ * page reads the heads a page at a time and the rows of one trip only when somebody
+ * opens it.
  */
 
 /**
@@ -12,8 +13,8 @@
  * Unknown falls back to `SESSION`. A session is labelled without a name, so a kind this
  * build has never heard of still draws a label that claims nothing about a basket.
  *
- * The wire said `LOOSE` until backend `0142`, section 7. The copy is velista `0095`'s and
- * is not touched here: this file mirrors the wire.
+ * The wire said `LOOSE` until backend `0142`, section 7. The mapper still reads it, as a
+ * session, through the fallback.
  */
 export const TRIP_KINDS = ['BASKET', 'SESSION'] as const;
 export type TripKind = (typeof TRIP_KINDS)[number];
@@ -36,10 +37,10 @@ export const TRIP_ROW_OUTCOME_FALLBACK: TripRowOutcome = 'NOT_BOUGHT';
 
 /** One trip's head: its label, its date and its counts. */
 export interface Trip {
-  /** The basket's id, or the id of a loose session's earliest settlement. */
+  /** The basket's id, or the id of a session's earliest settlement. */
   readonly id: string;
   readonly kind: TripKind;
-  /** A basket's name. Null for a loose trip and for a basket shown as its date. */
+  /** A basket's name. Null for a session and for a basket shown as its date. */
   readonly name: string | null;
   readonly live: boolean;
   readonly startedAt: Date;
@@ -62,13 +63,13 @@ export interface TripPage {
  */
 export interface TripRow {
   readonly lineId: string;
-  /** What the basket asked for. Null on a loose row. */
+  /** What the basket asked for. Null on a session row. */
   readonly asked: number | null;
   readonly bought: number;
-  /** What the basket left. Null on a loose row. */
+  /** What the basket left. Null on a session row. */
   readonly left: number | null;
   readonly outcome: TripRowOutcome;
-  /** A loose row's latest buyer, or null. Always null on a basket row. */
+  /** A session row's latest buyer, or null. Always null on a basket row. */
   readonly settledByUserId: string | null;
 }
 
@@ -99,18 +100,16 @@ export interface TripRowVm {
   readonly lineId: string;
   /** The line's name, from the line the page holds. */
   readonly content: string;
-  /** What the trip left. Null on a loose row, which draws zero. */
+  /** What the trip left. Null on a session row, which draws zero. */
   readonly left: number | null;
   readonly bought: number;
-  /** What the basket asked for. Null on a loose row. */
+  /** What the basket asked for. Null on a session row. */
   readonly asked: number | null;
   readonly mark: TripRowMark;
   /** Who holds the line, for `claimed`. Null draws the nameless form. */
   readonly claimedBy: string | null;
-  /** A loose row's buyer, or null to leave the name off. */
+  /** A session row's buyer, or null to leave the name off. */
   readonly buyer: string | null;
-  /** On a live trip, the line's quantity when it differs from `left`. */
-  readonly nowAsks: number | null;
   /** A past trip's row, drawn quieter than a live one. */
   readonly quiet: boolean;
 }
@@ -122,9 +121,12 @@ export interface TripGroupVm {
   readonly live: boolean;
   /** A basket's name, or null to label the trip with its date alone. */
   readonly name: string | null;
-  /** The trip's date, already formatted in the reader's locale. */
+  /**
+   * The trip's date, already formatted in the reader's locale. A session's carries the
+   * time of day when another group of the list shares its calendar day.
+   */
   readonly date: string;
-  /** "3 of 5 bought" for a basket, "2 lines" for a loose trip. */
+  /** "3 of 5 bought" for a basket, "2 lines" for a session. */
   readonly countKey: 'list.trips.bought' | 'list.trips.lines';
   readonly countArgs: Readonly<Record<string, number>>;
   /** The live trip's owner, or null for the nameless form. */

@@ -1,5 +1,10 @@
 import type { BasketProduct } from './basket-view';
-import { offerAt } from './basket-view';
+import {
+  basketRowProduct,
+  offerAt,
+  shownOffer,
+  shownPriceScope,
+} from './basket-view';
 import type { ProductOffer } from './domain';
 
 function offer(priceScopeId: string, price: number): ProductOffer {
@@ -57,5 +62,55 @@ describe('offerAt', () => {
 
   it('answers null for a product nobody has priced anywhere', () => {
     expect(offerAt(product([]), 's-merca')).toBeNull();
+  });
+});
+
+/**
+ * The scope a settle names is the scope of the price the row drew (velista `0095`,
+ * section 6, test 9).
+ */
+describe('shownPriceScope', () => {
+  const milk = product([offer('s-dia', 0.79), offer('s-merca', 0.95)]);
+
+  it('names the chosen shop when the row quotes it', () => {
+    expect(shownPriceScope(milk, 's-merca')).toBe('s-merca');
+    expect(shownOffer(milk, 's-merca')?.price).toBe(0.95);
+  });
+
+  it('names the cheapest offer when no shop is chosen', () => {
+    expect(shownPriceScope(milk, null)).toBe('s-dia');
+  });
+
+  it('is absent when the row drew no price', () => {
+    expect(shownPriceScope(null, null)).toBeUndefined();
+    expect(shownPriceScope(milk, 's-lidl')).toBeUndefined();
+    expect(shownPriceScope(product([]), null)).toBeUndefined();
+    expect(
+      shownPriceScope(product([{ ...offer('s-dia', 0), price: null }]), null)
+    ).toBeUndefined();
+  });
+});
+
+describe('basketRowProduct', () => {
+  const milk = product([offer('s-dia', 0.79)]);
+  const products = new Map([
+    ['p-milk', milk],
+    ['p-oat', { ...milk, id: 'p-oat' }],
+  ]);
+
+  it('answers a choice still among the options, the only option, or nothing', () => {
+    expect(
+      basketRowProduct({ optionIds: ['p-milk', 'p-oat'] }, products, 'p-oat')
+        ?.id
+    ).toBe('p-oat');
+    expect(
+      basketRowProduct({ optionIds: ['p-milk'] }, products, null)?.id
+    ).toBe('p-milk');
+    expect(
+      basketRowProduct({ optionIds: ['p-milk', 'p-oat'] }, products, null)
+    ).toBeNull();
+    expect(
+      basketRowProduct({ optionIds: ['p-milk'] }, products, 'p-gone')?.id
+    ).toBe('p-milk');
   });
 });

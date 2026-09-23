@@ -30,6 +30,8 @@ import { MembershipStore } from './memberships/membership-store';
 import { PresenceStore } from './presence/presence-store';
 import { ShoppingProfileMemory } from './profiles/shopping-profile-memory';
 import { ShoppingProfileStore } from './profiles/shopping-profile-store';
+import { PurchaseMemory } from './purchases/purchase-memory';
+import { PurchaseStore } from './purchases/purchase-store';
 import { ShopMemory } from './shops/shop-memory';
 import { StartupProbe } from './startup-probe';
 import { ZoneMemory } from './zones/zone-memory';
@@ -125,6 +127,11 @@ import { ZoneStore } from './zones/zone-store';
  * between them. `BasketListMemory` joins for `AccountMemory`'s reason exactly, and
  * `BasketListApi` stays out like every other real transport.
  *
+ * `PurchaseStore` (velista `0095`) sits beside `SharedListStore`, for its reason: the
+ * history page's third tab, a listing read once and kept. `PurchaseMemory` joins for
+ * `BasketListMemory`'s reason, and `PurchaseApi` stays out like every other real
+ * transport.
+ *
  * `LiveBasketStore` (velista `0091`) joins for `BasketListStore`'s reason exactly: it
  * resolves `BASKET_SERVICE` and `REALTIME_CLIENT`. It is app scoped rather than page
  * scoped because the dashboard reads it on every visit and the numbers it holds outlive
@@ -196,6 +203,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   BasketListMemory,
   BasketListStore,
   SharedListStore,
+  PurchaseMemory,
+  PurchaseStore,
   ContactMemory,
   ContactStore,
   BasketSessionStore,

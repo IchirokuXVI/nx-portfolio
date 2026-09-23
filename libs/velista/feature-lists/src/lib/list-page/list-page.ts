@@ -510,6 +510,11 @@ export class ListPage {
       live: this._trips.live(),
       past: this._trips.past(),
       rowsOf: (key) => this._trips.rows().get(key),
+      // Only a heads read about this list that succeeded. Until then, and after one
+      // failed, a line at zero with purchases stays in To buy (velista `0095`, section 5).
+      tripsReady:
+        this._trips.listId() === this.listId() &&
+        this._trips.state() === 'loaded',
       reordering: this.reordering(),
       // Only an answer about this list: the store may still hold the list somebody
       // came from for the frame before it opens this one.

@@ -16,10 +16,10 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   basketMatchRange,
-  basketRowPick,
+  basketRowProduct,
   inLocale,
-  offerAt,
   QUANTITY_REEL_CLICK_SHIELD_MS,
+  shownOffer,
   type BasketListRef,
   type BasketParticipant,
   type BasketPriceMark,
@@ -743,19 +743,9 @@ export class BasketRow {
    * is answered by the anchor's own product whether anybody has chosen or not.
    * This one asks "what is in the trolley", which only a person can answer.
    */
-  private readonly _product = computed<BasketProduct | null>(() => {
-    const row = this.row();
-    const products = this.products();
-
-    const chosen = this.chosenId();
-    if (chosen !== null && row.optionIds.includes(chosen)) {
-      return products.get(chosen) ?? null;
-    }
-
-    return row.optionIds.length === 1
-      ? (basketRowPick(row, products) ?? null)
-      : null;
-  });
+  private readonly _product = computed<BasketProduct | null>(() =>
+    basketRowProduct(this.row(), this.products(), this.chosenId())
+  );
 
   /**
    * Why there is no product to name, as a key, or null when there is one.
@@ -790,13 +780,8 @@ export class BasketRow {
    * where that distinction is worth drawing (`0062`, section 5.3).
    */
   protected readonly productPrice = computed<string | null>(() => {
-    const product = this._product();
-    if (product === null) {
-      return null;
-    }
-
-    const shop = this.shop();
-    const offer = shop === null ? product.offer : offerAt(product, shop);
+    // The same lookup a settle reads its scope from (velista `0095`, section 6).
+    const offer = shownOffer(this._product(), this.shop());
     if (offer === null || offer.price === null) {
       return null;
     }

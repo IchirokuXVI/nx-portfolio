@@ -1884,4 +1884,62 @@ describe('SettleSheet: the product somebody got', () => {
     // in it.
     expect(body.itemId).toBeUndefined();
   });
+
+  describe('the price scope (velista 0095, section 6)', () => {
+    const PRICED: BasketProduct = {
+      ...MILK,
+      id: 'i-priced',
+      offer: {
+        price: 0.95,
+        currency: 'EUR',
+        unitPrice: null,
+        unitPriceLabel: null,
+        observedAt: null,
+        sourceKind: 'OFFICIAL_WEB',
+        stale: false,
+        priceScopeId: 's-dia',
+      },
+    };
+    const priced = new Map([[PRICED.id, PRICED]]);
+
+    async function press(
+      selector: (button: HTMLButtonElement) => boolean
+    ): Promise<Record<string, unknown>> {
+      const { fixture, store } = await render({
+        lines: [line({ optionIds: [PRICED.id] })],
+        products: priced,
+      });
+      [
+        ...(
+          fixture.nativeElement as HTMLElement
+        ).querySelectorAll<HTMLButtonElement>('.actions button'),
+      ]
+        .find(selector)
+        ?.click();
+      await fixture.whenStable();
+      return (store.settle as unknown as jest.Mock).mock.calls[0][1];
+    }
+
+    it('names the scope of the price the row draws, and never an amount', async () => {
+      const body = await press((button) =>
+        button.classList.contains('primary')
+      );
+
+      expect(body['priceScopeId']).toBe('s-dia');
+      expect(
+        Object.keys(body).filter(
+          (key) => key !== 'priceScopeId' && /price|cents|amount/i.test(key)
+        )
+      ).toEqual([]);
+    });
+
+    it('names no scope on a close', async () => {
+      const body = await press((button) =>
+        (button.textContent ?? '').includes('basket.settle.none')
+      );
+
+      expect(body['outcome']).toBe('NOT_AVAILABLE');
+      expect(body).not.toHaveProperty('priceScopeId');
+    });
+  });
 });

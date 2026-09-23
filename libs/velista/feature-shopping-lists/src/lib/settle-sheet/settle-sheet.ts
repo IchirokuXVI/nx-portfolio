@@ -32,6 +32,7 @@ import {
   inLocale,
   LINE_CONTENT_MAX_LENGTH,
   offerAt,
+  shownPriceScope,
   toSettlementRow,
   type BasketParticipant,
   type BasketPriceScope,
@@ -1005,10 +1006,21 @@ export class SettleSheet {
    * the split with: "Got some, 2" with the whole milk chosen, then "Got it" with
    * the skimmed. Each settlement names one product, and the purchase history ends
    * up truer than a split ever made it.
+   *
+   * It also names the price scope of the offer the row underneath draws for that
+   * product (velista `0095`, section 6), and never an amount: the gateway reads the
+   * price itself. Absent when the row draws no price.
    */
-  private _got(): { itemId?: string } {
+  private _got(): { itemId?: string; priceScopeId?: string } {
     const itemId = this._store.itemIdFor(this._rowKey);
-    return itemId === undefined ? {} : { itemId };
+    const priceScopeId = shownPriceScope(
+      this._product(),
+      this._view.pricedShop()
+    );
+    return {
+      ...(itemId === undefined ? {} : { itemId }),
+      ...(priceScopeId === undefined ? {} : { priceScopeId }),
+    };
   }
 
   /**

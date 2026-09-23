@@ -369,7 +369,7 @@ export class TripStore {
       }
 
       if (error instanceof GatewayError && error.code === 'not_found') {
-        // A loose trip's id can disappear when a purchase is undone. The group goes,
+        // A session's id can disappear when a purchase is undone. The group goes,
         // and the heads are read again to find whatever replaced it.
         this._drop(key);
         this.refetch();

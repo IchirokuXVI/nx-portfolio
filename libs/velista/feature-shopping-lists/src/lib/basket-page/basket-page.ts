@@ -25,10 +25,12 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  basketRowProduct,
   countableBasketRows,
   isLinkVisitor,
   LINK_VISIT_HOURS,
   selectBasketSurface,
+  shownPriceScope,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
   VISIT_WARNING_MINUTES,
@@ -939,8 +941,24 @@ export class BasketPage {
         outcome: 'BOUGHT',
         quantity: row.left,
         from: row.left,
+        ...this._scopeOf(row),
       })
     );
+  }
+
+  /**
+   * The scope of the price the row draws, as a body fragment to spread (velista `0095`,
+   * section 6). Empty when it draws none.
+   *
+   * The row on this page is bound with no chosen product, so this asks the same
+   * question with the same null: what is sent is what the row drew.
+   */
+  private _scopeOf(row: BasketRowModel): { priceScopeId?: string } {
+    const scope = shownPriceScope(
+      basketRowProduct(row, this.products(), null),
+      this.pricedShop()
+    );
+    return scope === undefined ? {} : { priceScopeId: scope };
   }
 
   /**
@@ -1011,7 +1029,8 @@ export class BasketPage {
     const result = await this._store.setLeft(
       row.row.rowKey,
       change.to,
-      change.from
+      change.from,
+      this._scopeOf(row.row).priceScopeId
     );
 
     if (result === null) {

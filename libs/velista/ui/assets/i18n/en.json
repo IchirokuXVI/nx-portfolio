@@ -661,6 +661,7 @@
       "rate": "about how often you buy it",
       "lastBought": "last bought, {{count}}",
       "boughtBy": "Bought {{count}} · {{who}}",
+      "each": "{{count}} at {{price}} each",
       "missingBy": "Not in the shop · {{who}}",
       "you": "you",
       "someone": "somebody"
@@ -683,7 +684,6 @@
     },
     "trips": {
       "toBuy": "To buy",
-      "loose": "Loose buys",
       "labelNamed": "{{name}} · {{date}}",
       "bought": "{{bought}} of {{total}} bought",
       "lines": "{{count}} lines",
@@ -701,8 +701,7 @@
         "partly": "Bought some",
         "notAvailable": "Not in the shop",
         "notBought": "Was on the list, nobody bought it",
-        "boughtBy": "Bought · {{name}}",
-        "nowAsks": "The list now asks for {{count}}"
+        "boughtBy": "Bought · {{name}}"
       }
     },
     "due": {

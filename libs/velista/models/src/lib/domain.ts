@@ -377,6 +377,15 @@ export interface LineSettlement {
    * Null for every row written before that plan.
    */
   readonly revertedAt: Date | null;
+  /**
+   * What **one unit** cost, in the minor unit of {@link currency}, or null when nobody
+   * knew (backend `0143`, velista `0095` section 7). Every `NOT_AVAILABLE`, every
+   * settlement from before the price was recorded, and every hand settle on a zone
+   * list, which names no scope.
+   */
+  readonly unitPriceCents: number | null;
+  /** ISO 4217, null exactly when {@link unitPriceCents} is. */
+  readonly currency: string | null;
 }
 
 /**

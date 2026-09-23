@@ -1,5 +1,7 @@
 import {
+  calendarDayKey,
   TRIP_ROWS_PAGE_SIZE,
+  tripDateFormatter,
   type Line,
   type LineRowVm,
   type TripGroup,
@@ -11,7 +13,7 @@ import {
 /** Everything `selectTripGroups` needs beside the composed groups. */
 export interface TripGroupsInput {
   readonly groups: readonly TripGroup<LineRowVm>[];
-  /** The line behind a row, for its live quantity and its claim. */
+  /** The line behind a row, for its claim. */
   readonly lineOf: (lineId: string) => Line | null;
   /** A user id's name in this zone, or null. */
   readonly nameOf: (userId: string) => string | null;
@@ -28,7 +30,15 @@ export interface TripGroupsInput {
 export function selectTripGroups(
   input: TripGroupsInput
 ): readonly TripGroupVm[] {
-  const format = dateFormatter(input.locale);
+  const format = tripDateFormatter(input.locale);
+
+  // A session is told apart from another group on its calendar day by its time of day,
+  // and only then (velista `0095`, section 4).
+  const perDay = new Map<string, number>();
+  for (const { trip } of input.groups) {
+    const day = calendarDayKey(trip.startedAt);
+    perDay.set(day, (perDay.get(day) ?? 0) + 1);
+  }
 
   return input.groups.map(({ key, trip, open, rows }) => {
     const live = trip.live;
@@ -42,7 +52,11 @@ export function selectTripGroups(
       kind: trip.kind,
       live,
       name: trip.kind === 'BASKET' ? trip.name : null,
-      date: format(trip.startedAt, input.now),
+      date:
+        trip.kind === 'SESSION' &&
+        (perDay.get(calendarDayKey(trip.startedAt)) ?? 0) > 1
+          ? format.dateTime(trip.startedAt, input.now)
+          : format.date(trip.startedAt, input.now),
       countKey:
         trip.kind === 'BASKET' ? 'list.trips.bought' : 'list.trips.lines',
       countArgs,
@@ -70,15 +84,6 @@ export function selectTripGroups(
                 buyer:
                   trip.kind === 'SESSION' && row.settledByUserId !== null
                     ? input.nameOf(row.settledByUserId)
-                    : null,
-                // The basket holds a copy taken when it was composed. On a live trip
-                // this one sentence is all the page says about a difference.
-                nowAsks:
-                  live &&
-                  held !== null &&
-                  row.left !== null &&
-                  held.quantity !== row.left
-                    ? held.quantity
                     : null,
                 quiet: !live,
               } satisfies TripRowVm;
@@ -112,27 +117,4 @@ function liveOwner(
     }
   }
   return null;
-}
-
-/**
- * "Sat 12 Sep", with the year only when it is not this year's.
- *
- * `Intl` and never `DatePipe`: the language is runtime state here. An unrecognised
- * locale tag throws `RangeError`, and the runtime's own locale stands in.
- */
-function dateFormatter(locale: string): (date: Date, now: Date) => string {
-  const build = (options: Intl.DateTimeFormatOptions) => {
-    try {
-      return new Intl.DateTimeFormat(locale, options);
-    } catch {
-      return new Intl.DateTimeFormat(undefined, options);
-    }
-  };
-  const short = build({ weekday: 'short', day: 'numeric', month: 'short' });
-  const long = build({ day: 'numeric', month: 'short', year: 'numeric' });
-
-  return (date, now) =>
-    date.getFullYear() === now.getFullYear()
-      ? short.format(date)
-      : long.format(date);
 }

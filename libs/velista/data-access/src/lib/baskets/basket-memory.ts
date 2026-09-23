@@ -403,6 +403,11 @@ interface Settlement {
   readonly quantity: number;
   readonly by: string;
   readonly at: Date;
+  /**
+   * The scope the settle named (velista `0095`, section 6). The real gateway reads a
+   * price there; this twin keeps the scope so a spec can see what was sent.
+   */
+  readonly priceScopeId?: string;
   reverted: boolean;
 }
 
@@ -866,7 +871,12 @@ export class BasketMemory implements BasketServiceI {
 
     for (const allocation of allocations) {
       if (allocation.quantity > 0) {
-        this._write(allocation.lineId, 'BOUGHT', allocation.quantity);
+        this._write(
+          allocation.lineId,
+          'BOUGHT',
+          allocation.quantity,
+          body.priceScopeId
+        );
       }
     }
 
@@ -1646,7 +1656,8 @@ export class BasketMemory implements BasketServiceI {
   private _write(
     lineId: string,
     outcome: 'BOUGHT' | 'NOT_AVAILABLE',
-    quantity: number
+    quantity: number,
+    priceScopeId?: string
   ): void {
     this._settlements.push({
       id: (this._settlementId += 1),
@@ -1655,6 +1666,7 @@ export class BasketMemory implements BasketServiceI {
       quantity,
       by: this.me.id,
       at: new Date(),
+      ...(priceScopeId === undefined ? {} : { priceScopeId }),
       reverted: false,
     });
 

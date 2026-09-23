@@ -1,3 +1,9 @@
+> **PR:** [#447](https://github.com/IchirokuXVI/nx-portfolio/pull/447)
+
+> **Section 3 is not built.** The "Bought" tab was left out on 2026-09-23 because it may
+> move to another screen. Its data layer (`PurchaseStore` and the purchases client) is built
+> and has no screen yet. The mock was removed.
+
 # 0095: a history without baskets, and what it cost
 
 > Backend halves: `apps/luna-shopper-backend/plans/0142` (what a person bought, with or
