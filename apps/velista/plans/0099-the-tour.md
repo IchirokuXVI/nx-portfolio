@@ -1,3 +1,5 @@
+> **PR:** [#449](https://github.com/IchirokuXVI/nx-portfolio/pull/449)
+
 # 0099: the tour
 
 > Backend half: `apps/luna-shopper-backend/plans/0145`, which must be merged first.
