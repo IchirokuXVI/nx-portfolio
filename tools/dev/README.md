@@ -349,6 +349,13 @@ A claim and a listener are both checked because either alone would lie: a
 configured but idle worktree would collide the moment it starts, and an open port
 with no claim is something outside this repository that would collide right now.
 
+The backend half has two shared files in the main `.git` directory, because it
+holds things that a worktree does not own. A `--keep-data` lock keeps a slot's
+databases, and an ephemeral record (`plans/0004`) holds the slot of an
+`luna-slot.sh --ephemeral --up` while its caller runs. `luna-slot.sh --list` prints
+both. `k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md` describes them.
+`ng-slot.sh` has neither, because it has no data and no ephemeral mode.
+
 `probe-ports.mjs` tries **both** loopback addresses. That is not belt and braces:
 the shell's serve target sets `host: 0.0.0.0` and answers on 127.0.0.1, while a
 remote binds `localhost`, which Node resolves to `::1` and which then refuses IPv4
