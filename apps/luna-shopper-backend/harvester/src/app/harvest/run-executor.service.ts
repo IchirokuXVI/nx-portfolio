@@ -629,13 +629,16 @@ function readBackfillBudget(
 function describePrices(
   counters: Pick<
     SourceIngestCounters,
-    'pricesRecorded' | 'pricesWritten' | 'pricesConfirmed'
+    'pricesRecorded' | 'pricesWritten' | 'pricesConfirmed' | 'pricesConflicted'
   >
 ): Record<string, unknown> {
   return {
     pricesRecorded: counters.pricesRecorded,
     pricesPublished: counters.pricesWritten,
     pricesConfirmed: counters.pricesConfirmed,
+    // Plan 0155: an item two entries of the chain priced in one batch. Its
+    // prices were withheld, and a person decides which entry is the product.
+    pricesConflicted: counters.pricesConflicted,
   };
 }
 
@@ -647,6 +650,7 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
       pricesRecorded: written.pricesRecorded,
       pricesWritten: written.pricesPublished,
       pricesConfirmed: written.pricesConfirmed,
+      pricesConflicted: written.pricesConflicted,
     }),
     placesCreated: written.placesCreated,
     placesRefreshed: written.placesRefreshed,

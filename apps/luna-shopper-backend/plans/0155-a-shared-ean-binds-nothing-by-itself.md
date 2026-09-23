@@ -1,3 +1,5 @@
+> **PR:** [#456](https://github.com/IchirokuXVI/nx-portfolio/pull/456)
+
 # 0155: a shared EAN binds nothing by itself
 
 > Found by `0150` (report finding 5, `part3/rerun.md`, and the `NAME_SIZE` half of finding

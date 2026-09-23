@@ -178,6 +178,16 @@ export enum ItemSourceMatch {
    */
   NAME_SIZE = 'NAME_SIZE',
   MANUAL = 'MANUAL',
+  /**
+   * The source's EAN equals a catalog item's, and another row of the same chain
+   * carries that EAN too (plan 0155).
+   *
+   * Mercadona gives one EAN to five cuts of one fish, so an EAN that several
+   * rows of one chain share does not say which product a row is. The rung that
+   * would have bound the row proposes the item instead. Produces a CANDIDATE,
+   * never an ACTIVE, and writes no price until a person accepts the row.
+   */
+  SHARED_EAN = 'SHARED_EAN',
 }
 
 /**
