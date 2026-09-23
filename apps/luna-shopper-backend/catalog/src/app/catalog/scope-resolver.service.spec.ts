@@ -30,6 +30,11 @@ interface World {
   locations: WorldLocation[];
   scopes: Partial<PriceScope>[];
   chains: Partial<Supermarket>[];
+  /**
+   * The scopes holding at least one available price row (plan 0157). Absent
+   * means none, which is what every test written before it was about.
+   */
+  pricedScopeIds?: string[];
 }
 
 /**
@@ -73,6 +78,12 @@ function build(input: World) {
         );
       }
     ),
+    // The one raw read (plan 0157): which of these scopes hold a price. It is
+    // bound as a single array parameter, and answered from the world's list.
+    query: jest.fn(async (_sql: string, [ids]: [string[]]) => {
+      const priced = new Set(world.pricedScopeIds ?? []);
+      return ids.filter((id) => priced.has(id)).map((id) => ({ id }));
+    }),
   } as unknown as Repository<PriceScope>;
 
   const chains = {
@@ -421,6 +432,7 @@ describe('ScopeResolverService', () => {
           supermarketLocationId: null,
           priority: DEFAULT_SCOPE_PRIORITY.NATIONAL,
           quoted: true,
+          priced: false,
         },
       ]);
       expect(resolved.approximate).toBe(false);
@@ -455,6 +467,7 @@ describe('ScopeResolverService', () => {
           supermarketLocationId: null,
           priority: DEFAULT_SCOPE_PRIORITY.REGION,
           quoted: true,
+          priced: false,
         },
       ]);
       // What lets the client say "prices shown for Madrid" instead of implying
@@ -827,5 +840,122 @@ describe('ScopeResolverService and a shop stack', () => {
     expect(resolved.scopes).toEqual([]);
     // Coverage is a property of our data, not of what they will not walk to.
     expect(resolved.coverage).toEqual([{ postalCode: '28001', served: true }]);
+  });
+});
+
+/**
+ * Whether a scope holds any price at all (plan 0157), which `quoted` never
+ * said: the head of a shop's stack is quoted whether or not anything is in it.
+ */
+describe('ScopeResolverService, priced', () => {
+  const OWN_STORE = 'scope-own-store';
+  const WAREHOUSE = 'scope-warehouse-4661';
+
+  it('says an imported shop own STORE scope is quoted and holds no price', async () => {
+    // The plan 0150 shape: an imported location's own STORE scope heads its
+    // stack, so it is the tier the shop is quoted from, and nothing has
+    // priced it yet.
+    const resolver = build({
+      locations: [
+        {
+          supermarketId: DIA,
+          priceScopeId: OWN_STORE,
+          postalCode: '28001',
+        },
+      ],
+      scopes: [],
+      chains: [],
+    });
+
+    const resolved = await resolver.resolve({
+      userId: CALLER,
+      postalCodes: ['28001'],
+    });
+
+    expect(resolved.scopes).toHaveLength(1);
+    expect(resolved.scopes[0]).toMatchObject({
+      priceScopeId: OWN_STORE,
+      quoted: true,
+      priced: false,
+    });
+    // Still handed to a scoped read: `quoted` keeps its meaning.
+    expect(resolved.priceScopeIds).toEqual([OWN_STORE]);
+  });
+
+  it('says a warehouse scope with prices is priced, beside an empty one', async () => {
+    const resolver = build({
+      locations: [
+        {
+          supermarketId: MERCADONA,
+          priceScopeId: WAREHOUSE,
+          postalCode: '28001',
+        },
+        {
+          supermarketId: DIA,
+          priceScopeId: OWN_STORE,
+          postalCode: '28001',
+        },
+      ],
+      scopes: [],
+      chains: [],
+      pricedScopeIds: [WAREHOUSE],
+    });
+
+    const resolved = await resolver.resolve({
+      userId: CALLER,
+      postalCodes: ['28001'],
+    });
+
+    const byId = new Map(
+      resolved.scopes.map((scope) => [scope.priceScopeId, scope])
+    );
+    expect(byId.get(WAREHOUSE)).toMatchObject({ quoted: true, priced: true });
+    expect(byId.get(OWN_STORE)).toMatchObject({ quoted: true, priced: false });
+  });
+
+  it('answers priced on a fallback rung too', async () => {
+    const resolver = build({
+      locations: [],
+      scopes: [
+        {
+          id: 'scope-national',
+          supermarketId: LIDL,
+          kind: PriceScopeKind.NATIONAL,
+          priority: DEFAULT_SCOPE_PRIORITY.NATIONAL,
+        },
+        {
+          id: 'scope-madrid',
+          supermarketId: MERCADONA,
+          kind: PriceScopeKind.REGION,
+          priority: DEFAULT_SCOPE_PRIORITY.REGION,
+        },
+      ],
+      chains: [
+        { id: LIDL, defaultPriceScopeId: null },
+        { id: MERCADONA, defaultPriceScopeId: 'scope-madrid' },
+      ],
+      pricedScopeIds: ['scope-madrid'],
+    });
+
+    const resolved = await resolver.resolve({
+      userId: CALLER,
+      supermarketIds: [LIDL, MERCADONA],
+    });
+
+    const byId = new Map(
+      resolved.scopes.map((scope) => [scope.priceScopeId, scope])
+    );
+    // Rung two, quoted and empty.
+    expect(byId.get('scope-national')).toMatchObject({
+      origin: 'NATIONAL',
+      quoted: true,
+      priced: false,
+    });
+    // Rung three, quoted and priced.
+    expect(byId.get('scope-madrid')).toMatchObject({
+      origin: 'CHAIN_DEFAULT',
+      quoted: true,
+      priced: true,
+    });
   });
 });

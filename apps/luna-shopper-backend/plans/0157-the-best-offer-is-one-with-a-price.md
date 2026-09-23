@@ -1,3 +1,5 @@
+> **PR:** [#459](https://github.com/IchirokuXVI/nx-portfolio/pull/459)
+
 # 0157: the best offer is one with a price
 
 > Found by `0150` (report finding 4, shopper F3, F7 and F8). Prerequisite reading: `0080`

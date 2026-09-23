@@ -2046,6 +2046,7 @@ export type CatalogAdminSupermarketItemView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
   priceCopiedFromScopeId?: string | null;
@@ -2153,6 +2154,7 @@ export type CatalogItemOfferView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
   priceCopiedFromScopeId?: string | null;
@@ -2221,6 +2223,7 @@ export type CatalogItemPriceView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
   observedAt: string;
   lastObservedAt: string;
   validFrom: string | null;
@@ -2407,6 +2410,7 @@ export type CatalogResolvedScopeView = {
   supermarketLocationId: string | null;
   priority: number;
   quoted: boolean;
+  priced?: boolean;
 };
 
 /**
@@ -2486,6 +2490,7 @@ export type CatalogSupermarketItemView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
   priceCopiedFromScopeId?: string | null;

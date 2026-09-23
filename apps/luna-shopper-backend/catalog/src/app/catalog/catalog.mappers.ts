@@ -30,6 +30,7 @@ import type {
   SupermarketLocation,
   SupermarketLocationItem,
 } from '../entities';
+import { unitBasisOf } from './unit-basis';
 
 /**
  * The content locales, the caller's first (plan 0111, section 4).
@@ -278,6 +279,7 @@ export function toItemOfferView(row: SupermarketItem): ItemOfferView {
     currency: row.currency,
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
+    unitBasis: unitBasisOf(row.unitPriceLabel),
     observedAt: toInstant(row.priceObservedAt),
     sourceKind: row.priceSourceKind ?? null,
     priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,
@@ -296,6 +298,7 @@ export function toSupermarketItemView(
     currency: row.currency,
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
+    unitBasis: unitBasisOf(row.unitPriceLabel),
     observedAt: toInstant(row.priceObservedAt),
     sourceKind: row.priceSourceKind ?? null,
     priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,
@@ -316,6 +319,7 @@ export function toItemPriceView(row: ItemPrice): ItemPriceView {
     currency: row.currency,
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
+    unitBasis: unitBasisOf(row.unitPriceLabel),
     observedAt: toInstant(row.observedAt) ?? '',
     lastObservedAt: toInstant(row.lastObservedAt) ?? '',
     validFrom: toInstant(row.validFrom),

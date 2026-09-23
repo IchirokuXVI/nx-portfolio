@@ -672,6 +672,24 @@ export interface RegisterBrandSuggestionResult {
 }
 
 /**
+ * What a unit price is a price per (plan 0157, section 1).
+ *
+ * Read on every request from the verbatim `unitPriceLabel` by a fixed table, so
+ * a client can display "per litre" without parsing "el litro le sale a". The
+ * label and the amount are never changed, and a label the table does not know
+ * reads as null rather than as a guess.
+ */
+export const UNIT_BASES = [
+  'KILOGRAM',
+  'LITER',
+  'UNIT',
+  'DOZEN',
+  /** A washing machine or dishwasher load, Mercadona's `lv`. */
+  'WASH',
+] as const;
+export type UnitBasis = (typeof UNIT_BASES)[number];
+
+/**
  * A price quoted by a search result, from the materialized
  * {@link SupermarketItemView} rows (plan 0048, section 3).
  *
@@ -691,6 +709,11 @@ export interface ItemOfferView {
   /** Verbatim, and never recomputed (plan 0038, section 2.4). */
   unitPrice: number | null;
   unitPriceLabel: string | null;
+  /**
+   * What `unitPrice` is a price per, read from `unitPriceLabel` by a fixed
+   * table (plan 0157). Null for a label the table does not know.
+   */
+  unitBasis: UnitBasis | null;
   /** The effective row's `lastObservedAt`. Null when there is no price row. */
   observedAt: string | null;
   /** Null when there is no price row at all. */
@@ -815,6 +838,11 @@ export interface SupermarketItemView {
    * be parsed into a unit.
    */
   unitPriceLabel: string | null;
+  /**
+   * What `unitPrice` is a price per, read from `unitPriceLabel` by a fixed
+   * table (plan 0157). Null for a label the table does not know.
+   */
+  unitBasis: UnitBasis | null;
   /** The effective row's `lastObservedAt`. Without it a price has no age. */
   observedAt: string | null;
   /** The effective row's kind. Null when no row prices this key at all. */
@@ -914,6 +942,11 @@ export interface ItemPriceView {
   unitPrice: number | null;
   /** Text, never a unit (plan 0038, section 2.4). */
   unitPriceLabel: string | null;
+  /**
+   * What `unitPrice` is a price per, read from `unitPriceLabel` by a fixed
+   * table (plan 0157). Null for a label the table does not know.
+   */
+  unitBasis: UnitBasis | null;
   observedAt: string;
   lastObservedAt: string;
   /** The row applies from here. Null means from `observedAt`. */
@@ -1945,6 +1978,15 @@ export interface ResolvedScopeView {
    * from a till that will not ring it up.
    */
   quoted: boolean;
+  /**
+   * Whether this scope holds at least one available price row (plan 0157).
+   *
+   * Independent of {@link quoted}, which says which tier a shop is read from
+   * and not whether anything is there to read: an imported shop's own STORE
+   * scope heads its stack, so it is quoted, and it is empty until a source
+   * prices it. A client uses this to tell "no prices here yet" from "no match".
+   */
+  priced: boolean;
 }
 
 /**

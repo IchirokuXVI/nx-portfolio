@@ -23,6 +23,7 @@ import {
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  UNIT_BASES,
 } from '../../lib/messages/catalog.messages';
 // The one bound a suggestion's product set has to respect, taken from the line it
 // will become rather than restated here, so the two cannot drift apart.
@@ -230,6 +231,11 @@ const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
 const nullableSourceKind = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
 });
+// Plan 0157: read from the label on every request, so it is stated and never
+// required, and a reader built before it keeps validating what it holds.
+const nullableUnitBasis = (): JsonSchema => ({
+  anyOf: [{ type: 'string', enum: [...UNIT_BASES] }, { type: 'null' }],
+});
 const nullableLocalized = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
 });
@@ -355,6 +361,7 @@ const itemOfferView = object(
     currency: nullableString(),
     unitPrice: numberOrNull(),
     unitPriceLabel: nullableString(),
+    unitBasis: nullableUnitBasis(),
     observedAt: nullableString(),
     sourceKind: nullableSourceKind(),
     // Plan 0118. Stated but not required, so a reader built before it keeps
@@ -455,6 +462,7 @@ const supermarketItemProperties = () => ({
   currency: nullableString(),
   unitPrice: numberOrNull(),
   unitPriceLabel: nullableString(),
+  unitBasis: nullableUnitBasis(),
   observedAt: nullableString(),
   sourceKind: nullableSourceKind(),
   // Plan 0118. Stated but not required, so a reader built before it keeps
@@ -538,6 +546,7 @@ const itemPriceView = object(
     currency: nullableString(),
     unitPrice: numberOrNull(),
     unitPriceLabel: nullableString(),
+    unitBasis: nullableUnitBasis(),
     observedAt: nonEmptyString(),
     lastObservedAt: nonEmptyString(),
     validFrom: nullableString(),
@@ -1498,6 +1507,9 @@ const resolvedScopeView = object(
     supermarketLocationId: nullableString(),
     priority: integer(),
     quoted: boolean(),
+    // Plan 0157. Stated but not required, so a reader built before it keeps
+    // validating what it holds.
+    priced: boolean(),
   },
   [
     'priceScopeId',
