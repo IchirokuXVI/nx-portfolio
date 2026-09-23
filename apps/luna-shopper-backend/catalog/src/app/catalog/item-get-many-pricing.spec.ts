@@ -155,12 +155,15 @@ describe('ItemService.getMany with scopes (plan 0066)', () => {
       sourceKind: PriceSourceKind.OFFICIAL_WEB,
     });
     expect(calls.scopeIds).toEqual(['scope-a', 'scope-b']);
-    // Section 2.1: the shelf price decides, and the unit price only breaks a
-    // tie. Search ranks the other way round, on purpose.
+    // Section 2.1: the shelf price decides, after a row with no till price is
+    // put last (plan 0157), and the unit price only breaks a tie. Search ranks
+    // one product's offers the same way since plan 0157.
     expect(calls.order).toEqual([
       'si."itemId"',
+      'si."price" IS NULL',
       'si."price"',
       'si."unitPrice"',
+      'si."priceScopeId"',
     ]);
   });
 
@@ -238,8 +241,10 @@ describe("ItemService.getMany with offers: 'all' (plan 0109)", () => {
     expect(calls.distinct).toBe(false);
     expect(calls.order).toEqual([
       'si."itemId"',
+      'si."price" IS NULL',
       'si."price"',
       'si."unitPrice"',
+      'si."priceScopeId"',
     ]);
   });
 
@@ -343,12 +348,15 @@ describe('ItemService.getMany and the scope stack (plan 0105, D4)', () => {
     });
 
     expect(result.items[0].bestOffer?.priceScopeId).toBe('scope-national-lidl');
-    // Ordered by price and nothing else: no priority column enters this
-    // query, and adding one would answer the wrong question.
+    // Ordered by price and nothing else, with the scope id as the last tie
+    // break (plan 0157): no priority column enters this query, and adding one
+    // would answer the wrong question.
     expect(calls.order).toEqual([
       'si."itemId"',
+      'si."price" IS NULL',
       'si."price"',
       'si."unitPrice"',
+      'si."priceScopeId"',
     ]);
     expect(calls.order.join(' ')).not.toContain('priority');
   });

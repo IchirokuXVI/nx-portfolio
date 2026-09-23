@@ -29230,6 +29230,23 @@
               "null"
             ]
           },
+          "unitBasis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILOGRAM",
+                  "LITER",
+                  "UNIT",
+                  "DOZEN",
+                  "WASH"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "observedAt": {
             "type": [
               "string",
@@ -29630,6 +29647,23 @@
               "null"
             ]
           },
+          "unitBasis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILOGRAM",
+                  "LITER",
+                  "UNIT",
+                  "DOZEN",
+                  "WASH"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "observedAt": {
             "type": [
               "string",
@@ -29836,6 +29870,23 @@
             "type": [
               "string",
               "null"
+            ]
+          },
+          "unitBasis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILOGRAM",
+                  "LITER",
+                  "UNIT",
+                  "DOZEN",
+                  "WASH"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "observedAt": {
@@ -30460,6 +30511,9 @@
           },
           "quoted": {
             "type": "boolean"
+          },
+          "priced": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -30679,6 +30733,23 @@
             "type": [
               "string",
               "null"
+            ]
+          },
+          "unitBasis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILOGRAM",
+                  "LITER",
+                  "UNIT",
+                  "DOZEN",
+                  "WASH"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "observedAt": {

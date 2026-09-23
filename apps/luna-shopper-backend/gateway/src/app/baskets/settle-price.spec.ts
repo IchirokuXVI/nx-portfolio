@@ -43,6 +43,7 @@ const offer = (
   currency: price === null ? null : 'EUR',
   unitPrice: null,
   unitPriceLabel: null,
+  unitBasis: null,
   observedAt: '2026-09-01T08:00:00.000Z',
   sourceKind: PriceSourceKind.CHAIN,
   priceCopiedFromScopeId: null,

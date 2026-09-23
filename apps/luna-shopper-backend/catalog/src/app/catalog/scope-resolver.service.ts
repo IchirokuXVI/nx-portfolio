@@ -25,6 +25,12 @@ export const SCOPE_CACHE_TTL_MS = 60_000;
 /** Beyond this many entries the oldest are dropped. A cache, not a table. */
 const SCOPE_CACHE_MAX_ENTRIES = 500;
 
+/**
+ * A scope entry before the one read that says whether it holds prices, which
+ * is made once for the merged answer rather than once per rung.
+ */
+type UnpricedScope = Omit<ResolvedScopeView, 'priced'>;
+
 interface CacheEntry {
   value: ResolvedScopesView;
   expiresAt: number;
@@ -189,7 +195,7 @@ export class ScopeResolverService {
       serving.map((row) => row.id)
     );
 
-    const scopes: ResolvedScopeView[] = [];
+    const scopes: UnpricedScope[] = [];
     const fallbackChains: string[] = [];
 
     for (const supermarketId of candidates) {
@@ -227,14 +233,18 @@ export class ScopeResolverService {
 
     // One entry per scope. A chain with three stores in one postal code prices
     // them all from one warehouse, and the caller wants the warehouse once.
-    const unique = new Map<string, ResolvedScopeView>();
+    const unique = new Map<string, UnpricedScope>();
     for (const scope of scopes) {
       const existing = unique.get(scope.priceScopeId);
       if (!existing || preferred(scope, existing)) {
         unique.set(scope.priceScopeId, scope);
       }
     }
-    const resolved = [...unique.values()];
+    const priced = await this.pricedAmong([...unique.keys()]);
+    const resolved = [...unique.values()].map((scope) => ({
+      ...scope,
+      priced: priced.has(scope.priceScopeId),
+    }));
 
     return {
       // The quoted entries only (plan 0105, section 4). One shop's regional
@@ -251,9 +261,7 @@ export class ScopeResolverService {
   }
 
   /** Rungs two and three, for the chains rung one did not answer. */
-  private async ladderFor(
-    supermarketIds: string[]
-  ): Promise<ResolvedScopeView[]> {
+  private async ladderFor(supermarketIds: string[]): Promise<UnpricedScope[]> {
     if (supermarketIds.length === 0) {
       return [];
     }
@@ -293,7 +301,7 @@ export class ScopeResolverService {
         .filter((pair): pair is [string, PriceScope] => pair[1] !== undefined)
     );
 
-    const rungs: ResolvedScopeView[] = [];
+    const rungs: UnpricedScope[] = [];
     for (const supermarketId of supermarketIds) {
       const nationalScope = nationalByChain.get(supermarketId);
       if (nationalScope) {
@@ -332,6 +340,35 @@ export class ScopeResolverService {
     return rungs;
   }
 
+  /**
+   * Which of these scopes hold at least one available price row (plan 0157).
+   *
+   * One read for the whole answer, an `EXISTS` per scope on
+   * `ix_supermarket_items_scope`, and cached with the rest of the answer. It is
+   * what `quoted` never said: an imported shop's own STORE scope heads its stack
+   * and is quoted from, and it holds nothing until a source prices it, so seven
+   * of the twelve shops in the plan 0150 shopper's area were quoted and empty.
+   */
+  private async pricedAmong(priceScopeIds: string[]): Promise<Set<string>> {
+    if (priceScopeIds.length === 0) {
+      return new Set();
+    }
+    const rows: { id: string }[] = await this.scopes.query(
+      `
+      SELECT s."id"
+      FROM unnest($1::uuid[]) AS s("id")
+      WHERE EXISTS (
+        SELECT 1
+        FROM "supermarket_items" si
+        WHERE si."priceScopeId" = s."id"
+          AND si."available"
+      )
+      `,
+      [priceScopeIds]
+    );
+    return new Set(rows.map((row) => row.id));
+  }
+
   private remember(key: string, value: ResolvedScopesView): void {
     if (this.cache.size >= SCOPE_CACHE_MAX_ENTRIES) {
       // Insertion ordered, so the first key is the oldest write. One eviction
@@ -355,10 +392,7 @@ export class ScopeResolverService {
  * Then an exact reason over an approximate one: the id is the same either way,
  * and the explanation is what the client renders.
  */
-function preferred(
-  candidate: ResolvedScopeView,
-  held: ResolvedScopeView
-): boolean {
+function preferred(candidate: UnpricedScope, held: UnpricedScope): boolean {
   if (candidate.quoted !== held.quoted) {
     return candidate.quoted;
   }
