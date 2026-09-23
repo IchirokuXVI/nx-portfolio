@@ -1,5 +1,12 @@
 # 0147: an operation waiting to be confirmed
 
+> **Status: on hold since 2026-09-23. Do not build this plan until the product owner resumes
+> the assistant.** All development on the assistant is paused, and that covers this plan, `0148`
+> and the velista plan for the confirm button that neither of them has yet. The product
+> suggestion card (velista `0101`) is not paused. It continues without the parts that belong to
+> the assistant, and that plan names them. Nothing in this plan is needed by the card: the card
+> reads `GET /v1/catalog/suggest` and never an assistant route.
+
 > Frontend half: a velista plan, not written yet, and blocked on this one. Nothing here is
 > reachable from the app until it lands, because the button this plan describes is a velista
 > control. What this plan delivers is the store, the two routes, the two tools and the

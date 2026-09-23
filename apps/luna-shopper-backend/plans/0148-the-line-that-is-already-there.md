@@ -1,5 +1,11 @@
 # 0148: the line that is already there
 
+> **Status: on hold since 2026-09-23. Do not build this plan until the product owner resumes
+> the assistant.** All development on the assistant is paused, including `0147`, which this plan
+> is blocked on anyway. The product suggestion card (velista `0101`) is not paused. It continues
+> without the parts that belong to the assistant. The card's section on lines that already hold
+> a product is a join in the client, and it does not need the matcher in section 3 of this plan.
+
 > **Blocked on `0147`**, which builds the operation store this plan's question is answered
 > through. Build `0147` first. The frontend half is a velista plan and is not written yet, so
 > until that lands the question is answered in words rather than by tapping.
