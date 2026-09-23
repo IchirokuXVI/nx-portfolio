@@ -28,6 +28,7 @@ import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
   TEST_BRAND,
+  TourStore,
   type InstallState,
 } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
@@ -84,6 +85,7 @@ async function render(options: Options = {}): Promise<{
   tokens: TokenStore;
   router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
   install: { prompt: jest.Mock };
+  tour: { start: jest.Mock };
   opened: string[];
 }> {
   TestBed.resetTestingModule();
@@ -117,6 +119,9 @@ async function render(options: Options = {}): Promise<{
     prompt: jest.fn().mockResolvedValue('accepted'),
   };
   const opened: string[] = [];
+  // A double, because the real store reads the router's events and this spec's router
+  // is a pair of mocks. What the row does is start it; `tour-store.spec.ts` owns the rest.
+  const tour = { start: jest.fn().mockResolvedValue(undefined) };
 
   await TestBed.configureTestingModule({
     imports: [AccountPage, RokuTranslatorTestingModule.forTesting()],
@@ -156,6 +161,7 @@ async function render(options: Options = {}): Promise<{
         username,
       }),
       { provide: Router, useValue: router },
+      { provide: TourStore, useValue: tour },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
         provide: ActivatedRoute,
@@ -181,6 +187,7 @@ async function render(options: Options = {}): Promise<{
     tokens: TestBed.inject(TokenStore),
     router,
     install,
+    tour,
     opened,
   };
 }
@@ -204,6 +211,36 @@ function rowWith(
 }
 
 describe('AccountPage', () => {
+  describe('the tour row (velista 0099)', () => {
+    it('is there, in the accent, and starts the tour', async () => {
+      const { fixture, tour } = await render();
+      const row = rowWith(fixture, 'account.tour.again');
+
+      expect(row).toBeDefined();
+      const button = row?.querySelector('button');
+      expect(button?.classList).toContain('accent');
+      expect(button?.disabled).toBe(false);
+
+      button?.click();
+
+      expect(tour.start).toHaveBeenCalledTimes(1);
+    });
+
+    it('is there for a guest too', async () => {
+      const { fixture } = await render({ guest: true });
+
+      expect(rowWith(fixture, 'account.tour.again')).toBeDefined();
+    });
+
+    it('comes after every other row but the way out', async () => {
+      const { fixture } = await render();
+      const all = rows(fixture).map((row) => row.textContent ?? '');
+
+      expect(all.at(-2)).toContain('account.tour.again');
+      expect(all.at(-1)).toContain('account.delete.action');
+    });
+  });
+
   describe('what renders without a request', () => {
     it('shows the name straight away, with no loading state over it', async () => {
       // Section 3.1. `SessionStore.username` comes off the token pair, which is already

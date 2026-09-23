@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { TourAnchor } from '@portfolio/velista/platform';
 import { BrandWordmark } from '../brand/brand-wordmark';
 import { ChevronDownIcon, CommentIcon, OfflineIcon } from '../icons/icons';
 
@@ -41,6 +42,7 @@ import { ChevronDownIcon, CommentIcon, OfflineIcon } from '../icons/icons';
   imports: [
     RokuTranslatorPipe,
     RouterLink,
+    TourAnchor,
     BrandWordmark,
     CommentIcon,
     ChevronDownIcon,

@@ -49,6 +49,7 @@ import {
   BrowserFacade,
   shareUrl,
   sheetSegments,
+  TourAnchor,
 } from '@portfolio/velista/platform';
 import {
   AppBar,
@@ -101,6 +102,7 @@ import { selectHomeState } from './select-home-state';
     LiveBasketCard,
     ShoppingListCard,
     SuccessNote,
+    TourAnchor,
     ZoneCard,
     ZoneSkeleton,
   ],
@@ -249,6 +251,17 @@ export class HomePage {
       listViewers: (listId) => this._presenceNames().lists.get(listId) ?? [],
       guestBannerDismissed: this._guestBannerDismissed(),
     });
+  });
+
+  /**
+   * The one group card whose list rows the tour lights, which is the first with any
+   * (velista `0099`, section 2). Only one card may declare the anchor.
+   */
+  readonly listsAnchorZoneId = computed(() => {
+    const page = this.state();
+    return page.kind === 'populated'
+      ? (page.zones.find((zone) => zone.lists.length > 0)?.id ?? null)
+      : null;
   });
 
   /**

@@ -60,9 +60,11 @@
           />
         }
 
+        <!-- Where a new account's groups will be, for the tour (velista `0099`). -->
         <lib-empty-state
           [body]="'home.empty.body' | rokuT"
           [title]="'home.empty.title' | rokuT"
+          libTourAnchor="groups"
         >
           <button (click)="createZone()" class="empty-primary" type="button">
             {{ 'home.action.createZone' | rokuT }}
@@ -123,7 +125,7 @@
           />
         }
 
-        <section class="zones">
+        <section class="zones" libTourAnchor="groups">
           <!--
             Both ways into a group sit here, side by side, because they are the same
             kind of act: one makes a group, the other asks to be let into one. Joining
@@ -147,6 +149,9 @@
               (open)="openZone($event)"
               (openList)="openList($event)"
               (reviewRequests)="reviewRequests($event)"
+              [listsAnchor]="
+                zone.id === listsAnchorZoneId() ? 'group-lists' : null
+              "
               [zone]="zone"
             />
           }

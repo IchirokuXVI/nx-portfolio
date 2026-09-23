@@ -1,0 +1,85 @@
+@use '../styles/tokens' as tokens;
+
+:host {
+  display: block;
+}
+
+// A raised surface on a dimmed screen (section 10): the overlay surface and the
+// overlay elevation, which is what a sheet uses and what passes on both themes.
+.card {
+  padding: var(--app-space-5) var(--app-space-5) var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-xl);
+  background: var(--app-surface-overlay);
+  box-shadow: var(--app-elevation-2);
+  color: var(--app-text-primary);
+
+  @include tokens.app-focus-ring;
+}
+
+.progress {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-secondary);
+}
+
+.title {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+}
+
+.body {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin-block-start: var(--app-space-5);
+}
+
+// Both 48 tall (section 4). Skip keeps its words and its place on every card.
+.skip,
+.next {
+  min-block-size: var(--app-touch-target);
+  border: none;
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  font-size: var(--app-text-base);
+  cursor: pointer;
+
+  @include tokens.app-focus-ring;
+}
+
+.skip {
+  flex: none;
+  padding-inline: var(--app-space-4);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font-weight: 600;
+}
+
+.next {
+  flex: 1;
+  padding-inline: var(--app-space-6);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font-weight: 650;
+
+  &:hover {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:active {
+    background: var(--app-action-bg-pressed);
+  }
+}

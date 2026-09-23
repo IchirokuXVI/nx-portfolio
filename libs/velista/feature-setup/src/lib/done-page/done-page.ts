@@ -87,9 +87,9 @@ export class DonePage {
     focusHeading(this._heading);
   }
 
-  /** Show me around. Until the tour (`0099`) is built, it ends the setup at home. */
+  /** Show me around: the setup ends and the tour starts (velista `0099`). */
   protected tour(): void {
-    void this._flow.finish();
+    void this._flow.tour();
   }
 
   protected noThanks(): void {

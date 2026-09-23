@@ -11,7 +11,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, TourAnchor } from '@portfolio/velista/platform';
 import { BasketIcon, HomeIcon, ProductIcon } from '../icons/icons';
 
 /** The three tabs, left to right. `null` is every other screen in the app. */
@@ -86,7 +86,14 @@ export function activeNavTab(url: string): NavTab | null {
  */
 @Component({
   selector: 'lib-app-nav',
-  imports: [RokuTranslatorPipe, RouterLink, BasketIcon, HomeIcon, ProductIcon],
+  imports: [
+    RokuTranslatorPipe,
+    RouterLink,
+    TourAnchor,
+    BasketIcon,
+    HomeIcon,
+    ProductIcon,
+  ],
   templateUrl: './app-nav.html',
   styleUrl: './app-nav.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

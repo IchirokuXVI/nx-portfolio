@@ -85,6 +85,12 @@ export class AccountRow {
   /** Coral, and never coral alone. See the class comment. */
   readonly destructive = input(false);
 
+  /**
+   * The accent, for a row that offers something rather than reports it (velista
+   * `0099`: Show me around again). The words say what it does either way.
+   */
+  readonly accent = input(false);
+
   /** Whether a hairline is drawn under the row. False on the last of a group. */
   readonly divided = input(true);
 

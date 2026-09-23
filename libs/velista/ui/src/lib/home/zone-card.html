@@ -77,7 +77,7 @@
   }
 
   @if (zone().lists.length > 0) {
-    <ul class="lists">
+    <ul [libTourAnchor]="listsAnchor()" class="lists">
       @for (list of zone().lists; track list.id) {
         <li class="list-item">
           <button

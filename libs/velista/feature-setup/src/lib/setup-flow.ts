@@ -6,7 +6,7 @@ import {
   ShoppingProfileStore,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, type ShoppingProfile } from '@portfolio/velista/models';
-import { appPath } from '@portfolio/velista/platform';
+import { appPath, TourStore } from '@portfolio/velista/platform';
 
 /** Where a step can send the person, relative to the setup's own path. */
 export type SetupStep = '' | 'name' | 'place' | 'shops' | 'done';
@@ -37,6 +37,7 @@ export class SetupFlow {
   private readonly _router = inject(Router);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+  private readonly _tour = inject(TourStore);
 
   /**
    * The profile the setup writes to: the default one (section 10).
@@ -86,16 +87,26 @@ export class SetupFlow {
    *
    * The mark is written first and not awaited: the person is finished with the flow
    * whatever the network thinks, and `ProfileStore` answers the guard from its own
-   * copy on this tick. Every button that ends the flow comes through here, and
-   * `SetupLayout` calls the same mark on its way out for every route that does not.
-   *
-   * **Show me around lands here too, for now.** The tour is plan `0099` and it is not
-   * built; when it is, that button starts it from here instead of going home.
+   * copy on this tick. No thanks comes through here, Show me around through
+   * {@link tour}, and `SetupLayout` calls the same mark on its way out for every route
+   * that does neither.
    */
   async finish(): Promise<void> {
     this._profile.completeSetup();
     await this._router.navigateByUrl(
       appPath(this._locale(), this._basePath, 'home')
     );
+  }
+
+  /**
+   * Leave the setup, marked as over, into the tour (velista `0099`, section 8).
+   *
+   * The only place the tour starts by itself, and it starts because the person asked.
+   * The tour goes home on its own, replacing this screen, so back after it does not
+   * land on the finish again.
+   */
+  async tour(): Promise<void> {
+    this._profile.completeSetup();
+    await this._tour.start();
   }
 }

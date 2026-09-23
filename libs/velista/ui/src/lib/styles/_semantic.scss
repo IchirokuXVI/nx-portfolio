@@ -318,6 +318,9 @@ $app-content-max: 480px;
   // rows, which are 1 and 2. The two numbers are recorded together on purpose: a
   // sheet covers the bar, and the bar is not drawn while one is open anyway.
   --app-nav-z: 5;
+  // The tour (velista 0099): over the bar, whose tab it lights, and under a sheet,
+  // which it never draws over because no card is up while one is open.
+  --app-tour-z: 8;
 
   // The bottom sheet (plan 0008, rule E1). Its colours are a theme's job and live
   // in `_themes.scss`; its geometry is not, and is the same in both.

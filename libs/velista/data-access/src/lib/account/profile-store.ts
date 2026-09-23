@@ -99,6 +99,9 @@ export class ProfileStore {
    */
   private _session = 0;
 
+  /** Whether this document has sent the tour's stamp already (velista `0099`). */
+  private _tourMarked = false;
+
   /** The one read in flight, shared by every caller that asks while it runs. */
   private _loading: Promise<void> | null = null;
 
@@ -326,6 +329,35 @@ export class ProfileStore {
   }
 
   /**
+   * Say the tour was finished or skipped, and do not wait to hear back (velista
+   * `0099`, section 6).
+   *
+   * Every end of a run comes here, from the effect in `app-providers.ts`, and a replay
+   * ends too. **So an account the server already has as seen sends nothing**, and
+   * neither does a second call in one document: `tourSeenAt` is a fact about the past,
+   * and a second stamp would only move it later.
+   */
+  markTourSeen(): void {
+    if (this._tourMarked || (this.appState()?.tourSeenAt ?? null) !== null) {
+      return;
+    }
+
+    this._tourMarked = true;
+    const session = this._session;
+    void this._mutations
+      .run(null, () => this._account.setAppState({ tourSeen: true }))
+      .then((outcome) => {
+        if (outcome.state === 'failed' || session !== this._session) {
+          return;
+        }
+
+        this._profile.update((profile) =>
+          profile === null ? profile : { ...profile, appState: outcome.value }
+        );
+      });
+  }
+
+  /**
    * One name from the registration pool, written nowhere
    * (`GET /v1/account/username-suggestions`).
    *
@@ -340,6 +372,7 @@ export class ProfileStore {
   clear(): void {
     this._session += 1;
     this._setupMarked.set(false);
+    this._tourMarked = false;
     this._profile.set(null);
     this._state.set('loading');
     this._error.set(null);

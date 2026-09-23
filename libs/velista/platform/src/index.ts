@@ -29,3 +29,7 @@ export * from './lib/startup-gate';
 export * from './lib/storage-keys';
 export * from './lib/testing/velista-testing';
 export * from './lib/theme-store';
+export * from './lib/tour/tour-anchor';
+export * from './lib/tour/tour-anchors';
+export * from './lib/tour/tour-stops';
+export * from './lib/tour/tour-store';

@@ -69,6 +69,7 @@ import {
   RECORDING_LIMITS,
   sheetSegments,
   StorageKeys,
+  TourAnchor,
   zoneIdOf,
   type RecordingLimits,
 } from '@portfolio/velista/platform';
@@ -157,6 +158,7 @@ import { voiceFailureCopy } from '../voice-error-copy';
     RowSkeleton,
     SpinnerIcon,
     ToBuyHeading,
+    TourAnchor,
     TripGroup,
   ],
   templateUrl: './list-page.html',

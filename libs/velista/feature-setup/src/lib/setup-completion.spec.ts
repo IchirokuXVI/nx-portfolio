@@ -21,7 +21,7 @@ import {
   type AccountServiceI,
 } from '@portfolio/velista/data-access';
 import type { AppStateFlags, UserProfile } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { provideVelistaTesting, TourStore } from '@portfolio/velista/platform';
 import { DonePage } from './done-page/done-page';
 import { SetupLayout } from './setup-layout';
 import { WelcomePage } from './welcome-page/welcome-page';
@@ -152,13 +152,17 @@ describe('leaving the setup', () => {
     expect(TestBed.inject(Router).url).toBe('/en/home');
   });
 
-  it('Show me around marks it over once', async () => {
+  it('Show me around marks it over once, and starts the tour on home', async () => {
     const { harness, stamps } = await arrive('/en/setup/done');
+    const tour = TestBed.inject(TourStore);
 
     press(harness, '.primary');
     await settle(harness);
 
     expect(stamps).toEqual([{ setupCompleted: true }]);
+    expect(tour.running()).toBe(true);
+    expect(TestBed.inject(Router).url).toBe('/en/home');
+    tour.skip();
   });
 
   it('going back out of the setup marks it over once', async () => {

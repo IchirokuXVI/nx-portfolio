@@ -799,6 +799,9 @@
     },
     "row": {
       "profiles": "Shopping profiles"
+    },
+    "tour": {
+      "again": "Show me around again"
     }
   },
   "install": {
@@ -1609,6 +1612,36 @@
       "tourBody": "We will show you around the app, one screen at a time, so that nothing is hard to find. It is short, and you can stop it whenever you like.",
       "tourStart": "Show me around",
       "tourNo": "No, thank you"
+    }
+  },
+  "tour": {
+    "progress": "{{n}} of {{total}}",
+    "skip": "Skip the tour",
+    "next": "Next",
+    "finish": "Finish",
+    "nav": {
+      "title": "These three take you everywhere",
+      "body": "Home is where you are now. Catalog is every product in the shops near you. Shopping list is what you take to the supermarket."
+    },
+    "groups": {
+      "title": "A group is who you shop with",
+      "body": "Your household, your family, the flat you share. Everybody in it sees the same lists at the same time."
+    },
+    "lists": {
+      "title": "Inside a group are lists",
+      "body": "A list is what a group is running out of. Anybody in the group can add to it, from anywhere."
+    },
+    "basket": {
+      "title": "One list for the whole trip",
+      "body": "Velista puts everything your groups need into one list, and tells you which shop sells each thing cheapest. You tick things off as you put them in the trolley."
+    },
+    "assistant": {
+      "title": "Ask instead of looking",
+      "body": "Tell Velista what you need in your own words, the way you would tell a person. It writes it on the right list for you."
+    },
+    "voice": {
+      "title": "Say it instead of typing it",
+      "body": "Hold the microphone and say what is missing. It is the quickest way to add something with your hands full."
     }
   }
 }

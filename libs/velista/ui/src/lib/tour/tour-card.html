@@ -1,0 +1,23 @@
+<div
+  #dialog
+  aria-labelledby="tour-card-title"
+  aria-modal="true"
+  class="card"
+  role="dialog"
+  tabindex="-1"
+>
+  <p class="progress">
+    {{ 'tour.progress' | rokuT: { n: n(), total: total() } }}
+  </p>
+  <h2 class="title" id="tour-card-title">{{ titleKey() | rokuT }}</h2>
+  <p class="body">{{ bodyKey() | rokuT }}</p>
+
+  <div class="actions">
+    <button (click)="skip.emit()" #skipButton class="skip" type="button">
+      {{ 'tour.skip' | rokuT }}
+    </button>
+    <button (click)="next.emit()" #nextButton class="next" type="button">
+      {{ (last() ? 'tour.finish' : 'tour.next') | rokuT }}
+    </button>
+  </div>
+</div>

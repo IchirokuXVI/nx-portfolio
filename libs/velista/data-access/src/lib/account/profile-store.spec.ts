@@ -1,6 +1,10 @@
 import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
-import type { UserProfile, UsernameScope } from '@portfolio/velista/models';
+import type {
+  AppStateFlags,
+  UserProfile,
+  UsernameScope,
+} from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { ApiUrl } from '../api-url';
 import { SessionStore } from '../auth/session-store';
@@ -36,8 +40,12 @@ function fakeAccount(
     appStateRejectsWith?: unknown;
   } = {}
 ) {
-  const calls: { method: string; username?: string; scope?: UsernameScope }[] =
-    [];
+  const calls: {
+    method: string;
+    username?: string;
+    scope?: UsernameScope;
+    flags?: AppStateFlags;
+  }[] = [];
   let held = options.profile ?? profile();
 
   const service: AccountServiceI = {
@@ -63,8 +71,8 @@ function fakeAccount(
       calls.push({ method: 'deleteAccount' });
       return { deleted: true };
     },
-    setAppState: async () => {
-      calls.push({ method: 'setAppState' });
+    setAppState: async (flags: AppStateFlags) => {
+      calls.push({ method: 'setAppState', flags });
       if (options.appStateRejectsWith !== undefined) {
         throw options.appStateRejectsWith;
       }
@@ -557,6 +565,63 @@ describe('ProfileStore', () => {
       await store.load();
 
       expect(store.setupPending()).toBe(true);
+    });
+  });
+
+  describe('the tour (velista 0099)', () => {
+    const fresh = { setupCompletedAt: null, tourSeenAt: null };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it('sends tourSeen once, however many runs end in one document', async () => {
+      const service = fakeAccount({ profile: profile({ appState: fresh }) });
+      const { store } = setUp(service);
+      await store.load();
+
+      store.markTourSeen();
+      store.markTourSeen();
+      await settle();
+
+      expect(
+        service.calls.filter((call) => call.method === 'setAppState')
+      ).toEqual([{ method: 'setAppState', flags: { tourSeen: true } }]);
+    });
+
+    it('sends nothing for an account the server already has as seen', async () => {
+      // A replay ends too, and `tourSeenAt` is a fact about the past, not a switch.
+      const service = fakeAccount({
+        profile: profile({
+          appState: {
+            setupCompletedAt: '2026-09-01T00:00:00Z',
+            tourSeenAt: '2026-09-01T00:05:00Z',
+          },
+        }),
+      });
+      const { store } = setUp(service);
+      await store.load();
+
+      store.markTourSeen();
+      await settle();
+
+      expect(service.calls.some((call) => call.method === 'setAppState')).toBe(
+        false
+      );
+    });
+
+    it('sends it again for the next account after a clear', async () => {
+      const service = fakeAccount({ profile: profile({ appState: fresh }) });
+      const { store } = setUp(service);
+      await store.load();
+      store.markTourSeen();
+      await settle();
+
+      store.clear();
+      await store.load();
+      store.markTourSeen();
+      await settle();
+
+      expect(
+        service.calls.filter((call) => call.method === 'setAppState')
+      ).toHaveLength(2);
     });
   });
 
