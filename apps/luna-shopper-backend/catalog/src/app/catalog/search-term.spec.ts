@@ -1,4 +1,4 @@
-import { parseBarcode, parseSearchTerm } from './search-term';
+import { genderNumberStem, parseBarcode, parseSearchTerm } from './search-term';
 
 /**
  * The parsing half of the search, which is the half that decides what a query
@@ -76,5 +76,28 @@ describe('parseBarcode', () => {
     expect(parseBarcode('leche')).toBeNull();
     expect(parseBarcode('8480000181077 leche')).toBeNull();
     expect(parseBarcode('')).toBeNull();
+  });
+});
+
+describe('genderNumberStem (plan 0156)', () => {
+  it.each([
+    ['rustico', 'rustic'],
+    ['Rústicas', 'rústic'],
+    ['huevos', 'huev'],
+    ['salado', 'salad'],
+  ])('cuts %s to %s', (word, stem) => {
+    expect(genderNumberStem(word)).toBe(stem);
+  });
+
+  it('keeps a word shorter than five letters whole', () => {
+    // "sal" is the conflation the recheck is for, and "vino" is too short to
+    // leave a stem that says anything.
+    expect(genderNumberStem('sal')).toBeNull();
+    expect(genderNumberStem('vino')).toBeNull();
+  });
+
+  it('keeps a word with no gender or number ending whole', () => {
+    expect(genderNumberStem('leche')).toBeNull();
+    expect(genderNumberStem('yogur')).toBeNull();
   });
 });

@@ -160,10 +160,10 @@ export const GROUP_SEARCH_TEXT = `(
  * sequential scan of the table.
  *
  * **Accents are removed from both sides**, by `catalog_norm`, and that is not
- * cosmetic. The Spanish full text configuration strips accents while it stems,
- * so "salmon" already reaches "Salmón" today; a literal comparison that did not
- * would quietly delete every match a keyboard without accents can produce, which
- * in Spanish is most of them.
+ * cosmetic. Most Spanish is typed without accents. Since plan 0156 the item
+ * document and the item tsquery go through `catalog_norm` too, because the
+ * stemmer alone folds only some words: "platano" and "plátano" both stem to
+ * `platan`, while "lejia" stems to `leji` and "lejía" to `lej`.
  *
  * The words come from {@link parseSearchTerm}, which splits on everything that
  * is not a letter or a digit, so none of them can carry a regular expression
@@ -174,7 +174,7 @@ export function literalMatchSql(
   words: string[],
   bind: (value: unknown) => string
 ): string {
-  return wordMatchSql(textExpr, words, bind, '');
+  return wordMatchSql(textExpr, words, bind, false);
 }
 
 /**
@@ -192,23 +192,99 @@ export function wholeWordMatchSql(
   words: string[],
   bind: (value: unknown) => string
 ): string {
-  return wordMatchSql(textExpr, words, bind, " || '\\M'");
+  return wordMatchSql(textExpr, words, bind, true);
+}
+
+/**
+ * The endings Spanish marks gender and number with: "rústico", "rústica",
+ * "rústicos", "rústicas" (plan 0156, section 1). The longer ones come first, so
+ * "os" is cut whole rather than as its "s".
+ */
+const GENDER_NUMBER_ENDING = /(os|as|o|a)$/;
+
+/**
+ * The shortest typed word whose ending is cut.
+ *
+ * The recheck exists because the stemmer conflates "salado" with "sal". A
+ * shorter word would leave a stem short enough to conflate again. "sal" is below
+ * this length, and "salado" cut to "salad" still cannot reach "sal".
+ */
+const MIN_VARIANT_LENGTH = 5;
+
+/**
+ * What a typed word keeps once its gender or number ending is cut, or null when
+ * the word is too short or has no such ending (plan 0156, section 1).
+ *
+ * The recheck accepts this stem followed by any of the four endings, as a whole
+ * word, beside the typed word itself. So "pan rustico" finds "Barra de pan
+ * rústica". The stem alone is never accepted as a prefix: "vinos" cut to "vin"
+ * would let the stemmer's "vinagre" through, which is the conflation the
+ * recheck is for.
+ */
+export function genderNumberStem(word: string): string | null {
+  const lower = word.toLowerCase();
+  if ([...lower].length < MIN_VARIANT_LENGTH) {
+    return null;
+  }
+  const ending = GENDER_NUMBER_ENDING.exec(lower);
+  return ending ? lower.slice(0, -ending[0].length) : null;
 }
 
 function wordMatchSql(
   textExpr: string,
   words: string[],
   bind: (value: unknown) => string,
-  suffix: string
+  whole: boolean
 ): string {
   return words
-    .map(
-      (word) =>
-        `"catalog_norm"(${textExpr}) ~ ('\\m' || "catalog_norm"(${bind(
-          word
-        )})${suffix})`
-    )
+    .map((word) => {
+      const typed = `"catalog_norm"(${bind(word)})`;
+      const stem = genderNumberStem(word);
+      if (stem === null) {
+        return `"catalog_norm"(${textExpr}) ~ ('\\m' || ${typed}${
+          whole ? " || '\\M'" : ''
+        })`;
+      }
+      // The word as typed, or its stem with one of the four endings. In the
+      // filter the first alternative is still a prefix, for somebody mid word,
+      // and the second is a whole word in both keys.
+      const variant = `"catalog_norm"(${bind(stem)}) || '(o|a|os|as)`;
+      return whole
+        ? `"catalog_norm"(${textExpr}) ~ ('\\m(' || ${typed} || '|' || ${variant})\\M')`
+        : `"catalog_norm"(${textExpr}) ~ ('\\m(' || ${typed} || '|' || ${variant}\\M)')`;
+    })
     .join(' AND ');
+}
+
+/**
+ * SQL answering whether every word of `brandExpr` was typed, for the ranking
+ * (plan 0156).
+ *
+ * A shopper who names the brand is asking for it. "cerveza cruzcampo lata"
+ * reached a Cruzcampo and a Steinburg through trigram, and `ts_rank` put the
+ * Steinburg first because its name says "cerveza" and "lata". This key comes
+ * before `ts_rank`, so a product whose whole brand was typed beats one that
+ * only shares the category.
+ *
+ * Whole words, compared after `catalog_norm` on both sides, so "seagrams" is
+ * the brand "Seagram's". A product with no brand is false: a key that every
+ * unbranded product passed would put all of them above every branded one.
+ */
+export function brandTypedSql(
+  brandExpr: string,
+  words: string[],
+  bind: (value: unknown) => string
+): string {
+  // `bool_and` over no rows is null, which is how an empty brand becomes false.
+  return `coalesce((
+    SELECT bool_and(b.w = ANY (ARRAY(
+      SELECT "catalog_norm"(t) FROM unnest(${bind(words)}::text[]) AS t
+    )))
+    FROM regexp_split_to_table(
+      "catalog_norm"(coalesce(${brandExpr}, '')), '[^[:alnum:]]+'
+    ) AS b(w)
+    WHERE b.w <> ''
+  ), false)`;
 }
 
 /**

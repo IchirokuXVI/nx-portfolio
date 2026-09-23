@@ -743,6 +743,33 @@ export const REFERENCE_GROUPS: ReferenceGroup[] = [
   },
 
   // --- Pantry --------------------------------------------------------------
+  /**
+   * The one group with no receipt behind it (plan 0156). "aove" is how Spain
+   * writes extra virgin olive oil on a shopping list, and it is not a word in
+   * any product name, so the group's synonym is the only way to find it.
+   *
+   * Its members are the Mercadona harvest's extra virgin olive oils, by
+   * barcode, read from a catalog walk on 2026-09-23.
+   */
+  {
+    slug: 'extra-virgin-olive-oil',
+    name: { en: 'Extra Virgin Olive Oil', es: 'Aceite de oliva virgen extra' },
+    referenceUnit: UnitOfMeasure.LITER,
+    synonyms: {
+      en: ['evoo', 'extra virgin olive oil'],
+      es: ['aove', 'virgen extra'],
+    },
+    harvestedEans: [
+      // Hacendado, 0.2 l, 1 l and 3 l
+      '8480000047182',
+      '8402001001185',
+      '8402001001192',
+      // Hacendado Gran Selección, 0.75 l
+      '8480000047069',
+      // Casa Juncal Picual, 0.5 l
+      '8437009466476',
+    ],
+  },
   {
     slug: 'mayonnaise',
     name: { en: 'Mayonnaise', es: 'Mayonesa' },

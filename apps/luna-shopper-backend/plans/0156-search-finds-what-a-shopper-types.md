@@ -1,3 +1,5 @@
+> **PR:** [#458](https://github.com/IchirokuXVI/nx-portfolio/pull/458)
+
 # 0156: search finds what a shopper types
 
 > Found by `0150` (report finding 14, shopper F4 and F11). Prerequisite reading: `0115`
