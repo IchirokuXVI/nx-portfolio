@@ -48,7 +48,14 @@ describe('reference catalog', () => {
      * necessary and turned out to have nothing in them.
      */
     it('gives every group at least one member', () => {
-      const used = new Set([...EVERY_ITEM.map(({ it }) => it.group)]);
+      // A member is an authored product or, since plan 0156, a harvested one
+      // the group names by barcode.
+      const used = new Set([
+        ...EVERY_ITEM.map(({ it }) => it.group),
+        ...REFERENCE_GROUPS.filter((g) => g.harvestedEans?.length).map(
+          (g) => g.slug
+        ),
+      ]);
       const orphans = REFERENCE_GROUPS.map((g) => g.slug).filter(
         (s) => !used.has(s)
       );
@@ -109,8 +116,12 @@ describe('reference catalog', () => {
   describe('barcodes', () => {
     it('claims each EAN once', () => {
       // `uq_items_ean` is UNIQUE where not null, so a repeated barcode is not a
-      // duplicate row, it is an insert that fails.
-      const eans = EVERY_ITEM.map(({ it }) => it.ean).filter(Boolean);
+      // duplicate row, it is an insert that fails. A group's harvested barcode
+      // counts too: two claims would put one product in two groups.
+      const eans = [
+        ...EVERY_ITEM.map(({ it }) => it.ean).filter(Boolean),
+        ...REFERENCE_GROUPS.flatMap((g) => g.harvestedEans ?? []),
+      ];
       expect(new Set(eans).size).toBe(eans.length);
     });
 
@@ -118,6 +129,19 @@ describe('reference catalog', () => {
       for (const { it } of EVERY_ITEM) {
         if (it.ean) expect(it.ean).toMatch(/^\d{8,14}$/);
       }
+      for (const ean of REFERENCE_GROUPS.flatMap(
+        (g) => g.harvestedEans ?? []
+      )) {
+        expect(ean).toMatch(/^\d{8,14}$/);
+      }
+    });
+
+    it('finds extra virgin olive oil by "aove" (plan 0156)', () => {
+      const group = REFERENCE_GROUPS.find(
+        (g) => g.slug === 'extra-virgin-olive-oil'
+      );
+      expect(group?.synonyms.es).toContain('aove');
+      expect(group?.harvestedEans?.length).toBeGreaterThan(0);
     });
 
     it('gives barcodes only to Mercadona', () => {

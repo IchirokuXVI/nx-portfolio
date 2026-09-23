@@ -54,6 +54,7 @@ import {
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
 import {
+  brandTypedSql,
   GROUP_SEARCH_TEXT,
   ITEM_SEARCH_TEXT,
   literalMatchSql,
@@ -856,7 +857,10 @@ export class ItemService {
   ): Promise<Item[]> {
     const offset = Number(cursor?.value ?? 0) || 0;
     const p = params();
-    const query = p.bind(term.tsquery);
+    // Through `catalog_norm` before the stemmer, because the item documents are
+    // built from normalized text (plan 0156). The group search binds the same
+    // tsquery unnormalized, since group documents still keep their accents.
+    const query = `"catalog_norm"(${p.bind(term.tsquery)})`;
     const raw = p.bind(term.raw);
     // The barcode test, bound once and spent in both the filter and the
     // ordering, or the constant `false` when the query is words. A barcode names
@@ -951,6 +955,7 @@ export class ItemService {
         term.words,
         p.bind
       )}) DESC,
+               ${brandTypedSql('i."brand"', term.words, p.bind)} DESC,
                round(GREATEST(
                  ts_rank(i."search_es", to_tsquery('spanish', ${query}), 1),
                  ts_rank(i."search_en", to_tsquery('english', ${query}), 1),
@@ -1011,8 +1016,8 @@ export class ItemService {
           ${term.ean === null ? 'false' : 'i."ean" = :ean'}
           OR (
             (
-              i."search_es" @@ to_tsquery('spanish', :tsquery)
-              OR i."search_en" @@ to_tsquery('english', :tsquery)
+              i."search_es" @@ to_tsquery('spanish', "catalog_norm"(:tsquery))
+              OR i."search_en" @@ to_tsquery('english', "catalog_norm"(:tsquery))
             )
             AND ${literal}
           )

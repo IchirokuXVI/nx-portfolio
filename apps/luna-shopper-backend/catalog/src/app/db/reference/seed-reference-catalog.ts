@@ -96,6 +96,20 @@ export async function seedReferenceCatalog(
     await m.getRepository(ProductGroup).upsert(groupRows, ['id']);
     report.groups = groupRows.length;
 
+    // Harvested products a group names by barcode (plan 0156). Only the group
+    // is set, as for an adopted receipt product, and a barcode that no row
+    // carries changes nothing.
+    for (const g of REFERENCE_GROUPS) {
+      if (!g.harvestedEans?.length) continue;
+      const result = await m
+        .getRepository(Item)
+        .update(
+          { ean: In(g.harvestedEans) },
+          { productGroupId: groupId(g.slug) }
+        );
+      report.adopted += result.affected ?? 0;
+    }
+
     // --- 2. The two receipt chains ----------------------------------------
     for (const store of REFERENCE_STORES) {
       const sId = supermarketId(store.slug);

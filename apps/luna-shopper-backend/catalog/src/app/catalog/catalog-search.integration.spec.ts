@@ -996,4 +996,117 @@ describeIntegration('catalog search (real Postgres)', () => {
       expect(page.items.map((i) => i.id)).toContain(ids.pascualMilk);
     });
   });
+
+  /**
+   * What a shopper typed on a phone and did not find (plan 0156). One case per
+   * row of the plan's table, each with the product that used to come first
+   * beside the one that was wanted.
+   */
+  describe('search finds what a shopper types (plan 0156)', () => {
+    const typed = {
+      bleach: '',
+      pineapple: '',
+      piadina: '',
+      rusticBaguette: '',
+      burgerBuns: '',
+      evooGroup: '',
+      seagrams: '',
+      blackElephant: '',
+      cruzcampo: '',
+      steinburg: '',
+      vinegar: '',
+      coarseSalt: '',
+    };
+
+    beforeAll(async () => {
+      const make = (es: string, brand?: string, productGroupId?: string) =>
+        items
+          .create({
+            userId: OWNER,
+            name: { en: es, es },
+            brand,
+            category: ItemCategory.OTHER,
+            defaultUnit: UnitOfMeasure.UNIT,
+            productGroupId,
+          })
+          .then((item) => item.id);
+
+      const evoo = await groups.create({
+        userId: OWNER,
+        name: {
+          en: 'Extra Virgin Olive Oil',
+          es: 'Aceite de oliva virgen extra',
+        },
+        slug: 'extra-virgin-olive-oil',
+        referenceUnit: UnitOfMeasure.LITER,
+        synonyms: { en: ['evoo'], es: ['aove'] },
+      });
+      typed.evooGroup = evoo.id;
+
+      typed.bleach = await make('Lejía normal', 'Bosque Verde');
+      typed.pineapple = await make('Zumo de piña', 'Hacendado');
+      typed.piadina = await make('Piadina', 'Hacendado');
+      typed.rusticBaguette = await make('Barra de pan rústica');
+      typed.burgerBuns = await make('Pan de burger Rústico', 'Hacendado');
+      typed.seagrams = await make('Ginebra', "Seagram's");
+      typed.blackElephant = await make('Ginebra', 'Black Elephant');
+      typed.cruzcampo = await make('Cerveza Pilsen', 'Cruzcampo');
+      typed.steinburg = await make('Cerveza clásica en lata', 'Steinburg');
+      typed.vinegar = await make('Vinagre de manzana');
+      typed.coarseSalt = await make('Sal gruesa');
+      await make('Aceite de oliva virgen extra', 'Hacendado', evoo.id);
+    });
+
+    const idsFor = async (query: string) =>
+      (await items.search({ userId: SHOPPER, query })).items.map((i) => i.id);
+
+    it('finds "lejía" typed as "lejia"', async () => {
+      // The stemmer made `lej` of one and `leji` of the other. Both sides now
+      // go through `catalog_norm` before it, so both are `leji`.
+      expect(await idsFor('lejia')).toContain(typed.bleach);
+    });
+
+    it('finds "piña" typed as "pina", above what only looks like it', async () => {
+      // The stemmer keeps `ñ`, so `pin:*` never reached `piñ`. Piadina came in
+      // through trigram and was the only answer.
+      const order = await idsFor('pina');
+      expect(order[0]).toBe(typed.pineapple);
+    });
+
+    it('accepts the other gender of a typed word ("pan rustico")', async () => {
+      const order = await idsFor('pan rustico');
+      expect(order).toContain(typed.burgerBuns);
+      expect(order[0]).toBe(typed.rusticBaguette);
+    });
+
+    it('finds extra virgin olive oil by "aove", through its group', async () => {
+      // A synonym reaches the group and never the members' documents, so the
+      // answer is the group the suggest endpoint lists first.
+      const page = await items.searchOffers({ userId: SHOPPER, query: 'aove' });
+      expect(page.items[0]?.group.id).toBe(typed.evooGroup);
+    });
+
+    it('reads "seagrams" as the brand "Seagram\'s", and ranks it first', async () => {
+      const order = await idsFor('ginebra seagrams');
+      expect(order[0]).toBe(typed.seagrams);
+    });
+
+    it('ranks a typed brand above a product that only shares the category', async () => {
+      // Both enter through trigram, since neither name holds every word. The
+      // Steinburg name says "cerveza" and "lata" and won on `ts_rank`.
+      const order = await idsFor('cerveza cruzcampo lata');
+      expect(order).toContain(typed.steinburg);
+      expect(order.indexOf(typed.cruzcampo)).toBeLessThan(
+        order.indexOf(typed.steinburg)
+      );
+    });
+
+    it('does not let a cut word reach what the stemmer conflates with it', async () => {
+      // "vinos" is cut to "vin" only for a whole word with one of the four
+      // endings. As a prefix, `vin` would take the stemmer's "vinagre".
+      expect(await idsFor('vinos')).not.toContain(typed.vinegar);
+      // Plan 0156, section 1: "salado" cut to "salad" does not reach "sal".
+      expect(await idsFor('salado')).not.toContain(typed.coarseSalt);
+    });
+  });
 });
