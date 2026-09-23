@@ -209,6 +209,52 @@ describe('selectLinePage', () => {
     });
   });
 
+  describe('what each purchase cost (velista 0095, test 10)', () => {
+    const euros = (value: number, locale = 'en') =>
+      new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR' }).format(
+        value
+      );
+
+    it('draws the line amount on a priced purchase, through Intl in the locale', () => {
+      const page = select({
+        settlements: [
+          bought(1, { quantity: 3, unitPriceCents: 115, currency: 'EUR' }),
+        ],
+        locale: 'es',
+      });
+
+      expect(page?.thisList.rows[0].price).toBe(euros(3.45, 'es'));
+      expect(page?.thisList.rows[0].unitPrice).toBe(euros(1.15, 'es'));
+    });
+
+    it('says the unit price only above one unit', () => {
+      const page = select({
+        settlements: [
+          bought(1, { quantity: 1, unitPriceCents: 115, currency: 'EUR' }),
+        ],
+      });
+
+      expect(page?.thisList.rows[0].price).toBe(euros(1.15));
+      expect(page?.thisList.rows[0].unitPrice).toBeNull();
+    });
+
+    it('draws nothing for an unpriced purchase or a missing one', () => {
+      const page = select({
+        settlements: [
+          bought(1, { unitPriceCents: null, currency: null }),
+          bought(2, {
+            outcome: 'NOT_AVAILABLE',
+            quantity: 0,
+            unitPriceCents: 115,
+            currency: 'EUR',
+          }),
+        ],
+      });
+
+      expect(page?.thisList.rows.map((row) => row.price)).toEqual([null, null]);
+    });
+  });
+
   describe('paging', () => {
     it('offers no further page when the store holds the whole history', () => {
       const page = select({ settlements: [bought(1)] });

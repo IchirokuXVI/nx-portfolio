@@ -661,6 +661,7 @@
       "rate": "cada cuánto lo compras",
       "lastBought": "última vez, {{count}}",
       "boughtBy": "Comprado {{count}} · {{who}}",
+      "each": "{{count}} a {{price}} cada uno",
       "missingBy": "No había · {{who}}",
       "you": "tú",
       "someone": "alguien"

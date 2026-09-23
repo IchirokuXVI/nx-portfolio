@@ -661,6 +661,7 @@
       "rate": "about how often you buy it",
       "lastBought": "last bought, {{count}}",
       "boughtBy": "Bought {{count}} · {{who}}",
+      "each": "{{count}} at {{price}} each",
       "missingBy": "Not in the shop · {{who}}",
       "you": "you",
       "someone": "somebody"

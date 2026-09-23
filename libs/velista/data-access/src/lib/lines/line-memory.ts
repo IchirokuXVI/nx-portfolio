@@ -419,6 +419,9 @@ export class LineMemory implements LineServiceI {
       // basket act (luna `0054`, section 3) and this fake is the zone list surface,
       // which has no route that would set this.
       revertedAt: null,
+      // A hand settle on a zone list names no scope, so nothing records a price.
+      unitPriceCents: null,
+      currency: null,
     };
     this._settlements = [settlement, ...this._settlements];
 

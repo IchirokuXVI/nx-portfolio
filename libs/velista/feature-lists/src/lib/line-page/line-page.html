@@ -247,6 +247,22 @@
                     }}
                   }
                 </span>
+                @if (row.price !== null) {
+                  <span [class.reverted]="row.reverted" class="history-price">
+                    <span aria-hidden="true">{{ row.price }}</span>
+                    <span class="visually-hidden">
+                      {{ row.price }}
+                      @if (row.unitPrice !== null) {
+                        ,
+                        {{
+                          'list.page.each'
+                            | rokuT
+                              : { count: row.quantity, price: row.unitPrice }
+                        }}
+                      }
+                    </span>
+                  </span>
+                }
                 <span class="history-when">{{ row.when }}</span>
               </li>
             }
@@ -293,6 +309,22 @@
                             }
                     }}
                   </span>
+                  @if (row.price !== null) {
+                    <span [class.reverted]="row.reverted" class="history-price">
+                      <span aria-hidden="true">{{ row.price }}</span>
+                      <span class="visually-hidden">
+                        {{ row.price }}
+                        @if (row.unitPrice !== null) {
+                          ,
+                          {{
+                            'list.page.each'
+                              | rokuT
+                                : { count: row.quantity, price: row.unitPrice }
+                          }}
+                        }
+                      </span>
+                    </span>
+                  }
                   <span class="history-when">{{ row.when }}</span>
                 </li>
               }

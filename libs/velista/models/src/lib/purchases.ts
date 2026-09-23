@@ -114,6 +114,36 @@ export function fromMinorUnits(cents: number, currency: string): number {
   return cents / 10 ** digits;
 }
 
+/**
+ * An amount in a currency's minor unit, as the reader reads money: `Intl.NumberFormat`
+ * with `style: 'currency'`, in the reader's locale, never a hand built "12,40 €".
+ *
+ * An unrecognised locale or code, which `Intl` throws a `RangeError` for, falls back
+ * to two decimals and the code: ugly and correct.
+ */
+export function formatMinorMoney(
+  cents: number,
+  currency: string,
+  locale: string
+): string {
+  const amount = fromMinorUnits(cents, currency);
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+    }).format(amount);
+  } catch {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency,
+      }).format(amount);
+    } catch {
+      return `${amount.toFixed(2)} ${currency}`;
+    }
+  }
+}
+
 /** How many entries a page asks for. */
 export const PURCHASES_PAGE_SIZE = 20;
 
