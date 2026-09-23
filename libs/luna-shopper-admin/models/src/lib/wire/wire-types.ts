@@ -2782,7 +2782,8 @@ export type EnumsItemSourceMatch =
   | 'EAN'
   | 'NAME_BRAND_SIZE'
   | 'NAME_SIZE'
-  | 'MANUAL';
+  | 'MANUAL'
+  | 'SHARED_EAN';
 
 /**
  * `enums.LineApprovalStatus` in the gateway's OpenAPI document.

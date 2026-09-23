@@ -104,6 +104,11 @@ export interface RunReportResult {
   pricesPublished: number;
   /** Prices catalog already held at that value and only moved the clock on. */
   pricesConfirmed: number;
+  /**
+   * Items two entries of the chain priced at one scope in one batch, whose
+   * prices were withheld (plan 0155).
+   */
+  pricesConflicted: number;
   placesCreated: number;
   placesRefreshed: number;
   /** Catalog locations this run wrote itself, which only a trusted chain earns. */
@@ -171,6 +176,7 @@ export class RunReportSink implements RunReport {
     pricesRecorded: 0,
     pricesPublished: 0,
     pricesConfirmed: 0,
+    pricesConflicted: 0,
     placesCreated: 0,
     placesRefreshed: 0,
     placesImported: 0,
@@ -273,6 +279,7 @@ export class RunReportSink implements RunReport {
       this.result.pricesRecorded += counters.pricesRecorded;
       this.result.pricesPublished += counters.pricesWritten;
       this.result.pricesConfirmed += counters.pricesConfirmed;
+      this.result.pricesConflicted += counters.pricesConflicted;
       this.result.pricedScopes = [...copies.pricedScopes];
       this.result.pricesCopied = Object.fromEntries(copies.pricesCopied);
     }
