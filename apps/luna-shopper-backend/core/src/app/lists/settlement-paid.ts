@@ -2,11 +2,7 @@ import {
   SettlementOutcome,
   type SettlementPaid,
 } from '@portfolio/luna-shopper/contracts';
-import { ValidationException } from '@portfolio/luna-shopper/platform';
-
-/** Canonical UUID shape, for the two opaque catalog ids this carries. */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUuid, ValidationException } from '@portfolio/luna-shopper/platform';
 
 /** ISO 4217 as catalog stores it: three upper case letters. */
 const CURRENCY_PATTERN = /^[A-Z]{3}$/;
@@ -60,14 +56,14 @@ export function paidColumns(
     return NOTHING_PAID;
   }
 
-  if (!UUID_PATTERN.test(paid.priceScopeId)) {
+  if (!isUuid(paid.priceScopeId)) {
     throw new ValidationException('priceScopeId must be a valid scope', {
       messageArgs: { field: 'priceScopeId' },
     });
   }
   if (
     paid.supermarketLocationId !== null &&
-    !UUID_PATTERN.test(paid.supermarketLocationId)
+    !isUuid(paid.supermarketLocationId)
   ) {
     throw new ValidationException(
       'supermarketLocationId must be a valid shop reference',

@@ -36,6 +36,7 @@ import {
   clampPageSize,
   ConflictException,
   decodeCursor,
+  describeError,
   encodeCursor,
   NotFoundException,
   ValidationException,
@@ -755,7 +756,8 @@ export class SourceEntryService {
       return scopes.find((scope) => scope.externalKey)?.externalKey ?? null;
     } catch (error) {
       this.logger.warn(
-        `Could not read the scopes of ${supermarketId}: ${String(error)}`
+        `Could not read the scopes of ${supermarketId}: ` +
+          describeError(error).message
       );
       return null;
     }

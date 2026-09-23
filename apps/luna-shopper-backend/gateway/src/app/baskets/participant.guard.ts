@@ -12,6 +12,8 @@ import {
   type ResolveParticipantRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  isUuid,
+  malformedUuid,
   NotAParticipantException,
   UnauthorizedException,
 } from '@portfolio/luna-shopper/platform';
@@ -62,6 +64,11 @@ export class ParticipantGuard implements CanActivate {
     const basketId = request.params?.id;
     if (!basketId) {
       throw new NotAParticipantException('Not a participant of this basket');
+    }
+    // Guards run before pipes, so `UuidParam` on the handler has not looked at
+    // the id yet, and core would answer a malformed one with a 500 (plan 0158).
+    if (!isUuid(basketId)) {
+      throw malformedUuid('id');
     }
 
     const secret = request.headers?.[PARTICIPANT_SECRET_HEADER];

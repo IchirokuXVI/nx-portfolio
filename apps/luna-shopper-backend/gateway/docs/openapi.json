@@ -24969,12 +24969,10 @@
           "sourceKind": {
             "type": "string",
             "enum": [
+              "ADMIN",
               "OFFICIAL_API",
               "OFFICIAL_WEB",
-              "OFFICIAL_LEAFLET",
-              "ADMIN",
-              "USER_RECEIPT",
-              "USER_REPORTED"
+              "OFFICIAL_LEAFLET"
             ],
             "description": "Defaults to ADMIN, which is what a person typing through the back office means. The two user kinds are refused until backlog 0008 opens them."
           },

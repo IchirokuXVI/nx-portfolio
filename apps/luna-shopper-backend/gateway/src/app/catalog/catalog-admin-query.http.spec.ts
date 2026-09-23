@@ -10,6 +10,9 @@ import {
   AdminCatalogSupermarketsController,
 } from './catalog-admin.controller';
 
+/** A chain's id, which the routes refuse unless it is a uuid (plan 0158). */
+const CHAIN = '7e2a1b3c-4d5e-4f6a-9b8c-1d2e3f4a5b6c';
+
 /**
  * The back office's catalog lists over real HTTP, because the thing that has to
  * be true about them is not what the handler returns but that the request
@@ -173,12 +176,12 @@ describe('the admin catalog lists, over HTTP', () => {
     const { nest, sent, origin } = await boot();
     try {
       const res = await fetch(
-        `${origin}/v1/admin/catalog/supermarkets/sm-1/locations?postalCodeSource=DERIVED`
+        `${origin}/v1/admin/catalog/supermarkets/${CHAIN}/locations?postalCodeSource=DERIVED`
       );
 
       expect(res.status).toBe(200);
       expect(sent[0].payload['postalCodeSource']).toBe('DERIVED');
-      expect(sent[0].payload['supermarketId']).toBe('sm-1');
+      expect(sent[0].payload['supermarketId']).toBe(CHAIN);
     } finally {
       await nest.close();
     }
@@ -213,12 +216,12 @@ describe('the admin catalog lists, over HTTP', () => {
     const { nest, sent, origin } = await boot();
     try {
       const res = await fetch(
-        `${origin}/v1/admin/catalog/supermarkets/sm-1/locations?query=gran%20capit`
+        `${origin}/v1/admin/catalog/supermarkets/${CHAIN}/locations?query=gran%20capit`
       );
 
       expect(res.status).toBe(200);
       expect(sent[0].payload['query']).toBe('gran capit');
-      expect(sent[0].payload['supermarketId']).toBe('sm-1');
+      expect(sent[0].payload['supermarketId']).toBe(CHAIN);
     } finally {
       await nest.close();
     }

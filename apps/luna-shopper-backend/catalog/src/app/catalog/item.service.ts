@@ -286,7 +286,7 @@ export class ItemService {
         return rows;
       });
     } catch (error) {
-      throw asEanConflict(error, EAN_TAKEN_IN_BATCH);
+      throw asEanConflict(error, eanTakenInBatch(takenEanOf(error)));
     }
 
     for (const row of saved) {
@@ -1317,10 +1317,31 @@ const PG_UNIQUE_VIOLATION = '23505';
  * differs: a batch landed nothing at all, a create landed nothing, and an edit
  * left the product as it was. A single message would have to leave out which.
  */
-const EAN_TAKEN_IN_BATCH =
-  'One of these products carries an EAN the catalog already holds, so ' +
-  'none of them were created. Bind that row onto the product that has ' +
-  'the barcode instead of creating a second one.';
+function eanTakenInBatch(ean: string | null): string {
+  // The barcode, because "one of these products" in a file of a thousand
+  // leaves the operator to find which (plan 0158).
+  const which = ean
+    ? `A product of this batch carries EAN ${ean}, which the catalog ` +
+      'already holds'
+    : 'One of these products carries an EAN the catalog already holds';
+  return (
+    `${which}, so none of them were created. Bind that row onto the ` +
+    'product that has the barcode instead of creating a second one.'
+  );
+}
+
+/**
+ * The barcode a unique violation on `uq_items_ean` names. Postgres writes it
+ * into the error's detail as `Key (ean)=(8480000123456) already exists.`
+ */
+function takenEanOf(error: unknown): string | null {
+  const detail = (error as { driverError?: { detail?: unknown } })?.driverError
+    ?.detail;
+  if (typeof detail !== 'string') {
+    return null;
+  }
+  return /\(ean\)=\(([^)]+)\)/.exec(detail)?.[1] ?? null;
+}
 
 const EAN_TAKEN_ON_CREATE =
   'The catalog already holds a product with this EAN, so nothing was ' +

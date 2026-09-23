@@ -41,6 +41,7 @@ import {
   type PostalCodeUsageListView,
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
+import { UuidParam } from '@portfolio/luna-shopper/platform';
 import { DEFAULT_NEARBY_RADIUS_METRES } from '@portfolio/luna-shopper/postal-codes';
 import {
   ApiComposedResponse,
@@ -157,7 +158,7 @@ export class AdminZonesController {
   @ApiContractResponse(ADMIN_ZONE_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<AdminZoneDetailView> {
     return this.nats.send<AdminZoneDetailView>(ADMIN_ZONE_PATTERNS.get, {
       ...adminCredential(admin),
@@ -174,7 +175,7 @@ export class AdminZonesController {
   @ApiContractResponse(ADMIN_ZONE_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(ADMIN_ZONE_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -189,7 +190,7 @@ export class AdminZonesController {
   })
   regenerateJoinCode(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ZoneView> {
     return this.nats.send<ZoneView>(ADMIN_ZONE_PATTERNS.regenerateJoinCode, {
       ...adminCredential(admin),
@@ -211,8 +212,8 @@ export class AdminZonesController {
   })
   transferOwnership(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<ZoneView> {
     return this.nats.send<ZoneView>(ADMIN_ZONE_PATTERNS.transferOwnership, {
       ...adminCredential(admin),
@@ -231,8 +232,8 @@ export class AdminZonesController {
   })
   kick(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<AdminMembershipActionResult> {
     return this.nats.send<AdminMembershipActionResult>(
       ADMIN_MEMBERSHIP_PATTERNS.kick,
@@ -247,8 +248,8 @@ export class AdminZonesController {
   })
   ban(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<AdminMembershipActionResult> {
     return this.nats.send<AdminMembershipActionResult>(
       ADMIN_MEMBERSHIP_PATTERNS.ban,
@@ -270,7 +271,7 @@ export class AdminZonesController {
   @ApiContractResponse(ADMIN_ZONE_PATTERNS.update)
   update(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() body: UpdateAdminZoneDto
   ): Promise<ZoneView> {
     return this.nats.send<ZoneView>(ADMIN_ZONE_PATTERNS.update, {
@@ -296,7 +297,7 @@ export class AdminZonesController {
   })
   markForDeletion(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ZoneView> {
     return this.nats.send<ZoneView>(ADMIN_ZONE_PATTERNS.setDeletionMark, {
       ...adminCredential(admin),
@@ -310,7 +311,7 @@ export class AdminZonesController {
   @ApiContractResponse(ADMIN_ZONE_PATTERNS.setDeletionMark)
   restore(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ZoneView> {
     return this.nats.send<ZoneView>(ADMIN_ZONE_PATTERNS.setDeletionMark, {
       ...adminCredential(admin),
@@ -324,8 +325,8 @@ export class AdminZonesController {
   @ApiContractResponse(ADMIN_MEMBERSHIP_PATTERNS.get)
   getMember(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<AdminZoneMemberView> {
     return this.nats.send<AdminZoneMemberView>(ADMIN_MEMBERSHIP_PATTERNS.get, {
       ...adminCredential(admin),
@@ -345,8 +346,8 @@ export class AdminZonesController {
   @ApiContractResponse(ADMIN_MEMBERSHIP_PATTERNS.update)
   updateMember(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string,
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string,
     @Body() body: UpdateAdminMembershipDto
   ): Promise<MembershipView> {
     return this.nats.send<MembershipView>(ADMIN_MEMBERSHIP_PATTERNS.update, {
@@ -373,8 +374,8 @@ export class AdminZonesController {
   })
   approve(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<AdminMembershipActionResult> {
     return this.nats.send<AdminMembershipActionResult>(
       ADMIN_MEMBERSHIP_PATTERNS.approve,
@@ -389,8 +390,8 @@ export class AdminZonesController {
   })
   reject(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('membershipId') membershipId: string
+    @UuidParam('id') id: string,
+    @UuidParam('membershipId') membershipId: string
   ): Promise<{ id: string }> {
     return this.nats.send(ADMIN_MEMBERSHIP_PATTERNS.reject, {
       ...adminCredential(admin),
@@ -442,7 +443,7 @@ export class AdminListsController {
   @ApiContractResponse(ADMIN_LIST_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<AdminListDetailView> {
     return this.nats.send<AdminListDetailView>(ADMIN_LIST_PATTERNS.get, {
       ...adminCredential(admin),
@@ -465,7 +466,7 @@ export class AdminListsController {
   @ApiContractResponse(ADMIN_LIST_PATTERNS.update)
   update(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() body: UpdateAdminListDto
   ): Promise<ListView> {
     return this.nats.send<ListView>(ADMIN_LIST_PATTERNS.update, {
@@ -482,7 +483,7 @@ export class AdminListsController {
   @ApiContractResponse(ADMIN_LIST_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(ADMIN_LIST_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -495,8 +496,8 @@ export class AdminListsController {
   @ApiContractResponse(ADMIN_LIST_PATTERNS.getLine)
   getLine(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('lineId') lineId: string
+    @UuidParam('id') id: string,
+    @UuidParam('lineId') lineId: string
   ): Promise<AdminListLineView> {
     return this.nats.send<AdminListLineView>(ADMIN_LIST_PATTERNS.getLine, {
       ...adminCredential(admin),
@@ -522,8 +523,8 @@ export class AdminListsController {
   @ApiContractResponse(ADMIN_LIST_PATTERNS.updateLine)
   updateLine(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('lineId') lineId: string,
+    @UuidParam('id') id: string,
+    @UuidParam('lineId') lineId: string,
     @Body() body: UpdateAdminLineDto
   ): Promise<LineView> {
     return this.nats.send<LineView>(ADMIN_LIST_PATTERNS.updateLine, {
@@ -543,8 +544,8 @@ export class AdminListsController {
   })
   setLineApproval(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('lineId') lineId: string,
+    @UuidParam('id') id: string,
+    @UuidParam('lineId') lineId: string,
     @Body() body: SetAdminLineApprovalDto
   ): Promise<LineView> {
     return this.nats.send<LineView>(ADMIN_LIST_PATTERNS.setLineApproval, {
@@ -560,8 +561,8 @@ export class AdminListsController {
   @ApiContractResponse(ADMIN_LIST_PATTERNS.deleteLine)
   deleteLine(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
-    @Param('lineId') lineId: string
+    @UuidParam('id') id: string,
+    @UuidParam('lineId') lineId: string
   ): Promise<{ id: string }> {
     return this.nats.send(ADMIN_LIST_PATTERNS.deleteLine, {
       ...adminCredential(admin),
@@ -682,7 +683,7 @@ export class AdminBasketsController {
   @ApiContractResponse(ADMIN_BASKET_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<AdminBasketDetailView> {
     return this.nats.send<AdminBasketDetailView>(ADMIN_BASKET_PATTERNS.get, {
       ...adminCredential(admin),

@@ -10,6 +10,7 @@ import {
   PriceSourceKind,
   type AdapterKey,
 } from '@portfolio/luna-shopper/contracts';
+import { describeError } from '@portfolio/luna-shopper/platform';
 import { IsNull, Not, Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { SourceCatalogEntry, type SupermarketSource } from '../entities';
@@ -80,7 +81,7 @@ export class RunExecutor implements OnApplicationShutdown {
       };
     } catch (error) {
       this.logger.warn(
-        `Could not read the chain ${supermarketId}: ${String(error)}`
+        `Could not read the chain ${supermarketId}: ${describeError(error).message}`
       );
       return { externalBrandKey: null, brandName: null };
     }
@@ -267,7 +268,9 @@ export class RunExecutor implements OnApplicationShutdown {
    */
   start(runId: string): void {
     void this.execute(runId).catch((error: unknown) => {
-      this.logger.error(`Harvest run ${runId} crashed: ${String(error)}`);
+      this.logger.error(
+        `Harvest run ${runId} crashed: ${describeError(error).message}`
+      );
     });
   }
 
@@ -529,12 +532,12 @@ export class RunExecutor implements OnApplicationShutdown {
       const status = controller.signal.aborted
         ? HarvestRunStatus.ABORTED
         : HarvestRunStatus.FAILED;
-      await this.store.finish(runId, status, String(error));
+      await this.store.finish(runId, status, describeError(error).message);
       if (source) {
         await this.sources.recordRunFinished(source, false);
       }
       this.logger.error(
-        `Harvest run ${runId} ended as ${status}: ${String(error)}`
+        `Harvest run ${runId} ended as ${status}: ${describeError(error).message}`
       );
       return status;
     } finally {

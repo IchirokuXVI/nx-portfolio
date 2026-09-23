@@ -129,6 +129,8 @@ function build(
     /** Fail the cleanup delete, so the product is reported as an orphan. */
     failDelete?: boolean;
     createItems?: jest.Mock;
+    /** Barcodes catalog already holds, and the product holding each. */
+    takenEans?: Record<string, string>;
     /** The chain's adapter, which decides what language its printed name is in. */
     adapterKey?: string | null;
   } = {}
@@ -175,7 +177,15 @@ function build(
     }
     return { id: itemId };
   });
-  const catalog = { createItems, deleteItem } as unknown as CatalogClient;
+  const findItemByEan = jest.fn(async (ean: string) => {
+    const holder = options.takenEans?.[ean];
+    return { item: holder ? item(holder) : null };
+  });
+  const catalog = {
+    createItems,
+    deleteItem,
+    findItemByEan,
+  } as unknown as CatalogClient;
 
   const write = jest.fn(async (row: SourceCatalogEntry) => {
     if (options.failPricesOf?.includes(row.id)) {
@@ -214,7 +224,16 @@ function build(
     admin,
     sources
   );
-  return { service, saved, createItems, deleteItem, write, manager, admin };
+  return {
+    service,
+    saved,
+    createItems,
+    deleteItem,
+    findItemByEan,
+    write,
+    manager,
+    admin,
+  };
 }
 
 function request(
@@ -611,9 +630,88 @@ describe('SourceEntryBatchService', () => {
     ]);
   });
 
-  it('binds nothing when the products could not be created', async () => {
+  it('refuses a create whose barcode catalog holds, naming the row and the product', async () => {
+    const rows = [entry(), entry({ id: 'e-2', externalId: '4242' })];
+    const { service, saved, createItems } = build({
+      rows,
+      takenEans: { '8480000123456': 'item-held' },
+    });
+
+    const result = await service.applyDecisions(
+      request([
+        {
+          op: 'createItem',
+          entryId: 'e-1',
+          ref: 'milk',
+          item: { ean: '8480000123456' },
+          expect: expectFresh,
+        },
+        {
+          op: 'createItem',
+          entryId: 'e-2',
+          ref: 'cream',
+          item: { ean: '8480000999999' },
+          expect: expectFresh,
+        },
+      ])
+    );
+
+    expect(result.applied).toBe(false);
+    expect(result.failedStep).toBe('VALIDATE');
+    expect(result.results[0].error).toEqual({
+      code: BulkOperationErrorCode.ALREADY_TAKEN,
+      detail: expect.stringContaining(
+        'Catalog already holds an item with EAN 8480000123456 (item-held)'
+      ),
+    });
+    expect(result.results[1].error).toBeNull();
+    expect(createItems).not.toHaveBeenCalled();
+    expect(saved).toEqual([]);
+  });
+
+  it('asks catalog about the barcode the row printed when the file names none', async () => {
+    const { service, findItemByEan } = build({
+      rows: [entry({ ean: '8480000123456' })],
+      takenEans: { '8480000123456': 'item-held' },
+    });
+
+    const result = await service.applyDecisions(
+      request([
+        {
+          op: 'createItem',
+          entryId: 'e-1',
+          ref: 'milk',
+          item: {},
+          expect: expectFresh,
+        },
+      ])
+    );
+
+    expect(findItemByEan).toHaveBeenCalledWith('8480000123456');
+    expect(result.results[0].error?.code).toBe(
+      BulkOperationErrorCode.ALREADY_TAKEN
+    );
+  });
+
+  /**
+   * A NATS error arrives as the problem object catalog's filter built, not as
+   * an `Error`, and used to reach the operator as "[object Object]" (plan
+   * 0158). Catalog's 409 is now only the backstop for a barcode taken between
+   * the check and the write, and its sentence is what the answer carries.
+   */
+  it('binds nothing when the products could not be created, and says why', async () => {
     const createItems = jest.fn(async () => {
-      throw new Error('an EAN this file uses is already taken');
+      throw {
+        type: 'https://errors.luna-shopper-backend/conflict',
+        title: 'conflict',
+        status: 409,
+        code: 'conflict',
+        detail:
+          'A product of this batch carries EAN 8480000123456, which the ' +
+          'catalog already holds, so none of them were created.',
+        message: 'That conflicts with the current state.',
+        correlationId: 'c-1',
+      };
     });
     const { service, saved } = build({ createItems });
 
@@ -631,7 +729,8 @@ describe('SourceEntryBatchService', () => {
 
     expect(result.applied).toBe(false);
     expect(result.failedStep).toBe('CREATE_ITEMS');
-    expect(result.error).toContain('already taken');
+    expect(result.error).toContain('EAN 8480000123456');
+    expect(result.error).not.toContain('[object Object]');
     expect(saved).toEqual([]);
   });
 });

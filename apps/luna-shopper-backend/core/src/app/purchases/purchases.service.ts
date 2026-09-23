@@ -11,6 +11,7 @@ import {
   clampPageSize,
   decodeCursor,
   encodeCursor,
+  isUuid,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -41,10 +42,6 @@ interface EntryCursor extends Record<string, unknown> {
 interface RowCursor extends Record<string, unknown> {
   id: string;
 }
-
-/** Canonical UUID shape. Every id here reaches a `::uuid` cast. */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * What one person bought, with or without a basket (plan 0142).
@@ -92,7 +89,7 @@ export class PurchasesService {
       cursor &&
       isTripKind(cursor.kind) &&
       typeof cursor.id === 'string' &&
-      UUID_PATTERN.test(cursor.id)
+      isUuid(cursor.id)
         ? cursor
         : null;
 
@@ -135,7 +132,7 @@ export class PurchasesService {
         messageArgs: { field: 'kind' },
       });
     }
-    if (!UUID_PATTERN.test(req.entryId)) {
+    if (!isUuid(req.entryId)) {
       // Not a validation failure: an id that cannot name a row names no entry.
       throw new NotFoundException('Purchase entry not found');
     }
@@ -143,9 +140,7 @@ export class PurchasesService {
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor<RowCursor>(req.cursor);
     const cursorId =
-      typeof cursor?.id === 'string' && UUID_PATTERN.test(cursor.id)
-        ? cursor.id
-        : null;
+      typeof cursor?.id === 'string' && isUuid(cursor.id) ? cursor.id : null;
 
     const rows =
       req.kind === TripKind.BASKET

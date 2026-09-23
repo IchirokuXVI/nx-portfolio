@@ -24,6 +24,7 @@ import {
   clampPageSize,
   ConflictException,
   decodeCursor,
+  describeError,
   encodeCursor,
   NotFoundException,
   PLACE_CANDIDATES_DETAIL,
@@ -455,7 +456,7 @@ export class DiscoveredPlaceService {
     } catch (error) {
       this.logger.warn(
         `Could not import ${row.provider}/${row.externalRef} automatically, ` +
-          `so it stays in the queue: ${String(error)}`
+          `so it stays in the queue: ${describeError(error).message}`
       );
       return false;
     }
@@ -501,7 +502,7 @@ export class DiscoveredPlaceService {
     } catch (error) {
       this.logger.warn(
         `Could not derive a postal code for a place in ${country}: ` +
-          `${String(error)}`
+          `${describeError(error).message}`
       );
       return { postalCode: null, postalCodeSource: null };
     }

@@ -52,13 +52,7 @@ export type AddCommentDto = {
 export type AddItemPriceDto = {
   itemId: string;
   priceScopeId: string;
-  sourceKind?:
-    | 'OFFICIAL_API'
-    | 'OFFICIAL_WEB'
-    | 'OFFICIAL_LEAFLET'
-    | 'ADMIN'
-    | 'USER_RECEIPT'
-    | 'USER_REPORTED';
+  sourceKind?: 'ADMIN' | 'OFFICIAL_API' | 'OFFICIAL_WEB' | 'OFFICIAL_LEAFLET';
   price?: number | null;
   currency?: string | null;
   unitPrice?: number | null;

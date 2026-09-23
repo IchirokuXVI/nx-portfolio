@@ -27,7 +27,11 @@ import {
   type UserAppStateView,
   type UserProfileView,
 } from '@portfolio/luna-shopper/contracts';
-import { THROTTLE_LIMITS } from '@portfolio/luna-shopper/platform';
+import {
+  describeError,
+  THROTTLE_LIMITS,
+  UuidParam,
+} from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
@@ -125,7 +129,7 @@ export class AccountController {
       .catch((error: unknown) => {
         this.logger.warn(
           `Could not read app state for ${userId}; answering as never set up: ${
-            error instanceof Error ? error.message : String(error)
+            describeError(error).message
           }`
         );
         return { setupCompletedAt: null, tourSeenAt: null };
@@ -270,7 +274,7 @@ export class AccountController {
   @ApiProblemResponses({ auth: true, body: true, notFound: true })
   async updateProfile(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateShoppingProfileDto
   ): Promise<ShoppingProfileView> {
     const updated = await this.nats.send<ShoppingProfileView>(
@@ -305,7 +309,7 @@ export class AccountController {
   })
   async addPostalCode(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddPostalCodeDto
   ): Promise<ShoppingProfileView> {
     const profile = await this.nats.send<ShoppingProfileView>(
@@ -330,7 +334,7 @@ export class AccountController {
   @ApiProblemResponses({ auth: true, notFound: true })
   async removePostalCode(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Param('postalCode') postalCode: string
   ): Promise<ShoppingProfileView> {
     const profile = await this.nats.send<ShoppingProfileView>(
@@ -408,7 +412,7 @@ export class AccountController {
   })
   async setProfileLocations(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: SetProfileLocationsDto
   ): Promise<ShoppingProfileView> {
     const profile = await this.nats.send<ShoppingProfileView>(
@@ -437,7 +441,7 @@ export class AccountController {
   @ApiProblemResponses({ auth: true, notFound: true })
   async setDefaultProfile(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ShoppingProfileView> {
     const profile = await this.nats.send<ShoppingProfileView>(
       PROFILE_PATTERNS.setDefault,
@@ -456,7 +460,7 @@ export class AccountController {
   @ApiProblemResponses({ auth: true, notFound: true, conflict: true })
   async removeProfile(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     const result = await this.nats.send<{ id: string }>(
       PROFILE_PATTERNS.delete,

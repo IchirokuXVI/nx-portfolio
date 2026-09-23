@@ -35,6 +35,7 @@ import {
   decodeCursor,
   encodeCursor,
   ForbiddenException,
+  isUuid,
   LineMergeNeedsApprovalException,
   LineMergeRequiredException,
   LineMergeTooManyProductsException,
@@ -169,10 +170,6 @@ interface FoldLine {
   quantity: number;
   approvalStatus: LineApprovalStatus;
 }
-
-/** Canonical UUID shape, for validating the cross-service catalog `itemId`. */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * What an operator edits with (plan 0077, section 5.2).
@@ -366,7 +363,7 @@ export class LineService {
       );
     }
     for (const itemId of itemIds) {
-      if (typeof itemId !== 'string' || !UUID_PATTERN.test(itemId)) {
+      if (typeof itemId !== 'string' || !isUuid(itemId)) {
         throw new ValidationException(
           'itemIds must all be valid item references',
           { messageArgs: { field: 'itemIds' } }

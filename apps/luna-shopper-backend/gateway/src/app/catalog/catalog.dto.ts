@@ -562,6 +562,18 @@ export class UpdatePriceScopeDto {
 // --- Item prices: every price a source gave (plan 0080) ---------------------
 
 /**
+ * The kinds a person may type through the back office: `ADMIN`, and the
+ * automated kinds for a price an operator copies from a source. The two user
+ * kinds are refused until backlog 0008 opens them (plan 0158).
+ */
+const ADMIN_WRITABLE_PRICE_KINDS = [
+  PriceSourceKind.ADMIN,
+  PriceSourceKind.OFFICIAL_API,
+  PriceSourceKind.OFFICIAL_WEB,
+  PriceSourceKind.OFFICIAL_LEAFLET,
+];
+
+/**
  * One price row, typed in by an operator.
  *
  * No `overrides` and no `protectedUntil`: an `ADMIN` row's override snapshot is
@@ -583,12 +595,12 @@ export class AddItemPriceDto {
   priceScopeId!: string;
 
   @ApiPropertyOptional({
-    enum: PriceSourceKind,
+    enum: ADMIN_WRITABLE_PRICE_KINDS,
     description:
       'Defaults to ADMIN, which is what a person typing through the back office means. The two user kinds are refused until backlog 0008 opens them.',
   })
   @IsOptional()
-  @IsEnum(PriceSourceKind)
+  @IsIn(ADMIN_WRITABLE_PRICE_KINDS)
   sourceKind?: PriceSourceKind;
 
   @ApiPropertyOptional({ nullable: true, minimum: 0 })

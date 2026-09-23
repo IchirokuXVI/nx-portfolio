@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   HttpStatus,
-  Param,
   Post,
   Query,
   UseGuards,
@@ -14,6 +13,7 @@ import {
   type MergeRequestPage,
   type MergeRequestView,
 } from '@portfolio/luna-shopper/contracts';
+import { UuidParam } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
@@ -39,7 +39,7 @@ export class MergeController {
   @ApiProblemResponses({ body: true, conflict: true })
   request(
     @AuthUser() user: CurrentUser,
-    @Param('zoneId') zoneId: string,
+    @UuidParam('zoneId') zoneId: string,
     @Body() dto: RequestMergeDto
   ): Promise<MergeRequestView> {
     return this.nats.send<MergeRequestView>(MERGE_PATTERNS.request, {
@@ -54,7 +54,7 @@ export class MergeController {
   @ApiContractResponse(MERGE_PATTERNS.list)
   list(
     @AuthUser() user: CurrentUser,
-    @Param('zoneId') zoneId: string,
+    @UuidParam('zoneId') zoneId: string,
     @Query() query: ListMergesQueryDto
   ): Promise<MergeRequestPage> {
     return this.nats.send<MergeRequestPage>(MERGE_PATTERNS.list, {
@@ -70,7 +70,7 @@ export class MergeController {
   @ApiProblemResponses({ conflict: true })
   approve(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<MergeRequestView> {
     return this.nats.send<MergeRequestView>(MERGE_PATTERNS.approve, {
       userId: user.userId,
@@ -83,7 +83,7 @@ export class MergeController {
   @ApiProblemResponses({ conflict: true })
   reject(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<MergeRequestView> {
     return this.nats.send<MergeRequestView>(MERGE_PATTERNS.reject, {
       userId: user.userId,
@@ -96,7 +96,7 @@ export class MergeController {
   @ApiProblemResponses({ conflict: true })
   cancel(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<MergeRequestView> {
     return this.nats.send<MergeRequestView>(MERGE_PATTERNS.cancel, {
       userId: user.userId,

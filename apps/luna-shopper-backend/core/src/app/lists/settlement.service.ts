@@ -17,6 +17,7 @@ import {
   clampPageSize,
   decodeCursor,
   encodeCursor,
+  isUuid,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -43,10 +44,6 @@ import { ITEM_SETTLEMENTS_SQL } from './settlement.sql';
 interface SettlementCursor extends Record<string, unknown> {
   id: string;
 }
-
-/** Canonical UUID shape, for validating the cross-service catalog `itemId`. */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Settling a line, and reading back what was settled (plan 0047).
@@ -329,7 +326,7 @@ export class SettlementService {
   async listForItem(
     req: ListItemSettlementsRequest
   ): Promise<LineSettlementPage> {
-    if (!UUID_PATTERN.test(req.itemId)) {
+    if (!isUuid(req.itemId)) {
       throw new ValidationException('itemId must be a valid item reference', {
         messageArgs: { field: 'itemId' },
       });
@@ -402,7 +399,7 @@ export class SettlementService {
 
   /** The catalog reference is cross service, so only its shape is checked here. */
   private validateItemId(itemId?: string): void {
-    if (itemId !== undefined && !UUID_PATTERN.test(itemId)) {
+    if (itemId !== undefined && !isUuid(itemId)) {
       throw new ValidationException('itemId must be a valid item reference', {
         messageArgs: { field: 'itemId' },
       });
