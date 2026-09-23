@@ -16,7 +16,6 @@ function row(overrides: Partial<TripRowVm> = {}): TripRowVm {
     mark: 'bought',
     claimedBy: null,
     buyer: null,
-    nowAsks: null,
     quiet: true,
     ...overrides,
   };
@@ -119,7 +118,7 @@ describe('TripGroup (velista 0088)', () => {
       );
     });
 
-    it('draws a loose trip as Loose buys and its date', async () => {
+    it('draws a session as its date alone, never with a name (velista 0095)', async () => {
       const fixture = await render(
         group({
           kind: 'SESSION',
@@ -129,8 +128,8 @@ describe('TripGroup (velista 0088)', () => {
         })
       );
 
-      expect(host(fixture).querySelector('.name')?.textContent).toContain(
-        'list.trips.labelNamed'
+      expect(host(fixture).querySelector('.name')?.textContent?.trim()).toBe(
+        'Sat 12 Sep'
       );
       expect(host(fixture).querySelector('.count')?.textContent).toContain(
         'list.trips.lines'

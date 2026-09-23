@@ -48,12 +48,7 @@ import { TripRow } from './trip-row';
           <lib-chevron-right-icon aria-hidden="true" class="caret" />
           <span class="label">
             <span class="name">
-              @if (vm.kind === 'SESSION') {
-                {{
-                  'list.trips.labelNamed'
-                    | rokuT: { name: 'list.trips.loose' | rokuT, date: vm.date }
-                }}
-              } @else if (vm.name !== null) {
+              @if (vm.name !== null) {
                 {{
                   'list.trips.labelNamed'
                     | rokuT: { name: vm.name, date: vm.date }

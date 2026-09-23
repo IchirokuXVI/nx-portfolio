@@ -55,6 +55,11 @@ describe('trip mappers (velista 0088, test 1)', () => {
     expect(trip?.live).toBe(false);
   });
 
+  it('maps the wire session and the older LOOSE to SESSION (velista 0095, test 6)', () => {
+    expect(toTrip({ ...TRIP, kind: 'SESSION' })?.kind).toBe('SESSION');
+    expect(toTrip({ ...TRIP, kind: 'LOOSE' })?.kind).toBe('SESSION');
+  });
+
   it('drops a malformed trip from a page and keeps the rest', () => {
     const page = toTripPage({
       live: [TRIP, { kind: 'BASKET' }],
@@ -72,7 +77,7 @@ describe('trip mappers (velista 0088, test 1)', () => {
     });
   });
 
-  it("maps a row, keeping a loose row's nulls as nulls", () => {
+  it("maps a row, keeping a session row's nulls as nulls", () => {
     expect(toTripRow(ROW)).toEqual(ROW);
     expect(
       toTripRow({

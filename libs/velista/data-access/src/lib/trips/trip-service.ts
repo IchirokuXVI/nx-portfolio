@@ -31,7 +31,7 @@ export interface TripServiceI {
    * list's order.
    *
    * A trip that no longer exists answers `not_found`, with a cursor or without one. A
-   * loose trip's id can disappear when a purchase is undone.
+   * session's id can disappear when a purchase is undone.
    */
   listTripRows(
     listId: string,

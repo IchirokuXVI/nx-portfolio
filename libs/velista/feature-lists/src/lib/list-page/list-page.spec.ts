@@ -1738,7 +1738,17 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
     const { fixture } = await suggested({ due: 'fail' });
 
     expect(query(fixture, 'section.due')).toBeNull();
-    expect(rows(fixture).map((row) => row.id)).toEqual(['bread', 'saffron']);
+    // This list has no trip, so its bought lines at zero stay last in To buy rather
+    // than on neither side (velista 0095, section 5).
+    expect(rows(fixture).map((row) => row.id)).toEqual([
+      'bread',
+      'saffron',
+      'eggs',
+      'coffee',
+      'yogurt',
+      'butter',
+      'rice',
+    ]);
   });
 
   it('adds the suggested amount through the reel write, and the row goes at once (test 6)', async () => {

@@ -29,5 +29,6 @@ export * from './lib/requests';
 export * from './lib/shop';
 export * from './lib/shopping-lists-view';
 export * from './lib/shopping-profile';
+export * from './lib/trip-date';
 export * from './lib/trips';
 export * from './lib/zone-view';
