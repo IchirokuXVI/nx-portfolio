@@ -227,6 +227,14 @@ export const coreValidationSchema = Joi.object({
     .min(0)
     .default(DEFAULT_LOCATION_MAX_DISTANCE_METRES),
 
+  /**
+   * Stamp the tour as seen on every account created while this is on, so that a
+   * new account never opens it. A development convenience: the developer
+   * registers accounts all day and has seen the tour. Off by default, and off in
+   * every cluster.
+   */
+  NEW_ACCOUNTS_SKIP_TOUR: Joi.boolean().default(false),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -309,6 +317,11 @@ export interface CoreConfig {
   nearbyRadius: NearbyRadiusConfig;
   /** How far a device may be from the code it is placed in (velista plan 0058). */
   locationMaxDistanceMetres: number;
+  /** What an account has been shown (plan 0145). */
+  appState: {
+    /** Stamp `tourSeenAt` when an account is created. */
+    newAccountsSkipTour: boolean;
+  };
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -403,6 +416,9 @@ export const coreConfiguration = registerAs(
       process.env.PROFILE_LOCATION_MAX_DISTANCE_METRES ??
         DEFAULT_LOCATION_MAX_DISTANCE_METRES
     ),
+    appState: {
+      newAccountsSkipTour: process.env.NEW_ACCOUNTS_SKIP_TOUR === 'true',
+    },
     logLevel: process.env.LOG_LEVEL as CoreConfig['logLevel'],
   })
 );

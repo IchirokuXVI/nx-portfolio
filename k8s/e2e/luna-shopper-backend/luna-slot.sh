@@ -1186,6 +1186,10 @@ PROFILE_NEARBY_RADIUS_BY_COUNTRY=
 # (velista plan 0058). Beyond it the screen offers typing the code instead, which
 # is a path worth being able to force by lowering this.
 PROFILE_LOCATION_MAX_DISTANCE_METRES=10000
+# Stamp the tour as seen on every account created on this slot, so that a new
+# account never opens it. On here and off everywhere else: set it to false to
+# work on the tour itself (velista plan 0099).
+NEW_ACCOUNTS_SKIP_TOUR=true
 EOF
   telemetry_env core
   } | merge_env "$root/apps/luna-shopper-backend/core/.env" "${DERIVED_KEYS[core]} $TELEMETRY_DERIVED"
