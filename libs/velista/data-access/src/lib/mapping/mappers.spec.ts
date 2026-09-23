@@ -962,7 +962,7 @@ describe('toBasketFromView', () => {
 
 describe('toBasketRun', () => {
   const run = {
-    list: {
+    basket: {
       id: 'gl1',
       kind: 'GENERATED',
       name: null,
@@ -983,18 +983,27 @@ describe('toBasketRun', () => {
     expect(mapped).toEqual({ list: expect.objectContaining({ id: 'gl1' }) });
   });
 
+  // Backend 0159 answers the basket under `basket`, with the old `list` key
+  // beside it for one release. This client reads only `basket`.
+  it('reads the basket under basket and never under the old list key', () => {
+    expect(toBasketRun({ list: run.basket })).toBeNull();
+    expect(
+      toBasketRun({ ...run, list: { ...run.basket, id: 'old-key' } })?.list.id
+    ).toBe('gl1');
+  });
+
   it('reads an unknown kind as UNKNOWN rather than dropping the run', () => {
     // A kind this build has never heard of must not read as the permanent
     // basket, which is the safe direction the enum's fallback takes.
     const mapped = toBasketRun({
-      list: { ...run.list, kind: 'SOMETHING_NEW' },
+      basket: { ...run.basket, kind: 'SOMETHING_NEW' },
     });
 
     expect(mapped?.list.kind).toBe('UNKNOWN');
   });
 
   it('drops a run whose basket cannot be read', () => {
-    expect(toBasketRun({ ...run, list: null })).toBeNull();
+    expect(toBasketRun({ ...run, basket: null })).toBeNull();
     expect(toBasketRun(null)).toBeNull();
   });
 });

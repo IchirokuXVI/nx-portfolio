@@ -179,7 +179,8 @@ export class BasketService {
         where: { ownerUserId: req.userId, idempotencyKey: req.idempotencyKey },
       });
       if (existing) {
-        return { list: await this.viewFor(existing) };
+        const basket = await this.viewFor(existing);
+        return { basket, list: basket };
       }
     }
 
@@ -237,7 +238,8 @@ export class BasketService {
       this.events,
       await tripListsOfBasket(this.tripQuery, saved.id)
     );
-    return { list: view };
+    // `list` is the old key, for one release (plan 0159).
+    return { basket: view, list: view };
   }
 
   /**

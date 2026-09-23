@@ -28927,11 +28927,17 @@
       "basket.BasketRunResult": {
         "type": "object",
         "properties": {
-          "list": {
+          "basket": {
             "$ref": "#/components/schemas/basket.BasketHeaderView"
+          },
+          "list": {
+            "$ref": "#/components/schemas/basket.BasketHeaderView",
+            "deprecated": true,
+            "description": "The same value as `basket`. Read `basket`."
           }
         },
         "required": [
+          "basket",
           "list"
         ],
         "additionalProperties": false
@@ -34043,9 +34049,15 @@
             "type": "integer",
             "minimum": 0
           },
-          "boughtLineCount": {
+          "fullyBoughtLineCount": {
             "type": "integer",
             "minimum": 0
+          },
+          "boughtLineCount": {
+            "type": "integer",
+            "minimum": 0,
+            "deprecated": true,
+            "description": "The same value as `fullyBoughtLineCount`. Read that."
           }
         },
         "required": [
@@ -34055,6 +34067,7 @@
           "live",
           "startedAt",
           "lineCount",
+          "fullyBoughtLineCount",
           "boughtLineCount"
         ],
         "additionalProperties": false
@@ -34861,13 +34874,25 @@
             "type": "string",
             "format": "date-time"
           },
-          "lineCount": {
+          "settledLineCount": {
             "type": "integer",
             "minimum": 0
           },
-          "boughtLineCount": {
+          "anyBoughtLineCount": {
             "type": "integer",
             "minimum": 0
+          },
+          "lineCount": {
+            "type": "integer",
+            "minimum": 0,
+            "deprecated": true,
+            "description": "The same value as `settledLineCount`. Read that."
+          },
+          "boughtLineCount": {
+            "type": "integer",
+            "minimum": 0,
+            "deprecated": true,
+            "description": "The same value as `anyBoughtLineCount`. Read that."
           },
           "spent": {
             "anyOf": [
@@ -34891,6 +34916,8 @@
           "open",
           "startedAt",
           "endedAt",
+          "settledLineCount",
+          "anyBoughtLineCount",
           "lineCount",
           "boughtLineCount",
           "spent",

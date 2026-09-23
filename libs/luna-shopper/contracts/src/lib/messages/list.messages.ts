@@ -1269,9 +1269,18 @@ export interface TripView {
   live: boolean;
   /** `generatedAt`, or the earliest `settledAt` of the session. */
   startedAt: string;
-  /** Zone lines of this list the trip touched, and that still exist. */
+  /**
+   * Zone lines of this list the trip covers, and that still exist, pending
+   * ones included.
+   */
   lineCount: number;
-  /** Of those, the ones whose row says `BOUGHT`. */
+  /** Of those, the ones whose row says `BOUGHT`: every unit asked was bought. */
+  fullyBoughtLineCount: number;
+  /**
+   * The same value as {@link fullyBoughtLineCount}, for one release (plan 0159).
+   *
+   * @deprecated Read `fullyBoughtLineCount`. Removed by backlog plan 0015.
+   */
   boughtLineCount: number;
 }
 

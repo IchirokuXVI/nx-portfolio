@@ -7,7 +7,7 @@ const TRIP = {
   live: true,
   startedAt: '2026-09-17T10:00:00.000Z',
   lineCount: 5,
-  boughtLineCount: 1,
+  fullyBoughtLineCount: 1,
 };
 
 const ROW = {
@@ -32,6 +32,16 @@ describe('trip mappers (velista 0088, test 1)', () => {
     });
   });
 
+  // Backend 0159 renamed the count. The old name rides beside the new one for
+  // one release, and this client reads only the new one.
+  it('reads the bought count from fullyBoughtLineCount and never the old name', () => {
+    expect(toTrip({ ...TRIP, boughtLineCount: 4 })?.boughtLineCount).toBe(1);
+    expect(
+      toTrip({ ...TRIP, fullyBoughtLineCount: undefined, boughtLineCount: 4 })
+        ?.boughtLineCount
+    ).toBe(0);
+  });
+
   it('refuses a trip with no id or no readable date', () => {
     expect(toTrip({ ...TRIP, id: undefined })).toBeNull();
     expect(toTrip({ ...TRIP, id: '' })).toBeNull();
@@ -45,7 +55,7 @@ describe('trip mappers (velista 0088, test 1)', () => {
       ...TRIP,
       kind: 'SUBSCRIPTION',
       lineCount: undefined,
-      boughtLineCount: 'many',
+      fullyBoughtLineCount: 'many',
       live: 'yes',
     });
 

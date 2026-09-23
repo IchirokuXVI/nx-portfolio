@@ -699,9 +699,24 @@ const tripView = object(
     live: boolean(),
     startedAt: string({ format: 'date-time' }),
     lineCount: integer({ minimum: 0 }),
-    boughtLineCount: integer({ minimum: 0 }),
+    fullyBoughtLineCount: integer({ minimum: 0 }),
+    // The old name, with the same value, for one release (plan 0159).
+    boughtLineCount: integer({
+      minimum: 0,
+      deprecated: true,
+      description: 'The same value as `fullyBoughtLineCount`. Read that.',
+    }),
   },
-  ['id', 'kind', 'name', 'live', 'startedAt', 'lineCount', 'boughtLineCount']
+  [
+    'id',
+    'kind',
+    'name',
+    'live',
+    'startedAt',
+    'lineCount',
+    'fullyBoughtLineCount',
+    'boughtLineCount',
+  ]
 );
 
 // Not `paginated`, because it has two parts: live trips whole on the first

@@ -42,7 +42,10 @@ export function toTrip(raw: unknown): Trip | null {
     live: raw['live'] === true,
     startedAt,
     lineCount: Math.max(0, numOr(raw['lineCount'], 0)),
-    boughtLineCount: Math.max(0, numOr(raw['boughtLineCount'], 0)),
+    // `fullyBoughtLineCount` since backend 0159, which renamed it from
+    // `boughtLineCount` because a purchase entry counts something else under
+    // that name.
+    boughtLineCount: Math.max(0, numOr(raw['fullyBoughtLineCount'], 0)),
   };
 }
 

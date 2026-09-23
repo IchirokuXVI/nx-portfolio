@@ -684,8 +684,17 @@ export interface BasketHistoryView {
  * A wrapper with one field, where it used to carry the lines the run refused as
  * well. Plan 0133 section 7 deleted that refusal, and plan 0136 replaces the run
  * outright, so the wrapper stays for one plan rather than being unwrapped twice.
+ *
+ * Plan 0159 names the basket under `basket`, because a client read a basket
+ * under a key named after the other thing a shopper has.
  */
 export interface BasketRunResult {
+  basket: BasketHeaderView;
+  /**
+   * The same value as {@link basket}, under its old key, for one release.
+   *
+   * @deprecated Read `basket`. Removed by backlog plan 0015.
+   */
   list: BasketHeaderView;
 }
 

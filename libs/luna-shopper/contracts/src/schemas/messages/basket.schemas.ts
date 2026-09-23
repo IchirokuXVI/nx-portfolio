@@ -521,8 +521,16 @@ const sharedView = object(
 
 const runResult = object(
   BASKET_SCHEMA_IDS.runResult,
-  { list: ref(BASKET_SCHEMA_IDS.headerView) },
-  ['list']
+  {
+    basket: ref(BASKET_SCHEMA_IDS.headerView),
+    // The same value under its old key, for one release (plan 0159).
+    list: {
+      ...ref(BASKET_SCHEMA_IDS.headerView),
+      deprecated: true,
+      description: 'The same value as `basket`. Read `basket`.',
+    },
+  },
+  ['basket', 'list']
 );
 
 const sourceInput = object(

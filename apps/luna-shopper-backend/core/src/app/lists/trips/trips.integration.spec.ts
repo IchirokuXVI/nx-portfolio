@@ -18,11 +18,11 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
+  Basket,
+  BasketParticipant,
   BasketSource,
   BasketTripRow,
   CORE_ENTITIES,
-  Basket,
-  BasketParticipant,
   LineSettlement,
   ListAccess,
   ListLine,
@@ -408,6 +408,8 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
         listId: parents,
       });
 
+      // The new name, and the old one beside it with the same value for one
+      // release (plan 0159).
       expect(ofFlat.items).toEqual([
         {
           id,
@@ -416,11 +418,12 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
           live: false,
           startedAt: '2026-01-10T10:00:00.000Z',
           lineCount: 2,
+          fullyBoughtLineCount: 1,
           boughtLineCount: 1,
         },
       ]);
       expect(ofParents.items).toEqual([
-        expect.objectContaining({ id, lineCount: 1, boughtLineCount: 0 }),
+        expect.objectContaining({ id, lineCount: 1, fullyBoughtLineCount: 0 }),
       ]);
     });
 
@@ -520,6 +523,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
       const heads = await trips.list({ userId: ids.shopper, listId: flat });
       expect(heads.items[0]).toMatchObject({
         lineCount: 5,
+        fullyBoughtLineCount: 1,
         boughtLineCount: 1,
       });
     });
@@ -710,7 +714,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
           id,
           kind: TripKind.BASKET,
           lineCount: 1,
-          boughtLineCount: 1,
+          fullyBoughtLineCount: 1,
         }),
       ]);
 
@@ -800,6 +804,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
           live: false,
           startedAt: '2026-03-01T22:01:00.000Z',
           lineCount: 2,
+          fullyBoughtLineCount: 2,
           boughtLineCount: 2,
         },
         {
@@ -809,6 +814,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
           live: false,
           startedAt: '2026-03-01T10:00:00.000Z',
           lineCount: 2,
+          fullyBoughtLineCount: 2,
           boughtLineCount: 2,
         },
       ]);
@@ -922,7 +928,7 @@ describeIntegration('the trips of a zone list (real Postgres)', () => {
           kind: TripKind.SESSION,
           name: null,
           lineCount: 1,
-          boughtLineCount: 1,
+          fullyBoughtLineCount: 1,
         }),
       ]);
 

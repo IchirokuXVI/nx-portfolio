@@ -45,7 +45,9 @@ export function toPurchaseEntry(raw: unknown): PurchaseEntry | null {
     kind,
     name: kind === 'BASKET' ? nullableStr(raw['name']) : null,
     startedAt,
-    purchaseCount: count(raw['boughtLineCount']),
+    // `anyBoughtLineCount` since backend 0159, which renamed it from
+    // `boughtLineCount` because a trip counts something else under that name.
+    purchaseCount: count(raw['anyBoughtLineCount']),
     spend: toSpend(raw['spent'], unpricedCount),
     unpricedCount,
   };

@@ -9,6 +9,7 @@ import type { TripLineRow, TripRow } from './trips.sql';
 
 /** One raw trip head, with its date serialized and its kind typed. */
 export function toTripView(row: TripRow): TripView {
+  const fullyBoughtLineCount = Number(row.boughtLineCount);
   return {
     id: row.id,
     kind: row.kind === TripKind.BASKET ? TripKind.BASKET : TripKind.SESSION,
@@ -16,7 +17,11 @@ export function toTripView(row: TripRow): TripView {
     live: row.live,
     startedAt: new Date(row.startedAt).toISOString(),
     lineCount: Number(row.lineCount),
-    boughtLineCount: Number(row.boughtLineCount),
+    fullyBoughtLineCount,
+    // The old name, for one release (plan 0159). A purchase entry's
+    // `boughtLineCount` counts partly bought lines too, which is why it was
+    // renamed.
+    boughtLineCount: fullyBoughtLineCount,
   };
 }
 
