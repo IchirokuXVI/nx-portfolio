@@ -22,6 +22,8 @@ every element MUST have exactly these keys:
     "basis": "unit" | "pack" | "kg" | "l",
     "wasPrice": 0.00,
     "loyalty": false,
+    "validUntil": "the offer's own last day as YYYY-MM-DD, or null",
+    "validityText": "the offer's own date wording, verbatim, or null",
     "promotion": null
   }
 }
@@ -41,11 +43,14 @@ none of the twelve fits.
 {
   "type": "price_drop" | "second_unit_discount" | "multibuy_unit_price"
         | "multibuy_total" | "n_for_m" | "buy_n_get_free" | "pack_bonus",
+  "rawText": "the offer wording exactly as the leaflet prints it",
   "requiredQuantity": 0,
   "effectiveUnitPrice": 0.00,
   "totalPrice": 0.00,
   "singleUnitPrice": 0.00
 }
+
+"rawText" is required whenever "promotion" is not null.
 
 HOW THIS LEAFLET IS LAID OUT
 
@@ -141,8 +146,10 @@ Rules, in order of importance:
    - "COMPRANDO 12 UNIDADES"              -> "multibuy_unit_price"
    Text such as "AHORA MAS BARATO" or "AHORRO" with no old price and no
    quantity is a slogan, not a promotion. Leave "promotion" null.
-   On a second unit offer, read the printed single unit price. Do not divide
-   the total by two.
+   On a second unit offer, read the printed single unit price into
+   "singleUnitPrice". Do not divide the total by two.
+   Copy the promotion's own wording verbatim into "rawText": "ANTES 1'45",
+   "2 X 1", "LLEVANDO 3, GRATIS 1".
 
 10. A number labelled "el litro le sale a", "el kilo le sale a" or
     "100 ml le sale a" is a UNIT price, not the product price. Record it in
@@ -161,9 +168,86 @@ Rules, in order of importance:
 13. "loyalty" is always false in this leaflet. Deza prints no loyalty card
     badge. Set it to false on every offer.
 
-14. Use null for anything the page does not state. Do not invent values and do
+14. AN OFFER'S OWN END DATE. Some tiles print a window of their own, shorter
+    than the leaflet's, such as "OFERTA VÁLIDA HASTA EL 14-9-2026". Copy that
+    wording verbatim into "leaflet.validityText" and write the last day it
+    names into "leaflet.validUntil" as YYYY-MM-DD: "2026-09-14". When the
+    wording prints no year, leave "validUntil" null and still copy the
+    wording. The leaflet's own window on the cover is not a tile's date: leave
+    both null on every tile that prints no date of its own.
+
+15. Use null for anything the page does not state. Do not invent values and do
     not compute a value the page does not print. Never divide one printed
     number by another to produce a price.
+
+EXAMPLE OF A WHOLE ANSWER
+
+These tiles are invented, and come from more than one page, to show the shape
+and every field in use. Never copy them into an answer: read the page in front
+of you.
+
+[
+  {
+    "name": "Aceite de girasol",
+    "brand": "Koipesol",
+    "unitSize": 1,
+    "sizeFormat": "l",
+    "price": 1.45,
+    "unitPrice": 1.45,
+    "unitPriceLabel": "LITRO 1'45",
+    "category": "PANTRY",
+    "categoryPath": ["ACEITES Y SALSAS"],
+    "leaflet": {
+      "format": "1 L",
+      "basis": "unit",
+      "wasPrice": 1.69,
+      "loyalty": false,
+      "validUntil": "2026-09-14",
+      "validityText": "OFERTA VÁLIDA HASTA EL 14-9-2026",
+      "promotion": { "type": "price_drop", "rawText": "ANTES 1'69", "requiredQuantity": null, "effectiveUnitPrice": null, "totalPrice": null, "singleUnitPrice": null }
+    }
+  },
+  {
+    "name": "Refresco de cola",
+    "brand": "Coca-Cola",
+    "unitSize": 2000,
+    "sizeFormat": "ml",
+    "price": 1.10,
+    "unitPrice": 0.55,
+    "unitPriceLabel": "LITRO 0'55",
+    "category": "BEVERAGES",
+    "categoryPath": ["BEBIDAS"],
+    "leaflet": {
+      "format": "2 L",
+      "basis": "unit",
+      "wasPrice": null,
+      "loyalty": false,
+      "validUntil": null,
+      "validityText": null,
+      "promotion": { "type": "second_unit_discount", "rawText": "2ª UNIDAD -50%", "requiredQuantity": 2, "effectiveUnitPrice": null, "totalPrice": 3.30, "singleUnitPrice": 2.20 }
+    }
+  },
+  {
+    "name": "Filete de pechuga de pollo",
+    "brand": null,
+    "unitSize": 1,
+    "sizeFormat": "kg",
+    "price": 6.95,
+    "unitPrice": null,
+    "unitPriceLabel": "EUR/KILO",
+    "category": "MEAT",
+    "categoryPath": ["CARNICERÍA"],
+    "leaflet": {
+      "format": "kilo",
+      "basis": "kg",
+      "wasPrice": null,
+      "loyalty": false,
+      "validUntil": null,
+      "validityText": null,
+      "promotion": null
+    }
+  }
+]
 
 WHY THREE OF THESE FIELDS MATTER MORE THAN THE REST
 
