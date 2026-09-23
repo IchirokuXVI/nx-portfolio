@@ -212,6 +212,29 @@ export const ERROR_CODES = {
    * section 9 of plan 0115: there is nowhere for its products to go.
    */
   BRAND_NOT_LINKED: 'brand_not_linked',
+  /**
+   * A discovered place is already imported, and the write asked to import it
+   * again or to reject it (plan 0152, section 5).
+   *
+   * Removing an imported shop is a catalog act on the location, not a queue
+   * act on the place, so reject refuses it rather than leaving a rejected row
+   * that still points at a live shop.
+   */
+  PLACE_ALREADY_IMPORTED: 'place_already_imported',
+  /**
+   * The catalog already holds a shop this place may be (plan 0152, section 2).
+   *
+   * Nothing was written. The candidates travel in the envelope's `details` as
+   * `candidates`, each with the rung that found it, so the back office can
+   * offer to link one or to create a new shop anyway.
+   */
+  PLACE_MATCHES_LOCATION: 'place_matches_location',
+  /**
+   * The run declared a price scope the chain does not hold (plan 0152,
+   * section 1). The key travels in `details` as `scopeKey`, so the operator
+   * can create that scope first.
+   */
+  SCOPE_NOT_FOUND: 'scope_not_found',
   INTERNAL: 'internal',
 } as const;
 
@@ -305,5 +328,11 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409 again: the request is well formed and the caller may make it, and what
   // refuses it is that this brand is not a spelling of anything.
   [ERROR_CODES.BRAND_NOT_LINKED]: HttpStatus.CONFLICT,
+  // All three 409: the request is well formed, and what refuses it is the
+  // state of the place, of the catalog's shops, or of the chain's scopes
+  // (plan 0152).
+  [ERROR_CODES.PLACE_ALREADY_IMPORTED]: HttpStatus.CONFLICT,
+  [ERROR_CODES.PLACE_MATCHES_LOCATION]: HttpStatus.CONFLICT,
+  [ERROR_CODES.SCOPE_NOT_FOUND]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

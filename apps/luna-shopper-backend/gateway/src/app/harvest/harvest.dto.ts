@@ -309,10 +309,32 @@ export class ImportDiscoveredPlaceDto {
   @IsUUID()
   supermarketId?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The scope the new shop prices against. When omitted, the chain’s scope whose `externalKey` is the place’s `scopeKey`, and a STORE scope of its own when the place declares none.',
+  })
   @IsOptional()
   @IsUUID()
   priceScopeId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Create a new shop although the catalog holds one the place may be. Without it, a match answers 409 `place_matches_location` and writes nothing.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+}
+
+/** Bind a discovered place to a shop the catalog already holds (plan 0152). */
+export class LinkDiscoveredPlaceDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'A shop of the place’s own chain.',
+  })
+  @IsUUID()
+  supermarketLocationId!: string;
 }
 
 /** Bind a queued row to a product the catalog already holds (plan 0086, section 7). */

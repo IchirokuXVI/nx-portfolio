@@ -148,6 +148,19 @@ export const ERROR_CATALOG: Record<
     en: 'A spelling of another brand keeps its key. Register the other spelling as its own brand.',
     es: 'La grafía de otra marca conserva su clave. Registra la otra grafía como una marca propia.',
   },
+  // The three refusals of the places queue (plan 0152).
+  [ERROR_CODES.PLACE_ALREADY_IMPORTED]: {
+    en: 'That place is already imported into the catalog.',
+    es: 'Ese lugar ya está importado en el catálogo.',
+  },
+  [ERROR_CODES.PLACE_MATCHES_LOCATION]: {
+    en: 'The catalog already holds a shop that may be this place. Link it, or create a new shop anyway.',
+    es: 'El catálogo ya tiene una tienda que puede ser este lugar. Enlázala o crea una tienda nueva de todos modos.',
+  },
+  [ERROR_CODES.SCOPE_NOT_FOUND]: {
+    en: 'The chain has no price scope with the key this place declares. Create that scope first.',
+    es: 'La cadena no tiene un ámbito de precios con la clave que declara este lugar. Crea ese ámbito primero.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

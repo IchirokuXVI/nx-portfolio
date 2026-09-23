@@ -36,6 +36,7 @@ import {
   type HarvestRunPresetView,
   type HarvestRunView,
   type ImportDiscoveredPlaceRequest,
+  type LinkDiscoveredPlaceRequest,
   type ListBrandSuggestionsRequest,
   type ListDiscoveredPlacesRequest,
   type ListHarvestRunPresetsRequest,
@@ -306,6 +307,13 @@ export class HarvestController {
     @Payload() req: ImportDiscoveredPlaceRequest
   ): Promise<DiscoveredPlaceView> {
     return this.places.import(req);
+  }
+
+  @MessagePattern(DISCOVERED_PLACE_PATTERNS.link)
+  linkPlace(
+    @Payload() req: LinkDiscoveredPlaceRequest
+  ): Promise<DiscoveredPlaceView> {
+    return this.places.link(req);
   }
 
   @MessagePattern(DISCOVERED_PLACE_PATTERNS.reject)

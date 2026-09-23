@@ -1,3 +1,5 @@
+> **PR:** [#453](https://github.com/IchirokuXVI/nx-portfolio/pull/453)
+
 # 0152: a place joins the shop and the scope it names
 
 > Found by `0150` (report findings 3, 9 and 13, shopper F5 and F8). Prerequisite reading:

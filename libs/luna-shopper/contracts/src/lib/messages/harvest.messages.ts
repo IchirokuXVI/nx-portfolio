@@ -16,6 +16,7 @@ import type {
   HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
+  PlaceMatchRung,
   PostalCodeDiscoveryStatus,
   SourceEntryStatus,
   SourceLocationStatus,
@@ -26,6 +27,7 @@ import type {
   BulkOperationError,
   ContentLocale,
   ItemView,
+  LocalizedText,
 } from './catalog.messages';
 
 /**
@@ -110,6 +112,11 @@ export const DISCOVERED_PLACE_PATTERNS = {
    */
   groups: 'place.groups',
   import: 'place.import',
+  /**
+   * Bind a place to a shop the catalog already holds (plan 0152, section 3).
+   * It fills only the fields the shop lacks, and never creates one.
+   */
+  link: 'place.link',
   reject: 'place.reject',
 } as const;
 
@@ -628,6 +635,13 @@ export interface DiscoveredPlaceView {
   website: string | null;
   openingHours: string | null;
   tags: Record<string, string>;
+  /**
+   * The price scope key the run declared for this shop (plan 0152, section 1):
+   * a Mercadona warehouse or a LIDL offer region. Null when the source declares
+   * none, which is every OpenStreetMap place. Import joins the chain's scope
+   * with this `externalKey` unless the caller names another.
+   */
+  scopeKey: string | null;
   status: DiscoveredPlaceStatus;
   supermarketLocationId: string | null;
   firstSeenAt: string;
@@ -1094,9 +1108,39 @@ export interface ImportDiscoveredPlaceRequest extends AdminCredential {
   placeId: string;
   /** Attach to an existing chain instead of resolving by `brand:wikidata`. */
   supermarketId?: string;
-  /** The scope the new location prices against; resolved from its postal code
-   *  when omitted, falling back to the run's centre with a review flag. */
+  /**
+   * The scope the new location prices against. When omitted, the chain's scope
+   * whose `externalKey` is the place's {@link DiscoveredPlaceView.scopeKey}, and
+   * a `STORE` scope of its own when the place declares none (plan 0152,
+   * section 1).
+   */
   priceScopeId?: string;
+  /**
+   * Create a new shop even though the catalog holds one the place may be
+   * (plan 0152, section 2). Without it, a match answers 409
+   * `place_matches_location` and writes nothing.
+   */
+  force?: boolean;
+}
+
+/** Bind a place to a shop the catalog already holds (plan 0152, section 3). */
+export interface LinkDiscoveredPlaceRequest extends AdminCredential {
+  placeId: string;
+  /** A shop of the place's own chain. */
+  supermarketLocationId: string;
+}
+
+/**
+ * One catalog shop a discovered place may be, as the 409
+ * `place_matches_location` lists it under `details.candidates` (plan 0152,
+ * section 2).
+ */
+export interface PlaceLocationCandidate {
+  supermarketLocationId: string;
+  label: LocalizedText | null;
+  address: string | null;
+  postalCode: string | null;
+  rung: PlaceMatchRung;
 }
 
 export interface DiscoveredPlaceIdRequest extends AdminCredential {

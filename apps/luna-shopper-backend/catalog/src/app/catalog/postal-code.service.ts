@@ -144,6 +144,12 @@ export class PostalCodeService {
   /**
    * Which postal code is this point in. Null beyond `maxDistanceMetres`,
    * rather than a confident wrong code.
+   *
+   * **Null as well when the best distance is shared** (plan 0152, section 4).
+   * The dataset estimates 14 of the 18 Córdoba codes at one point, so a tie
+   * broken on the code answered 14001 for every shop in the city. Nothing about
+   * the point says which of the tied codes it is in, and an honest gap lets a
+   * person fill it.
    */
   async nearest(
     req: ResolveNearestPostalCodeRequest
@@ -151,8 +157,11 @@ export class PostalCodeService {
     const country = normalizeCountry(req.country);
     const centre: LatLon = { lat: req.latitude, lon: req.longitude };
     const candidates = await this.inBox(country, centre, req.maxDistanceMetres);
-    const ranked = rank(candidates, centre, req.maxDistanceMetres);
-    return { country, nearest: ranked[0] ?? null };
+    const [best, next] = rank(candidates, centre, req.maxDistanceMetres);
+    if (!best || (next && next.distanceMetres === best.distanceMetres)) {
+      return { country, nearest: null };
+    }
+    return { country, nearest: best };
   }
 
   /**

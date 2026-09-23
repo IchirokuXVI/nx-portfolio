@@ -68,6 +68,7 @@ import {
   HarvestRunPresetListQueryDto,
   ImportDiscoveredPlaceDto,
   ImportHarvestDocumentDto,
+  LinkDiscoveredPlaceDto,
   MapSourceLocationDto,
   PostalCodeDiscoveryListQueryDto,
   SetSourceEnabledDto,
@@ -379,6 +380,16 @@ export class AdminHarvestPlacesController {
     );
   }
 
+  /**
+   * Create a shop from the place (plan 0152). The scope is the one named, or
+   * the chain's scope the run declared for the place; a declared key the chain
+   * does not hold answers 409 `scope_not_found` with `details.scopeKey`.
+   *
+   * A shop the catalog may already hold answers 409 `place_matches_location`
+   * with `details.candidates`, each naming the rung that found it, and writes
+   * nothing. Link one of them, or send `force` to create a new shop anyway. An
+   * imported place answers 409 `place_already_imported`.
+   */
   @Post(':id/import')
   @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.import, {
     status: HttpStatus.CREATED,
@@ -395,10 +406,38 @@ export class AdminHarvestPlacesController {
     );
   }
 
+  /**
+   * Bind the place to a shop of its chain that the catalog already holds (plan
+   * 0152, section 3). It fills only the fields the shop lacks: coordinates, the
+   * provider's ref and a postal code. It never creates a shop. An imported
+   * place answers 409 `place_already_imported`.
+   */
+  @Post(':id/link')
+  @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.link, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true, notFound: true })
+  linkPlace(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Param('id') id: string,
+    @Body() dto: LinkDiscoveredPlaceDto
+  ): Promise<DiscoveredPlaceView> {
+    return this.nats.send<DiscoveredPlaceView>(DISCOVERED_PLACE_PATTERNS.link, {
+      ...adminCredential(admin),
+      placeId: id,
+      supermarketLocationId: dto.supermarketLocationId,
+    });
+  }
+
+  /**
+   * An imported place answers 409 `place_already_imported`: removing its shop
+   * is a catalog act on the location (plan 0152, section 5).
+   */
   @Post(':id/reject')
   @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.reject, {
     status: HttpStatus.CREATED,
   })
+  @ApiProblemResponses({ conflict: true })
   reject(
     @ActingAdmin() admin: CurrentAdmin,
     @Param('id') id: string

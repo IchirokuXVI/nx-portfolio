@@ -20,6 +20,11 @@ const FIXTURE: PostalCodePoint[] = [
   { country: 'pt', postalCode: '14013', ...CORDOBA_CENTRE },
 ];
 
+/** The fixture with 14010 alone at the shared point, so nothing ties. */
+const ONE_CODE_AT_THE_POINT = FIXTURE.filter(
+  (r) => r.country !== 'es' || !['14012', '14013'].includes(r.postalCode)
+);
+
 /**
  * A repository answering from the array, applying the `Between` bounds the
  * service asks for. `Between` is a TypeORM value object, so the double reads
@@ -70,7 +75,7 @@ function build(rows: PostalCodePoint[] = FIXTURE) {
 describe('PostalCodeService', () => {
   describe('nearest', () => {
     it('answers the closest centroid and how far it is', async () => {
-      const { service } = build();
+      const { service } = build(ONE_CODE_AT_THE_POINT);
 
       // 300 m north east of the shared Córdoba point.
       const view = await service.nearest({
@@ -83,8 +88,23 @@ describe('PostalCodeService', () => {
       expect(view.country).toBe('es');
       expect(view.nearest?.distanceMetres).toBeGreaterThan(250);
       expect(view.nearest?.distanceMetres).toBeLessThan(400);
-      // Three codes share the point; the tie breaks on the code, stably.
       expect(view.nearest?.postalCode).toBe('14010');
+    });
+
+    it('is null when several codes share the best distance (plan 0152)', async () => {
+      // 14010, 14012 and 14013 share one point. Breaking the tie on the code
+      // answered the lowest code for every shop near it, which is a confident
+      // wrong code for all but one of them.
+      const { service } = build();
+
+      const view = await service.nearest({
+        country: 'es',
+        latitude: 37.8936,
+        longitude: -4.77,
+        maxDistanceMetres: 2_000,
+      });
+
+      expect(view).toEqual({ country: 'es', nearest: null });
     });
 
     it('is null beyond maxDistanceMetres rather than a confident wrong code', async () => {
@@ -103,7 +123,7 @@ describe('PostalCodeService', () => {
     });
 
     it('drops a corner of the box the exact distance rejects', async () => {
-      const { service, find } = build();
+      const { service, find } = build(ONE_CODE_AT_THE_POINT);
 
       // 14014 is 2.4 km from the Córdoba point, almost due north. From a spot
       // 2 km south west of 14014, the box for 2.2 km reaches it in each axis

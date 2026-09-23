@@ -35,6 +35,7 @@ import {
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
+  type UpdateSupermarketLocationRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   buildNatsHeaders,
@@ -267,6 +268,23 @@ export class CatalogClient {
     });
   }
 
+  /**
+   * Every shop of a chain, a page at a time. What an import matches a place
+   * against before it creates a shop (plan 0152, section 2).
+   */
+  async listAllSupermarketLocations(
+    supermarketId: string
+  ): Promise<SupermarketLocationView[]> {
+    const held: SupermarketLocationView[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.listSupermarketLocations(supermarketId, cursor);
+      held.push(...page.items);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return held;
+  }
+
   // --- Writes --------------------------------------------------------------
 
   createSupermarket(
@@ -305,6 +323,19 @@ export class CatalogClient {
     input: Omit<CreateSupermarketLocationRequest, 'userId'>
   ): Promise<SupermarketLocationView> {
     return this.send(SUPERMARKET_LOCATION_PATTERNS.create, {
+      userId: this.actor(),
+      ...input,
+    });
+  }
+
+  /**
+   * Fill fields a shop lacks, when a place is linked to it (plan 0152,
+   * section 3). The caller sends only the fields it means to write.
+   */
+  updateLocation(
+    input: Omit<UpdateSupermarketLocationRequest, 'userId'>
+  ): Promise<SupermarketLocationView> {
+    return this.send(SUPERMARKET_LOCATION_PATTERNS.update, {
       userId: this.actor(),
       ...input,
     });

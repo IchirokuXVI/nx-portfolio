@@ -381,6 +381,7 @@ export type HarvestRunPresetInputDto = {
 export type ImportDiscoveredPlaceDto = {
   supermarketId?: string;
   priceScopeId?: string;
+  force?: boolean;
 };
 
 /**
@@ -410,6 +411,13 @@ export type JoinBasketDto = {
 export type JoinZoneDto = {
   joinCode: string;
   username?: string;
+};
+
+/**
+ * `LinkDiscoveredPlaceDto` in the gateway's OpenAPI document.
+ */
+export type LinkDiscoveredPlaceDto = {
+  supermarketLocationId: string;
 };
 
 /**
@@ -503,6 +511,9 @@ export type ProblemDetails = {
     | 'brand_link_owns_no_chain'
     | 'brand_link_keeps_key'
     | 'brand_not_linked'
+    | 'place_already_imported'
+    | 'place_matches_location'
+    | 'scope_not_found'
     | 'internal';
   detail?: string;
   message: string;
@@ -3114,6 +3125,7 @@ export type HarvestDiscoveredPlaceView = {
   tags: {
     [key: string]: string;
   };
+  scopeKey: string | null;
   status: EnumsDiscoveredPlaceStatus;
   supermarketLocationId: string | null;
   firstSeenAt: string;
