@@ -1,5 +1,5 @@
-import { Component, type Provider } from '@angular/core';
-import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { Component, signal, type Provider } from '@angular/core';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import { type AppBrand } from '@portfolio/velista/models';
@@ -13,7 +13,11 @@ import {
   RENDERS_WHILE_CONNECTING,
   StorageKeys,
   ThemeStore,
+  TourStore,
+  type TourCardView,
 } from '@portfolio/velista/platform';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { AppLayout } from './app-layout';
 
 /** A page below the layout, so a route can actually activate under it. */
@@ -336,6 +340,152 @@ describe('AppLayout', () => {
    * rule somebody has to remember: those screens replace the outlet, so no page is
    * drawn at all and there is nothing for a bar to sit under.
    */
+  describe('the tour (velista 0099)', () => {
+    function tourDouble(card: Partial<TourCardView> | null = {}) {
+      return {
+        running: signal(true),
+        card: signal<TourCardView | null>(
+          card === null
+            ? null
+            : {
+                stopId: 'nav',
+                titleKey: 'tour.nav.title',
+                bodyKey: 'tour.nav.body',
+                n: 1,
+                total: 4,
+                last: false,
+                placement: 'above',
+                element: document.createElement('div'),
+                ...card,
+              }
+        ),
+        next: jest.fn(),
+        skip: jest.fn(),
+      };
+    }
+
+    const SHEET_ROUTES: Routes = [
+      {
+        path: 'home',
+        component: TestPage,
+        children: [{ path: 'sheet/zones/new', component: TestPage }],
+      },
+    ];
+
+    async function withTour(
+      tour: ReturnType<typeof tourDouble>,
+      routes: Routes = SHEET_ROUTES
+    ): Promise<ComponentFixture<AppLayout>> {
+      const fixture = await createFixture({}, routes, [
+        { provide: TourStore, useValue: tour },
+      ]);
+      TestBed.inject(NavChrome).setUsable(true);
+      TestBed.inject(BackendReadiness).reportReady();
+      await TestBed.inject(Router).navigateByUrl('/home');
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    function mainOf(fixture: ComponentFixture<AppLayout>): HTMLElement {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        'main'
+      ) as HTMLElement;
+    }
+
+    function cardOf(fixture: ComponentFixture<AppLayout>): Element | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-tour-card'
+      );
+    }
+
+    it('draws the card over the app, and nothing behind it responds', async () => {
+      const fixture = await withTour(tourDouble());
+
+      expect(cardOf(fixture)).not.toBeNull();
+      expect(mainOf(fixture).hasAttribute('inert')).toBe(true);
+    });
+
+    it('keeps the app dimmed and inert between two stops, with no card', async () => {
+      const fixture = await withTour(tourDouble(null));
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-tour-spotlight'
+        )
+      ).not.toBeNull();
+      expect(cardOf(fixture)).toBeNull();
+      expect(mainOf(fixture).hasAttribute('inert')).toBe(true);
+    });
+
+    it('draws no card while a sheet is open', async () => {
+      const fixture = await withTour(tourDouble());
+
+      await TestBed.inject(Router).navigateByUrl('/home/sheet/zones/new');
+      fixture.detectChanges();
+
+      expect(cardOf(fixture)).toBeNull();
+      expect(mainOf(fixture).hasAttribute('inert')).toBe(false);
+    });
+
+    it('draws nothing and leaves the app alone when no run is going', async () => {
+      const tour = tourDouble();
+      tour.running.set(false);
+      const fixture = await withTour(tour);
+
+      expect(cardOf(fixture)).toBeNull();
+      expect(mainOf(fixture).hasAttribute('inert')).toBe(false);
+    });
+
+    it('puts the card above the bar', async () => {
+      const fixture = await withTour(tourDouble());
+      const host = fixture.nativeElement as HTMLElement;
+      const nav = host.querySelector('lib-app-nav') as Element;
+      const spotlight = host.querySelector('lib-tour-spotlight') as Element;
+
+      // After it in the DOM, and over it in the stacking order.
+      expect(
+        nav.compareDocumentPosition(spotlight) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+
+      const styles = resolve(__dirname, '..');
+      const semantic = readFileSync(
+        resolve(styles, 'styles/_semantic.scss'),
+        'utf8'
+      );
+      const layer = (name: string): number =>
+        Number(new RegExp(`--app-${name}-z:\\s*(\\d+)`).exec(semantic)?.[1]);
+      expect(layer('tour')).toBeGreaterThan(layer('nav'));
+      expect(
+        readFileSync(resolve(styles, 'tour/tour-spotlight.scss'), 'utf8')
+      ).toContain('z-index: var(--app-tour-z)');
+    });
+
+    it('declares the bar as the first stop’s anchor', async () => {
+      const fixture = await withTour(tourDouble());
+
+      expect(
+        (fixture.nativeElement as HTMLElement)
+          .querySelector('lib-app-nav')
+          ?.getAttribute('libtouranchor')
+      ).toBe('nav');
+    });
+
+    it('hands Next and Skip to the store', async () => {
+      const tour = tourDouble();
+      const fixture = await withTour(tour);
+      const buttons = Array.from(
+        cardOf(fixture)?.querySelectorAll('button') ?? []
+      );
+
+      buttons[1]?.dispatchEvent(new Event('click'));
+      buttons[0]?.dispatchEvent(new Event('click'));
+
+      expect(tour.next).toHaveBeenCalledTimes(1);
+      expect(tour.skip).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('the bottom bar', () => {
     it('is absent while the startup gate holds the outlet', async () => {
       const fixture = await createFixture();

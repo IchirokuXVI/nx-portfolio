@@ -102,9 +102,16 @@ export class NavChrome {
     () => this._usable() && !this._chromeless()
   );
 
+  /**
+   * Whether the URL addresses a sheet, whatever the bar is doing.
+   *
+   * The tour reads it: no card is drawn while a sheet is open (velista `0099`).
+   */
+  readonly sheetOpen: Signal<boolean> = computed(() => holdsSheet(this._url()));
+
   /** Whether `AppLayout` draws the bar. */
   readonly visible: Signal<boolean> = computed(
-    () => this.reserved() && !holdsSheet(this._url())
+    () => this.reserved() && !this.sheetOpen()
   );
 
   constructor() {

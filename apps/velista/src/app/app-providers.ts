@@ -6,7 +6,9 @@ import {
 import {
   effect,
   inject,
+  Injector,
   provideEnvironmentInitializer,
+  untracked,
   type EnvironmentProviders,
   type Provider,
 } from '@angular/core';
@@ -39,6 +41,7 @@ import {
   ListApi,
   MEMBERSHIP_SERVICE,
   MembershipApi,
+  ProfileStore,
   PURCHASE_SERVICE,
   PurchaseApi,
   REALTIME_CLIENT,
@@ -55,6 +58,7 @@ import {
   VELISTA_DATA_ACCESS_PROVIDERS,
   ZONE_SERVICE,
   ZoneApi,
+  ZoneStore,
 } from '@portfolio/velista/data-access';
 import {
   APP_API_CONFIG,
@@ -69,6 +73,8 @@ import {
   AppUpdates,
   InstallStore,
   NavChrome,
+  TourStore,
+  tourHoldingsOf,
   VELISTA_PLATFORM_PROVIDERS,
 } from '@portfolio/velista/platform';
 import { environment } from '../environments/environment';
@@ -355,5 +361,41 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
     const chrome = inject(NavChrome);
 
     effect(() => chrome.setUsable(session.isAuthenticated()));
+  }),
+
+  // Tell the tour what it needs from `data-access`, and send its one write (velista
+  // `0099`, sections 3 and 6). Here for `NavChrome`'s reason: `TourStore` lives in
+  // `platform`, which may not import the stores or reach the API.
+  //
+  // - **What the account holds**, only while a run is going. `ZoneStore` is taken from
+  //   the injector then, rather than injected here, because constructing it at startup
+  //   would open its realtime subscription on the landing page for nobody. The run
+  //   starts on home, which loads the zones; until they arrive the store waits.
+  // - **Whether it was seen**, from `appState.tourSeenAt`.
+  // - **The write**, once per ended run, fire and forget. `ProfileStore` sends at most
+  //   one per document and nothing for an account already stamped.
+  provideEnvironmentInitializer(() => {
+    const injector = inject(Injector);
+    const profile = inject(ProfileStore);
+    const tour = inject(TourStore);
+
+    effect(() => {
+      if (!tour.running()) {
+        return;
+      }
+
+      const zones = untracked(() => injector.get(ZoneStore));
+      tour.setHoldings(
+        zones.state() === 'loaded' ? tourHoldingsOf(zones.myZones()) : null
+      );
+    });
+
+    effect(() => tour.setSeen((profile.appState()?.tourSeenAt ?? null) !== null));
+
+    effect(() => {
+      if (tour.ended() > 0) {
+        untracked(() => profile.markTourSeen());
+      }
+    });
   }),
 ];

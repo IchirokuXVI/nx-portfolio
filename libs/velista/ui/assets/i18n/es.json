@@ -799,6 +799,9 @@
     },
     "row": {
       "profiles": "Perfiles de compra"
+    },
+    "tour": {
+      "again": "Enséñamela otra vez"
     }
   },
   "install": {
@@ -1609,6 +1612,36 @@
       "tourBody": "Te enseñamos la app pantalla a pantalla para que no te cueste encontrar nada. Es corta y puedes pararla cuando quieras.",
       "tourStart": "Enséñamela",
       "tourNo": "No, gracias"
+    }
+  },
+  "tour": {
+    "progress": "{{n}} de {{total}}",
+    "skip": "Saltar la visita",
+    "next": "Siguiente",
+    "finish": "Terminar",
+    "nav": {
+      "title": "Con estos tres llegas a todo",
+      "body": "Inicio es donde estás ahora. Catálogo son todos los productos de las tiendas que tienes cerca. Lista de la compra es lo que te llevas al supermercado."
+    },
+    "groups": {
+      "title": "Un grupo es con quién compras",
+      "body": "Tu casa, tu familia, el piso que compartes. Todos ven las mismas listas a la vez."
+    },
+    "lists": {
+      "title": "Dentro de un grupo hay listas",
+      "body": "Una lista es lo que le falta a un grupo. Cualquiera del grupo puede añadir, desde donde esté."
+    },
+    "basket": {
+      "title": "Una lista para toda la compra",
+      "body": "Velista junta en una lista todo lo que necesitan tus grupos y te dice dónde sale más barato cada cosa. Vas marcando lo que metes en el carro."
+    },
+    "assistant": {
+      "title": "Pregunta en vez de buscar",
+      "body": "Dile a Velista lo que necesitas con tus palabras, como se lo dirías a una persona. Lo apunta en la lista que toca."
+    },
+    "voice": {
+      "title": "Dilo en vez de escribirlo",
+      "body": "Mantén pulsado el micrófono y di lo que falta. Es lo más rápido cuando tienes las manos ocupadas."
     }
   }
 }

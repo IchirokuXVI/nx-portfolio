@@ -82,6 +82,14 @@
   }
 }
 
+.accent {
+  font-weight: 600;
+
+  .value {
+    color: var(--app-action-quiet-fg);
+  }
+}
+
 .chevron {
   flex: none;
   font-size: var(--app-icon-sm);

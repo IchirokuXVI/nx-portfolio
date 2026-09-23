@@ -1,6 +1,7 @@
 import type { Provider } from '@angular/core';
 import { InstallStore } from './install-store';
 import { ThemeStore } from './theme-store';
+import { TourStore } from './tour/tour-store';
 
 /**
  * The `platform` services the app layer has to install, because they cannot install
@@ -22,5 +23,12 @@ import { ThemeStore } from './theme-store';
  * created by the install page has already missed it everywhere else (plan 0033 D1).
  * Being on this list makes it *available*; `app-providers.ts` also constructs it, which
  * is what makes it *listening*.
+ *
+ * `TourStore` is here because it builds URLs from the locale and the mount, which the
+ * app provides (velista `0099`).
  */
-export const VELISTA_PLATFORM_PROVIDERS: Provider[] = [ThemeStore, InstallStore];
+export const VELISTA_PLATFORM_PROVIDERS: Provider[] = [
+  ThemeStore,
+  InstallStore,
+  TourStore,
+];

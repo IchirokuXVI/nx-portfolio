@@ -34,6 +34,7 @@ import {
   InstallStore,
   PageNavigation,
   sheetSegments,
+  TourStore,
 } from '@portfolio/velista/platform';
 import {
   AccountRow,
@@ -125,6 +126,7 @@ export class AccountPage {
   private readonly _install = inject(InstallStore);
   private readonly _browser = inject(BrowserFacade);
   private readonly _brand = inject(APP_BRAND);
+  private readonly _tour = inject(TourStore);
   private readonly _standaloneOrigin = inject(APP_STANDALONE_ORIGIN);
 
   /**
@@ -348,6 +350,14 @@ export class AccountPage {
     void this._router.navigate(['..', 'auth', 'upgrade'], {
       relativeTo: this._route,
     });
+  }
+
+  /**
+   * Show me around again (velista `0099`, section 7). The tour goes home itself and
+   * plays every stop the account can show today. It does not clear `tourSeenAt`.
+   */
+  showAround(): void {
+    void this._tour.start();
   }
 
   /**

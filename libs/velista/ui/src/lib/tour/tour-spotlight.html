@@ -1,0 +1,28 @@
+<!--
+  The layer that takes every press, dimmed all over while there is nothing to light.
+  With a ring, the ring's own shadow is the dimming, and this layer stays clear so the
+  control shows through it.
+-->
+<div [class.dimmed]="ring() === null" class="blocker"></div>
+
+@if (ring(); as box) {
+  <div
+    [style.height.px]="box.height"
+    [style.left.px]="box.left"
+    [style.top.px]="box.top"
+    [style.width.px]="box.width"
+    aria-hidden="true"
+    class="ring"
+  ></div>
+}
+
+@if (slot(); as place) {
+  <div
+    [style.bottom.px]="place.bottom"
+    [style.top.px]="place.top"
+    #cardSlot
+    class="slot"
+  >
+    <ng-content />
+  </div>
+}

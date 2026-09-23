@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ZoneCardVm } from '@portfolio/velista/models';
+import { TourAnchor, type TourAnchorId } from '@portfolio/velista/platform';
 import { ChevronRightIcon, ListLinesIcon, MemberAddIcon } from '../icons/icons';
 import { PresenceRow } from '../presence/presence-row';
 
@@ -37,6 +38,7 @@ import { PresenceRow } from '../presence/presence-row';
     ListLinesIcon,
     MemberAddIcon,
     PresenceRow,
+    TourAnchor,
   ],
   templateUrl: './zone-card.html',
   styleUrl: './zone-card.scss',
@@ -44,6 +46,14 @@ import { PresenceRow } from '../presence/presence-row';
 })
 export class ZoneCard {
   readonly zone = input.required<ZoneCardVm>();
+
+  /**
+   * The tour anchor for this card's list rows, or null (velista `0099`, section 2).
+   *
+   * An input rather than written on the rows, because every card has rows and only one
+   * may declare them: the page names the first card with lists and no other.
+   */
+  readonly listsAnchor = input<TourAnchorId | null>(null);
 
   readonly open = output<string>();
 
