@@ -1,5 +1,11 @@
 # 0101: the product suggestion card
 
+> **Status, 2026-09-23: build this plan without the assistant.** All development on the
+> assistant is on hold, and backend `0147` and `0148` say so. The card continues. The
+> assistant's sheet (the `Assistant` artboard, rule 7 in section 3 and its acceptance
+> criterion) is out of scope until the assistant resumes. Do not build it, and do not
+> build a placeholder for it.
+
 > Mock: `mocks/typeahead/`, published at https://claude.ai/artifact/GASRtmT5Y74jM7fywGeMK3.
 > Reverses `0063` section 6.5, which refused to draw a chain on a typeahead row.
 > Needs one server change before any of it can be built. Section 2 says which.
@@ -45,8 +51,9 @@ the zone list page and the composer on the basket page, and nowhere else.
   `ItemView`, which already carries `imageUrl` and an `offers` array beside `bestOffer`.
   velista's `CatalogItem` maps neither. Section 2 has the detail.
 - The typeahead also receives suggestions it did not search for. The assistant produces
-  them from one spoken sentence, and this plan gives them their own sheet rather than
-  the panel.
+  them from one spoken sentence, and the canvas gives them their own sheet rather than
+  the panel. **The assistant is on hold, so this build draws no such sheet.** The panel
+  shows only what the composer searched for.
 - `lib-quantity-stepper` in the same directory is the app's stepper: a pill, two 44px
   targets, a tabular number, disabled at each end rather than clamping,
   `LINE_QUANTITY_MIN` 0 and `LINE_QUANTITY_MAX` 100000 from `@portfolio/velista/models`.
@@ -56,8 +63,7 @@ the zone list page and the composer on the basket page, and nowhere else.
 The composer on both screens offers cards. Three fit on a 390 by 844 phone with the
 keyboard open. Pressing the button on a card adds a line, pressing anything else on the
 card does not, and nothing in the panel closes the keyboard. A group offers its products
-behind a reveal and explains itself through a popover. The assistant's rows are reviewed
-in a sheet and reach no list until one button is pressed.
+behind a reveal and explains itself through a popover.
 
 ### Scope
 
@@ -105,9 +111,11 @@ only thing on the card that adds it.
 
 Around that: the chain row that expands into every shop's price (`Expanded`), the group
 that reveals its products (`Group`) and explains itself (`GroupInfo`), the section naming
-the lines that already hold the product, the Day theme (`Day`), the sheet the assistant
-reviews its rows in (`Assistant`), the loading, priceless and stale states (`Edge`), and
-the arithmetic that fixes every height (`Budget`).
+the lines that already hold the product, the Day theme (`Day`), the loading, priceless and
+stale states (`Edge`), and the arithmetic that fixes every height (`Budget`).
+
+The `Assistant` artboard draws the sheet the assistant reviews its rows in. It is not
+built, because the assistant is on hold.
 
 ## 2. What the app cannot draw yet
 
@@ -168,7 +176,7 @@ Stated here so they are not re-argued. The notes on the canvas carry the reasoni
 6. **The cheapest chain is the only one named** on the collapsed row.
 7. **The assistant does not fill the typeahead.** Its rows are reviewed in a sheet, they
    include rows the catalog matched nothing to, and nothing exists until one button is
-   pressed.
+   pressed. The rule stands for when the assistant resumes. This build draws no sheet.
 8. **`role="option"` cannot hold three buttons.** The pattern that fits is the ARIA
    combobox with a grid popup, and that is a change to the existing markup rather than an
    addition to it.
@@ -185,6 +193,8 @@ increase a line instead of adding the product again. The `Edge` artboard draws b
 
 ## 5. Not in this plan
 
+- The sheet the assistant reviews its rows in (`Assistant`), and anything else that
+  belongs to the assistant. All development on the assistant is on hold.
 - A product detail page. The card links to one. This plan does not build it.
 - Steering anybody toward a shop, or saying a second trip is worth it. Backend backlog
   `0004`, and `0063` section 6.5's second reason still stands: naming the cheapest chain
@@ -209,8 +219,6 @@ increase a line instead of adding the product again. The `Edge` artboard draws b
 - [ ] A group is collapsed like any other card, reveals at most five products with a
       count of the rest, and its badge opens the popover.
 - [ ] The popover is positioned against the badge and is not clipped by the panel.
-- [ ] The assistant's rows appear in a sheet with a way to remove each one, include rows
-      with no product, and reach no list until the sheet is accepted.
 - [ ] The section naming lines already holding the product shows the line's own words,
       and on the basket the list above it.
 - [ ] `npx nx lint velista && npx nx test velista` pass.
