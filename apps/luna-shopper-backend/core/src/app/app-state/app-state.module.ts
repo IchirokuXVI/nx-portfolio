@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AppStateController } from './app-state.controller';
+import { NewAccountController } from './new-account.controller';
 import { UserAppStateService } from './user-app-state.service';
 
 /**
@@ -16,7 +17,9 @@ import { UserAppStateService } from './user-app-state.service';
  * callers at once.
  */
 @Module({
-  controllers: [AppStateController],
+  // NewAccountController marks the tour seen on a new account, when the
+  // NEW_ACCOUNTS_SKIP_TOUR development switch is on.
+  controllers: [AppStateController, NewAccountController],
   providers: [UserAppStateService],
 })
 export class AppStateModule {}
