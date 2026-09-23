@@ -2,6 +2,7 @@ import {
   computed,
   inject,
   Injectable,
+  Injector,
   signal,
   type Signal,
 } from '@angular/core';
@@ -82,7 +83,15 @@ interface Run {
 export class TourStore {
   private readonly _router = inject(Router);
   private readonly _locale = inject(RokuLocaleStore).locale;
-  private readonly _basePath = inject(APP_BASE_PATH);
+  /**
+   * Where the mount is read from, at the moment of navigating and not before.
+   *
+   * `appProviders` is attached twice in the standalone build, once on the route that
+   * binds `APP_BASE_PATH` and once on the root, which does not. The app layer's
+   * initializer builds this store in both, and a mount injected up front throws
+   * `NG0201` at bootstrap in the root one. That copy never navigates, so it never asks.
+   */
+  private readonly _injector = inject(Injector);
   private readonly _anchors = inject(TourAnchors);
 
   private readonly _holdings = signal<TourHoldings | null>(null);
@@ -306,7 +315,7 @@ export class TourStore {
    */
   private async _go(segments: readonly string[]): Promise<void> {
     await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, ...segments),
+      appPath(this._locale(), this._injector.get(APP_BASE_PATH), ...segments),
       { replaceUrl: true }
     );
   }
