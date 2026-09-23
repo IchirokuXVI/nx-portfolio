@@ -17,7 +17,12 @@
 }
 
 @if (slot(); as place) {
-  <div [style.bottom.px]="place.bottom" [style.top.px]="place.top" class="slot">
+  <div
+    [style.bottom.px]="place.bottom"
+    [style.top.px]="place.top"
+    #cardSlot
+    class="slot"
+  >
     <ng-content />
   </div>
 }

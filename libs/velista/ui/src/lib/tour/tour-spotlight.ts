@@ -5,6 +5,8 @@ import {
   computed,
   input,
   signal,
+  viewChild,
+  type ElementRef,
 } from '@angular/core';
 
 /** Where the card sits beside the lit control. */
@@ -23,6 +25,54 @@ const RING_GAP = 4;
 
 /** How far the card stands off the ring. `--app-space-3`. */
 const CARD_GAP = 8;
+
+/** How close the card may come to the top or bottom edge of the screen. `--app-space-3`. */
+const SCREEN_EDGE = 8;
+
+/** Where the card goes: its top edge, or its bottom edge, from the screen's. */
+export type TourSlot =
+  | { readonly top: number; readonly bottom: null }
+  | { readonly top: null; readonly bottom: number };
+
+/**
+ * Where a card of `cardHeight` goes beside `ring` on a screen `viewport` tall.
+ *
+ * The preferred side first. **Then the other side**, because a card cut off at the
+ * screen's edge hides its own buttons: the groups section on a new account is most of
+ * the screen tall, and a card placed below it ended under the bottom edge. With room
+ * on neither side the card is kept on screen over part of the control, which still
+ * shows round it. A height of zero (not measured yet) fits anywhere.
+ */
+export function placeCard(
+  ring: Box,
+  preferred: TourSpotlightPlacement,
+  cardHeight: number,
+  viewport: number
+): TourSlot {
+  const below = ring.top + ring.height + CARD_GAP;
+  const fitsBelow = below + cardHeight <= viewport - SCREEN_EDGE;
+  const fitsAbove = ring.top - CARD_GAP - cardHeight >= SCREEN_EDGE;
+  const asBelow: TourSlot = { top: below, bottom: null };
+  const asAbove: TourSlot = {
+    top: null,
+    bottom: viewport - ring.top + CARD_GAP,
+  };
+
+  if (preferred === 'below' && fitsBelow) {
+    return asBelow;
+  }
+  if (preferred === 'above' && fitsAbove) {
+    return asAbove;
+  }
+  if (fitsBelow) {
+    return asBelow;
+  }
+  if (fitsAbove) {
+    return asAbove;
+  }
+
+  return { top: null, bottom: SCREEN_EDGE };
+}
 
 /**
  * The dimming, the ring round the lit control, and the place the card goes (velista
@@ -62,6 +112,11 @@ export class TourSpotlight {
   /** Above when the control is at the bottom, below when it is at the top. */
   readonly placement = input<TourSpotlightPlacement>('below');
 
+  private readonly _slot = viewChild<ElementRef<HTMLElement>>('cardSlot');
+
+  /** How tall the card is, measured after it is drawn. Zero until then. */
+  private readonly _cardHeight = signal(0);
+
   /** Bumped when the control may have moved, which re-reads it. */
   private readonly _tick = signal(0);
 
@@ -96,16 +151,12 @@ export class TourSpotlight {
         };
   });
 
-  /** Where the card goes: its top edge below the ring, or its bottom edge above it. */
-  protected readonly slot = computed(() => {
+  /** Where the card goes. See {@link placeCard}. */
+  protected readonly slot = computed<TourSlot | null>(() => {
     const ring = this.ring();
-    if (ring === null) {
-      return null;
-    }
-
-    return this.placement() === 'below'
-      ? { top: ring.top + ring.height + CARD_GAP, bottom: null }
-      : { top: null, bottom: this._viewport() - ring.top + CARD_GAP };
+    return ring === null
+      ? null
+      : placeCard(ring, this.placement(), this._cardHeight(), this._viewport());
   });
 
   constructor() {
@@ -117,6 +168,13 @@ export class TourSpotlight {
 
   /** Read the control again if it is no longer where the ring says. */
   protected measure(): void {
+    const height = Math.round(
+      this._slot()?.nativeElement.getBoundingClientRect().height ?? 0
+    );
+    if (height !== this._cardHeight()) {
+      this._cardHeight.set(height);
+    }
+
     const target = this.target();
     const drawn = this._box();
     if (target === null || drawn === null) {
