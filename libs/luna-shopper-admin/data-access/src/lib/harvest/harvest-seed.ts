@@ -732,6 +732,7 @@ export const SOURCE_LOCATION_SEED: readonly Wire.HarvestSourceLocationView[] = [
     lastSeenAt: NOW,
     firstRunId: 'run-store-aborted',
     lastRunId: 'run-catalog-running',
+    candidates: [],
   },
   {
     id: 'shop-t2',
@@ -745,6 +746,7 @@ export const SOURCE_LOCATION_SEED: readonly Wire.HarvestSourceLocationView[] = [
     lastSeenAt: NOW,
     firstRunId: 'run-store-aborted',
     lastRunId: 'run-catalog-running',
+    candidates: [],
   },
   {
     // The exact name match, which is the only automatic one there is. It bound
@@ -760,6 +762,7 @@ export const SOURCE_LOCATION_SEED: readonly Wire.HarvestSourceLocationView[] = [
     lastSeenAt: NOW,
     firstRunId: 'run-store-aborted',
     lastRunId: 'run-catalog-running',
+    candidates: [],
   },
   {
     // Bound by a person, which is the same green badge and a different
@@ -775,6 +778,7 @@ export const SOURCE_LOCATION_SEED: readonly Wire.HarvestSourceLocationView[] = [
     lastSeenAt: NOW,
     firstRunId: 'run-store-aborted',
     lastRunId: 'run-catalog-running',
+    candidates: [],
   },
   {
     // A place the source lists that we do not sell from. Marking it is a
@@ -790,6 +794,7 @@ export const SOURCE_LOCATION_SEED: readonly Wire.HarvestSourceLocationView[] = [
     lastSeenAt: '2026-08-30T08:00:00.000Z',
     firstRunId: 'run-store-aborted',
     lastRunId: 'run-store-aborted',
+    candidates: [],
   },
   {
     // Another chain entirely, so a spec asserting the queue is chain scoped has
@@ -805,6 +810,7 @@ export const SOURCE_LOCATION_SEED: readonly Wire.HarvestSourceLocationView[] = [
     lastSeenAt: NOW,
     firstRunId: null,
     lastRunId: null,
+    candidates: [],
   },
 ];
 

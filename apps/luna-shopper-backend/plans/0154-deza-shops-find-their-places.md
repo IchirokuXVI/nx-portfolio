@@ -1,3 +1,5 @@
+> **PR:** [#455](https://github.com/IchirokuXVI/nx-portfolio/pull/455)
+
 # 0154: DEZA shops find their places
 
 > Found by `0150` (report finding 12). Prerequisite reading: `0084` section 6, `0085` (the

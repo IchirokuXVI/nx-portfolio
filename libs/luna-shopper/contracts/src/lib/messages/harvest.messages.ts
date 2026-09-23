@@ -822,6 +822,28 @@ export interface SourceLocationView {
   /** The run that created the row, and the run that last saw the shop. */
   firstRunId: string | null;
   lastRunId: string | null;
+  /**
+   * The chain's shops this row may be, best first, at most three (plan 0154).
+   *
+   * Filled on an `UNMAPPED` row only, and empty on every other status. A
+   * candidate is a suggestion: nothing maps a shop but `PUT .../location`.
+   */
+  candidates: SourceLocationCandidate[];
+}
+
+/**
+ * One catalog shop an unmapped source shop may be (plan 0154, section 1).
+ *
+ * `score` is the share of the printed name's tokens that the location's label,
+ * address or postal code holds, and `strong` says it holds every one of them.
+ */
+export interface SourceLocationCandidate {
+  supermarketLocationId: string;
+  label: LocalizedText | null;
+  address: string | null;
+  postalCode: string | null;
+  score: number;
+  strong: boolean;
 }
 
 // --- Run requests ----------------------------------------------------------
