@@ -25,6 +25,7 @@ export * from './lib/limits';
 export * from './lib/line-detail-view';
 export * from './lib/list-view';
 export * from './lib/problem';
+export * from './lib/purchases';
 export * from './lib/requests';
 export * from './lib/shop';
 export * from './lib/shopping-lists-view';

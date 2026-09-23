@@ -39,6 +39,8 @@ import {
   ListApi,
   MEMBERSHIP_SERVICE,
   MembershipApi,
+  PURCHASE_SERVICE,
+  PurchaseApi,
   REALTIME_CLIENT,
   RealtimeSocket,
   SessionStore,
@@ -251,6 +253,9 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // The people the reader shares a group with (velista `0085`), for the picker that
   // shares a basket with them.
   provideService(CONTACT_SERVICE, ContactApi),
+  // What the reader bought, with or without a basket (velista `0095`): the history
+  // page's "Bought" tab.
+  provideService(PURCHASE_SERVICE, PurchaseApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches
