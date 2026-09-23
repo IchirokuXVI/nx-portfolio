@@ -23,6 +23,8 @@ import type { PurchaseEntryRow, PurchaseLineRow } from './purchases.sql';
  */
 export function toPurchaseEntryView(row: PurchaseEntryRow): PurchaseEntryView {
   const cents = row.spentCents === null ? null : Number(row.spentCents);
+  const settledLineCount = Number(row.lineCount);
+  const anyBoughtLineCount = Number(row.boughtLineCount);
   return {
     id: row.id,
     kind: row.kind === TripKind.BASKET ? TripKind.BASKET : TripKind.SESSION,
@@ -30,8 +32,12 @@ export function toPurchaseEntryView(row: PurchaseEntryRow): PurchaseEntryView {
     open: row.open === true,
     startedAt: new Date(row.startedAt).toISOString(),
     endedAt: new Date(row.endedAt).toISOString(),
-    lineCount: Number(row.lineCount),
-    boughtLineCount: Number(row.boughtLineCount),
+    settledLineCount,
+    anyBoughtLineCount,
+    // The old names, for one release (plan 0159). A trip's `lineCount` counts
+    // something else, which is why these were renamed.
+    lineCount: settledLineCount,
+    boughtLineCount: anyBoughtLineCount,
     spent:
       cents === null || row.currency === null || Number(row.currencies) !== 1
         ? null

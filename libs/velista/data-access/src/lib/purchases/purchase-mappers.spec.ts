@@ -11,8 +11,8 @@ const ENTRY = {
   open: false,
   startedAt: '2026-09-20T10:00:00.000Z',
   endedAt: '2026-09-20T11:00:00.000Z',
-  lineCount: 4,
-  boughtLineCount: 3,
+  settledLineCount: 4,
+  anyBoughtLineCount: 3,
   spent: { cents: 1240, currency: 'EUR' },
   unpricedCount: 1,
 };
@@ -34,6 +34,19 @@ const ROW = {
 };
 
 describe('purchase mappers (velista 0095, test 1)', () => {
+  // Backend 0159 renamed the counts. The old names ride beside the new ones
+  // for one release, and this client reads only the new ones.
+  it('reads the purchase count from anyBoughtLineCount and never the old name', () => {
+    expect(
+      toPurchaseEntry({ ...ENTRY, lineCount: 99, boughtLineCount: 99 })
+        ?.purchaseCount
+    ).toBe(3);
+    expect(
+      toPurchaseEntry({ ...ENTRY, anyBoughtLineCount: undefined })
+        ?.purchaseCount
+    ).toBe(0);
+  });
+
   it('maps an entry, its spend and what the spend does not cover', () => {
     expect(toPurchaseEntry(ENTRY)).toEqual({
       id: 's-1',

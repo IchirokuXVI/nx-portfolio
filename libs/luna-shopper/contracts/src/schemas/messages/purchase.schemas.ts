@@ -68,8 +68,19 @@ const entryView = object(
     open: boolean(),
     startedAt: string({ format: 'date-time' }),
     endedAt: string({ format: 'date-time' }),
-    lineCount: integer({ minimum: 0 }),
-    boughtLineCount: integer({ minimum: 0 }),
+    settledLineCount: integer({ minimum: 0 }),
+    anyBoughtLineCount: integer({ minimum: 0 }),
+    // The old names, with the same values, for one release (plan 0159).
+    lineCount: integer({
+      minimum: 0,
+      deprecated: true,
+      description: 'The same value as `settledLineCount`. Read that.',
+    }),
+    boughtLineCount: integer({
+      minimum: 0,
+      deprecated: true,
+      description: 'The same value as `anyBoughtLineCount`. Read that.',
+    }),
     // Null, never zero, when nothing in the entry carries a price, and null
     // again when its priced rows carry two currencies (plan 0143, section 7).
     spent: nullableMoney(),
@@ -82,6 +93,8 @@ const entryView = object(
     'open',
     'startedAt',
     'endedAt',
+    'settledLineCount',
+    'anyBoughtLineCount',
     'lineCount',
     'boughtLineCount',
     'spent',

@@ -69,9 +69,24 @@ export interface PurchaseEntryView {
   startedAt: string;
   /** The newest `settledAt` in the entry. */
   endedAt: string;
-  /** Distinct list lines the entry touched. */
+  /**
+   * Distinct list lines this person settled in the entry, bought or not
+   * available (plan 0159 names it; plan 0142 defines it).
+   */
+  settledLineCount: number;
+  /** Of those, the ones with at least one unit bought, partly bought included. */
+  anyBoughtLineCount: number;
+  /**
+   * The same value as {@link settledLineCount}, for one release.
+   *
+   * @deprecated Read `settledLineCount`. Removed by backlog plan 0015.
+   */
   lineCount: number;
-  /** Of those, the ones with at least one unit bought. */
+  /**
+   * The same value as {@link anyBoughtLineCount}, for one release.
+   *
+   * @deprecated Read `anyBoughtLineCount`. Removed by backlog plan 0015.
+   */
   boughtLineCount: number;
   /**
    * What the entry cost: the sum over its standing `BOUGHT` purchases that

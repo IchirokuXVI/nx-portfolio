@@ -403,7 +403,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
         expect.objectContaining({
           id: purchase,
           kind: TripKind.SESSION,
-          lineCount: 1,
+          settledLineCount: 1,
         }),
       ]);
     });
@@ -489,7 +489,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
           kind: TripKind.BASKET,
           name: 'Saturday',
           open: true,
-          lineCount: 2,
+          settledLineCount: 2,
           startedAt: '2026-02-08T09:00:00.000Z',
           endedAt: '2026-02-08T10:05:00.000Z',
         }),
@@ -547,7 +547,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
       );
 
       expect(mine).toHaveLength(1);
-      expect(mine[0].lineCount).toBe(2);
+      expect(mine[0].settledLineCount).toBe(2);
     });
 
     it('is two sessions seven hours apart', async () => {
@@ -557,7 +557,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
       );
 
       expect(mine).toHaveLength(2);
-      expect(mine.map((entry) => entry.lineCount)).toEqual([1, 1]);
+      expect(mine.map((entry) => entry.settledLineCount)).toEqual([1, 1]);
     });
 
     // A gap of exactly the constant continues the session. Only a longer one
@@ -569,7 +569,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
       );
 
       expect(mine).toHaveLength(1);
-      expect(mine[0].lineCount).toBe(2);
+      expect(mine[0].settledLineCount).toBe(2);
     });
 
     // No calendar day anywhere, so no time zone can move this answer.
@@ -580,7 +580,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
       );
 
       expect(mine).toHaveLength(1);
-      expect(mine[0].lineCount).toBe(2);
+      expect(mine[0].settledLineCount).toBe(2);
     });
   });
 
@@ -618,6 +618,9 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
 
       expect(mine).toHaveLength(1);
       expect(mine[0]).toMatchObject({
+        settledLineCount: 4,
+        anyBoughtLineCount: 3,
+        // The old names, with the same values, for one release (plan 0159).
         lineCount: 4,
         boughtLineCount: 3,
         spent: { cents: 2 * 120 + 250, currency: 'EUR' },
@@ -636,7 +639,7 @@ describeIntegration('one person’s purchases (real Postgres)', () => {
 
       expect(mine[0].spent).toBeNull();
       expect(mine[0].unpricedCount).toBe(1);
-      expect(mine[0].boughtLineCount).toBe(1);
+      expect(mine[0].anyBoughtLineCount).toBe(1);
     });
 
     /**

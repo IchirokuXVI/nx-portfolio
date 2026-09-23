@@ -370,7 +370,7 @@ describeIntegration(
             { userId: users.twin, username: 'Twin everywhere' },
           ],
         });
-        const basket = run.list.id;
+        const basket = run.basket.id;
 
         const friend = await dataSource
           .getRepository(BasketParticipant)
@@ -763,7 +763,7 @@ describeIntegration(
           sources: [{ zoneId: ids.home }],
           memberUserIds: [users.friend],
         });
-        const basket = run.list.id;
+        const basket = run.basket.id;
         jest.clearAllMocks();
 
         await generated.delete({

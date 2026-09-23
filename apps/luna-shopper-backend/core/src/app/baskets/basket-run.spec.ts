@@ -318,9 +318,12 @@ describe('the generation run', () => {
       new Set(['Basket', 'BasketSource'])
     );
     // The result is the basket and nothing else since plan 0133 section 7: the
-    // run refuses no line, so there is nothing left behind to report.
-    expect(Object.keys(result)).toEqual(['list']);
-    expect(result.list).not.toHaveProperty('lines');
+    // run refuses no line, so there is nothing left behind to report. It is
+    // answered under `basket`, and under the old `list` key beside it with the
+    // same value for one release (plan 0159).
+    expect(Object.keys(result)).toEqual(['basket', 'list']);
+    expect(result.basket).not.toHaveProperty('lines');
+    expect(result.list).toBe(result.basket);
   });
 
   it('merges nothing, because there is no row to merge into', async () => {
@@ -396,7 +399,10 @@ describe('the generation run', () => {
     const result = await service.create({ userId: OWNER });
 
     expect(written.lists).toHaveLength(1);
-    expect(result).toEqual({ list: expect.objectContaining({ id: 'gl-1' }) });
+    expect(result).toEqual({
+      basket: expect.objectContaining({ id: 'gl-1' }),
+      list: expect.objectContaining({ id: 'gl-1' }),
+    });
   });
 
   it('draws from every writable list when nothing narrows it', async () => {
@@ -563,7 +569,8 @@ describe('the generation run', () => {
       idempotencyKey: 'tap-1',
     });
 
-    expect(result.list.id).toBe('gl-first');
+    expect(result.basket.id).toBe('gl-first');
+    expect(result.list).toBe(result.basket);
     // Nothing was written a second time, which is the whole point of the key.
     expect(written.lists).toEqual([]);
     expect(written.sources).toEqual([]);
@@ -590,7 +597,8 @@ describe('the generation run', () => {
       idempotencyKey: 'tap-1',
     });
 
-    expect(result.list.id).toBe('gl-winner');
+    expect(result.basket.id).toBe('gl-winner');
+    expect(result.list).toBe(result.basket);
   });
 
   it('covers nothing when no list qualifies, rather than failing', async () => {
@@ -601,7 +609,7 @@ describe('the generation run', () => {
 
     const result = await service.create({ userId: OWNER });
 
-    expect(result.list.sources).toEqual([]);
+    expect(result.basket.sources).toEqual([]);
     expect(written.sources).toEqual([]);
   });
 });

@@ -120,6 +120,8 @@ describe('what a trip did to a line (section 4)', () => {
       live: true,
       startedAt: '2026-01-10T10:00:00.000Z',
       lineCount: 4,
+      fullyBoughtLineCount: 1,
+      // The old name, with the same value, for one release (plan 0159).
       boughtLineCount: 1,
     });
   });

@@ -1939,6 +1939,7 @@ export type BasketBasketRowView = {
  * `basket.BasketRunResult` in the gateway's OpenAPI document.
  */
 export type BasketBasketRunResult = {
+  basket: BasketBasketHeaderView;
   list: BasketBasketHeaderView;
 };
 
@@ -3709,6 +3710,7 @@ export type ListTripView = {
   live: boolean;
   startedAt: string;
   lineCount: number;
+  fullyBoughtLineCount: number;
   boughtLineCount: number;
 };
 
@@ -3933,6 +3935,8 @@ export type PurchasePurchaseEntryView = {
   open: boolean;
   startedAt: string;
   endedAt: string;
+  settledLineCount: number;
+  anyBoughtLineCount: number;
   lineCount: number;
   boughtLineCount: number;
   spent: PurchaseMoneyView | null;

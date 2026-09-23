@@ -1348,7 +1348,9 @@ export function toBasketRun(raw: unknown): BasketRun | null {
     return null;
   }
 
-  const list = toBasketFromView(raw['list']);
+  // Under `basket` since backend 0159. The old `list` key rides beside it for
+  // one release and is not read.
+  const list = toBasketFromView(raw['basket']);
   return list === null ? null : { list };
 }
 

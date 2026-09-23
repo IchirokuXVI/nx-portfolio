@@ -49,6 +49,8 @@ describe('one history entry (section 3)', () => {
     ...extra,
   });
 
+  // Plan 0159: the new names, and the old ones beside them with the same
+  // values for one release.
   it('serializes its dates and reads its counts as numbers', () => {
     expect(toPurchaseEntryView(row())).toEqual({
       id: ENTRY,
@@ -57,6 +59,8 @@ describe('one history entry (section 3)', () => {
       open: false,
       startedAt: '2026-01-10T10:00:00.000Z',
       endedAt: '2026-01-10T12:30:00.000Z',
+      settledLineCount: 4,
+      anyBoughtLineCount: 3,
       lineCount: 4,
       boughtLineCount: 3,
       spent: { cents: 1240, currency: 'EUR' },
