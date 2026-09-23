@@ -77,6 +77,7 @@ export const HARVEST_SCHEMA_IDS = {
   sourceCatalogEntryView: schemaId('harvest/SourceCatalogEntryView'),
   sourceEntryPriceView: schemaId('harvest/SourceEntryPriceView'),
   sourceEntryAcceptResult: schemaId('harvest/SourceEntryAcceptResult'),
+  sourceLocationCandidate: schemaId('harvest/SourceLocationCandidate'),
   sourceLocationView: schemaId('harvest/SourceLocationView'),
   supermarketSourceView: schemaId('harvest/SupermarketSourceView'),
   postalCodeDiscoveryRequestView: schemaId(
@@ -538,6 +539,25 @@ const harvestRunExportResult = object(
 );
 
 /**
+ * One catalog shop an unmapped source shop may be (plan 0154). A suggestion
+ * only: nothing maps a shop but a person.
+ */
+const sourceLocationCandidate = object(
+  HARVEST_SCHEMA_IDS.sourceLocationCandidate,
+  {
+    supermarketLocationId: nonEmptyString(),
+    label: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
+    },
+    address: nullableString(),
+    postalCode: nullableString(),
+    score: { type: 'number', minimum: 0, maximum: 1 },
+    strong: boolean(),
+  },
+  ['supermarketLocationId', 'label', 'address', 'postalCode', 'score', 'strong']
+);
+
+/**
  * One shop a source names (plan 0084, section 6). Keyed on the source's own
  * code, so a shop the chain renames keeps its mapping.
  */
@@ -555,6 +575,7 @@ const sourceLocationView = object(
     lastSeenAt: nonEmptyString(),
     firstRunId: nullableString(),
     lastRunId: nullableString(),
+    candidates: array(ref(HARVEST_SCHEMA_IDS.sourceLocationCandidate)),
   },
   [
     'id',
@@ -568,6 +589,7 @@ const sourceLocationView = object(
     'lastSeenAt',
     'firstRunId',
     'lastRunId',
+    'candidates',
   ]
 );
 
@@ -1339,6 +1361,7 @@ export const harvestSchemas: JsonSchema[] = [
   sourceCatalogEntryView,
   sourceEntryPriceView,
   sourceEntryAcceptResult,
+  sourceLocationCandidate,
   sourceLocationView,
   discoveredPlaceCounts,
   postalCodeDiscoveryRequestView,

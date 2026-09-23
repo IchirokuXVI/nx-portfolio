@@ -231,6 +231,8 @@ export interface LocationCandidate {
   id: string;
   label: LocalizedText | null;
   address: string | null;
+  /** Read by {@link rankLocations} only. The exact match ignores it. */
+  postalCode: string | null;
 }
 
 /**
@@ -278,6 +280,97 @@ export class LocationNameIndex {
     }
     return [...bucket][0];
   }
+}
+
+/** A location {@link rankLocations} proposes, and how well it fits. */
+export interface RankedLocation {
+  location: LocationCandidate;
+  score: number;
+  strong: boolean;
+}
+
+/** The lowest share of printed tokens a proposal may hold. */
+export const LOCATION_CANDIDATE_MIN_SCORE = 0.5;
+
+/** The most proposals one printed shop name gets. */
+export const LOCATION_CANDIDATES_MAX = 3;
+
+/**
+ * Words a street name carries that say nothing about which street it is. A
+ * printed "Avda. de Libia" and an address "Avenida de Libia" differ only in
+ * these.
+ */
+const LOCATION_STOP_WORDS = new Set([
+  'de',
+  'del',
+  'la',
+  'el',
+  'c',
+  'calle',
+  'avda',
+  'avenida',
+]);
+
+/** A street number: "48" in "Isla de Fuerteventura 48". A postal code is not one. */
+const STREET_NUMBER = /^\d{1,4}$/;
+
+/**
+ * The chain's shops a printed shop name may be, best first (plan 0154, section 1).
+ *
+ * **This proposes and never maps.** The exact match in {@link LocationNameIndex}
+ * is the only automated binding, and it is exact because a wrong binding writes
+ * availability onto the wrong shop. What this returns goes into the queue for a
+ * person, on the same rule plan 0081 states for printed product names.
+ *
+ * The score is the share of the printed name's tokens that the location's
+ * label, address or postal code holds, after {@link normalizeName} and after
+ * dropping stop words and street numbers from the printed name. A location
+ * holding every token is `strong`. Anything under
+ * {@link LOCATION_CANDIDATE_MIN_SCORE} is dropped, and ties fall to the
+ * location id, so the same input always gives the same list.
+ */
+export function rankLocations(
+  printedName: string,
+  locations: readonly LocationCandidate[]
+): RankedLocation[] {
+  const wanted = [...new Set(printedTokens(printedName))];
+  if (wanted.length === 0) {
+    return [];
+  }
+
+  const ranked: RankedLocation[] = [];
+  for (const location of locations) {
+    const held = new Set(
+      [...namesOf(location), location.postalCode ?? ''].flatMap(tokensOf)
+    );
+    const found = wanted.filter((token) => held.has(token)).length;
+    const score = found / wanted.length;
+    if (score >= LOCATION_CANDIDATE_MIN_SCORE) {
+      ranked.push({ location, score, strong: found === wanted.length });
+    }
+  }
+
+  return ranked
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        (a.location.id < b.location.id
+          ? -1
+          : a.location.id > b.location.id
+            ? 1
+            : 0)
+    )
+    .slice(0, LOCATION_CANDIDATES_MAX);
+}
+
+function printedTokens(printedName: string): string[] {
+  return tokensOf(printedName).filter(
+    (token) => !LOCATION_STOP_WORDS.has(token) && !STREET_NUMBER.test(token)
+  );
+}
+
+function tokensOf(text: string): string[] {
+  return normalizeName(text).split(' ').filter(Boolean);
 }
 
 function namesOf(location: LocationCandidate): string[] {

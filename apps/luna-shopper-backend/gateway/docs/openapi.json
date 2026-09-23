@@ -32987,6 +32987,54 @@
         ],
         "additionalProperties": false
       },
+      "harvest.SourceLocationCandidate": {
+        "type": "object",
+        "properties": {
+          "supermarketLocationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postalCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "strong": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "supermarketLocationId",
+          "label",
+          "address",
+          "postalCode",
+          "score",
+          "strong"
+        ],
+        "additionalProperties": false
+      },
       "harvest.SourceLocationPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -33060,6 +33108,12 @@
               "string",
               "null"
             ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceLocationCandidate"
+            }
           }
         },
         "required": [
@@ -33073,7 +33127,8 @@
           "firstSeenAt",
           "lastSeenAt",
           "firstRunId",
-          "lastRunId"
+          "lastRunId",
+          "candidates"
         ],
         "additionalProperties": false
       },

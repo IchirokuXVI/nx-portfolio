@@ -5,6 +5,7 @@ import {
   SourceLocationStatus,
   type ListSourceLocationsRequest,
   type MapSourceLocationRequest,
+  type SourceLocationCandidate,
   type SourceLocationIdRequest,
   type SourceLocationPage,
   type SourceLocationView,
@@ -20,7 +21,11 @@ import { In, Repository } from 'typeorm';
 import { SourceLocation } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { toSourceLocationView } from './harvest.mappers';
-import { LocationNameIndex, type LocationCandidate } from './matching';
+import {
+  LocationNameIndex,
+  rankLocations,
+  type LocationCandidate,
+} from './matching';
 import { PlatformAdminService } from './platform-admin.service';
 
 interface SourceLocationCursor {
@@ -127,7 +132,14 @@ export class SourceLocationService {
     return this.shops.save(rows, { chunk: 100 });
   }
 
-  /** The queue, one chain at a time, filterable by status. */
+  /**
+   * The queue, one chain at a time, filterable by status.
+   *
+   * An `UNMAPPED` row carries the chain's shops it may be (plan 0154), so an
+   * operator maps it with one confirmation instead of a search. The proposal is
+   * worked out on every read rather than stored, because a location imported
+   * after the run is a candidate the next time the queue is opened.
+   */
   async list(req: ListSourceLocationsRequest): Promise<SourceLocationPage> {
     await this.admin.requireAdmin(req);
     const limit = clampPageSize(req.limit);
@@ -154,7 +166,7 @@ export class SourceLocationService {
     const page = found.slice(0, limit);
     const last = page[page.length - 1];
     return {
-      items: page.map(toSourceLocationView),
+      items: await this.views(page),
       nextCursor:
         hasMore && last
           ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
@@ -184,7 +196,7 @@ export class SourceLocationService {
     row.supermarketLocationId = req.supermarketLocationId;
     row.status = SourceLocationStatus.ACTIVE;
     row.matchedBy = ItemSourceMatch.MANUAL;
-    return toSourceLocationView(await this.shops.save(row));
+    return this.view(await this.shops.save(row));
   }
 
   /**
@@ -200,7 +212,7 @@ export class SourceLocationService {
     row.supermarketLocationId = null;
     row.status = SourceLocationStatus.UNMAPPED;
     row.matchedBy = ItemSourceMatch.NAME_SIZE;
-    return toSourceLocationView(await this.shops.save(row));
+    return this.view(await this.shops.save(row));
   }
 
   /**
@@ -216,7 +228,7 @@ export class SourceLocationService {
     const row = await this.load(req.sourceLocationId);
     row.supermarketLocationId = null;
     row.status = SourceLocationStatus.IGNORED;
-    return toSourceLocationView(await this.shops.save(row));
+    return this.view(await this.shops.save(row));
   }
 
   /** Back into the queue, unmapped. */
@@ -224,7 +236,51 @@ export class SourceLocationService {
     await this.admin.requireAdmin(req);
     const row = await this.load(req.sourceLocationId);
     row.status = SourceLocationStatus.UNMAPPED;
-    return toSourceLocationView(await this.shops.save(row));
+    return this.view(await this.shops.save(row));
+  }
+
+  private async view(row: SourceLocation): Promise<SourceLocationView> {
+    const [view] = await this.views([row]);
+    return view;
+  }
+
+  /**
+   * The rows as the queue shows them, with the proposals an `UNMAPPED` row
+   * carries (plan 0154). Catalog is asked once per chain, and not at all when no
+   * row needs a proposal.
+   */
+  private async views(rows: SourceLocation[]): Promise<SourceLocationView[]> {
+    const locations = new Map<string, Promise<LocationCandidate[]>>();
+    const locationsOf = (supermarketId: string) => {
+      let held = locations.get(supermarketId);
+      if (!held) {
+        held = this.chainLocations(supermarketId);
+        locations.set(supermarketId, held);
+      }
+      return held;
+    };
+
+    const views: SourceLocationView[] = [];
+    for (const row of rows) {
+      const candidates =
+        row.status === SourceLocationStatus.UNMAPPED
+          ? rankLocations(
+              row.printedName,
+              await locationsOf(row.supermarketId)
+            ).map(
+              ({ location, score, strong }): SourceLocationCandidate => ({
+                supermarketLocationId: location.id,
+                label: location.label,
+                address: location.address,
+                postalCode: location.postalCode,
+                score,
+                strong,
+              })
+            )
+          : [];
+      views.push(toSourceLocationView(row, candidates));
+    }
+    return views;
   }
 
   /** Every shop catalog holds for this chain, as the name match reads them. */
@@ -243,6 +299,7 @@ export class SourceLocationService {
           id: location.id,
           label: location.label,
           address: location.address,
+          postalCode: location.postalCode,
         });
       }
       cursor = page.nextCursor ?? undefined;

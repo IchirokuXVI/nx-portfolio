@@ -79,7 +79,16 @@ function build(
   const { held = [], catalogLocations = [], one } = options;
   const saved: SourceLocation[] = [];
 
+  const queryBuilder = {
+    where: () => queryBuilder,
+    andWhere: () => queryBuilder,
+    orderBy: () => queryBuilder,
+    addOrderBy: () => queryBuilder,
+    take: () => queryBuilder,
+    getMany: async () => held,
+  };
   const shops = {
+    createQueryBuilder: jest.fn(() => queryBuilder),
     find: jest.fn(async () => held),
     findOne: jest.fn(async () => (one === undefined ? (held[0] ?? null) : one)),
     create: jest.fn((draft) => ({ id: 'sl-new', ...draft })),
@@ -311,5 +320,114 @@ describe('SourceLocationService, the queue actions', () => {
     expect(
       await svc.unignore({ userId: ADMIN, sourceLocationId: 'sl-1' })
     ).toMatchObject({ status: SourceLocationStatus.UNMAPPED });
+  });
+});
+
+/**
+ * The proposals an unmapped row carries (plan 0154). A proposal is only that:
+ * the row stays `UNMAPPED` until a person maps it.
+ */
+describe('SourceLocationService, the candidates on the queue', () => {
+  const locations = [
+    {
+      ...catalogLocation(
+        'loc-fuerteventura',
+        null,
+        'Calle Isla de Fuerteventura 48'
+      ),
+      postalCode: '14011',
+    },
+    {
+      ...catalogLocation('loc-martorell', null, 'Calle José María Martorell'),
+      postalCode: '14005',
+    },
+  ];
+
+  function unmapped(externalId: string, printedName: string): SourceLocation {
+    return heldRow({
+      id: `sl-${externalId}`,
+      externalId,
+      printedName,
+      status: SourceLocationStatus.UNMAPPED,
+      supermarketLocationId: null,
+    });
+  }
+
+  it('proposes the chain’s shops for an unmapped row and maps nothing', async () => {
+    const { svc, saved } = build({
+      held: [unmapped('T4', 'Isla Fuerteventura')],
+      catalogLocations: locations,
+    });
+
+    const page = await svc.list({ userId: ADMIN, supermarketId: CHAIN });
+
+    expect(page.items[0]).toMatchObject({
+      status: SourceLocationStatus.UNMAPPED,
+      supermarketLocationId: null,
+      candidates: [
+        {
+          supermarketLocationId: 'loc-fuerteventura',
+          label: null,
+          address: 'Calle Isla de Fuerteventura 48',
+          postalCode: '14011',
+          score: 1,
+          strong: true,
+        },
+      ],
+    });
+    expect(saved).toEqual([]);
+  });
+
+  it('proposes nothing for a mapped or ignored row, and does not ask catalog', async () => {
+    const { svc, catalog } = build({
+      held: [
+        heldRow(),
+        {
+          ...unmapped('T4', 'Isla Fuerteventura'),
+          status: SourceLocationStatus.IGNORED,
+        } as SourceLocation,
+      ],
+      catalogLocations: locations,
+    });
+
+    const page = await svc.list({ userId: ADMIN, supermarketId: CHAIN });
+
+    expect(page.items.map((item) => item.candidates)).toEqual([[], []]);
+    expect(catalog.listSupermarketLocations).not.toHaveBeenCalled();
+  });
+
+  it('asks catalog once for a page of unmapped rows', async () => {
+    const { svc, catalog } = build({
+      held: [
+        unmapped('T4', 'Isla Fuerteventura'),
+        unmapped('T6', 'Avda. de Libia'),
+        unmapped('Z1', 'Zoco'),
+      ],
+      catalogLocations: locations,
+    });
+
+    const page = await svc.list({ userId: ADMIN, supermarketId: CHAIN });
+
+    expect(catalog.listSupermarketLocations).toHaveBeenCalledTimes(1);
+    expect(page.items.map((item) => item.candidates.length)).toEqual([1, 0, 0]);
+  });
+
+  it('answers an unmap with the proposals the row is back in the queue with', async () => {
+    const { svc } = build({
+      held: [
+        heldRow({
+          printedName: 'Isla Fuerteventura',
+          supermarketLocationId: 'loc-fuerteventura',
+          matchedBy: ItemSourceMatch.MANUAL,
+        }),
+      ],
+      catalogLocations: locations,
+    });
+
+    const view = await svc.unmap({ userId: ADMIN, sourceLocationId: 'sl-1' });
+
+    expect(view.candidates.map((c) => c.supermarketLocationId)).toEqual([
+      'loc-fuerteventura',
+    ]);
   });
 });

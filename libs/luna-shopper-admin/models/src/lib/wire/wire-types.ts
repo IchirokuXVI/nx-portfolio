@@ -3401,6 +3401,18 @@ export type HarvestSourceEntryPriceView = {
 };
 
 /**
+ * `harvest.SourceLocationCandidate` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceLocationCandidate = {
+  supermarketLocationId: string;
+  label: CatalogLocalizedText | null;
+  address: string | null;
+  postalCode: string | null;
+  score: number;
+  strong: boolean;
+};
+
+/**
  * `harvest.SourceLocationPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -3425,6 +3437,7 @@ export type HarvestSourceLocationView = {
   lastSeenAt: string;
   firstRunId: string | null;
   lastRunId: string | null;
+  candidates: HarvestSourceLocationCandidate[];
 };
 
 /**

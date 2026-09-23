@@ -37,6 +37,7 @@ import { Repository } from 'typeorm';
 import { DiscoveredPlace } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { toDiscoveredPlaceView } from './harvest.mappers';
+import { normalizeName } from './matching';
 import {
   placeImportBlockers,
   type PlaceImportBlocker,
@@ -181,6 +182,38 @@ function matchNamedChain(
     matchChain(known, place, name) ??
     (newChain ? known.byName.get(chainNameKey(newChain.name)) : undefined)
   );
+}
+
+/**
+ * The bucket {@link DiscoveredPlaceService.groups} puts a place in: its brand
+ * key, else its normalized brand name, else its normalized name (plan 0154).
+ * The prefixes keep a brand called "Deza" apart from a shop only named "Deza",
+ * because the first is a statement about the chain and the second is not.
+ */
+function placeGroupKey(place: DiscoveredPlace): string {
+  if (place.brandKey) {
+    return `key:${place.brandKey}`;
+  }
+  const brand = normalizeName(place.brandName ?? '');
+  if (brand) {
+    return `brand:${brand}`;
+  }
+  const name = normalizeName(place.name ?? '');
+  return name ? `name:${name}` : 'none';
+}
+
+/**
+ * What a group is called: the brand one of its places names, or for a group
+ * of places that name no brand, the first place's name. Null is the group of
+ * places with neither.
+ */
+function placeGroupName(places: DiscoveredPlace[]): string | null {
+  const brandName = places.find((place) => place.brandName)?.brandName;
+  if (brandName) {
+    return brandName;
+  }
+  const [first] = places;
+  return !first.brandKey && normalizeName(first.name ?? '') ? first.name : null;
 }
 
 function alreadyImported(): PlaceAlreadyImportedException {
@@ -531,11 +564,16 @@ export class DiscoveredPlaceService {
    * Section 6.1 step 4's report: the run's places grouped by chain, with a count,
    * a sample, and whether catalog already knows that chain.
    *
-   * Grouping is on `brandKey` and never on the name (section 2.7): `Dia` and
-   * `Maxi Dia` share one QID, and matching on the name would split one chain into
-   * several. Places with no brand tag group under `null`, which is a real answer:
-   * they are independent shops, and 35 of the 75 elements in the wider search
-   * looked like that.
+   * A place with a `brandKey` groups on it and never on the name (section 2.7):
+   * `Dia` and `Maxi Dia` share one QID, and matching on the name would split one
+   * chain into several.
+   *
+   * A place with no key groups on its normalized `brandName`, then on its
+   * normalized name (plan 0154). OpenStreetMap has no brand key for DEZA, and
+   * one bucket for every keyless place labelled it with whichever brand sorted
+   * first, which read "Alsara, 39" with eight DEZA shops inside. A place with
+   * neither a brand nor a name groups under `brandName: null`, which is the
+   * "no brand" group.
    */
   async groups(
     req: GroupDiscoveredPlacesRequest
@@ -550,22 +588,24 @@ export class DiscoveredPlaceService {
     const rows = await qb.getMany();
 
     const { byKey: known } = await this.knownChains();
-    const buckets = new Map<string | null, DiscoveredPlace[]>();
+    const buckets = new Map<string, DiscoveredPlace[]>();
     for (const row of rows) {
-      const bucket = buckets.get(row.brandKey);
+      const key = placeGroupKey(row);
+      const bucket = buckets.get(key);
       if (bucket) {
         bucket.push(row);
       } else {
-        buckets.set(row.brandKey, [row]);
+        buckets.set(key, [row]);
       }
     }
 
-    const groups: DiscoveredPlaceGroup[] = [...buckets.entries()].map(
-      ([brandKey, places]) => {
+    const groups: DiscoveredPlaceGroup[] = [...buckets.values()].map(
+      (places) => {
+        const brandKey = places[0].brandKey;
         const match = brandKey ? known.get(brandKey) : undefined;
         return {
           brandKey,
-          brandName: places.find((p) => p.brandName)?.brandName ?? null,
+          brandName: placeGroupName(places),
           count: places.length,
           known: Boolean(match),
           supermarketId: match?.id ?? null,

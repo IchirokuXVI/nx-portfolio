@@ -8,6 +8,7 @@ import type {
   PostalCodeDiscoveryRequestView,
   SourceCatalogEntryView,
   SourceEntryPriceView,
+  SourceLocationCandidate,
   SourceLocationView,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
@@ -211,9 +212,13 @@ export function toSourceEntryPriceView(
  *
  * `externalId` is the source's own code and `printedName` is what it displayed;
  * the view carries both because the queue is read by a person who recognises the
- * street and acts on the code.
+ * street and acts on the code. `candidates` are the service's to work out,
+ * because they need the chain's locations from catalog (plan 0154).
  */
-export function toSourceLocationView(row: SourceLocation): SourceLocationView {
+export function toSourceLocationView(
+  row: SourceLocation,
+  candidates: SourceLocationCandidate[] = []
+): SourceLocationView {
   return {
     id: row.id,
     supermarketId: row.supermarketId,
@@ -226,6 +231,7 @@ export function toSourceLocationView(row: SourceLocation): SourceLocationView {
     lastSeenAt: row.lastSeenAt.toISOString(),
     firstRunId: row.firstRunId,
     lastRunId: row.lastRunId,
+    candidates,
   };
 }
 
