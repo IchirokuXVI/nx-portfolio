@@ -123,6 +123,17 @@ export function makeFakeSession({
       const query = init.query ?? null;
       calls.push({ path, query, method: init.method ?? 'GET' });
 
+      // The gateway's own validation: a search text over 120 characters is a
+      // 400 on both the item and the group search, and one long product name
+      // used to end a whole walk on it (plan 0002).
+      if (typeof query?.query === 'string' && query.query.length > 120) {
+        const error = new Error(
+          `GET ${path} answered 400: query must be shorter than or equal to 120 characters`
+        );
+        error.status = 400;
+        throw error;
+      }
+
       if (path === '/v1/admin/catalog/items') {
         return catalog.ungroupedPage({
           cursor: query?.cursor,

@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  MAX_SEARCH_LENGTH,
   buildDecisionSchema,
   buildSystemPrompt,
   canonicalSlug,
+  capSearchText,
   deriveUnitFamilies,
   groupWords,
   isValidSlug,
@@ -167,4 +169,43 @@ test('the decision schema takes its enum from the same unit vocabulary', () => {
     'issues',
     'reasoning',
   ]);
+});
+
+// ---------------------------------------------------------------------------
+// The search cap (plan 0002)
+// ---------------------------------------------------------------------------
+
+test('capSearchText leaves a text within the cap alone', () => {
+  assert.equal(capSearchText('huevos frescos'), 'huevos frescos');
+  assert.equal(capSearchText('a'.repeat(120)), 'a'.repeat(120));
+  assert.equal(capSearchText(null), '');
+});
+
+test('capSearchText cuts a long text at the last word that fits', () => {
+  const words = Array.from({ length: 40 }, (_, i) => `palabra${i}`).join(' ');
+  const capped = capSearchText(words);
+
+  assert.ok(capped.length <= MAX_SEARCH_LENGTH);
+  assert.ok(words.startsWith(capped));
+  // The cut falls between two words, never inside one.
+  assert.equal(words[capped.length], ' ');
+  assert.equal(capped, capped.trim());
+});
+
+test('capSearchText keeps the whole last word when the cap lands on a space', () => {
+  const text = `${'a'.repeat(120)} tail`;
+  assert.equal(capSearchText(text), 'a'.repeat(120));
+});
+
+test('capSearchText cuts a single word longer than the cap where the cap is', () => {
+  assert.equal(capSearchText('x'.repeat(300)), 'x'.repeat(120));
+});
+
+test('itemSearchKey is capped for a product with a very long name', () => {
+  const long = `Atún claro en aceite de oliva ${'pack ahorro familiar '.repeat(10)}Hacendado`;
+  const key = itemSearchKey({ name: { es: long, en: null } });
+
+  assert.ok(key.length <= MAX_SEARCH_LENGTH);
+  assert.ok(key.startsWith('atun claro en aceite de oliva'));
+  assert.ok(!key.endsWith(' '));
 });

@@ -147,4 +147,29 @@ test('apply reaches the replay path with the file it was given', async () => {
 
   const answer = await run(['apply', '--main-url', 'http://x', '--file', file]);
   assert.equal(answer.operations, 0);
+  assert.equal(answer.applied, true);
+});
+
+test('start refuses --chain by name from the command line', async () => {
+  await assert.rejects(
+    () =>
+      run([
+        'start',
+        '--main-url',
+        'http://x',
+        '--rehearsal-url',
+        'http://y',
+        '--run-dir',
+        '/tmp/r',
+        '--chain',
+        'mercadona',
+      ]),
+    /--chain is not taken by the groups decider/
+  );
+});
+
+test('the usage names --local and says --chain is refused', async () => {
+  const { usage } = await run([]);
+  assert.match(usage, /--local/);
+  assert.match(usage, /--chain is refused/);
 });

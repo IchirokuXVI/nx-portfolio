@@ -67,7 +67,16 @@ function appendJsonl(path, value) {
  */
 export function createRun(
   dir,
-  { runId, mainUrl, rehearsalUrl, mainUser, model, total, limit = null }
+  {
+    runId,
+    mainUrl,
+    rehearsalUrl,
+    mainUser,
+    model,
+    local = false,
+    total,
+    limit = null,
+  }
 ) {
   mkdirSync(dir, { recursive: true });
   if (existsSync(statePath(dir))) {
@@ -94,6 +103,9 @@ export function createRun(
     // directory an operator may keep, copy or attach to a report.
     mainUser: mainUser ?? null,
     model: model ?? null,
+    // Whether the model answering this run is on this machine. Recorded so a
+    // report says what answered it, and so a resumed run reads the same answer.
+    local: local === true,
     startedAt: header.startedAt,
     total: total ?? 0,
     // How many products this run will ask about, when the operator capped it.

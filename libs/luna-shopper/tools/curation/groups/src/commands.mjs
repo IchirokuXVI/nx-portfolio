@@ -91,9 +91,27 @@ export async function start({
   runDir,
   model = null,
   limit = null,
+  // Whether that model runs on the operator's own machine, as the engine
+  // registry states it. `curation-cli` passes it for every local engine, so it
+  // is taken and recorded rather than refused, which would end every local
+  // walk before its first product. No validator here reads it yet: the extra
+  // check the suggestions decider buys with it is that decider's rule, and
+  // plan 0002 asks only that the flag is honoured, not that the rule is copied.
+  local = false,
+  // Refused, never ignored. The walk is every product in no group, and a
+  // group is the thing that spans chains: "Huevos" has to hold the Mercadona
+  // and the SuperCash eggs alike. The item route this walk pages has no
+  // supermarket filter either, so there is nothing a chain could narrow.
+  chain = null,
   makeSession = defaultMakeSession,
   units = loadUnits(),
 }) {
+  if (chain !== null && chain !== undefined && chain !== false) {
+    throw new Error(
+      '--chain is not taken by the groups decider: a product group spans every chain, so the walk is every ungrouped product whichever chain sells it. Run it without --chain.'
+    );
+  }
+
   const main = makeGateway(
     makeSession({
       baseUrl: mainUrl,
@@ -126,6 +144,7 @@ export async function start({
     rehearsalUrl: normalizeUrl(rehearsalUrl),
     mainUser,
     model,
+    local: local === true,
     total,
     limit,
   });
@@ -609,6 +628,7 @@ export function end({ runDir, usage = null }) {
     mainUrl: state.mainUrl,
     rehearsalUrl: state.rehearsalUrl,
     model: state.model,
+    local: state.local === true,
     startedAt: header?.startedAt ?? state.startedAt,
     endedAt: new Date().toISOString(),
     total: state.total ?? records.length,
@@ -682,11 +702,15 @@ export async function apply({
       `${file} holds ${operations.length} operations and the route caps a request at ${MAX_OPERATIONS}. Refusing: chunking it would break the all or nothing promise.`
     );
   }
+  // A run of nothing but REVIEWs has nothing to write, and writing nothing is
+  // done. It answers `applied: true` the way the suggestions decider does, so
+  // the orchestrator reads a walk that handed every product to a person as the
+  // success it is rather than as a refused file (plan 0002).
   if (operations.length === 0) {
     return {
       runId: header.runId,
       operations: 0,
-      applied: false,
+      applied: true,
       error: null,
       results: [],
       createdGroups: [],

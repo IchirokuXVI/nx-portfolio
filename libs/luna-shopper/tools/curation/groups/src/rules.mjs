@@ -101,9 +101,40 @@ export function itemLabel(item) {
   return item?.name?.es ?? item?.name?.en ?? item?.id ?? '(unnamed)';
 }
 
+/**
+ * The longest search text the gateway takes.
+ *
+ * Both routes this library searches refuse a longer `query` with a 400: the
+ * admin item search (`catalog-admin.dto.ts`) and the product group search
+ * (`catalog.dto.ts`). One long product name was enough to end a whole walk on
+ * its first row (plan 0002), so every query is cut to this before it is sent.
+ */
+export const MAX_SEARCH_LENGTH = 120;
+
+/**
+ * A search text cut to the gateway's cap at a word boundary.
+ *
+ * A word cut in half matches nothing in a full text search, or worse matches a
+ * shorter word it happens to start, so the cut falls on the last space that
+ * fits. A single word longer than the cap has no space to fall back to and is
+ * cut where the cap is, which is the only answer the gateway would take.
+ */
+export function capSearchText(text, max = MAX_SEARCH_LENGTH) {
+  const value = String(text ?? '').trim();
+  if (value.length <= max) {
+    return value;
+  }
+  if (/\s/.test(value[max])) {
+    return value.slice(0, max).trimEnd();
+  }
+  const head = value.slice(0, max);
+  const lastSpace = head.search(/\s\S*$/);
+  return (lastSpace > 0 ? head.slice(0, lastSpace) : head).trimEnd();
+}
+
 /** What a product is searched for by: its Spanish name, else its English one. */
 export function itemSearchKey(item) {
-  return normalizeName(item?.name?.es ?? item?.name?.en ?? '');
+  return capSearchText(normalizeName(item?.name?.es ?? item?.name?.en ?? ''));
 }
 
 // ---------------------------------------------------------------------------
