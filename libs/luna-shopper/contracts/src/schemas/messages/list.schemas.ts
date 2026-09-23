@@ -268,9 +268,9 @@ const settlePick = object(
 // One origin line touched by one settling act (plan 0047, section 3).
 // `basketLineId` is deliberately absent: it is stored and never served, so
 // a reader learns that something was bought and not which basket it came out of
-// (section 3.1). `supermarketLocationId` is absent for the same reason since plan
-// 0143: the price of a tin at a chain is a product fact, and a street and a time
-// are a fact about where somebody was standing (section 6).
+// (section 3.1). `settledByParticipantId` and `supermarketLocationId` are served
+// since plan 0151 section 5, which reverses plan 0051 section 6 and plan 0143
+// section 6 for these two fields: the view has to say who settled and where.
 const lineSettlementView = object(
   LIST_SCHEMA_IDS.lineSettlementView,
   {
@@ -283,6 +283,9 @@ const lineSettlementView = object(
     // buying more than was asked for is recorded as it happened (section 4.2).
     quantity: integer({ minimum: 0 }),
     settledByUserId: nonEmptyString(),
+    // Exactly one of this and `settledByUserId` is set: a basket settle names
+    // the participant, the list page names the account.
+    settledByParticipantId: nullableString(),
     settledAt: string({ format: 'date-time' }),
     // Null while the settlement stands, and set once somebody took it back
     // (plan 0054, section 3.3). The row is kept and served either way: a
@@ -295,6 +298,8 @@ const lineSettlementView = object(
     pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
     pricePaidCurrency: { type: ['string', 'null'], maxLength: 3 },
     priceScopeId: nullableString(),
+    // The one shop, set only by a settler who was served shops.
+    supermarketLocationId: nullableString(),
   },
   [
     'id',
@@ -304,11 +309,13 @@ const lineSettlementView = object(
     'outcome',
     'quantity',
     'settledByUserId',
+    'settledByParticipantId',
     'settledAt',
     'revertedAt',
     'pricePaidCents',
     'pricePaidCurrency',
     'priceScopeId',
+    'supermarketLocationId',
   ]
 );
 

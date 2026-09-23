@@ -362,15 +362,18 @@ describe('contract schemas', () => {
             outcome: 'BOUGHT',
             quantity: 2,
             settledByUserId: 'u',
+            // The list page settled it, so no participant (plan 0151).
+            settledByParticipantId: null,
             settledAt: '2026-01-01T00:00:00.000Z',
             // Standing, which is every settlement a settle writes (plan 0054,
             // section 3.3). Only a basket reopen sets it.
             revertedAt: null,
-            // What one of them cost, and the chain catchment it was read at
-            // (plan 0143). The shop is stored and never served here.
+            // What one of them cost, the chain catchment it was read at (plan
+            // 0143), and the shop, served since plan 0151.
             pricePaidCents: 129,
             pricePaidCurrency: 'EUR',
             priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
+            supermarketLocationId: '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f',
           },
         }).valid
       ).toBe(true);
@@ -390,6 +393,7 @@ describe('contract schemas', () => {
               outcome: 'NOT_AVAILABLE',
               quantity: 0,
               settledByUserId: 'u',
+              settledByParticipantId: null,
               settledAt: '2026-01-01T00:00:00.000Z',
               revertedAt: null,
               // A close records no price, by check constraint, and keeps the
@@ -398,6 +402,7 @@ describe('contract schemas', () => {
               pricePaidCents: null,
               pricePaidCurrency: null,
               priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
+              supermarketLocationId: null,
             },
           ],
           nextCursor: null,

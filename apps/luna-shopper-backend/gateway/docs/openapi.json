@@ -33196,6 +33196,12 @@
             "type": "string",
             "minLength": 1
           },
+          "settledByParticipantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "settledAt": {
             "type": "string",
             "format": "date-time"
@@ -33225,6 +33231,12 @@
               "string",
               "null"
             ]
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -33235,11 +33247,13 @@
           "outcome",
           "quantity",
           "settledByUserId",
+          "settledByParticipantId",
           "settledAt",
           "revertedAt",
           "pricePaidCents",
           "pricePaidCurrency",
-          "priceScopeId"
+          "priceScopeId",
+          "supermarketLocationId"
         ],
         "additionalProperties": false
       },

@@ -3518,11 +3518,13 @@ export type ListLineSettlementView = {
   outcome: EnumsSettlementOutcome;
   quantity: number;
   settledByUserId: string;
+  settledByParticipantId: string | null;
   settledAt: string;
   revertedAt: string | null;
   pricePaidCents: number | null;
   pricePaidCurrency: string | null;
   priceScopeId: string | null;
+  supermarketLocationId: string | null;
 };
 
 /**

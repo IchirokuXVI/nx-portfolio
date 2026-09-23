@@ -168,15 +168,18 @@ export function toLineSettlementView(
     outcome: settlement.outcome,
     quantity: settlement.quantity,
     settledByUserId: settlement.settledByUserId,
+    // Who settled a basket row, where `settledByUserId` is null by the actor
+    // check (plan 0151, section 5).
+    settledByParticipantId: settlement.settledByParticipantId,
     settledAt: settlement.settledAt.toISOString(),
     // Served, and marked, rather than filtered out (plan 0054, section 3.3):
     // somebody said they got this and then took it back, which is a truer
-    // history than a gap. `revertedByParticipantId` stays unserved for the
-    // reason the three columns above it are, being meaningless to a zone reader.
+    // history than a gap. `revertedByParticipantId` stays unserved.
     revertedAt: settlement.revertedAt?.toISOString() ?? null,
     pricePaidCents: settlement.pricePaidCents,
     pricePaidCurrency: settlement.pricePaidCurrency,
     priceScopeId: settlement.priceScopeId,
+    supermarketLocationId: settlement.supermarketLocationId,
   };
 }
 
