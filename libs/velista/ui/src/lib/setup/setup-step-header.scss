@@ -1,0 +1,79 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.back,
+.skip {
+  min-block-size: var(--app-touch-target);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  margin-inline-start: calc(var(--app-space-2) * -1);
+  border-radius: var(--app-radius-full);
+  color: var(--app-text-secondary);
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.skip {
+  padding-inline: var(--app-space-2);
+  margin-inline-end: calc(var(--app-space-2) * -1);
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+.rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--app-space-2);
+}
+
+.segment {
+  block-size: var(--app-progress-height);
+  border-radius: var(--app-radius-full);
+  background: var(--app-border-subtle);
+
+  @media (prefers-reduced-motion: no-preference) {
+    transition: background var(--app-motion-base) var(--app-motion-ease);
+  }
+}
+
+// The amber accent, which is `action-quiet-fg` and not the attention token.
+.reached {
+  background: var(--app-action-quiet-fg);
+}
+
+.step {
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}

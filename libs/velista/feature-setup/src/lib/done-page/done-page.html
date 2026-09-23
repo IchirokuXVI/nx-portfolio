@@ -1,0 +1,41 @@
+<main class="page">
+  <span aria-hidden="true" class="tick">
+    <lib-check-icon class="tick-glyph" />
+  </span>
+
+  <h1 #heading class="title" tabindex="-1">
+    {{ 'setup.done.title' | rokuT }}
+  </h1>
+  <p class="lede">{{ 'setup.done.body' | rokuT }}</p>
+
+  <dl class="answers">
+    @for (row of rows(); track row.label) {
+      <div class="answer">
+        <dt class="answer-label">{{ row.label | rokuT }}</dt>
+        <dd class="answer-value">
+          @if (row.answer.key === verbatim) {
+            {{ row.answer.params['value'] }}
+          } @else {
+            {{ row.answer.key | rokuT: row.answer.params }}
+          }
+        </dd>
+      </div>
+    }
+  </dl>
+
+  <section aria-labelledby="setup-tour-title" class="tour">
+    <h2 class="tour-title" id="setup-tour-title">
+      {{ 'setup.done.tourTitle' | rokuT }}
+    </h2>
+    <p class="tour-body">{{ 'setup.done.tourBody' | rokuT }}</p>
+  </section>
+
+  <div class="foot">
+    <button (click)="tour()" class="primary" type="button">
+      {{ 'setup.done.tourStart' | rokuT }}
+    </button>
+    <button (click)="noThanks()" class="secondary" type="button">
+      {{ 'setup.done.tourNo' | rokuT }}
+    </button>
+  </div>
+</main>

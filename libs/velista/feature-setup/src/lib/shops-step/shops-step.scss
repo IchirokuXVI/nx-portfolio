@@ -1,0 +1,133 @@
+@use '../setup-page' as setup;
+
+:host {
+  @include setup.host;
+}
+
+.page {
+  @include setup.page;
+}
+
+.title {
+  @include setup.title;
+}
+
+.lede {
+  @include setup.lede;
+}
+
+.chains {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.chains-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+}
+
+.label {
+  @include setup.label;
+  margin: 0;
+}
+
+.all-off {
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-2);
+  margin-inline-end: calc(var(--app-space-2) * -1);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  cursor: pointer;
+
+  @include setup.focus-ring;
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.none {
+  @include setup.card;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  padding: var(--app-space-4);
+}
+
+.none-title {
+  display: flex;
+  gap: var(--app-space-3);
+  margin: 0;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+.none-glyph {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  margin-block-start: var(--app-space-hair);
+}
+
+.none-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.failed {
+  @include setup.card;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4);
+}
+
+.failed-line {
+  margin: 0;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+}
+
+.quiet {
+  @include setup.quiet-action;
+}
+
+.error {
+  @include setup.error;
+}
+
+.foot {
+  @include setup.foot;
+}
+
+.primary {
+  @include setup.primary-action;
+}
+
+.spinning {
+  font-size: var(--app-icon-sm);
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: spin 0.9s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

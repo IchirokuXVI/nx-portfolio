@@ -1,0 +1,81 @@
+<form (submit)="onSubmit($event)" class="page" novalidate>
+  <lib-setup-step-header (back)="back()" (skip)="skip()" [step]="1" />
+
+  <h1 #heading class="title" tabindex="-1">
+    {{ 'setup.name.title' | rokuT }}
+  </h1>
+  <p class="lede">{{ 'setup.name.body' | rokuT }}</p>
+
+  <div class="field-block">
+    <div class="label-row">
+      <label class="label" for="setup-name">
+        {{ 'setup.name.label' | rokuT }}
+      </label>
+      @if (typed() !== '') {
+        <span aria-hidden="true" class="counter">
+          {{ typed().length }} / {{ maxLength }}
+        </span>
+      }
+    </div>
+    <input
+      (input)="onInput($event)"
+      [attr.maxlength]="maxLength"
+      [placeholder]="'setup.name.placeholder' | rokuT"
+      [readOnly]="saving()"
+      [value]="typed()"
+      autocomplete="nickname"
+      class="field"
+      id="setup-name"
+      type="text"
+    />
+  </div>
+
+  @if (trimmed() === '') {
+    <!--
+      The generated name, named rather than hidden behind a placeholder. The card is a
+      live region so that pressing Pick another one reads out the name it swapped in.
+    -->
+    <section class="picked">
+      <p class="picked-lead">{{ 'setup.name.picked' | rokuT }}</p>
+      <p aria-live="polite" class="picked-name">{{ cardName() }}</p>
+      <p class="picked-keeps">{{ 'setup.name.keeps' | rokuT }}</p>
+      <button
+        (click)="another()"
+        [attr.aria-busy]="suggesting()"
+        [disabled]="suggesting() || saving()"
+        class="another"
+        type="button"
+      >
+        @if (suggesting()) {
+          <lib-spinner-icon class="spinning" />
+        }
+        <span>{{ 'setup.name.another' | rokuT }}</span>
+      </button>
+    </section>
+  } @else {
+    <p class="note">
+      <lib-info-icon aria-hidden="true" class="note-glyph" />
+      <span>{{ 'setup.name.note' | rokuT: { name: trimmed() } }}</span>
+    </p>
+  }
+
+  @if (failure(); as failed) {
+    <p class="error" role="alert">
+      {{ failed.key | rokuT: { wait: failed.wait } }}
+    </p>
+  }
+
+  <div class="foot">
+    <button
+      [attr.aria-busy]="saving()"
+      [disabled]="!canContinue()"
+      class="primary"
+      type="submit"
+    >
+      @if (saving()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ action().key | rokuT: { name: action().name } }}</span>
+    </button>
+  </div>
+</form>

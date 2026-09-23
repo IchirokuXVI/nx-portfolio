@@ -1,6 +1,11 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
-import type { UserProfile, UsernameScope } from '@portfolio/velista/models';
+import type {
+  AppState,
+  AppStateFlags,
+  UserProfile,
+  UsernameScope,
+} from '@portfolio/velista/models';
 import { AccountApi } from './account-api';
 
 /**
@@ -45,6 +50,24 @@ export interface AccountServiceI {
    * whether *this* call did it can, even though the screen treats both the same.
    */
   deleteAccount(): Promise<{ readonly deleted: boolean }>;
+
+  /**
+   * Stamp what the account has been shown (`PATCH /v1/account/app-state`, backend
+   * `0145`).
+   *
+   * Idempotent on the server: a second stamp does not move the first timestamp. The
+   * answer is the whole state after the write.
+   */
+  setAppState(flags: AppStateFlags): Promise<AppState>;
+
+  /**
+   * One name from the pool registration draws from
+   * (`GET /v1/account/username-suggestions`).
+   *
+   * **It writes nothing.** The setup's name step shows it in place of the generated
+   * name, and only pressing that step's button makes it the account's.
+   */
+  suggestUsername(): Promise<string>;
 }
 
 /**

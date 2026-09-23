@@ -669,4 +669,33 @@ export interface UserProfile {
   readonly email: string | null;
   readonly emailVerified: boolean;
   readonly displayName: string | null;
+  /**
+   * What the account has been shown (backend `0145`, velista `0098`).
+   *
+   * Optional because only `GET /v1/account/me` carries it. `PATCH /v1/account/me`
+   * answers the auth half alone, so a rename's answer has none, and `ProfileStore`
+   * keeps the copy it held rather than forgetting it.
+   */
+  readonly appState?: AppState;
+}
+
+/**
+ * The moments an account has passed, stamped once and never moved (backend `0145`).
+ *
+ * The flag is the account's and not the device's, so a setup finished on a phone is
+ * finished on a laptop too. Null is "not yet". The gateway answers two nulls when core
+ * cannot be reached, which reads the same as a new account, on purpose: asking again
+ * once is a nuisance, and the name in the app bar must never wait on core.
+ */
+export interface AppState {
+  /** When the setup was finished or dismissed, as an ISO timestamp, or null. */
+  readonly setupCompletedAt: string | null;
+  /** When the tour was finished or skipped, as an ISO timestamp, or null. */
+  readonly tourSeenAt: string | null;
+}
+
+/** The flags `PATCH /v1/account/app-state` accepts. Each is absent or true. */
+export interface AppStateFlags {
+  readonly setupCompleted?: true;
+  readonly tourSeen?: true;
 }

@@ -1,0 +1,107 @@
+@use '../setup-page' as setup;
+
+:host {
+  @include setup.host;
+}
+
+.page {
+  @include setup.page;
+}
+
+.title {
+  @include setup.title;
+}
+
+.lede {
+  @include setup.lede;
+}
+
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.label,
+.counter {
+  @include setup.label;
+}
+
+.field {
+  @include setup.field;
+}
+
+// The name that is already the account's, on the amber-tinted card the mock draws.
+.picked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-1);
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-action-quiet-bg);
+}
+
+.picked-lead,
+.picked-keeps {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.picked-name {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-xl);
+  color: var(--app-action-quiet-fg);
+}
+
+.another {
+  @include setup.quiet-action;
+  margin-block-start: var(--app-space-2);
+}
+
+.note {
+  @include setup.note;
+  margin: 0;
+}
+
+.note-glyph {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  margin-block-start: var(--app-space-hair);
+}
+
+.error {
+  @include setup.error;
+}
+
+.foot {
+  @include setup.foot;
+}
+
+.primary {
+  @include setup.primary-action;
+}
+
+.spinning {
+  font-size: var(--app-icon-sm);
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: spin 0.9s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

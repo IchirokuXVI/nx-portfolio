@@ -1,0 +1,80 @@
+<main class="page">
+  <lib-setup-step-header (back)="back()" (skip)="skip()" [step]="3" />
+
+  <h1 #heading class="title" tabindex="-1">
+    {{ 'setup.shops.title' | rokuT }}
+  </h1>
+  <p class="lede">{{ 'setup.shops.body' | rokuT }}</p>
+
+  @switch (load()) {
+    @case ('loading') {
+      <lib-row-skeleton [count]="4" labelKey="setup.shops.loading" />
+    }
+
+    @case ('failed') {
+      <div class="failed" role="alert">
+        <p class="failed-line">{{ 'setup.shops.failed' | rokuT }}</p>
+        <button (click)="retry()" class="quiet" type="button">
+          {{ 'profiles.error.retry' | rokuT }}
+        </button>
+      </div>
+    }
+
+    @default {
+      <section aria-labelledby="setup-shops-heading" class="chains">
+        <div class="chains-head">
+          <h2 class="label" id="setup-shops-heading">
+            @if (near(); as code) {
+              {{ 'setup.shops.near' | rokuT: { code } }}
+            } @else {
+              {{ 'setup.shops.all' | rokuT }}
+            }
+          </h2>
+          @if (anyOn()) {
+            <button (click)="turnAllOff()" class="all-off" type="button">
+              {{ 'setup.shops.turnAllOff' | rokuT }}
+            </button>
+          }
+        </div>
+
+        <lib-setup-chain-list
+          (switched)="toggle($event)"
+          [rows]="rows()"
+          labelledBy="setup-shops-heading"
+        />
+
+        @if (noneOn()) {
+          <!-- Allowed, never blocked, and what it means is said once. -->
+          <div class="none" role="status">
+            <p class="none-title">
+              <lib-warning-icon aria-hidden="true" class="none-glyph" />
+              <span>{{ 'setup.shops.noneTitle' | rokuT }}</span>
+            </p>
+            <p class="none-body">{{ 'setup.shops.noneBody' | rokuT }}</p>
+          </div>
+        } @else {
+          <p class="hint">{{ 'setup.shops.note' | rokuT }}</p>
+        }
+      </section>
+    }
+  }
+
+  @if (saveFailed()) {
+    <p class="error" role="alert">{{ 'profiles.error.save' | rokuT }}</p>
+  }
+
+  <div class="foot">
+    <button
+      (click)="done()"
+      [attr.aria-busy]="saving()"
+      [disabled]="saving() || load() !== 'loaded'"
+      class="primary"
+      type="button"
+    >
+      @if (saving()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ 'setup.shops.done' | rokuT }}</span>
+    </button>
+  </div>
+</main>

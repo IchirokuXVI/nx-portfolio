@@ -1,0 +1,186 @@
+<form (submit)="onSubmit($event)" class="page" novalidate>
+  <lib-setup-step-header (back)="back()" (skip)="skip()" [step]="2" />
+
+  <h1 #heading class="title" tabindex="-1">
+    {{ 'setup.place.title' | rokuT }}
+  </h1>
+
+  @if (resolved(); as placed) {
+    <!--
+      The answer, announced, because somebody who cannot see it needs to know what they
+      are confirming before they press (section 9). The code and the country, and
+      nothing else: the lookup answers no town, so the screen cannot print one.
+    -->
+    <div class="placed" role="status">
+      <p class="placed-lead">
+        <lib-check-filled-icon aria-hidden="true" class="placed-glyph" />
+        <span>{{ 'setup.place.placed' | rokuT }}</span>
+      </p>
+      <p class="placed-code">{{ placed.postalCode }}</p>
+      <p class="placed-country">{{ country() }}</p>
+    </div>
+  } @else {
+    <p class="lede">{{ 'setup.place.body' | rokuT }}</p>
+
+    @switch (state()) {
+      @case ('refused') {
+        <!--
+          Sticky: the browser will not ask again, so there is no button to offer. The
+          sentence hands over to typing, which is a complete path.
+        -->
+        <p class="notice" role="status">
+          <lib-slash-circle-icon aria-hidden="true" class="notice-glyph" />
+          <span>{{ 'profiles.location.refused' | rokuT }}</span>
+        </p>
+      }
+      @case ('unplaceable') {
+        <div class="notice notice-stack" role="status">
+          <p class="notice-line">
+            <lib-info-icon aria-hidden="true" class="notice-glyph" />
+            <span>{{ 'profiles.location.unplaceable' | rokuT }}</span>
+          </p>
+          <button (click)="typeInstead()" class="quiet" type="button">
+            {{ 'profiles.location.typeInstead' | rokuT }}
+          </button>
+        </div>
+      }
+      @default {
+        @if (state() === 'unavailable') {
+          <p class="notice" role="status">
+            <lib-info-icon aria-hidden="true" class="notice-glyph" />
+            <span>{{ 'profiles.location.unavailable' | rokuT }}</span>
+          </p>
+        }
+        @if (state() === 'failed') {
+          <p class="error" role="alert">
+            {{ 'profiles.location.failed' | rokuT }}
+          </p>
+        }
+
+        <!--
+          Words and not a pin glyph: the label names the outcome. This press is what
+          raises the browser's own dialog, and nothing before it does.
+        -->
+        <button
+          (click)="locate()"
+          [attr.aria-busy]="locating()"
+          [disabled]="locating() || saving()"
+          class="locate"
+          type="button"
+        >
+          @if (locating()) {
+            <lib-spinner-icon class="spinning" />
+          }
+          <span>{{ 'setup.place.useLocation' | rokuT }}</span>
+        </button>
+
+        <p aria-hidden="true" class="or">
+          <span>{{ 'setup.place.or' | rokuT }}</span>
+        </p>
+      }
+    }
+
+    <div class="field-block">
+      <label class="label" for="setup-postal-code">
+        {{ 'profiles.postal.code' | rokuT }}
+      </label>
+      <input
+        (change)="onChange()"
+        (input)="onInput($event)"
+        [attr.maxlength]="maxLength"
+        [readOnly]="saving()"
+        [value]="typed()"
+        #field
+        autocomplete="postal-code"
+        class="field"
+        id="setup-postal-code"
+        inputmode="numeric"
+        type="text"
+      />
+    </div>
+
+    @if (state() !== 'refused' && state() !== 'unplaceable') {
+      <!-- Said before the press, when it is a promise rather than a report. -->
+      <p class="note">
+        <lib-info-icon aria-hidden="true" class="note-glyph" />
+        <span>{{ 'setup.place.privacy' | rokuT }}</span>
+      </p>
+    }
+  }
+
+  @if (code() !== null) {
+    <label class="nearby">
+      <input
+        (change)="toggleNearby($event)"
+        [checked]="nearby()"
+        class="checkbox"
+        type="checkbox"
+      />
+      <span class="nearby-text">
+        <span class="nearby-title">{{ 'setup.place.nearby' | rokuT }}</span>
+        <span class="nearby-body">{{ 'setup.place.nearbyBody' | rokuT }}</span>
+      </span>
+    </label>
+  }
+
+  @if (reach(); as reached) {
+    <section aria-labelledby="setup-reach" class="reach">
+      <h2 class="label" id="setup-reach">
+        {{ 'setup.place.reachesTitle' | rokuT }}
+      </h2>
+      <div class="reach-card">
+        @if (reached.chains === 0) {
+          <p class="reach-line">{{ 'profiles.postal.uncovered' | rokuT }}</p>
+        } @else {
+          <p class="reach-line">
+            {{
+              'setup.place.reaches'
+                | rokuT: { chains: reached.chains, shops: reached.shops }
+            }}
+          </p>
+          <p class="reach-body">{{ 'setup.place.reachesBody' | rokuT }}</p>
+        }
+      </div>
+    </section>
+  }
+
+  @if (saveFailed()) {
+    <p class="error" role="alert">{{ 'profiles.error.save' | rokuT }}</p>
+  }
+
+  <div class="foot">
+    @if (askingSkip()) {
+      <!--
+        Said once, and never again: the one consequence of skipping worth a sentence.
+        Back is the primary, because it keeps the person where the answer is.
+      -->
+      <section aria-labelledby="setup-skip-title" class="skip-card">
+        <p class="skip-title" id="setup-skip-title">
+          <lib-warning-icon aria-hidden="true" class="notice-glyph" />
+          <span>{{ 'setup.place.skipTitle' | rokuT }}</span>
+        </p>
+        <p class="skip-body">{{ 'setup.place.skipBody' | rokuT }}</p>
+        <div class="skip-actions">
+          <button (click)="skipAnyway()" class="quiet" type="button">
+            {{ 'setup.place.skipAnyway' | rokuT }}
+          </button>
+          <button (click)="keepAnswering()" class="primary" type="button">
+            {{ 'setup.place.back' | rokuT }}
+          </button>
+        </div>
+      </section>
+    } @else {
+      <button
+        [attr.aria-busy]="saving()"
+        [disabled]="!canContinue()"
+        class="primary"
+        type="submit"
+      >
+        @if (saving()) {
+          <lib-spinner-icon class="spinning" />
+        }
+        <span>{{ 'setup.place.continue' | rokuT }}</span>
+      </button>
+    }
+  </div>
+</form>

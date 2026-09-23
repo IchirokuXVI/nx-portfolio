@@ -1534,5 +1534,81 @@
       "removeNote": "Quien quites no podrá volver con un enlace.",
       "failed": "No se ha guardado. Inténtalo de nuevo."
     }
+  },
+  "setup": {
+    "back": "Volver",
+    "welcome": {
+      "title": "Tres preguntas y a comprar",
+      "body": "No hace falta responder a ninguna. Si te saltas una, elegimos por ti y puedes cambiarlo luego.",
+      "one": "Cómo te llamamos",
+      "oneBody": "El nombre que ve todo tu grupo.",
+      "two": "Dónde compras",
+      "twoBody": "Un código postal. Sin él no podemos mostrar precios.",
+      "three": "Qué supermercados",
+      "threeBody": "Todos, hasta que digas lo contrario.",
+      "start": "Empezar",
+      "later": "Ahora no"
+    },
+    "step": "Paso {{n}} de {{total}}",
+    "skip": "Saltar",
+    "name": {
+      "title": "¿Cómo te llamamos?",
+      "body": "Este nombre lo ve todo tu grupo. No es tu correo y no tiene que ser tu nombre real.",
+      "label": "Tu nombre",
+      "placeholder": "Déjalo en blanco",
+      "picked": "Ya hemos elegido uno por ti.",
+      "keeps": "Déjalo en blanco y se queda contigo.",
+      "another": "Elegir otro",
+      "keep": "Quedarme con {{name}}",
+      "continue": "Seguir como {{name}}",
+      "note": "Puedes cambiarlo luego en tu cuenta. Los nombres no son únicos, así que otra persona también puede llamarse {{name}}."
+    },
+    "place": {
+      "title": "¿Dónde compras?",
+      "body": "El mismo producto cuesta distinto en cada pueblo, así que no podemos darte un precio hasta saber qué tiendas tienes cerca. Con el código postal nos basta.",
+      "useLocation": "Usar mi ubicación",
+      "or": "o escríbelo",
+      "privacy": "Si pulsas el botón, tu posición se convierte en un código postal y la posición se descarta. Guardamos el código y nada más preciso.",
+      "placed": "Estás en",
+      "nearby": "Incluir los códigos de alrededor",
+      "nearbyBody": "Una tienda a una calle suele estar en el código siguiente. Marcado porque acabas de decirnos dónde estás.",
+      "reachesTitle": "Lo que alcanza",
+      "reaches": "{{chains}} cadenas y {{shops}} tiendas",
+      "reachesBody": "Eliges entre ellas en la pantalla siguiente.",
+      "skipTitle": "Sin código postal el catálogo funciona y no muestra precios.",
+      "skipBody": "Las listas, los grupos y el asistente no cambian. Añade un código cuando quieras, en tu perfil de compra.",
+      "skipAnyway": "Saltar igualmente",
+      "back": "Volver",
+      "continue": "Seguir"
+    },
+    "shops": {
+      "title": "¿Qué supermercados?",
+      "body": "Están todos activos. Desactiva una cadena a la que no vayas nunca y sus precios dejan de contar en toda la app.",
+      "near": "Cerca de {{code}}",
+      "all": "Todas las cadenas que tenemos",
+      "turnAllOff": "Desactivar todas",
+      "count": "{{count}} tiendas",
+      "off": "NO",
+      "note": "Una cadena son todas sus tiendas de aquí. Rechaza una tienda concreta más tarde, en tu perfil de compra.",
+      "noneTitle": "Sin ninguna cadena activa, nada tiene precio.",
+      "noneBody": "El catálogo, tus listas y el asistente siguen funcionando. Vuelve a activar una cuando quieras.",
+      "done": "Listo",
+      "loading": "Cargando los supermercados",
+      "failed": "No se han cargado los supermercados."
+    },
+    "done": {
+      "title": "Ya está todo",
+      "body": "Cada respuesta ya está guardada. Cámbialas cuando quieras desde tu cuenta.",
+      "name": "Nombre",
+      "where": "Dónde",
+      "shops": "Tiendas",
+      "nearby": "{{code}} y alrededores",
+      "chainsOf": "{{on}} cadenas de {{total}}",
+      "skipped": "Sin responder",
+      "tourTitle": "¿Quieres una visita rápida?",
+      "tourBody": "Te enseñamos la app pantalla a pantalla para que no te cueste encontrar nada. Es corta y puedes pararla cuando quieras.",
+      "tourStart": "Enséñamela",
+      "tourNo": "No, gracias"
+    }
   }
 }

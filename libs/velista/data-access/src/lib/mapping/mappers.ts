@@ -29,6 +29,7 @@ import {
   ZONE_STATUS_FALLBACK,
   ZONE_STATUSES,
   type AlsoOnPlaceVm,
+  type AppState,
   type AssistantChoice,
   type AssistantListLink,
   type AssistantReply,
@@ -830,6 +831,28 @@ export function toUserProfile(raw: unknown): UserProfile | null {
     email: nullableStr(raw['email']),
     emailVerified: raw['emailVerified'] === true,
     displayName: nullableStr(raw['displayName']),
+    // Left off entirely when the body carries none, rather than set to two nulls. The
+    // rename's answer has no `appState`, and two nulls there would read as a new
+    // account and send the setup guard after somebody who finished it an hour ago.
+    ...(isRecord(raw['appState'])
+      ? { appState: toAppState(raw['appState']) }
+      : {}),
+  };
+}
+
+/**
+ * From `UserAppStateView`, on `me` and as the answer of `PATCH /v1/account/app-state`.
+ *
+ * A timestamp that is not a string reads as null, "not yet". Of the two ways to be
+ * wrong that is the cheap one: the setup is offered once more, where the other way
+ * would hide it from an account that never saw it.
+ */
+export function toAppState(raw: unknown): AppState {
+  const record = isRecord(raw) ? raw : {};
+
+  return {
+    setupCompletedAt: nullableStr(record['setupCompletedAt']),
+    tourSeenAt: nullableStr(record['tourSeenAt']),
   };
 }
 

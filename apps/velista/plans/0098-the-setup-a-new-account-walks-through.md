@@ -1,3 +1,5 @@
+> **PR:** [#446](https://github.com/IchirokuXVI/nx-portfolio/pull/446)
+
 # 0098: the setup a new account walks through
 
 > Backend half: `apps/luna-shopper-backend/plans/0145`, which must be merged first.

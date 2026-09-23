@@ -1,0 +1,201 @@
+// The page furniture every setup screen uses.
+//
+// A copy of the shapes `feature-account` and `feature-install` keep in their own
+// partials, for the reason `_account-page.scss` gives: Sass resolves `@use` against the
+// filesystem and not against the workspace's path aliases, so a mixin cannot cross a
+// library boundary. The geometry that must not drift is a token.
+
+@mixin focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+@mixin host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+// One column, with the primary action pushed to the bottom of a tall screen by `foot`.
+// The width cap is `AppLayout`'s.
+@mixin page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+  flex: 1;
+  min-block-size: 100%;
+  padding: var(--app-space-5);
+  padding-block-end: calc(var(--app-space-6) + var(--app-safe-bottom));
+  overflow-y: auto;
+}
+
+// The heading takes focus on arrival (section 9), so it must not draw a ring for it:
+// the focus is for a screen reader's cursor, not a sign that something is pressable.
+@mixin title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+
+  &:focus {
+    outline: none;
+  }
+}
+
+@mixin lede {
+  margin: 0;
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+@mixin foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin-block-start: auto;
+  padding-block-start: var(--app-space-4);
+}
+
+@mixin primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  padding-inline: var(--app-space-6);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--app-action-bg-hover);
+  }
+
+  &:active:not(:disabled) {
+    background: var(--app-action-bg-pressed);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include focus-ring;
+}
+
+// A second action under the primary, as words rather than a second button shape.
+@mixin text-action {
+  min-block-size: var(--app-touch-target);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+@mixin quiet-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include focus-ring;
+}
+
+@mixin card {
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+// Small uppercase label over a field or a group.
+@mixin label {
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+@mixin field {
+  inline-size: 100%;
+  min-block-size: var(--app-control-height);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-field-font-size);
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+@mixin error {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
+// A glyph, then a column of text: the notes and the warnings on these screens.
+@mixin note {
+  display: flex;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+@mixin visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -1,7 +1,12 @@
 import { inject, Injectable } from '@angular/core';
-import type { UserProfile, UsernameScope } from '@portfolio/velista/models';
-import { GatewayError } from '../errors';
+import type {
+  AppState,
+  AppStateFlags,
+  UsernameScope,
+  UserProfile,
+} from '@portfolio/velista/models';
 import { TokenStore } from '../auth/token-store';
+import { GatewayError } from '../errors';
 import type { AccountServiceI } from './account-service';
 
 /** Five per hour, matching `THROTTLE_LIMITS.usernameChange` (rule A4). */
@@ -15,6 +20,14 @@ const RENAME_LIMIT = 5;
  * mock's refused frame draws.
  */
 const RENAME_REFUSED_WAIT_SECONDS = 2468;
+
+/**
+ * What `suggestUsername` hands out, in turn.
+ *
+ * A fixed list rather than a random draw, so a spec can say which name the card shows
+ * after one press and after two.
+ */
+const SUGGESTIONS = ['Quiet Harbour', 'Amber Fox', 'Late Lantern'] as const;
 
 /** The address the fake's registered account answers with. */
 const MEMORY_EMAIL = 'marta@example.com';
@@ -55,6 +68,17 @@ export class AccountMemory implements AccountServiceI {
   /** Every scope this fake was asked for, in order, so a spec can assert rule A3. */
   readonly scopesSent: UsernameScope[] = [];
 
+  /**
+   * What the account has been shown. A new account by default, which is the state the
+   * setup exists for; stamps are kept once and never moved, as the server keeps them.
+   */
+  private _appState: AppState = { setupCompletedAt: null, tourSeenAt: null };
+
+  private _suggested = 0;
+
+  /** Every app state write, in order, so a spec can count them. */
+  readonly appStateSent: AppStateFlags[] = [];
+
   async getProfile(): Promise<UserProfile> {
     return this._profile();
   }
@@ -86,6 +110,30 @@ export class AccountMemory implements AccountServiceI {
     return { deleted: first };
   }
 
+  async setAppState(flags: AppStateFlags): Promise<AppState> {
+    this._profile();
+    this.appStateSent.push(flags);
+
+    const now = new Date().toISOString();
+    this._appState = {
+      setupCompletedAt:
+        this._appState.setupCompletedAt ??
+        (flags.setupCompleted === true ? now : null),
+      tourSeenAt:
+        this._appState.tourSeenAt ?? (flags.tourSeen === true ? now : null),
+    };
+
+    return this._appState;
+  }
+
+  async suggestUsername(): Promise<string> {
+    this._profile();
+
+    const name = SUGGESTIONS[this._suggested % SUGGESTIONS.length];
+    this._suggested += 1;
+    return name;
+  }
+
   private _profile(): UserProfile {
     const tokens = this._tokens.tokens();
     if (tokens === null) {
@@ -110,6 +158,7 @@ export class AccountMemory implements AccountServiceI {
       email: guest ? null : MEMORY_EMAIL,
       emailVerified: !guest,
       displayName: null,
+      appState: this._appState,
     };
   }
 }

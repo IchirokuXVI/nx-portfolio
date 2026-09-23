@@ -31,13 +31,18 @@ export class ShopApi implements ShopServiceI {
   private readonly _urls = inject(ApiUrl);
 
   async summarizeChains(
-    profileId: string
+    profileId: string,
+    postalCodes: readonly string[] = []
   ): Promise<readonly ShopChainSummary[]> {
+    // Repeated, which is how the DTO reads an array out of a query string.
+    const params = postalCodes.reduce(
+      (built, code) => built.append('postalCode', code),
+      new HttpParams().set('profileId', profileId).set('includeExcluded', true)
+    );
+
     const body = await firstValueFrom(
       this._http.get<unknown>(this._urls.gateway('/v1/catalog/shops/summary'), {
-        params: new HttpParams()
-          .set('profileId', profileId)
-          .set('includeExcluded', true),
+        params,
         context: operation('catalog.shopSummary'),
       })
     );
