@@ -58,9 +58,9 @@ describe('purchase mappers (velista 0095, test 1)', () => {
 
     expect(entry?.kind).toBe('SESSION');
     expect(entry?.name).toBeNull();
-    expect(toPurchaseEntry({ ...ENTRY, kind: 'BASKET', name: 'Sat' })?.name).toBe(
-      'Sat'
-    );
+    expect(
+      toPurchaseEntry({ ...ENTRY, kind: 'BASKET', name: 'Sat' })?.name
+    ).toBe('Sat');
   });
 
   it('maps an amount with no currency to no amount at all', () => {

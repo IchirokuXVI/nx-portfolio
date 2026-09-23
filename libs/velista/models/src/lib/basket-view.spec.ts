@@ -100,11 +100,12 @@ describe('basketRowProduct', () => {
 
   it('answers a choice still among the options, the only option, or nothing', () => {
     expect(
-      basketRowProduct({ optionIds: ['p-milk', 'p-oat'] }, products, 'p-oat')?.id
+      basketRowProduct({ optionIds: ['p-milk', 'p-oat'] }, products, 'p-oat')
+        ?.id
     ).toBe('p-oat');
-    expect(basketRowProduct({ optionIds: ['p-milk'] }, products, null)?.id).toBe(
-      'p-milk'
-    );
+    expect(
+      basketRowProduct({ optionIds: ['p-milk'] }, products, null)?.id
+    ).toBe('p-milk');
     expect(
       basketRowProduct({ optionIds: ['p-milk', 'p-oat'] }, products, null)
     ).toBeNull();

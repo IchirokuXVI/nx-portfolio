@@ -562,7 +562,11 @@ describe('BasketApi, the writes of velista 0092', () => {
       });
       expect(none).not.toHaveProperty('priceScopeId');
 
-      const unpriced = await settleBody({ outcome: 'BOUGHT', quantity: 1, from: 2 });
+      const unpriced = await settleBody({
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: 2,
+      });
       expect(unpriced).not.toHaveProperty('priceScopeId');
 
       const units = await revertBody({ target: 'UNITS', units: 1, from: 1 });
@@ -588,7 +592,9 @@ describe('BasketApi, the writes of velista 0092', () => {
 
       const money = bodies
         .flatMap(keysOf)
-        .filter((key) => key !== 'priceScopeId' && /price|cents|amount/i.test(key));
+        .filter(
+          (key) => key !== 'priceScopeId' && /price|cents|amount/i.test(key)
+        );
       expect(money).toEqual([]);
     });
   });

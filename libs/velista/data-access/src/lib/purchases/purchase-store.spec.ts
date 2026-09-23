@@ -14,7 +14,10 @@ import { RealtimeMemory } from '../realtime/realtime-memory';
 import { PURCHASE_SERVICE, type PurchaseServiceI } from './purchase-service';
 import { PurchaseStore } from './purchase-store';
 
-function entry(id: string, overrides: Partial<PurchaseEntry> = {}): PurchaseEntry {
+function entry(
+  id: string,
+  overrides: Partial<PurchaseEntry> = {}
+): PurchaseEntry {
   return {
     id,
     kind: 'SESSION',

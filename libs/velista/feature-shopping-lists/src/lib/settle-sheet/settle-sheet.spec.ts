@@ -1928,8 +1928,7 @@ describe('SettleSheet: the product somebody got', () => {
       expect(body['priceScopeId']).toBe('s-dia');
       expect(
         Object.keys(body).filter(
-          (key) =>
-            key !== 'priceScopeId' && /price|cents|amount/i.test(key)
+          (key) => key !== 'priceScopeId' && /price|cents|amount/i.test(key)
         )
       ).toEqual([]);
     });

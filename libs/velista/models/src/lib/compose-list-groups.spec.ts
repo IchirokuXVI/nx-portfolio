@@ -199,9 +199,7 @@ describe('composeListGroups (velista 0088)', () => {
     });
 
     it('is drawn once, as due, when the list suggests it', () => {
-      const view = groups(
-        compose(seeds, { tripsReady: false, due: ['eggs'] })
-      );
+      const view = groups(compose(seeds, { tripsReady: false, due: ['eggs'] }));
 
       expect(ids(view.toBuy)).toEqual(['bread', 'saffron']);
       expect(ids(view.due)).toEqual(['eggs']);

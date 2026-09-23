@@ -1,4 +1,10 @@
-import { computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
+import {
+  computed,
+  DestroyRef,
+  inject,
+  Injectable,
+  signal,
+} from '@angular/core';
 import {
   purchaseEntryKey,
   PURCHASES_REFETCH_QUIET_MS,
