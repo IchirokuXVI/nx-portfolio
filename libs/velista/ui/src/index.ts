@@ -64,6 +64,8 @@ export * from './lib/presence/list-viewers';
 export * from './lib/presence/presence-row';
 export * from './lib/recording/recording-elapsed';
 export * from './lib/recording/recording-row';
+export * from './lib/setup/setup-chain-list';
+export * from './lib/setup/setup-step-header';
 export * from './lib/sharing/people-picker';
 export * from './lib/shops/franchise-buttons';
 export * from './lib/shops/shop-list';

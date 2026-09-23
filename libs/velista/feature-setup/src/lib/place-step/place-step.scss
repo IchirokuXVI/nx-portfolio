@@ -1,0 +1,257 @@
+@use '../setup-page' as setup;
+
+:host {
+  @include setup.host;
+}
+
+.page {
+  @include setup.page;
+}
+
+.title {
+  @include setup.title;
+}
+
+.lede {
+  @include setup.lede;
+}
+
+.label {
+  @include setup.label;
+  margin: 0;
+}
+
+// Full width, amber on the quiet fill: the one control on the screen that is not a
+// field and not the primary.
+.locate {
+  @include setup.quiet-action;
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  border-color: var(--app-action-quiet-border);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-base);
+}
+
+// "or type it", centred on a hairline.
+.or {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+}
+
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.field {
+  @include setup.field;
+  letter-spacing: 0.08em;
+}
+
+.note,
+.notice {
+  @include setup.note;
+  margin: 0;
+}
+
+.notice-stack {
+  flex-direction: column;
+}
+
+.notice-line {
+  display: flex;
+  gap: var(--app-space-3);
+  margin: 0;
+}
+
+.note-glyph,
+.notice-glyph {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  margin-block-start: var(--app-space-hair);
+}
+
+.notice {
+  color: var(--app-text-primary);
+}
+
+.quiet {
+  @include setup.quiet-action;
+}
+
+.placed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  padding: var(--app-space-5) var(--app-space-4);
+  border: 1px solid var(--app-status-success-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-status-success-bg);
+}
+
+.placed-lead {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.placed-glyph {
+  font-size: var(--app-icon-md);
+  color: var(--app-status-success-fg);
+}
+
+.placed-code {
+  margin: var(--app-space-2) 0 0;
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-3xl);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--app-text-primary);
+}
+
+.placed-country {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.nearby {
+  @include setup.card;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4);
+  cursor: pointer;
+
+  &:has(.checkbox:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.checkbox {
+  flex: none;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  margin: 0;
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
+}
+
+.nearby-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}
+
+.nearby-title {
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+.nearby-body {
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.reach {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.reach-card {
+  @include setup.card;
+  padding: var(--app-space-4);
+}
+
+.reach-line {
+  margin: 0;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+}
+
+.reach-body {
+  margin: var(--app-space-1) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.error {
+  @include setup.error;
+}
+
+.foot {
+  @include setup.foot;
+}
+
+.primary {
+  @include setup.primary-action;
+}
+
+.skip-card {
+  @include setup.card;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4);
+}
+
+.skip-title {
+  display: flex;
+  gap: var(--app-space-3);
+  margin: 0;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+.skip-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.skip-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--app-space-2);
+
+  .quiet,
+  .primary {
+    min-block-size: var(--app-button-height);
+  }
+}
+
+.spinning {
+  font-size: var(--app-icon-sm);
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: spin 0.9s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

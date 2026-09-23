@@ -4,7 +4,15 @@ import {
   NO_NAV_CHROME,
   SHEET_SEGMENT,
 } from '@portfolio/velista/platform';
+import { authenticatedGuard } from './auth-guards';
 import { AppShellRoutes } from './routes';
+import { setupGuard } from './setup-guard';
+
+/**
+ * What every signed in page carries: an account, and the setup's one offer
+ * (velista `0098`, section 3).
+ */
+const SIGNED_IN = [authenticatedGuard, setupGuard];
 
 /**
  * Everything below the app's layout route, which is where the pages live.
@@ -369,7 +377,7 @@ describe('AppShellRoutes', () => {
         // Two guards, one per id. `canMatch` and not `canActivate`, because a declined
         // match has to carry on to the next route rather than abort the navigation.
         expect(routeAt(listPath)?.canMatch).toHaveLength(2);
-        expect(routeAt(listPath)?.canActivate).toHaveLength(1);
+        expect(routeAt(listPath)?.canActivate).toEqual(SIGNED_IN);
       });
 
       it('still leaves /zones/<uuid>/lists/new to the create sheet', () => {
@@ -460,7 +468,7 @@ describe('AppShellRoutes', () => {
 
       it('checks both ids with canMatch and demands an account', () => {
         expect(routeAt(linePath)?.canMatch).toHaveLength(2);
-        expect(routeAt(linePath)?.canActivate).toHaveLength(1);
+        expect(routeAt(linePath)?.canActivate).toEqual(SIGNED_IN);
       });
 
       it('confirms a delete over itself rather than over the list', () => {
@@ -563,7 +571,7 @@ describe('AppShellRoutes', () => {
       // and not a different route, which is a property of `SessionStore.isGuest` that
       // the page reads. Splitting it would give two URLs for one thing somebody
       // reaches by pressing one button (section 4.1).
-      expect(account?.canActivate).toHaveLength(1);
+      expect(account?.canActivate).toEqual(SIGNED_IN);
       expect(account?.canMatch).toBeUndefined();
     });
 
@@ -625,7 +633,7 @@ describe('AppShellRoutes', () => {
     it('is authenticated, and guarded by nothing else', () => {
       // A profile is private and resolves from the caller's own token, so there is
       // nothing here to authorize that the gateway does not already.
-      expect(profiles?.canActivate).toHaveLength(1);
+      expect(profiles?.canActivate).toEqual(SIGNED_IN);
       expect(profiles?.canMatch).toBeUndefined();
     });
 
@@ -682,7 +690,7 @@ describe('AppShellRoutes', () => {
     });
 
     it('is authenticated, and guarded by nothing else', () => {
-      expect(supermarkets?.canActivate).toHaveLength(1);
+      expect(supermarkets?.canActivate).toEqual(SIGNED_IN);
       expect(supermarkets?.canMatch).toBeUndefined();
     });
 
@@ -808,7 +816,7 @@ describe('AppShellRoutes', () => {
         // The opposite of the route below it, and for the same reason: a guest
         // holding a link has no basket of their own to open, and the basket they
         // were sent is reached by its id.
-        expect(routeAt(livePath)?.canActivate).toHaveLength(1);
+        expect(routeAt(livePath)?.canActivate).toEqual(SIGNED_IN);
         expect(routeAt(basketPath)?.canActivate).toBeUndefined();
       });
 
@@ -958,7 +966,7 @@ describe('AppShellRoutes', () => {
       // The bot acts as the caller through the gateway with the caller's own token
       // (backend 0039, rule A1), so there is nothing here to authorize that the API
       // does not already.
-      expect(assistant?.canActivate).toHaveLength(1);
+      expect(assistant?.canActivate).toEqual(SIGNED_IN);
       expect(assistant?.canMatch).toBeUndefined();
     });
 
@@ -1113,7 +1121,7 @@ describe('the basket routes', () => {
   it('keeps the history behind the authenticated guard', () => {
     expect(
       pages.find((route) => route.path === 'shopping-lists')?.canActivate
-    ).toHaveLength(1);
+    ).toEqual(SIGNED_IN);
   });
 
   it('keeps it lazy, like every other page', () => {
@@ -1183,7 +1191,7 @@ describe('the bottom bar', () => {
   it('demands an account for the third tab, and keeps it lazy', () => {
     const tab = pages.find((route) => route.path === 'shopping-lists/current');
 
-    expect(tab?.canActivate).toHaveLength(1);
+    expect(tab?.canActivate).toEqual(SIGNED_IN);
     expect(tab?.loadComponent).toBeDefined();
   });
 
@@ -1196,7 +1204,61 @@ describe('the bottom bar', () => {
     const catalog = pages.find((route) => route.path === 'catalog');
 
     expect(catalog?.loadComponent).toBeDefined();
-    expect(catalog?.canActivate).toHaveLength(1);
+    expect(catalog?.canActivate).toEqual(SIGNED_IN);
     expect(paths.indexOf('catalog')).toBeLessThan(paths.indexOf(''));
+  });
+});
+
+describe('the setup (velista 0098)', () => {
+  const setup = pages.find((route) => route.path === 'setup');
+  const screens = setup?.children ?? [];
+
+  it('has its five screens, in order', () => {
+    expect(screens.map((route) => route.path)).toEqual([
+      '',
+      'name',
+      'place',
+      'shops',
+      'done',
+    ]);
+  });
+
+  it('draws no bar on any of them', () => {
+    // The bar reads the deepest activated route, and these children sit below a
+    // parent with a component, so each one says it for itself.
+    expect(screens).toHaveLength(5);
+    for (const screen of screens) {
+      expect(screen.data?.[NAV_CHROME]).toBe(NO_NAV_CHROME);
+    }
+  });
+
+  it('gives each screen its own title', () => {
+    for (const screen of screens) {
+      expect(screen.title).toBeDefined();
+    }
+  });
+
+  it('demands an account, and does not send the setup to itself', () => {
+    expect(setup?.canActivate).toEqual([authenticatedGuard]);
+  });
+
+  it('is lazy, and declared before the front door', () => {
+    const paths = pages.map((route) => route.path);
+
+    expect(setup?.loadComponent).toBeDefined();
+    expect(paths.indexOf('setup')).toBeLessThan(paths.indexOf(''));
+  });
+
+  it('puts the setup guard on every page that demands an account', () => {
+    const signedIn = pages.filter((route) =>
+      route.canActivate?.includes(authenticatedGuard)
+    );
+
+    expect(signedIn.length).toBeGreaterThan(5);
+    for (const page of signedIn) {
+      expect(page.canActivate).toEqual(
+        page.path === 'setup' ? [authenticatedGuard] : SIGNED_IN
+      );
+    }
   });
 });

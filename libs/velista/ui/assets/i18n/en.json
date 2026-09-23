@@ -1535,5 +1535,81 @@
       "removeNote": "Somebody you remove cannot come back with a link.",
       "failed": "That did not save. Try again."
     }
+  },
+  "setup": {
+    "back": "Back",
+    "welcome": {
+      "title": "Three questions and you are shopping",
+      "body": "You do not have to answer any of them. If you skip a question, we choose for you, and you can change it later.",
+      "one": "What we call you",
+      "oneBody": "The name everyone in your groups sees.",
+      "two": "Where you shop",
+      "twoBody": "A postal code. Without one we cannot show a price.",
+      "three": "Which supermarkets",
+      "threeBody": "All of them, until you say otherwise.",
+      "start": "Start",
+      "later": "Not now"
+    },
+    "step": "Step {{n}} of {{total}}",
+    "skip": "Skip",
+    "name": {
+      "title": "What do we call you?",
+      "body": "Everyone in your groups sees this name. It is not your email address, and it does not have to be your real name.",
+      "label": "Your name",
+      "placeholder": "Leave it blank",
+      "picked": "We already picked one for you.",
+      "keeps": "Leave the field blank and it stays yours.",
+      "another": "Pick another one",
+      "keep": "Keep {{name}}",
+      "continue": "Continue as {{name}}",
+      "note": "You can change it later on your account screen. Names are not unique, so somebody else can be {{name}} too."
+    },
+    "place": {
+      "title": "Where do you shop?",
+      "body": "The same product costs different amounts in different towns, so we cannot show you a price until we know which shops are near you. A postal code is as close as we ever need.",
+      "useLocation": "Use my location",
+      "or": "or type it",
+      "privacy": "If you press the button, your position is turned into a postal code and the position is thrown away. We store the code and nothing finer.",
+      "placed": "We placed you in",
+      "nearby": "Include the codes around it",
+      "nearbyBody": "A shop one street over is often in the next code. Ticked because you just told us where you are.",
+      "reachesTitle": "What that reaches",
+      "reaches": "{{chains}} supermarket chains and {{shops}} shops",
+      "reachesBody": "You choose between them on the next screen.",
+      "skipTitle": "Without a postal code the catalog still works and shows no prices.",
+      "skipBody": "Lists, groups and the assistant are unaffected. Add a code whenever you like, on your shopping profile.",
+      "skipAnyway": "Skip anyway",
+      "back": "Back",
+      "continue": "Continue"
+    },
+    "shops": {
+      "title": "Which supermarkets?",
+      "body": "All of them are on. Turn off a chain you will never walk into, and its prices stop counting anywhere in the app.",
+      "near": "Near {{code}}",
+      "all": "Every chain we hold",
+      "turnAllOff": "Turn all off",
+      "count": "{{count}} shops",
+      "off": "OFF",
+      "note": "A chain means every shop it has here. Refuse one shop on its own later, on your shopping profile.",
+      "noneTitle": "With every chain off, nothing has a price.",
+      "noneBody": "The catalog, your lists and the assistant all keep working. Turn one back on whenever you like.",
+      "done": "Done",
+      "loading": "Loading the supermarkets",
+      "failed": "The supermarkets did not load."
+    },
+    "done": {
+      "title": "That is everything",
+      "body": "Each answer is already saved. Change any of them from your account screen.",
+      "name": "Name",
+      "where": "Where",
+      "shops": "Shops",
+      "nearby": "{{code}} and nearby",
+      "chainsOf": "{{on}} chains of {{total}}",
+      "skipped": "Skipped",
+      "tourTitle": "Would you like a quick tour?",
+      "tourBody": "We will show you around the app, one screen at a time, so that nothing is hard to find. It is short, and you can stop it whenever you like.",
+      "tourStart": "Show me around",
+      "tourNo": "No, thank you"
+    }
   }
 }

@@ -1,0 +1,86 @@
+@use '../setup-page' as setup;
+
+:host {
+  @include setup.host;
+}
+
+.page {
+  @include setup.page;
+  padding-block-start: var(--app-space-10);
+}
+
+.wordmark {
+  align-self: flex-start;
+}
+
+.title {
+  @include setup.title;
+  font-size: var(--app-text-3xl);
+}
+
+.lede {
+  @include setup.lede;
+}
+
+.questions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.question {
+  @include setup.card;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4);
+}
+
+// The amber ink on the violet fill, the pairing the app already uses for a tile.
+.number {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-icon-lg);
+  block-size: var(--app-icon-lg);
+  border: 1px solid var(--app-status-attention-border);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-attention-bg);
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-xs);
+  font-weight: 700;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}
+
+.question-title {
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.question-body {
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.foot {
+  @include setup.foot;
+}
+
+.primary {
+  @include setup.primary-action;
+}
+
+.later {
+  @include setup.text-action;
+}

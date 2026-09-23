@@ -1,15 +1,17 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
+  AppState,
+  AppStateFlags,
   SetGlobalUsernameRequest,
-  UserProfile,
   UsernameScope,
+  UserProfile,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
-import { toUserProfile } from '../mapping/mappers';
-import { isRecord } from '../mapping/primitives';
+import { toAppState, toUserProfile } from '../mapping/mappers';
+import { isRecord, str } from '../mapping/primitives';
 import { required } from '../mapping/required';
 import type { AccountServiceI } from './account-service';
 
@@ -84,6 +86,40 @@ export class AccountApi implements AccountServiceI {
     );
 
     return { deleted: isRecord(body) && body['deleted'] === true };
+  }
+
+  /**
+   * `PATCH /v1/account/app-state`.
+   *
+   * The flags go out exactly as given: the DTO accepts each one absent or `true` and
+   * refuses a body with neither, so an object with a `false` in it could never be sent
+   * by accident from a type that has no `false` to hold.
+   */
+  async setAppState(flags: AppStateFlags): Promise<AppState> {
+    const body = await firstValueFrom(
+      this._http.patch<unknown>(
+        this._urls.gateway('/v1/account/app-state'),
+        flags,
+        { context: operation('account.appState') }
+      )
+    );
+
+    return toAppState(body);
+  }
+
+  /** `GET /v1/account/username-suggestions`. */
+  async suggestUsername(): Promise<string> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(
+        this._urls.gateway('/v1/account/username-suggestions'),
+        { context: operation('account.suggestUsername') }
+      )
+    );
+
+    return required(
+      isRecord(body) ? str(body['username']) : null,
+      'account.suggestUsername'
+    );
   }
 
   private _me(): string {

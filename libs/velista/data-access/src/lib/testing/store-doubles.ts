@@ -1598,6 +1598,8 @@ export interface FakeProfileOptions {
   readonly renameRejectsWith?: unknown;
   /** What `remove` throws back as its failure, if anything. */
   readonly removeRejectsWith?: unknown;
+  /** The names `suggestUsername` hands out, in turn. */
+  readonly suggestions?: readonly string[];
 }
 
 /** One recorded call to a faked `ProfileStore`. */
@@ -1609,6 +1611,8 @@ export type ProfileCall =
       readonly scope: UsernameScope;
     }
   | { readonly method: 'remove' }
+  | { readonly method: 'completeSetup' }
+  | { readonly method: 'suggestUsername' }
   | { readonly method: 'clear' };
 
 /**
@@ -1624,6 +1628,9 @@ export function fakeProfileStore(options: FakeProfileOptions = {}) {
   const calls: ProfileCall[] = [];
   const profile = signal<UserProfile | null>(options.profile ?? null);
   const state = signal<ProfileLoad>(options.state ?? 'loaded');
+  const setupMarked = signal(false);
+  const appState = computed(() => profile()?.appState ?? null);
+  let suggested = 0;
 
   return {
     profile: profile.asReadonly(),
@@ -1637,6 +1644,33 @@ export function fakeProfileStore(options: FakeProfileOptions = {}) {
     load: async () => {
       calls.push({ method: 'load' });
     },
+
+    appState,
+
+    /** The real rule, on the fake's own state: a mark wins, else the held stamp. */
+    setupPending: computed<boolean | null>(() => {
+      if (setupMarked()) {
+        return false;
+      }
+      const held = appState();
+      return held === null ? null : held.setupCompletedAt === null;
+    }),
+
+    completeSetup: () => {
+      calls.push({ method: 'completeSetup' });
+      setupMarked.set(true);
+    },
+
+    suggestUsername: async () => {
+      calls.push({ method: 'suggestUsername' });
+      const pool = options.suggestions ?? ['Quiet Harbour'];
+      const name = pool[suggested % pool.length];
+      suggested += 1;
+      return name;
+    },
+
+    /** Put a profile in, as a load that answered would. */
+    setProfile: (next: UserProfile | null) => profile.set(next),
 
     rename: async (username: string, scope: UsernameScope) => {
       calls.push({ method: 'rename', username, scope });

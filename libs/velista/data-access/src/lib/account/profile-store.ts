@@ -6,6 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import type {
+  AppState,
   ProfileLoad,
   UsernameScope,
   UserProfile,
@@ -82,6 +83,22 @@ export class ProfileStore {
   private readonly _state = signal<ProfileLoad>('loading');
   private readonly _error = signal<unknown>(null);
 
+  /**
+   * Whether this document has said the setup is over (velista `0098`, section 7).
+   *
+   * Its own signal rather than a stamp written into the held profile, because the
+   * setup can end before any profile has been read, and a stamp needs a profile to sit
+   * on. It also outlives a re-read that still says null: that is a write that was lost,
+   * and the plan re-asks at most once per cold start, not on the next `load`.
+   */
+  private readonly _setupMarked = signal(false);
+
+  /**
+   * Bumped by {@link clear}, so a stamp still in flight for the account that signed out
+   * cannot land on the profile of the one that signs in next.
+   */
+  private _session = 0;
+
   /** The one read in flight, shared by every caller that asks while it runs. */
   private _loading: Promise<void> | null = null;
 
@@ -137,6 +154,31 @@ export class ProfileStore {
     return profile === null || profile.username === ''
       ? null
       : profile.username;
+  });
+
+  /**
+   * What the account has been shown, or null when `me` has not answered yet.
+   *
+   * Null is "not known", never "not shown". A guard that read null as a new account
+   * would send everybody through the setup for the length of one round trip.
+   */
+  readonly appState = computed<AppState | null>(
+    () => this._profile()?.appState ?? null
+  );
+
+  /**
+   * Whether the setup is still owed: true, false, or null for "not known yet".
+   *
+   * The setup guard's whole question, answered from what is already held so that the
+   * guard never issues a request of its own (velista `0098`, section 3).
+   */
+  readonly setupPending = computed<boolean | null>(() => {
+    if (this._setupMarked()) {
+      return false;
+    }
+
+    const state = this.appState();
+    return state === null ? null : state.setupCompletedAt === null;
   });
 
   /**
@@ -210,7 +252,16 @@ export class ProfileStore {
     // normalizes: `normalizeUsername` collapses whitespace runs and normalizes to NFC,
     // and writing back what was sent would leave the screen showing a name the server
     // does not have.
-    this._profile.set(outcome.value);
+    //
+    // The `appState` is carried over, because the rename's answer is the auth half of
+    // the profile alone and has none. Dropping it would make `setupPending` unknown
+    // again in the middle of the setup's own name step.
+    const held = this._profile()?.appState;
+    this._profile.set(
+      outcome.value.appState === undefined && held !== undefined
+        ? { ...outcome.value, appState: held }
+        : outcome.value
+    );
     this._state.set('loaded');
 
     return { state: 'renamed' };
@@ -237,8 +288,58 @@ export class ProfileStore {
       : { state: 'deleted' };
   }
 
+  /**
+   * Say the setup is over, and do not wait to hear back (velista `0098`, section 7).
+   *
+   * {@link setupPending} turns false on this tick, so no guard sends the person back
+   * in during this document, whatever the network does. Then the stamp is sent, fire
+   * and forget: the person is finished with the flow whatever the server thinks, and a
+   * lost write costs one more offer on the next cold start.
+   *
+   * **At most one request per document.** Every exit calls this, and some calls
+   * follow each other (a button, then the flow's own teardown), so a second call, or a
+   * call for an account the server already knows is set up, sends nothing.
+   */
+  completeSetup(): void {
+    if (this._setupMarked()) {
+      return;
+    }
+
+    const known = this.appState()?.setupCompletedAt ?? null;
+    this._setupMarked.set(true);
+    if (known !== null) {
+      return;
+    }
+
+    const session = this._session;
+    void this._mutations
+      .run(null, () => this._account.setAppState({ setupCompleted: true }))
+      .then((outcome) => {
+        if (outcome.state === 'failed' || session !== this._session) {
+          return;
+        }
+
+        this._profile.update((profile) =>
+          profile === null ? profile : { ...profile, appState: outcome.value }
+        );
+      });
+  }
+
+  /**
+   * One name from the registration pool, written nowhere
+   * (`GET /v1/account/username-suggestions`).
+   *
+   * Here rather than on the name step, because the step renames through
+   * {@link rename} and the two belong to the same account.
+   */
+  suggestUsername(): Promise<string> {
+    return this._account.suggestUsername();
+  }
+
   /** Drop what is held. Called on sign out and after a delete. */
   clear(): void {
+    this._session += 1;
+    this._setupMarked.set(false);
     this._profile.set(null);
     this._state.set('loading');
     this._error.set(null);

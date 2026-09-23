@@ -28,6 +28,7 @@ import {
   authenticatedGuard,
   guestOnlyGuard,
 } from './auth-guards';
+import { setupGuard } from './setup-guard';
 import { APP_USABLE_LOCALES } from './usable-locales';
 import {
   basketIdGuard,
@@ -428,6 +429,51 @@ function listSheetRoutes(): Route[] {
   ];
 }
 
+/**
+ * The setup's five screens, below its layout (velista `0098`, section 2).
+ *
+ * Each step's heading is also its document title (section 9), so each route names the
+ * same key its page draws in its `h1`.
+ */
+function setupRoutes(): Route[] {
+  const load = () => import('@portfolio/velista/feature-setup');
+  const noChrome = { [NAV_CHROME]: NO_NAV_CHROME };
+
+  return [
+    {
+      path: '',
+      pathMatch: 'full',
+      title: localizedTitle('setup.welcome.title'),
+      data: noChrome,
+      loadComponent: () => load().then((m) => m.WelcomePage),
+    },
+    {
+      path: 'name',
+      title: localizedTitle('setup.name.title'),
+      data: noChrome,
+      loadComponent: () => load().then((m) => m.NameStep),
+    },
+    {
+      path: 'place',
+      title: localizedTitle('setup.place.title'),
+      data: noChrome,
+      loadComponent: () => load().then((m) => m.PlaceStep),
+    },
+    {
+      path: 'shops',
+      title: localizedTitle('setup.shops.title'),
+      data: noChrome,
+      loadComponent: () => load().then((m) => m.ShopsStep),
+    },
+    {
+      path: 'done',
+      title: localizedTitle('setup.done.title'),
+      data: noChrome,
+      loadComponent: () => load().then((m) => m.DonePage),
+    },
+  ];
+}
+
 export const AppShellRoutes: Route[] = [
   {
     /**
@@ -508,7 +554,7 @@ export const AppShellRoutes: Route[] = [
             // they are actually shown. That was the split's whole point and it only starts
             // paying once there are two of them, which there now are.
             path: 'home',
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-home').then((m) => m.HomePage),
             // The two entry sheets, and **not** Get shopping list any more (velista
@@ -518,6 +564,25 @@ export const AppShellRoutes: Route[] = [
             // that now have a control for it. A sheet nothing can open is a URL that
             // draws a form over the wrong page.
             children: [...entrySheetRoutes('home')],
+          },
+          // The setup a new account walks through (velista `0098`). `setupGuard`, on
+          // every signed in page, sends a fresh account here once per document.
+          //
+          // Pages and not sheets: a sheet covers a page that is still there, and there
+          // is nothing behind this. Every one of the five says `chrome: 'none'`, on the
+          // child itself, because the bar reads the deepest activated route and these
+          // children do not inherit a parent with a component. The bar is a way out of a
+          // screen, and these five are one task with one way out.
+          //
+          // No `setupGuard` here, which would send the setup to itself.
+          {
+            path: 'setup',
+            canActivate: [authenticatedGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-setup').then(
+                (m) => m.SetupLayout
+              ),
+            children: setupRoutes(),
           },
           // The credential flows (plan 0009). Routes and not sheets, because none of them
           // completes one field in place over a page that keeps its context: each has two
@@ -622,7 +687,7 @@ export const AppShellRoutes: Route[] = [
           {
             path: 'zones/:zoneId/lists/:listId/lines/:lineId',
             canMatch: [zoneIdGuard, listIdGuard],
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-lists').then(
                 (m) => m.LinePage
@@ -642,7 +707,7 @@ export const AppShellRoutes: Route[] = [
           {
             path: 'zones/:zoneId/lists/:listId',
             canMatch: [zoneIdGuard, listIdGuard],
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-lists').then(
                 (m) => m.ListPage
@@ -658,7 +723,7 @@ export const AppShellRoutes: Route[] = [
           {
             path: 'zones/:zoneId/members',
             canMatch: [zoneIdGuard],
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-zones').then(
                 (m) => m.MembersPage
@@ -668,7 +733,7 @@ export const AppShellRoutes: Route[] = [
           {
             path: 'zones/:zoneId',
             canMatch: [zoneIdGuard],
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-zones').then(
                 (m) => m.GroupPage
@@ -713,7 +778,7 @@ export const AppShellRoutes: Route[] = [
             // The profile is in the URL rather than taken from the store's selection,
             // because this page is deep linkable and a selection is not.
             path: 'account/profiles/:profileId/supermarkets',
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-account').then(
                 (m) => m.SupermarketsPage
@@ -736,7 +801,7 @@ export const AppShellRoutes: Route[] = [
             // from the caller's own token, so there is nothing here to authorize that
             // the gateway does not already.
             path: 'account/profiles',
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-account').then(
                 (m) => m.ProfilesPage
@@ -788,7 +853,7 @@ export const AppShellRoutes: Route[] = [
             // unreachable. Here the wrong branch is a screen with rows that do not
             // apply. Guards are for the ones that cost something.
             path: 'account',
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-account').then(
                 (m) => m.AccountPage
@@ -858,7 +923,7 @@ export const AppShellRoutes: Route[] = [
             // destroying the recorder releases the microphone, so a recording does not
             // survive leaving mid capture.
             path: 'assistant',
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-assistant').then(
                 (m) => m.AssistantPage
@@ -895,7 +960,7 @@ export const AppShellRoutes: Route[] = [
              * screens of section 4.
              */
             path: 'catalog',
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-catalog').then(
                 (m) => m.CatalogPage
@@ -918,7 +983,7 @@ export const AppShellRoutes: Route[] = [
              * opened from.
              */
             path: 'shopping-lists/current',
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-shopping-lists').then(
                 (m) => m.BasketCurrentPage
@@ -951,7 +1016,7 @@ export const AppShellRoutes: Route[] = [
              * `routes.spec.ts` asserts it against `BASKET_PATHS.live`.
              */
             path: 'shopping-lists/live',
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             // Which basket the page opens, read from the route rather than from the
             // URL: there is no id here to read.
             data: { basket: 'live' },
@@ -1065,7 +1130,7 @@ export const AppShellRoutes: Route[] = [
             // one that must not carry this guard, since a guest with no account has to
             // reach it by link.
             path: 'shopping-lists',
-            canActivate: [authenticatedGuard],
+            canActivate: [authenticatedGuard, setupGuard],
             loadComponent: () =>
               import('@portfolio/velista/feature-shopping-lists').then(
                 (m) => m.ShoppingListsPage

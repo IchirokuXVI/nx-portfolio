@@ -1,0 +1,95 @@
+:host {
+  display: block;
+}
+
+.card {
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-list-row-height);
+  padding: var(--app-space-2) var(--app-space-4);
+  border-block-start: 1px solid var(--app-border-subtle);
+  cursor: pointer;
+
+  &:first-child {
+    border-block-start: none;
+  }
+
+  // The ring goes on the row, which is what the keyboard is on, for the reason the
+  // profiles page's chain list gives.
+  &:has(.checkbox:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.tile {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-avatar-md);
+  block-size: var(--app-avatar-md);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+  font-size: var(--app-text-sm);
+  font-weight: 700;
+  color: var(--app-text-secondary);
+}
+
+.text {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.name {
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.count {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// Struck through, dimmed and marked with the word.
+.off {
+  .name {
+    color: var(--app-text-muted);
+    text-decoration: line-through;
+  }
+
+  .tile {
+    opacity: 0.55;
+  }
+}
+
+.mark {
+  flex: none;
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.checkbox {
+  flex: none;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
+}
