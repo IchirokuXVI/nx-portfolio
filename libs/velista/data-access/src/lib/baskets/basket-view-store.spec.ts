@@ -8,6 +8,7 @@ import type {
   BasketProduct,
   BasketRow,
   BasketRowEntry,
+  BasketShop,
 } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
@@ -82,6 +83,7 @@ function product(
     unit: null,
     offer: null,
     offers: [],
+    atShop: null,
     categories: ['OTHER'],
   };
 }
@@ -108,6 +110,13 @@ interface Harness {
   readonly scopes: WritableSignal<ReadonlyMap<string, BasketPriceScope>>;
   /** This device's storage, so a spec can seed a record and read what was written. */
   readonly storage: Map<string, string>;
+  /**
+   * The shop the store double reads at, which is `BasketStore.readAt` (velista
+   * `0102`). The double answers every read at once, so it is also the shop read.
+   */
+  readonly readAt: WritableSignal<string | null>;
+  /** The shop the basket was started at, which locks it, or null. */
+  readonly own: WritableSignal<BasketShop | null>;
 }
 
 function harness(
@@ -123,6 +132,8 @@ function harness(
   const locale = signal('en');
   const lists = signal<ReadonlyMap<string, BasketListRef>>(new Map());
   const scopes = signal<ReadonlyMap<string, BasketPriceScope>>(new Map());
+  const readAt = signal<string | null>(null);
+  const own = signal<BasketShop | null>(null);
 
   TestBed.configureTestingModule({
     providers: [
@@ -136,8 +147,21 @@ function harness(
           me: signal<BasketParticipant | null>(ME),
           // The scopes travel on the basket rather than on its rows, so the double
           // answers the whole read the way the store reaches for it.
-          basket: computed(() => ({ scopes: scopes() })),
+          basket: computed(() => ({
+            scopes: scopes(),
+            shop: own(),
+            lockedShopId: own()?.id ?? null,
+            readAt: own()?.id ?? readAt(),
+          })),
           lists,
+          // The device's shop, read at once: this double has no request in flight
+          // (velista `0102`). A basket started at a shop ignores it.
+          readAt: computed(() => readAt()),
+          shopRead: computed(() => own()?.id ?? readAt()),
+          readAtShop: (locationId: string | null) => {
+            readAt.set(locationId);
+            return Promise.resolve();
+          },
         },
       },
       BasketViewStore,
@@ -151,6 +175,8 @@ function harness(
     lists,
     scopes,
     storage,
+    readAt,
+    own,
   };
 }
 
@@ -330,8 +356,8 @@ describe('BasketViewStore, the view state', () => {
     view.setGrouping('category');
     expect(view.grouping()).toBe('category');
 
-    view.setShop('scope-1');
-    expect(view.shop()).toBe('scope-1');
+    view.setShop('loc-1');
+    expect(view.shop()).toBe('loc-1');
 
     expect(view.activeCount()).toBe(3);
   });
@@ -572,7 +598,10 @@ describe('BasketViewStore, what the sheet remembers', () => {
   const written = (storage: Map<string, string>) =>
     parseBasketViewMemory(storage.get(KEY) ?? null);
 
-  /** A basket priced at one shop, which is what a remembered shop is checked against. */
+  /**
+   * A basket priced at one Mercadona, which is what a remembered shop is checked
+   * against: a shop the read names among the basket's scopes (velista `0102`).
+   */
   function priced(harnessed: Harness): Harness {
     harnessed.scopes.set(
       new Map([
@@ -581,7 +610,15 @@ describe('BasketViewStore, what the sheet remembers', () => {
           {
             priceScopeId: 'scope-mercadona',
             supermarketName: { en: 'Mercadona', es: 'Mercadona' },
-            locations: [],
+            locations: [
+              {
+                id: 'loc-mercadona',
+                label: null,
+                address: 'Calle Mayor 3',
+                city: 'Córdoba',
+                postalCode: '14008',
+              },
+            ],
           },
         ],
       ])
@@ -599,7 +636,7 @@ describe('BasketViewStore, what the sheet remembers', () => {
             version: 1,
             order: { value: 'alpha', until: null },
             grouping: { value: 'category', until: null },
-            shop: { value: 'scope-mercadona', until: at(HOUR) },
+            location: { value: 'loc-mercadona', until: at(HOUR) },
           })
         )
       )
@@ -610,8 +647,46 @@ describe('BasketViewStore, what the sheet remembers', () => {
     expect(harnessed.view.state()).toEqual({
       order: 'alpha',
       grouping: 'category',
-      shop: 'scope-mercadona',
+      shop: 'loc-mercadona',
       lists: null,
+    });
+    // And the basket is read at it, which is where its prices come from.
+    expect(harnessed.readAt()).toBe('loc-mercadona');
+  });
+
+  /**
+   * A price scope id kept before velista `0102` is dropped on read. Both are uuids
+   * and nothing tells one from the other, so it is never read as a shop, and it
+   * costs at most one choice: it expired within two hours anyway.
+   */
+  it('drops a scope id stored before shops were chosen, and keeps the rest', () => {
+    const harnessed = priced(
+      withLists(
+        harness(
+          basket,
+          new Map(),
+          new Map([
+            [
+              KEY,
+              JSON.stringify({
+                version: 1,
+                order: { value: 'alpha', until: null },
+                shop: { value: 'scope-mercadona', until: at(HOUR) },
+              }),
+            ],
+          ])
+        )
+      )
+    );
+
+    harnessed.view.restore();
+
+    expect(harnessed.view.shop()).toBeNull();
+    expect(harnessed.view.order()).toBe('alpha');
+    expect(harnessed.readAt()).toBeNull();
+    expect(JSON.parse(harnessed.storage.get(KEY) ?? '{}')).toEqual({
+      version: 1,
+      order: { value: 'alpha', until: null },
     });
   });
 
@@ -633,7 +708,7 @@ describe('BasketViewStore, what the sheet remembers', () => {
           seed({
             version: 1,
             order: { value: 'alpha', until: null },
-            shop: { value: 'scope-mercadona', until: at(-1) },
+            location: { value: 'loc-mercadona', until: at(-1) },
           })
         )
       )
@@ -662,27 +737,27 @@ describe('BasketViewStore, what the sheet remembers', () => {
           new Map(),
           seed({
             version: 1,
-            shop: { value: 'scope-mercadona', until: at(HOUR) },
+            location: { value: 'loc-mercadona', until: at(HOUR) },
           })
         )
       )
     );
 
     harnessed.view.restore();
-    expect(harnessed.view.shop()).toBe('scope-mercadona');
+    expect(harnessed.view.shop()).toBe('loc-mercadona');
 
     jest.setSystemTime(NOW + 3 * HOUR);
 
-    expect(harnessed.view.shop()).toBe('scope-mercadona');
-    expect(written(harnessed.storage)?.shop?.until).toBe(at(HOUR));
+    expect(harnessed.view.shop()).toBe('loc-mercadona');
+    expect(written(harnessed.storage)?.location?.until).toBe(at(HOUR));
   });
 
   it('dates the shop two hours out, and setting the grouping leaves that date alone', () => {
     const harnessed = priced(withLists(harness(basket)));
 
-    harnessed.view.setShop('scope-mercadona');
-    expect(written(harnessed.storage)?.shop).toEqual({
-      value: 'scope-mercadona',
+    harnessed.view.setShop('loc-mercadona');
+    expect(written(harnessed.storage)?.location).toEqual({
+      value: 'loc-mercadona',
       until: at(2 * HOUR),
     });
 
@@ -690,17 +765,17 @@ describe('BasketViewStore, what the sheet remembers', () => {
     harnessed.view.setGrouping('category');
 
     const record = written(harnessed.storage);
-    expect(record?.shop).toEqual({
-      value: 'scope-mercadona',
+    expect(record?.location).toEqual({
+      value: 'loc-mercadona',
       until: at(2 * HOUR),
     });
     expect(record?.grouping).toEqual({ value: 'category', until: null });
   });
 
-  it('ignores a remembered shop this basket has no price from, and keeps it stored', () => {
+  it('ignores a remembered shop this basket does not offer, and keeps it stored', () => {
     const stored: BasketViewMemory = {
       version: 1,
-      shop: { value: 'scope-lidl', until: at(HOUR) },
+      location: { value: 'loc-lidl', until: at(HOUR) },
     };
     const harnessed = priced(
       withLists(harness(basket, new Map(), seed(stored)))
@@ -814,11 +889,12 @@ describe('BasketViewStore, what the sheet remembers', () => {
   it('writes a record holding nothing when the sheet is reset', () => {
     const harnessed = priced(withLists(harness(basket)));
     harnessed.view.setOrder('alpha');
-    harnessed.view.setShop('scope-mercadona');
+    harnessed.view.setShop('loc-mercadona');
 
     harnessed.view.reset();
 
     expect(written(harnessed.storage)).toEqual({ version: 1 });
+    expect(harnessed.readAt()).toBeNull();
   });
 
   /**
@@ -853,11 +929,12 @@ describe('BasketViewStore, what the sheet remembers', () => {
    */
   it('forgets the shop when the cheapest anywhere is chosen again', () => {
     const harnessed = priced(withLists(harness(basket)));
-    harnessed.view.setShop('scope-mercadona');
+    harnessed.view.setShop('loc-mercadona');
 
     harnessed.view.resetProperty('shop');
 
     expect(written(harnessed.storage)).toEqual({ version: 1 });
+    expect(harnessed.view.shop()).toBeNull();
   });
 
   it('writes nothing for the list filter, which has nothing to put back', () => {
@@ -932,33 +1009,30 @@ describe('BasketViewStore: the chosen shop', () => {
     ).toEqual(['scope-mercadona', 'scope-dia']);
   });
 
-  it('names the chain and the scope’s first shop', () => {
+  /**
+   * The shop and not its scope (velista `0102`): two Mercadonas of one scope are
+   * two places to stand, and the one picked is the one named.
+   */
+  it('names the chain and the shop that was picked', () => {
     const harnessed = shops(harness(basket));
 
-    harnessed.view.setShop('scope-mercadona');
+    harnessed.view.setShop('loc-barcelona');
 
-    // The first of two, which is `0062` section 5.1's rule for a place with
-    // several locations: any of them is where the price comes from, and a list of
-    // addresses answers a question the sheet cannot answer anyway.
     expect(harnessed.view.chosenShop()).toEqual({
-      priceScopeId: 'scope-mercadona',
+      id: 'loc-barcelona',
       chain: 'Mercadona',
-      shop: 'Ronda de los Tejares 32',
+      shop: 'Avenida de Barcelona 4',
+      outsideAreas: false,
+      locked: false,
     });
+    // And the basket is read there, which is what prices the rows.
+    expect(harnessed.readAt()).toBe('loc-barcelona');
   });
 
-  it('names no shop for a scope the reader was sent none of', () => {
+  it('names nothing for a shop the read cannot name', () => {
     const harnessed = shops(harness(basket));
 
-    harnessed.view.setShop('scope-dia');
-
-    expect(harnessed.view.chosenShop()?.shop).toBeNull();
-  });
-
-  it('names nothing for a shop this basket was not priced at', () => {
-    const harnessed = shops(harness(basket));
-
-    harnessed.view.setShop('scope-gone');
+    harnessed.view.setShop('loc-gone');
 
     expect(harnessed.view.chosenShop()).toBeNull();
   });
@@ -971,7 +1045,7 @@ describe('BasketViewStore: the chosen shop', () => {
   it('chips the chain’s name alone', () => {
     const harnessed = shops(harness(basket));
 
-    harnessed.view.setShop('scope-mercadona');
+    harnessed.view.setShop('loc-tejares');
 
     expect(harnessed.view.chips()).toEqual([
       {
@@ -989,9 +1063,87 @@ describe('BasketViewStore: the chosen shop', () => {
   it('quotes no shop until one of them prices something on the basket', () => {
     const harnessed = shops(harness(basket));
 
-    harnessed.view.setShop('scope-mercadona');
+    harnessed.view.setShop('loc-tejares');
 
-    // Nothing in this basket's products carries an offer at all.
-    expect(harnessed.view.pricedShop()).toBeNull();
+    // Nothing in this basket's products carries a price at the shop at all.
+    expect(harnessed.view.pricedAtShop()).toBe(false);
+  });
+
+  /**
+   * Velista `0102`: a basket started at a shop. **The lock is the server's fact**,
+   * so it is drawn from the basket read and from nothing this device stored.
+   */
+  describe('on a basket started at a shop', () => {
+    const LIDL: BasketShop = {
+      id: 'loc-lidl-malaga',
+      supermarketId: 'sm-lidl',
+      chain: { en: 'Lidl', es: 'Lidl' },
+      label: null,
+      address: 'Avenida de Andalucía 21',
+      city: 'Málaga',
+      postalCode: '29002',
+      inProfile: false,
+    };
+
+    it('is that shop, locked, named with the note for a shop outside the areas', () => {
+      const harnessed = shops(harness(basket));
+      harnessed.own.set(LIDL);
+
+      expect(harnessed.view.shop()).toBe('loc-lidl-malaga');
+      expect(harnessed.view.shopLocked()).toBe(true);
+      expect(harnessed.view.chosenShop()).toEqual({
+        id: 'loc-lidl-malaga',
+        chain: 'Lidl',
+        shop: 'Avenida de Andalucía 21, Málaga',
+        outsideAreas: true,
+        locked: true,
+      });
+    });
+
+    it('refuses every change, the owner’s included, and chips a lock', () => {
+      const harnessed = shops(harness(basket));
+      harnessed.own.set(LIDL);
+
+      harnessed.view.setShop('loc-tejares');
+      harnessed.view.resetProperty('shop');
+
+      expect(harnessed.view.shop()).toBe('loc-lidl-malaga');
+      expect(harnessed.readAt()).toBeNull();
+      expect(harnessed.view.chips()).toEqual([
+        {
+          property: 'shop',
+          key: 'basket.view.chip.shop',
+          args: { name: 'Lidl' },
+          locked: true,
+        },
+      ]);
+    });
+
+    it('applies no remembered shop over its own', () => {
+      const harnessed = shops(
+        harness(
+          basket,
+          new Map(),
+          new Map([
+            [
+              StorageKeys.basketView,
+              JSON.stringify({
+                version: 1,
+                location: {
+                  value: 'loc-tejares',
+                  until: new Date(Date.now() + 3_600_000).toISOString(),
+                },
+              }),
+            ],
+          ])
+        )
+      );
+      harnessed.own.set(LIDL);
+
+      harnessed.view.restore();
+
+      expect(harnessed.view.shop()).toBe('loc-lidl-malaga');
+      expect(harnessed.readAt()).toBeNull();
+    });
   });
 });

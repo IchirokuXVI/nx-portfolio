@@ -155,12 +155,12 @@ export class BasketApi implements BasketServiceI {
 
   // --- The participant surface ----------------------------------------------
 
-  async getBasket(basketId: string): Promise<Basket> {
+  async getBasket(basketId: string, locationId?: string): Promise<Basket> {
     const body = await firstValueFrom(
-      this._http.get<unknown>(
-        this._basket(basketId),
-        this._participantOptions(basketId, 'basket.get')
-      )
+      this._http.get<unknown>(this._basket(basketId), {
+        ...this._participantOptions(basketId, 'basket.get'),
+        ...atShop(locationId),
+      })
     );
 
     return required(toBasket(body), 'basket.get');
@@ -175,10 +175,11 @@ export class BasketApi implements BasketServiceI {
    * request about this basket goes out by its id, through the participant
    * surface, where the owner arrives as their own participant row.
    */
-  async getLiveBasket(): Promise<Basket> {
+  async getLiveBasket(locationId?: string): Promise<Basket> {
     const body = await firstValueFrom(
       this._http.get<unknown>(this._live(), {
         context: operation('basket.live'),
+        ...atShop(locationId),
       })
     );
 
@@ -226,6 +227,11 @@ export class BasketApi implements BasketServiceI {
     // The scope and never an amount (velista `0095`, section 6).
     if (body.priceScopeId !== undefined && body.outcome === 'BOUGHT') {
       request['priceScopeId'] = body.priceScopeId;
+    }
+    // The shop the person is standing in, on every settle made while one is
+    // chosen and on none made in "any of your shops" mode (velista `0102`).
+    if (body.supermarketLocationId !== undefined) {
+      request['supermarketLocationId'] = body.supermarketLocationId;
     }
     if (body.allocations !== undefined && body.allocations.length > 0) {
       request['allocations'] = body.allocations.map((allocation) => ({
@@ -658,4 +664,16 @@ export class BasketApi implements BasketServiceI {
   private _link(secret: string): string {
     return this._urls.gateway(`/v1/share-links/${encodeURIComponent(secret)}`);
   }
+}
+
+/**
+ * The query half of a basket read at one shop (velista `0102`), or nothing.
+ *
+ * Omitted rather than sent empty, which is this file's rule: a read at no shop is
+ * exactly the read before backend `0163`, and only a shop id ever travels.
+ */
+function atShop(locationId: string | undefined): { params?: HttpParams } {
+  return locationId === undefined
+    ? {}
+    : { params: new HttpParams().set('locationId', locationId) };
 }

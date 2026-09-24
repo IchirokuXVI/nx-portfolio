@@ -1768,3 +1768,169 @@ describe('BasketStore: skip, demand and the add', () => {
     expect(store.handedOver()?.seq).not.toBe(first?.seq);
   });
 });
+
+/**
+ * Buying at one shop (velista `0102`).
+ *
+ * The device's shop reaches the server only as the read parameter and on each
+ * settle, so these follow the parameter: every read after a choice sends it, the
+ * answer says which shop it describes, and a basket started at a shop of its own
+ * refuses anything else, which drops the choice and reads it at its own shop.
+ */
+describe('BasketStore: buying at one shop', () => {
+  function shopLocked(): GatewayError {
+    return new GatewayError({
+      code: 'basket_shop_locked',
+      status: 409,
+      correlationId: 'spec',
+    });
+  }
+
+  it('reads again at the chosen shop, and every later read sends it', async () => {
+    const asked: (string | undefined)[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: (id, locationId) => {
+        asked.push(locationId);
+        return memory.getBasket(id, locationId);
+      },
+    });
+    await store.open('basket-saturday');
+
+    await store.readAtShop('loc-tejares');
+    await store.refresh();
+
+    expect(asked).toEqual([undefined, 'loc-tejares', 'loc-tejares']);
+    expect(store.basket()?.readAt).toBe('loc-tejares');
+    expect(store.shopRead()).toBe('loc-tejares');
+  });
+
+  it('reads at no shop again when any of the shops is chosen', async () => {
+    const asked: (string | undefined)[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: (id, locationId) => {
+        asked.push(locationId);
+        return memory.getBasket(id, locationId);
+      },
+    });
+    await store.open('basket-saturday');
+    await store.readAtShop('loc-tejares');
+
+    await store.readAtShop(null);
+
+    expect(asked.at(-1)).toBeUndefined();
+    expect(store.shopRead()).toBeNull();
+  });
+
+  it('drops the device’s shop and reads the basket at its own when it is refused', async () => {
+    const asked: (string | undefined)[] = [];
+    const memory = new BasketMemory();
+    // The first read says nothing about a lock, which is a read a moment before
+    // the refusal: the basket's own shop is what the refusal teaches the store.
+    let refused = false;
+    const { store } = build({
+      getBasket: async (id, locationId) => {
+        asked.push(locationId);
+        if (locationId !== undefined) {
+          refused = true;
+          throw shopLocked();
+        }
+        const read = await memory.getBasket(id);
+        return refused
+          ? { ...read, lockedShopId: 'loc-own', readAt: 'loc-own' }
+          : read;
+      },
+    });
+    await store.open('basket-saturday');
+
+    await store.readAtShop('loc-tejares');
+
+    expect(asked).toEqual([undefined, 'loc-tejares', undefined]);
+    expect(store.state()).toBe('ready');
+    expect(store.readAt()).toBeNull();
+    expect(store.shopRead()).toBe('loc-own');
+  });
+
+  it('sends nothing for a basket started at a shop, which is read at its own', async () => {
+    const asked: (string | undefined)[] = [];
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: async (id, locationId) => {
+        asked.push(locationId);
+        const read = await memory.getBasket(id);
+        return { ...read, lockedShopId: 'loc-own', readAt: 'loc-own' };
+      },
+    });
+    await store.open('basket-saturday');
+
+    await store.readAtShop('loc-tejares');
+    await store.refresh();
+
+    expect(asked).toEqual([undefined, undefined]);
+  });
+
+  it('drops the device’s shop when a settle is refused for it, and reads again', async () => {
+    const memory = new BasketMemory();
+    const { store } = build({
+      settle: () => Promise.reject(shopLocked()),
+    });
+    await store.open('basket-saturday');
+    await store.readAtShop('loc-tejares');
+    const milk = rowOf(store, 'Milk');
+
+    const result = await store.settle(milk.rowKey, {
+      outcome: 'BOUGHT',
+      quantity: 1,
+      from: milk.left,
+      supermarketLocationId: 'loc-tejares',
+    });
+
+    expect(result).toBeNull();
+    expect(store.readAt()).toBeNull();
+    expect(store.shopRead()).toBeNull();
+    expect((store.error() as GatewayError).code).toBe('basket_shop_locked');
+    void memory;
+  });
+
+  /**
+   * The row names the option it offers in place of a default the shop is known not
+   * to have, so the settle buys it. A choice somebody made wins over it.
+   */
+  it('buys the option offered in place of a missing default, unless somebody chose', async () => {
+    const memory = new BasketMemory();
+    const { store } = build({
+      getBasket: async (id, locationId) => {
+        const read = await memory.getBasket(id, locationId);
+        if (locationId === undefined) {
+          return read;
+        }
+        const products = new Map(read.products);
+        for (const [key, product] of products) {
+          products.set(key, {
+            ...product,
+            atShop: {
+              priceScopeId: null,
+              price: null,
+              currency: null,
+              available: key === 'item-milk-hacendado' ? false : null,
+            },
+          });
+        }
+        return { ...read, products };
+      },
+    });
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
+    const [first, second] = milk.optionIds;
+    expect(first).toBe('item-milk-hacendado');
+    expect(store.itemIdFor(milk.rowKey)).toBeUndefined();
+
+    await store.readAtShop('loc-tejares');
+
+    expect(store.itemIdFor(milk.rowKey)).toBe(second);
+
+    store.choose(milk.rowKey, first);
+    expect(store.itemIdFor(milk.rowKey)).toBe(first);
+  });
+});

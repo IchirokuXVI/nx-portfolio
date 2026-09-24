@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import {
   BASKET_ACCESS_ENDED_FALLBACK,
+  basketShelfMark,
   isOpenBasket,
   type Basket,
   type BasketAccessEnded,
@@ -144,6 +145,9 @@ export class BasketStore {
 
   /** See {@link address}. A signal, because the sheets read it to build URLs. */
   private readonly _address = signal<BasketAddress | null>(null);
+
+  /** See {@link readAt}. */
+  private readonly _readAt = signal<string | null>(null);
 
   /**
    * Whether the reader is leaving this basket on purpose (velista `0085`, section 7).
@@ -431,7 +435,64 @@ export class BasketStore {
     if (held !== undefined && row.optionIds.includes(held)) {
       return held;
     }
-    return row.optionIds.length === 1 ? row.optionIds[0] : undefined;
+    if (row.optionIds.length === 1) {
+      return row.optionIds[0];
+    }
+
+    // The third way, since velista `0102`: at a shop that is known not to have the
+    // row's default, the option the row offers instead. The row names it, so the
+    // settle buys it; a person who chose is the first case and wins over this.
+    const shelf = basketShelfMark(
+      row,
+      this.products(),
+      this.shopRead() !== null
+    );
+    return shelf?.kind === 'instead' ? shelf.optionId : undefined;
+  }
+
+  /**
+   * The shop this device asks every read to be made at, or null for none
+   * (velista `0102`; `0091` section 7).
+   *
+   * A **device's** choice and never the basket's: two people in one household
+   * stand in two shops, so it reaches the server only as the read parameter and
+   * on each settle. `BasketViewStore` sets it and remembers it. A basket started
+   * at a shop ignores it, because the server reads that basket at its own shop.
+   */
+  readonly readAt = computed(() => this._readAt());
+
+  /**
+   * The shop the products' `atShop` describes **and** this screen is asking
+   * about, or null (velista `0102`).
+   *
+   * The basket's own shop on a basket started at one. Otherwise the device's
+   * choice, once a read at it has answered: while the read at a newly chosen shop
+   * is out, the products still describe the last one, and this says null rather
+   * than let a row quote one shop's price under another's name.
+   */
+  readonly shopRead = computed<string | null>(() => {
+    const basket = this._basket();
+    if (basket === null) {
+      return null;
+    }
+    const wanted = basket.lockedShopId ?? this._readAt();
+    return wanted !== null && basket.readAt === wanted ? wanted : null;
+  });
+
+  /**
+   * Read the basket at this shop from now on, or at none (velista `0102`).
+   *
+   * Every read after this sends it, the socket's refetches included, which is
+   * what keeps a row's `atShop` from reverting to nothing the next time somebody
+   * else settles a line. A change reads again at once. A basket started at a shop
+   * is read at that shop whatever this says, so nothing is sent for one.
+   */
+  async readAtShop(locationId: string | null): Promise<void> {
+    if (this._readAt() === locationId || this._basket()?.lockedShopId != null) {
+      return;
+    }
+    this._readAt.set(locationId);
+    await this.refresh();
   }
 
   /**
@@ -738,6 +799,10 @@ export class BasketStore {
     // The choices are about **this** basket's rows, and they were never stored:
     // they go with it rather than following the next one into a shop.
     this._chosen.set(new Map());
+    // The shop is the device's and outlives the basket in `BasketViewStore`'s
+    // record, which puts it back on the next one. This store asks nothing of a
+    // basket it has let go.
+    this._readAt.set(null);
     // The sentence is about a row of **this** basket, so it goes with it.
     this._rowGone.set(0);
     this._handedOver.set(null);
@@ -807,6 +872,13 @@ export class BasketStore {
       const generation = this._generation;
       this._queued = false;
 
+      // The device's shop, unless the basket held is one started at a shop: the
+      // server reads that one at its own, and sending anything else is refused.
+      const at =
+        this._basket()?.lockedShopId == null
+          ? (this._readAt() ?? undefined)
+          : undefined;
+
       let basket: Basket;
       try {
         // A null id is the caller's own basket, which this read is what names:
@@ -814,11 +886,24 @@ export class BasketStore {
         // id is recorded below and every refresh after it goes out by id.
         basket =
           id === null
-            ? await this._service.getLiveBasket()
-            : await this._service.getBasket(id);
+            ? await this._service.getLiveBasket(at)
+            : await this._service.getBasket(id, at);
       } catch (error) {
+        if (at !== undefined && isShopLocked(error)) {
+          // The basket turned out to be started at a shop of its own (velista
+          // `0102`). The device's choice is dropped and the basket read again at
+          // its own shop, which is what the screen then draws, locked.
+          this._readAt.set(null);
+          continue;
+        }
         this._fail(id, error);
         return;
+      }
+
+      // Which shop this answer describes, since the mapper cannot know the
+      // request. A basket started at a shop already says so for itself.
+      if (basket.lockedShopId === null && at !== undefined) {
+        basket = { ...basket, readAt: at };
       }
 
       if (!this._stillReading(id)) {
@@ -924,14 +1009,19 @@ export class BasketStore {
    *
    * The ceiling the reel offers is `row.asked`, which is read and never computed.
    *
-   * `priceScopeId` is the scope of the price the row drew (velista `0095`, section
-   * 6). Only the settling direction sends it: a revert names no scope.
+   * `at` is where the purchase happened and what was bought: the scope of the price
+   * the row drew (velista `0095`, section 6), the shop the person is buying at and
+   * the option the row offered in place of a missing default (velista `0102`). Only
+   * the settling direction sends it: a revert names no scope and no shop.
    */
   async setLeft(
     rowKey: string,
     next: number,
     from: number,
-    priceScopeId?: string
+    at: Pick<
+      BasketSettleRequest,
+      'priceScopeId' | 'supermarketLocationId' | 'itemId'
+    > = {}
   ): Promise<BasketRowResult | null> {
     if (next === from) {
       return null;
@@ -942,7 +1032,13 @@ export class BasketStore {
           outcome: 'BOUGHT',
           quantity: from - next,
           from,
-          ...(priceScopeId === undefined ? {} : { priceScopeId }),
+          ...(at.priceScopeId === undefined
+            ? {}
+            : { priceScopeId: at.priceScopeId }),
+          ...(at.supermarketLocationId === undefined
+            ? {}
+            : { supermarketLocationId: at.supermarketLocationId }),
+          ...(at.itemId === undefined ? {} : { itemId: at.itemId }),
         })
       : this.revert(rowKey, {
           target: 'UNITS',
@@ -1338,9 +1434,16 @@ export class BasketStore {
    * it can still name.
    */
   private async _rereadIfOvertaken(error: unknown): Promise<void> {
+    if (isShopLocked(error)) {
+      // A settle named a shop this basket was not started at (velista `0102`):
+      // the device's choice goes, and the basket is drawn at its own shop.
+      this._readAt.set(null);
+    }
     if (
       error instanceof GatewayError &&
-      (error.code === 'stale_quantity' || error.code === 'basket_finished')
+      (error.code === 'stale_quantity' ||
+        error.code === 'basket_finished' ||
+        error.code === 'basket_shop_locked')
     ) {
       await this.refresh();
       this._error.set(error);
@@ -1413,4 +1516,14 @@ export class BasketStore {
     // by a list that is a minute old than by an error page.
     this._state.set(this._basket() === null ? 'failed' : 'ready');
   }
+}
+
+/**
+ * Whether a refusal says this basket was started at another shop (velista `0102`).
+ *
+ * The one refusal a read answers by trying again, without the device's shop, so it
+ * is named once rather than tested inline in two places.
+ */
+function isShopLocked(error: unknown): boolean {
+  return error instanceof GatewayError && error.code === 'basket_shop_locked';
 }

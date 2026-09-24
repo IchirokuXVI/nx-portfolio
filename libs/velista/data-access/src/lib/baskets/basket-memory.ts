@@ -14,6 +14,7 @@ import {
   type BasketParticipant,
   type BasketPriceScope,
   type BasketProduct,
+  type BasketProductAtShop,
   type BasketProgress,
   type BasketRenameRequest,
   type BasketRenameResult,
@@ -150,6 +151,7 @@ const PRODUCTS: readonly BasketProduct[] = [
       offer(0.95, 0.95, 'EUR/L'),
       offer(1.05, 1.05, 'EUR/L', SCOPE_DIA)
     ),
+    atShop: null,
     categories: ['DAIRY'],
   },
   {
@@ -163,6 +165,7 @@ const PRODUCTS: readonly BasketProduct[] = [
       offer(0.89, 0.89, 'EUR/L'),
       offer(0.79, 0.79, 'EUR/L', SCOPE_DIA)
     ),
+    atShop: null,
     categories: ['DAIRY'],
   },
   {
@@ -176,6 +179,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     unit: 'LITER',
     // Priced nowhere, which is `0062` section 5.3's unpriced option among priced ones.
     ...priced(),
+    atShop: null,
     categories: ['DAIRY'],
   },
   {
@@ -186,9 +190,32 @@ const PRODUCTS: readonly BasketProduct[] = [
     unit: 'UNIT',
     // Mercadona alone, so the Dia view sinks this row and says where it is sold.
     ...priced(offer(2.85, 0.24, 'EUR/ud')),
+    atShop: null,
     categories: ['DAIRY'],
   },
 ];
+
+/**
+ * One product at the scope a shop is priced at (velista `0102`).
+ *
+ * The price that scope quotes and nothing about availability: this fake stores no
+ * shop's shelf, and unknown is what most real shops answer too.
+ */
+function atShopOf(
+  product: BasketProduct,
+  scope: BasketPriceScope
+): BasketProductAtShop {
+  const here = product.offers.find(
+    (candidate) => candidate.priceScopeId === scope.priceScopeId
+  );
+  const price = here?.price ?? null;
+  return {
+    priceScopeId: price === null ? null : scope.priceScopeId,
+    price,
+    currency: price === null ? null : (here?.currency ?? null),
+    available: null,
+  };
+}
 
 /** The scopes those offers name, with their shops for a reader served them. */
 const SCOPES: readonly BasketPriceScope[] = [
@@ -778,8 +805,18 @@ export class BasketMemory implements BasketServiceI {
 
   // --- The participant surface ----------------------------------------------
 
-  async getBasket(): Promise<Basket> {
+  async getBasket(_basketId?: string, locationId?: string): Promise<Basket> {
     const rows = this._rows();
+    // The scope the chosen shop is priced at (velista `0102`), as the gateway
+    // answers it: this fake's shops each belong to one scope, so its stack is
+    // one deep. A shop it does not know reads at no shop, as a gateway that
+    // could not name the shop does.
+    const at =
+      locationId === undefined
+        ? undefined
+        : SCOPES.find((scope) =>
+            scope.locations.some((location) => location.id === locationId)
+          );
     return {
       id: BASKET_ID,
       kind: 'GENERATED',
@@ -794,16 +831,22 @@ export class BasketMemory implements BasketServiceI {
         this.servesLists ? person : this._withoutDevice(person)
       ),
       me: this.me,
-      products: new Map(PRODUCTS.map((product) => [product.id, product])),
-      // The chain reaches everybody and the shops reach only a reader served
-      // them (backend `0066`, section 5), redacted here exactly as the gateway
-      // redacts them: to an empty array, never to an absent key.
-      scopes: new Map(
-        SCOPES.map((scope) => [
-          scope.priceScopeId,
-          this.servesLists ? scope : { ...scope, locations: [] },
+      products: new Map(
+        PRODUCTS.map((product) => [
+          product.id,
+          at === undefined
+            ? product
+            : { ...product, atShop: atShopOf(product, at) },
         ])
       ),
+      // The chain and its shops reach every participant, a guest included,
+      // since backend `0163` section 4: a guest picks the shop they are
+      // standing in from the same list the owner sees.
+      scopes: new Map(SCOPES.map((scope) => [scope.priceScopeId, scope])),
+      // Nobody started this basket at a shop, so nothing is locked here.
+      shop: null,
+      lockedShopId: null,
+      readAt: null,
       progress: this._progress(rows),
       pending: this._pending(rows),
       // The server's count and the server's id, both read off the log this
@@ -823,8 +866,8 @@ export class BasketMemory implements BasketServiceI {
    * name, a `LIVE` kind, and a status that is always open. A developer who wants
    * the other surface opens a basket by id, which is what the app does.
    */
-  async getLiveBasket(): Promise<Basket> {
-    const basket = await this.getBasket();
+  async getLiveBasket(locationId?: string): Promise<Basket> {
+    const basket = await this.getBasket(undefined, locationId);
     return {
       ...basket,
       id: LIVE_BASKET_ID,
