@@ -1,4 +1,5 @@
 import type {
+  GatewayError,
   QueueBulkResult,
   QueueStore,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -22,6 +23,14 @@ export interface QueueBulkAct<T> {
   readonly applies?: (item: T) => boolean;
   /** What a row is called, for the report. Never an id, where there is a name. */
   readonly nameOf: (item: T) => string;
+  /**
+   * A screen's own sentence for a refusal, or `null` for the generic one.
+   *
+   * The places queue is the reason (admin plan 0034, section 1): a place the
+   * catalog may already hold is refused with its own code, stays in the queue,
+   * and has to be reported as that rather than as a bare conflict.
+   */
+  readonly reasonOf?: (error: GatewayError) => string | null;
 }
 
 /**
@@ -46,13 +55,14 @@ export async function runQueueBulk<T>(
   }
 
   const result = await queue.decideMany(bulk.act, bulk.applies);
-  return queueReport(result, names);
+  return queueReport(result, names, bulk.reasonOf);
 }
 
 /** What a bulk run did, with each row named rather than counted. */
 export function queueReport(
   result: QueueBulkResult,
-  names: ReadonlyMap<string, string>
+  names: ReadonlyMap<string, string>,
+  reasonOf: (error: GatewayError) => string | null = () => null
 ): QueueReport {
   const name = (id: string): string => names.get(id) ?? id;
 
@@ -63,7 +73,10 @@ export function queueReport(
     stopped: result.stopped,
     failed: result.failed.map((failure) => ({
       name: name(failure.id),
-      reasonKey: gatewayErrorKey(failure.error) ?? 'resource.error.unknown',
+      reasonKey:
+        reasonOf(failure.error) ??
+        gatewayErrorKey(failure.error) ??
+        'resource.error.unknown',
     })),
     skipped: result.skipped.map((id) => ({ name: name(id), reasonKey: '' })),
   };

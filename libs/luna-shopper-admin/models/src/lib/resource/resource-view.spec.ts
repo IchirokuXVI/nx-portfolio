@@ -175,6 +175,31 @@ describe('toCell', () => {
       reference: { resource: 'price-scopes', id: 'ps_1' },
     });
   });
+
+  /**
+   * Admin plan 0034, section 2: an empty reference whose field says its
+   * absence is a gap draws that as a flag, and only then.
+   */
+  it('flags an empty reference whose field asks for it', () => {
+    const flagged = {
+      kind: 'reference' as const,
+      name: 'priceScopeId' as const,
+      label: 'shops.priceScope',
+      resource: 'price-scopes',
+      unsetFlag: 'shops.noScope',
+    };
+
+    expect(toCell(flagged, { ...row, priceScopeId: null }, options)).toEqual({
+      text: '',
+      key: 'shops.noScope',
+      flag: true,
+    });
+    expect(toCell(flagged, row, options).flag).toBeUndefined();
+    expect(cellFor('priceScopeId', { priceScopeId: null })).toEqual({
+      text: '',
+      key: EMPTY_VALUE_KEY,
+    });
+  });
 });
 
 /**

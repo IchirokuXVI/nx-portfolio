@@ -361,6 +361,34 @@ describe('the runs list, and the filter over it', () => {
     expect(fixture.componentInstance.reverted()).toBe('reverted');
     expect(listed.at(-1)).toEqual({ limit: 20, reverted: true });
   });
+
+  /** Admin plan 0034, section 4: one mode at a time, or all of them. */
+  it('filters by mode, and sends none for any mode', async () => {
+    const { fixture, listed } = await render();
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+      'select[name="modeFilter"]'
+    );
+
+    const offered = [...select.querySelectorAll('option')].map(
+      (option) => option.value
+    );
+    expect(offered).toEqual([
+      '',
+      'STORE_DISCOVERY',
+      'CATALOG_DISCOVERY',
+      'FILE_IMPORT',
+    ]);
+
+    select.value = 'STORE_DISCOVERY';
+    select.dispatchEvent(new Event('change'));
+    await drain();
+    expect(listed.at(-1)).toEqual({ limit: 20, mode: 'STORE_DISCOVERY' });
+
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+    await drain();
+    expect(listed.at(-1)).toEqual({ limit: 20 });
+  });
 });
 
 /**

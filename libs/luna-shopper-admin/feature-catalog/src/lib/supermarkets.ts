@@ -29,11 +29,15 @@ export const SUPERMARKETS_PATH = '/v1/admin/catalog/supermarkets';
  * operator's own interface is English only, and that is a different list from
  * this one: the catalog is read by shoppers.
  *
- * **`defaultPriceScopeId` is not editable.** `UpdateSupermarketDto` has no such
- * property, so the gateway would ignore it. A field the form offered and the
- * server dropped is worse than one it does not offer: the operator would type a
- * value, see the form succeed, and find it unchanged. It still renders, as
- * text, because it is worth reading.
+ * **`defaultPriceScopeId` is editable on an existing chain only** (admin plan
+ * 0034, section 2; backend plan 0153). A new chain is created with a
+ * `NATIONAL` scope that catalog makes its default in the same write, so there
+ * is nothing to pick at creation and `CreateSupermarketDto` has no property
+ * for it. Afterwards `UpdateSupermarketDto` takes one, and the gateway refuses
+ * a scope of another chain, so the picker offers this chain's scopes only.
+ *
+ * A chain with no default is a gap, not a resting state: chains made before
+ * `0153` have none until somebody sets one. The list flags them.
  */
 export const SUPERMARKETS = defineResource<Supermarket>({
   name: 'supermarkets',
@@ -88,18 +92,26 @@ export const SUPERMARKETS = defineResource<Supermarket>({
       label: 'catalog.supermarkets.defaultPriceScopeId',
       help: 'catalog.supermarkets.defaultPriceScopeIdHelp',
       resource: 'price-scopes',
-      editable: false,
+      editable: 'edit',
       nullable: true,
+      // A chain holds a handful of scopes, so one cached resolve per id names
+      // the column.
+      nameLookup: true,
+      scopeFrom: (row) =>
+        typeof row.id === 'string' && row.id !== ''
+          ? { supermarketId: row.id }
+          : null,
+      unsetFlag: 'catalog.supermarkets.noDefaultScope',
     },
   ],
 
   list: {
-    columns: ['name', 'websiteUrl', 'externalBrandKey'],
+    columns: ['name', 'websiteUrl', 'externalBrandKey', 'defaultPriceScopeId'],
     // The one piece of per entity judgement the generic list cannot make. A
     // chain is recognised by its name and, when two look alike, by the brand key
     // that tells Carrefour from Carrefour Express. Its website is not what
     // anybody is scanning a phone screen for.
-    compact: ['name', 'externalBrandKey'],
+    compact: ['name', 'externalBrandKey', 'defaultPriceScopeId'],
   },
 
   sorts: [

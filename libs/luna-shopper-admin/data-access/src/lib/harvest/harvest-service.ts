@@ -83,6 +83,18 @@ export interface HarvestServiceI {
     input: Wire.ImportDiscoveredPlaceDto
   ): Promise<Wire.HarvestDiscoveredPlaceView>;
   rejectPlace(id: string): Promise<Wire.HarvestDiscoveredPlaceView>;
+  /**
+   * Bind a place to a shop the catalog already holds (backend plan 0152,
+   * section 3).
+   *
+   * The other answer to an import refused with `place_matches_location`. It
+   * never creates a shop: it fills only what the named shop lacks and marks
+   * the place imported. The shop must be one of the place's own chain.
+   */
+  linkPlace(
+    id: string,
+    input: Wire.LinkDiscoveredPlaceDto
+  ): Promise<Wire.HarvestDiscoveredPlaceView>;
 
   /**
    * The one queue (admin plan 0014, section 1; backend plan 0086, section 10).

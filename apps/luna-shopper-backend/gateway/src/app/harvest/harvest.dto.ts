@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import {
-  ADAPTER_KEYS,
   BRAND_LABEL_MAX_LENGTH,
   BULK_DECISION_MAX_OPERATIONS,
   CONTENT_LOCALES,
@@ -16,9 +15,9 @@ import {
   SourceEntryStatus,
   SourceLocationStatus,
   UnitOfMeasure,
-  type AdapterKey,
   type ContentLocale,
   type HarvestDocument,
+  type SourceAdapterKey,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
@@ -535,17 +534,15 @@ export class ApplySourceEntryDecisionsDto {
 }
 
 export class UpsertSupermarketSourceDto {
-  // The enum still lists every adapter, `osm-places` included, and only the
-  // validator is narrower (plan 0153). The back office types its adapter
-  // picker off this enum, and admin plan 0034 removes the entry there; a
-  // narrower enum today would stop the back office compiling before it does.
+  // Narrower than the view's `AdapterKey`: a row written before plan 0153 may
+  // still read `osm-places`, and nothing may write one (admin plan 0034).
   @ApiProperty({
-    enum: ADAPTER_KEYS,
+    enum: SOURCE_ADAPTER_KEYS,
     description:
       '`osm-places` is refused with 400: OpenStreetMap is asked for every postal code, so a source row for it switches nothing on.',
   })
   @IsIn([...SOURCE_ADAPTER_KEYS])
-  adapterKey!: AdapterKey;
+  adapterKey!: SourceAdapterKey;
 
   @ApiPropertyOptional({
     description:

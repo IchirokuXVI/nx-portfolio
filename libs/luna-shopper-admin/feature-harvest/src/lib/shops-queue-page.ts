@@ -8,6 +8,7 @@ import {
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  ContentLocaleStore,
   HARVEST_SERVICE,
   QueueStore,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -30,7 +31,12 @@ import {
   type PendingBulk,
   type QueueBulkAct,
 } from './queue-bulk';
-import { toShopRow, type Shop, type ShopRow } from './shop-view';
+import {
+  toShopRow,
+  type Shop,
+  type ShopCandidate,
+  type ShopRow,
+} from './shop-view';
 
 /**
  * The status a row can be filtered by, plus the "any" that is not one.
@@ -204,6 +210,50 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
             </div>
           </dl>
 
+          @if (row.candidates.length > 0) {
+            <section
+              aria-labelledby="shops-candidates-heading"
+              class="candidates"
+              role="region"
+            >
+              <h3 id="shops-candidates-heading">
+                {{ 'harvest.shops.candidates.heading' | rokuT }}
+              </h3>
+              <ul>
+                @for (
+                  candidate of row.candidates;
+                  track candidate.supermarketLocationId
+                ) {
+                  <li [class.strong]="candidate.strong">
+                    <div class="who">
+                      <strong>{{ candidate.title }}</strong>
+                      @if (candidate.address !== '') {
+                        <span>{{ candidate.address }}</span>
+                      }
+                      <span class="none">{{ candidate.postalCode }}</span>
+                    </div>
+                    @if (candidate.strong) {
+                      <span class="mark">{{
+                        'harvest.shops.candidates.strong' | rokuT
+                      }}</span>
+                    }
+                    <button
+                      (click)="mapTo(row, candidate)"
+                      [disabled]="queue.busy()"
+                      class="map"
+                      type="button"
+                    >
+                      {{ 'harvest.shops.candidates.map' | rokuT }}
+                    </button>
+                  </li>
+                }
+              </ul>
+              <p class="none">
+                {{ 'harvest.shops.candidates.notBackfilled' | rokuT }}
+              </p>
+            </section>
+          }
+
           @if (row.canUnmap) {
             <button
               (click)="ignore(row)"
@@ -248,6 +298,19 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
             }}</span>
           } @else {
             <span>{{ row.mappedTo }}</span>
+          }
+          @if (row.candidates[0]; as best) {
+            <span class="best">
+              {{
+                'harvest.shops.candidates.best'
+                  | rokuT: { location: best.title }
+              }}
+              @if (best.strong) {
+                <span class="mark">{{
+                  'harvest.shops.candidates.strong' | rokuT
+                }}</span>
+              }
+            </span>
           }
           <span class="none">{{
             'harvest.match.' + row.matchedBy | rokuT
@@ -413,6 +476,87 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
       flex: 1 1 16rem;
     }
 
+    /* The shops of ours this one may be, best first. A suggestion and never
+       an answer: each one maps only when its own button is pressed, and a
+       strong match earns a mark rather than an automatic binding. */
+    .candidates {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+      margin-block-end: var(--admin-space-3);
+    }
+
+    .candidates h3 {
+      margin: 0;
+      font-size: 0.875rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--admin-ink-muted);
+    }
+
+    .candidates ul {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .candidates li {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: var(--admin-space-3);
+      align-items: center;
+      padding: var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+    }
+
+    .candidates li.strong {
+      border-color: var(--admin-accent);
+    }
+
+    @media (max-width: 40rem) {
+      .candidates li {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .who {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+      min-inline-size: 0;
+    }
+
+    .mark {
+      padding: 0.125rem var(--admin-space-2);
+      border-radius: 999px;
+      background: var(--admin-accent-wash);
+      font-size: 0.75rem;
+      color: var(--admin-accent-on-wash);
+      white-space: nowrap;
+    }
+
+    .best {
+      display: inline-flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+    }
+
+    .map {
+      min-block-size: 2.75rem;
+      border-color: var(--admin-accent);
+      background: var(--admin-accent);
+      color: var(--admin-accent-ink);
+    }
+
+    .map:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
     .bulk {
       display: flex;
       flex: 3;
@@ -447,6 +591,7 @@ export class ShopsQueuePage {
 
   readonly shell = inject(HarvestShell);
   readonly references = inject(ResourceReferences);
+  private readonly _content = inject(ContentLocaleStore);
 
   readonly statuses = STATUSES;
 
@@ -493,7 +638,10 @@ export class ShopsQueuePage {
 
   readonly rows = computed<readonly ShopRow[]>(() => {
     const names = this._names();
-    return (this.queue?.items() ?? []).map((shop) => toShopRow(shop, names));
+    const locales = this._content.order();
+    return (this.queue?.items() ?? []).map((shop) =>
+      toShopRow(shop, names, locales)
+    );
   });
 
   /** The row the review view is about, which is the head of the queue. */
@@ -677,6 +825,26 @@ export class ShopsQueuePage {
       })
     );
 
+    this.cancelMapping();
+  }
+
+  /**
+   * Map the row to one of its candidates, in one press (backend plan 0154).
+   *
+   * No dialog, unlike the picker: the candidate is already on screen by name
+   * with its address, and the press on its own button is the confirmation.
+   * The sentence the dialog carries, that mapping does not backfill what the
+   * last run skipped, sits under the list instead.
+   */
+  async mapTo(row: ShopRow, candidate: ShopCandidate): Promise<void> {
+    this._names.update((names) =>
+      new Map(names).set(candidate.supermarketLocationId, candidate.title)
+    );
+    await this._decide(row.id, () =>
+      this._service.mapShop(row.id, {
+        supermarketLocationId: candidate.supermarketLocationId,
+      })
+    );
     this.cancelMapping();
   }
 

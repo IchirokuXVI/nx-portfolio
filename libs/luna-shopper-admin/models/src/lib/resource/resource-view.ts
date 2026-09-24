@@ -29,6 +29,12 @@ export interface ResourceCell {
    */
   readonly key?: string;
   /**
+   * Whether {@link key} is a flag rather than a muted word: an empty value that
+   * is a gap to fix, drawn as a chip (admin plan 0034, section 2). Set only
+   * from {@link ReferenceField.unsetFlag}.
+   */
+  readonly flag?: true;
+  /**
    * What to interpolate into {@link key}, for a word that carries a number.
    *
    * A priority nobody named reads "Custom (250)" (admin plan 0028, section 2),
@@ -138,7 +144,9 @@ export function toCell<T extends ResourceRow>(
   }
 
   if (value === null || value === undefined || value === '') {
-    return EMPTY;
+    return field.kind === 'reference' && field.unsetFlag !== undefined
+      ? { text: '', key: field.unsetFlag, flag: true }
+      : EMPTY;
   }
 
   switch (field.kind) {

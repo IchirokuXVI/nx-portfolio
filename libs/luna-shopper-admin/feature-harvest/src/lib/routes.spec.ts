@@ -1,5 +1,6 @@
 import { EntriesQueuePage } from './entries-queue-page';
 import { ImportUploadPage } from './import-upload-page';
+import { PlaceGroupsPage } from './place-groups-page';
 import { PlacesQueuePage } from './places-queue-page';
 import { PresetsPage } from './presets-page';
 import { HARVEST_LINKS, HARVEST_SEGMENT, harvestRoutes } from './routes';
@@ -30,6 +31,7 @@ describe('harvestRoutes', () => {
       RunPage,
       PresetsPage,
       PlacesQueuePage,
+      PlaceGroupsPage,
       EntriesQueuePage,
       ImportUploadPage,
       ShopsQueuePage,
@@ -141,11 +143,14 @@ describe('HARVEST_LINKS', () => {
   /**
    * Every screen an operator can open, and only those. `runs/:id` has no entry,
    * because a navigation link to a route with a parameter has nothing to put in
-   * it.
+   * it. `places/groups` has none either: it is a second view of the places
+   * queue, reached from that queue's own link (admin plan 0034).
    */
-  it('links every screen except the one reached from a list', () => {
+  it('links every screen except the ones reached from another screen', () => {
     const linked = new Set(HARVEST_LINKS.map((link) => link.path));
-    const screens = pathsOf().filter((path) => path !== 'runs/:id');
+    const screens = pathsOf().filter(
+      (path) => path !== 'runs/:id' && path !== 'places/groups'
+    );
 
     expect(screens.map((path) => `/${HARVEST_SEGMENT}/${path}`).sort()).toEqual(
       [...linked].sort()

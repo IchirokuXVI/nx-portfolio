@@ -200,7 +200,7 @@
       "externalBrandKey": "Wikidata identifier",
       "externalBrandKeyHelp": "The chain's stable identity across discovery runs. It is what splits Carrefour from Carrefour Express, so change it only when that is what you mean.",
       "defaultPriceScopeId": "Default price scope",
-      "defaultPriceScopeIdHelp": "Set by the catalog service, not from here.",
+      "defaultPriceScopeIdHelp": "The scope a shop of this chain prices against when nothing more specific holds a price. Only this chain's scopes are offered, and a new chain starts with its national scope.",
       "filter": {
         "query": "Name or Wikidata identifier contains"
       },
@@ -208,7 +208,8 @@
         "name": "By name",
         "created": "Newest first",
         "updated": "Recently changed"
-      }
+      },
+      "noDefaultScope": "No default scope"
     },
     "locations": {
       "one": "shop",
@@ -767,6 +768,10 @@
         },
         "missingScope": "This scope no longer exists. Remove it to save.",
         "removeMissingScope": "Remove"
+      },
+      "modeFilter": {
+        "label": "Mode",
+        "any": "Any mode"
       }
     },
     "presets": {
@@ -953,6 +958,59 @@
           "heading": "Reject {{count}} places?",
           "body": "Each place stays as rejected, so no run offers it again."
         }
+      },
+      "groups": {
+        "open": "See them grouped by chain",
+        "heading": "Discovered places by chain",
+        "lead": "Every place discovery found, grouped by the chain it belongs to. A place with no Wikidata identifier is grouped by the brand it prints, then by its name.",
+        "back": "Back to the queue",
+        "empty": "Discovery has found no places yet.",
+        "noBrand": "No brand",
+        "count": "{{count}} places",
+        "unknownChain": "No chain in the catalog yet",
+        "knownChain": "Filed under {{chain}}"
+      },
+      "newChain": {
+        "start": "Create a chain for it",
+        "name": "Chain name",
+        "locale": "Language of the name",
+        "language": {
+          "en": "English",
+          "es": "Spanish"
+        },
+        "hint": "OpenStreetMap does not say what language a name is in, so say it here. The chain is created, with a national price scope, when the place is added and not before.",
+        "cancel": "Pick an existing chain instead"
+      },
+      "scope": {
+        "heading": "Price scope",
+        "declared": "The run that found it declared scope {{key}}. The shop joins that scope of the chain unless you pick another.",
+        "none": "The run declared no scope, so the new shop gets a store scope of its own unless you pick one.",
+        "pick": "Pick another scope of this chain only when the run's is wrong.",
+        "chainFirst": "Pick the chain to choose a different scope."
+      },
+      "match": {
+        "heading": "The catalog may already hold this shop",
+        "lead": "Nothing was added. Link the place to the shop that is the same one, or add it as a new shop if none of them is.",
+        "rung": {
+          "EXTERNAL_REF": "Same provider reference",
+          "NEARBY": "Same chain within 50 metres",
+          "ADDRESS": "Same address and postal code",
+          "UNKNOWN": "Matched by the catalog"
+        },
+        "link": "Link to this shop",
+        "force": "Create a new shop anyway"
+      },
+      "error": {
+        "matchesLocation": "The catalog may already hold this shop, so nothing was added. Open it on its own to link it or to add it anyway.",
+        "alreadyImported": "This place is already in the catalog. Its shop is removed from the catalog's locations, not from this queue.",
+        "scopeNotFound": "The run declared a price scope this chain does not hold. Create that scope first, or pick one.",
+        "needsChain": "OpenStreetMap does not say what language this place's name is in, so no chain could be made from it. Name the chain below, or pick one."
+      },
+      "nearCatalog": {
+        "heading": "Shops of this chain the catalog holds nearby",
+        "none": "The catalog holds no shop of this chain near it.",
+        "unplaced": "No position, same postal code",
+        "metres": "{{metres}} m away"
       }
     },
     "entries": {
@@ -1165,6 +1223,13 @@
           "heading": "Unmap {{count}} shops?",
           "body": "Each one stops pointing at a shop of ours, and the next run writes no availability for it until somebody maps it again. {{leftAlone}} of the picked rows are not mapped and are left alone."
         }
+      },
+      "candidates": {
+        "heading": "Shops of ours it may be",
+        "strong": "Strong match",
+        "map": "Map to this location",
+        "notBackfilled": "Mapping does not fill in what the last run skipped: the next run writes it.",
+        "best": "Best guess: {{location}}"
       }
     },
     "sources": {
@@ -1201,7 +1266,8 @@
         "lastRunAt": "Last run",
         "lastSuccessAt": "Last success",
         "failures": "Failures in a row"
-      }
+      },
+      "osmAlways": "OpenStreetMap: always asked for every postal code."
     },
     "postalCodes": {
       "one": "Postal code",
