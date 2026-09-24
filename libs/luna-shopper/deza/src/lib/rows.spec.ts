@@ -23,6 +23,12 @@ describe('parseProductPage', () => {
     });
   });
 
+  it('reads a pack count off a real row, and none off a single size (plan 0162)', () => {
+    const pack = landing.rows.find((row) => row.sizeFormat === '3x187 ml');
+    expect(pack?.packCount).toBe(3);
+    expect(landing.rows[0].packCount).toBeNull();
+  });
+
   it('names every shop a popup lists, by code and by printed name', () => {
     expect(landing.rows[0].shops).toEqual([
       { code: 'T1', printedName: 'Jesús Rescatado' },

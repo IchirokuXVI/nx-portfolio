@@ -401,6 +401,9 @@ export class SourceEntryService {
             ? null
             : Number(entry.unitSize)
           : req.unitSize,
+      // The row's count unless the request names one (plan 0162).
+      packCount:
+        req.packCount === undefined ? (entry.packCount ?? null) : req.packCount,
       // Never from the chain (plan 0038, section 5.7): `imageUrl` comes from
       // Open Food Facts or the owner, and is never rehosted from a supermarket's
       // own photography.

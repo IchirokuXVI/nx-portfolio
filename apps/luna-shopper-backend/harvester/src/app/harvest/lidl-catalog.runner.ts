@@ -231,6 +231,7 @@ function observationOf(product: LidlProduct): SourceObservation {
     ean: product.ean,
     unitSize: product.unitSize,
     sizeFormat: product.sizeFormat,
+    packCount: product.packCount,
     categoryPath: product.categoryPath,
     url: product.url,
     observedAt: product.observedAt,

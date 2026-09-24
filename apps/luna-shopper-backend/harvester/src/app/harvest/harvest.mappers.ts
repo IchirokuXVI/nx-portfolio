@@ -170,6 +170,7 @@ export function toSourceCatalogEntryView(
     ean: row.ean,
     unitSize: toNumber(row.unitSize),
     sizeFormat: row.sizeFormat,
+    packCount: row.packCount ?? null,
     categoryPath: row.categoryPath ?? [],
     url: row.url,
     extra: row.extra ?? null,

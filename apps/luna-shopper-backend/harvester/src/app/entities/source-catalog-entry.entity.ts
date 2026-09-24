@@ -116,6 +116,14 @@ export class SourceCatalogEntry extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   sizeFormat!: string | null;
 
+  /**
+   * How many units the pack holds, as the last run that saw the row read it
+   * (plan 0162), or null. The source's, like `sizeFormat`: every run rewrites
+   * it, and it is never part of a matching key.
+   */
+  @Column({ type: 'smallint', nullable: true })
+  packCount!: number | null;
+
   /** The path the walk took, root first. Deepest node drives the category map. */
   @Column({ type: 'jsonb', default: () => `'[]'::jsonb` })
   categoryPath!: string[];

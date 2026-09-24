@@ -26,6 +26,7 @@ function item(overrides: Partial<ItemView> = {}): ItemView {
     sku: null,
     ean: null,
     unitSize: 1,
+    packCount: null,
     category: ItemCategory.PANTRY,
     defaultUnit: UnitOfMeasure.LITER,
     ...overrides,

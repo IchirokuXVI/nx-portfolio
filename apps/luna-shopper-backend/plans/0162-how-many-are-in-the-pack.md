@@ -1,3 +1,5 @@
+> **PR:** [#476](https://github.com/IchirokuXVI/nx-portfolio/pull/476)
+
 # 0162: how many are in the pack
 
 > Frontend half: velista `0101`, the product suggestion card, which draws "Pack 6" beside the

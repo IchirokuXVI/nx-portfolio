@@ -478,6 +478,9 @@ function itemFrom(
           ? null
           : Number(entry.unitSize)
         : item.unitSize,
+    // The row's count unless the operation names one (plan 0162).
+    packCount:
+      item.packCount === undefined ? (entry.packCount ?? null) : item.packCount,
     // Never from the chain (plan 0038, section 5.7).
     imageUrl: null,
     sku: null,

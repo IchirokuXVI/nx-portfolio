@@ -155,6 +155,7 @@ export class DezaCatalogRunner implements CatalogRunner {
         ean: null,
         unitSize: null,
         sizeFormat: product.sizeFormat,
+        packCount: product.packCount,
         categoryPath: product.categoryPath,
         // There is no per product URL on this site; the listing is the page.
         url: null,
@@ -278,6 +279,8 @@ const MIN_TERM_LENGTH = 4;
 interface CrawledProduct {
   name: string;
   sizeFormat: string | null;
+  /** Read from the description by the adapter (plan 0162). */
+  packCount: number | null;
   brand: string | null;
   categoryPath: string[];
   /** The codes of the shops that carry it. Absence is the negative claim. */
@@ -389,6 +392,7 @@ class Crawl {
     this.products.set(key, {
       name: row.name,
       sizeFormat: row.sizeFormat,
+      packCount: row.packCount,
       brand: row.brand,
       // The attribute icons sit beside the section path because they are the
       // only classification beyond the section the page offers (section 8).

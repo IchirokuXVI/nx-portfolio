@@ -445,6 +445,150 @@ describe('ItemService', () => {
    * raises has to be turned into a 409. `create` and `update` used to let it
    * through, and an operator was told 500 for a barcode they could see.
    */
+  describe('the pack count (plan 0162)', () => {
+    const MILK = {
+      id: 'i1',
+      name: { en: 'Milk', es: 'Leche' },
+      brand: null,
+      imageUrl: null,
+      sku: null,
+      ean: null,
+      unitSize: 6,
+      packCount: 6,
+      category: ItemCategory.DAIRY,
+      defaultUnit: UnitOfMeasure.LITER,
+      productGroupId: null,
+    };
+
+    function items() {
+      return {
+        create: jest.fn((x) => x),
+        save: jest.fn(async (x) => ({ id: 'i1', ...x })),
+        findOne: jest.fn(async () => ({ ...MILK })),
+      } as unknown as Repository<Item>;
+    }
+
+    it('is answered on every view, and null when the create names none', async () => {
+      const { service } = build({ items: items() });
+      const created = await service.create({
+        userId: ADMIN,
+        name: { es: 'Leche' },
+        category: ItemCategory.DAIRY,
+        defaultUnit: UnitOfMeasure.LITER,
+      });
+      expect(created.packCount).toBeNull();
+      expect(
+        (await service.get({ userId: ADMIN, itemId: 'i1' })).packCount
+      ).toBe(6);
+    });
+
+    it('is written by a create and by a bulk create', async () => {
+      const { service } = build({ items: items() });
+      const created = await service.create({
+        userId: ADMIN,
+        name: { es: 'Leche' },
+        category: ItemCategory.DAIRY,
+        defaultUnit: UnitOfMeasure.LITER,
+        packCount: 6,
+      });
+      expect(created.packCount).toBe(6);
+      const many = await service.createMany({
+        userId: ADMIN,
+        items: [
+          {
+            name: { es: 'Atún' },
+            category: ItemCategory.PANTRY,
+            defaultUnit: UnitOfMeasure.GRAM,
+            packCount: 8,
+          },
+        ],
+      });
+      expect(many.items[0].packCount).toBe(8);
+    });
+
+    it('is changed by an update, which can also clear it', async () => {
+      const { service, audit } = build({ items: items() });
+      expect(
+        (await service.update({ userId: ADMIN, itemId: 'i1', packCount: 4 }))
+          .packCount
+      ).toBe(4);
+      expect(
+        (await service.update({ userId: ADMIN, itemId: 'i1', packCount: null }))
+          .packCount
+      ).toBeNull();
+      expect(audit.recorded.map((row) => row.after)).toEqual([
+        { packCount: 4 },
+        { packCount: null },
+      ]);
+    });
+
+    it('is left alone by an update that does not name it', async () => {
+      const { service } = build({ items: items() });
+      const updated = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        sku: 'X-1',
+      });
+      expect(updated.packCount).toBe(6);
+    });
+
+    describe('fillPackCounts', () => {
+      const ITEM = '6f1c2f7e-6d3a-4b58-9d4e-1c2b3a4d5e6f';
+
+      it('is gated like every other write', async () => {
+        const { service } = build({ items: items() });
+        await expect(
+          service.fillPackCounts({
+            userId: 'intruder',
+            entries: [{ itemId: ITEM, packCount: 6 }],
+          })
+        ).rejects.toBeInstanceOf(ForbiddenException);
+      });
+
+      it('refuses a product named twice, a count out of bounds and a list over the cap', async () => {
+        const { service, audit } = build({ items: items() });
+        await expect(
+          service.fillPackCounts({
+            userId: ADMIN,
+            entries: [
+              { itemId: ITEM, packCount: 6 },
+              { itemId: ITEM, packCount: 4 },
+            ],
+          })
+        ).rejects.toBeInstanceOf(ValidationException);
+        for (const packCount of [1, 1001, 2.5]) {
+          await expect(
+            service.fillPackCounts({
+              userId: ADMIN,
+              entries: [{ itemId: ITEM, packCount }],
+            })
+          ).rejects.toBeInstanceOf(ValidationException);
+        }
+        await expect(
+          service.fillPackCounts({
+            userId: ADMIN,
+            entries: Array.from({ length: 1001 }, (_, i) => ({
+              itemId: `${i}`,
+              packCount: 6,
+            })),
+          })
+        ).rejects.toBeInstanceOf(ValidationException);
+        expect(audit.recorded).toEqual([]);
+      });
+
+      it('writes nothing, and opens nothing, for ids that name no product', async () => {
+        const { service, audit } = build({ items: items() });
+        await expect(
+          service.fillPackCounts({
+            userId: ADMIN,
+            entries: [{ itemId: 'not-a-uuid', packCount: 6 }],
+          })
+        ).resolves.toEqual({ written: 0 });
+        expect(audit.recorded).toEqual([]);
+      });
+    });
+  });
+
   describe('a barcode the catalog already holds', () => {
     /** What the driver raises on `uq_items_ean`, as the service reads it. */
     function duplicateEan(detail?: string) {

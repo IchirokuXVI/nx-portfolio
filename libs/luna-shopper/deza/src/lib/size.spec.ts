@@ -1,4 +1,4 @@
-import { splitSize } from './size';
+import { packCountIn, splitSize } from './size';
 
 /**
  * Real descriptions, read off the live listing on 2026-09-05, kept here rather
@@ -104,5 +104,39 @@ describe('splitSize', () => {
       name: 'Leche ALTEZA',
       sizeFormat: '1 Kg',
     });
+  });
+});
+
+describe('packCountIn (plan 0162, section 1)', () => {
+  it('reads the N of a trailing NxQ', () => {
+    expect(packCountIn('Vino mesa blanco VIÑA LA HIGUERA 3x187 ml')).toBe(3);
+    expect(packCountIn('Choco wafer MILKA 5x30 g')).toBe(5);
+  });
+
+  it('reads the count of a trailing pack phrase', () => {
+    expect(packCountIn('Atún claro ALTEZA pack de 8 latas de 52 g')).toBe(8);
+    expect(packCountIn('Cerveza MAHOU pack 6 33 cl')).toBe(6);
+    expect(packCountIn('Yogur natural DANONE pack de 4')).toBe(4);
+  });
+
+  it('states no count for a sum, a bare unit count or a single size', () => {
+    expect(
+      packCountIn('Detergente en cápsulas ARIEL ORIGINAL 23+12 lavados')
+    ).toBeNull();
+    expect(packCountIn('Detergente en cápsulas MICOLOR 10 ud')).toBeNull();
+    expect(
+      packCountIn('Croissant relleno choco ST.PIERRE 6 ud 288 g')
+    ).toBeNull();
+    expect(packCountIn('Vino blanco DON SIMON brik 1 L')).toBeNull();
+  });
+
+  it('states no count for 1, for a number past the bound, or for both shapes at once', () => {
+    expect(packCountIn('Zumo ALTEZA 1x200 ml')).toBeNull();
+    expect(packCountIn('Palillos ALTEZA 1500x1 ud')).toBeNull();
+    expect(packCountIn('Zumo ALTEZA pack de 2 3x200 ml')).toBeNull();
+  });
+
+  it('reads nothing into a pack phrase in the middle of a name', () => {
+    expect(packCountIn('Estuche pack 3 regalo ALTEZA 500 g')).toBeNull();
   });
 });

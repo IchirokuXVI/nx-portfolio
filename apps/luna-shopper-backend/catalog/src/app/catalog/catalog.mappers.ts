@@ -218,6 +218,7 @@ export function toItemView(row: Item, bestOffer?: ItemOfferView): ItemView {
     sku: row.sku,
     ean: row.ean,
     unitSize: toNumber(row.unitSize),
+    packCount: row.packCount ?? null,
     category: row.category,
     defaultUnit: row.defaultUnit,
     productGroupId: row.productGroupId,

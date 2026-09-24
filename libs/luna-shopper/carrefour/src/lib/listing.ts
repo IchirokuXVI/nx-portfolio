@@ -18,6 +18,7 @@
  * answer: a missing size is a weaker key, an invented one is a wrong key.
  */
 
+import { packCountOf } from '@portfolio/luna-shopper/contracts';
 import { priceToCents, unitPriceLabel } from './price';
 import type { CarrefourCard, CarrefourProduct } from './types';
 
@@ -133,6 +134,8 @@ export interface SplitCardName {
   sizeFormat: string | null;
   /** The size as a number in the card's `measure_unit`, or null. */
   unitSize: number | null;
+  /** How many units the pack holds, or null (plan 0162). See {@link packCountIn}. */
+  packCount: number | null;
 }
 
 /**
@@ -154,7 +157,7 @@ export function splitCardName(
   const trimmed = printed.replace(/\s+/g, ' ').trim();
   const match = TRAILING_SIZE.exec(trimmed);
   if (!match) {
-    return { name: trimmed, sizeFormat: null, unitSize: null };
+    return { name: trimmed, sizeFormat: null, unitSize: null, packCount: null };
   }
 
   const unit = UNITS[match[6].toLowerCase()];
@@ -163,7 +166,7 @@ export function splitCardName(
   // another family is a coincidence: `Café molido 500 g` is a size when the
   // card measures in `kg` and a misread when it measures in `ud`.
   if (!unit || (expected && unit.base !== expected)) {
-    return { name: trimmed, sizeFormat: null, unitSize: null };
+    return { name: trimmed, sizeFormat: null, unitSize: null, packCount: null };
   }
 
   const start = match.index + match[1].length;
@@ -171,7 +174,7 @@ export function splitCardName(
   // A name that is nothing but a size keeps the whole name: an empty name is
   // not a product, and the key it would build joins nothing.
   if (!name) {
-    return { name: trimmed, sizeFormat: null, unitSize: null };
+    return { name: trimmed, sizeFormat: null, unitSize: null, packCount: null };
   }
 
   return {
@@ -182,7 +185,33 @@ export function splitCardName(
     // Either shape of the pack phrase states the count, and only one of them
     // matched, so the first that is set is the one this name used.
     unitSize: sizeAsNumber(match[3] ?? match[4], match[5], unit.factor),
+    packCount: packCountIn(match[3] ?? match[4], match[5]),
   };
+}
+
+/** One count times one quantity, `3x200` or `4 x 1,5`, and nothing else. */
+const COUNT_TIMES_QUANTITY = /^(\d+)\s*x\s*\d+(?:[.,]\d+)?$/i;
+
+/**
+ * How many units the pack holds (plan 0162, section 1).
+ *
+ * Two places state it, and both are parts of the size this file already
+ * splits off: the count of the pack phrase, `pack de 9 unidades de 1 l.` or
+ * `4 sobres de 100 g.`, and the `N` of a quantity printed as `NxQ`, `3x200 ml`.
+ * A name that states both is null, because the chain then prints a pack of
+ * packs and neither number alone is the count. A bonus pack, `28+16 lavados`,
+ * is null too: it is a sum and not a count. Proved by the names in
+ * `listing.spec.ts`, which are real names from the crawl.
+ */
+function packCountIn(
+  phraseCount: string | undefined,
+  quantity: string
+): number | null {
+  const multiplied = COUNT_TIMES_QUANTITY.exec(quantity.trim());
+  if (phraseCount !== undefined) {
+    return multiplied ? null : packCountOf(phraseCount);
+  }
+  return multiplied ? packCountOf(multiplied[1]) : null;
 }
 
 /**
@@ -233,6 +262,7 @@ export function readCard(
     name: split.name,
     sizeFormat: split.sizeFormat,
     unitSize: split.unitSize,
+    packCount: split.packCount,
     brand: card.brand?.trim() || null,
     priceCents: priceToCents(card.price),
     unitPriceCents: priceToCents(card.price_per_unit),

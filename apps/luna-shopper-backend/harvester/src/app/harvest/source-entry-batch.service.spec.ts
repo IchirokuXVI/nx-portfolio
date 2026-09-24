@@ -361,6 +361,54 @@ describe('SourceEntryBatchService', () => {
    * and the only difference between them that is meant to exist is the English
    * fetch, which this route does not pay for.
    */
+  describe('the pack count a created product gets (plan 0162)', () => {
+    async function created(
+      item: Record<string, unknown>,
+      row: Partial<SourceCatalogEntry>
+    ) {
+      const { service, createItems } = build({ rows: [entry(row)] });
+      await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'milk',
+            item,
+            expect: expectFresh,
+          },
+        ])
+      );
+      return createItems;
+    }
+
+    it("takes the row's count when the operation names none", async () => {
+      const createItems = await created(
+        { name: { es: 'Leche entera' } },
+        { sizeFormat: 'pack de 6 unidades de 1 l.', packCount: 6 }
+      );
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ packCount: 6 }),
+      ]);
+    });
+
+    it('takes the count the operation names over the row', async () => {
+      const createItems = await created(
+        { name: { es: 'Leche entera' }, packCount: 4 },
+        { sizeFormat: 'pack de 6 unidades de 1 l.', packCount: 6 }
+      );
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ packCount: 4 }),
+      ]);
+    });
+
+    it('creates none from a row that is not a pack', async () => {
+      const createItems = await created({ name: { es: 'Leche' } }, {});
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ packCount: null }),
+      ]);
+    });
+  });
+
   describe('the name a created product gets', () => {
     /** The single `createItem` input this file produced. */
     async function nameFrom(

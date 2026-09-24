@@ -39,6 +39,16 @@ export class Item extends BaseEntity {
   @Column({ type: 'numeric', precision: 12, scale: 4, nullable: true })
   unitSize!: number | null;
 
+  /**
+   * How many units the pack holds, 2 to 1000, or null (plan 0162).
+   *
+   * Written in three ways only: on creation from a source entry, by a run's
+   * fill where it is null, and by an update a person sends. The last is the
+   * only one that changes a count that is set.
+   */
+  @Column({ type: 'smallint', nullable: true })
+  packCount!: number | null;
+
   @Column({ type: 'enum', enum: ItemCategory, default: ItemCategory.OTHER })
   category!: ItemCategory;
 

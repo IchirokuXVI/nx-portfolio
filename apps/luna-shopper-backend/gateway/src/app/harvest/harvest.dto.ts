@@ -9,6 +9,8 @@ import {
   HarvestRunStatus,
   HarvestRunWrites,
   ItemCategory,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
   PostalCodeDiscoveryStatus,
   PriceSourceKind,
   SOURCE_ADAPTER_KEYS,
@@ -401,6 +403,20 @@ export class CreateItemFromEntryDto {
   @IsOptional()
   @IsNumber()
   unitSize?: number | null;
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    nullable: true,
+    minimum: PACK_COUNT_MIN,
+    maximum: PACK_COUNT_MAX,
+    description:
+      'Override the pack count the row read (plan 0162). Null creates the product with none.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(PACK_COUNT_MIN)
+  @Max(PACK_COUNT_MAX)
+  packCount?: number | null;
 
   @ApiPropertyOptional({
     enum: ItemCategory,

@@ -18,6 +18,9 @@ import {
   CATALOG_SUGGESTION_KINDS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
+  PACK_COUNT_FILL_MAX,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
   POSTAL_CODE_PATTERNS,
   PRICE_POLICY_PATTERNS,
   PRICE_SCOPE_PATTERNS,
@@ -131,6 +134,10 @@ export const CATALOG_SCHEMA_IDS = {
   searchItemsRequest: schemaId('msg/item.search/request'),
   findItemByEanRequest: schemaId('msg/item.findByEan/request'),
   findItemByEanResult: schemaId('catalog/FindItemByEanResult'),
+  // Plan 0162: the harvester fills the pack counts a run saw.
+  packCountFill: schemaId('catalog/PackCountFill'),
+  fillPackCountsRequest: schemaId('msg/item.fillPackCounts/request'),
+  fillPackCountsResult: schemaId('msg/item.fillPackCounts/response'),
   // Plan 0100: the two bulk replays, and the error shape they share.
   bulkOperationErrorCode: schemaId('enums/BulkOperationErrorCode'),
   bulkOperationError: schemaId('catalog/BulkOperationError'),
@@ -245,6 +252,12 @@ export const CATALOG_SCHEMA_IDS = {
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
 const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
+/** A pack count (plan 0162): a whole number in the bounds, or null. */
+const packCountOrNull = (): JsonSchema => ({
+  type: ['integer', 'null'],
+  minimum: PACK_COUNT_MIN,
+  maximum: PACK_COUNT_MAX,
+});
 /** A kind, or null for a materialized row no price row stands behind (plan 0080). */
 const nullableSourceKind = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
@@ -410,6 +423,7 @@ const itemView = object(
     sku: nullableString(),
     ean: nullableString(),
     unitSize: numberOrNull(),
+    packCount: packCountOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
@@ -431,6 +445,7 @@ const itemView = object(
     'sku',
     'ean',
     'unitSize',
+    'packCount',
     'category',
     'defaultUnit',
     'productGroupId',
@@ -978,6 +993,7 @@ const createItemRequest = object(
     sku: nullableString(),
     ean: nullableString(),
     unitSize: numberOrNull(),
+    packCount: packCountOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
@@ -995,6 +1011,7 @@ const updateItemRequest = object(
     sku: nullableString(),
     ean: nullableString(),
     unitSize: numberOrNull(),
+    packCount: packCountOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
@@ -1029,6 +1046,7 @@ const createItemInput = object(
     sku: nullableString(),
     ean: nullableString(),
     unitSize: numberOrNull(),
+    packCount: packCountOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
@@ -1140,6 +1158,31 @@ const findItemByEanResult = object(
     },
   },
   ['item']
+);
+/** One product and the count a run read for it (plan 0162, section 3). */
+const packCountFill = object(
+  CATALOG_SCHEMA_IDS.packCountFill,
+  {
+    itemId: nonEmptyString(),
+    packCount: integer({ minimum: PACK_COUNT_MIN, maximum: PACK_COUNT_MAX }),
+  },
+  ['itemId', 'packCount']
+);
+const fillPackCountsRequest = object(
+  CATALOG_SCHEMA_IDS.fillPackCountsRequest,
+  {
+    ...adminCredentialProperties,
+    entries: {
+      ...array(ref(CATALOG_SCHEMA_IDS.packCountFill)),
+      maxItems: PACK_COUNT_FILL_MAX,
+    },
+  },
+  ['userId', 'entries']
+);
+const fillPackCountsResult = object(
+  CATALOG_SCHEMA_IDS.fillPackCountsResult,
+  { written: integer({ minimum: 0 }) },
+  ['written']
 );
 const itemIdRequest = object(
   CATALOG_SCHEMA_IDS.itemIdRequest,
@@ -2128,6 +2171,9 @@ export const catalogSchemas: JsonSchema[] = [
   listProductGroupsRequest,
   findItemByEanRequest,
   findItemByEanResult,
+  packCountFill,
+  fillPackCountsRequest,
+  fillPackCountsResult,
   itemPriceOverride,
   itemPriceOverrides,
   itemPriceDetails,
@@ -2270,6 +2316,10 @@ export const catalogMessageContracts: Record<
   [ITEM_PATTERNS.createMany]: {
     request: CATALOG_SCHEMA_IDS.createItemsRequest,
     response: CATALOG_SCHEMA_IDS.createItemsResult,
+  },
+  [ITEM_PATTERNS.fillPackCounts]: {
+    request: CATALOG_SCHEMA_IDS.fillPackCountsRequest,
+    response: CATALOG_SCHEMA_IDS.fillPackCountsResult,
   },
   [BRAND_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createBrandRequest,
