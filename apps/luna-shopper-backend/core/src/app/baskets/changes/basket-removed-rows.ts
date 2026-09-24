@@ -80,6 +80,9 @@ export function removedRows(
       touchedBy: newest?.settledByParticipantId ?? null,
       touchedAt: newest ? new Date(newest.settledAt).toISOString() : null,
       entries: [],
+      // Filled by the read when it has a chain (plan 0165), from the lines
+      // that went, and null otherwise.
+      usual: null,
     };
   });
 }
