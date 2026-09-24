@@ -626,6 +626,14 @@ export async function main(
     }));
   const cliPath = deciderPath(implementation, repoRoot);
   const chain = resumed ? (resumed.chain ?? null) : stringFlag(flags, 'chain');
+  // The groups decider refuses --chain itself, because a product group spans
+  // every chain. Refused here as well, before a slot is taken, for the same
+  // reason a misspelled engine is.
+  if (implementation === 'groups' && chain !== null) {
+    throw new Error(
+      '--chain works with the suggestions decider only. A product group spans every chain, so a groups walk is every ungrouped product. Run it without --chain.'
+    );
+  }
 
   const runDir = resumed
     ? flags.resume

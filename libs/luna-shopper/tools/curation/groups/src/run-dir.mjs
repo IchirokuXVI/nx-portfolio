@@ -81,7 +81,7 @@ export function createRun(
   mkdirSync(dir, { recursive: true });
   if (existsSync(statePath(dir))) {
     throw new Error(
-      `${statePath(dir)} already holds run ${readState(dir).runId}. Point --run-dir at a new directory, or continue this one with next.`
+      `${statePath(dir)} already holds run ${readState(dir).runId}. Point --run-dir at a new directory, or continue this run with: npx nx run luna-shopper/curation-cli:curate -- --resume ${dir}`
     );
   }
 
