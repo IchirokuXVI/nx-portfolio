@@ -83,3 +83,77 @@ export function runStreamed(command, args, { cwd, env } = {}) {
     child.on('close', (code) => resolve({ code: code ?? 0, started: true }));
   });
 }
+
+/**
+ * A child fed on stdin and captured, in the shape the model engines library
+ * asks its `spawn` for: `{ code, stdout, stderr }`, and a rejection when the
+ * command cannot start or does not answer in time.
+ *
+ * The `claude` engine is built with it. Without one it has nothing to start a
+ * `claude -p` call with, which is why `--engine claude` never read a page here
+ * before plan 0003: the engine was built and its first call threw.
+ */
+export function runWithInput(
+  command,
+  args,
+  { input, env, cwd, timeoutMs, signal } = {}
+) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new Error('the run was stopped'));
+      return;
+    }
+    let child;
+    try {
+      child = spawn(command, args, {
+        cwd,
+        env,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true,
+      });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    let stdout = '';
+    let stderr = '';
+    let timer = null;
+    // A stopped run kills the call it was in the middle of, so a model call
+    // that outlived the run bills nobody.
+    const onStop = () => {
+      child.kill();
+      reject(signal.reason ?? new Error('the run was stopped'));
+    };
+    signal?.addEventListener('abort', onStop, { once: true });
+    const settle = () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      signal?.removeEventListener('abort', onStop);
+    };
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', (error) => {
+      settle();
+      reject(error);
+    });
+    child.on('close', (code) => {
+      settle();
+      resolve({ code: code ?? 0, stdout, stderr });
+    });
+    if (timeoutMs) {
+      timer = setTimeout(() => {
+        child.kill();
+        reject(new Error(`${command} did not answer within ${timeoutMs}ms`));
+      }, timeoutMs);
+    }
+    child.stdin.on('error', () => undefined);
+    child.stdin.end(input ?? '');
+  });
+}

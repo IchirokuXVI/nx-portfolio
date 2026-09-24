@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { censusPdf, formatCensus, groupSizes, scanPdf } from './census.mjs';
+import {
+  censusImages,
+  censusPdf,
+  formatCensus,
+  groupSizes,
+  scanPdf,
+} from './census.mjs';
 
 /** A PDF's own bytes, cut down to the two things the scan reads. */
 const THREE_PAGES = Buffer.from(
@@ -101,4 +107,22 @@ test('pdftotext answers the text layer when PyMuPDF is not the renderer', async 
   assert.deepEqual(census.textLayer, [true, false, true]);
   assert.equal(census.textLayerFrom, 'pdftotext');
   assert.match(formatCensus(census), /pages with text: 1, 3/);
+});
+
+test('a folder of page images counts its highest page, and names what is there', () => {
+  // Pages 5 to 16, as backend plan 0150 rendered them.
+  const present = Array.from({ length: 12 }, (_, index) => index + 5);
+  const census = censusImages('/pages', () => present);
+  assert.equal(census.pageCount, 16);
+  assert.deepEqual(census.pages, present);
+  const printed = formatCensus(census);
+  assert.match(printed, /pages: 16, from the highest page_NN.png/);
+  assert.match(printed, /page images there: 12, pages 5-16/);
+  // It names the input, rather than blaming a tool that is not needed.
+  assert.match(printed, /The input is a directory of page images/);
+  assert.doesNotMatch(printed, /Neither PyMuPDF nor pdftotext is installed/);
+});
+
+test('an empty folder counts no pages', () => {
+  assert.equal(censusImages('/pages', () => []).pageCount, 0);
 });

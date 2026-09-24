@@ -23,7 +23,8 @@
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
 
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import {
@@ -40,19 +41,32 @@ import {
   readPrompt,
   resolveChain,
 } from './chains.mjs';
+import { checkPage } from './check-page.mjs';
+import { runWithInput } from './child.mjs';
+import { formatPageList } from './commands.mjs';
+import { isDay } from './document.mjs';
 import { readRunFile } from './manual.mjs';
 import { DEFAULT_PAGE_TIMEOUT_S } from './read-pages.mjs';
-import { runRead } from './run.mjs';
+import { finishRun, runRead } from './run.mjs';
 
 /** The engine that is a person. It is not a registry entry, because everything
  * in that registry builds an object with an `ask` method and this one has none
  * to build. The CLI branches on it before it asks the registry. */
 export const MANUAL = 'manual';
 
-/** The engine a run takes when the operator names none. A leaflet reading is
- * cheap to redo and the drift check already catches a bad one, so a free first
- * pass over a 40 page leaflet is worth having. */
-export const DEFAULT_ENGINE = 'ollama';
+/**
+ * The engine a run takes when the operator names none, and the model it asks
+ * (plan 0003).
+ *
+ * It used to be `ollama`, as a free first pass. Local vision models are
+ * unreliable on leaflets, gemma4 was measured unstable on them, and the
+ * developer asked for leaflets to be read by Sonnet or another strong vision
+ * model and never by gemma4. The `claude` engine already hands a page to
+ * `claude -p` through its Read tool, so the default is that, with Sonnet.
+ * `sonnet` is the Claude Code alias, which follows the current Sonnet.
+ */
+export const DEFAULT_ENGINE = 'claude';
+export const DEFAULT_MODEL = 'sonnet';
 
 /** Where a run's working material goes when the operator names no directory. */
 export const RUN_ROOT = 'tmp/leaflet';
@@ -98,15 +112,24 @@ export function usageText(engines = ENGINES, slugs = listChains()) {
   typed without the \`--\` is dropped in silence.
 
 ${line('--pdf <path>', 'the leaflet. A PDF, or a directory of')}
-${indent}page_NN.png that skips rendering
+${indent}page_NN.png that skips rendering. A directory
+${indent}is read for the pages it holds
 ${line('--chain <slug>', 'which chain. Required, never guessed.')}
 ${indent}${slugs.length > 0 ? slugs.join(', ') : '(no chain folders found)'}
-${line(`--engine <name>`, `${[...ENGINE_NAMES, MANUAL].join(', ')}. Default ${DEFAULT_ENGINE}.`)}
+${line(`--engine <name>`, `${[...ENGINE_NAMES, MANUAL].join(', ')}. Default ${DEFAULT_ENGINE}`)}
+${indent}with --model ${DEFAULT_MODEL}.
 ${line('--model <name>', "the engine's own default when absent")}
 ${line('--pages 1-12,31', 'read only these. Default: every page')}
 ${line('--out <dir>', `default ${RUN_ROOT}/<slug>-<date>`)}
 ${line('--dpi <n>', "the chain's own dpi when absent")}
-${line('--resume', 'keep page readings already in --out')}
+${line('--valid-from <day>', 'the first day of the window, YYYY-MM-DD')}
+${line('--valid-until <day>', 'the last day of the window, YYYY-MM-DD')}
+${line('--resume', 'keep page readings already in --out. The pages,')}
+${indent}the dpi and the dates come from run.json
+${indent}when the flags are absent
+${line('--check-page <n>', 'check one hand written page_NN.json in --out')}
+${line('--finish', 'build, drift check and validate a manual run,')}
+${indent}everything read from --out's run.json
 ${line('--dry-run', 'census and layout only. Read no page')}
 ${line('--page-timeout <s>', `give up on one page. Default ${DEFAULT_PAGE_TIMEOUT_S}`)}
 
@@ -115,12 +138,14 @@ ${line('--page-timeout <s>', `give up on one page. Default ${DEFAULT_PAGE_TIMEOU
 ${perEngine}
     ${MANUAL.padEnd(width)}  a person, with any model at all
 
+  --engine ollama runs a local vision model, and local vision models are
+  unreliable on leaflets. Name it only for a reading you will check page by
+  page against the leaflet.
+
   --engine manual renders the pages, writes <out>/PROMPT.md and stops. Paste
   that file into Claude Code or any model you like, let it write one
-  <out>/import/page_NN.json per page, then pick the run back up with
-  --out <out> --resume --engine manual. It reaches a stronger model than
-  --engine claude does, more cheaply, so it is the mode to use when a run
-  matters.
+  <out>/import/page_NN.json per page, check each with --out <out>
+  --check-page N, then run --out <out> --finish.
 
   --page-timeout is not a tuning knob. It is the only thing that ends a looping
   local model, and a longer one collects nothing: three minutes and five
@@ -151,6 +176,19 @@ export function parseArgs(argv) {
     }
   }
   return flags;
+}
+
+/** A day, as `--valid-from` and `--valid-until` take one, or null when absent. */
+export function parseDay(name, value) {
+  if (value === undefined) {
+    return null;
+  }
+  if (!isDay(value)) {
+    throw new Error(
+      `${name} is ${value === true ? '(nothing)' : value}, and it has to be a day as YYYY-MM-DD.`
+    );
+  }
+  return value;
 }
 
 /** A whole number of something, refused here rather than three layers down. */
@@ -188,7 +226,10 @@ export async function main(
     ask = askLine,
     exists = existsSync,
     stat = statSync,
+    readFile = readFileSync,
+    readRun = readRunFile,
     read = runRead,
+    finish = finishRun,
     // How an entry becomes an engine. Injected because a built engine does not
     // report what it was built with, so this is the one place a test can see
     // the ceiling the leaflet workload asks for.
@@ -202,12 +243,75 @@ export async function main(
     return 0;
   }
 
+  const outFlag = typeof flags.out === 'string' ? flags.out : null;
+
+  // One hand written page, checked. It needs no chain and no engine, only the
+  // run's folder, so it answers before either is resolved.
+  if (flags['check-page'] !== undefined) {
+    if (!outFlag) {
+      throw new Error(
+        '--check-page needs --out <dir>, the run whose page it checks.'
+      );
+    }
+    const page = parseNumber('--check-page', flags['check-page']);
+    const { ok, lines } = checkPage({
+      page,
+      importDir: join(outFlag, 'import'),
+      outDir: outFlag,
+      stripFence,
+      exists,
+      readFile,
+    });
+    stdout.write(`${lines.join('\n')}\n`);
+    return ok ? 0 : 1;
+  }
+
+  // The window a person states, on any engine. It outranks the cover.
+  const statedValidity = {
+    from: parseDay('--valid-from', flags['valid-from']),
+    until: parseDay('--valid-until', flags['valid-until']),
+  };
+  if (
+    statedValidity.from &&
+    statedValidity.until &&
+    statedValidity.from > statedValidity.until
+  ) {
+    throw new Error(
+      `--valid-from ${statedValidity.from} is after --valid-until ${statedValidity.until}.`
+    );
+  }
+
   // `--resume` with an `--out` alone picks a run back up, and what it needs is
   // the PDF and the chain, neither of which it was given. The first pass wrote
   // both into `<out>/run.json` rather than asking an operator to type them
   // twice and get one of them wrong.
-  const outFlag = typeof flags.out === 'string' ? flags.out : null;
-  const recorded = outFlag ? readRunFile(outFlag) : null;
+  const recorded = outFlag ? readRun(outFlag) : null;
+
+  // A manual run's last three steps, with everything read from run.json.
+  if (flags.finish === true) {
+    if (!recorded) {
+      throw new Error(
+        `--finish needs --out <dir> of a run that wrote run.json${outFlag ? `, and ${outFlag} holds none` : ''}.`
+      );
+    }
+    const chain = resolveChain(recorded.chain ?? null);
+    const outcome = await finish({
+      chain,
+      defaults: await loadChainDefaults(chain),
+      outDir: outFlag,
+      recorded,
+      statedValidity,
+      stripFence,
+      stdout,
+    });
+    return outcome.code ?? 0;
+  }
+
+  // What a resume reads back when the flags do not say it (plan 0003). A resume
+  // without `--pages` used to mean every page, and one without the dates lost
+  // the window the first pass was given.
+  const resume = flags.resume === true;
+  const carried = resume ? recorded : null;
 
   const slug =
     typeof flags.chain === 'string' ? flags.chain : (recorded?.chain ?? null);
@@ -216,15 +320,17 @@ export async function main(
   const chain = resolveChain(slug);
   const defaults = await loadChainDefaults(chain);
 
-  const engineName =
-    typeof flags.engine === 'string' ? flags.engine : DEFAULT_ENGINE;
+  const engineNamed = typeof flags.engine === 'string';
+  const engineName = engineNamed ? flags.engine : DEFAULT_ENGINE;
   const manual = engineName === MANUAL;
   // Manual mode branches before the registry, because it has no `ask` to build.
   const entry = manual ? null : engineEntry(engineName);
   const model =
     typeof flags.model === 'string'
       ? flags.model
-      : (entry?.defaultModel ?? null);
+      : engineNamed
+        ? (entry?.defaultModel ?? null)
+        : DEFAULT_MODEL;
 
   const source =
     typeof flags.pdf === 'string' ? flags.pdf : (recorded?.pdf ?? null);
@@ -239,7 +345,12 @@ export async function main(
   const sourceIsDirectory = stat(source).isDirectory();
 
   const outDir = outFlag ?? defaultOutDir(chain.slug, now());
-  const dpi = parseNumber('--dpi', flags.dpi, defaults.dpi);
+  const dpi = parseNumber('--dpi', flags.dpi, carried?.dpi ?? defaults.dpi);
+  const pagesSpec =
+    flags.pages ??
+    (Array.isArray(carried?.pages) && carried.pages.length > 0
+      ? formatPageList(carried.pages)
+      : undefined);
   const timeoutMs =
     parseNumber(
       '--page-timeout',
@@ -261,6 +372,9 @@ export async function main(
       usage,
       stderr,
       gated,
+      // What the claude entry starts `claude -p` with. It has no default, so an
+      // engine built without it threw on its first call.
+      spawn: runWithInput,
       // A page of offers is a longer answer than the library's own default was
       // set for. An entry with no such ceiling ignores the key.
       numPredict: LEAFLET_NUM_PREDICT,
@@ -273,9 +387,9 @@ export async function main(
     source,
     sourceIsDirectory,
     outDir,
-    pagesSpec: flags.pages,
+    pagesSpec,
     dpi,
-    resume: flags.resume === true,
+    resume,
     dryRun: flags['dry-run'] === true,
     manual,
     timeoutMs,
@@ -283,6 +397,8 @@ export async function main(
     engineName,
     model,
     isLocal: entry?.local === true,
+    statedValidity,
+    recordedValidity: carried?.validity ?? null,
     prompt: readPrompt(chain),
     layout: readLayout(chain),
     stripFence,

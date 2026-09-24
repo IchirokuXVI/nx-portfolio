@@ -6,6 +6,7 @@ import { CHAINS_DIR, readLayout, readPrompt, resolveChain } from './chains.mjs';
 import {
   RUN_FILE,
   collectManualReadings,
+  mergeRunFile,
   promptFile,
   readRunFile,
   writeRunFile,
@@ -51,18 +52,41 @@ test('PROMPT.md names one absolute path per rendered page', () => {
   assert.ok(!text.includes('page_03.png'));
 });
 
-test('PROMPT.md says where each answer goes, and names the pick up command', () => {
-  const text = written([1]);
-  assert.ok(text.includes('page_01.json'));
-  assert.match(text, /--out \/out --resume --engine manual/);
+test('PROMPT.md says where each answer goes, and names a whole command for each step', () => {
+  const text = written([5, 6]);
+  assert.ok(text.includes('page_05.json'));
   assert.match(text, /empty array for a page with no priced product/);
+  // One check per page, and the finish, each pasteable as it stands.
+  assert.ok(
+    text.includes(
+      'npx nx run luna-shopper/leaflet-cli:read -- --out /out --check-page 5'
+    )
+  );
+  assert.ok(
+    text.includes(
+      'npx nx run luna-shopper/leaflet-cli:read -- --out /out --check-page 6'
+    )
+  );
+  assert.ok(
+    text.includes(
+      'npx nx run luna-shopper/leaflet-cli:read -- --out /out --finish'
+    )
+  );
 });
 
-test('PROMPT.md names the three fields that matter most', () => {
+test('PROMPT.md names the three fields that matter most, in the plan 0002 shape', () => {
   const text = written([1]);
-  for (const field of ['loyalty', 'promotion.type', 'basis']) {
+  for (const field of [
+    'leaflet.loyalty',
+    'leaflet.promotion.type',
+    'leaflet.promotion.singleUnitPrice',
+    'leaflet.basis',
+  ]) {
     assert.ok(text.includes(field), `names ${field}`);
   }
+  // The flat names the builder stopped asking for are gone from this section.
+  const section = text.slice(text.indexOf('## The three fields'));
+  assert.doesNotMatch(section, /single_unit_price/);
 });
 
 test('the first pass records the chain and the pdf, and the pick up reads them', () => {
@@ -79,6 +103,42 @@ test('the first pass records the chain and the pdf, and the pick up reads them',
   });
   assert.equal(back.chain, 'el-jamon');
   assert.equal(back.pdf, '/leaflets/a.pdf');
+});
+
+test('a resume merges into run.json rather than writing it whole', () => {
+  const store = new Map();
+  const fs = {
+    writeFile: (path, text) => store.set(path, text),
+    exists: (path) => store.has(path),
+    readFile: (path) => store.get(path),
+  };
+  writeRunFile(
+    '/out',
+    {
+      chain: 'el-jamon',
+      pages: [5, 6],
+      startedAt: '2026-09-23T10:00:00.000Z',
+      validity: { from: '2026-08-27', until: '2026-09-23' },
+    },
+    fs.writeFile
+  );
+  // A resume that states only the end of the window, and no start time.
+  mergeRunFile(
+    '/out',
+    {
+      chain: 'el-jamon',
+      startedAt: '2026-09-24T10:00:00.000Z',
+      resumedAt: '2026-09-24T10:00:00.000Z',
+      model: null,
+      validity: { from: null, until: '2026-09-22' },
+    },
+    fs
+  );
+  const back = readRunFile('/out', fs);
+  assert.deepEqual(back.pages, [5, 6]);
+  assert.equal(back.startedAt, '2026-09-23T10:00:00.000Z');
+  assert.equal(back.resumedAt, '2026-09-24T10:00:00.000Z');
+  assert.deepEqual(back.validity, { from: '2026-08-27', until: '2026-09-22' });
 });
 
 test('there is nothing to pick up when no run was recorded', () => {

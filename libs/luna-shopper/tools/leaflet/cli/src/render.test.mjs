@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import {
+  DOCKER_IMAGE,
   PYTHON_CANDIDATES,
   RENDERERS,
+  dockerRenderArgs,
   findRenderer,
+  hostOwner,
   installLines,
   pageImagePath,
   pageName,
@@ -148,5 +152,173 @@ test('a page that fails to render is named by number', async () => {
       run,
     }),
     /page 2 did not render.*broken xref/
+  );
+});
+
+test('the probe takes Docker last, and only with a daemon that answers', async () => {
+  const { run, calls } = probeFor(['docker']);
+  const chosen = await findRenderer({ run });
+  assert.equal(chosen.key, 'docker');
+  assert.deepEqual(calls.at(-1), ['docker', ['version']]);
+
+  // A client with no daemon starts, exits non-zero, and renders nothing.
+  const down = async (command) => ({
+    started: command === 'docker',
+    code: command === 'docker' ? 1 : -1,
+    stdout: '',
+    stderr: 'Cannot connect to the Docker daemon',
+  });
+  assert.equal(await findRenderer({ run: down }), null);
+});
+
+test('a renderer already tried on this run is skipped', async () => {
+  const { run } = probeFor(['magick', 'docker']);
+  assert.equal((await findRenderer({ run })).key, 'magick');
+  assert.equal((await findRenderer({ run, skip: ['magick'] })).key, 'docker');
+});
+
+test('the Docker renderer runs pdftoppm in alpine over two mounted folders', () => {
+  const [command, args] = dockerRenderArgs({
+    pdf: '/leaflets/eljamon-leaflet.pdf',
+    outDir: '/out/pages',
+    pages: [5, 6],
+    dpi: 160,
+    owner: '1000:1000',
+  });
+  assert.equal(command, 'docker');
+  assert.deepEqual(args.slice(0, 2), ['run', '--rm']);
+  assert.ok(
+    args.includes(`${dirname(resolve('/leaflets/eljamon-leaflet.pdf'))}:/in:ro`)
+  );
+  assert.ok(args.includes(`${resolve('/out/pages')}:/out`));
+  assert.ok(args.includes(DOCKER_IMAGE));
+  assert.equal(DOCKER_IMAGE, 'alpine:3.20');
+  assert.deepEqual(args.slice(-3, -1), ['sh', '-c']);
+  assert.equal(
+    args.at(-1),
+    [
+      'apk add --no-cache poppler-utils >/dev/null',
+      "pdftoppm -png -r 160 -f 5 -l 5 -singlefile '/in/eljamon-leaflet.pdf' /out/page_05",
+      "pdftoppm -png -r 160 -f 6 -l 6 -singlefile '/in/eljamon-leaflet.pdf' /out/page_06",
+      'chown 1000:1000 /out/page_05.png /out/page_06.png',
+    ].join(' && ')
+  );
+  // Windows has no uid, so nothing is handed back there.
+  const [, windows] = dockerRenderArgs({
+    pdf: 'a.pdf',
+    outDir: '/out',
+    pages: [1],
+    dpi: 128,
+    owner: null,
+  });
+  assert.doesNotMatch(windows.at(-1), /chown/);
+  assert.equal(hostOwner({}), null);
+  assert.equal(hostOwner({ getuid: () => 0, getgid: () => 0 }), null);
+  assert.equal(
+    hostOwner({ getuid: () => 1000, getgid: () => 100 }),
+    '1000:100'
+  );
+});
+
+test('a PDF name with a quote in it stays one word inside the container', () => {
+  const [, args] = dockerRenderArgs({
+    pdf: "/x/it's.pdf",
+    outDir: '/out',
+    pages: [1],
+    dpi: 160,
+    owner: null,
+  });
+  assert.ok(args.at(-1).includes(`-singlefile '/in/it'\\''s.pdf'`));
+});
+
+/** A docker that answers `image inspect` as told and renders the pages. */
+function fakeDocker({ imagePresent, fail = false }) {
+  const calls = [];
+  const written = new Set();
+  const run = async (command, args) => {
+    calls.push(args[0] === 'image' ? 'inspect' : args[0]);
+    if (args[0] === 'image') {
+      return {
+        started: true,
+        code: imagePresent ? 0 : 1,
+        stdout: '',
+        stderr: '',
+      };
+    }
+    if (!fail) {
+      for (const match of args.at(-1).matchAll(/\/out\/(page_\d+)(?= |$)/g)) {
+        written.add(`${match[1]}.png`);
+      }
+    }
+    return {
+      started: true,
+      code: fail ? 1 : 0,
+      stdout: '',
+      stderr: fail ? 'no such file' : '',
+    };
+  };
+  const exists = (path) => written.has(String(path).split(/[\\/]/).pop());
+  return { run, exists, calls };
+}
+
+const DOCKER = {
+  key: 'docker',
+  command: 'docker',
+  label: 'pdftoppm in Docker',
+};
+
+test('Docker says it is pulling the image before it pulls, and renders every page in one container', async () => {
+  const said = [];
+  const { run, exists, calls } = fakeDocker({ imagePresent: false });
+  const out = await renderPages({
+    renderer: DOCKER,
+    pdf: '/leaflets/a.pdf',
+    outDir: '/out',
+    dpi: 160,
+    pages: [5, 6],
+    run,
+    exists,
+    say: (line) => said.push(line),
+  });
+  assert.deepEqual(calls, ['inspect', 'run']);
+  assert.match(
+    said[0],
+    /alpine:3.20 is not on this machine, so Docker pulls it now/
+  );
+  assert.equal(out.length, 2);
+  assert.ok(out[1].endsWith('page_06.png'));
+});
+
+test('Docker announces no pull when the image is already there', async () => {
+  const said = [];
+  const { run, exists } = fakeDocker({ imagePresent: true });
+  await renderPages({
+    renderer: DOCKER,
+    pdf: '/leaflets/a.pdf',
+    outDir: '/out',
+    dpi: 160,
+    pages: [1],
+    run,
+    exists,
+    say: (line) => said.push(line),
+  });
+  assert.ok(said.every((line) => !/pulls/.test(line)));
+});
+
+test('a Docker render that wrote nothing names the page and says it wrote none', async () => {
+  const { run, exists } = fakeDocker({ imagePresent: true, fail: true });
+  await assert.rejects(
+    renderPages({
+      renderer: DOCKER,
+      pdf: '/leaflets/a.pdf',
+      outDir: '/out',
+      dpi: 160,
+      pages: [5, 6],
+      run,
+      exists,
+    }),
+    (error) =>
+      /page 5 did not render.*no such file/.test(error.message) &&
+      error.rendered === 0
   );
 });
