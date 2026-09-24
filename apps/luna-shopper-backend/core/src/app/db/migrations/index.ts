@@ -29,6 +29,8 @@ import { PersonPurchases1756003000000 } from './1756003000000-PersonPurchases';
 import { SettlementPricePaid1756003100000 } from './1756003100000-SettlementPricePaid';
 import { GeneratedListsBecomeBaskets1756003200000 } from './1756003200000-GeneratedListsBecomeBaskets';
 import { UserAppState1756003300000 } from './1756003300000-UserAppState';
+import { BasketShop1756003400000 } from './1756003400000-BasketShop';
+import { SettlementChain1756003500000 } from './1756003500000-SettlementChain';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -157,4 +159,13 @@ export const CORE_MIGRATIONS = [
   // so it follows every migration and none of them in particular (plan 0145,
   // section 1).
   UserAppState1756003300000,
+  // One column and one check constraint on `baskets`, which plan 0144's
+  // migration last renamed. Every row is null, so the check holds on the day
+  // it is added; it reads and writes nothing (plan 0163, section 1).
+  BasketShop1756003400000,
+  // One column on `line_settlements`, and the location check that plan 0143
+  // added widened to hold it. Every row is null in the new column, so the check
+  // holds; it follows plan 0143's migration and nothing else (plan 0163,
+  // section 5).
+  SettlementChain1756003500000,
 ];

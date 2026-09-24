@@ -26,7 +26,16 @@ const OAT = 'item-oat';
 const entry = (lineId: string, itemIds: string[]): BasketEntry =>
   ({ lineId, itemIds, quantity: 1 }) as unknown as BasketEntry;
 
-function build(rows: Record<string, BasketEntry[]>) {
+const SHOP = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
+
+function build(
+  rows: Record<string, BasketEntry[]>,
+  basket: { supermarketLocationId?: string | null } = {},
+  participant: { kind: ParticipantKind; invitedAt: Date | null } = {
+    kind: ParticipantKind.OWNER,
+    invitedAt: null,
+  }
+) {
   const asked: string[] = [];
   const context = {
     open: jest.fn(async () => ({
@@ -35,8 +44,10 @@ function build(rows: Record<string, BasketEntry[]>) {
         kind: BasketKind.GENERATED,
         ownerUserId: OWNER,
         pricingProfileId: 'prof-home',
+        supermarketLocationId: null,
+        ...basket,
       },
-      participant: { kind: ParticipantKind.OWNER, invitedAt: null },
+      participant,
       row: jest.fn(async (rowKey: string): Promise<BasketRow> => {
         asked.push(rowKey);
         const entries = rows[rowKey];
@@ -69,8 +80,39 @@ describe('basket.searchScope (plan 0151)', () => {
       ownerUserId: OWNER,
       profileId: 'prof-home',
       servesLocations: true,
+      supermarketLocationId: null,
     });
     expect(w.asked).toEqual([]);
+  });
+
+  // Plan 0163, section 5: the settle records the basket's own shop when it
+  // names none, and refuses another. It learns the shop here, on the question
+  // it already asks, rather than by reading the whole basket.
+  it("answers the basket's own shop", async () => {
+    const w = build({}, { supermarketLocationId: SHOP });
+
+    const scope = await w.service.searchScope({
+      basketId: BASKET,
+      participantId: PARTICIPANT,
+    });
+
+    expect(scope.supermarketLocationId).toBe(SHOP);
+  });
+
+  // Plan 0163, section 4: a link visitor, guest or registered, is served shops,
+  // so a settle they make at a shop records it.
+  it.each([
+    ['a guest', ParticipantKind.GUEST],
+    ['a registered link visitor', ParticipantKind.REGISTERED],
+  ])('serves shops to %s', async (_name, kind) => {
+    const w = build({}, {}, { kind, invitedAt: null });
+
+    const scope = await w.service.searchScope({
+      basketId: BASKET,
+      participantId: PARTICIPANT,
+    });
+
+    expect(scope.servesLocations).toBe(true);
   });
 
   it('answers the only product of a row with one option', async () => {

@@ -212,6 +212,9 @@ export class BasketReadService {
       servesLocations: redaction.servesLocations,
       unseenChangeCount: marks.unseenChangeCount,
       newestUnseenChangeId: marks.newestUnseenChangeId,
+      // The shop the basket was started at (plan 0163, section 1). Core states
+      // the lock itself, so it holds even when catalog cannot name the shop.
+      supermarketLocationId: basket.supermarketLocationId ?? null,
     };
   }
 

@@ -47,7 +47,7 @@ describe('the lists a reader is served', () => {
   });
 });
 
-describe('who is served shop addresses (section 2)', () => {
+describe('who is served shop addresses (plan 0163, section 4)', () => {
   it('serves the owner', () => {
     expect(
       BasketRedaction.of(
@@ -67,26 +67,27 @@ describe('who is served shop addresses (section 2)', () => {
     ).toBe(true);
   });
 
-  it('refuses a link visitor, however many lists they write', () => {
-    // **This is not the per list rule.** A street address is the owner's
-    // geography rather than a fact about any list, so writing every covered
-    // list buys no shops: somebody who found a forwarded link gets the chain
-    // and the price, and never the neighbourhood.
+  // Plan 0163 reverses plan 0136 section 2 here, as the user decided on
+  // 2026-09-24: a guest picks the shop they are standing in from the same list
+  // the owner sees. The cost, that a link tells its holder roughly where the
+  // owner shops, is written on `servesLocations` itself.
+  it('serves a registered link visitor, and the per list rule is unchanged', () => {
     const redaction = BasketRedaction.of(
       participant(),
       new Set(['list-a', 'list-b'])
     );
 
     expect(redaction.servedListIds.size).toBe(2);
-    expect(redaction.servesLocations).toBe(false);
+    expect(redaction.servesLocations).toBe(true);
   });
 
-  it('refuses a guest', () => {
-    expect(
-      BasketRedaction.none(
-        participant({ kind: ParticipantKind.GUEST, userId: null })
-      ).servesLocations
-    ).toBe(false);
+  it('serves a guest who holds nothing but the link', () => {
+    const redaction = BasketRedaction.none(
+      participant({ kind: ParticipantKind.GUEST, userId: null })
+    );
+
+    expect(redaction.servedListIds.size).toBe(0);
+    expect(redaction.servesLocations).toBe(true);
   });
 });
 

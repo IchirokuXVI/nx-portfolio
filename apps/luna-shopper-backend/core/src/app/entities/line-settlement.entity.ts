@@ -238,14 +238,30 @@ export class LineSettlement {
   priceScopeId!: string | null;
 
   /**
-   * The one shop, when the shopper had picked one and is allowed to be told
-   * shops at all (`BasketView.servesLocations`, plan 0136 section 2).
+   * The one shop, when the shopper chose one (plan 0163, section 5). A settle
+   * made in "any shop" mode records none, even though it records the scope of
+   * the price shown: the scope of the cheapest price is not where the person
+   * stood.
    *
-   * Never stored without a scope (`ck_line_settlements_location_scope`), and
-   * served back in exactly one place: a person's own history (plan 0143,
-   * section 6). A shop and a time say where a named member of the household was
-   * standing at 18:40, which is not a fact about the milk.
+   * Never stored without a scope (`ck_line_settlements_location_scope`). It is
+   * served back in two places only: a person's own history (plan 0143, section
+   * 6) and the item history of plan 0151. Plan 0165 reads it only as counts. A
+   * shop and a time say where a named member of the household was standing at
+   * 18:40, which is not a fact about the milk.
    */
   @Column({ type: 'uuid', nullable: true })
   supermarketLocationId!: string | null;
+
+  /**
+   * The chain of {@link supermarketLocationId}, copied at settle time (plan
+   * 0163, section 5).
+   *
+   * Core cannot join catalog, and plan 0165 counts purchases by chain, so the
+   * chain is written onto the row. It is written together with the shop and
+   * never without it (`ck_line_settlements_location_scope`). Opaque, with no
+   * foreign key. Settlements written before plan 0163 are null and are not
+   * backfilled: no client sent a shop before it.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  supermarketId!: string | null;
 }
