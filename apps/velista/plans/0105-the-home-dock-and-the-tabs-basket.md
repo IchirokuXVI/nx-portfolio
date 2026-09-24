@@ -1,3 +1,5 @@
+> **PR:** [#487](https://github.com/IchirokuXVI/nx-portfolio/pull/487)
+
 # 0105: the home dock and the tab's basket
 
 Three small fixes the user asked for after using the app on a phone. Two are on the home
