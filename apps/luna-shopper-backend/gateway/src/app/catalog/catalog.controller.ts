@@ -49,6 +49,7 @@ import {
   hoistContractSchema,
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
+import { CatalogSuggestService } from './catalog-suggest.service';
 import {
   CatalogListQueryDto,
   ListPriceScopesQueryDto,
@@ -590,7 +591,7 @@ export class CatalogProductGroupsController {
 @Controller({ path: 'catalog/suggest', version: '1' })
 export class CatalogSuggestController {
   constructor(
-    private readonly nats: NatsClient,
+    private readonly suggestions: CatalogSuggestService,
     private readonly scopes: ScopeResolutionService
   ) {}
 
@@ -606,41 +607,15 @@ export class CatalogSuggestController {
   ): Promise<CatalogSuggestResponse> {
     // Resolved once and passed to both halves, so the two reads cannot quote
     // prices from different places, and so a caller with no scopes gets one
-    // priceless dropdown rather than half a priced one.
-    const common = {
+    // priceless dropdown rather than half a priced one. `describe` rather than
+    // `forRead`, which is the same call with the chains thrown away, because
+    // the response names them (plan 0161, section 3).
+    return this.suggestions.suggest({
       userId: user.userId,
       query: query.q,
-      priceScopeIds: await this.scopes.forRead(
-        user.userId,
-        toScopeQuery(query)
-      ),
       limit: query.limit,
-    };
-    const [groups, items] = await Promise.all([
-      this.nats
-        .send<ProductGroupOfferPage>(ITEM_PATTERNS.searchOffers, common)
-        .catch(
-          () => ({ items: [], nextCursor: null }) as ProductGroupOfferPage
-        ),
-      this.nats
-        .send<ItemPage>(ITEM_PATTERNS.search, common)
-        .catch(() => ({ items: [], nextCursor: null }) as ItemPage),
-    ]);
-
-    return {
-      suggestions: [
-        ...groups.items.map((group) => ({
-          kind: 'group' as const,
-          group,
-          item: null,
-        })),
-        ...items.items.map((item) => ({
-          kind: 'item' as const,
-          group: null,
-          item,
-        })),
-      ],
-    };
+      resolved: await this.scopes.describe(user.userId, toScopeQuery(query)),
+    });
   }
 }
 

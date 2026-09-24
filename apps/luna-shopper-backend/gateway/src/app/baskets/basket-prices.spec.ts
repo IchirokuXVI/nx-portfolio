@@ -17,6 +17,7 @@ import {
   type BasketParticipantView,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
+import { CatalogSuggestService } from '../catalog/catalog-suggest.service';
 import type { ShopperSelection } from '../catalog/scope-resolution.service';
 import { BasketCatalogService } from './basket-catalog.service';
 import { BasketController } from './basket.controller';
@@ -290,7 +291,10 @@ function build(world: World = {}) {
     {
       describe,
       forShops,
-    } as never
+    } as never,
+    // The real helper over the same fake: naming a scope's chain is part of
+    // what this file proves, and plan 0161 moved it there.
+    new CatalogSuggestService({ send } as never)
   );
   // The settle price service is not what this file proves (plan 0143 has its
   // own spec), and the controller needs one to be constructed.
@@ -438,6 +442,32 @@ describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
     expect(locationReads()).toEqual([
       expect.objectContaining({ priceScopeId: SCOPE_A, userId: OWNER }),
     ]);
+  });
+
+  it('answers the same scope JSON since the chain naming moved (plan 0161)', async () => {
+    const { controller } = build({ servesLocations: true });
+
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
+      BASKET_ID
+    );
+
+    // Serialized, so the key order is checked as well as the keys: the chain
+    // half now comes from the helper the dropdown shares, and the wire must not
+    // tell.
+    expect(JSON.stringify(result.scopes)).toBe(
+      JSON.stringify([
+        {
+          priceScopeId: SCOPE_A,
+          supermarketId: 'mercadona',
+          supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+          locations: [
+            named('loc-tejares', 'Ronda de los Tejares 32'),
+            named('loc-lagartijo', 'Avenida del Gran Capitán 5'),
+          ],
+        },
+      ])
+    );
   });
 
   it('describes exactly the scopes the offers reference, with no extras (section 4)', async () => {

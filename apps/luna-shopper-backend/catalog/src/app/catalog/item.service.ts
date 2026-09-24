@@ -5,6 +5,7 @@ import {
   BULK_DECISION_MAX_OPERATIONS,
   ITEM_LOOKUP_LIMITS,
   LINE_ITEM_SET_MAX,
+  PRODUCT_GROUP_MEMBERS_MAX,
   type CreateItemInput,
   type CreateItemRequest,
   type CreateItemsRequest,
@@ -489,16 +490,28 @@ export class ItemService {
 
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
-    const offers = await this.offersFor(
-      page.map((row) => row.id),
-      req.priceScopeIds
-    );
     const last = page[page.length - 1];
     const nextCursor =
       !hasMore || !last
         ? null
         : this.nextCursor(order, locale, cursor, limit, last);
 
+    const pageIds = page.map((row) => row.id);
+    const scopeIds = req.priceScopeIds ?? [];
+    if (req.offers === 'all' && scopeIds.length > 0) {
+      // Plan 0161, section 1: what `getMany` answers for `all`, for the same
+      // reason. `bestOffer` is the first entry of the one array rather than a
+      // second query, so the two cannot disagree.
+      const perItem = await this.allOffersFor(pageIds, scopeIds);
+      return {
+        items: page.map((row) => {
+          const offers = perItem.get(row.id) ?? [];
+          return { ...toItemView(row), bestOffer: offers[0] ?? null, offers };
+        }),
+        nextCursor,
+      };
+    }
+    const offers = await this.offersFor(pageIds, req.priceScopeIds);
     return {
       items: page.map((row) => toItemView(row, offers.get(row.id))),
       nextCursor,
@@ -651,25 +664,49 @@ export class ItemService {
 
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
-
-    // The cheapest member as a full ItemView, in one query for the page. The
-    // ranking already knows which product it is; this is what it looks like.
-    const itemIds = page
-      .map((row) => row.offerItemId)
-      .filter((id): id is string => id !== null);
-    const members =
-      itemIds.length === 0
-        ? []
-        : await this.items.find({ where: { id: In(itemIds) } });
-    const byId = new Map(members.map((item) => [item.id, item]));
+    const groupIds = page.map((row) => row.id);
 
     // The whole membership of every group on the page, which is what choosing one
-    // attaches to a line. One query for the page rather than one per group.
-    const membership = await this.membersOf(page.map((row) => row.id));
+    // attaches to a line, and the cheapest few as products when they were asked
+    // for (plan 0161, section 2). One query each for the page rather than one per
+    // group.
+    const memberCount = Math.min(req.members ?? 0, PRODUCT_GROUP_MEMBERS_MAX);
+    const [membership, ranked] = await Promise.all([
+      this.membersOf(groupIds),
+      memberCount > 0
+        ? this.cheapestMembersOf(groupIds, scopeIds, memberCount)
+        : Promise.resolve(undefined),
+    ]);
+
+    // The cheapest member as a full ItemView, in one query for the page. The
+    // ranking already knows which product it is; this is what it looks like. The
+    // ranked members are loaded by the same query.
+    const cheapestIds = page
+      .map((row) => row.offerItemId)
+      .filter((id): id is string => id !== null);
+    const itemIds = [
+      ...new Set([
+        ...cheapestIds,
+        ...[...(ranked?.values() ?? [])].flat().map((row) => row.itemId),
+      ]),
+    ];
+    const [members, offers] = await Promise.all([
+      itemIds.length === 0
+        ? Promise.resolve([] as Item[])
+        : this.items.find({ where: { id: In(itemIds) } }),
+      // Plan 0161, section 1: every scope's price for each cheapest member.
+      req.offers === 'all' && scopeIds.length > 0
+        ? this.allOffersFor(cheapestIds, scopeIds)
+        : Promise.resolve(undefined),
+    ]);
+    const byId = new Map(members.map((item) => [item.id, item]));
 
     return {
       items: page.map((row) =>
-        this.toOfferView(row, byId, membership.get(row.id) ?? [])
+        this.toOfferView(row, byId, membership.get(row.id) ?? [], {
+          offers,
+          members: ranked ? (ranked.get(row.id) ?? []) : undefined,
+        })
       ),
       nextCursor: hasMore
         ? encodeCursor({
@@ -731,10 +768,116 @@ export class ItemService {
     return byGroup;
   }
 
+  /**
+   * The cheapest `count` members of each group, as the card's reveal draws them
+   * (plan 0161, section 2), in one query for the page.
+   *
+   * **The same keys as the lateral in {@link searchOffers}**, applied twice:
+   * once to pick each member's own offer, and once to rank the members by it.
+   * That is what makes the first member the group's `cheapestItem`: the lateral
+   * takes the lowest row of the whole group by those keys, and the lowest of
+   * every member's lowest row is that same row. A member with no offer at these
+   * scopes sorts after every member that has one, by English name then id,
+   * which is the order {@link membersOf} uses.
+   *
+   * Capped **in the database** with a window function, for the reason
+   * {@link membersOf} gives: ten groups must not pull ten whole ranges out of
+   * Postgres to answer one keystroke.
+   */
+  private async cheapestMembersOf(
+    groupIds: string[],
+    scopeIds: string[],
+    count: number
+  ): Promise<Map<string, RankedMemberRow[]>> {
+    const byGroup = new Map<string, RankedMemberRow[]>();
+    if (groupIds.length === 0) {
+      return byGroup;
+    }
+    const p = params();
+    // With no scopes there is no offer to join, and every member ranks by name.
+    const offerJoin =
+      scopeIds.length === 0
+        ? ''
+        : `
+          LEFT JOIN LATERAL (
+            SELECT si."priceScopeId", si."price", si."currency",
+                   si."unitPrice", si."unitPriceLabel", si."priceObservedAt",
+                   si."priceSourceKind", si."priceCopiedFromScopeId", si."stale"
+            FROM "supermarket_items" si
+            WHERE si."itemId" = i."id"
+              AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
+              AND si."available"
+            ORDER BY si."price" IS NULL ASC,
+                     si."unitPrice" ASC NULLS LAST,
+                     si."price" ASC NULLS LAST,
+                     si."priceScopeId" ASC
+            LIMIT 1
+          ) o ON true`;
+    const offerColumns =
+      scopeIds.length === 0
+        ? `NULL::uuid AS "offerScopeId",
+           NULL::numeric AS "offerPrice", NULL::varchar AS "offerCurrency",
+           NULL::numeric AS "offerUnitPrice", NULL::varchar AS "offerUnitPriceLabel",
+           NULL::timestamptz AS "offerObservedAt",
+           NULL::"price_source_kind" AS "offerSourceKind",
+           NULL::uuid AS "offerCopiedFromScopeId",
+           NULL::boolean AS "offerStale"`
+        : `o."priceScopeId" AS "offerScopeId",
+           o."price" AS "offerPrice", o."currency" AS "offerCurrency",
+           o."unitPrice" AS "offerUnitPrice", o."unitPriceLabel" AS "offerUnitPriceLabel",
+           o."priceObservedAt" AS "offerObservedAt",
+           o."priceSourceKind" AS "offerSourceKind",
+           o."priceCopiedFromScopeId" AS "offerCopiedFromScopeId",
+           o."stale" AS "offerStale"`;
+    const rank =
+      scopeIds.length === 0
+        ? `i."name" ->> 'en' ASC, i."id" ASC`
+        : `o."price" IS NULL ASC,
+           o."unitPrice" ASC NULLS LAST,
+           o."price" ASC NULLS LAST,
+           o."priceScopeId" IS NULL ASC,
+           CASE WHEN o."priceScopeId" IS NULL THEN i."name" ->> 'en' END ASC,
+           i."id" ASC`;
+
+    const rows: (RankedMemberRow & { rn: string })[] = await this.items.query(
+      `
+      SELECT *
+      FROM (
+        SELECT i."id" AS "itemId", i."productGroupId", ${offerColumns},
+               row_number() OVER (
+                 PARTITION BY i."productGroupId"
+                 ORDER BY ${rank}
+               ) AS rn
+        FROM "items" i${offerJoin}
+        WHERE i."productGroupId" = ANY(${p.bind(groupIds)})
+      ) ranked
+      WHERE rn <= ${p.bind(count)}
+      ORDER BY "productGroupId" ASC, rn ASC
+      `,
+      p.values
+    );
+
+    for (const row of rows) {
+      const current = byGroup.get(row.productGroupId);
+      if (current === undefined) {
+        byGroup.set(row.productGroupId, [row]);
+      } else {
+        current.push(row);
+      }
+    }
+    return byGroup;
+  }
+
   private toOfferView(
     row: RankedGroupRow,
     members: Map<string, Item>,
-    itemIds: string[]
+    itemIds: string[],
+    extra: {
+      /** Every scope's offer per cheapest member, when `offers: 'all'`. */
+      offers?: Map<string, ItemOfferView[]>;
+      /** The ranked members, when `members` was asked for. */
+      members?: RankedMemberRow[];
+    } = {}
   ): ProductGroupOfferView {
     const group = toProductGroupView({
       id: row.id,
@@ -745,26 +888,62 @@ export class ItemService {
     } as ProductGroup);
 
     const member = row.offerItemId ? members.get(row.offerItemId) : undefined;
-    if (!member || !row.offerScopeId) {
-      return { group, cheapestItem: null, offer: null, itemIds };
+    const offer =
+      member && row.offerScopeId
+        ? rawOfferView(member.id, row.offerScopeId, row)
+        : null;
+
+    const view: ProductGroupOfferView =
+      !member || !offer
+        ? { group, cheapestItem: null, offer: null, itemIds }
+        : {
+            group,
+            cheapestItem: extra.offers
+              ? {
+                  ...toItemView(member, offer),
+                  // The group's own offer leads the array, so `bestOffer` is
+                  // its first entry without being changed (plan 0161, section
+                  // 1). The lateral ranks one product's rows by unit price
+                  // before price and `allOffersFor` by price first; for one
+                  // product the two almost always agree, and where they do not
+                  // the offer the group was ranked by is the one that stays.
+                  offers: [
+                    offer,
+                    ...(extra.offers.get(member.id) ?? []).filter(
+                      (other) => other.priceScopeId !== offer.priceScopeId
+                    ),
+                  ],
+                }
+              : toItemView(member, offer),
+            offer,
+            itemIds,
+          };
+
+    if (extra.members === undefined) {
+      return view;
     }
-    const offer: ItemOfferView = {
-      itemId: member.id,
-      priceScopeId: row.offerScopeId,
-      price: row.offerPrice === null ? null : Number(row.offerPrice),
-      currency: row.offerCurrency,
-      unitPrice:
-        row.offerUnitPrice === null ? null : Number(row.offerUnitPrice),
-      unitPriceLabel: row.offerUnitPriceLabel,
-      unitBasis: unitBasisOf(row.offerUnitPriceLabel),
-      observedAt: row.offerObservedAt
-        ? new Date(row.offerObservedAt).toISOString()
-        : null,
-      sourceKind: row.offerSourceKind ?? null,
-      priceCopiedFromScopeId: row.offerCopiedFromScopeId ?? null,
-      stale: row.offerStale ?? false,
-    };
-    return { group, cheapestItem: toItemView(member, offer), offer, itemIds };
+    const ranked: ItemView[] = [];
+    for (const entry of extra.members) {
+      const item = members.get(entry.itemId);
+      if (!item) {
+        // Deleted between the two reads. A missing product is left out rather
+        // than drawn without a name.
+        continue;
+      }
+      ranked.push(
+        // `members[0]` is `cheapestItem` exactly: the same product by the
+        // ranking, and the same offer even where two of its scopes tie.
+        offer && item.id === offer.itemId && ranked.length === 0
+          ? toItemView(item, offer)
+          : toItemView(
+              item,
+              entry.offerScopeId
+                ? rawOfferView(item.id, entry.offerScopeId, entry)
+                : undefined
+            )
+      );
+    }
+    return { ...view, members: ranked };
   }
 
   /**
@@ -1396,6 +1575,51 @@ function orderOffers(
     .addOrderBy('si."price"', 'ASC', 'NULLS LAST')
     .addOrderBy('si."unitPrice"', 'ASC', 'NULLS LAST')
     .addOrderBy('si."priceScopeId"', 'ASC');
+}
+
+/**
+ * The offer columns a raw query aliases with an `offer` prefix, as Postgres
+ * hands them back: numerics as strings.
+ */
+interface RawOfferColumns {
+  offerPrice: string | null;
+  offerCurrency: string | null;
+  offerUnitPrice: string | null;
+  offerUnitPriceLabel: string | null;
+  offerObservedAt: string | Date | null;
+  offerSourceKind: SupermarketItem['priceSourceKind'];
+  offerCopiedFromScopeId: string | null;
+  offerStale: boolean | null;
+}
+
+/** One offer out of a raw query's `offer` columns. */
+function rawOfferView(
+  itemId: string,
+  priceScopeId: string,
+  row: RawOfferColumns
+): ItemOfferView {
+  return {
+    itemId,
+    priceScopeId,
+    price: row.offerPrice === null ? null : Number(row.offerPrice),
+    currency: row.offerCurrency,
+    unitPrice: row.offerUnitPrice === null ? null : Number(row.offerUnitPrice),
+    unitPriceLabel: row.offerUnitPriceLabel,
+    unitBasis: unitBasisOf(row.offerUnitPriceLabel),
+    observedAt: row.offerObservedAt
+      ? new Date(row.offerObservedAt).toISOString()
+      : null,
+    sourceKind: row.offerSourceKind ?? null,
+    priceCopiedFromScopeId: row.offerCopiedFromScopeId ?? null,
+    stale: row.offerStale ?? false,
+  };
+}
+
+/** One member of a group, ranked for the card's reveal (plan 0161). */
+interface RankedMemberRow extends RawOfferColumns {
+  itemId: string;
+  productGroupId: string;
+  offerScopeId: string | null;
 }
 
 /** One row of the ranked group query, before it becomes a view. */

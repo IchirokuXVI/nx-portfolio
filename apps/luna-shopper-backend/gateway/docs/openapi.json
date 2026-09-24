@@ -29925,10 +29925,17 @@
             "items": {
               "$ref": "#/components/schemas/catalog.CatalogSuggestion"
             }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.PriceScopeChainView"
+            }
           }
         },
         "required": [
-          "suggestions"
+          "suggestions",
+          "scopes"
         ],
         "additionalProperties": false
       },
@@ -30731,6 +30738,28 @@
         ],
         "additionalProperties": false
       },
+      "catalog.PriceScopeChainView": {
+        "type": "object",
+        "properties": {
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketName": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          }
+        },
+        "required": [
+          "priceScopeId",
+          "supermarketId",
+          "supermarketName"
+        ],
+        "additionalProperties": false
+      },
       "catalog.PriceScopePage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -30905,6 +30934,13 @@
               "minLength": 1
             },
             "maxItems": 100
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemView"
+            },
+            "maxItems": 5
           }
         },
         "required": [
