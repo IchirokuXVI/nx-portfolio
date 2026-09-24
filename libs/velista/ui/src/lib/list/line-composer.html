@@ -76,8 +76,8 @@
 
     **No empty state, ever.** An absent list is the ordinary case for two characters, a
     rare word, or a shop the catalog has not been taught, and "no matches" would be a
-    screen telling somebody their shopping list is wrong. The free text row below is
-    always the last one, so there is always something to press.
+    screen telling somebody their shopping list is wrong. The button beside the field
+    always adds the typed words, so there is always something to press.
   -->
   <!--
     Waved away by a click anywhere on the page that is not this row and not the panel
@@ -85,11 +85,18 @@
     with no way to put it down is a screen you have to type your way out of.
   -->
   @if (suggestionsShown()) {
+    <!--
+      Cards since velista 0101, and no free text row: the button beside the field
+      already adds the typed words.
+    -->
     <lib-suggestion-list
       (chose)="choose($event)"
-      (choseAsWritten)="submit()"
-      [asWritten]="canSubmit() ? content() : null"
+      (holdingChanged)="holdingChanged.emit($event)"
+      [holdingsOf]="holdingsOf()"
+      [loading]="suggesting()"
+      [panelId]="panelId"
       [placement]="'above'"
+      [productLink]="productLink()"
       [suggestions]="suggestions()"
     />
   }
@@ -100,17 +107,26 @@
 -->
   <form (submit)="onSubmit($event)" class="composer">
     <div class="field-wrap">
+      <!--
+        The combobox that owns the panel's grid (rule 8 of velista 0101): a card
+        holds several controls, which a listbox option may not.
+      -->
       <input
         (input)="onInput($event)"
+        [attr.aria-controls]="panelOpen() ? panelId : null"
+        [attr.aria-expanded]="panelOpen()"
         [attr.aria-label]="'list.add.placeholder' | rokuT"
         [attr.maxlength]="maxLength"
         [placeholder]="'list.add.placeholder' | rokuT"
         [value]="content()"
         #field
+        aria-autocomplete="list"
+        aria-haspopup="grid"
         autocomplete="off"
         class="field"
         enterkeyhint="send"
         name="content"
+        role="combobox"
         type="text"
       />
 

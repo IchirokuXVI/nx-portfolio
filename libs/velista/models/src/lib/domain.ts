@@ -1,3 +1,4 @@
+import type { PriceUnitBasis } from './catalog-browse';
 import type {
   CommentTranscription,
   LineApprovalStatus,
@@ -11,7 +12,6 @@ import type {
   ZoneRole,
   ZoneStatus,
 } from './enums';
-import type { PriceUnitBasis } from './catalog-browse';
 import type { LocalizedName, Supermarket } from './shopping-profile';
 
 /**

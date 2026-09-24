@@ -366,11 +366,15 @@
       }
 
       <lib-line-composer
+        (holdingChanged)="changeHolding($event)"
         (queryChanged)="onComposerQuery($event)"
         (recordingFailed)="onRecordingFailed()"
         (spoke)="addAloud($event)"
         (submitted)="add($event)"
         [busy]="composerBusy()"
+        [holdingsOf]="holdingsOf()"
+        [productLink]="productLink()"
+        [suggesting]="suggesting()"
         [suggestions]="suggestions()"
         [takeFocus]="page.empty"
         libTourAnchor="list-composer"

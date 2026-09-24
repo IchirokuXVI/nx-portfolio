@@ -10,14 +10,8 @@ import { formatMoney } from '@portfolio/velista/platform';
 import { SuggestionList } from './suggestion-list';
 
 /**
- * The two things `placement` decides, which are the two things a panel drawn over
- * somebody's shopping list has to get right: it is opaque, and it opens at the row
- * nearest the field.
- *
- * Both were defects rather than omissions. The panel was transparent, so the lines
- * underneath read straight through the suggestions, and it opened at its first row,
- * which left the free text row, the one that is always there and always works, below
- * the fold of a scrolling list.
+ * The line page's one line rows (`placement: 'below'`), which velista `0101` leaves
+ * as they were. The composer's cards are `suggestion-cards.spec.ts`.
  */
 function item(
   id: string,
@@ -32,10 +26,15 @@ function item(
     size,
     unit,
     productGroupId: null,
+    category: 'OTHER',
     // Unpriced by default, which is what staging and production are: the tests
     // that want a price say so, and every other one asserts the row a cluster
     // with the harvester off draws.
     offer: null,
+    chainPrices: [],
+    imageUrl: null,
+    packCount: null,
+    unitBasis: null,
   };
 }
 
@@ -66,7 +65,7 @@ function groupRow(
     id: `group-${name}`,
     name: { es: name, en: name },
   };
-  return { kind: 'group', group, itemIds, offer: priced };
+  return { kind: 'group', group, itemIds, offer: priced, members: [] };
 }
 
 function suggestions(count: number): readonly CatalogSuggestion[] {
@@ -74,15 +73,6 @@ function suggestions(count: number): readonly CatalogSuggestion[] {
     kind: 'item' as const,
     item: item(`item-${index}`, `Product ${index}`),
   }));
-}
-
-/** The names in a set of suggestions, for asserting the caller's own array is intact. */
-function offeredNames(offered: readonly CatalogSuggestion[]): string[] {
-  return offered.map((suggestion) =>
-    suggestion.kind === 'item'
-      ? suggestion.item.name.en
-      : suggestion.group.name.en
-  );
 }
 
 /**
@@ -114,8 +104,7 @@ function fakeScroll(
 
 async function render(
   offered: readonly CatalogSuggestion[],
-  placement: 'below' | 'above',
-  asWritten: string | null = null
+  placement: 'below' | 'above'
 ) {
   TestBed.resetTestingModule();
 
@@ -126,7 +115,6 @@ async function render(
   const fixture = TestBed.createComponent(SuggestionList);
   fixture.componentRef.setInput('suggestions', offered);
   fixture.componentRef.setInput('placement', placement);
-  fixture.componentRef.setInput('asWritten', asWritten);
   fixture.detectChanges();
   await fixture.whenStable();
 
@@ -189,37 +177,11 @@ function offered(
   return found;
 }
 
-describe('SuggestionList, where it goes is the caller’s', () => {
-  it('is a panel over the page when it is placed above its field', async () => {
-    const fixture = await render(suggestions(3), 'above');
-
-    // The class is what carries the surface, the hairline and the elevation. Those
-    // are tokens and belong to the theme, so what is asserted here is that the panel
-    // treatment is applied at all.
-    expect(panel(fixture).classList).toContain('above');
-  });
-
-  it('stays on the page’s own ground when it is placed below', async () => {
+describe('SuggestionList, the line page’s rows', () => {
+  it('reads straight down, where the field is above it', async () => {
     const fixture = await render(suggestions(3), 'below');
 
-    // The line page's search sits under the chips with nothing in the way, so it has
-    // nothing to cover and nothing to be opaque against.
-    expect(panel(fixture).classList).not.toContain('above');
-  });
-
-  it('opens at its last row, so the free text row is the one on screen', async () => {
-    const fixture = await render(suggestions(20), 'above', 'olive oil');
-    const drawn = panel(fixture);
-    fakeScroll(drawn, { scrollHeight: 640, clientHeight: 240, scrollTop: 0 });
-
-    // A second set of results, one keystroke later. The panel re-anchors rather than
-    // staying wherever the list it replaced happened to be scrolled to: a position
-    // from a query nobody is typing any more is not a place anybody chose to be.
-    fixture.componentRef.setInput('suggestions', suggestions(18));
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    expect(drawn.scrollTop).toBe(640);
+    expect(names(fixture)).toEqual(['Product 0', 'Product 1', 'Product 2']);
   });
 
   it('leaves an inline list at the top of the ranking', async () => {
@@ -235,58 +197,21 @@ describe('SuggestionList, where it goes is the caller’s', () => {
     // server's ranking behind the worst answers in it.
     expect(drawn.scrollTop).toBe(0);
   });
-});
 
-/**
- * Which end of the server's ranking sits nearest the field, which is decided by the
- * placement and by nothing else.
- *
- * The panel over the composer opens at its **last** row, so the row nearest the field
- * is the one everybody sees first and the list climbs away from there. Drawn top to
- * bottom, that put the server's best answer at the far end of a list that usually
- * needs scrolling, which is the defect this pins. The ranking itself is untouched: it
- * is the same order, read the way the panel is read.
- */
-describe('SuggestionList, which end of the ranking is nearest the field', () => {
-  it('climbs away from the field when it is placed above, best answer first', async () => {
-    const fixture = await render(suggestions(3), 'above', 'olive oil');
+  it('draws no free text row and nothing at all for an empty answer', async () => {
+    const fixture = await render([], 'below');
 
-    // Read from the bottom: the free text row, then the server's first suggestion
-    // directly above it, then the rest of the ranking climbing away.
-    expect(names(fixture)).toEqual([
-      'Product 2',
-      'Product 1',
-      'Product 0',
-      'list.add.asWritten',
-    ]);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('ul.suggestions')
+    ).toBeNull();
   });
 
-  it('keeps the free text row last when there is nothing to offer above it', async () => {
-    const fixture = await render([], 'above', 'olive oil');
+  it('never draws a card', async () => {
+    const fixture = await render(suggestions(2), 'below');
 
-    expect(names(fixture)).toEqual(['list.add.asWritten']);
-  });
-
-  it('reads straight down when it is placed below, where the field is above it', async () => {
-    const fixture = await render(suggestions(3), 'below');
-
-    expect(names(fixture)).toEqual(['Product 0', 'Product 1', 'Product 2']);
-  });
-
-  it('leaves the caller’s array alone rather than reversing it in place', async () => {
-    // `reverse` mutates, and the array handed in belongs to whoever fetched it. A
-    // component that reversed it in place would flip the caller's own copy once per
-    // render and settle on whichever parity the last pass left behind.
-    const offered = suggestions(3);
-    const fixture = await render(offered, 'above');
-
-    expect(names(fixture)).toEqual(['Product 2', 'Product 1', 'Product 0']);
-    expect(fixture.componentInstance.suggestions()).toBe(offered);
-    expect(offeredNames(offered)).toEqual([
-      'Product 0',
-      'Product 1',
-      'Product 2',
-    ]);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.sug')
+    ).toHaveLength(0);
   });
 });
 
@@ -316,7 +241,7 @@ describe('SuggestionList, how big the packet is', () => {
           item: item('item-milk-half', 'Whole milk', 0.5, 'LITER'),
         },
       ],
-      'above'
+      'below'
     );
 
     // Both rows carry a size, which is the half the DOM can prove: the number inside

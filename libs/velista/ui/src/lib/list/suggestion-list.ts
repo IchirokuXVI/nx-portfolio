@@ -184,10 +184,9 @@ export class SuggestionList {
    * The lines already holding what a card offers, by the page that holds them
    * (velista `0101`, section 4). The composer's cards only.
    */
-  readonly holdingsOf =
-    input<(suggestion: CatalogSuggestion) => readonly SuggestionHolding[]>(
-      () => NO_HOLDINGS
-    );
+  readonly holdingsOf = input<
+    (suggestion: CatalogSuggestion) => readonly SuggestionHolding[]
+  >(() => NO_HOLDINGS);
 
   /**
    * The URL a card's "Details" opens for one product, or null for no link. A
@@ -325,17 +324,15 @@ export class SuggestionList {
     const host = inject<ElementRef<HTMLElement>>(ElementRef);
     const destroyRef = inject(DestroyRef);
     afterNextRender(() => {
-      const viewport = host.nativeElement.ownerDocument.defaultView
-        ?.visualViewport;
+      const viewport =
+        host.nativeElement.ownerDocument.defaultView?.visualViewport;
       if (viewport === null || viewport === undefined) {
         return;
       }
       const read = (): void => this._viewport.set(viewport.height);
       read();
       viewport.addEventListener('resize', read);
-      destroyRef.onDestroy(() =>
-        viewport.removeEventListener('resize', read)
-      );
+      destroyRef.onDestroy(() => viewport.removeEventListener('resize', read));
     });
 
     // Opened at its last row, for `'above'` only, and re-opened there on every new

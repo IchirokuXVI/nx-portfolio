@@ -34,17 +34,17 @@ import {
   type AssistantChoice,
   type AssistantListLink,
   type AssistantReply,
+  type BasketRun,
+  type BasketSummary,
   type CatalogItem,
   type CatalogScope,
   type CatalogSuggestion,
-  type ChainPrice,
   type ChainPreference,
+  type ChainPrice,
   type Comment,
   type CommentRecording,
   type CommentTranscription,
   type Contact,
-  type BasketRun,
-  type BasketSummary,
   type Line,
   type LineSettlement,
   type ListAccessEntry,
@@ -1378,9 +1378,7 @@ export function toCatalogScope(raw: unknown): CatalogScope | null {
  * fabricated `new Date()` would sort itself to the top of somebody's history and title
  * itself today. Dropping it costs one row and is counted, per rule D4.
  */
-export function toBasketSummary(
-  raw: unknown
-): BasketSummary | null {
+export function toBasketSummary(raw: unknown): BasketSummary | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -1501,9 +1499,7 @@ export function toBasketRun(raw: unknown): BasketRun | null {
  * somebody worked through, and counting it would let an empty basket report itself
  * finished.
  */
-export function toBasketFromView(
-  raw: unknown
-): BasketSummary | null {
+export function toBasketFromView(raw: unknown): BasketSummary | null {
   const summary = toBasketSummary(raw);
   if (summary === null || !isRecord(raw)) {
     return null;

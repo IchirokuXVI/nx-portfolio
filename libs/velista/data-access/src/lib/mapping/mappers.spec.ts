@@ -1,16 +1,17 @@
+import type { CatalogSuggestion } from '@portfolio/velista/models';
 import {
   toAssistantReply,
+  toBasketFromView,
+  toBasketRun,
+  toBasketSummary,
   toCatalogItem,
   toCatalogSuggestion,
   toCatalogSuggestions,
   toComment,
-  toBasketFromView,
-  toBasketRun,
-  toBasketSummary,
   toLine,
+  toLineSettlement,
   toListAccessEntries,
   toListIdResult,
-  toLineSettlement,
   toListPermissions,
   toMembership,
   toMyZone,
@@ -20,7 +21,6 @@ import {
   toZone,
   toZonePresence,
 } from './mappers';
-import type { CatalogSuggestion } from '@portfolio/velista/models';
 
 /**
  * Rule D4's test surface (plan 0004, section 12). Every mapper takes `unknown`, so
@@ -956,9 +956,7 @@ describe('toBasketFromView', () => {
 
   it('drops a body it cannot read at all', () => {
     expect(toBasketFromView(null)).toBeNull();
-    expect(
-      toBasketFromView({ ...view, generatedAt: 'soon' })
-    ).toBeNull();
+    expect(toBasketFromView({ ...view, generatedAt: 'soon' })).toBeNull();
   });
 });
 
@@ -1359,9 +1357,7 @@ describe('toCatalogSuggestions', () => {
   });
 
   it('names no chain at all when the map is absent or empty', () => {
-    expect(chainsOf(toCatalogSuggestions({ ...body, scopes: [] }))).toEqual(
-      []
-    );
+    expect(chainsOf(toCatalogSuggestions({ ...body, scopes: [] }))).toEqual([]);
     expect(
       chainsOf(toCatalogSuggestions({ suggestions: body.suggestions }))
     ).toEqual([]);
@@ -1395,9 +1391,7 @@ describe('toCatalogSuggestions', () => {
     expect(group?.kind).toBe('group');
     if (group?.kind === 'group') {
       expect(group.members.map((one) => one.id)).toEqual(['i1']);
-      expect(group.members[0]?.chainPrices[0]?.chain.name.es).toBe(
-        'Mercadona'
-      );
+      expect(group.members[0]?.chainPrices[0]?.chain.name.es).toBe('Mercadona');
     }
   });
 

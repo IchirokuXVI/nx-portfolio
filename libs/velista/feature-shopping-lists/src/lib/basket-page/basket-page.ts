@@ -60,6 +60,8 @@ import {
   ShareIcon,
   VisitNotice,
   type ChipRowItem,
+  type SuggestionHolding,
+  type SuggestionHoldingChange,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
 import {
@@ -1463,6 +1465,117 @@ export class BasketPage {
   protected readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
 
   /**
+   * The catalog is being asked, for the composer's skeleton cards (velista `0101`).
+   * The list page's rule, for the reason the search itself is the list page's.
+   */
+  protected readonly suggesting = signal(false);
+
+  /**
+   * The lines in this basket already holding what a card offers (velista `0101`,
+   * section 4): one per entry of every row whose products name it, because the same
+   * product reaches the basket from several lists.
+   *
+   * The words are the row's, since an entry carries none of its own, and the list
+   * above them is named only where this reader was served that list. How many is the
+   * entry's `left`, and the stepper moves only where the server says that entry's
+   * demand may change. A group is held by nothing here: a basket row names products,
+   * not the group a line followed.
+   */
+  protected readonly holdingsOf = computed(() => {
+    const rows = this._store.rows();
+    const lists = this._store.lists();
+    return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] => {
+      if (suggestion.kind !== 'item') {
+        return [];
+      }
+      return rows
+        .filter((row) => row.optionIds.includes(suggestion.item.id))
+        .flatMap((row) =>
+          row.entries.map((entry) => ({
+            key: `${row.rowKey}:${entry.lineId}`,
+            lineId: entry.lineId,
+            text: row.content,
+            listName:
+              entry.listId === null
+                ? null
+                : (lists.get(entry.listId)?.name ?? null),
+            quantity: entry.left,
+            editable: entry.demandEditable,
+          }))
+        );
+    };
+  });
+
+  /**
+   * Where a card's "Details" opens a product: the catalog tab's product sheet. Null
+   * for a guest, because every catalog screen needs an account and a link that ends
+   * on a sign in wall is not a way through to the product.
+   */
+  protected readonly productLink = computed(() => {
+    if (this._store.me()?.kind === 'GUEST') {
+      return null;
+    }
+    const locale = this._locale();
+    return (itemId: string): string =>
+      appPath(
+        locale,
+        this._basePath,
+        'catalog',
+        ...sheetSegments('products', itemId)
+      );
+  });
+
+  /**
+   * A card's stepper moved one list's demand (velista `0101`, section 2): the write
+   * the settle sheet makes, `POST rows/{rowKey}/demand`, and the same sentences
+   * after it. The row is found again by the line, because a row's key can change
+   * under the panel while somebody else adds or settles.
+   */
+  protected async changeHolding(
+    change: SuggestionHoldingChange
+  ): Promise<void> {
+    const row = this._store
+      .rows()
+      .find((candidate) =>
+        candidate.entries.some(
+          (entry) => entry.lineId === change.holding.lineId
+        )
+      );
+    if (row === undefined) {
+      return;
+    }
+
+    const result = await this._store.setDemand(row.rowKey, {
+      lineId: change.holding.lineId,
+      quantity: change.to,
+      from: change.from,
+    });
+
+    if (result === null) {
+      this._say(
+        this._translator.t(
+          basketErrorKey(this._store.error(), 'basket.demand'),
+          undefined,
+          this._locale(),
+          { count: change.from }
+        )
+      );
+      return;
+    }
+
+    if (result.row === null) {
+      this._say(
+        this._translator.t(
+          'basket.demand.nothingLeft',
+          undefined,
+          this._locale(),
+          { name: change.holding.text }
+        )
+      );
+    }
+  }
+
+  /**
    * What arrived, said once, in the **same** region every other sentence on this
    * screen goes through.
    *
@@ -1510,15 +1623,20 @@ export class BasketPage {
       // Cleared synchronously rather than after the debounce: a dropdown that
       // lingered over a field somebody has just emptied is offering matches for
       // nothing.
-      untracked(() => this.suggestions.set([]));
+      untracked(() => {
+        this.suggestions.set([]);
+        this.suggesting.set(false);
+      });
       return;
     }
 
     const timer = setTimeout(() => {
       const seq = (this._suggestSeq += 1);
+      this.suggesting.set(true);
       void this._store.suggest(query).then((found) => {
         if (seq === this._suggestSeq) {
           this.suggestions.set(found);
+          this.suggesting.set(false);
         }
       });
     }, SUGGEST_DEBOUNCE_MS);

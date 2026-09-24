@@ -45,6 +45,7 @@ import {
 } from '@portfolio/velista/data-access';
 import type {
   CatalogItem,
+  CatalogSuggestion,
   DueLine,
   Line,
   LineRowVm,
@@ -1859,5 +1860,102 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
 
     expect(store.lines()).toEqual([]);
     expect(store.listId()).toBeNull();
+  });
+});
+
+/**
+ * The lines a suggestion card names (velista `0101`, section 4): a join over the
+ * lines this page already holds, and the reel's own write when one is stepped.
+ */
+describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
+  const OAT: CatalogSuggestion = {
+    kind: 'item',
+    item: {
+      id: 'item-oat',
+      name: { es: 'Bebida de avena', en: 'Oat drink' },
+      brand: 'Oatly',
+      size: 1,
+      unit: 'LITER',
+      productGroupId: null,
+      category: 'OTHER',
+      offer: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+      unitBasis: null,
+    },
+  };
+  const MILK: CatalogSuggestion = {
+    kind: 'group',
+    group: { id: 'group-milk', name: { es: 'Leche', en: 'Milk' } },
+    itemIds: ['item-milk-1l'],
+    offer: null,
+    members: [],
+  };
+
+  it('names the lines holding a product, and the lines following a group', async () => {
+    const { fixture } = await render({
+      permissions: DECIDER,
+      lines: [
+        line('ln-oat', {
+          content: 'Avena',
+          quantity: 2,
+          itemIds: ['item-oat'],
+        }),
+        line('ln-milk', { content: 'Leche', productGroupId: 'group-milk' }),
+        line('ln-bread'),
+      ],
+    });
+    const holdingsOf = fixture.componentInstance.holdingsOf();
+
+    expect(holdingsOf(OAT)).toEqual([
+      {
+        key: 'ln-oat',
+        lineId: 'ln-oat',
+        text: 'Avena',
+        listName: null,
+        quantity: 2,
+        editable: true,
+      },
+    ]);
+    expect(holdingsOf(MILK).map((held) => held.lineId)).toEqual(['ln-milk']);
+  });
+
+  it('lets only somebody who decides quantities step one', async () => {
+    const { fixture } = await render({
+      permissions: WRITER,
+      lines: [line('ln-oat', { itemIds: ['item-oat'] })],
+    });
+
+    expect(fixture.componentInstance.holdingsOf()(OAT)[0]?.editable).toBe(
+      false
+    );
+  });
+
+  it('steps a line through the reel’s own write, as a delta', async () => {
+    const { fixture, lines } = await render({
+      permissions: DECIDER,
+      lines: [line('ln-oat', { quantity: 2, itemIds: ['item-oat'] })],
+    });
+    const [holding] = fixture.componentInstance.holdingsOf()(OAT);
+    if (holding === undefined) {
+      throw new Error('no holding');
+    }
+
+    await fixture.componentInstance.changeHolding({ holding, from: 2, to: 3 });
+
+    expect(lines.calls).toContainEqual({
+      kind: 'quantity',
+      lineId: 'ln-oat',
+      delta: 1,
+    });
+  });
+
+  it('links a card to the catalog tab’s product sheet', async () => {
+    const { fixture } = await render();
+
+    expect(fixture.componentInstance.productLink()('item-oat')).toMatch(
+      /\/catalog\/sheet\/products\/item-oat$/
+    );
   });
 });

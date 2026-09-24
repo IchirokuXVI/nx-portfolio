@@ -575,10 +575,14 @@
       waits, which is what `submitDisabled` is for.
     -->
     <lib-line-composer
+      (holdingChanged)="changeHolding($event)"
       (queryChanged)="onComposerQuery($event)"
       (submitted)="add($event)"
       [busy]="adding()"
+      [holdingsOf]="holdingsOf()"
+      [productLink]="productLink()"
       [submitDisabled]="target() === null"
+      [suggesting]="suggesting()"
       [suggestions]="suggestions()"
       [voice]="false"
     />

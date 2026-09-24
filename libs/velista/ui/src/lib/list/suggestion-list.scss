@@ -363,20 +363,6 @@
   &:hover {
     background: var(--app-action-quiet-bg);
   }
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-
-  // The pill stays small and the target grows to the touch target, which is what the
-  // chip token already does for a chip that is a control.
-  &::after {
-    content: '';
-    position: absolute;
-    inset-block: calc((var(--app-touch-target) - var(--app-chain-mark)) / -2);
-    inset-inline: calc(var(--app-space-2) * -1);
-  }
 }
 
 .reveal {
@@ -449,18 +435,31 @@
   &:hover {
     color: var(--app-text-secondary);
   }
+}
 
+// ---- what every control in a card shares
+
+// The ring, for a keyboard. The panel cancels mousedown, so a pointer never sets it.
+.chains,
+.reveal,
+.details,
+.group-badge,
+.pick {
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }
+}
 
-  &::after {
-    content: '';
-    position: absolute;
-    inset-block: calc((var(--app-touch-target) - var(--app-chain-mark)) / -2);
-    inset-inline: calc(var(--app-space-2) * -1);
-  }
+// The pill stays small and the target grows to the touch target, which is what the
+// chip token already does for a chip that is a control.
+.chains::after,
+.reveal::after,
+.details::after {
+  content: '';
+  position: absolute;
+  inset-block: calc((var(--app-touch-target) - var(--app-chain-mark)) / -2);
+  inset-inline: calc(var(--app-space-2) * -1);
 }
 
 // ---- every chain's price, once the row is opened
@@ -540,11 +539,6 @@
   font-weight: 600;
   line-height: 1.4;
   cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
 
   &::after {
     content: '';
@@ -739,11 +733,6 @@
 
   &:active {
     transform: scale(0.97);
-  }
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
   }
 }
 

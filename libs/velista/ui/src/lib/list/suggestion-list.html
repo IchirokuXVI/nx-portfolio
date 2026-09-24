@@ -138,7 +138,11 @@
                     class="chains"
                     type="button"
                   >
-                    @for (mark of chains.marks; track mark.id; let first = $first) {
+                    @for (
+                      mark of chains.marks;
+                      track mark.id;
+                      let first = $first
+                    ) {
                       <span aria-hidden="true" class="mark">{{
                         mark.initial
                       }}</span>

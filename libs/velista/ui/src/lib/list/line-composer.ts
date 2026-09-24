@@ -30,7 +30,14 @@ import {
 } from '@portfolio/velista/platform';
 import { MicIcon, PlusIcon, StopIcon, TrashIcon } from '../icons/icons';
 import { QuantityStepper } from './quantity-stepper';
-import { SuggestionList } from './suggestion-list';
+import {
+  SuggestionList,
+  type SuggestionHolding,
+  type SuggestionHoldingChange,
+} from './suggestion-list';
+
+/** Numbers each composer's panel id, so the field's `aria-controls` is unique. */
+let composerCount = 0;
 
 /** What the one button at the end of the row is for. */
 export type LineComposerButton = 'add' | 'record';
@@ -230,6 +237,39 @@ export class LineComposer {
    * thing to do (velista plan 0043, section 6).
    */
   readonly suggestions = input<readonly CatalogSuggestion[]>([]);
+
+  /** The catalog is being asked, for the panel's skeleton cards (velista `0101`). */
+  readonly suggesting = input(false);
+
+  /**
+   * The lines already holding what a card offers, by the page that holds them
+   * (velista `0101`, section 4). Handed straight to the panel.
+   */
+  readonly holdingsOf = input<
+    (suggestion: CatalogSuggestion) => readonly SuggestionHolding[]
+  >(() => []);
+
+  /** Where a card's "Details" goes for one product, or null for no link. */
+  readonly productLink = input<((itemId: string) => string) | null>(null);
+
+  /** A card's stepper moved a line that already holds the product. */
+  readonly holdingChanged = output<SuggestionHoldingChange>();
+
+  /**
+   * The panel's id, which the field names in `aria-controls`. One per composer, so
+   * two on a page could not point at each other's panel.
+   */
+  protected readonly panelId = `line-composer-panel-${++composerCount}`;
+
+  /**
+   * Whether the field's popup is on screen, for `aria-expanded`: the panel is drawn,
+   * and it has cards or skeletons in it.
+   */
+  protected readonly panelOpen = computed(
+    () =>
+      this.suggestionsShown() &&
+      (this.suggestions().length > 0 || this.suggesting())
+  );
 
   /**
    * What has been typed, raw and on every keystroke.

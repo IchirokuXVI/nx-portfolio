@@ -35,7 +35,7 @@ import {
   toLiveBasketSummary,
 } from '../mapping/basket-mappers';
 import { toCatalogSuggestions } from '../mapping/mappers';
-import { isRecord, mapArray } from '../mapping/primitives';
+import { mapArray } from '../mapping/primitives';
 import { required } from '../mapping/required';
 import type { BasketServiceI } from './basket-service';
 import { BasketSessionStore } from './basket-session-store';

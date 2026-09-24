@@ -144,7 +144,9 @@ function itemView(
     price,
     stale,
     meta,
-    aside: stale ? seenText(offer, options) : unitPriceText(item, locale, translate),
+    aside: stale
+      ? seenText(offer, options)
+      : unitPriceText(item, locale, translate),
     chains,
     shops:
       chains === null
