@@ -100,6 +100,8 @@ export class CatalogMemory implements CatalogServiceI {
       // The reveal's first five, in fixture order: with no prices there is no
       // cheapest, and the server orders an unpriced group's members by name.
       members: ITEMS.filter((one) => one.productGroupId === row.id).slice(0, 5),
+      // The fixture groups carry no other words, and match on their names alone.
+      synonyms: { en: [], es: [] },
     }));
 
     const items: CatalogSuggestion[] = ITEMS.filter((row) =>

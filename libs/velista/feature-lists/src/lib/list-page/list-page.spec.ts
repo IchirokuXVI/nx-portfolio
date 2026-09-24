@@ -2005,6 +2005,33 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
 });
 
 /**
+ * The words an answer is for (velista `0108`, target 1): what lets the composer
+ * tell a finished search that found nothing from one still on its way.
+ */
+describe('ListPage: the words the suggestions answer (velista 0108)', () => {
+  it('records them when the answer lands, and forgets them under three characters', async () => {
+    const { fixture } = await render({ permissions: DECIDER });
+    const page = fixture.componentInstance;
+
+    expect(page.suggestedFor()).toBeNull();
+
+    page.onComposerQuery('zzzz ');
+    fixture.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    fixture.detectChanges();
+
+    expect(page.suggestions()).toEqual([]);
+    expect(page.suggesting()).toBe(false);
+    expect(page.suggestedFor()).toBe('zzzz');
+
+    page.onComposerQuery('zz');
+    fixture.detectChanges();
+
+    expect(page.suggestedFor()).toBeNull();
+  });
+});
+
+/**
  * The lines a suggestion card names (velista `0101`, section 4): a join over the
  * lines this page already holds, and the reel's own write when one is stepped.
  */
@@ -2032,6 +2059,7 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
     itemIds: ['item-milk-1l'],
     offer: null,
     members: [],
+    synonyms: { en: [], es: [] },
   };
 
   it('names the lines holding a product, and the lines following a group', async () => {

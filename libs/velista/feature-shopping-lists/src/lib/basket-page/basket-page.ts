@@ -1610,6 +1610,13 @@ export class BasketPage {
   protected readonly suggesting = signal(false);
 
   /**
+   * The words {@link suggestions} answer, or null when nothing has been asked. The
+   * list page's rule (velista `0108`): the composer's no results row and a group
+   * card's synonym both read it.
+   */
+  protected readonly suggestedFor = signal<string | null>(null);
+
+  /**
    * The lines in this basket already holding what a card offers (velista `0101`,
    * section 4): one per entry of every row whose products name it, because the same
    * product reaches the basket from several lists.
@@ -1768,6 +1775,7 @@ export class BasketPage {
       untracked(() => {
         this.suggestions.set([]);
         this.suggesting.set(false);
+        this.suggestedFor.set(null);
       });
       return;
     }
@@ -1778,6 +1786,7 @@ export class BasketPage {
       void this._store.suggest(query).then((found) => {
         if (seq === this._suggestSeq) {
           this.suggestions.set(found);
+          this.suggestedFor.set(query);
           this.suggesting.set(false);
         }
       });

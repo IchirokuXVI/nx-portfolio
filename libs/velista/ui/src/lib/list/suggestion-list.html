@@ -1,13 +1,15 @@
 <!--
-  **No empty state, ever.** An absent list is the ordinary case for two characters, a
-  rare word, or a shop the catalog has not been taught, and "no matches" would be a
-  screen telling somebody their shopping list is wrong. Nothing at all is drawn when
-  there is nothing to offer: the composer's own button already adds the typed words.
+  **A finished search that found nothing says so** (velista 0108, target 1), in the
+  composer's panel: one row naming the words, and a second line when the composer can
+  still add them as written. Nothing is drawn for two characters, for a search still
+  running, or once the words in the field have changed. The line page's rows keep
+  drawing nothing when there is nothing to offer.
 -->
 @if (placement() === 'above') {
   <!--
     The composer's panel: product cards (velista 0101). Opaque, bottom anchored and
-    scrolling, never growing past three cards or what the keyboard leaves.
+    scrolling, never growing past three cards or what the keyboard leaves, and no
+    taller than the cards it holds (velista 0108, target 2).
 
     `mousedown` is cancelled on the whole panel, once, which is rule 2: nothing in
     here may take the focus from the field, so the keyboard stays up whatever was
@@ -119,6 +121,14 @@
                 }}</span>
               }
             </span>
+
+            @if (card.alsoCalled; as alsoCalled) {
+              <!--
+                Why a group matched words its name does not hold (0108, target 4).
+                The meta line's type, so it adds no rule to a sheet at its budget.
+              -->
+              <span class="sug-meta sug-also">{{ alsoCalled }}</span>
+            }
 
             @if (card.meta !== null || card.aside !== null) {
               <span class="sug-l">
@@ -291,7 +301,7 @@
         </div>
       }
     </div>
-  } @else if (loading()) {
+  } @else if (skeletonShown()) {
     <div
       (mousedown)="holdFocus($event)"
       [attr.aria-label]="'list.add.card.loading' | rokuT"
@@ -312,6 +322,11 @@
       }
     </div>
   }
+  <!--
+    The no results row, and the status line that says it once (0108, target 1). A
+    component of its own for its stylesheet; see `SuggestionNoMatch`.
+  -->
+  <lib-suggestion-no-match [freeText]="freeText()" [words]="emptyFor()" />
 } @else if (rows().length > 0) {
   <!-- The line page's one line rows, which velista 0101 leaves as they were. -->
   <ul

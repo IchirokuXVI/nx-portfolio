@@ -1412,6 +1412,44 @@ describe('toCatalogSuggestions', () => {
     expect(group?.kind === 'group' ? group.members : null).toEqual([]);
   });
 
+  it("reads a group's synonyms, so a card can say which one matched (velista 0108)", () => {
+    const [group, older] = toCatalogSuggestions({
+      suggestions: [
+        {
+          kind: 'group',
+          item: null,
+          group: {
+            group: {
+              id: 'g1',
+              name: { es: 'Discos desmaquillantes', en: 'Cotton Pads' },
+              synonyms: { en: ['cotton pads', 7, ' '], es: ['algodón'] },
+            },
+            itemIds: [],
+            offer: null,
+          },
+        },
+        {
+          kind: 'group',
+          item: null,
+          group: {
+            group: { id: 'g2', name: { es: 'Leche', en: 'Milk' } },
+            itemIds: [],
+            offer: null,
+          },
+        },
+      ],
+    });
+    expect(group?.kind === 'group' ? group.synonyms : null).toEqual({
+      en: ['cotton pads'],
+      es: ['algodón'],
+    });
+    // A gateway that sends none reads as a group with none.
+    expect(older?.kind === 'group' ? older.synonyms : older).toEqual({
+      en: [],
+      es: [],
+    });
+  });
+
   it('answers nothing for a body that is not a response', () => {
     expect(toCatalogSuggestions(null)).toEqual([]);
     expect(toCatalogSuggestions('oops')).toEqual([]);

@@ -246,15 +246,24 @@ export class LineComposer {
    * owns the debounce, the scope and the request. It is also what keeps the ordering
    * honest, since a component that fetched would eventually be tempted to re-rank.
    *
-   * Empty draws no list at all rather than an empty one. A dropdown that says "no
-   * matches" is a screen telling somebody their shopping list is wrong; free text is
-   * first class and typing something the catalog has never heard of is an ordinary
-   * thing to do (velista plan 0043, section 6).
+   * Empty after a **finished** search for the words still in the field draws one row
+   * saying nothing matched, and that the words can still be added as they are
+   * (velista `0108`, target 1). It used to draw nothing, so that "no matches" would
+   * not read as the shopping list being wrong; on a phone the silence read as a
+   * search that never ran. Free text is still first class, and the row says so.
    */
   readonly suggestions = input<readonly CatalogSuggestion[]>([]);
 
   /** The catalog is being asked, for the panel's skeleton cards (velista `0101`). */
   readonly suggesting = input(false);
+
+  /**
+   * The words {@link suggestions} answer, trimmed, or null when nothing has been
+   * asked (velista `0108`). The container sets it when an answer lands, so the
+   * composer can tell an empty answer to **these** words from an empty list that is
+   * still waiting for them.
+   */
+  readonly suggestedFor = input<string | null>(null);
 
   /**
    * The lines already holding what a card offers, by the page that holds them
@@ -280,6 +289,21 @@ export class LineComposer {
    * Whether the field's popup is on screen, for `aria-expanded`: the panel is drawn,
    * and it has cards or skeletons in it.
    */
+  /**
+   * The words the no results row quotes, or null when there is no row: the search
+   * finished, found nothing, and was for exactly what is in the field now. A keystroke
+   * takes the row away at once, rather than leaving it quoting words nobody is typing.
+   */
+  protected readonly emptyFor = computed(() => {
+    const words = this.suggestedFor();
+    return words !== null &&
+      !this.suggesting() &&
+      this.suggestions().length === 0 &&
+      words === this.content().trim()
+      ? words
+      : null;
+  });
+
   protected readonly panelOpen = computed(
     () =>
       this.suggestionsShown() &&

@@ -10,6 +10,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   ElementRef,
   inject,
   Injector,
@@ -40,6 +41,7 @@ import {
   suggestionCardView,
   type SuggestionCardView,
 } from './suggestion-card-view';
+import { SuggestionNoMatch } from './suggestion-no-match';
 
 /**
  * A line that already holds the product a card offers (velista `0101`, section 4).
@@ -75,6 +77,13 @@ export interface SuggestionHoldingChange {
 const NO_HOLDINGS: readonly SuggestionHolding[] = [];
 
 /**
+ * How long the catalog may take before the skeleton is drawn (velista `0108`,
+ * target 1). An answer faster than this lands with no skeleton before it, so a
+ * search with no results does not flash three grey cards and then a sentence.
+ */
+export const SKELETON_DELAY_MS = 150;
+
+/**
  * Where the group popover opens: above its badge, centred, since the panel sits
  * over the keyboard and the room is upward; below it when the badge is near the
  * top of the screen.
@@ -108,15 +117,21 @@ const POPOVER_POSITIONS: ConnectedPosition[] = [
  * one. A second one is where the ranking rules drift, so it moved out here and the
  * composer now uses the extracted component like anybody else.
  *
- * ## The three rules it carries
+ * ## The four rules it carries
  *
  * - **The ranking is the server's** and is never re-sorted. A group ranks above an item
  *   for a bare word, and that ranking was made with prices, scopes and synonyms this
  *   component has never seen. Which end of it sits nearest the field is a different
  *   question, and it is {@link placement} that answers it. See {@link rows}.
- * - **No empty state, ever.** An absent list is the ordinary case for two characters, a
- *   rare word, or a shop the catalog has not been taught, and "no matches" would be a
- *   screen telling somebody their shopping list is wrong.
+ * - **A finished search that found nothing says so, in one row** (velista `0108`,
+ *   target 1). It used to draw nothing at all, on the grounds that "no matches" reads
+ *   as the shopping list being wrong; on a phone the empty answer read as a search that
+ *   never ran. The row names the words and, where the composer can still add them,
+ *   says that. It is the composer's placement only, it is drawn only for the words
+ *   still in the field ({@link emptyFor}), and two characters or a search still
+ *   running draw nothing, as before.
+ * - **The skeleton waits {@link SKELETON_DELAY_MS}** before it is drawn, so a fast
+ *   answer, empty or not, is never preceded by a flash of grey cards.
  * - **A row says how big the packet is**, because the catalog holds one record per
  *   size and two cartons of the same milk are otherwise the same row twice over. See
  *   {@link sizeOf}, which is where the rule and its one exception live.
@@ -152,6 +167,7 @@ const POPOVER_POSITIONS: ConnectedPosition[] = [
     PlusIcon,
     ProductIcon,
     QuantityStepper,
+    SuggestionNoMatch,
     CdkConnectedOverlay,
     CdkOverlayOrigin,
     RouterLink,
@@ -180,6 +196,26 @@ export class SuggestionList {
    * panel does not resize under the thumb when the answer lands (`Edge`).
    */
   readonly loading = input(false);
+
+  /**
+   * The words these suggestions answer, or null when nothing has been asked. Read
+   * for one thing: a group card that matched through a synonym names it (velista
+   * `0108`, target 4).
+   */
+  readonly query = input<string | null>(null);
+
+  /**
+   * The words a **finished** search answered with nothing, while they are still the
+   * words in the field, or null (velista `0108`, target 1). The composer decides it,
+   * because only the composer knows what is in the field now; this draws the row.
+   */
+  readonly emptyFor = input<string | null>(null);
+
+  /**
+   * Whether the composer can still add the typed words as a line of their own, which
+   * the no results row then says. The composer's own button is how.
+   */
+  readonly freeText = input(false);
 
   /**
    * The lines already holding what a card offers, by the page that holds them
@@ -281,10 +317,12 @@ export class SuggestionList {
     // Read so the cards are drawn again once the words arrive.
     this._translator.loaded();
     const now = new Date();
+    const query = this.query();
     return this.rows().map((suggestion) =>
       suggestionCardView(suggestion, {
         locale,
         now,
+        query,
         translate: (key, args) =>
           this._translator.t(key, undefined, locale, args),
       })
@@ -297,6 +335,17 @@ export class SuggestionList {
     [48, 56, 29],
     [70, 37, 33],
   ];
+
+  /**
+   * Whether the catalog has been slow for {@link SKELETON_DELAY_MS}. Set by a timer
+   * that starts when {@link loading} does and is cancelled when it ends.
+   */
+  private readonly _slow = signal(false);
+
+  /** The skeleton is drawn only for a search that is still running and has been slow. */
+  protected readonly skeletonShown = computed(
+    () => this.loading() && this._slow()
+  );
 
   protected readonly popoverPositions = POPOVER_POSITIONS;
 
@@ -324,6 +373,15 @@ export class SuggestionList {
   });
 
   constructor() {
+    effect((onCleanup) => {
+      if (!this.loading()) {
+        this._slow.set(false);
+        return;
+      }
+      const timer = setTimeout(() => this._slow.set(true), SKELETON_DELAY_MS);
+      onCleanup(() => clearTimeout(timer));
+    });
+
     const host = inject<ElementRef<HTMLElement>>(ElementRef);
     const destroyRef = inject(DestroyRef);
     afterNextRender(() => {

@@ -546,6 +546,9 @@
         "groupMore_one": "and {{count}} more",
         "groupMore_other": "and {{count}} more",
         "already": "Product already in your list",
+        "noMatch": "No products match “{{- query}}”",
+        "noMatchFreeText": "You can still add it as written",
+        "alsoCalled": "Also called: {{- synonym}}",
         "alreadyQuantity": "How many of {{line}}"
       }
     },

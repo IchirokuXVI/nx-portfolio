@@ -1376,6 +1376,13 @@ export class ListPage {
   readonly suggesting = signal(false);
 
   /**
+   * The words {@link suggestions} answer, or null when nothing has been asked, so the
+   * composer can say that a finished search for what is in its field found nothing
+   * (velista `0108`, target 1) and a group card can name the synonym it matched.
+   */
+  readonly suggestedFor = signal<string | null>(null);
+
+  /**
    * The lines on this list already holding what a card offers (velista `0101`,
    * section 4), a join over lines this page already holds rather than a field to
    * ask for.
@@ -1477,6 +1484,7 @@ export class ListPage {
       untracked(() => {
         this.suggestions.set([]);
         this.suggesting.set(false);
+        this.suggestedFor.set(null);
       });
       return;
     }
@@ -1498,6 +1506,7 @@ export class ListPage {
         .then((found) => {
           if (seq === this._suggestSeq) {
             this.suggestions.set(found);
+            this.suggestedFor.set(query);
             this.suggesting.set(false);
           }
         });

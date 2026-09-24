@@ -74,10 +74,10 @@
     server's ranking, so the order is kept and the whole block sits above: a group is
     the top row and it is the row closest to what somebody typed.
 
-    **No empty state, ever.** An absent list is the ordinary case for two characters, a
-    rare word, or a shop the catalog has not been taught, and "no matches" would be a
-    screen telling somebody their shopping list is wrong. The button beside the field
-    always adds the typed words, so there is always something to press.
+    **A finished search that found nothing says so**, in one row (velista 0108, target
+    1): an empty answer used to draw nothing, and read as a search that never ran. The
+    row quotes the words and says they can still be added as written, which the button
+    beside the field does, so there is always something to press.
   -->
   <!--
     Waved away by a click anywhere on the page that is not this row and not the panel
@@ -92,11 +92,14 @@
     <lib-suggestion-list
       (chose)="choose($event)"
       (holdingChanged)="holdingChanged.emit($event)"
+      [emptyFor]="emptyFor()"
+      [freeText]="canSubmit() && !locked()"
       [holdingsOf]="holdingsOf()"
       [loading]="suggesting()"
       [panelId]="panelId"
       [placement]="'above'"
       [productLink]="productLink()"
+      [query]="suggestedFor()"
       [suggestions]="suggestions()"
     />
   }
