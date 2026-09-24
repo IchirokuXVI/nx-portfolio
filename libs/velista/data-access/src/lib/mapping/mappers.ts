@@ -39,6 +39,7 @@ import {
   type CatalogItem,
   type CatalogScope,
   type CatalogSuggestion,
+  type CatalogSynonyms,
   type ChainPreference,
   type ChainPrice,
   type Comment,
@@ -761,11 +762,34 @@ export function toCatalogSuggestion(
           members: mapArray(groupOffer['members'], (member) =>
             toCatalogItem(member, chains)
           ),
+          // What the card names when a synonym and not the name matched
+          // (velista `0108`). Read off the same `ProductGroupView` the name is.
+          synonyms: toCatalogSynonyms(
+            isRecord(groupOffer['group'])
+              ? groupOffer['group']['synonyms']
+              : undefined
+          ),
         };
   }
 
   const item = toCatalogItem(raw['item'], chains);
   return item === null ? null : { kind: 'item', item };
+}
+
+/**
+ * From `catalog.LocalizedSynonyms`: each language's list, with anything that is
+ * not a word left out. Both lists empty for a body that is not one.
+ */
+export function toCatalogSynonyms(raw: unknown): CatalogSynonyms {
+  if (!isRecord(raw)) {
+    return { en: [], es: [] };
+  }
+  const words = (list: unknown): readonly string[] =>
+    mapArray(list, (word) => {
+      const text = str(word)?.trim() ?? '';
+      return text === '' ? null : text;
+    });
+  return { en: words(raw['en']), es: words(raw['es']) };
 }
 
 /** From `catalog.ProductGroupView`. What "milk" means before it means a brand. */

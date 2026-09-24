@@ -573,8 +573,24 @@ export type CatalogSuggestion =
        * difference between the two.
        */
       readonly members: readonly CatalogItem[];
+      /**
+       * The other words the catalog files this group under, per language, as
+       * the operator wrote them (velista `0108`, target 4).
+       *
+       * Read so a card can say **why** it matched. Group search matches the
+       * name and these words alike, so "alg" offers "Discos desmaquillantes"
+       * because one of its Spanish words is "algodón", and a card that does
+       * not say so reads as a wrong answer. Empty on a group that has none.
+       */
+      readonly synonyms: CatalogSynonyms;
     }
   | { readonly kind: 'item'; readonly item: CatalogItem };
+
+/** A group's other words, per language. Either list may be empty. */
+export interface CatalogSynonyms {
+  readonly en: readonly string[];
+  readonly es: readonly string[];
+}
 
 /**
  * A recording somebody just made, on its way to being sent (velista plan 0039).

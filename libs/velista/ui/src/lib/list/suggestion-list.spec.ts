@@ -65,7 +65,14 @@ function groupRow(
     id: `group-${name}`,
     name: { es: name, en: name },
   };
-  return { kind: 'group', group, itemIds, offer: priced, members: [] };
+  return {
+    kind: 'group',
+    group,
+    itemIds,
+    offer: priced,
+    members: [],
+    synonyms: { en: [], es: [] },
+  };
 }
 
 function suggestions(count: number): readonly CatalogSuggestion[] {

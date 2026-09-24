@@ -251,6 +251,7 @@ describe('suggestionCardView, a group (rule 4)', () => {
         itemIds: Array.from({ length: count }, (_unused, index) => `i${index}`),
         offer: floor,
         members,
+        synonyms: { en: [], es: [] },
       },
       options
     );

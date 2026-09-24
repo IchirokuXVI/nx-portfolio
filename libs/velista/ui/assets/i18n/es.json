@@ -548,6 +548,9 @@
         "groupMore_one": "y {{count}} más",
         "groupMore_other": "y {{count}} más",
         "already": "Ya está en tu lista",
+        "noMatch": "Ningún producto coincide con «{{- query}}»",
+        "noMatchFreeText": "Puedes añadirlo tal cual",
+        "alsoCalled": "También: {{- synonym}}",
         "alreadyQuantity": "Cuántos de {{line}}"
       }
     },

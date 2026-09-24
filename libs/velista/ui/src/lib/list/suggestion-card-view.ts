@@ -7,6 +7,7 @@ import {
   type UnitOfMeasure,
 } from '@portfolio/velista/models';
 import { formatMoney } from '@portfolio/velista/platform';
+import { matchedSynonym } from './matched-synonym';
 
 /** A translator call, so this stays a plain function a spec can run. */
 export type SuggestionTranslate = (
@@ -19,6 +20,11 @@ export interface SuggestionCardOptions {
   readonly translate: SuggestionTranslate;
   /** Now, for the age of a stale price. A parameter so a spec can fix it. */
   readonly now: Date;
+  /**
+   * The words these suggestions answer, for {@link SuggestionCardView.alsoCalled}.
+   * Absent or null draws no synonym on any card.
+   */
+  readonly query?: string | null;
 }
 
 /** One chain's mark on the collapsed row: its initial, in the app's own colours. */
@@ -72,6 +78,12 @@ export interface SuggestionCardView {
   readonly suggestion: CatalogSuggestion;
   readonly group: boolean;
   readonly name: string;
+  /**
+   * "Also called: algodón" on a group that matched through one of its other
+   * words and not its name, or null (velista `0108`, target 4). Always null on
+   * an item, whose search document carries no synonyms since backend `0156`.
+   */
+  readonly alsoCalled: string | null;
   /** "Pack 6", or null for a product that is not a pack (backend `0162`). */
   readonly pack: string | null;
   /** The item's price, or a group's labelled floor, "from 0,89 €". */
@@ -140,6 +152,7 @@ function itemView(
     suggestion,
     group: false,
     name,
+    alsoCalled: null,
     pack,
     price,
     stale,
@@ -180,12 +193,25 @@ function groupView(
     price: priceText(member.offer, locale),
   }));
   const rest = count - members.length;
+  const synonym =
+    options.query === undefined || options.query === null
+      ? null
+      : matchedSynonym(
+          suggestion.group.name,
+          suggestion.synonyms,
+          options.query,
+          locale
+        );
 
   return {
     key: `group:${suggestion.group.id}`,
     suggestion,
     group: true,
     name,
+    alsoCalled:
+      synonym === null
+        ? null
+        : translate('list.add.card.alsoCalled', { synonym }),
     pack: null,
     // Labelled, because it is the cheapest of several and not the price of a
     // thing (rule 4). "from 0,89 €".

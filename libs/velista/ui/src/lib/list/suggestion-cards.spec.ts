@@ -8,10 +8,21 @@ import type {
   ProductOffer,
 } from '@portfolio/velista/models';
 import {
+  SKELETON_DELAY_MS,
   SuggestionList,
   type SuggestionHolding,
   type SuggestionHoldingChange,
 } from './suggestion-list';
+
+/** Real time past the skeleton's wait, then a render of what the timer changed. */
+async function pastSkeletonDelay(
+  fixture: ComponentFixture<SuggestionList>,
+  ms = SKELETON_DELAY_MS + 30
+): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  fixture.detectChanges();
+  await fixture.whenStable();
+}
 
 /**
  * The composer's product cards (velista `0101`), `placement: 'above'`.
@@ -77,6 +88,7 @@ function group(count: number, members: number): CatalogSuggestion {
     members: Array.from({ length: members }, (_unused, index) =>
       product(`m${index}`)
     ),
+    synonyms: { en: [], es: [] },
   };
 }
 
@@ -92,6 +104,9 @@ async function render(
     loading?: boolean;
     holdings?: readonly SuggestionHolding[];
     productLink?: ((itemId: string) => string) | null;
+    query?: string | null;
+    emptyFor?: string | null;
+    freeText?: boolean;
   } = {}
 ): Promise<Rendered> {
   TestBed.resetTestingModule();
@@ -113,6 +128,9 @@ async function render(
         : []
   );
   fixture.componentRef.setInput('productLink', inputs.productLink ?? null);
+  fixture.componentRef.setInput('query', inputs.query ?? null);
+  fixture.componentRef.setInput('emptyFor', inputs.emptyFor ?? null);
+  fixture.componentRef.setInput('freeText', inputs.freeText ?? false);
 
   const chose: CatalogSuggestion[] = [];
   const changed: SuggestionHoldingChange[] = [];
@@ -190,10 +208,83 @@ describe('SuggestionList, the composer’s cards', () => {
 
   it('draws three skeleton cards while the catalog is being asked', async () => {
     const { fixture } = await render([], { loading: true });
+    await pastSkeletonDelay(fixture);
     const panel = root(fixture).querySelector('.panel');
 
     expect(panel?.getAttribute('aria-busy')).toBe('true');
     expect(root(fixture).querySelectorAll('.sk')).toHaveLength(3);
+  });
+
+  describe('a search that found nothing (0108, target 1)', () => {
+    it('draws no skeleton at all for an answer that lands inside the wait', async () => {
+      const { fixture } = await render([], { loading: true });
+      await pastSkeletonDelay(fixture, SKELETON_DELAY_MS / 3);
+
+      expect(root(fixture).querySelectorAll('.sk')).toHaveLength(0);
+
+      fixture.componentRef.setInput('loading', false);
+      fixture.componentRef.setInput('emptyFor', 'zzzz');
+      fixture.detectChanges();
+      await pastSkeletonDelay(fixture);
+
+      expect(root(fixture).querySelectorAll('.sk')).toHaveLength(0);
+      expect(root(fixture).querySelector('.none')).not.toBeNull();
+    });
+
+    it('draws one row naming the words, and says they can still be added', async () => {
+      const { fixture } = await render([], {
+        emptyFor: 'zzzz',
+        freeText: true,
+      });
+      const rows = root(fixture).querySelectorAll('.none');
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0].querySelector('.none-h')?.textContent?.trim()).toBe(
+        'list.add.card.noMatch'
+      );
+      expect(rows[0].querySelector('.none-p')?.textContent?.trim()).toBe(
+        'list.add.card.noMatchFreeText'
+      );
+      // One row and nothing else: no card panel, no card, no skeleton.
+      expect(root(fixture).querySelectorAll('.panel, .sug, .sk')).toHaveLength(
+        0
+      );
+    });
+
+    it('leaves the second line out when the words cannot be added', async () => {
+      const { fixture } = await render([], { emptyFor: 'zzzz' });
+
+      expect(root(fixture).querySelector('.none-h')).not.toBeNull();
+      expect(root(fixture).querySelector('.none-p')).toBeNull();
+    });
+
+    it('says it once through the status line, and the row is not said twice', async () => {
+      const { fixture } = await render([], { freeText: true });
+      const status = root(fixture).querySelector('[role="status"]');
+
+      expect(status?.textContent?.trim()).toBe('');
+
+      fixture.componentRef.setInput('emptyFor', 'zzzz');
+      fixture.detectChanges();
+
+      // The same element, filled rather than inserted, so it is announced.
+      expect(root(fixture).querySelector('[role="status"]')).toBe(status);
+      expect(status?.textContent).toContain('list.add.card.noMatch');
+      expect(status?.textContent).toContain('list.add.card.noMatchFreeText');
+      expect(
+        root(fixture).querySelector('.none')?.closest('[aria-hidden="true"]')
+      ).not.toBeNull();
+    });
+
+    it('goes away when there are no longer empty words to quote', async () => {
+      const { fixture } = await render([], { emptyFor: 'zzzz' });
+
+      fixture.componentRef.setInput('emptyFor', null);
+      fixture.detectChanges();
+
+      expect(root(fixture).querySelector('.none')).toBeNull();
+      expect(root(fixture).querySelector('.panel')).toBeNull();
+    });
   });
 
   it('keeps the cards it has while a newer answer is asked for', async () => {
@@ -296,6 +387,37 @@ describe('SuggestionList, the composer’s cards', () => {
       const { fixture } = await render([item('a', { chainPrices: [] })]);
 
       expect(root(fixture).querySelector('.chains')).toBeNull();
+    });
+  });
+
+  describe('why a group matched (0108, target 4)', () => {
+    const pads: CatalogSuggestion = {
+      kind: 'group',
+      group: {
+        id: 'cotton-pads',
+        name: { es: 'Discos desmaquillantes', en: 'Cotton Pads' },
+      },
+      itemIds: [],
+      offer: null,
+      members: [],
+      synonyms: {
+        en: ['cotton pads', 'makeup remover pads'],
+        es: ['discos desmaquillantes', 'algodón'],
+      },
+    };
+
+    it('names the synonym under the name when that is what matched', async () => {
+      const { fixture } = await render([pads], { query: 'alg' });
+
+      expect(
+        root(fixture).querySelector('.sug-also')?.textContent?.trim()
+      ).toBe('list.add.card.alsoCalled');
+    });
+
+    it('says nothing new when the name matched', async () => {
+      const { fixture } = await render([pads], { query: 'discos' });
+
+      expect(root(fixture).querySelector('.sug-also')).toBeNull();
     });
   });
 

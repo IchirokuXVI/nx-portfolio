@@ -15,7 +15,7 @@ import {
   type SilenceHandlers,
 } from '@portfolio/velista/platform';
 import { LineComposer } from './line-composer';
-import { SuggestionList } from './suggestion-list';
+import { SKELETON_DELAY_MS, SuggestionList } from './suggestion-list';
 
 /**
  * Plan 0038: the add button records when there is nothing typed.
@@ -615,10 +615,69 @@ describe('LineComposer, the field and its cards', () => {
     expect(field(fixture).getAttribute('aria-controls')).toBe(panel?.id);
   });
 
+  describe('a search that found nothing (0108, target 1)', () => {
+    function answered(
+      fixture: ComponentFixture<LineComposer>,
+      words: string | null,
+      found: readonly CatalogSuggestion[] = []
+    ): void {
+      fixture.componentRef.setInput('suggestions', found);
+      fixture.componentRef.setInput('suggestedFor', words);
+      fixture.detectChanges();
+    }
+
+    it('says so for the words in the field, and that they can still be added', async () => {
+      const { fixture } = await render();
+      type(fixture, 'zzzz');
+      answered(fixture, 'zzzz');
+
+      expect(host(fixture).querySelector('.none-h')).not.toBeNull();
+      expect(host(fixture).querySelector('.none-p')).not.toBeNull();
+    });
+
+    it('takes the row away on the next keystroke', async () => {
+      const { fixture } = await render();
+      type(fixture, 'zzzz');
+      answered(fixture, 'zzzz');
+      type(fixture, 'zzzzz');
+
+      expect(host(fixture).querySelector('.none')).toBeNull();
+    });
+
+    it('draws no row while the search is still running, or when it found something', async () => {
+      const { fixture } = await render();
+      type(fixture, 'zzzz');
+      answered(fixture, 'zzzz');
+      fixture.componentRef.setInput('suggesting', true);
+      fixture.detectChanges();
+
+      expect(host(fixture).querySelector('.none')).toBeNull();
+
+      fixture.componentRef.setInput('suggesting', false);
+      answered(fixture, 'oat', [OAT]);
+      type(fixture, 'oat');
+
+      expect(host(fixture).querySelector('.none')).toBeNull();
+      expect(host(fixture).querySelectorAll('.sug')).toHaveLength(1);
+    });
+
+    it('does not offer to add the words where the submit is held', async () => {
+      const { fixture } = await render(fakeCapture(), { voice: false });
+      fixture.componentRef.setInput('submitDisabled', true);
+      type(fixture, 'zzzz');
+      answered(fixture, 'zzzz');
+
+      expect(host(fixture).querySelector('.none-h')).not.toBeNull();
+      expect(host(fixture).querySelector('.none-p')).toBeNull();
+    });
+  });
+
   it('draws the skeleton while the page is asking the catalog', async () => {
     const { fixture } = await render();
     fixture.componentRef.setInput('suggesting', true);
     type(fixture, 'oat');
+    await new Promise((resolve) => setTimeout(resolve, SKELETON_DELAY_MS + 30));
+    fixture.detectChanges();
 
     expect(host(fixture).querySelectorAll('.sk')).toHaveLength(3);
   });

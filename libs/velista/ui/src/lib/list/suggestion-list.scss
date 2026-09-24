@@ -143,23 +143,27 @@
 // Opaque, because it covers rows of somebody's own shopping list, and anchored to its
 // last card, because it grows upward from the field under the thumb.
 //
-// **It scrolls and never grows.** Its height is a `min()` of three cards and what the
-// visual viewport leaves, and `--app-viewport` is set on this element from
-// `window.visualViewport`, because an iOS keyboard does not shorten `100svh`. Until it
-// is known the small viewport stands in.
+// **It is as tall as its cards, and past three it scrolls** (velista 0108, target 2).
+// The cap is a `min()` of three cards and what the visual viewport leaves, and
+// `--app-viewport` is set on this element from `window.visualViewport`, because an iOS
+// keyboard does not shorten `100svh`. Until it is known the small viewport stands in.
+//
+// The cap never drops below two cards: a 375 by 667 phone resolves to two, which is the
+// floor the arithmetic protects, and a smaller screen scrolls rather than shows one.
+// That floor used to be a `min-height`, which sat one card at the bottom of a panel
+// sized for two with an empty raised surface above it. As a floor on the cap it keeps
+// the protection and lets one card, or the no results row, be a panel of its own size.
+// The panel still opens upward: it sits in the flow above the composer's field.
 .panel {
   position: relative;
   display: flex;
   flex-direction: column;
   max-height: min(
     var(--app-suggestions-card-cap),
-    calc(var(--app-viewport, 100svh) - var(--app-suggestions-chrome))
-  );
-  // Never less than two cards: a 375 by 667 phone resolves to two, which is the floor
-  // the arithmetic protects, and a smaller screen scrolls rather than shows one.
-  min-height: min(
-    calc(2 * var(--app-suggestion-card) + var(--app-space-3)),
-    var(--app-suggestions-card-cap)
+    max(
+      calc(var(--app-viewport, 100svh) - var(--app-suggestions-chrome)),
+      calc(2 * var(--app-suggestion-card) + var(--app-space-3))
+    )
   );
   padding-inline: var(--app-space-4);
   overflow-x: hidden;
@@ -176,12 +180,6 @@
     width: 0;
     height: 0;
   }
-}
-
-// Bottom anchored by margin rather than by `justify-content: flex-end`, because a flex
-// column that pushes its content down cannot be scrolled back up to what overflowed.
-.panel > :first-child {
-  margin-block-start: auto;
 }
 
 // A double tap must not zoom the page out from under a card.
@@ -658,11 +656,18 @@
   border-block-start: 1px solid var(--app-border-subtle);
 }
 
+// A tinted label in the attention pair (0108, target 3): violet says "look", where
+// amber would say "press", and this is the one thing on the card that must not be
+// missed before a second line is made for the same product.
 .already-h {
+  align-self: flex-start;
   margin-block-end: var(--app-chip-padding-block);
-  color: var(--app-text-secondary);
+  padding: var(--app-chip-padding-block) var(--app-space-3);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-attention-bg);
+  color: var(--app-status-attention-fg);
   font-size: var(--app-text-2xs);
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.4;
 }
 
