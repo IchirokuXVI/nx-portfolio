@@ -164,7 +164,7 @@ test('decide carries the model JSON as input and adds --final only when asked', 
   assert.deepEqual(requests[1].args.slice(0, 4), [
     '--run-dir',
     '/runs/x',
-    '--entry',
+    '--row',
     'e1',
   ]);
   await decider.close();
@@ -291,4 +291,41 @@ test('end closes the child, and closing twice is a no op', async () => {
   await decider.close();
   assert.deepEqual(exits, [0]);
   assert.equal(child.killed, false);
+});
+
+test('a file with nothing to send is an answer, not a refused replay', async () => {
+  // The groups decider answers a run of reviews only with `applied: false`,
+  // because nothing was applied. That run finished, and it has nothing to
+  // apply, which is not the same as a file the server threw out (plan 0005).
+  const { startChild } = fakeChild([
+    { runId: 'r1', operations: 0, applied: false, results: [] },
+  ]);
+  const decider = makeDecider({ startChild, cliPath: '/c.mjs', runDir: null });
+  const answer = await decider.apply({
+    mainUrl: 'http://a',
+    file: 'decisions.jsonl',
+  });
+  assert.equal(answer.operations, 0);
+});
+
+test('end gets a fresh child when the walk killed the first one', async () => {
+  // A walk that failed because its decider died still has to write the report
+  // (plan 0005), and `end` only reads the run directory, so a new child writes
+  // the report the old one would have written.
+  const first = fakeChild([{ __hang: true }]);
+  const second = fakeChild([{ report: '/runs/x/report.json' }]);
+  const children = [first.child, second.child];
+  const decider = makeDecider({
+    startChild: () => children.shift(),
+    cliPath: '/c.mjs',
+    runDir: '/runs/x',
+  });
+
+  const inFlight = decider.next();
+  first.child.crash(1, 'boom\n');
+  await assert.rejects(() => inFlight, /exited with code 1/);
+
+  const report = await decider.end({ calls: 1 });
+  assert.equal(report.report, '/runs/x/report.json');
+  assert.equal(second.requests[0].command, 'end');
 });
