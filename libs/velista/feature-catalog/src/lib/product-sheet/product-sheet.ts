@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, type ActivatedRouteSnapshot } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -18,7 +18,6 @@ import {
   type CatalogServiceI,
 } from '@portfolio/velista/data-access';
 import {
-  APP_BASE_PATH,
   catalogName,
   productPricesSeenAt,
   productShopPrices,
@@ -26,11 +25,7 @@ import {
   type CatalogItem,
   type ProductShopPrice,
 } from '@portfolio/velista/models';
-import {
-  appPath,
-  formatMoney,
-  SheetNavigation,
-} from '@portfolio/velista/platform';
+import { formatMoney, SheetNavigation } from '@portfolio/velista/platform';
 import { productRowView, SheetShell } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
 
@@ -50,8 +45,10 @@ type SheetStatus = 'loading' | 'ready' | 'failed';
  * One product, and what every shop near the person charges for it (velista
  * `0100`, section 5).
  *
- * Addressed at `catalog/sheet/products/:itemId`, so back dismisses it and the URL
- * says what is open.
+ * Addressed at `<the covered page>/sheet/products/:itemId`, so back dismisses it and
+ * the URL says what is open. It covers the catalog, and since velista `0107` the zone
+ * list and both baskets too, whose composers link a suggestion's Details here. It
+ * knows none of them by name: the page it closes onto is read from its own route.
  *
  * ## Where the prices come from
  *
@@ -83,11 +80,10 @@ export class ProductSheet {
   private readonly _sheet = inject(SheetNavigation);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
-  private readonly _basePath = inject(APP_BASE_PATH);
+  private readonly _route = inject(ActivatedRoute);
 
   /** Read once: a sheet covers the list, so no second product opens under it. */
-  protected readonly itemId =
-    inject(ActivatedRoute).snapshot.paramMap.get('itemId') ?? '';
+  protected readonly itemId = this._route.snapshot.paramMap.get('itemId') ?? '';
 
   protected readonly status = signal<SheetStatus>('loading');
   private readonly _item = signal<CatalogItem | null>(null);
@@ -144,10 +140,12 @@ export class ProductSheet {
     void this._load();
   }
 
+  /**
+   * Cancel, the scrim and Escape. The fallback, used on a cold load of the sheet's
+   * own URL, is the page it covers, whichever of the four that is.
+   */
   async dismiss(): Promise<void> {
-    await this._sheet.dismiss(
-      appPath(this._locale(), this._basePath, 'catalog')
-    );
+    await this._sheet.dismiss(coveredPageUrl(this._route.snapshot));
   }
 
   private async _load(): Promise<void> {
@@ -170,6 +168,22 @@ export class ProductSheet {
     );
     this.status.set('ready');
   }
+}
+
+/**
+ * The URL of the page a sheet covers: every segment down to its parent route, which
+ * is that page, and nothing of the sheet below it.
+ *
+ * Read from the route rather than built from a path, because this sheet is declared
+ * over four pages (velista `0107`) and the only fact they share is that the sheet is
+ * their direct child. The locale and the mount are already among the segments, so a
+ * standalone build and the portfolio's mount both come out right.
+ */
+function coveredPageUrl(sheet: ActivatedRouteSnapshot): string {
+  const segments = (sheet.parent?.pathFromRoot ?? []).flatMap((route) =>
+    route.url.map((segment) => encodeURIComponent(segment.path))
+  );
+  return `/${segments.join('/')}`;
 }
 
 function hasScopes(context: CatalogBrowseContext): boolean {

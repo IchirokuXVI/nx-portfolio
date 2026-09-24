@@ -386,7 +386,7 @@ describe('AppShellRoutes', () => {
         ).toContain('sheet/lists/new');
       });
 
-      it('offers the five sheets over it, as routes rather than flags', () => {
+      it('offers the six sheets over it, as routes rather than flags', () => {
         // Rule E1: each covers the page without losing it, and Android's back button
         // has to dismiss it. Ticking a line off is deliberately not among them.
         expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual(
@@ -401,6 +401,8 @@ describe('AppShellRoutes', () => {
             'sheet/settings',
             // The order and the category view (velista `0082`, section 4).
             'sheet/filter',
+            // A suggestion's Details in the composer (velista `0107`).
+            'sheet/products/:itemId',
           ]
         );
       });
@@ -420,7 +422,7 @@ describe('AppShellRoutes', () => {
         // allowed, on every request.
         const sheets = routeAt(listPath)?.children ?? [];
 
-        expect(sheets).toHaveLength(5);
+        expect(sheets).toHaveLength(6);
         for (const sheet of sheets) {
           expect(sheet.canActivate).toBeUndefined();
         }
@@ -754,7 +756,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the eight sheets over the basket, and no units sheet', () => {
+    it('offers the nine sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -781,6 +783,8 @@ describe('AppShellRoutes', () => {
           // Every line added from the basket names a list now, so there has to
           // be somewhere to say which.
           'sheet/add/list',
+          // A suggestion's Details in the composer (velista `0107`).
+          'sheet/products/:itemId',
         ]
       );
     });
@@ -902,7 +906,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(8);
+      expect(sheets).toHaveLength(9);
       for (const entry of sheets) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -1053,7 +1057,10 @@ describe('the sheets and their exit animation', () => {
     // covered lists is read over both baskets, for the same reason.
     //
     // `0100` added the catalog's product sheet, one page and one entry.
-    expect(sheets).toHaveLength(39);
+    //
+    // `0107` declared that sheet over three more pages, the zone list and both
+    // baskets, so a suggestion's Details covers the page it was pressed on.
+    expect(sheets).toHaveLength(42);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1219,6 +1226,25 @@ describe('the bottom bar', () => {
     expect(product?.loadComponent).toBeDefined();
     expect(product?.canDeactivate).toHaveLength(1);
     expect(catalog?.children).toHaveLength(1);
+  });
+
+  /**
+   * The same sheet over the pages whose composers link to it (velista `0107`), so
+   * Details covers the list or the basket it was pressed on rather than leaving it
+   * for the catalog tab.
+   */
+  it.each([
+    'zones/:zoneId/lists/:listId',
+    'shopping-lists/live',
+    'shopping-lists/:basketId',
+  ])('declares the product sheet over %s, with the fall guard', (path) => {
+    const page = pages.find((route) => route.path === path);
+    const product = page?.children?.find(
+      (route) => route.path === `${SHEET_SEGMENT}/products/:itemId`
+    );
+
+    expect(product?.loadComponent).toBeDefined();
+    expect(product?.canDeactivate).toHaveLength(1);
   });
 });
 

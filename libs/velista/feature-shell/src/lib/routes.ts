@@ -101,6 +101,33 @@ function sheet(route: Route): Route {
 }
 
 /**
+ * One product and every shop's price for it (velista `0100`, section 5), as a child
+ * of whichever page offered it.
+ *
+ * A child route under rule E1, so the page underneath keeps its scroll and back
+ * dismisses the sheet. `products/:itemId`: a sheet is addressed by what it is about.
+ *
+ * It covers **three** pages (velista `0107`): the catalog, whose rows open it, and the
+ * zone list and the baskets, whose composers link a suggestion's Details to it. Over
+ * the catalog alone, Details on a list left the list, lit the catalog tab and closed
+ * onto the catalog, which reads as the app losing its place. One function and not
+ * three entries, for `entrySheetRoutes`' reason: the copies must not be able to drift.
+ * Nothing differs between them, because the sheet reads the page it covers out of its
+ * own route rather than being told.
+ */
+function productSheetRoutes(): Route[] {
+  return [
+    sheet({
+      path: 'products/:itemId',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-catalog').then(
+          (m) => m.ProductSheet
+        ),
+    }),
+  ];
+}
+
+/**
  * The two sheets, as children of whichever page they cover (plan 0008, rule E1).
  *
  * They are routes rather than a signal toggling a template branch, and the reason
@@ -306,6 +333,10 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
           (m) => m.TargetListSheet
         ),
     }),
+    // A suggestion's Details in the composer (velista `0107`). Over both routes,
+    // like the composer itself. Unguarded like its siblings: a guest is given no
+    // link to it, and every catalog read behind it is refused without an account.
+    ...productSheetRoutes(),
   ];
 }
 
@@ -426,6 +457,8 @@ function listSheetRoutes(): Route[] {
           (m) => m.ListFilterSheet
         ),
     }),
+    // A suggestion's Details in the composer (velista `0107`).
+    ...productSheetRoutes(),
   ];
 }
 
@@ -961,19 +994,7 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-catalog').then(
                 (m) => m.CatalogPage
               ),
-            children: [
-              sheet({
-                // One product and every shop's price for it (section 5). A child
-                // route under rule E1, so the list keeps its scroll underneath and
-                // back dismisses it. `products/:itemId`: a sheet is addressed by
-                // what it is about.
-                path: 'products/:itemId',
-                loadComponent: () =>
-                  import('@portfolio/velista/feature-catalog').then(
-                    (m) => m.ProductSheet
-                  ),
-              }),
-            ],
+            children: [...productSheetRoutes()],
           },
           {
             /**
