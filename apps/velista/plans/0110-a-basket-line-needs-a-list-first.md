@@ -1,3 +1,5 @@
+> **PR:** [#489](https://github.com/IchirokuXVI/nx-portfolio/pull/489)
+
 # 0110: a basket line needs a list first
 
 On a basket that gathers more than one list, the composer at the bottom adds a line to the list
