@@ -6,9 +6,16 @@
 > criterion) is out of scope until the assistant resumes. Do not build it, and do not
 > build a placeholder for it.
 
+> **Decided 2026-09-24.** Section 4 is closed: the lines already holding the product use
+> `lib-quantity-stepper`. The group popover is a CDK overlay (`@angular/cdk` is already a
+> dependency). Photographs do not ship until backend `0126` to `0129` land, so the card
+> always draws the state with no photograph until then.
+
 > Mock: `mocks/typeahead/`, published at https://claude.ai/artifact/GASRtmT5Y74jM7fywGeMK3.
 > Reverses `0063` section 6.5, which refused to draw a chain on a typeahead row.
-> Needs one server change before any of it can be built. Section 2 says which.
+> Backend half: `apps/luna-shopper-backend/plans/0161` (every chain's price, the scope map,
+> the group's products) and `0162` (the pack count). Section 2 says which part of the card
+> waits on which.
 >
 > The typeahead offers a one line row: a name, a brand, and a price. The person choosing
 > from it is choosing a product to buy, and the row tells them almost nothing about the
@@ -48,8 +55,8 @@ the zone list page and the composer on the basket page, and nowhere else.
 - `GET /v1/catalog/suggest` and `GET /v1/baskets/{id}/catalog/suggest` both answer
   `CatalogSuggestResponse`, which is `{ suggestions }` and nothing else.
 - A suggestion is `{ kind: 'group' | 'item', item, group }`. The item is a full
-  `ItemView`, which already carries `imageUrl` and an `offers` array beside `bestOffer`.
-  velista's `CatalogItem` maps neither. Section 2 has the detail.
+  `ItemView`. It carries `imageUrl`, and an `offers` array only once backend `0161` asks
+  for it. velista's `CatalogItem` maps neither. Section 2 has the detail.
 - The typeahead also receives suggestions it did not search for. The assistant produces
   them from one spoken sentence, and the canvas gives them their own sheet rather than
   the panel. **The assistant is on hold, so this build draws no such sheet.** The panel
@@ -94,8 +101,7 @@ Stop and ask before:
 
 - changing any backend service, contract or migration, including the one section 2 needs
 - promoting the control out of `libs/velista/ui`
-- deciding the open question in section 4
-- adding a dependency, or reaching for a popover library
+- adding a dependency, or reaching for a popover library other than CDK overlay
 
 ### Progress evidence
 
@@ -119,37 +125,50 @@ built, because the assistant is on hold.
 
 ## 2. What the app cannot draw yet
 
-Three different problems, and only one of them is a server change.
+Checked against the code on 2026-09-24. An earlier version of this section said every
+shop's price is already sent. It is not, on the suggest routes, and that is corrected below.
 
-**Already on the wire, and velista does not map it.** No backend work:
+**On the wire, and velista does not map it.** No backend work:
 
 - `ItemView.imageUrl`. The field exists. It holds nothing until the Open Food Facts
-  import lands, which is backend `0126` to `0129`, written and not built. So the card
-  needs the state where there is no photograph, which `Edge` draws, and it needs it
-  permanently rather than as a courtesy.
-- `ItemView.offers`, an array of `ItemOfferView`, each with `price`, `unitPrice`,
-  `unitPriceLabel`, `observedAt`, `stale` and `priceScopeId`. Every shop's price is
-  already being sent. `CatalogItem` reads `bestOffer` alone.
+  import lands, which is backend `0126` to `0129`, written and not built. **Photographs do
+  not ship in this build.** The card draws the state with no photograph, which `Edge`
+  draws, on every product until those plans land.
 
-**Missing, and the card cannot be built without the first one:**
+**Missing, and planned in backend `0161`.** The card cannot draw these parts without it:
 
+- **Every chain's price.** `ItemView.offers` exists, but catalog fills it only when a read
+  asks for `offers: 'all'`, and neither search behind the suggest routes asks. So the
+  expanded chain row has nothing to list, and the collapsed row has no other chains to count.
 - **A `scopes` map on `CatalogSuggestResponse`.** An offer names a `priceScopeId` and
-  nothing resolves it. The basket read composes exactly this map so a row can turn that
-  id into a chain and a shop, and the suggest response has no equivalent, so no row can
-  name a chain today. This is the server change `0063` section 6.5 declined to ask for,
-  and asking for it is what this plan reverses. Everything else on the card can be built
-  without it. The chain row cannot be built at all.
-- **A packaging format.** "Pack 6", "Docena". `ItemView` carries `unitSize`,
-  `defaultUnit`, `ean` and `sku`, and none of them is the words on the packet.
-- **The group's products.** `ProductGroupOfferView` carries `group`, `itemIds`, `offer`
-  and `cheapestItem`, so one product is named and the rest are ids. The card draws five,
-  cheapest first, with name, brand and price, and states how many there are in total.
+  nothing resolves it, so no row can name a chain. This is the server change `0063` section
+  6.5 declined to ask for, and asking for it is what this plan reverses. `0161` answers
+  chain names only, with no shop address, because the card names chains.
+- **The group's products.** `ProductGroupOfferView` carries `itemIds` and one
+  `cheapestItem`. `0161` adds `members`, the cheapest five with name, brand and price. The
+  total is still `itemIds.length`.
+
+**Missing, and planned in backend `0162`:**
+
+- **The pack count.** "Pack 6". `ItemView` carries `unitSize` and `defaultUnit`, so a six
+  pack of litre cartons reads "6 L", like a six litre jug. `0162` adds `packCount`, a whole
+  number from 2 or null, and velista renders "Pack 6" or "Pack de 6" from it. It is a
+  number and not the printed words, so a container word such as "Brik" is not drawn.
+
+**What can be built before them:** the card layout, the price, the unit price, the stale and
+priceless states, the keyboard rules, the viewport height, the grid pattern, the lines
+already holding the product, and the stepper. The chain row, its expansion and the group
+reveal wait for `0161`. The pack line waits for `0162`, and a card with a null `packCount`
+draws no pack line, so the card ships without it too.
 
 **Neither. velista can answer it itself:**
 
 - **The lines that already hold the product.** The list page holds its own lines and the
   basket view holds its rows, each already naming the list it came from, so this is a
   join in the client and not a field to ask for.
+- **Changing the quantity of those lines.** The list page already updates a line, and the
+  basket already sends `POST /v1/baskets/{id}/rows/{rowKey}/demand` with a `lineId` and a
+  `quantity`.
 
 ## 3. The rules the mock settles
 
@@ -182,14 +201,14 @@ Stated here so they are not re-argued. The notes on the canvas carry the reasoni
    addition to it.
 9. **The free text row is gone.** The composer button already adds the typed words.
 
-## 4. The question the mock leaves open
+## 4. The question the mock left open, now decided
 
-The section naming the lines a product is already on draws its quantity as a plain count
-chip, 32px per row, so the section informs and does not act. The alternative is
-`lib-quantity-stepper`, which takes the row to 44px and buys back the original intent:
-increase a line instead of adding the product again. The `Edge` artboard draws both.
-
-**Decide this before building, and do not decide it while building.**
+The section naming the lines a product is already on draws each line with
+`lib-quantity-stepper`, 44px per row, not the 32px count chip. The section acts rather than
+informs: it increases a line instead of adding the product again. Decided on 2026-09-24. The
+`Edge` artboard draws both, and the stepper is the one to build. `Budget` priced the section
+with the 32px chip, so each already line costs 12px more than it shows there. Recompute the
+heights with 44px, and state the new figures in the PR.
 
 ## 5. Not in this plan
 
@@ -226,9 +245,10 @@ increase a line instead of adding the product again. The `Edge` artboard draws b
 ## 7. Verification
 
 ```sh
-npx nx test velista-ui
-npx nx test velista-data-access
-npx nx test velista-feature-list
+npx nx test velista/ui
+npx nx test velista/data-access
+npx nx test velista/feature-lists
+npx nx test velista/feature-shopping-lists
 npx nx lint velista
 npx nx build velista
 ```
