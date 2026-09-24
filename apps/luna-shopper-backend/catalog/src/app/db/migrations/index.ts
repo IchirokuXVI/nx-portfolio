@@ -18,6 +18,7 @@ import { BrandLinks1757600000000 } from './1757600000000-BrandLinks';
 import { ItemsSoldByChain1757700000000 } from './1757700000000-ItemsSoldByChain';
 import { NormalizedItemSearch1757800000000 } from './1757800000000-NormalizedItemSearch';
 import { ItemPackCount1757900000000 } from './1757900000000-ItemPackCount';
+import { LocationCoordinatesIndex1758050000000 } from './1758050000000-LocationCoordinatesIndex';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -49,4 +50,5 @@ export const CATALOG_MIGRATIONS = [
   ItemsSoldByChain1757700000000,
   NormalizedItemSearch1757800000000,
   ItemPackCount1757900000000,
+  LocationCoordinatesIndex1758050000000,
 ];
