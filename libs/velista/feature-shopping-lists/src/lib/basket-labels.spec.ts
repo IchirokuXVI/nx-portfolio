@@ -76,6 +76,7 @@ function row(over: Partial<BasketRow> = {}): BasketRow {
     optionIds: [],
     touchedBy: null,
     touchedAt: null,
+    usual: null,
     entries: [entry(null)],
     ...over,
   };

@@ -6,6 +6,7 @@ import type {
   BasketProgress,
   BasketRow,
   BasketRowEntry,
+  BasketRowUsual,
   BasketShelfMark,
   BasketShop,
 } from './basket-view';
@@ -27,8 +28,13 @@ export type BasketOrder = 'shop' | 'alpha';
 /** What the lines are cut into. `category` and `list` are velista `0077`'s. */
 export type BasketGrouping = 'none' | 'category' | 'list';
 
-/** One of the four things the filter sheet sets, for the chip that removes it. */
-export type BasketViewProperty = 'order' | 'grouping' | 'shop' | 'lists';
+/** One of the five things the filter sheet sets, for the chip that removes it. */
+export type BasketViewProperty =
+  | 'order'
+  | 'grouping'
+  | 'shop'
+  | 'lists'
+  | 'usual';
 
 /**
  * Everything the filter sheet decides about the screen (velista `0075`,
@@ -59,7 +65,27 @@ export interface BasketViewState {
    * back to null for that reason.
    */
   readonly lists: ReadonlySet<string> | null;
+  /**
+   * Only what the household usually buys at the chosen shop's chain (velista
+   * `0104`). Off by default and **never remembered**, like {@link lists}.
+   *
+   * It means nothing without a shop, and it does nothing until the read at that
+   * shop has answered: the rows' `usual` is counted against the read's chain, and a
+   * read still out at a newly chosen shop describes the last one. See
+   * {@link basketUsualApplies}.
+   */
+  readonly usual: boolean;
 }
+
+/**
+ * Below how many purchases here a kept row says how many it was (velista `0104`).
+ *
+ * A row bought here five or six times of its last six is simply what is bought
+ * here, and a sentence under it would say nothing the filter has not already
+ * said. Under five, the number is worth reading: "2 of the last 6" is a line the
+ * household buys here sometimes, and elsewhere as often.
+ */
+export const BASKET_USUAL_MESSAGE_BELOW = 5;
 
 /** The view every basket opens on, and what {@link basketViewChips} measures against. */
 export const DEFAULT_BASKET_VIEW_STATE: BasketViewState = {
@@ -67,6 +93,7 @@ export const DEFAULT_BASKET_VIEW_STATE: BasketViewState = {
   grouping: 'none',
   shop: null,
   lists: null,
+  usual: false,
 };
 
 /**
@@ -210,6 +237,16 @@ export interface BasketViewRow {
    * `unlisted` does, and that is `0078`'s rule unchanged.
    */
   readonly shelf: BasketShelfMark | null;
+  /**
+   * "Bought here {{bought}} of the last {{of}} times", as its two numbers, or null
+   * (velista `0104`).
+   *
+   * Only while the usual filter is on, only on a row the server says is `HERE`, and
+   * only when `bought` is under {@link BASKET_USUAL_MESSAGE_BELOW}. The numbers are
+   * the server's, passed through untouched. With the filter off, every row carries
+   * null, so nothing about the page changes until somebody asks for it.
+   */
+  readonly usual: Pick<BasketRowUsual, 'bought' | 'of'> | null;
 }
 
 /**
@@ -299,8 +336,8 @@ const NOT_LISTED_SECTION_KEY = 'not-listed';
  *
  * ## Three steps, in this order and no other
  *
- * 1. **Filter.** The search (`0074`) and the list filter (section 8.2) decide
- *    which rows stay.
+ * 1. **Filter.** The search (`0074`), the list filter (section 8.2) and the usual
+ *    filter (velista `0104`) decide which rows stay.
  * 2. **Order.** The server's order, or A to Z.
  * 3. **Group.** The ordered rows are cut into sections.
  *
@@ -332,10 +369,92 @@ export function composeBasketView(
   // hides eight rows must not change what the ninth says about the shop, and the
   // "has this shop priced anything" test below is a fact about the basket.
   const prices = priceView(rows, state, context);
-  const kept = filterRows(rows, state, context);
+  const usual = basketUsualApplies(state, context);
+  const kept = keepUsual(filterRows(rows, state, context), usual);
   const ordered = orderRows(kept, state, context);
   const sunk = sinkUnlisted(ordered, prices);
-  return groupRows(sunk, state, context, prices);
+  return groupRows(sunk, state, context, { prices, usual });
+}
+
+/**
+ * Whether the usual filter is on **and** has something to filter on (velista
+ * `0104`).
+ *
+ * The switch is on, a shop is chosen, and the read the rows came from was made at
+ * it. While a read at a newly chosen shop is still out the rows' `usual` counts
+ * the last shop's chain, so nothing is hidden and nothing is said until the answer
+ * lands, which is the wait `0102` already makes the prices take.
+ */
+export function basketUsualApplies(
+  state: Pick<BasketViewState, 'shop' | 'usual'>,
+  context: Pick<BasketViewContext, 'shop'>
+): boolean {
+  return state.usual && basketReadAtShop(state, context);
+}
+
+/**
+ * Whether the usual filter keeps one row (velista `0104`; backend `0165`,
+ * section 1).
+ *
+ * `NEVER_BOUGHT` and `HERE` stay, and every other state goes: `ELSEWHERE`, and
+ * `NO_SHOP_KNOWN`, which is a separate state so that keeping it is one line here if
+ * the first weeks prove it should be kept (backend `0165`, section 3).
+ *
+ * Two more rows stay, and neither is a state. A `REMOVED` row passes every filter,
+ * for the reason it also sinks. And a row with no `usual` at all is kept, because
+ * nobody has said where it is bought: a read at a shop answers it on every row, so
+ * this is a row a write put on the screen before the next read, usually one
+ * somebody has just added, and hiding it would take it away under their thumb.
+ */
+export function keptByUsual(row: BasketRow): boolean {
+  if (row.state === 'REMOVED' || row.usual === null) {
+    return true;
+  }
+  const state = row.usual.state;
+  return state === 'NEVER_BOUGHT' || state === 'HERE';
+}
+
+/**
+ * The usual filter, after the search and the lists and before the order.
+ *
+ * It **hides and does nothing else**. The rows it keeps are handed to the order
+ * exactly as they arrived, so they come out in the order they had with it off: it
+ * never reorders, groups or sinks a row by where it is bought (velista `0104`).
+ */
+function keepUsual(
+  rows: readonly BasketRow[],
+  applies: boolean
+): readonly BasketRow[] {
+  return applies ? rows.filter(keptByUsual) : rows;
+}
+
+/** What a drawn row says about the chosen shop, decided once per basket. */
+interface RowNotes {
+  readonly prices: PriceView | null;
+  /** Whether the usual filter applies, and so whether a kept row may say why. */
+  readonly usual: boolean;
+}
+
+/**
+ * The message under one kept row, or null (velista `0104`).
+ *
+ * `HERE` with fewer than {@link BASKET_USUAL_MESSAGE_BELOW} purchases here. A row
+ * never bought stays with nothing under it, because there is nothing to count.
+ */
+function usualNote(
+  row: BasketRow,
+  applies: boolean
+): Pick<BasketRowUsual, 'bought' | 'of'> | null {
+  const usual = row.usual;
+  if (
+    !applies ||
+    usual === null ||
+    usual.state !== 'HERE' ||
+    usual.bought >= BASKET_USUAL_MESSAGE_BELOW
+  ) {
+    return null;
+  }
+  return { bought: usual.bought, of: usual.of };
 }
 
 /**
@@ -619,15 +738,15 @@ function groupRows(
   rows: readonly BasketRow[],
   state: BasketViewState,
   context: BasketViewContext,
-  prices: PriceView | null
+  notes: RowNotes
 ): readonly BasketViewSection[] {
   if (state.grouping === 'category') {
-    return byCategory(rows, context, prices);
+    return byCategory(rows, context, notes);
   }
   if (state.grouping === 'list') {
-    return byList(rows, context, prices);
+    return byList(rows, context, notes);
   }
-  return ungrouped(rows, prices);
+  return ungrouped(rows, notes);
 }
 
 /**
@@ -647,8 +766,9 @@ function groupRows(
  */
 function ungrouped(
   rows: readonly BasketRow[],
-  prices: PriceView | null
+  notes: RowNotes
 ): readonly BasketViewSection[] {
+  const prices = notes.prices;
   const listed: BasketRow[] = [];
   const notListed: BasketRow[] = [];
 
@@ -661,11 +781,11 @@ function ungrouped(
   }
 
   const sections = [
-    section(ALL_SECTION_KEY, null, null, rowsOf(listed, prices), false),
+    section(ALL_SECTION_KEY, null, null, rowsOf(listed, notes), false),
   ];
   if (notListed.length > 0 && prices !== null) {
     sections.push(
-      notListedSection(prices.chain, rowsOf(notListed, prices), false)
+      notListedSection(prices.chain, rowsOf(notListed, notes), false)
     );
   }
   return sections;
@@ -700,7 +820,7 @@ function ungrouped(
 function byCategory(
   rows: readonly BasketRow[],
   context: BasketViewContext,
-  prices: PriceView | null
+  notes: RowNotes
 ): readonly BasketViewSection[] {
   // Insertion ordered, which is what makes a section's place its first row's
   // place. A `Map` guarantees that; an object keyed on the same strings would not.
@@ -731,7 +851,7 @@ function byCategory(
         `category:${category}`,
         { kind: 'key', key: `basket.category.${category}` },
         null,
-        rowsOf(held, prices),
+        rowsOf(held, notes),
         true
       )
     );
@@ -743,7 +863,7 @@ function byCategory(
         NO_CATEGORY_SECTION_KEY,
         { kind: 'key', key: 'basket.group.noCategory' },
         'basket.group.noCategoryHint',
-        rowsOf(noCategory, prices),
+        rowsOf(noCategory, notes),
         true
       )
     );
@@ -775,8 +895,9 @@ function byCategory(
 function byList(
   rows: readonly BasketRow[],
   context: BasketViewContext,
-  prices: PriceView | null
+  notes: RowNotes
 ): readonly BasketViewSection[] {
+  const prices = notes.prices;
   const lists = new Map<string, BasketViewRow[]>();
   const others: BasketViewRow[] = [];
 
@@ -790,6 +911,7 @@ function byList(
         entry,
         priceMark: prices?.marks.get(row.rowKey) ?? null,
         shelf: prices?.shelves.get(row.rowKey) ?? null,
+        usual: usualNote(row, notes.usual),
       };
 
       const listId = entry.listId;
@@ -863,14 +985,16 @@ function notListedSection(
 /** A run of rows as rows about themselves, which is every grouping but by list. */
 function rowsOf(
   rows: readonly BasketRow[],
-  prices: PriceView | null
+  notes: RowNotes
 ): readonly BasketViewRow[] {
+  const prices = notes.prices;
   return rows.map((row) => ({
     key: row.rowKey,
     row,
     entry: null,
     priceMark: prices?.marks.get(row.rowKey) ?? null,
     shelf: prices?.shelves.get(row.rowKey) ?? null,
+    usual: usualNote(row, notes.usual),
   }));
 }
 
@@ -1075,6 +1199,16 @@ export function basketViewChips(
     });
   }
 
+  // Only with a shop, which is the only time the switch is drawn: a chip for a
+  // filter the sheet has no control for could not be understood or turned off.
+  if (state.usual && state.shop !== null) {
+    chips.push({
+      property: 'usual',
+      key: 'basket.view.usual.chip',
+      args: null,
+    });
+  }
+
   const lists = state.lists;
   if (lists !== null) {
     const kept = [...lists];
@@ -1101,7 +1235,7 @@ export function basketViewChips(
   return chips;
 }
 
-/** How many of the four properties are not at their default, for the badge. */
+/** How many of the five properties are not at their default, for the badge. */
 export function basketViewActiveCount(state: BasketViewState): number {
   let count = 0;
   if (state.order !== DEFAULT_BASKET_VIEW_STATE.order) {
@@ -1114,6 +1248,9 @@ export function basketViewActiveCount(state: BasketViewState): number {
     count += 1;
   }
   if (state.lists !== null) {
+    count += 1;
+  }
+  if (state.usual && state.shop !== null) {
     count += 1;
   }
   return count;

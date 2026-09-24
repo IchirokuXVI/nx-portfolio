@@ -50,6 +50,7 @@ function line(
     optionIds: [],
     touchedBy: null,
     touchedAt: null,
+    usual: null,
     entries: (lists.length === 0 ? [null] : lists).map((listId) => ({
       lineId: `zl-${rowKey}-${listId ?? 'none'}`,
       listId,
@@ -655,3 +656,110 @@ function text(
     (node?.nativeElement as HTMLElement | undefined)?.textContent?.trim() ?? ''
   );
 }
+
+/**
+ * Only what I usually buy here (velista `0104`).
+ *
+ * The switch exists only once a shop is chosen, a basket's own locked shop
+ * included, and it applies at once like every other control in this sheet.
+ */
+describe('FilterSheet: the usual switch', () => {
+  const MERCADONA_SCOPE = scope('s-merca', 'Mercadona', [
+    'Ronda de los Tejares 32',
+  ]);
+
+  function usualSwitch(
+    fixture: ReturnType<typeof render>['fixture']
+  ): HTMLInputElement | null {
+    return (
+      (fixture.debugElement.query(By.css('input[role="switch"]'))
+        ?.nativeElement as HTMLInputElement | undefined) ?? null
+    );
+  }
+
+  it('is absent while no shop is chosen', () => {
+    const { fixture } = render({
+      lines: OWNER_LINES,
+      scopes: [MERCADONA_SCOPE],
+    });
+
+    expect(usualSwitch(fixture)).toBeNull();
+  });
+
+  it('is drawn off below Buying at once a shop is chosen', () => {
+    const { fixture, view } = render({
+      lines: OWNER_LINES,
+      scopes: [MERCADONA_SCOPE],
+    });
+
+    view.setShop('s-merca-0');
+    fixture.detectChanges();
+
+    const control = usualSwitch(fixture);
+    expect(control).not.toBeNull();
+    expect(control?.type).toBe('checkbox');
+    expect(control?.checked).toBe(false);
+    expect(text(fixture, '.usual .choice-title')).toBe(
+      'basket.view.usual.label'
+    );
+
+    // Below the shop fieldset, and before the lists.
+    const order = fixture.debugElement
+      .queryAll(By.css('.shops, .usual'))
+      .map((node) => (node.nativeElement as HTMLElement).classList[1]);
+    expect(order).toEqual(['shops', 'usual']);
+  });
+
+  it('turns the filter on and off at once, and goes with the shop', () => {
+    const { fixture, view } = render({
+      lines: OWNER_LINES,
+      scopes: [MERCADONA_SCOPE],
+    });
+    view.setShop('s-merca-0');
+    fixture.detectChanges();
+
+    const control = usualSwitch(fixture);
+    if (control === null) {
+      throw new Error('the switch was not drawn');
+    }
+    control.click();
+    fixture.detectChanges();
+    expect(view.usual()).toBe(true);
+
+    control.click();
+    fixture.detectChanges();
+    expect(view.usual()).toBe(false);
+
+    control.click();
+    view.setShop(null);
+    fixture.detectChanges();
+    expect(view.usual()).toBe(false);
+    expect(usualSwitch(fixture)).toBeNull();
+  });
+
+  it('is drawn, and usable, on a basket started at its own shop', () => {
+    const { fixture, view } = render({
+      lines: OWNER_LINES,
+      meKind: 'GUEST',
+      scopes: [MERCADONA_SCOPE],
+      own: {
+        id: 'loc-mayor',
+        supermarketId: 'sm-merca',
+        chain: { en: 'Mercadona', es: 'Mercadona' },
+        label: null,
+        address: 'Calle Mayor 3',
+        city: 'Córdoba',
+        postalCode: '14001',
+        inProfile: true,
+      },
+    });
+
+    const control = usualSwitch(fixture);
+    expect(control).not.toBeNull();
+    expect(control?.disabled).toBe(false);
+
+    control?.click();
+    fixture.detectChanges();
+    expect(view.usual()).toBe(true);
+  });
+});

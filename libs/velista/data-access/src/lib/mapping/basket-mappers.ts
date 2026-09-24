@@ -7,6 +7,7 @@ import {
   BASKET_ROW_STATES,
   BASKET_STATUS_FALLBACK,
   BASKET_STATUSES,
+  BASKET_USUAL_STATES,
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
   PRODUCT_CATEGORIES,
@@ -27,6 +28,7 @@ import {
   type BasketRow,
   type BasketRowEntry,
   type BasketRowResult,
+  type BasketRowUsual,
   type BasketSession,
   type BasketShareLink,
   type BasketShop,
@@ -263,6 +265,35 @@ export function toBasketRow(raw: unknown): BasketRow | null {
     touchedBy: nullableStr(raw['touchedBy']),
     touchedAt: date(raw['touchedAt']),
     entries,
+    usual: toBasketRowUsual(raw['usual']),
+  };
+}
+
+/**
+ * From `BasketRowUsualView`: how often a row was bought at the read's chain
+ * (backend `0165`, section 2; velista `0104`).
+ *
+ * Null for anything but a record with a state this build knows. That covers the
+ * wire's own null, which is every row of a read with no shop and the row every
+ * write answers, and it covers a state added after this build: a row with no
+ * `usual` is kept by the filter and carries no message, which is the safe way to
+ * misunderstand one.
+ *
+ * The two numbers are **read, never worked out**. Floored at zero because a
+ * negative count is a defect rather than a number; nothing else is done to them.
+ */
+function toBasketRowUsual(raw: unknown): BasketRowUsual | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const state = oneOfOrNull(raw['state'], BASKET_USUAL_STATES);
+  if (state === null) {
+    return null;
+  }
+  return {
+    state,
+    bought: atLeastZero(raw['bought']),
+    of: atLeastZero(raw['of']),
   };
 }
 

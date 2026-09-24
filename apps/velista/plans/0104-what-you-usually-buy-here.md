@@ -1,3 +1,5 @@
+> **PR:** [#483](https://github.com/IchirokuXVI/nx-portfolio/pull/483)
+
 # 0104: what you usually buy here
 
 > **Mock first.** There is no mock for this plan yet. The session that builds it adds to

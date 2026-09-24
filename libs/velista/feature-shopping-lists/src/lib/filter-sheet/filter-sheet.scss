@@ -229,3 +229,56 @@
 .choice-outside {
   margin-block-start: var(--app-space-2);
 }
+
+// The usual filter's own card, under BUYING AT and about it, so it has no legend of
+// its own (velista 0104).
+.usual .choice {
+  min-block-size: var(--app-space-10);
+}
+
+// A switch drawn over the native checkbox, which stays the control: it keeps the
+// switch role, the keyboard and the label's tap. The track is the size the mock
+// draws, off in the sunken surface with a strong border, on in the action colour,
+// and the knob travels so the state never rests on colour alone.
+.switch {
+  position: relative;
+  flex: none;
+  inline-size: calc(var(--app-space-10) - var(--app-space-2));
+  block-size: calc(var(--app-space-7) + var(--app-space-2));
+  margin: 0 var(--app-space-2) 0 0;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  appearance: none;
+  cursor: pointer;
+  transition: background-color var(--app-motion-fast) var(--app-motion-ease);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block-start: var(--app-space-hair);
+    inset-inline-start: var(--app-space-hair);
+    inline-size: var(--app-space-6);
+    block-size: var(--app-space-6);
+    border-radius: var(--app-radius-full);
+    background: var(--app-text-muted);
+    transition:
+      transform var(--app-motion-fast) var(--app-motion-ease),
+      background-color var(--app-motion-fast) var(--app-motion-ease);
+  }
+
+  &:checked {
+    border-color: var(--app-action-bg);
+    background: var(--app-action-bg);
+
+    &::before {
+      background: var(--app-text-on-action);
+      transform: translateX(var(--app-space-5));
+    }
+  }
+
+  // Right to left, the knob starts at the other end and travels the other way.
+  &:dir(rtl):checked::before {
+    transform: translateX(calc(-1 * var(--app-space-5)));
+  }
+}

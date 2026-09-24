@@ -89,6 +89,7 @@ function line(overrides: Partial<BasketRow> = {}): BasketRow {
     optionIds: [],
     touchedBy: null,
     touchedAt: null,
+    usual: null,
     entries: [entry('l1', 'zl1', 3), entry('l2', 'zl2', 1)],
     ...overrides,
   };

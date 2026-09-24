@@ -1225,7 +1225,11 @@ export class BasketStore {
     }
 
     const served = new Set(held.lists.map((ref) => ref.listId));
-    const row = restrictRowToServedLists(result.row, served);
+    const row = withHeldUsual(
+      restrictRowToServedLists(result.row, served),
+      held.rows,
+      rowKey
+    );
     const gone = new Set(
       [rowKey, result.replacedRowKey].filter(
         (key): key is string => key !== null
@@ -1526,4 +1530,31 @@ export class BasketStore {
  */
 function isShopLocked(error: unknown): boolean {
   return error instanceof GatewayError && error.code === 'basket_shop_locked';
+}
+
+/**
+ * The answered row, carrying the `usual` of the row it replaces when it carries
+ * none of its own (velista `0104`).
+ *
+ * A write answers a row with `usual` null (backend `0165`): the settle or revert
+ * that wrote it counts nothing about the chain. Taking that null as the answer
+ * would make a row the usual filter hid jump back onto the screen the moment
+ * somebody settled it, and lose the message under one it kept. So the last read's
+ * value stays until the next read, which is the one place it is counted. Found by
+ * the answered key first and then by the key the request used, which is the same
+ * pair {@link BasketStore} folds the row by.
+ */
+function withHeldUsual(
+  row: BasketRow,
+  held: readonly BasketRow[],
+  requested: string
+): BasketRow {
+  if (row.usual !== null) {
+    return row;
+  }
+  const previous =
+    held.find((current) => current.rowKey === row.rowKey) ??
+    held.find((current) => current.rowKey === requested);
+  const usual = previous?.usual ?? null;
+  return usual === null ? row : { ...row, usual };
 }

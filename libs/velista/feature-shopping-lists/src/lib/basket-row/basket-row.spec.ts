@@ -42,6 +42,7 @@ function line(overrides: Partial<BasketRow> = {}): BasketRow {
     optionIds: [],
     touchedBy: null,
     touchedAt: null,
+    usual: null,
     entries: [entry(null)],
     ...overrides,
   };
@@ -912,4 +913,69 @@ describe('BasketRowComponent: a row skipped earlier', () => {
       (fixture.nativeElement as HTMLElement).querySelector('.skipped')
     ).toBeNull();
   });
+});
+
+/**
+ * "Bought here 2 of the last 6 times" (velista `0104`).
+ *
+ * The row draws what the pipeline hands it and decides nothing: the threshold and
+ * the filter are the pipeline's, and their specs are in `compose-basket-view`.
+ */
+describe('BasketRow: how often it was bought here', () => {
+  async function withUsual(usual: { bought: number; of: number } | null) {
+    const fixture = await render(line());
+    fixture.componentRef.setInput('usual', usual);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('draws the message it is handed, and says it with the row', async () => {
+    const fixture = await withUsual({ bought: 2, of: 6 });
+
+    expect(text(fixture, '.usual')).toBe('basket.view.usual.here');
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.body')
+        ?.getAttribute('aria-label')
+    ).toContain('basket.view.usual.here');
+  });
+
+  it('draws nothing when it is handed nothing', async () => {
+    const fixture = await withUsual(null);
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.usual')
+    ).toBeNull();
+  });
+
+  /**
+   * The copy itself, through a real i18next, because the testing translator echoes
+   * keys: pluralised on the purchases counted, in both languages, with the
+   * server's two numbers and never the street.
+   */
+  it.each([
+    ['en', 6, 2, 'Bought here 2 of the last 6 times'],
+    ['en', 1, 1, 'Bought here the one time it was bought'],
+    ['es', 6, 2, 'Comprado aquí 2 de las últimas 6 veces'],
+    ['es', 1, 1, 'Comprado aquí la única vez que se compró'],
+  ])(
+    'reads in %s for %i counted and %i here',
+    async (lng, of, bought, said) => {
+      const { readFileSync } = await import('fs');
+      const { resolve } = await import('path');
+      const i18next = (await import('i18next')).default;
+      const file = resolve(__dirname, `../../../../ui/assets/i18n/${lng}.json`);
+      const instance = i18next.createInstance();
+      await instance.init({
+        lng,
+        resources: {
+          [lng]: { translation: JSON.parse(readFileSync(file, 'utf8')) },
+        },
+      });
+
+      expect(instance.t('basket.view.usual.here', { count: of, bought })).toBe(
+        said
+      );
+    }
+  );
 });

@@ -290,6 +290,15 @@
   color: var(--app-text-muted);
 }
 
+// "Bought here 2 of the last 6 times" (velista 0104). The secondary role rather
+// than the muted one around it: it is the answer to the filter somebody switched
+// on, and it is information, never a warning.
+.usual {
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
 // Put off for now, or put off earlier (velista 0092, section 3).
 //
 // The same quiet role as the two captions above it, and deliberately **not** an

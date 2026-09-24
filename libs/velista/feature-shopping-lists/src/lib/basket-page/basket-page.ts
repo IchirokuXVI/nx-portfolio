@@ -1310,6 +1310,17 @@ export class BasketPage {
   protected readonly visibleCount = this._view.visibleCount;
 
   /**
+   * Whether the usual filter is what left nothing on the screen, which draws its
+   * own empty state rather than the filter's (velista `0104`).
+   */
+  protected readonly usualHidesAll = this._view.usualHidesAll;
+
+  /** The usual empty state's one button: the switch, off (velista `0104`). */
+  protected showEveryLine(): void {
+    this._view.setUsual(false);
+  }
+
+  /**
    * How many rows the tools bar says are shown.
    *
    * {@link visibleCount} with the `REMOVED` rows taken out, which is the same
@@ -1335,7 +1346,7 @@ export class BasketPage {
    */
   protected readonly pricedAtShop = this._view.pricedAtShop;
 
-  /** How many of the four properties are on, for the filter button's badge. */
+  /** How many of the five properties are on, for the filter button's badge. */
   protected readonly activeCount = this._view.activeCount;
 
   /**
