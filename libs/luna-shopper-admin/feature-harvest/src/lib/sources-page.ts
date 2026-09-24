@@ -29,6 +29,16 @@ import { HarvestShell } from './harvest-shell';
 type Source = Wire.HarvestSupermarketSourceView;
 
 /**
+ * An adapter a source row may be written with.
+ *
+ * Narrower than the view's `EnumsAdapterKey`, which still lists `osm-places`
+ * because rows written before backend plan 0153 hold it. OpenStreetMap is asked
+ * for every postal code and has no row to switch it on, so the upsert refuses
+ * the key and the document no longer offers it (admin plan 0034, section 4).
+ */
+type SourceAdapterKey = Wire.UpsertSupermarketSourceDto['adapterKey'];
+
+/**
  * The adapters `UpsertSupermarketSourceDto` accepts, in the order the picker
  * offers them.
  *
@@ -41,18 +51,22 @@ type Source = Wire.HarvestSupermarketSourceView;
  *
  * The values are the order, and nothing else reads them.
  */
-const ADAPTER_ORDER: Record<Wire.EnumsAdapterKey, number> = {
+const ADAPTER_ORDER: Record<SourceAdapterKey, number> = {
   'mercadona-api': 1,
   'deza-web': 2,
   'carrefour-web': 3,
   'lidl-api': 4,
-  'osm-places': 5,
-  manual: 6,
+  manual: 5,
 };
 
-const ADAPTERS: readonly Wire.EnumsAdapterKey[] = (
-  Object.keys(ADAPTER_ORDER) as Wire.EnumsAdapterKey[]
+const ADAPTERS: readonly SourceAdapterKey[] = (
+  Object.keys(ADAPTER_ORDER) as SourceAdapterKey[]
 ).sort((a, b) => ADAPTER_ORDER[a] - ADAPTER_ORDER[b]);
+
+/** Whether a row's adapter is one a row may still be written with. */
+function writable(key: Wire.EnumsAdapterKey): key is SourceAdapterKey {
+  return key in ADAPTER_ORDER;
+}
 
 /**
  * The settings column as the text an operator edits.
@@ -108,6 +122,11 @@ function configTextOf(
       <h1>{{ 'harvest.sources.heading' | rokuT }}</h1>
       <p class="lead">{{ 'harvest.sources.lead' | rokuT }}</p>
     </header>
+
+    <!-- Read only, and not a row: OpenStreetMap is asked by the postal code
+         queue for every code, so there is nothing about it to switch or
+         configure here (backend plan 0153). -->
+    <p class="always">{{ 'harvest.sources.osmAlways' | rokuT }}</p>
 
     @if (failed()) {
       <lib-harvest-notice (retry)="load()" [absent]="shell.absent()" />
@@ -229,7 +248,9 @@ function configTextOf(
                   (click)="toggleTrust(source)"
                   [attr.aria-pressed]="source.autoImportPlaces"
                   [class.on]="source.autoImportPlaces"
-                  [disabled]="busyId() === source.supermarketId"
+                  [disabled]="
+                    busyId() === source.supermarketId || !writable(source)
+                  "
                   class="toggle"
                   type="button"
                 >
@@ -371,6 +392,13 @@ function configTextOf(
 
     .lead,
     .state {
+      color: var(--admin-ink-muted);
+    }
+
+    .always {
+      margin: 0;
+      padding: var(--admin-space-3) var(--admin-space-4);
+      border-inline-start: 3px solid var(--admin-border);
       color: var(--admin-ink-muted);
     }
 
@@ -572,7 +600,7 @@ export class SourcesPage {
     this.sources().some((row) => row.supermarketId === this.newChainId())
   );
 
-  readonly adapterKey = signal<Wire.EnumsAdapterKey>('manual');
+  readonly adapterKey = signal<SourceAdapterKey>('manual');
   readonly workers = signal(1);
   readonly rate = signal(1);
   /**
@@ -630,7 +658,11 @@ export class SourcesPage {
   edit(source: Source): void {
     this.creating.set(false);
     this.editing.set(source.supermarketId);
-    this.adapterKey.set(source.adapterKey);
+    // A row that still names `osm-places` opens on `manual`, which is what it
+    // can be saved as: the key it holds is refused on the way back in.
+    this.adapterKey.set(
+      writable(source.adapterKey) ? source.adapterKey : 'manual'
+    );
     this.workers.set(source.workers);
     this.rate.set(source.maxRequestsPerSecond);
     this.configText.set(configTextOf(source.config));
@@ -725,12 +757,20 @@ export class SourcesPage {
    * rewrite a configuration nobody was editing.
    */
   async toggleTrust(source: Source): Promise<void> {
+    // The upsert resends the row's adapter, and an `osm-places` row's is one
+    // the server refuses. Its control is disabled; this is the same rule for a
+    // caller that is not the template.
+    const adapterKey = source.adapterKey;
+    if (!writable(adapterKey)) {
+      return;
+    }
+
     this.busyId.set(source.supermarketId);
     this.error.set(null);
 
     try {
       const updated = await this._service.upsertSource(source.supermarketId, {
-        adapterKey: source.adapterKey,
+        adapterKey,
         workers: source.workers,
         maxRequestsPerSecond: source.maxRequestsPerSecond,
         config: source.config,
@@ -809,6 +849,11 @@ export class SourcesPage {
 
   instant(value: string | null): string {
     return formatInstant(value);
+  }
+
+  /** Whether the row can go back through the upsert as it stands. */
+  writable(source: Source): boolean {
+    return writable(source.adapterKey);
   }
 
   /**

@@ -56,6 +56,7 @@ export const ADMIN_CORE_SCHEMA_IDS = {
   listPage: schemaId('admin-core/AdminListPage'),
   basketView: schemaId('admin-core/AdminBasketView'),
   basketRowView: schemaId('admin-core/AdminBasketRowView'),
+  basketSettlementView: schemaId('admin-core/AdminBasketSettlementView'),
   basketDetailView: schemaId('admin-core/AdminBasketDetailView'),
   basketPage: schemaId('admin-core/AdminBasketPage'),
   membershipPage: schemaId('admin-core/AdminMembershipPage'),
@@ -276,8 +277,44 @@ const basketRowView = object(
     left: integer({ minimum: 0 }),
     bought: integer({ minimum: 0 }),
     asked: integer({ minimum: 0 }),
+    // Plan 0160: what the row was bought for, reverted ones included.
+    settlements: array(ref(ADMIN_CORE_SCHEMA_IDS.basketSettlementView)),
   },
-  ['rowKey', 'content', 'left', 'bought', 'asked']
+  ['rowKey', 'content', 'left', 'bought', 'asked', 'settlements']
+);
+
+const basketSettlementView = object(
+  ADMIN_CORE_SCHEMA_IDS.basketSettlementView,
+  {
+    id: nonEmptyString(),
+    lineId: nonEmptyString(),
+    itemId: nullableString(),
+    outcome: ref(ENUM_IDS.settlementOutcome),
+    quantity: integer({ minimum: 0 }),
+    pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
+    pricePaidCurrency: nullableString(),
+    priceScopeId: nullableString(),
+    supermarketLocationId: nullableString(),
+    settledByUserId: nullableString(),
+    settledByParticipantId: nullableString(),
+    settledAt: string({ format: 'date-time' }),
+    revertedAt: nullableString(),
+  },
+  [
+    'id',
+    'lineId',
+    'itemId',
+    'outcome',
+    'quantity',
+    'pricePaidCents',
+    'pricePaidCurrency',
+    'priceScopeId',
+    'supermarketLocationId',
+    'settledByUserId',
+    'settledByParticipantId',
+    'settledAt',
+    'revertedAt',
+  ]
 );
 
 const basketDetailView = object(
@@ -557,6 +594,7 @@ export const adminCoreSchemas: JsonSchema[] = [
   listPage,
   basketView,
   basketRowView,
+  basketSettlementView,
   basketDetailView,
   basketPage,
   listZonesRequest,

@@ -4,6 +4,11 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { toGatewayError } from '../gateway-error';
+import {
+  toEntryDecisionsAnswer,
+  type ApplyEntryDecisionsInput,
+  type EntryDecisionsAnswer,
+} from './entry-decisions';
 import type {
   AcceptSourceEntryInput,
   CreateItemFromSourceEntryInput,
@@ -16,6 +21,7 @@ import type {
   PlaceGroupQuery,
   PlaceQuery,
   PostalCodeQuery,
+  RunPriceQuery,
   RunQuery,
   ShopQuery,
   SourceEntryAcceptResult,
@@ -23,6 +29,9 @@ import type {
 
 /** Everything under `/v1/admin/harvest`, which is where all of it already is. */
 const ROOT = '/v1/admin/harvest';
+
+/** Where catalog lists price rows, which a run's written prices are read from. */
+const ITEM_PRICES = '/v1/admin/catalog/item-prices';
 
 /**
  * The harvester's REST surface, as the screens call it (plan 0006, section 1).
@@ -154,6 +163,16 @@ export class HarvestApi implements HarvestServiceI {
     });
   }
 
+  /** A POST to a verb, like import and reject beside it (backend plan 0152). */
+  linkPlace(
+    id: string,
+    input: Wire.LinkDiscoveredPlaceDto
+  ): Promise<Wire.HarvestDiscoveredPlaceView> {
+    return this._send('post', `${ROOT}/places/${segment(id)}/link`, {
+      body: input,
+    });
+  }
+
   /**
    * The one queue, over one flat collection (backend plan 0086, section 10).
    *
@@ -191,6 +210,21 @@ export class HarvestApi implements HarvestServiceI {
   }
 
   /**
+   * A decisions file, applied in one request (admin plan 0035, section 3).
+   *
+   * The answer is read from `unknown`, because a refused file is a 201 whose
+   * body is the whole of what the operator is told.
+   */
+  async applyEntryDecisions(
+    input: ApplyEntryDecisionsInput
+  ): Promise<EntryDecisionsAnswer> {
+    const raw = await this._send<unknown>('post', `${ROOT}/entries/decisions`, {
+      body: input,
+    });
+    return toEntryDecisionsAnswer(raw);
+  }
+
+  /**
    * A harvest document, uploaded (backend plan 0086, section 6.2).
    *
    * A plain JSON body, and deliberately not multipart: the producer emits JSON,
@@ -215,6 +249,30 @@ export class HarvestApi implements HarvestServiceI {
    */
   exportRun(id: string): Promise<Readonly<Record<string, unknown>>> {
     return this._send('get', `${ROOT}/runs/${segment(id)}/export`);
+  }
+
+  /**
+   * The rows a run wrote, which catalog holds and answers (backend plan 0160).
+   *
+   * The one route in this file outside `/v1/admin/harvest`: the rows are
+   * catalog's, and the run is only the filter.
+   */
+  listRunPrices(
+    runId: string,
+    query: RunPriceQuery
+  ): Promise<Wire.CatalogItemPricePage> {
+    return this._send('get', ITEM_PRICES, {
+      params: toParams({ ...query, runId }),
+    });
+  }
+
+  listItemEntries(
+    itemId: string,
+    query: PageQuery
+  ): Promise<Wire.HarvestItemSourceEntryPage> {
+    return this._send('get', `${ROOT}/items/${segment(itemId)}/entries`, {
+      params: toParams(query),
+    });
   }
 
   /**

@@ -19,6 +19,7 @@ import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import { firstValueFrom } from 'rxjs';
 import type { SeededSpelling } from './brand-seed';
 import {
+  BRAND_REGISTER_MANY_PATH,
   BRAND_REGISTER_SUGGESTION_PATH,
   brandSource,
   brandSpellingsSource,
@@ -60,6 +61,35 @@ export type SuggestionRegistered = Wire.CatalogRegisterBrandSuggestionResult;
 
 /** A key the queue carries that no registered brand holds. */
 export type BrandSuggestion = Wire.HarvestBrandSuggestionView;
+
+/** One name in a batch register, as the person decided it. */
+export interface BrandBatchEntry {
+  readonly label: string;
+  readonly privateLabelSupermarketId?: string | null;
+}
+
+/**
+ * What a batch did to one name (backend plan 0160).
+ *
+ * `CREATED` is a new brand, `EXISTS` is a brand that already held the key the
+ * name makes, and `REFUSED` is a name the server would not register.
+ */
+export type BrandBatchOutcome = 'CREATED' | 'EXISTS' | 'REFUSED';
+
+/**
+ * One name's answer, in this app's own words (rule D4).
+ *
+ * `reasonDetail` is the server's own sentence, shown as it came, because it
+ * names the specific thing that was wrong and no key could.
+ */
+export interface BrandBatchResult {
+  readonly label: string;
+  readonly outcome: BrandBatchOutcome;
+  readonly brandId: string | null;
+  readonly linkedItems: number | null;
+  readonly reasonCode: string | null;
+  readonly reasonDetail: string | null;
+}
 
 /** How many suggestions one page asks for. */
 const SUGGESTION_PAGE_SIZE = 25;
@@ -296,6 +326,60 @@ export class BrandsGateway implements ResourceGateway<Brand> {
     }
   }
 
+  /**
+   * Register many names in one request, one answer per name (admin plan 0035,
+   * section 1).
+   *
+   * **One request, many decisions.** A person chose every name on the list, so
+   * each is still a decision; the batch only saves the round trips. The answers
+   * come back in the order the names were sent, and a name the server said
+   * nothing about is read as refused, because that is the reading that leaves it
+   * selected for another try rather than claiming it landed.
+   *
+   * The same two halves as {@link registerSuggestion}: over HTTP when the app
+   * bound it, and against the memory table otherwise.
+   */
+  async registerMany(
+    entries: readonly BrandBatchEntry[]
+  ): Promise<readonly BrandBatchResult[]> {
+    if (this._gateways instanceof ResourceMemoryGateways) {
+      const results: BrandBatchResult[] = [];
+      for (const entry of entries) {
+        results.push(await this._registerOneInMemory(entry));
+      }
+      return results;
+    }
+    const http = this._http;
+    const urls = this._urls;
+    if (http === null || urls === null) {
+      throw new Error(
+        'BrandsGateway.registerMany needs HttpClient and ApiUrl when the gateways are not in memory.'
+      );
+    }
+
+    const body: Wire.RegisterBrandsDto = {
+      brands: entries.map((entry) =>
+        entry.privateLabelSupermarketId === undefined ||
+        entry.privateLabelSupermarketId === null
+          ? { label: entry.label }
+          : {
+              label: entry.label,
+              privateLabelSupermarketId: entry.privateLabelSupermarketId,
+            }
+      ),
+    };
+
+    let answer: unknown;
+    try {
+      answer = await firstValueFrom(
+        http.post<unknown>(urls.gateway(BRAND_REGISTER_MANY_PATH), body)
+      );
+    } catch (error) {
+      throw toGatewayError(error);
+    }
+    return toBrandBatchResults(answer, entries);
+  }
+
   /** How each chain spells one brand, in the order the route answers. */
   async spellings(brandId: string): Promise<readonly SeededSpelling[]> {
     const page = await this._spellings.list({ filters: { brandId } });
@@ -393,6 +477,55 @@ export class BrandsGateway implements ResourceGateway<Brand> {
     };
   }
 
+  /**
+   * One name of a batch, against the memory table, the way the server decides
+   * it: a name that makes no key is refused, a key already held exists, and
+   * anything else is created.
+   */
+  private async _registerOneInMemory(
+    entry: BrandBatchEntry
+  ): Promise<BrandBatchResult> {
+    const label = entry.label;
+    const key = brandKey(label.trim());
+    if (key === null) {
+      return {
+        label,
+        outcome: 'REFUSED',
+        brandId: null,
+        linkedItems: null,
+        reasonCode: 'brand_label_empty',
+        reasonDetail: 'The label makes no brand key.',
+      };
+    }
+
+    const holder = await this._holderOf(key);
+    if (holder !== null) {
+      return {
+        label,
+        outcome: 'EXISTS',
+        brandId: holder.id,
+        linkedItems: null,
+        reasonCode: null,
+        reasonDetail: null,
+      };
+    }
+
+    const created = await this._createBrand(
+      label.trim(),
+      key,
+      entry.privateLabelSupermarketId ?? null,
+      null
+    );
+    return {
+      label,
+      outcome: 'CREATED',
+      brandId: created.id,
+      linkedItems: 0,
+      reasonCode: null,
+      reasonDetail: null,
+    };
+  }
+
   /** The brand holding a key in the memory table, or nothing. */
   private async _holderOf(key: string): Promise<Brand | null> {
     const page = await this._brands.list({ limit: LINKED_PAGE_SIZE });
@@ -457,5 +590,55 @@ function refusal(code: string, status: number, brandId?: string): GatewayError {
     status,
     correlationId: '',
     details: brandId === undefined ? {} : { brandId },
+  });
+}
+
+/**
+ * A batch answer, read from `unknown` into this app's own results (rule D4).
+ *
+ * Matched to the names by position, which is the order the route answers in.
+ * An outcome this app does not know, or a missing answer, reads as `REFUSED`:
+ * the least dangerous reading, because it keeps the name selected rather than
+ * claiming it was registered.
+ */
+export function toBrandBatchResults(
+  answer: unknown,
+  sent: readonly BrandBatchEntry[]
+): readonly BrandBatchResult[] {
+  const results =
+    typeof answer === 'object' &&
+    answer !== null &&
+    Array.isArray((answer as { results?: unknown }).results)
+      ? ((answer as { results: unknown[] }).results as unknown[])
+      : [];
+
+  return sent.map((entry, index) => {
+    const raw = results[index];
+    const row =
+      typeof raw === 'object' && raw !== null
+        ? (raw as Record<string, unknown>)
+        : {};
+    const reason =
+      typeof row['reason'] === 'object' && row['reason'] !== null
+        ? (row['reason'] as Record<string, unknown>)
+        : null;
+    const outcome = row['outcome'];
+
+    return {
+      label: typeof row['label'] === 'string' ? row['label'] : entry.label,
+      outcome:
+        outcome === 'CREATED' || outcome === 'EXISTS' ? outcome : 'REFUSED',
+      brandId: typeof row['brandId'] === 'string' ? row['brandId'] : null,
+      linkedItems:
+        typeof row['linkedItems'] === 'number' ? row['linkedItems'] : null,
+      reasonCode:
+        reason !== null && typeof reason['code'] === 'string'
+          ? reason['code']
+          : null,
+      reasonDetail:
+        reason !== null && typeof reason['detail'] === 'string'
+          ? reason['detail']
+          : null,
+    };
   });
 }

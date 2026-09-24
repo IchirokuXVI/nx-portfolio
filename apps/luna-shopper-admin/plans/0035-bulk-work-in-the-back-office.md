@@ -1,3 +1,5 @@
+> **PR:** [#470](https://github.com/IchirokuXVI/nx-portfolio/pull/470)
+
 # 0035 Bulk work in the back office
 
 > Backend half: `apps/luna-shopper-backend/plans/0160` for the brand batch route. The other two
@@ -78,3 +80,29 @@ Stop and ask before: adding a dependency for file parsing, or adding a section.
   result and a refusal.
 - `npx nx test` and `npx nx lint` pass for every touched admin library, and
   `npx nx build luna-shopper-admin` passes.
+
+## Decisions taken while building
+
+- **The generic list learned to tick rows.** "Set group" on the items list needs ticked rows,
+  and the list every resource shares had no selection. A descriptor now names its bulk actions
+  in `actions.bulk`, each one a label and a panel component. The list draws a tick box per row
+  only for a resource that names one, and the panel receives the ticked rows and a `finish`
+  callback. The panel is the review, so a tick still sends nothing. This touches
+  `models` (`BulkAction`, `BulkPanelInputs`), `ui` (`ResourceList`) and `feature-resource`
+  (`ResourceListPage`), which the Scope did not list. No other change gets to the target.
+- **A brand batch links nothing.** `register-many` takes labels, not a spelling and a label, so
+  a label that makes a different key than its row registers another brand and leaves the
+  suggestion behind. The review holds such a line back with a sentence and disables the send.
+  Linking stays the single panel's job. The batch sends no private label chain either: that is
+  a per brand fact, decided in the single panel.
+- **A decisions file decided against another gateway is warned about, not refused.** The CLI
+  refuses it. A browser and a terminal can name the same machine differently, and the route
+  checks every row's expectation before it writes, so a foreign file is refused there anyway.
+- **The product group detail is a component now**, the generic form with "Add items" under
+  it, the way the brand detail is built. That adds the `:id/edit` route the route factory gives
+  every resource with a detail component.
+- **Group assignments send an expectation per product**, the group it was in when the review
+  was drawn, so a product moved by somebody else in between is refused rather than moved again.
+- **`people-seed.ts` gained `settlements: []` on its three basket rows.** Backend plan 0160 made
+  the field required, and without it `nx build luna-shopper-admin` failed before any change
+  here. Admin plan 0033 draws settlements and is free to replace these with real seed rows.

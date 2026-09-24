@@ -79,6 +79,10 @@ export interface RowAction {
       />
     }
 
+    <!-- What the page draws for ticked rows: a count, the bulk actions, and
+         the panel one of them opened (admin plan 0035, section 2). -->
+    <ng-content select="[listBulk]" />
+
     @if (blockedBy(); as needed) {
       <p class="state" role="status">
         {{ 'resource.list.blocked' | rokuT: { filters: needed } }}
@@ -104,7 +108,21 @@ export interface RowAction {
     } @else if (compact()) {
       <ul class="cards">
         @for (row of rows(); track row.id) {
-          <li class="card">
+          <li [class.picked]="isSelected(row.id)" class="card">
+            @if (selectable()) {
+              <label class="pick">
+                <input
+                  (change)="pick.emit(row.id)"
+                  [checked]="isSelected(row.id)"
+                  [disabled]="selectionLocked()"
+                  type="checkbox"
+                  data-pick-row
+                />
+                <span>{{
+                  'resource.bulk.selectRow' | rokuT: { name: row.title }
+                }}</span>
+              </label>
+            }
             @if (canOpen()) {
               <button (click)="open.emit(row.id)" class="title" type="button">
                 {{ row.title }}
@@ -151,6 +169,13 @@ export interface RowAction {
         <table>
           <thead>
             <tr>
+              @if (selectable()) {
+                <th class="pick-cell" scope="col">
+                  <span class="sr-only">{{
+                    'resource.bulk.selectColumn' | rokuT
+                  }}</span>
+                </th>
+              }
               @for (field of columns(); track field.name) {
                 <th scope="col">{{ field.label | rokuT }}</th>
               }
@@ -163,7 +188,21 @@ export interface RowAction {
           </thead>
           <tbody>
             @for (row of rows(); track row.id) {
-              <tr>
+              <tr [class.picked]="isSelected(row.id)">
+                @if (selectable()) {
+                  <td class="pick-cell">
+                    <input
+                      (change)="pick.emit(row.id)"
+                      [attr.aria-label]="
+                        'resource.bulk.selectRow' | rokuT: { name: row.title }
+                      "
+                      [checked]="isSelected(row.id)"
+                      [disabled]="selectionLocked()"
+                      type="checkbox"
+                      data-pick-row
+                    />
+                  </td>
+                }
                 @for (
                   field of columns();
                   track field.name;
@@ -425,6 +464,29 @@ export interface RowAction {
       align-self: center;
     }
 
+    .pick-cell {
+      inline-size: 2.75rem;
+    }
+
+    .pick {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    input[type='checkbox'] {
+      inline-size: 1.25rem;
+      block-size: 1.25rem;
+      accent-color: var(--admin-accent);
+    }
+
+    tr.picked td,
+    .card.picked {
+      background: var(--admin-accent-wash);
+    }
+
     .sr-only {
       position: absolute;
       overflow: hidden;
@@ -498,6 +560,17 @@ export class ResourceList {
   /** The row something is happening to, so its controls stop taking clicks. */
   readonly busyRowId = input<string | null>(null);
 
+  /**
+   * Whether rows draw a tick box, for a resource with bulk actions (admin plan
+   * 0035, section 2). A tick only marks a row: what happens to the ticked rows
+   * is the page's business, and always goes through a review first.
+   */
+  readonly selectable = input(false);
+  /** The ticked rows, by id. */
+  readonly selected = input<ReadonlySet<string>>(new Set());
+  /** While a bulk panel is open, the ticks it was opened with hold still. */
+  readonly selectionLocked = input(false);
+
   readonly filters = input<readonly FilterDescriptor[]>([]);
   readonly filterValues = input<Readonly<Record<string, string>>>({});
   readonly sorts = input<readonly EnumOption[]>([]);
@@ -517,6 +590,12 @@ export class ResourceList {
   readonly act = output<RowAction>();
   readonly filterChange = output<FilterChange>();
   readonly orderChange = output<string>();
+  /** A row's tick box was pressed. */
+  readonly pick = output<string>();
+
+  isSelected(id: string): boolean {
+    return this.selected().has(id);
+  }
 
   /** One cell, or an empty one when the row view has none for this field. */
   cellOf(row: ResourceRowView, name: string) {

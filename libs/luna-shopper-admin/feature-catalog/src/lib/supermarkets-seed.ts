@@ -20,7 +20,9 @@ export const SUPERMARKET_SEED: readonly Wire.CatalogSupermarketView[] = [
     logoUrl: null,
     websiteUrl: 'https://www.mercadona.es',
     externalBrandKey: 'Q1888874',
-    defaultPriceScopeId: null,
+    // The national scope, as every chain gets since backend plan 0153. The
+    // others carry none, which is what a chain made before it reads as.
+    defaultPriceScopeId: 'ps_mercadona_national',
   },
   {
     id: 'sm_bonpreu',

@@ -11,6 +11,8 @@ import {
   UNIT_OF_MEASURE_OPTIONS,
 } from './catalog-enums';
 import { itemSource } from './catalog-sources';
+import { ItemFormPage } from './item-form-page';
+import { SetGroupPanel } from './set-group-panel';
 
 /** A product, as the gateway describes it. */
 export type Item = Wire.CatalogItemView;
@@ -44,6 +46,10 @@ export const ITEMS = defineResource<Item>({
   labels: { one: 'catalog.items.one', many: 'catalog.items.many' },
 
   title: (row, locales) => localizedTextValue(row.name, locales),
+
+  // The generic form, with the source products panel and the way to the
+  // product's prices at every scope below it (admin plan 0033).
+  editor: ItemFormPage,
 
   fields: [
     { kind: 'text', name: 'id', label: 'catalog.items.id', editable: false },
@@ -156,7 +162,19 @@ export const ITEMS = defineResource<Item>({
     },
   ],
 
-  actions: { create: true, edit: true, delete: true },
+  actions: {
+    create: true,
+    edit: true,
+    delete: true,
+    // Many products into one group, through a review (admin plan 0035).
+    bulk: [
+      {
+        name: 'setGroup',
+        label: 'catalog.items.setGroup.action',
+        panel: SetGroupPanel,
+      },
+    ],
+  },
 
   gateway: () => inject(RESOURCE_GATEWAYS).for<Item>(itemSource()),
 });

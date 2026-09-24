@@ -39,6 +39,7 @@ import {
   type ItemPage,
   type ItemPricePage,
   type ItemPriceView,
+  type ItemScopePricesPage,
   type ItemView,
   type PricePolicyListView,
   type PricePolicyView,
@@ -46,6 +47,7 @@ import {
   type PriceScopeView,
   type ProductGroupPage,
   type ProductGroupView,
+  type RegisterBrandsResult,
   type RegisterBrandSuggestionResult,
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityResult,
@@ -57,7 +59,11 @@ import {
   type SupermarketView,
   type UpdateBrandResult,
 } from '@portfolio/luna-shopper/contracts';
-import { MAX_PAGE_SIZE, UuidParam } from '@portfolio/luna-shopper/platform';
+import {
+  MAX_PAGE_SIZE,
+  PageQueryDto,
+  UuidParam,
+} from '@portfolio/luna-shopper/platform';
 import { adminCredential } from '../admin/admin-credential';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
 import type { CurrentAdmin } from '../admin/admin-jwt.strategy';
@@ -91,6 +97,7 @@ import {
   ListItemPricesQueryDto,
   ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
+  RegisterBrandsDto,
   RegisterBrandSuggestionDto,
   SetSupermarketItemAvailabilityDto,
   SetSupermarketLocationItemAvailabilityDto,
@@ -415,6 +422,31 @@ export class AdminCatalogItemsController {
     });
   }
 
+  /**
+   * The product at every scope that prices it (plan 0160), paged by scope.
+   *
+   * Each scope carries the current row of every kind the price decision
+   * weighed there, the row it chose, and `shownBecause`, which the decision
+   * function returns beside its answer rather than a second copy of the rule
+   * working it out. `protectedUntil` and the overrides snapshot come with an
+   * `ADMIN` row, so an operator reads when its protection ends and what a
+   * source would have to say to displace it.
+   */
+  @Get(':id/prices')
+  @ApiContractResponse(ITEM_PRICE_PATTERNS.byItem)
+  prices(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Query() query: PageQueryDto
+  ): Promise<ItemScopePricesPage> {
+    return this.nats.send<ItemScopePricesPage>(ITEM_PRICE_PATTERNS.byItem, {
+      ...adminCredential(admin),
+      itemId: id,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
   /** The only place an item joins a product group, and it is a person doing it. */
   @Patch(':id')
   @ApiContractResponse(ITEM_PATTERNS.update)
@@ -623,6 +655,31 @@ export class AdminCatalogBrandsController {
       BRAND_PATTERNS.registerSuggestion,
       { ...adminCredential(admin), ...dto }
     );
+  }
+
+  /**
+   * Register many brands, one outcome per name (plan 0160).
+   *
+   * A literal path above `:id`, like `register-suggestion`. A person still
+   * chose every name on the list, so each registration stays a decision; the
+   * batch only saves the round trips. Each name is its own transaction and
+   * answers `CREATED`, `EXISTS` with the brand holding its key, or `REFUSED`
+   * with the reason, so one refused name never fails the others. The route
+   * answers 201 whatever the outcomes are: the outcomes are the answer.
+   */
+  @Post('register-many')
+  @ApiContractResponse(BRAND_PATTERNS.registerMany, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  registerMany(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: RegisterBrandsDto
+  ): Promise<RegisterBrandsResult> {
+    return this.nats.send<RegisterBrandsResult>(BRAND_PATTERNS.registerMany, {
+      ...adminCredential(admin),
+      brands: dto.brands,
+    });
   }
 
   @Get()
@@ -898,7 +955,15 @@ export class AdminCatalogItemPricesController {
     });
   }
 
-  /** The history for one (item, scope), newest first. */
+  /**
+   * The history for one (item, scope), newest first, or with `runId` the rows
+   * one harvest run wrote (plan 0160).
+   *
+   * A run's rows are the ones it inserted and the ones whose `lastObservedAt`
+   * it moved last, each marked `writtenBy`: `INSERTED` or `CONFIRMED`. A later
+   * run that repeats a price takes the confirmation over, so an old run's
+   * confirmed rows shrink as newer runs confirm them.
+   */
   @Get()
   @ApiContractResponse(ITEM_PRICE_PATTERNS.list)
   list(
@@ -909,6 +974,7 @@ export class AdminCatalogItemPricesController {
       ...adminCredential(admin),
       itemId: query.itemId,
       priceScopeId: query.priceScopeId,
+      runId: query.runId,
       cursor: query.cursor,
       limit: query.limit,
     });

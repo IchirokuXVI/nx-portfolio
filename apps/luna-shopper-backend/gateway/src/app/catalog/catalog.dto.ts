@@ -5,10 +5,12 @@ import {
   IntersectionType,
 } from '@nestjs/swagger';
 import {
+  BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
   BULK_DECISION_MAX_OPERATIONS,
   CONTENT_LOCALES,
   ITEM_LOOKUP_LIMITS,
+  ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS,
   ItemCategory,
   PriceScopeKind,
   PriceSourceKind,
@@ -573,6 +575,48 @@ const ADMIN_WRITABLE_PRICE_KINDS = [
   PriceSourceKind.OFFICIAL_LEAFLET,
 ];
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A hand typed `observedAt`: absent, or an instant no later than now and no
+ * earlier than {@link ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS} days ago (plan
+ * 0160).
+ *
+ * Checked here so the form hears it as a 400 naming the field, and again in
+ * catalog for any other caller on the subject. Protection runs from
+ * `observedAt`, so the window opens backwards only: a past date protects a row
+ * for less time, never more.
+ */
+export function ObservedAtInWindow(): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'observedAtInWindow',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown): boolean {
+          if (value === undefined || value === null) {
+            return true;
+          }
+          const at = typeof value === 'string' ? Date.parse(value) : NaN;
+          if (Number.isNaN(at)) {
+            // `IsDateString` names the malformed case.
+            return true;
+          }
+          const now = Date.now();
+          return (
+            at <= now &&
+            at >= now - ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS * DAY_MS
+          );
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return `${args.property} must not be in the future, and must be within the last ${ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS} days`;
+        },
+      },
+    });
+  };
+}
+
 /**
  * One price row, typed in by an operator.
  *
@@ -640,10 +684,11 @@ export class AddItemPriceDto {
   @ApiPropertyOptional({
     nullable: true,
     format: 'date-time',
-    description: 'When the price was observed. Defaults to now.',
+    description: `When the price was observed. Defaults to now. At most ${ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS} days back, and never in the future. An ADMIN row is protected for seven days from this instant, so a past date protects it for less time, never more.`,
   })
   @IsOptional()
   @IsDateString()
+  @ObservedAtInWindow()
   observedAt?: string | null;
 
   @ApiPropertyOptional({
@@ -666,15 +711,65 @@ export class AddItemPriceDto {
   validUntil?: string | null;
 }
 
-/** The history of one (item, scope), newest first (plan 0080, section 9). */
+/**
+ * The history of one (item, scope), newest first (plan 0080, section 9), or
+ * the rows one harvest run wrote (plan 0160).
+ *
+ * `itemId` and `priceScopeId` together name a history. `runId` names a run,
+ * optionally narrowed to one `itemId`, and takes no scope.
+ */
 export class ListItemPricesQueryDto extends PageQueryDto {
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Required without `runId`. With `runId` it narrows the run to one product.',
+  })
+  @ValidateIf(
+    (dto: ListItemPricesQueryDto) => !dto.runId || dto.itemId !== undefined
+  )
   @IsUUID()
-  itemId!: string;
+  itemId?: string;
 
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Required without `runId`, and refused with it.',
+  })
+  @ValidateIf(
+    (dto: ListItemPricesQueryDto) =>
+      !dto.runId || dto.priceScopeId !== undefined
+  )
   @IsUUID()
-  priceScopeId!: string;
+  @NotWithRunId()
+  priceScopeId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The rows this run inserted, and the rows whose `lastObservedAt` it moved last. Each carries `writtenBy`.',
+  })
+  @IsOptional()
+  @IsUUID()
+  runId?: string;
+}
+
+/** A query field a run read does not take (plan 0160). */
+function NotWithRunId(): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'notWithRunId',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown, args: ValidationArguments): boolean {
+          const query = args.object as { runId?: unknown };
+          return value === undefined || query.runId === undefined;
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return `${args.property} is not allowed with runId`;
+        },
+      },
+    });
+  };
 }
 
 /** Whether a scope carries one product. */
@@ -1370,6 +1465,49 @@ export class UpdateBrandDto {
   @ValidateIf((dto: UpdateBrandDto) => dto.canonicalBrandId !== null)
   @IsUUID()
   canonicalBrandId?: string | null;
+}
+
+/** One name of a brand batch (plan 0160): a label, and a chain if it is a private label. */
+export class RegisterBrandsEntryDto {
+  @ApiProperty({ maxLength: BRAND_LABEL_MAX_LENGTH })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(BRAND_LABEL_MAX_LENGTH)
+  label!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The chain that owns this private label. Null, and usually absent, for an ordinary brand.',
+  })
+  @IsOptional()
+  @ValidateIf(
+    (dto: RegisterBrandsEntryDto) => dto.privateLabelSupermarketId !== null
+  )
+  @IsUUID()
+  privateLabelSupermarketId?: string | null;
+}
+
+/**
+ * Register many brands at once (plan 0160).
+ *
+ * A person still chose every name on the list, which keeps each registration a
+ * decision. Each name is its own transaction, and the answer is one outcome per
+ * name, so one refused name never fails the others.
+ */
+export class RegisterBrandsDto {
+  @ApiProperty({
+    type: [RegisterBrandsEntryDto],
+    minItems: 1,
+    maxItems: BRAND_BATCH_MAX,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(BRAND_BATCH_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => RegisterBrandsEntryDto)
+  brands!: RegisterBrandsEntryDto[];
 }
 
 /**

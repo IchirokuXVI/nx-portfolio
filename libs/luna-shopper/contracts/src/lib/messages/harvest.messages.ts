@@ -183,6 +183,15 @@ export const SOURCE_ENTRY_PATTERNS = {
    * spellings, and the answer is capped rather than cut into pages.
    */
   brandSpellings: 'sourceEntry.brandSpellings',
+  /**
+   * The source rows bound to one product, with how many rows of the same
+   * chain share each row's EAN (plan 0160).
+   *
+   * Every row whose `itemId` is the product: `ACTIVE` rows are bound, and a
+   * `CANDIDATE` row carries it as a proposal, which its `status` says. A
+   * shared EAN is how two walk rows of one chain end up on one product.
+   */
+  listByItem: 'sourceEntry.listByItem',
 } as const;
 
 /**
@@ -1252,6 +1261,22 @@ export interface SourceEntryIdRequest extends AdminCredential {
   entryId: string;
 }
 
+/** The source rows that name one product (plan 0160). */
+export interface ListSourceEntriesByItemRequest
+  extends PageQuery, AdminCredential {
+  itemId: string;
+}
+
+/** A source row on the product's own read, with its EAN counted (plan 0160). */
+export interface ItemSourceEntryView extends SourceCatalogEntryView {
+  /**
+   * How many rows of this chain carry this EAN, this row included. More than
+   * one says the chain lists the same barcode twice. Null for a row with no
+   * EAN.
+   */
+  eanSharedBy: number | null;
+}
+
 /** Bind a queued row to a product the catalog already holds. */
 export interface AcceptSourceEntryRequest extends AdminCredential {
   entryId: string;
@@ -1570,6 +1595,7 @@ export type HarvestRunPage = Paginated<HarvestRunView>;
 export type HarvestRunPresetPage = Paginated<HarvestRunPresetView>;
 export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
+export type ItemSourceEntryPage = Paginated<ItemSourceEntryView>;
 export type SourceLocationPage = Paginated<SourceLocationView>;
 export type SupermarketSourcePage = Paginated<SupermarketSourceView>;
 

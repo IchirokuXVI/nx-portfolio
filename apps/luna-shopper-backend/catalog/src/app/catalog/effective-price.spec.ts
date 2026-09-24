@@ -1,4 +1,7 @@
-import { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
+import {
+  PriceShownBecause,
+  PriceSourceKind,
+} from '@portfolio/luna-shopper/contracts';
 import {
   isDisputed,
   resolveEffectivePrice,
@@ -841,5 +844,127 @@ describe('an expired price falls through (plan 0117)', () => {
     const atBoundary = resolveAt([region], day(15));
     expect(atBoundary.stale).toBe(true);
     expect(atBoundary.nextBoundaryAt).toBeNull();
+  });
+});
+
+/**
+ * Why a row is shown (plan 0160). The reason is read from the comparisons that
+ * chose the row, so each case asserts the row and the reason together: a
+ * reason beside the wrong row would be an explanation of a different decision.
+ */
+describe('resolveEffectivePrice: shownBecause (plan 0160)', () => {
+  const typed = adminRow(day(5), 1.29, {
+    OFFICIAL_API: { price: 1.19, unitPrice: null },
+  });
+
+  it('a protected ADMIN row no source disputes is PROTECTED_ADMIN', () => {
+    const crawl = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.19,
+      lastObservedAt: day(6),
+    });
+    const result = resolve([crawl, typed], day(6));
+    expect(result.row).toBe(typed);
+    expect(result.shownBecause).toBe(PriceShownBecause.PROTECTED_ADMIN);
+  });
+
+  it('a disputed ADMIN row is dropped, and the source that disputed it wins on its own terms', () => {
+    const crawl = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.35,
+      lastObservedAt: day(6),
+    });
+    const result = resolve([crawl, typed], day(6));
+    expect(result.row).toBe(crawl);
+    // The ADMIN row is out of the running, so the crawl was the only row left.
+    expect(result.shownBecause).toBe(PriceShownBecause.ONLY_ROW);
+  });
+
+  it('a row that outranks the others on policy priority is POLICY_PRIORITY', () => {
+    const leaflet = row({
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      price: 0.99,
+      lastObservedAt: day(3),
+    });
+    const crawl = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.19,
+      lastObservedAt: day(4),
+    });
+    const result = resolve([crawl, leaflet], day(5));
+    expect(result.row).toBe(leaflet);
+    expect(result.shownBecause).toBe(PriceShownBecause.POLICY_PRIORITY);
+  });
+
+  it('an ADMIN row past its protection competes on priority like any other', () => {
+    const crawl = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.19,
+      lastObservedAt: day(12),
+    });
+    const afterProtection = new Date(day(12).getTime() + 60_000);
+    const result = resolve([crawl, typed], afterProtection);
+    expect(result.row).toBe(crawl);
+    expect(result.shownBecause).toBe(PriceShownBecause.POLICY_PRIORITY);
+  });
+
+  it('a single eligible row is ONLY_ROW', () => {
+    const crawl = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.19,
+      lastObservedAt: day(4),
+    });
+    const result = resolve([crawl], day(5));
+    expect(result.row).toBe(crawl);
+    expect(result.shownBecause).toBe(PriceShownBecause.ONLY_ROW);
+  });
+
+  it('two rows tied on priority are decided by the newer one, which is NEWEST', () => {
+    const tied: PolicyRow[] = POLICIES.map((policy) =>
+      policy.sourceKind === PriceSourceKind.OFFICIAL_WEB
+        ? { ...policy, priority: 20 }
+        : policy
+    );
+    const api = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.19,
+      lastObservedAt: day(3),
+    });
+    const web = row({
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      price: 1.21,
+      lastObservedAt: day(4),
+    });
+    const result = resolve([api, web], day(5), tied);
+    expect(result.row).toBe(web);
+    expect(result.shownBecause).toBe(PriceShownBecause.NEWEST);
+  });
+
+  it('the stale tier is NEWEST among several rows and ONLY_ROW for one', () => {
+    const older = row({
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      price: 1.19,
+      lastObservedAt: day(1),
+    });
+    const newer = row({
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      price: 1.21,
+      lastObservedAt: day(2),
+    });
+
+    const several = resolve([older, newer], day(20));
+    expect(several.stale).toBe(true);
+    expect(several.row).toBe(newer);
+    expect(several.shownBecause).toBe(PriceShownBecause.NEWEST);
+
+    const one = resolve([older], day(20));
+    expect(one.stale).toBe(true);
+    expect(one.shownBecause).toBe(PriceShownBecause.ONLY_ROW);
+  });
+
+  it('no row at all has no reason', () => {
+    const result = resolve([], day(5));
+    expect(result.row).toBeNull();
+    expect(result.shownBecause).toBeNull();
   });
 });

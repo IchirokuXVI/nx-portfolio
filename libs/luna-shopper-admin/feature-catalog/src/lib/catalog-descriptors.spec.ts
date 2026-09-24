@@ -431,6 +431,9 @@ describe('the price form', () => {
         'unitPriceLabel',
         'validFrom',
         'validUntil',
+        // A past date, 30 days back at most (admin plan 0033; backend plan
+        // 0160).
+        'observedAt',
       ].sort()
     );
   });

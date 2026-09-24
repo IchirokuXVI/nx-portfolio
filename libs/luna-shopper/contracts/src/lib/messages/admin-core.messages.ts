@@ -2,7 +2,10 @@ import type { BasketKind } from '../enums/basket.enums';
 import type {
   BasketStatus,
 } from '../enums/basket.enums';
-import type { LineApprovalStatus } from '../enums/list.enums';
+import type {
+  LineApprovalStatus,
+  SettlementOutcome,
+} from '../enums/list.enums';
 import type {
   MembershipStatus,
   ZoneRole,
@@ -606,6 +609,43 @@ export interface AdminBasketRowView {
   bought: number;
   /** `bought + left`, computed, never stored. */
   asked: number;
+  /**
+   * Every settlement made through this basket on the row's lines, oldest
+   * first, including the ones taken back (plan 0160). A reverted one carries
+   * `revertedAt` and counts toward nothing.
+   */
+  settlements: AdminBasketSettlementView[];
+}
+
+/**
+ * One settlement on a basket row, as an operator sees it (plan 0160).
+ *
+ * It serves what a shopper's own history keeps to itself: the shop and who
+ * settled. An operator reads it to check what a row was bought for.
+ */
+export interface AdminBasketSettlementView {
+  id: string;
+  /** The list line settled. One of the row's entries, not always its anchor. */
+  lineId: string;
+  /** The exact product bought. Null for free text, or when nobody said which. */
+  itemId: string | null;
+  outcome: SettlementOutcome;
+  /** Units bought, and `0` for `NOT_AVAILABLE`. */
+  quantity: number;
+  /** What one unit cost, in the minor unit of `pricePaidCurrency`. Null when nobody knew. */
+  pricePaidCents: number | null;
+  pricePaidCurrency: string | null;
+  /** The price scope the shopper was looking at. A catalog id. */
+  priceScopeId: string | null;
+  /** The one shop, when one was picked. A catalog id. */
+  supermarketLocationId: string | null;
+  /** Exactly one of these two is set: an account holder, or a basket participant. */
+  settledByUserId: string | null;
+  settledByParticipantId: string | null;
+  /** ISO 8601 UTC. */
+  settledAt: string;
+  /** ISO 8601 UTC. Null while the settlement stands. */
+  revertedAt: string | null;
 }
 
 export interface AdminBasketDetailView extends AdminBasketView {

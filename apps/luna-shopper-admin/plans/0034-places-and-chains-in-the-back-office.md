@@ -1,3 +1,5 @@
+> **PR:** [#469](https://github.com/IchirokuXVI/nx-portfolio/pull/469)
+
 # 0034 Places and chains in the back office
 
 > Backend half: `apps/luna-shopper-backend/plans/0152` (a place joins the shop and scope it

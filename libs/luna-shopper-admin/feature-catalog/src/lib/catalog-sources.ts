@@ -2,6 +2,7 @@ import type { ResourceSource } from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import {
   ITEM_PRICE_SEED,
+  ITEM_SCOPE_PRICES_SEED,
   ITEM_SEED,
   LOCATION_ITEM_SEED,
   LOCATION_SEED,
@@ -9,6 +10,7 @@ import {
   PRICE_SCOPE_SEED,
   PRICE_SEED,
   PRODUCT_GROUP_SEED,
+  type ItemScopePrices,
 } from './catalog-seed';
 import { SUPERMARKETS_PATH } from './supermarkets';
 
@@ -45,8 +47,21 @@ export const PRICE_SCOPES_PATH = '/v1/admin/catalog/price-scopes';
 /** Where the back office reads and writes products. */
 export const ITEMS_PATH = '/v1/admin/catalog/items';
 
+/**
+ * Where the back office reads one product at every scope (backend plan 0160),
+ * with the product in place of `{id}`.
+ */
+export const ITEM_SCOPE_PRICES_PATH = `${ITEMS_PATH}/{id}/prices`;
+
 /** Where the back office reads and writes groups. */
 export const PRODUCT_GROUPS_PATH = '/v1/admin/catalog/product-groups';
+
+/**
+ * Where many products are moved into groups in one transaction (backend plan
+ * 0100, admin plan 0035, section 2). A command, not a collection: it answers
+ * one outcome per operation rather than a row or a page.
+ */
+export const PRODUCT_GROUP_ASSIGNMENTS_PATH = `${PRODUCT_GROUPS_PATH}/assignments`;
 
 /**
  * Where the back office reads the effective prices (backend plan 0080,
@@ -148,6 +163,31 @@ export function priceSource(): ResourceSource<Wire.CatalogAdminSupermarketItemVi
  */
 export function itemPriceSource(): ResourceSource<Wire.CatalogItemPriceView> {
   return { path: ITEM_PRICES_PATH, seed: ITEM_PRICE_SEED };
+}
+
+/**
+ * One product at every scope that prices it (admin plan 0033; backend plan
+ * 0160): each scope's rows, the row shown and why.
+ *
+ * A collection under the product, `/items/{id}/prices`, so the product is a
+ * path parameter and goes back onto every scope that comes out. Read only:
+ * nothing is written here, and a price is added through {@link itemPriceSource}.
+ */
+export function itemScopePricesSource(): ResourceSource<ItemScopePrices> {
+  return {
+    // Never requested as it stands: the collection is always the product's.
+    // It is the memory table's key, and has to differ from `ITEMS_PATH` so these
+    // rows never land among the products.
+    path: ITEM_SCOPE_PRICES_PATH,
+    collectionPath: (values) => {
+      const itemId = values['itemId'];
+      return typeof itemId === 'string' && itemId !== ''
+        ? `${ITEMS_PATH}/${encodeURIComponent(itemId)}/prices`
+        : null;
+    },
+    pathParams: ['itemId'],
+    seed: ITEM_SCOPE_PRICES_SEED,
+  };
 }
 
 /**

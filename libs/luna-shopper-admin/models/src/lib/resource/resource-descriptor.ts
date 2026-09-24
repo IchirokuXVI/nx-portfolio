@@ -6,6 +6,7 @@ import type {
   FilterValue,
   ResourceRow,
 } from './resource-field';
+import type { ResourceRowView } from './resource-view';
 
 /**
  * What a resource is, in one object (plan 0004, section 1).
@@ -183,6 +184,35 @@ export interface NamedAction<T extends ResourceRow = ResourceRow> {
   run(row: T): Promise<void>;
 }
 
+/**
+ * Something done to several ticked rows at once (admin plan 0035, section 2).
+ *
+ * **A panel, not a function**, because a bulk write here always has a review
+ * step before it: the list draws a tick box per row, and the action's button
+ * opens its panel with the ticked rows. The panel asks what it needs, shows
+ * what will change, and is the only thing that sends. A tick alone sends
+ * nothing.
+ *
+ * The panel is created with the inputs {@link BulkPanelInputs} names.
+ */
+export interface BulkAction {
+  readonly name: string;
+  /** A translation key, for the button that opens the panel. */
+  readonly label: string;
+  readonly panel: Type<unknown>;
+}
+
+/** What the list hands a bulk action's panel. */
+export interface BulkPanelInputs {
+  /** The ticked rows, as the list drew them. */
+  readonly rows: readonly ResourceRowView[];
+  /**
+   * Close the panel. `true` when something was written, and the list then
+   * clears its ticks and reads the page again.
+   */
+  readonly finish: (changed: boolean) => void;
+}
+
 /** What an operator may do to this resource. */
 export interface ResourceActions<T extends ResourceRow = ResourceRow> {
   readonly create?: boolean;
@@ -198,6 +228,11 @@ export interface ResourceActions<T extends ResourceRow = ResourceRow> {
    * is still static, so a screen can list them without running anything.
    */
   named?(): readonly NamedAction<T>[];
+  /**
+   * What can be done to several ticked rows at once. Absent means the list
+   * draws no tick boxes.
+   */
+  readonly bulk?: readonly BulkAction[];
 }
 
 /**

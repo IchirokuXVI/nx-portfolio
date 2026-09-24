@@ -58,6 +58,7 @@ function silent(): HarvestServiceI {
     acceptEntry: refuse,
     createItemFromEntry: refuse,
     rejectEntry: refuse,
+    applyEntryDecisions: refuse,
     importDocument: refuse,
     exportRun: refuse,
     listShops: refuse,
