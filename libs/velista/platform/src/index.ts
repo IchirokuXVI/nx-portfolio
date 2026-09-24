@@ -11,6 +11,7 @@ export * from './lib/connection-state';
 export * from './lib/geolocation-reader';
 export * from './lib/install-state';
 export * from './lib/install-store';
+export * from './lib/list-search';
 export * from './lib/live-basket-badge';
 export * from './lib/money';
 export * from './lib/nav-chrome';

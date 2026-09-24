@@ -1,7 +1,13 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  Router,
+  type NavigationExtras,
+  type Params,
+} from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorService,
@@ -37,7 +43,7 @@ import {
 } from '@portfolio/velista/platform';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { BasketRow as BasketRowComponent } from '../basket-row/basket-row';
 import { BasketPage } from './basket-page';
 
@@ -142,6 +148,8 @@ interface FakeStore {
 }
 
 interface Options {
+  /** `?search=1`, the open search (velista `0109`). */
+  readonly search?: boolean;
   readonly live?: boolean;
   readonly revoked?: boolean;
   /** Why the reader lost the basket, for the two endings of velista `0094`. */
@@ -347,6 +355,35 @@ function visitor(
   };
 }
 
+/**
+ * A route's query as the router keeps it: observable, merged into by a navigation, and
+ * replaced by a navigation to a whole URL.
+ */
+function queryOnRoute(initial: Params) {
+  const queryParamMap = new BehaviorSubject(convertToParamMap(initial));
+  let params: Params = initial;
+
+  return {
+    queryParamMap,
+    set(next: Params): void {
+      params = next;
+      queryParamMap.next(convertToParamMap(next));
+    },
+    /** `queryParamsHandling: 'merge'`, where a null takes a parameter off. */
+    merged(extra: Params | null | undefined): Params {
+      const next: Params = { ...params };
+      for (const [key, value] of Object.entries(extra ?? {})) {
+        if (value === null || value === undefined) {
+          delete next[key];
+        } else {
+          next[key] = value;
+        }
+      }
+      return next;
+    },
+  };
+}
+
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<BasketPage>;
   store: FakeStore;
@@ -418,6 +455,20 @@ async function render(options: Options = {}): Promise<{
 
   const paramMap = convertToParamMap({ basketId: 'basket-saturday' });
 
+  // The URL's query, which holds whether the search is open (velista `0109`). The
+  // router below moves it the way the real one would, so opening the search, Cancel
+  // and the phone's back button all reach the page through the route, as they do in
+  // the app.
+  const url = queryOnRoute(options.search === true ? { search: '1' } : {});
+  store.navigate.mockImplementation(
+    (commands: readonly unknown[], extras?: NavigationExtras) => {
+      if (commands.length === 0) {
+        url.set(url.merged(extras?.queryParams));
+      }
+      return Promise.resolve(true);
+    }
+  );
+
   await TestBed.configureTestingModule({
     imports: [BasketPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
@@ -427,16 +478,33 @@ async function render(options: Options = {}): Promise<{
         provide: Router,
         useValue: {
           navigate: store.navigate,
-          navigateByUrl: jest.fn().mockResolvedValue(true),
+          navigateByUrl: jest.fn((to: string) => {
+            url.set(
+              Object.fromEntries(new URL(to, 'http://velista').searchParams)
+            );
+            return Promise.resolve(true);
+          }),
+          // What `ListSearchNavigation.close` builds its fallback from.
+          createUrlTree: (_: unknown, extras?: NavigationExtras) =>
+            url.merged(extras?.queryParams),
+          serializeUrl: (params: Params) =>
+            `/shopping-lists/basket-saturday${
+              Object.keys(params).length === 0
+                ? ''
+                : `?${new URLSearchParams(params)}`
+            }`,
         },
       },
       {
         provide: ActivatedRoute,
         useValue: {
           paramMap: of(paramMap),
+          queryParamMap: url.queryParamMap,
           snapshot: {
             paramMap,
-            queryParamMap: convertToParamMap({}),
+            get queryParamMap() {
+              return url.queryParamMap.value;
+            },
             // What the route says about which basket to open (velista `0091`):
             // `live` for the caller's own, absent for a basket named by its id.
             data: options.kind === 'LIVE' ? { basket: 'live' } : {},
@@ -1524,6 +1592,72 @@ describe('searching the basket', () => {
       fixture.detectChanges();
 
       expect(searchField(fixture)).toBeNull();
+      expect(rows(fixture)).toHaveLength(3);
+    });
+
+    it('opens by pushing search=1, merged into the query', async () => {
+      const { fixture, store } = await render({ lines: threeLines });
+      openSearch(fixture);
+
+      expect(store.navigate).toHaveBeenCalledWith([], {
+        relativeTo: TestBed.inject(ActivatedRoute),
+        queryParams: { search: '1' },
+        queryParamsHandling: 'merge',
+      });
+      expect(store.navigate.mock.calls[0][1]).not.toHaveProperty('replaceUrl');
+    });
+
+    it('closes and clears the query when back takes search=1 off (velista 0109)', async () => {
+      const { fixture } = await render({ lines: threeLines });
+      openSearch(fixture);
+      search(fixture, 'milk');
+      expect(rows(fixture)).toHaveLength(1);
+
+      // The phone's back button: the entry opening pushed is popped, which the page
+      // hears as the route's query losing the parameter.
+      await TestBed.inject(Router).navigateByUrl(
+        '/shopping-lists/basket-saturday'
+      );
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(searchField(fixture)).toBeNull();
+      expect(TestBed.inject(BasketViewStore).query()).toBe('');
+      expect(rows(fixture)).toHaveLength(3);
+    });
+
+    it('closes from Cancel through PageNavigation.back, to the basket without search', async () => {
+      const { fixture } = await render({ lines: threeLines, search: true });
+
+      query(fixture, '.search-cancel')?.click();
+
+      // Nothing of this app is behind a spec's first entry, which is the cold load of
+      // a URL with search=1: the fallback replaces and never leaves the app.
+      expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
+        '/shopping-lists/basket-saturday',
+        { replaceUrl: true }
+      );
+    });
+
+    it('keeps search=1 on the filter sheet, so closing it comes back to the search', async () => {
+      const { fixture, store } = await render({
+        lines: threeLines,
+        search: true,
+      });
+
+      query(fixture, '.search .tool')?.click();
+
+      expect(store.navigate).toHaveBeenCalledWith(['sheet', 'filter'], {
+        relativeTo: TestBed.inject(ActivatedRoute),
+        queryParams: { search: '1' },
+      });
+    });
+
+    it('draws the field open and empty on a cold load with search=1', async () => {
+      const { fixture } = await render({ lines: threeLines, search: true });
+
+      expect(searchField(fixture)?.value).toBe('');
       expect(rows(fixture)).toHaveLength(3);
     });
 

@@ -24,9 +24,14 @@ import { CloseIcon, FilterIcon, SearchIcon } from '../icons/icons';
  * ## Plain values in, events out
  *
  * Rule D1: only a page injects a store. The page hands down the query, the counts
- * and the badge, and hears back a query and a press on the filter. **Whether the
- * field is open is kept here**, because it is a gesture and not a fact about the
- * list: opening is not searching, and a field can be open and empty.
+ * and the badge, and hears back a query and a press on the filter. Opening is not
+ * searching, and a field can be open and empty.
+ *
+ * **Whether the field is open is the page's**, since velista `0109`. It used to be
+ * kept here, and then the phone's back button had nothing to pop and left the page
+ * instead of closing the search. The page keeps it in the URL now, so this takes
+ * `open` and asks for a change with `openChange`, and it keeps only the focus that
+ * follows: the field on opening, the search button on closing.
  *
  * ## What the page puts in it
  *
@@ -71,18 +76,23 @@ export class ListTools {
   /** The field's id, so the hidden label names it. One per page. */
   readonly fieldId = input('list-search');
 
+  /**
+   * Whether the field has replaced the row, which is not the same as searching.
+   *
+   * A field that is open and empty draws every line, and the count says so. The page
+   * decides it; this only asks through `openChange`.
+   */
+  readonly open = input(false);
+
   readonly queryChange = output<string>();
   readonly openFilter = output<void>();
 
   /**
-   * Whether the field has replaced the row, which is not the same as searching.
-   *
-   * A field that is open and empty draws every line, and the count says so. Cancel
-   * is what closes it.
+   * The search button asks for `true`, and Cancel and Escape ask for `false`. The page
+   * clears the query when the field closes, whichever way it closed, so Cancel does
+   * not clear it here.
    */
-  private readonly _open = signal(false);
-
-  protected readonly open = this._open.asReadonly();
+  readonly openChange = output<boolean>();
 
   /**
    * Which control the keyboard should be on once the row has been redrawn.
@@ -98,6 +108,23 @@ export class ListTools {
 
   private readonly _button =
     viewChild<ElementRef<HTMLButtonElement>>('searchButton');
+
+  /**
+   * Which way the field went last, so that a change of `open` moves the focus and the
+   * first value does not. A page drawn with the search already open (a reload of a URL
+   * with `search=1`) puts no caret anywhere, and a closed row that is merely drawn
+   * does not pull the focus onto its button.
+   */
+  private _wasOpen: boolean | null = null;
+
+  private readonly _followOpen = effect(() => {
+    const open = this.open();
+    const was = this._wasOpen;
+    this._wasOpen = open;
+    if (was !== null && was !== open) {
+      untracked(() => this._focusWanted.set(open ? 'field' : 'button'));
+    }
+  });
 
   /**
    * Put the focus where the gesture said, as soon as there is something to put it on
@@ -118,10 +145,9 @@ export class ListTools {
     target.nativeElement.focus();
   });
 
-  /** Replace the row with the field, and put the caret in it. */
+  /** Ask for the field in place of the row. The caret follows once it is open. */
   protected openSearch(): void {
-    this._open.set(true);
-    this._focusWanted.set('field');
+    this.openChange.emit(true);
   }
 
   protected onInput(event: Event): void {
@@ -135,13 +161,11 @@ export class ListTools {
   }
 
   /**
-   * Cancel, and Escape does the same. It **clears the query as well as closing the
-   * field**, because a search left running behind a closed field is a screen missing
-   * lines for a reason nothing on it says.
+   * Cancel, and Escape does the same. The page closes the field and **clears the
+   * query as well**, because a search left running behind a closed field is a screen
+   * missing lines for a reason nothing on it says.
    */
   protected close(): void {
-    this.queryChange.emit('');
-    this._open.set(false);
-    this._focusWanted.set('button');
+    this.openChange.emit(false);
   }
 }

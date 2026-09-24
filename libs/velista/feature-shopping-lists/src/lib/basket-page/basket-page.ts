@@ -44,7 +44,9 @@ import {
 import {
   appPath,
   BrowserFacade,
+  ListSearchNavigation,
   PageNavigation,
+  searchOpenOf,
   sheetSegments,
   visitNoticeKey,
 } from '@portfolio/velista/platform';
@@ -923,6 +925,7 @@ export class BasketPage {
   protected openRow(row: BasketRowModel): void {
     void this._router.navigate(sheetSegments('rows', row.rowKey, 'settle'), {
       relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
     });
   }
 
@@ -1198,12 +1201,14 @@ export class BasketPage {
   protected openPeople(): void {
     void this._router.navigate(sheetSegments('people'), {
       relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
     });
   }
 
   protected openShare(): void {
     void this._router.navigate(sheetSegments('share'), {
       relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
     });
   }
 
@@ -1217,6 +1222,7 @@ export class BasketPage {
   protected openFinish(): void {
     void this._router.navigate(sheetSegments('finish'), {
       relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
     });
   }
 
@@ -1283,17 +1289,42 @@ export class BasketPage {
   /** The query folded once, handed to every row to draw its `<mark>` from. */
   protected readonly highlight = this._view.folded;
 
-  /**
-   * What was typed, or the empty string from Clear and Cancel.
-   *
-   * Whether the field is open is `ListTools`' to know since velista `0082`, which
-   * moved the row, its focus handling and its Cancel into a component the zone list
-   * page draws too. Cancel still clears the query, so the row that comes back is over
-   * the whole basket.
-   */
+  /** What was typed, or the empty string from Clear. */
   protected search(query: string): void {
     this._view.search(query);
   }
+
+  private readonly _search = inject(ListSearchNavigation);
+
+  /**
+   * Whether the search field is open, which is `?search=1` (velista `0109`).
+   *
+   * In the URL so the phone's back button closes the search rather than leaving the
+   * basket: opening pushes the parameter, and back pops it.
+   */
+  protected readonly searchOpen = searchOpenOf(this._route);
+
+  /** The search button opens, and Cancel and Escape go back. */
+  protected setSearchOpen(open: boolean): void {
+    void (open
+      ? this._search.open(this._route)
+      : this._search.close(this._route));
+  }
+
+  /**
+   * The query goes when the field does, whichever way it closed, so the row that
+   * comes back is over the whole basket.
+   */
+  private _searchWasOpen = false;
+
+  private readonly _clearClosedSearch = effect(() => {
+    const open = this.searchOpen();
+    const was = this._searchWasOpen;
+    this._searchWasOpen = open;
+    if (was && !open) {
+      untracked(() => this._view.search(''));
+    }
+  });
 
   // --- The filter sheet and its chips (plan 0075) ----------------------------
 
@@ -1429,12 +1460,14 @@ export class BasketPage {
   protected openChanges(): void {
     void this._router.navigate(sheetSegments('changes'), {
       relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
     });
   }
 
   protected openFilter(): void {
     void this._router.navigate(sheetSegments('filter'), {
       relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
     });
   }
 
@@ -1496,6 +1529,7 @@ export class BasketPage {
   protected openTarget(): void {
     void this._router.navigate(sheetSegments('add', 'list'), {
       relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
     });
   }
 

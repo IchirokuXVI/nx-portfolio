@@ -116,9 +116,11 @@
       -->
       @if (!reordering()) {
         <lib-list-tools
+          (openChange)="setSearchOpen($event)"
           (openFilter)="openFilter()"
           (queryChange)="search($event)"
           [activeCount]="activeCount()"
+          [open]="searchOpen()"
           [query]="searchQuery()"
           [shown]="shownCount()"
           [total]="current.lines.length"

@@ -73,7 +73,7 @@ import {
   ToBuyHeading,
   TripGroup,
 } from '@portfolio/velista/ui';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { ListPage } from './list-page';
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
@@ -194,6 +194,8 @@ interface Options {
   readonly tripRows?: Readonly<Record<string, readonly TripRow[]>>;
   /** What the list suggests, or a failure (velista `0089`). Nothing by default. */
   readonly due?: readonly DueLine[] | 'fail';
+  /** `?search=1`, the open search (velista `0109`). */
+  readonly search?: boolean;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -202,7 +204,14 @@ async function render(options: Options = {}): Promise<{
   lists: FakeListStore;
   realtime: RealtimeMemory;
   storage: Map<string, string>;
-  router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
+  router: {
+    navigate: jest.Mock;
+    navigateByUrl: jest.Mock;
+    createUrlTree: jest.Mock;
+    serializeUrl: jest.Mock;
+  };
+  /** The route the page was given, whose query a spec can move as the router would. */
+  activatedRoute: ReturnType<typeof route>;
   tone: { play: jest.Mock };
   profiles: FakeShoppingProfileStore;
   itemNames: FakeItemNames;
@@ -261,7 +270,18 @@ async function render(options: Options = {}): Promise<{
   const router = {
     navigate: jest.fn().mockResolvedValue(true),
     navigateByUrl: jest.fn().mockResolvedValue(true),
+    // What `ListSearchNavigation.close` builds its fallback with (velista `0109`).
+    // The URL itself is `list-search.spec.ts`'s subject, against a real router.
+    createUrlTree: jest.fn((commands: unknown, extras: unknown) => ({
+      commands,
+      extras,
+    })),
+    serializeUrl: jest.fn(() => '/velista/en/zones/z/lists/l'),
   };
+  const activatedRoute = route(
+    options.line,
+    options.search === true ? { search: '1' } : {}
+  );
 
   await TestBed.configureTestingModule({
     imports: [ListPage, RokuTranslatorTestingModule.forTesting()],
@@ -293,7 +313,7 @@ async function render(options: Options = {}): Promise<{
       { provide: REALTIME_CLIENT, useValue: realtime },
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
-      { provide: ActivatedRoute, useValue: route(options.line) },
+      { provide: ActivatedRoute, useValue: activatedRoute },
       // The composer's microphone posts through this (plan 0038). Every test in
       // this file is about the typed path, so it is the in-memory service rather
       // than a stub: a real implementation that never gets called is cheaper to
@@ -326,6 +346,7 @@ async function render(options: Options = {}): Promise<{
     realtime,
     storage,
     router,
+    activatedRoute,
     tone,
     profiles,
     itemNames,
@@ -344,15 +365,30 @@ async function render(options: Options = {}): Promise<{
  * because none of this page's three line sheets simply shows a line and all three do
  * something to one.
  */
-function route(line?: string) {
+function route(line?: string, extra: Record<string, string> = {}) {
   const map = convertToParamMap({ zoneId: ZONE_ID, listId: LIST_ID });
-  const queryMap = convertToParamMap(line === undefined ? {} : { line });
+  const queryOf = (params: Record<string, string>) =>
+    convertToParamMap(line === undefined ? params : { line, ...params });
+  const queryParamMap = new BehaviorSubject(queryOf(extra));
+  const snapshot = {
+    paramMap: map,
+    queryParamMap: queryParamMap.value,
+    parent: null,
+  };
 
   return {
     paramMap: of(map),
-    queryParamMap: of(queryMap),
-    snapshot: { paramMap: map, queryParamMap: queryMap, parent: null },
+    queryParamMap,
+    snapshot,
     parent: null,
+    /**
+     * The URL's query changing under the page, as a navigation or the phone's back
+     * button changes it (velista `0109`). `?line=` is kept, as the router keeps it.
+     */
+    setQuery(params: Record<string, string>): void {
+      snapshot.queryParamMap = queryOf(params);
+      queryParamMap.next(snapshot.queryParamMap);
+    },
   };
 }
 
@@ -1258,6 +1294,111 @@ describe('ListPage: searching and viewing one category', () => {
     expect(query(fixture, 'h2.category-heading')?.textContent?.trim()).toBe(
       'list.view.noCategory'
     );
+  });
+
+  describe('the open search is in the URL (velista 0109)', () => {
+    function searchButton(fixture: ComponentFixture<ListPage>) {
+      return query(fixture, 'lib-list-tools .tools .tool') as HTMLButtonElement;
+    }
+
+    it('opens by pushing search=1, merged into the query', async () => {
+      const { fixture, router, activatedRoute } = await render({
+        lines: LINES,
+        items: ITEMS,
+        line: 'ln-milk',
+      });
+
+      searchButton(fixture).click();
+
+      expect(router.navigate).toHaveBeenCalledWith([], {
+        relativeTo: activatedRoute,
+        queryParams: { search: '1' },
+        queryParamsHandling: 'merge',
+      });
+      // A push: nothing asked the router to replace the entry.
+      expect(router.navigate.mock.calls[0][1]).not.toHaveProperty('replaceUrl');
+    });
+
+    it('closes the field and clears the term when back takes search=1 off', async () => {
+      const { fixture, view, activatedRoute } = await render({
+        lines: LINES,
+        items: ITEMS,
+      });
+
+      activatedRoute.setQuery({ search: '1' });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(tools(fixture)?.open()).toBe(true);
+
+      view.search('leche');
+      fixture.detectChanges();
+      expect(rows(fixture).map((row) => row.id)).toEqual(['ln-milk']);
+
+      // The phone's back button: a popstate onto the entry without the parameter.
+      activatedRoute.setQuery({});
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(tools(fixture)?.open()).toBe(false);
+      expect(query(fixture, 'input.search-input')).toBeNull();
+      expect(view.query()).toBe('');
+      expect(rows(fixture)).toHaveLength(LINES.length);
+    });
+
+    it('closes from Cancel through PageNavigation.back, to the list without search', async () => {
+      const { fixture, router } = await render({
+        lines: LINES,
+        items: ITEMS,
+        search: true,
+      });
+
+      (query(fixture, '.search-cancel') as HTMLButtonElement).click();
+      await fixture.whenStable();
+
+      expect(router.createUrlTree).toHaveBeenCalledWith(
+        ['.'],
+        expect.objectContaining({
+          queryParams: { search: null },
+          queryParamsHandling: 'merge',
+        })
+      );
+      // Nothing of this app is behind a spec's first entry, which is the cold load
+      // of a URL with search=1: the fallback replaces, and never leaves the app.
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        '/velista/en/zones/z/lists/l',
+        { replaceUrl: true }
+      );
+    });
+
+    it('keeps search=1 on the filter sheet, so closing it comes back to the search', async () => {
+      const { fixture, router, activatedRoute } = await render({
+        lines: LINES,
+        items: ITEMS,
+        search: true,
+      });
+
+      fixture.componentInstance.openFilter();
+
+      expect(router.navigate).toHaveBeenCalledWith(['sheet', 'filter'], {
+        relativeTo: activatedRoute,
+        queryParams: { search: '1' },
+      });
+    });
+
+    it('draws the field open and empty on a cold load with search=1', async () => {
+      const { fixture, view } = await render({
+        lines: LINES,
+        items: ITEMS,
+        search: true,
+      });
+
+      const input = query(fixture, 'input.search-input') as HTMLInputElement;
+      expect(input).not.toBeNull();
+      expect(input.value).toBe('');
+      expect(view.query()).toBe('');
+      expect(rows(fixture)).toHaveLength(LINES.length);
+    });
   });
 
   it('orders A to Z and hands the search down for the mark', async () => {
