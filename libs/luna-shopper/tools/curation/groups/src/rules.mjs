@@ -137,6 +137,28 @@ export function itemSearchKey(item) {
   return capSearchText(normalizeName(item?.name?.es ?? item?.name?.en ?? ''));
 }
 
+/**
+ * The keys a product is searched for by, most specific first: the whole name,
+ * then its first three, two and one words.
+ *
+ * The group search joins every word with AND, and its trigram fallback only
+ * rescues a query about as short as a group name, so a product's whole name
+ * finds no group whose name is shorter than it (`champu liss frizz control`
+ * never reaches `Champú`). A shorter key does. The whole name still comes
+ * first, so a group named after the product ranks ahead of a broad one.
+ */
+export function itemSearchKeys(item) {
+  const whole = itemSearchKey(item);
+  const words = whole.split(/\s+/).filter(Boolean);
+  const keys = [whole];
+  for (const count of [3, 2, 1]) {
+    if (words.length > count) {
+      keys.push(words.slice(0, count).join(' '));
+    }
+  }
+  return [...new Set(keys.filter(Boolean))];
+}
+
 // ---------------------------------------------------------------------------
 // The unit vocabulary
 // ---------------------------------------------------------------------------

@@ -39,12 +39,12 @@ export function makeCatalog({ items = [], groups = [] } = {}) {
     /**
      * The admin group search, standing in for the tsvector ranked one.
      *
-     * A group scores one per query word it answers to and the best score comes
-     * first, which is the property the library depends on. Requiring every word
-     * would be a stricter search than production's and would make the fake, not
-     * the library, decide what a candidate is: a product is named `Leche
-     * semidesnatada Hacendado 1 L` and the group it belongs to is named `Leche
-     * semidesnatada`.
+     * Every query word has to be answered, the way production's tsquery joins
+     * its terms with AND. Production also falls back to trigram similarity on
+     * the whole query, which only rescues a query about as short as a group
+     * name. A product named `Leche semidesnatada Hacendado 1 L` therefore finds
+     * nothing by its whole name, and the group `Leche semidesnatada` is found
+     * by a shorter key from the ladder in `itemSearchKeys`.
      */
     searchGroups(query) {
       const words = String(query ?? '')
@@ -65,11 +65,14 @@ export function makeCatalog({ items = [], groups = [] } = {}) {
           ]
             .filter(Boolean)
             .join(' ')
-            .toLowerCase();
+            .toLowerCase()
+            // Production folds accents too: `champu` finds `Champú`.
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
           const score = words.filter((word) => haystack.includes(word)).length;
           return { group, score };
         })
-        .filter((hit) => hit.score > 0)
+        .filter((hit) => hit.score === words.length)
         .sort((a, b) => b.score - a.score)
         .map((hit) => hit.group);
     },

@@ -7,6 +7,7 @@ import {
   BULK_GROUP_ASSIGNMENTS_PATH,
   apply,
   buildOperations,
+  collectCandidates,
   decide,
   end,
   next,
@@ -983,4 +984,33 @@ test('a proposed group with names over the cap is checked, not refused by the ga
       `a search of ${text.length} characters was sent`
     );
   }
+});
+
+test('a product with a long name reaches its group through a shorter key', async () => {
+  const shampoo = {
+    id: 'g-shampoo',
+    slug: 'shampoo',
+    name: { es: 'Champú', en: 'Shampoo' },
+  };
+  const main = makeGateway(
+    makeFakeSession({
+      catalog: makeCatalog({ groups: [shampoo] }),
+      label: 'main',
+    })
+  );
+  const rehearsal = makeGateway(
+    makeFakeSession({ catalog: makeCatalog(), label: 'rehearsal' })
+  );
+
+  const { candidates } = await collectCandidates({
+    item: item('i-1', 'Champú Liss Frizz Control para cabello rebelde'),
+    main,
+    rehearsal,
+    createdRefs: {},
+  });
+
+  assert.deepEqual(
+    candidates.map((candidate) => candidate.id ?? candidate.groupId),
+    ['g-shampoo']
+  );
 });

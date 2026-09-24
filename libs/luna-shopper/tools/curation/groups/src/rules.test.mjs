@@ -11,6 +11,7 @@ import {
   isValidSlug,
   itemLabel,
   itemSearchKey,
+  itemSearchKeys,
   loadUnits,
   normalizeName,
   proposedWords,
@@ -77,6 +78,26 @@ test('a proposal answers to the same kinds of word', () => {
     [...words].sort(),
     ['leche semi', 'leche semidesnatada', 'semi skimmed milk'].sort()
   );
+});
+
+test('a product is searched for by its whole name, then by shorter keys', () => {
+  assert.deepEqual(
+    itemSearchKeys({
+      name: { es: 'Champú Liss Frizz Control para cabello rebelde' },
+    }),
+    [
+      'champu liss frizz control para cabello rebelde',
+      'champu liss frizz',
+      'champu liss',
+      'champu',
+    ]
+  );
+  assert.deepEqual(itemSearchKeys({ name: { es: 'Huevos grandes' } }), [
+    'huevos grandes',
+    'huevos',
+  ]);
+  assert.deepEqual(itemSearchKeys({ name: { es: 'Naranjas' } }), ['naranjas']);
+  assert.deepEqual(itemSearchKeys({ name: {} }), []);
 });
 
 test('a product is searched for by its Spanish name, else its English one', () => {

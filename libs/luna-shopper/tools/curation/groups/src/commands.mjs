@@ -22,6 +22,7 @@ import {
 } from './decision.mjs';
 import {
   BULK_GROUP_ASSIGNMENTS_PATH,
+  CANDIDATE_LIMIT,
   makeGateway,
   toCreateGroupBody,
 } from './gateway.mjs';
@@ -32,7 +33,7 @@ import {
   canonicalSlug,
   deriveUnitFamilies,
   itemLabel,
-  itemSearchKey,
+  itemSearchKeys,
   loadUnits,
   normalizeName,
   slugWords,
@@ -182,15 +183,19 @@ export async function collectCandidates({
   rehearsal,
   createdRefs,
 }) {
-  const key = itemSearchKey(item);
+  const keys = itemSearchKeys(item);
   const refByGroupId = new Map(
     Object.entries(createdRefs ?? {}).map(([ref, groupId]) => [groupId, ref])
   );
 
-  const [mainHits, runHits] = await Promise.all([
-    main.searchGroups(key),
-    rehearsal.searchGroups(key),
+  // One search per key and catalog, merged in key order so the hits of the
+  // most specific key come first, and cut to the candidate limit.
+  const [mainPages, runPages] = await Promise.all([
+    Promise.all(keys.map((key) => main.searchGroups(key))),
+    Promise.all(keys.map((key) => rehearsal.searchGroups(key))),
   ]);
+  const mainHits = firstDistinct(mainPages.flat(), CANDIDATE_LIMIT);
+  const runHits = firstDistinct(runPages.flat(), CANDIDATE_LIMIT);
 
   const candidates = [];
   const groupsById = new Map();
@@ -212,6 +217,20 @@ export async function collectCandidates({
   }
 
   return { candidates, groupsById, runGroups };
+}
+
+/** The first `limit` groups of `groups`, each id once, in the order given. */
+function firstDistinct(groups, limit) {
+  const seen = new Map();
+  for (const group of groups) {
+    if (seen.size >= limit) {
+      break;
+    }
+    if (!seen.has(group.id)) {
+      seen.set(group.id, group);
+    }
+  }
+  return [...seen.values()];
 }
 
 /**
