@@ -1951,11 +1951,11 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
     });
   });
 
-  it('links a card to the catalog tab’s product sheet', async () => {
+  it('links a card to the product sheet over this list (velista 0107)', async () => {
     const { fixture } = await render();
 
     expect(fixture.componentInstance.productLink()('item-oat')).toMatch(
-      /\/catalog\/sheet\/products\/item-oat$/
+      new RegExp(`/zones/${ZONE_ID}/lists/${LIST_ID}/sheet/products/item-oat$`)
     );
   });
 });

@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, UrlSegment } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -37,6 +37,25 @@ interface Options {
   /** Replaces the double's source rows. */
   readonly rows?: readonly CatalogScopeOffer[] | null;
   readonly item?: CatalogItem | null;
+  /**
+   * The URL of the page the sheet covers, one route per entry, as the router would
+   * hand it over. The catalog under the portfolio's mount unless a test says otherwise.
+   */
+  readonly covered?: readonly (readonly string[])[];
+}
+
+/** A route snapshot's chain from the root, reduced to what the sheet reads. */
+function routeChain(covered: readonly (readonly string[])[]): {
+  pathFromRoot: { url: UrlSegment[] }[];
+} {
+  return {
+    pathFromRoot: [
+      { url: [] },
+      ...covered.map((paths) => ({
+        url: paths.map((path) => new UrlSegment(path, {})),
+      })),
+    ],
+  };
 }
 
 async function render(options: Options = {}): Promise<{
@@ -68,7 +87,12 @@ async function render(options: Options = {}): Promise<{
       {
         provide: ActivatedRoute,
         useValue: {
-          snapshot: { paramMap: convertToParamMap({ itemId: 'item-oil' }) },
+          snapshot: {
+            paramMap: convertToParamMap({ itemId: 'item-oil' }),
+            parent: routeChain(
+              options.covered ?? [['velista'], ['en'], ['catalog']]
+            ),
+          },
         },
       },
       { provide: SheetNavigation, useValue: sheets },
@@ -186,5 +210,27 @@ describe('ProductSheet', () => {
     await fixture.componentInstance.dismiss();
 
     expect(sheets.dismiss).toHaveBeenCalledWith('/velista/en/catalog');
+  });
+
+  it('dismisses back to the zone list it covers (velista 0107)', async () => {
+    const { fixture, sheets } = await render({
+      covered: [['velista'], ['en'], ['zones', 'z-1', 'lists', 'l-1']],
+    });
+
+    await fixture.componentInstance.dismiss();
+
+    expect(sheets.dismiss).toHaveBeenCalledWith(
+      '/velista/en/zones/z-1/lists/l-1'
+    );
+  });
+
+  it('dismisses back to the basket it covers, on a standalone build', async () => {
+    const { fixture, sheets } = await render({
+      covered: [['en'], ['shopping-lists', 'live']],
+    });
+
+    await fixture.componentInstance.dismiss();
+
+    expect(sheets.dismiss).toHaveBeenCalledWith('/en/shopping-lists/live');
   });
 });

@@ -69,7 +69,7 @@ import {
   participantInitials,
   visitTime,
 } from '../basket-labels';
-import { BASKET_PATHS } from '../basket-paths';
+import { BASKET_PATHS, basketPath } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
 import { ChangeAcknowledger } from './change-acknowledger';
 import { SeenTarget } from './seen-target';
@@ -1550,22 +1550,22 @@ export class BasketPage {
   });
 
   /**
-   * Where a card's "Details" opens a product: the catalog tab's product sheet. Null
-   * for a guest, because every catalog screen needs an account and a link that ends
-   * on a sign in wall is not a way through to the product.
+   * Where a card's "Details" opens a product: the product sheet, over this basket
+   * (velista `0107`), so the basket stays underneath and closing the sheet lands
+   * back on it. Null for a guest, because every catalog read needs an account and a
+   * link that ends on a sign in wall is not a way through to the product.
    */
   protected readonly productLink = computed(() => {
     if (this._store.me()?.kind === 'GUEST') {
       return null;
     }
-    const locale = this._locale();
+    const page = basketPath(
+      this._locale(),
+      this._basePath,
+      this._store.address()
+    );
     return (itemId: string): string =>
-      appPath(
-        locale,
-        this._basePath,
-        'catalog',
-        ...sheetSegments('products', itemId)
-      );
+      `${page}/${sheetSegments('products', itemId).join('/')}`;
   });
 
   /**
