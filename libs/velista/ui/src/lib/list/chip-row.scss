@@ -88,6 +88,20 @@
   color: var(--app-text-secondary);
 }
 
+// A property nobody can take off from here (velista `0102`): the ordinary border
+// and the secondary ink, like `+N`, because it names a fact rather than a choice
+// the accent could invite somebody to undo. The lock says why there is no x.
+.is-locked {
+  border-color: var(--app-border-strong);
+  background: none;
+  color: var(--app-text-secondary);
+}
+
+.chip-lock {
+  flex: none;
+  font-size: var(--app-icon-sm);
+}
+
 .count {
   flex: none;
   margin-inline-start: auto;
