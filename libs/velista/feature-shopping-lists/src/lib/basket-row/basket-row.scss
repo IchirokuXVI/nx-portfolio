@@ -252,6 +252,34 @@
   font-style: italic;
 }
 
+// What the chosen shop is known not to have (velista `0102`). Its own line under
+// the product, so the caption above keeps its shape whether a shop is chosen or not.
+.shelf {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+}
+
+// Every option is known missing here. The danger role, which `0002` gives a shop
+// that had none, and the words beside a glyph so the colour carries nothing alone.
+.is-unavailable {
+  font-weight: 600;
+  color: var(--app-status-danger-fg);
+}
+
+.shelf-glyph {
+  flex: none;
+  font-size: var(--app-icon-sm);
+}
+
+// The option the row took in place of a missing default: a plain sentence in the
+// row's own ink, because the row has already done something about it.
+.is-instead {
+  color: var(--app-text-secondary);
+}
+
 .touched {
   font-size: var(--app-text-xs);
   color: var(--app-text-muted);

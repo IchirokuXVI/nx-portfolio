@@ -170,6 +170,8 @@ interface World {
    * than through anything that outlives the page.
    */
   readonly chosen?: ReadonlyMap<string, string>;
+  /** The shop the rows were read at, which the device chose (velista `0102`). */
+  readonly readAt?: string;
 }
 
 /** Every settlement read the sheet made, so a test can assert it asked both origins. */
@@ -217,6 +219,9 @@ function storeDouble(world: World) {
     me,
     products: world.products ?? new Map(),
     scopes: world.scopes ?? new Map(),
+    shop: null,
+    lockedShopId: null,
+    readAt: world.readAt ?? null,
     progress: { done: 0, unavailable: 0, total: 1 },
     pending: 1,
   });
@@ -251,7 +256,16 @@ function storeDouble(world: World) {
     return row.optionIds.length === 1 ? row.optionIds[0] : undefined;
   };
 
+  // The shop the rows are read at (velista `0102`), which a world may name.
+  const readAt = signal<string | null>(world.readAt ?? null);
+
   return {
+    readAt,
+    shopRead: readAt,
+    readAtShop: jest.fn((locationId: string | null) => {
+      readAt.set(locationId);
+      return Promise.resolve();
+    }),
     chosen,
     itemIdFor,
     choose: jest.fn((key: string, itemId: string) => {
@@ -1939,6 +1953,101 @@ describe('SettleSheet: the product somebody got', () => {
       );
 
       expect(body['outcome']).toBe('NOT_AVAILABLE');
+      expect(body).not.toHaveProperty('priceScopeId');
+    });
+  });
+
+  /**
+   * Buying at one shop (velista `0102`). Every settle made while a shop is chosen
+   * names the shop and the scope of the price bought there; "any of your shops"
+   * names no shop, ever, because the cheapest price's scope is not where the person
+   * stood.
+   */
+  describe('the shop a settle names (velista 0102)', () => {
+    const AT_SHOP: BasketProduct = {
+      ...MILK,
+      id: 'i-at-shop',
+      offer: {
+        price: 0.79,
+        currency: 'EUR',
+        unitPrice: null,
+        unitPriceLabel: null,
+        observedAt: null,
+        sourceKind: 'OFFICIAL_WEB',
+        stale: false,
+        priceScopeId: 's-dia',
+      },
+      atShop: {
+        priceScopeId: 's-merca-store',
+        price: 0.95,
+        currency: 'EUR',
+        available: true,
+      },
+    };
+    const SCOPES = new Map([
+      [
+        's-merca',
+        {
+          priceScopeId: 's-merca',
+          supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+          locations: [
+            {
+              id: 'loc-merca',
+              label: null,
+              address: 'Calle Mayor 3',
+              city: 'Córdoba',
+              postalCode: '14001',
+            },
+          ],
+        },
+      ],
+    ]);
+
+    async function press(
+      readAt: string | undefined,
+      selector: (button: HTMLButtonElement) => boolean
+    ): Promise<Record<string, unknown>> {
+      const { fixture, store } = await render({
+        lines: [line({ optionIds: [AT_SHOP.id] })],
+        products: new Map([[AT_SHOP.id, AT_SHOP]]),
+        scopes: SCOPES,
+        ...(readAt === undefined ? {} : { readAt }),
+      });
+      [
+        ...(
+          fixture.nativeElement as HTMLElement
+        ).querySelectorAll<HTMLButtonElement>('.actions button'),
+      ]
+        .find(selector)
+        ?.click();
+      await fixture.whenStable();
+      return (store.settle as unknown as jest.Mock).mock.calls[0][1];
+    }
+
+    const primary = (button: HTMLButtonElement) =>
+      button.classList.contains('primary');
+
+    it('carries the shop and the scope of the price bought there', async () => {
+      const body = await press('loc-merca', primary);
+
+      expect(body['supermarketLocationId']).toBe('loc-merca');
+      expect(body['priceScopeId']).toBe('s-merca-store');
+    });
+
+    it('carries no shop in "any of your shops" mode', async () => {
+      const body = await press(undefined, primary);
+
+      expect(body).not.toHaveProperty('supermarketLocationId');
+      expect(body['priceScopeId']).toBe('s-dia');
+    });
+
+    it('names the shop on "they had none" too, and no scope', async () => {
+      const body = await press('loc-merca', (button) =>
+        (button.textContent ?? '').includes('basket.settle.none')
+      );
+
+      expect(body['outcome']).toBe('NOT_AVAILABLE');
+      expect(body['supermarketLocationId']).toBe('loc-merca');
       expect(body).not.toHaveProperty('priceScopeId');
     });
   });

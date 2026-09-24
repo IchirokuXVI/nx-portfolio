@@ -47,9 +47,22 @@ export interface BasketViewMemory {
   readonly version: 1;
   readonly order?: Remembered<BasketOrder>;
   readonly grouping?: Remembered<BasketGrouping>;
-  /** A price scope id (`0078`). */
-  readonly shop?: Remembered<string>;
+  /**
+   * The shop the person is buying at, a supermarket location id (velista `0102`).
+   *
+   * **A new key and not `shop`**, which held a price scope id from `0078` until
+   * that plan. The two are both uuids and nothing tells one from the other, so a
+   * stored `shop` is never read as a location: it is dropped on read, which costs
+   * at most one choice because it expired within two hours anyway.
+   */
+  readonly location?: Remembered<string>;
 }
+
+/**
+ * The key a price scope id was kept under before velista `0102`, which this build
+ * never reads and drops from the record on the next write.
+ */
+export const LEGACY_SHOP_KEY = 'shop';
 
 /**
  * The properties this record may hold, which is every key but the version.
@@ -74,14 +87,14 @@ export const BASKET_VIEW_LIFETIME_MS: Readonly<
 > = {
   order: null,
   grouping: null,
-  shop: 2 * 60 * 60 * 1000,
+  location: 2 * 60 * 60 * 1000,
 };
 
 /** Every property, for the readers that walk the record. */
 export const REMEMBERED_PROPERTIES: readonly RememberedProperty[] = [
   'order',
   'grouping',
-  'shop',
+  'location',
 ];
 
 /**
@@ -121,11 +134,16 @@ export function toBasketViewMemory(raw: unknown): BasketViewMemory | null {
   const grouping = readRemembered(raw['grouping'], (value) =>
     oneOfOrNull(value, GROUPINGS)
   );
-  const shop = readRemembered(raw['shop'], (value) =>
+  // `location` and never the legacy `shop`, whose value is a price scope id.
+  const location = readRemembered(raw['location'], (value) =>
     typeof value === 'string' && value !== '' ? value : null
   );
 
-  if (order === UNREADABLE || grouping === UNREADABLE || shop === UNREADABLE) {
+  if (
+    order === UNREADABLE ||
+    grouping === UNREADABLE ||
+    location === UNREADABLE
+  ) {
     return null;
   }
 
@@ -133,7 +151,7 @@ export function toBasketViewMemory(raw: unknown): BasketViewMemory | null {
     version: VERSION,
     ...(order === undefined ? {} : { order }),
     ...(grouping === undefined ? {} : { grouping }),
-    ...(shop === undefined ? {} : { shop }),
+    ...(location === undefined ? {} : { location }),
   };
 }
 
@@ -202,8 +220,8 @@ export function remember<K extends RememberedProperty>(
 /**
  * The record with one property gone.
  *
- * The one property whose default cannot be written as a value: `shop` is a scope id
- * and its default is **no** scope, which {@link Remembered} has no room for. Storing
+ * The one property whose default cannot be written as a value: `location` is a shop
+ * id and its default is **no** shop, which {@link Remembered} has no room for. Storing
  * nothing and storing the default are the same thing to a reader, since a property
  * this record does not hold leaves the state's own default in place, so choosing the
  * cheapest anywhere forgets the shop instead of remembering a null.
@@ -218,4 +236,24 @@ export function forget(
 
   const { [property]: dropped, ...kept } = memory;
   return kept;
+}
+
+/**
+ * Whether a stored record still carries the key a price scope id was kept under
+ * before velista `0102`.
+ *
+ * Asked once, when a basket loads, so the record can be written back without it:
+ * {@link toBasketViewMemory} already ignores the key, and this is what makes the
+ * drop stick rather than the value sitting in storage until the next setter runs.
+ */
+export function holdsLegacyShop(raw: string | null): boolean {
+  if (raw === null) {
+    return false;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isRecord(parsed) && LEGACY_SHOP_KEY in parsed;
+  } catch {
+    return false;
+  }
 }

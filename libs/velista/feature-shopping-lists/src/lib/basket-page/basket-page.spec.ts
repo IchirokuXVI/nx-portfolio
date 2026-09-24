@@ -112,6 +112,9 @@ interface FakeStore {
   readonly setStatus: jest.Mock;
   /** Every refetch, so a spec can see the screen being brought up to date. */
   readonly refresh: jest.Mock;
+  /** The device's shop, which `BasketStore.readAtShop` sets (velista `0102`). */
+  readonly readAt: WritableSignal<string | null>;
+  readonly readAtShop: jest.Mock;
   /** Every product the basket named, which is the other half of what a search reads. */
   readonly products: WritableSignal<ReadonlyMap<string, BasketProduct>>;
   /** The lists this reader was served, which the filter sheet offers. */
@@ -344,6 +347,8 @@ async function render(options: Options = {}): Promise<{
   TestBed.resetTestingModule();
 
   const me = options.me === undefined ? participant(owner()) : options.me;
+  // The device's shop (velista `0102`), read at once by this double.
+  const readAt = signal<string | null>(null);
 
   const store: FakeStore = {
     live: signal(options.live ?? true),
@@ -379,6 +384,11 @@ async function render(options: Options = {}): Promise<{
     pending: signal(options.unsettled ?? options.lines?.length ?? 0),
     setStatus: jest.fn().mockResolvedValue(options.statusWriteLands ?? true),
     refresh: jest.fn().mockResolvedValue(undefined),
+    readAt,
+    readAtShop: jest.fn((locationId: string | null) => {
+      readAt.set(locationId);
+      return Promise.resolve();
+    }),
     products: signal<ReadonlyMap<string, BasketProduct>>(
       options.products ?? new Map()
     ),
@@ -465,6 +475,10 @@ async function render(options: Options = {}): Promise<{
           rows: store.rows,
           lists: store.lists,
           products: store.products,
+          // The device's shop (velista `0102`), read at once by this double.
+          readAt: store.readAt,
+          shopRead: store.readAt,
+          readAtShop: store.readAtShop,
           error: store.error,
           progress: store.progress,
           pending: store.pending,
@@ -890,7 +904,7 @@ describe('the number on a row', () => {
     row(fixture).left.emit({ from: 5, to: 3 });
     await settleWrites(fixture);
 
-    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, undefined);
+    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, {});
   });
 
   describe('the price scope (velista 0095, section 6)', () => {
@@ -914,6 +928,7 @@ describe('the number on a row', () => {
             priceScopeId: 's-dia',
           },
           offers: [],
+          atShop: null,
           categories: ['DAIRY'],
         },
       ],
@@ -930,7 +945,9 @@ describe('the number on a row', () => {
       row(fixture).left.emit({ from: 5, to: 3 });
       await settleWrites(fixture);
 
-      expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, 's-dia');
+      expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, {
+        priceScopeId: 's-dia',
+      });
     });
 
     it('the status control names it too, and never an amount', async () => {
@@ -2077,7 +2094,7 @@ describe('searching the basket', () => {
       rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 1 });
       await settleWrites(fixture);
 
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4, undefined);
+      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4, {});
     });
 
     it('commits an ungrouped row through the same call', async () => {
@@ -2086,7 +2103,7 @@ describe('searching the basket', () => {
       rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 0 });
       await settleWrites(fixture);
 
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4, undefined);
+      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4, {});
     });
 
     /**

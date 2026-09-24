@@ -135,4 +135,12 @@ export interface CreateBasketRequest {
    * default, so a basket nobody shares sends exactly the body it always did.
    */
   readonly memberUserIds?: readonly string[];
+  /**
+   * The shop this basket is bought at (velista `0102`; backend `0163`, section 1).
+   *
+   * Omitted for "any of your shops", which is the default. Once sent it is the
+   * basket's for good and for everybody in it: no request changes it afterwards, so
+   * the get a list sheet is the only place it can still be changed.
+   */
+  readonly supermarketLocationId?: string;
 }

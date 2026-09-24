@@ -109,6 +109,11 @@ export class BasketListApi implements BasketListServiceI {
           request.memberUserIds.length === 0
             ? {}
             : { memberUserIds: [...request.memberUserIds] }),
+          // The shop the basket is bought at, and only when one was chosen:
+          // "any of your shops" sends no shop, ever (velista `0102`).
+          ...(request.supermarketLocationId === undefined
+            ? {}
+            : { supermarketLocationId: request.supermarketLocationId }),
         },
         { context: operation('basket.create') }
       )

@@ -1,0 +1,16 @@
+// The note is the attention role and never a warning: the app has no warning colour
+// on purpose (`0002`), and a shop outside your areas is priced correctly.
+:host {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  line-height: var(--app-leading-body);
+  color: var(--app-status-attention-fg);
+}
+
+.glyph {
+  flex: none;
+  font-size: var(--app-icon-sm);
+}

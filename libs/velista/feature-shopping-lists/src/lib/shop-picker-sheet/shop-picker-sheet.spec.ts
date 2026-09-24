@@ -63,8 +63,8 @@ const OWNER_SCOPES = [
   ]),
 ];
 
-/** A guest's: the same chains with every address withheld (`0066`, section 5). */
-const GUEST_SCOPES = [scope('s-merca', 'Mercadona'), scope('s-dia', 'Dia')];
+/** Chains whose scopes name no shop: a scope catalog could not place. */
+const NO_SHOP_SCOPES = [scope('s-merca', 'Mercadona'), scope('s-dia', 'Dia')];
 
 function render(scopes: readonly BasketPriceScope[]) {
   TestBed.resetTestingModule();
@@ -77,7 +77,15 @@ function render(scopes: readonly BasketPriceScope[]) {
   const held = signal(
     new Map(scopes.map((entry) => [entry.priceScopeId, entry]))
   );
+  // The device's shop (velista `0102`), read at once by this double.
+  const readAt = signal<string | null>(null);
   const store = {
+    readAt,
+    shopRead: readAt,
+    readAtShop: jest.fn((locationId: string | null) => {
+      readAt.set(locationId);
+      return Promise.resolve();
+    }),
     lines: signal([]),
     // How a sheet addresses its own basket since velista `0091`: off the store,
     // never off `paramMap`, which has no id under `shopping-lists/live`.
@@ -85,7 +93,13 @@ function render(scopes: readonly BasketPriceScope[]) {
     products: signal(new Map()),
     lastAdded: signal(null),
     me: signal(null),
-    basket: computed(() => ({ sources: [], scopes: held() })),
+    basket: computed(() => ({
+      sources: [],
+      scopes: held(),
+      shop: null,
+      lockedShopId: null,
+      readAt: readAt(),
+    })),
     listNames: signal(new Map<string, string>()),
   };
 
@@ -155,14 +169,12 @@ function type(fixture: Fixture, query: string): void {
 }
 
 /**
- * Choosing which shop the prices come from (velista `0078`, section 4).
+ * Choosing which shop the person is buying at (velista `0078`, section 4; `0102`).
  *
- * The supermarkets page's own pieces over a **basket's** scopes: the search across
- * every chain, the chain buttons, and the shops under their postal codes. What these
- * assert is the two things that make it a picker rather than that page. A row picks
- * the **scope**, because the price belongs to the scope and not to the door; and a
- * reader the server sent no addresses to picks a chain, because there is nothing
- * finer for them to pick.
+ * The supermarkets page's own pieces over a **basket's** scopes, drawn by
+ * `ShopPicker` from `ui`: the search across every chain, the chain buttons, and the
+ * shops under their postal codes. A row picks **the shop**, because the shop is
+ * where the person is standing, and every participant is served the same shops.
  */
 describe('ShopPickerSheet', () => {
   it('draws one button per chain, with the count of its shops', () => {
@@ -188,7 +200,15 @@ describe('ShopPickerSheet', () => {
     expect(headings(fixture)).toEqual(['14008', '14001']);
   });
 
-  it('writes the scope, not the shop, and goes back to the filter sheet', () => {
+  it('draws the body the get a list sheet draws too', () => {
+    const { fixture } = render(OWNER_SCOPES);
+
+    expect(
+      fixture.debugElement.query(By.css('lib-shop-picker'))
+    ).not.toBeNull();
+  });
+
+  it('writes the shop that was picked, and goes back to the filter sheet', () => {
     const { fixture, sheets, view } = render(OWNER_SCOPES);
     tapChain(fixture, 0);
 
@@ -197,8 +217,9 @@ describe('ShopPickerSheet', () => {
       .nativeElement.click();
     fixture.detectChanges();
 
-    // The second shop of the first scope: both rows pick that one scope.
-    expect(view.shop()).toBe('s-merca');
+    // The second shop of the first scope, and not the scope: two Mercadonas of
+    // one scope are two places to stand (velista `0102`).
+    expect(view.shop()).toBe('loc-barcelona');
     // A pop, because the filter sheet pushed this one: the filter sheet's URL is
     // only the fallback for a cold load on this sheet's own address.
     expect(sheets.dismiss).toHaveBeenCalledWith(
@@ -207,19 +228,16 @@ describe('ShopPickerSheet', () => {
     expect(sheets.leaveTo).not.toHaveBeenCalled();
   });
 
-  it('checks the scope’s first shop when it is already the chosen one', () => {
+  it('checks the chosen shop and no other of its scope', () => {
     const { fixture, view } = render(OWNER_SCOPES);
-    view.setShop('s-merca');
+    view.setShop('loc-barcelona');
     fixture.detectChanges();
     tapChain(fixture, 0);
 
     const radios = fixture.debugElement
       .queryAll(By.css('lib-shop-list .checkbox'))
       .map((node) => node.nativeElement as HTMLInputElement);
-    // A radio group has one checked control and a scope holds two shops that
-    // charge the same, so the first stands for the scope, which is the shop the
-    // filter sheet names under the chain.
-    expect(radios.map((radio) => radio.checked)).toEqual([true, false]);
+    expect(radios.map((radio) => radio.checked)).toEqual([false, true]);
   });
 
   describe('the search', () => {
@@ -276,23 +294,15 @@ describe('ShopPickerSheet', () => {
     });
   });
 
-  describe('a reader with no addresses', () => {
-    it('draws the chain buttons and no shops at all', () => {
-      const { fixture } = render(GUEST_SCOPES);
+  /**
+   * A chain is not a place to stand in, so a scope with no shop to name offers
+   * nothing to pick, and its chain has no button (velista `0102`).
+   */
+  it('draws no button for a chain with no shop to pick', () => {
+    const { fixture, view } = render(NO_SHOP_SCOPES);
 
-      expect(chains(fixture)).toHaveLength(2);
-      expect(rows(fixture)).toHaveLength(0);
-    });
-
-    it('picks that chain’s scope when a button is tapped', () => {
-      const { fixture, sheets, view } = render(GUEST_SCOPES);
-
-      tapChain(fixture, 1);
-
-      expect(view.shop()).toBe('s-dia');
-      expect(sheets.dismiss).toHaveBeenCalledWith(
-        `/en/shopping-lists/${BASKET_ID}/sheet/filter`
-      );
-    });
+    expect(chains(fixture)).toHaveLength(0);
+    expect(rows(fixture)).toHaveLength(0);
+    expect(view.shop()).toBeNull();
   });
 });

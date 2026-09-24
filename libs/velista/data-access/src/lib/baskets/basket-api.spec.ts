@@ -597,5 +597,75 @@ describe('BasketApi, the writes of velista 0092', () => {
         );
       expect(money).toEqual([]);
     });
+
+    /**
+     * Velista `0102`: a settle made while a shop is chosen names the shop and the
+     * scope of the price bought; "any of your shops" names neither shop nor chain.
+     */
+    it('carries the shop and its scope at a shop, and neither in any shop mode', async () => {
+      const atShop = await settleBody({
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: 1,
+        priceScopeId: 'scope-store',
+        supermarketLocationId: 'loc-merca',
+      });
+      expect(atShop).toEqual(
+        expect.objectContaining({
+          priceScopeId: 'scope-store',
+          supermarketLocationId: 'loc-merca',
+        })
+      );
+
+      const anywhere = await settleBody({
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: 1,
+      });
+      expect(anywhere).not.toHaveProperty('supermarketLocationId');
+      expect(anywhere).not.toHaveProperty('priceScopeId');
+    });
+  });
+
+  /** Velista `0102`: the basket read at one shop, and at none. */
+  describe('the read at a shop', () => {
+    const BODY = {
+      id: BASKET,
+      kind: 'LIVE',
+      status: 'OPEN',
+      rows: [],
+      me: { id: 'p-me', kind: 'OWNER' },
+      progress: { done: 0, unavailable: 0, total: 0, pending: 0 },
+      supermarketLocationId: null,
+      shop: null,
+    };
+
+    it('asks for the basket at the chosen shop', async () => {
+      const done = api.getBasket(BASKET, 'loc-merca');
+      const req = httpMock.expectOne(
+        (candidate) => candidate.url === `${GATEWAY}/v1/baskets/${BASKET}`
+      );
+      expect(req.request.params.get('locationId')).toBe('loc-merca');
+      req.flush(BODY);
+      await done;
+    });
+
+    it('sends no shop at all for a read at none', async () => {
+      const done = api.getBasket(BASKET);
+      const req = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}`);
+      expect(req.request.params.has('locationId')).toBe(false);
+      req.flush(BODY);
+      await done;
+    });
+
+    it('asks for the live basket at the chosen shop', async () => {
+      const done = api.getLiveBasket('loc-merca');
+      const req = httpMock.expectOne(
+        (candidate) => candidate.url === `${GATEWAY}/v1/baskets/live`
+      );
+      expect(req.request.params.get('locationId')).toBe('loc-merca');
+      req.flush(BODY);
+      await done;
+    });
   });
 });

@@ -31,8 +31,7 @@ import {
   APP_BASE_PATH,
   inLocale,
   LINE_CONTENT_MAX_LENGTH,
-  offerAt,
-  shownPriceScope,
+  shownOffer,
   toSettlementRow,
   type BasketParticipant,
   type BasketPriceScope,
@@ -575,7 +574,7 @@ export class SettleSheet {
 
     const locale = this._locale();
     const products = this._store.products();
-    const shop = this._view.shop();
+    const atShop = this._view.pricedAtShop();
     const scopes = this._store.basket()?.scopes;
     const chosen = this._store.itemIdFor(row.rowKey);
 
@@ -586,15 +585,15 @@ export class SettleSheet {
         continue;
       }
 
-      // The chosen shop's price when there is one, and the cheapest anywhere
-      // otherwise, which is exactly what the row above quotes (velista `0078`,
-      // section 5).
-      const offer = shop === null ? product.offer : offerAt(product, shop);
+      // The chosen shop's price when the rows are priced there, which the server
+      // decided (velista `0102`), and the cheapest anywhere otherwise: exactly what
+      // the row above quotes (velista `0078`, section 5).
+      const offer = shownOffer(product, atShop);
       drawn.push({
         itemId,
         name: inLocale(product.name, locale),
         price:
-          offer === null || offer.price === null
+          offer === null
             ? null
             : formatMoney(offer.price, offer.currency, locale),
         place:
@@ -1009,17 +1008,18 @@ export class SettleSheet {
    *
    * It also names the price scope of the offer the row underneath draws for that
    * product (velista `0095`, section 6), and never an amount: the gateway reads the
-   * price itself. Absent when the row draws no price.
+   * price itself. Absent when the row draws no price. And, while a shop is chosen,
+   * that shop (velista `0102`), from the one place the row's settle asks too.
    */
-  private _got(): { itemId?: string; priceScopeId?: string } {
+  private _got(): {
+    itemId?: string;
+    priceScopeId?: string;
+    supermarketLocationId?: string;
+  } {
     const itemId = this._store.itemIdFor(this._rowKey);
-    const priceScopeId = shownPriceScope(
-      this._product(),
-      this._view.pricedShop()
-    );
     return {
       ...(itemId === undefined ? {} : { itemId }),
-      ...(priceScopeId === undefined ? {} : { priceScopeId }),
+      ...this._view.settleShop(this._product()),
     };
   }
 
@@ -1081,9 +1081,14 @@ export class SettleSheet {
     // **No `itemId`**, and that is not an omission: a close buys nothing, so
     // there is no product to record against it. Naming one would put a product
     // in a purchase history that has no purchase in it.
+    // The shop, though: "they had none" is a fact about the shop the person is
+    // standing in, and every settle made while one is chosen names it (velista
+    // `0102`). In "any of your shops" mode it names none.
+    const shop = this._view.shop();
     await this._send({
       outcome: 'NOT_AVAILABLE',
       from: this.outstanding(),
+      ...(shop === null ? {} : { supermarketLocationId: shop }),
     });
   }
 

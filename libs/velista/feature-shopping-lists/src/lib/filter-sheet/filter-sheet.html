@@ -116,19 +116,27 @@
   </fieldset>
 
   <!--
-    Which shop's prices the rows show (velista `0078`, section 3).
+    Where the person is buying (velista `0078`, section 3; `0102`).
 
-    Absent for a basket with no price scopes, drawn from the data exactly as the
+    Absent for a basket with no shop to name, drawn from the data exactly as the
     LISTS section below is: a run scoped by hand, a profile since deleted or a
     gateway that could not price the read has nothing to choose between, and a
     control that cannot do anything is an invitation `0038` section 2.1 will not
-    draw.
+    draw. A basket started at a shop always has the section, locked.
   -->
   @if (hasShops()) {
-    <fieldset class="group shops">
+    <fieldset
+      [class.has-note]="locked()"
+      [disabled]="locked()"
+      class="group shops"
+    >
       <legend class="legend">{{ 'basket.view.shop.legend' | rokuT }}</legend>
 
-      <label [class.picked]="!oneShop()" class="choice">
+      <label
+        [class.is-locked]="locked()"
+        [class.picked]="!oneShop()"
+        class="choice"
+      >
         <input
           (change)="setAnyShop()"
           [checked]="!oneShop()"
@@ -143,9 +151,11 @@
             {{ 'basket.view.shop.anyGuest' | rokuT }}
           }
         </span>
-        <span class="choice-note">{{
-          'basket.view.shop.anyHint' | rokuT
-        }}</span>
+        @if (!locked()) {
+          <span class="choice-note">{{
+            'basket.view.shop.anyHint' | rokuT
+          }}</span>
+        }
       </label>
 
       <!--
@@ -155,11 +165,16 @@
         unchecked until the picker answers, so the group never claims a shop it
         does not have.
 
-        The button beside it is a text button and its accessible name says which
-        section it belongs to, because "Change" alone is four other things on this
-        screen.
+        On a basket started at a shop the whole fieldset is disabled, for
+        everybody, the owner included (`0102`): the lock is the server's fact, and
+        the line under the fieldset says why. A padlock takes Change's place,
+        because a button that could never do anything is a promise broken.
       -->
-      <div [class.picked]="oneShop()" class="choice">
+      <div
+        [class.is-locked]="locked()"
+        [class.picked]="oneShop()"
+        class="choice"
+      >
         <!--
           A `div` holding a label and a button, where every other row here is one
           label: a label wrapping a button would make the button's tap toggle the
@@ -180,6 +195,9 @@
               @if (shop.shop !== null) {
                 <span class="choice-hint">{{ shop.shop }}</span>
               }
+              @if (shop.outsideAreas) {
+                <lib-outside-areas class="choice-outside" />
+              }
             </span>
           } @else {
             <span class="choice-title is-muted">
@@ -188,7 +206,9 @@
           }
         </label>
 
-        @if (shopRow() === null) {
+        @if (locked()) {
+          <lib-lock-icon class="lock" />
+        } @else if (shopRow() === null) {
           <button
             (click)="openPicker()"
             [attr.aria-label]="'basket.view.shop.chooseLabel' | rokuT"
@@ -209,6 +229,13 @@
         }
       </div>
     </fieldset>
+
+    @if (locked()) {
+      <p class="locked-note">
+        <lib-lock-icon class="locked-glyph" />
+        {{ 'basket.view.shop.locked' | rokuT }}
+      </p>
+    }
   }
 
   <!--

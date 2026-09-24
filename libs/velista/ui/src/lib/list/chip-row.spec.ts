@@ -128,4 +128,33 @@ describe('ChipRow', () => {
     // Every chip, not only the ones that fit, or there would be nothing to measure.
     expect(ruler.queryAll(By.css('.chip'))).toHaveLength(CHIPS.length + 1);
   });
+
+  /**
+   * Velista `0102`: the shop of a basket started at a shop. A lock and no x, and a
+   * tap opens the sheet, because an x that does nothing is a broken promise.
+   */
+  it('draws a locked chip with a lock and no x, and opens the sheet on a tap', () => {
+    const fixture = render([
+      {
+        id: 'shop',
+        label: 'Mercadona',
+        removeLabel: 'Mercadona, set when this list was started',
+        locked: true,
+      },
+    ]);
+    const removed: string[] = [];
+    let opened = 0;
+    fixture.componentInstance.remove.subscribe((id) => removed.push(id));
+    fixture.componentInstance.more.subscribe(() => (opened += 1));
+
+    const chip = fixture.debugElement.query(By.css('.row .chip'))
+      .nativeElement as HTMLButtonElement;
+    expect(chip.querySelector('lib-lock-icon')).not.toBeNull();
+    expect(chip.querySelector('.chip-x')).toBeNull();
+
+    chip.click();
+
+    expect(removed).toEqual([]);
+    expect(opened).toBe(1);
+  });
 });

@@ -440,17 +440,41 @@ describe('BasketMemory: what a reader is served', () => {
     expect(eggs.entries.some((entry) => entry.listId === null)).toBe(true);
   });
 
-  /** The shops are the owner's geography, and a guest is served the chain alone. */
-  it('serves a guest the chain and no shop', async () => {
+  /**
+   * Since backend `0163` section 4 a guest picks the shop they are standing in
+   * from the same list the owner sees (velista `0102`), so the shops reach them.
+   */
+  it('serves a guest the same shops the owner sees', async () => {
     const memory = new BasketMemory();
+    const owner = await memory.getBasket(BASKET);
     memory.servesLists = false;
 
-    const basket = await memory.getBasket(BASKET);
+    const guest = await memory.getBasket(BASKET);
 
-    for (const scope of basket.scopes.values()) {
-      expect(scope.locations).toEqual([]);
-      expect(scope.supermarketName.en).not.toBe('');
-    }
+    expect([...guest.scopes.values()]).toEqual([...owner.scopes.values()]);
+    expect(
+      [...guest.scopes.values()].some((scope) => scope.locations.length > 0)
+    ).toBe(true);
+  });
+
+  /** A read at a shop carries what that shop says about every product. */
+  it('answers atShop for a read at one of its shops, and none without one', async () => {
+    const memory = new BasketMemory();
+
+    const anywhere = await memory.getBasket(BASKET);
+    const atShop = await memory.getBasket(BASKET, 'loc-dia-victoria');
+
+    expect([...anywhere.products.values()].map((item) => item.atShop)).toEqual(
+      [...anywhere.products.values()].map(() => null)
+    );
+    const milk = atShop.products.get('item-milk-hacendado');
+    expect(milk?.atShop).toEqual({
+      priceScopeId: milk?.offers.find((item) => item.price === 1.05)
+        ?.priceScopeId,
+      price: 1.05,
+      currency: 'EUR',
+      available: null,
+    });
   });
 });
 

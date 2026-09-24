@@ -12,6 +12,7 @@ import {
   viewChildren,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { LockIcon } from '../icons/icons';
 
 /** One chip: what it says, and what removing it is called. */
 export interface ChipRowItem {
@@ -21,6 +22,13 @@ export interface ChipRowItem {
   readonly label: string;
   /** The accessible name of its x, already translated. "Remove: A to Z". */
   readonly removeLabel: string;
+  /**
+   * Something nobody can take off from here (velista `0102`): the shop a basket
+   * was started at. It draws a lock and no x, because an x that does nothing is a
+   * broken promise, and a tap opens the sheet, where the reason is written. Its
+   * {@link removeLabel} then names what it is rather than a removal.
+   */
+  readonly locked?: boolean;
 }
 
 /**
@@ -108,7 +116,7 @@ export function fitChips(
  */
 @Component({
   selector: 'lib-chip-row',
-  imports: [RokuTranslatorPipe],
+  imports: [LockIcon, RokuTranslatorPipe],
   templateUrl: './chip-row.html',
   styleUrl: './chip-row.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -128,7 +136,7 @@ export class ChipRow {
   /** A chip's x was pressed. The caller puts that one property back. */
   readonly remove = output<string>();
 
-  /** The `+N` chip was pressed. The caller opens the sheet. */
+  /** The `+N` chip, or a locked chip, was pressed. The caller opens the sheet. */
   readonly more = output<void>();
 
   private readonly _host = inject(ElementRef<HTMLElement>);

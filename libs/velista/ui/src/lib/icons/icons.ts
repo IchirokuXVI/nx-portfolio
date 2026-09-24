@@ -960,3 +960,46 @@ export class HomeIcon {
       import('./home-icon.svg?raw')
   );
 }
+
+/**
+ * A closed padlock: the shop a basket was started at (velista `0102`).
+ *
+ * On the shop chip in place of the x, because an x that does nothing is a broken
+ * promise, and beside the one line under the "Buying at" fieldset that says why the
+ * choice cannot change. Never a control on its own: the chip and the line carry the
+ * words.
+ */
+@Component({
+  selector: 'lib-lock-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class LockIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./lock-icon.svg?raw')
+  );
+}
+
+/**
+ * A map pin: where a shop is (velista `0102`).
+ *
+ * Beside "Outside your areas" wherever a shop outside the owner's postal codes is
+ * named, and at the leading edge of the get a list sheet's "Buying at" row. The words
+ * always travel with it, so the pin never has to say anything alone.
+ */
+@Component({
+  selector: 'lib-pin-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PinIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./pin-icon.svg?raw')
+  );
+}
