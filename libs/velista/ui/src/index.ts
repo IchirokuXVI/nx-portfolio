@@ -45,6 +45,7 @@ export * from './lib/install/install-benefits';
 export * from './lib/install/install-panel';
 export * from './lib/install/install-steps';
 export * from './lib/layout/app-layout';
+export * from './lib/list/anchored-popover';
 export * from './lib/list/audio-player';
 export * from './lib/list/chip-row';
 export * from './lib/list/comment-composer';

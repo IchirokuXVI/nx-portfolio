@@ -569,7 +569,7 @@
   that a guest is never pushed to register forbids explaining why.
 -->
 @if (state() === 'ready' && canAdd()) {
-  <div class="composer-dock">
+  <div #dock="cdkOverlayOrigin" cdkOverlayOrigin class="composer-dock">
     <!--
       Where the next line goes, above the field it goes from.
 
@@ -578,8 +578,13 @@
       on it would be asking a question with one answer (`0030`).
     -->
     @if (canRetarget()) {
+      <!--
+        Marked as the next step while nothing is chosen (velista 0110): the field
+        below it is locked until a list is, so this is the one thing to press.
+      -->
       <button
         (click)="openTarget()"
+        [class.is-next]="target() === null"
         [disabled]="adding()"
         class="target"
         type="button"
@@ -597,23 +602,59 @@
     }
 
     <!--
-      The field stays usable while no target is chosen, so somebody can type the
-      thing they just remembered and choose where it goes second. Only the submit
-      waits, which is what `submitDisabled` is for.
+      Locked while no target is chosen (velista 0110). Plans 0091 and 0092 kept
+      the field usable so somebody could type first and choose second, and the
+      words then went nowhere: a suggestion chosen, or the plus pressed, with no
+      list to put the line on did nothing at all. So nothing can be typed until a
+      list is chosen, a tap on the field says why, and the popover it opens holds
+      the same way to choose as the chip above.
+
+      The reason is a sentence in the page, always in the document while the
+      field is locked, because the field names it in `aria-describedby` and a
+      description has to exist before it is read.
     -->
+    @if (target() === null) {
+      <span class="visually-hidden" id="basket-add-needs-list">{{
+        'basket.add.needsList' | rokuT
+      }}</span>
+    }
     <lib-line-composer
       (holdingChanged)="changeHolding($event)"
+      (lockedPressed)="openNeedsList()"
       (queryChanged)="onComposerQuery($event)"
       (submitted)="add($event)"
       [busy]="adding()"
       [holdingsOf]="holdingsOf()"
+      [lockReasonId]="target() === null ? 'basket-add-needs-list' : null"
       [productLink]="productLink()"
-      [submitDisabled]="target() === null"
       [suggesting]="suggesting()"
       [suggestions]="suggestions()"
       [voice]="false"
     />
   </div>
+
+  <!--
+    Held against the whole dock rather than the field, so it opens above the chip
+    and never covers the control it points to. Inserted in the document right
+    after the dock, so Tab from the field reaches its button.
+  -->
+  <lib-anchored-popover
+    (closed)="closeNeedsList($event)"
+    [labelledBy]="'basket-add-needs-list-text'"
+    [open]="needsListOpen() && target() === null"
+    [origin]="dock"
+  >
+    <p class="needs-list-text" id="basket-add-needs-list-text">
+      {{ 'basket.add.needsList' | rokuT }}
+    </p>
+    <button
+      (click)="chooseFromNeedsList()"
+      class="needs-list-action"
+      type="button"
+    >
+      {{ 'basket.add.needsListAction' | rokuT }}
+    </button>
+  </lib-anchored-popover>
 }
 
 <!--

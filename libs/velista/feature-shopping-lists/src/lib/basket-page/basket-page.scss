@@ -574,3 +574,24 @@ lib-line-composer {
   font-weight: 500;
   cursor: default;
 }
+
+// Nothing chosen yet, on a basket with more than one list (velista 0110): the
+// field below is locked until a list is, so the chip is the next step and is
+// tinted in the quiet accent it already speaks in. The dock keeps its height.
+.target.is-next {
+  background: var(--app-action-quiet-bg);
+}
+
+// Inside the popover the locked field opens. The sentence is the reason, in the
+// primary text; the one control is the primary action, because it is the only
+// thing the popover is for.
+.needs-list-text {
+  margin: 0;
+  color: var(--app-text-primary);
+}
+
+.needs-list-action {
+  @include shared.primary-button;
+
+  font-size: var(--app-text-sm);
+}

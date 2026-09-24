@@ -303,6 +303,9 @@ $app-content-max: 480px;
   --app-suggestion-inside-row: 22px;
   // The group popover, wide enough for its two sentences at four lines each.
   --app-suggestion-popover-width: 248px;
+  // A popover held against a control at the foot of the screen (velista 0110): two
+  // short sentences and a button, without wrapping the button.
+  --app-anchored-popover-width: 280px;
   // The two bands the composer's panel is measured against. They are the page's
   // header and the composer row as they are drawn today, stated here because the
   // panel's height is arithmetic on the screen and these are two of its terms.

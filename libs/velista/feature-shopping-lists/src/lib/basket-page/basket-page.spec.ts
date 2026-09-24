@@ -36,6 +36,7 @@ import type {
   CatalogSuggestion,
   ErrorCode,
 } from '@portfolio/velista/models';
+import { SUGGEST_DEBOUNCE_MS } from '@portfolio/velista/models';
 import {
   PageNavigation,
   provideFakeBrowserFacade,
@@ -2893,22 +2894,126 @@ describe('the composer and the list it adds to', () => {
       expect(chip(fixture)?.tagName.toLowerCase()).toBe('button');
       expect(chip(fixture)?.textContent).toContain('basket.add.choose');
     });
+  });
 
-    it('holds the submit while none is chosen, and not the field', async () => {
-      // A person in an aisle types the thing they just remembered and chooses
-      // where it goes second, rather than losing it to a sheet.
+  /**
+   * Velista `0110`, which reverses `0091` and `0092`: with no list chosen the field
+   * is locked rather than usable, because the words typed into it went nowhere.
+   */
+  describe('with no list chosen', () => {
+    const popover = () => document.querySelector<HTMLElement>('.pop');
+
+    afterEach(() => {
+      // The popover lives in the top layer, next to the dock, and a fixture that
+      // is torn down with it open would leave it for the next test to find.
+      TestBed.resetTestingModule();
+    });
+
+    it('locks the field and the button, and says why', async () => {
       const { fixture } = await render({ served });
-      const composer = (fixture.nativeElement as HTMLElement).querySelector(
-        'lib-line-composer'
-      );
+      const input = field(fixture);
 
+      expect(input.readOnly).toBe(true);
+      expect(input.getAttribute('aria-disabled')).toBe('true');
+      const reason = document.getElementById(
+        input.getAttribute('aria-describedby') ?? ''
+      );
+      expect(reason?.textContent).toContain('basket.add.needsList');
       expect(
-        composer?.querySelector<HTMLButtonElement>('.send')?.disabled
-      ).toBe(true);
-      expect(
-        composer?.querySelector<HTMLInputElement>('input[type="text"]')
-          ?.disabled
-      ).toBeFalsy();
+        query(fixture, 'lib-line-composer .send') as HTMLButtonElement
+      ).toHaveProperty('disabled', true);
+      // The chip stays a working button, marked as the next step.
+      expect(chip(fixture)).toHaveProperty('disabled', false);
+      expect(chip(fixture)?.classList).toContain('is-next');
+    });
+
+    it('asks the catalog nothing', async () => {
+      const { fixture } = await render({ served });
+      const suggest = jest.spyOn(TestBed.inject(BasketStore), 'suggest');
+
+      // Past the field's own hold, which is the composer's to test: this is the
+      // page's guard, reached as the composer's query would reach it.
+      const page = fixture.componentInstance as unknown as {
+        onComposerQuery(query: string): void;
+      };
+      page.onComposerQuery('milk');
+      fixture.detectChanges();
+      await new Promise((done) => setTimeout(done, SUGGEST_DEBOUNCE_MS + 50));
+
+      expect(suggest).not.toHaveBeenCalled();
+    });
+
+    it('opens the popover when the field is tapped', async () => {
+      const { fixture } = await render({ served });
+      expect(popover()).toBeNull();
+
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+
+      expect(popover()?.textContent).toContain('basket.add.needsList');
+    });
+
+    it('opens the target sheet from the popover’s button', async () => {
+      const { fixture, store } = await render({ served });
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+
+      popover()
+        ?.querySelector<HTMLButtonElement>('.needs-list-action')
+        ?.click();
+      fixture.detectChanges();
+
+      expect(store.navigate).toHaveBeenCalledWith(
+        ['sheet', 'add', 'list'],
+        expect.anything()
+      );
+      expect(popover()).toBeNull();
+      // Focus goes back to the field, for the sheet to hand back on its way out,
+      // and handing it back does not open the popover again.
+      expect(document.activeElement).toBe(field(fixture));
+    });
+
+    it('closes the popover on Escape', async () => {
+      const { fixture } = await render({ served });
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
+      fixture.detectChanges();
+
+      expect(popover()).toBeNull();
+    });
+
+    it('unlocks the composer, and closes the popover, once a list is chosen', async () => {
+      const { fixture } = await render({ served });
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+
+      TestBed.inject(BasketTargetStore).choose(served[1]);
+      fixture.detectChanges();
+
+      expect(popover()).toBeNull();
+      expect(field(fixture).readOnly).toBe(false);
+      expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
+      expect(chip(fixture)?.classList).not.toContain('is-next');
+      expect(chip(fixture)?.textContent).toContain('basket.add.to');
+    });
+
+    it('changes nothing on a basket with one list, which chooses itself', async () => {
+      const { fixture } = await render({ served: [served[0]] });
+      const suggest = jest.spyOn(TestBed.inject(BasketStore), 'suggest');
+
+      expect(field(fixture).readOnly).toBe(false);
+      expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
+
+      field(fixture).dispatchEvent(new Event('focus'));
+      typeInto(fixture, 'milk');
+      await new Promise((done) => setTimeout(done, SUGGEST_DEBOUNCE_MS + 50));
+
+      expect(popover()).toBeNull();
+      expect(suggest).toHaveBeenCalledWith('milk');
     });
   });
 
