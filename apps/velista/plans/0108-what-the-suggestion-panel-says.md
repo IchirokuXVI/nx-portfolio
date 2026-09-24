@@ -1,3 +1,5 @@
+> **PR:** [#490](https://github.com/IchirokuXVI/nx-portfolio/pull/490)
+
 # 0108: what the suggestion panel says
 
 Four defects in the composer's typeahead panel (plan `0101`), found on a phone:
