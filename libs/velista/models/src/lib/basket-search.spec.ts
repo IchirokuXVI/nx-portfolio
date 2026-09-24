@@ -29,6 +29,7 @@ function row(content: string, overrides: Partial<BasketRow> = {}): BasketRow {
     optionIds: [],
     touchedBy: null,
     touchedAt: null,
+    usual: null,
     entries: [],
     ...overrides,
   };
