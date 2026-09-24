@@ -13,11 +13,14 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   BASKET_PATTERNS,
   BASKET_SCHEMA_IDS,
+  SUPERMARKET_LOCATION_PATTERNS,
   type BasketPage,
   type BasketRunResult,
   type BasketHeaderView,
   type SharedBasketCorePage,
   type SharedBasketPage,
+  type ShopAvailabilityRequest,
+  type ShopAvailabilityView,
 } from '@portfolio/luna-shopper/contracts';
 import { UuidParam } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
@@ -73,6 +76,9 @@ export class BasketsController {
    * `memberUserIds` shares it with people from the caller's groups as it is
    * made (plan 0114, section 4), and a person who is not one of their contacts
    * refuses the whole run.
+   *
+   * `supermarketLocationId` starts the trip at a shop (plan 0163, section 1):
+   * the basket keeps that shop for its whole life, for everybody in it.
    */
   @Post()
   @ApiContractResponse(BASKET_PATTERNS.create, {
@@ -90,6 +96,18 @@ export class BasketsController {
       this.nats,
       dto.memberUserIds ?? []
     );
+    // The shop the basket is bought at must exist, and catalog is the one that
+    // knows (plan 0163, section 1). Asked before core writes anything, so an
+    // unknown shop is the ordinary 404 for a location and no basket is made. It
+    // does not have to be in the owner's profile.
+    if (dto.supermarketLocationId) {
+      await this.nats.send<ShopAvailabilityView>(
+        SUPERMARKET_LOCATION_PATTERNS.shopAvailability,
+        {
+          supermarketLocationId: dto.supermarketLocationId,
+        } satisfies ShopAvailabilityRequest
+      );
+    }
     return this.nats.send<BasketRunResult>(
       BASKET_PATTERNS.create,
       { userId: user.userId, ...dto, globalUsernames }

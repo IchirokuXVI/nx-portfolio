@@ -257,4 +257,61 @@ describeIntegration('per shop availability (real Postgres)', () => {
       )?.available
     ).toBe(true);
   }, 300_000);
+
+  /**
+   * The read a basket at a shop makes (plan 0163, section 2): the three stored
+   * states come back as they are, and a product with no row is absent rather
+   * than false, because nobody said anything about it.
+   */
+  it('answers a shop, its stack and the stored availability of the products asked', async () => {
+    const shopC = (
+      await dataSource
+        .getRepository(SupermarketLocation)
+        .save(
+          dataSource
+            .getRepository(SupermarketLocation)
+            .create({ supermarketId: (await chainOf(shopA)) as string })
+        )
+    ).id;
+    await setStack(dataSource.manager, shopC, [scopeId]);
+    const [yes, no, unknown, noRow] = itemIds.slice(2500, 2504);
+    await dataSource.getRepository(SupermarketLocationItem).insert([
+      { itemId: yes, supermarketLocationId: shopC, available: true },
+      { itemId: no, supermarketLocationId: shopC, available: false },
+      { itemId: unknown, supermarketLocationId: shopC, available: null },
+    ]);
+
+    const answer = await shopItems.shopAvailability({
+      supermarketLocationId: shopC,
+      itemIds: [yes, no, unknown, noRow],
+    });
+
+    expect(answer.location.id).toBe(shopC);
+    expect(answer.location.priceScopeIds).toEqual([scopeId]);
+    expect(answer.supermarket.name).toEqual({ en: 'Chain', es: 'Cadena' });
+    const byItem = new Map(
+      answer.availability.map((row) => [row.itemId, row.available])
+    );
+    expect(byItem.get(yes)).toBe(true);
+    expect(byItem.get(no)).toBe(false);
+    expect(byItem.has(unknown)).toBe(true);
+    expect(byItem.get(unknown)).toBe(null);
+    expect(byItem.has(noRow)).toBe(false);
+  });
+
+  it('answers not found for a shop that does not exist', async () => {
+    await expect(
+      shopItems.shopAvailability({
+        supermarketLocationId: '99999999-9999-4999-8999-999999999999',
+      })
+    ).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  async function chainOf(locationId: string): Promise<string | undefined> {
+    return (
+      await dataSource
+        .getRepository(SupermarketLocation)
+        .findOneBy({ id: locationId })
+    )?.supermarketId;
+  }
 });

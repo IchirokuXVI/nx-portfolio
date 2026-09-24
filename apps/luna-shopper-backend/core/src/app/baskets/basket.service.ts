@@ -23,6 +23,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
+  isUuid,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -188,6 +189,9 @@ export class BasketService {
     // shared with somebody the owner may not share it with is refused whole,
     // rather than created and then shared with fewer people than asked.
     const members = await this.checkMembers(req);
+    // The shape of the shop and nothing more (plan 0163, section 1). Whether
+    // it exists was asked of catalog by the gateway before this message.
+    checkShop(req.supermarketLocationId);
 
     const resolved = await this.resolveSources(req);
 
@@ -403,6 +407,9 @@ export class BasketService {
             generatedAt: new Date(),
             pricingProfileId,
             idempotencyKey: req.idempotencyKey ?? null,
+            // Fixed here, for the life of the basket and for everybody in it
+            // (plan 0163, section 1). Nothing after this write names the column.
+            supermarketLocationId: req.supermarketLocationId ?? null,
           })
         );
 
@@ -997,6 +1004,21 @@ function recordedSources(
 }
 
 /** Trimmed, capped, and an empty name is no name rather than an empty one. */
+/**
+ * The shop a run was asked to buy at, refused when it is not an id (plan 0163).
+ *
+ * Only the shape. A shop is a catalog row, and core holds no copy of catalog to
+ * ask; the gateway asked before sending the run.
+ */
+function checkShop(supermarketLocationId: string | undefined): void {
+  if (supermarketLocationId !== undefined && !isUuid(supermarketLocationId)) {
+    throw new ValidationException(
+      'supermarketLocationId must be a valid shop reference',
+      { messageArgs: { field: 'supermarketLocationId' } }
+    );
+  }
+}
+
 function checkName(name: string | null | undefined): string | null {
   if (name === undefined || name === null) {
     return null;

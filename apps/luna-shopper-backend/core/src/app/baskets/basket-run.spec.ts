@@ -1,9 +1,14 @@
 import {
+  BASKET_PATTERNS,
   BasketKind,
   BasketStatus,
   RealtimeEvent,
+  validateMessageRequest,
 } from '@portfolio/luna-shopper/contracts';
-import { NotFoundException } from '@portfolio/luna-shopper/platform';
+import {
+  NotFoundException,
+  ValidationException,
+} from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, type DataSource } from 'typeorm';
 import type { BasketReadService } from '../baskets/basket-read.service';
 import { BasketSource, Basket } from '../entities';
@@ -369,6 +374,7 @@ describe('the generation run', () => {
       'ownerUserId',
       'pricingProfileId',
       'status',
+      'supermarketLocationId',
     ]);
   });
 
@@ -807,5 +813,93 @@ describe('a basket tells the lists it touches (plan 0122, section 6)', () => {
     await w.service.delete({ userId: OWNER, basketId: 'gl-old' });
 
     expect(w.tripsChanged).toEqual([LIST_A, LIST_B]);
+  });
+});
+
+/**
+ * The shop a basket is bought at (plan 0163, section 1).
+ *
+ * Set by the run and by nothing after it. The update path is asserted twice:
+ * the service writes no shop column on a rename or a status move, and the
+ * message it answers has no field a client could put one in, because its
+ * schema refuses one.
+ */
+describe('the shop a basket is started at (plan 0163)', () => {
+  const SHOP = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
+  const OTHER_SHOP = '73b49a1d-e2c6-4a81-b37d-95f80b2c6e4f';
+
+  it('stores the shop the run was asked for, and answers it back', async () => {
+    const { service, written } = build({});
+
+    const result = await service.create({
+      userId: OWNER,
+      supermarketLocationId: SHOP,
+    });
+
+    expect(written.lists[0].supermarketLocationId).toBe(SHOP);
+    expect(result.basket.supermarketLocationId).toBe(SHOP);
+  });
+
+  it('stores none when the run named none', async () => {
+    const { service, written } = build({});
+
+    const result = await service.create({ userId: OWNER });
+
+    expect(written.lists[0].supermarketLocationId).toBeNull();
+    expect(result.basket.supermarketLocationId).toBeNull();
+  });
+
+  it('refuses a shop that is not an id, before anything is written', async () => {
+    const { service, written } = build({});
+
+    await expect(
+      service.create({ userId: OWNER, supermarketLocationId: 'not-a-shop' })
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(written.lists).toHaveLength(0);
+  });
+
+  it.each([
+    ['a rename', { name: 'Saturday' }],
+    ['a finish', { status: BasketStatus.FINISHED }],
+    ['a move back to open', { status: BasketStatus.OPEN }],
+  ])('keeps the shop through %s', async (_name, change) => {
+    const w = build({
+      existing: {
+        id: 'gl-shop',
+        ownerUserId: OWNER,
+        status: BasketStatus.OPEN,
+        name: null,
+        generatedAt: new Date('2026-03-01T00:00:00.000Z'),
+        kind: BasketKind.GENERATED,
+        pricingProfileId: null,
+        supermarketLocationId: SHOP,
+      },
+    });
+
+    const view = await w.service.update({
+      userId: OWNER,
+      basketId: 'gl-shop',
+      ...change,
+      // A caller that tries anyway: the field is not on the request type, and
+      // the service reads no such key.
+      ...({ supermarketLocationId: OTHER_SHOP } as object),
+    });
+
+    expect(view.supermarketLocationId).toBe(SHOP);
+  });
+
+  it('has no field on the update message a shop could travel in', () => {
+    const refused = validateMessageRequest(BASKET_PATTERNS.update, {
+      userId: OWNER,
+      basketId: 'gl-shop',
+      supermarketLocationId: OTHER_SHOP,
+    });
+    const accepted = validateMessageRequest(BASKET_PATTERNS.create, {
+      userId: OWNER,
+      supermarketLocationId: SHOP,
+    });
+
+    expect(refused.valid).toBe(false);
+    expect(accepted.valid).toBe(true);
   });
 });

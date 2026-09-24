@@ -98,6 +98,8 @@ import {
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityRequest,
   type SetSupermarketLocationItemAvailabilityResult,
+  type ShopAvailabilityRequest,
+  type ShopAvailabilityView,
   type ShopPage,
   type SummarizeLocationsByChainRequest,
   type SupermarketIdRequest,
@@ -282,6 +284,21 @@ export class CatalogController {
   @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.search)
   searchShops(@Payload() req: SearchShopsRequest): Promise<ShopPage> {
     return this.locations.search(req);
+  }
+
+  /**
+   * One shop, its scope stack, its chain and the stored availability of some
+   * products there (plan 0163, section 2).
+   *
+   * Service to service and carrying no `userId`, like `item.getMany`: the
+   * basket read that asks may be a guest's, and a shop and whether it stocks a
+   * product are not private.
+   */
+  @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.shopAvailability)
+  shopAvailability(
+    @Payload() req: ShopAvailabilityRequest
+  ): Promise<ShopAvailabilityView> {
+    return this.locationItems.shopAvailability(req);
   }
 
   // --- Items ---------------------------------------------------------------

@@ -835,6 +835,13 @@ export interface SettlementPaid {
   /** The one shop, or null: a reader not served shops never records one. */
   supermarketLocationId: string | null;
   /**
+   * The shop's chain, copied so that a count by chain needs no join into
+   * catalog (plan 0163, section 5). Set together with
+   * {@link supermarketLocationId} and never without it. Optional on the wire,
+   * and absent reads as null.
+   */
+  supermarketId?: string | null;
+  /**
    * What **one unit** cost at {@link priceScopeId}, in the minor unit of
    * {@link pricePaidCurrency}. Never the row's total, and never catalog's
    * `unitPrice`, which is a per kilogram number.

@@ -116,4 +116,19 @@ export class Basket extends BaseEntity {
   /** Null for a run that carried no key; unique per owner when it did. */
   @Column({ type: 'varchar', length: 200, nullable: true })
   idempotencyKey!: string | null;
+
+  /**
+   * The shop this basket is bought at (plan 0163, section 1).
+   *
+   * Written once, by the run that creates a `GENERATED` basket, and never
+   * changed after by anybody, the owner included: no update path names it.
+   * Null on every `LIVE` basket (`ck_baskets_live_no_shop`), whose shop is a
+   * choice of the device and reaches the server only on a read and a settle.
+   *
+   * Opaque, like every catalog reference in core: no foreign key, since catalog
+   * is a separate database. The gateway asked catalog that it exists before
+   * the run wrote it. It does not have to be in the owner's profile.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  supermarketLocationId!: string | null;
 }

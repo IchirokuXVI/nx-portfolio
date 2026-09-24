@@ -74,6 +74,12 @@ export const ERROR_CATALOG: Record<
     en: 'This basket is finished, so it cannot be changed.',
     es: 'Esta cesta está terminada, así que no se puede modificar.',
   },
+  // A fact about the basket, and what to do about it is implied: the shop was
+  // chosen when the basket was started, so there is nothing to pick now.
+  [ERROR_CODES.BASKET_SHOP_LOCKED]: {
+    en: 'This basket was started at a shop, and that shop cannot be changed.',
+    es: 'Esta cesta se empezó en una tienda, y esa tienda no se puede cambiar.',
+  },
   // It carries its number in the message rather than only in a code, because
   // the client's job is to say it: "somebody else moved this, it is 3 now" is
   // actionable and "that failed" is not (plan 0057, section 5).

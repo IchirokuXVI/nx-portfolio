@@ -232,6 +232,12 @@ export const CATALOG_SCHEMA_IDS = {
   searchShopsRequest: schemaId('msg/supermarketLocation.search/request'),
   shopView: schemaId('catalog/ShopView'),
   shopPage: schemaId('catalog/ShopPage'),
+  // A shop as a basket read at it needs it (plan 0163, section 2).
+  shopAvailabilityRequest: schemaId(
+    'msg/supermarketLocation.shopAvailability/request'
+  ),
+  shopAvailabilityView: schemaId('catalog/ShopAvailabilityView'),
+  shopItemAvailabilityView: schemaId('catalog/ShopItemAvailabilityView'),
   upsertLocationItemRequest: schemaId(
     'msg/supermarketLocationItem.upsert/request'
   ),
@@ -413,43 +419,51 @@ const itemOfferView = object(
   ]
 );
 
+/**
+ * A product's own fields, exported so that a view extending one (the basket's
+ * product of plan 0163) lists the same fields rather than a copy of them.
+ */
+export const itemViewProperties: Record<string, JsonSchema> = {
+  id: nonEmptyString(),
+  name: ref(CATALOG_SCHEMA_IDS.localizedText),
+  brand: nullableString(),
+  imageUrl: nullableString(),
+  sku: nullableString(),
+  ean: nullableString(),
+  unitSize: numberOrNull(),
+  packCount: packCountOrNull(),
+  category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+  defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+  productGroupId: nullableString(),
+  // Deliberately NOT required: only the reads that take price scopes fill it,
+  // and absent means the same as null (plan 0048, section 3.1).
+  bestOffer: {
+    anyOf: [ref(CATALOG_SCHEMA_IDS.itemOfferView), { type: 'null' }],
+  },
+  // Also deliberately NOT required (plan 0109, section 2): only a lookup that
+  // asked for `all` fills it, and absent means "this read did not list the
+  // scopes", which is a different sentence from an empty array.
+  offers: array(ref(CATALOG_SCHEMA_IDS.itemOfferView)),
+};
+
+export const itemViewRequired: string[] = [
+  'id',
+  'name',
+  'brand',
+  'imageUrl',
+  'sku',
+  'ean',
+  'unitSize',
+  'packCount',
+  'category',
+  'defaultUnit',
+  'productGroupId',
+];
+
 const itemView = object(
   CATALOG_SCHEMA_IDS.itemView,
-  {
-    id: nonEmptyString(),
-    name: ref(CATALOG_SCHEMA_IDS.localizedText),
-    brand: nullableString(),
-    imageUrl: nullableString(),
-    sku: nullableString(),
-    ean: nullableString(),
-    unitSize: numberOrNull(),
-    packCount: packCountOrNull(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
-    defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
-    productGroupId: nullableString(),
-    // Deliberately NOT required: only the reads that take price scopes fill it,
-    // and absent means the same as null (plan 0048, section 3.1).
-    bestOffer: {
-      anyOf: [ref(CATALOG_SCHEMA_IDS.itemOfferView), { type: 'null' }],
-    },
-    // Also deliberately NOT required (plan 0109, section 2): only a lookup that
-    // asked for `all` fills it, and absent means "this read did not list the
-    // scopes", which is a different sentence from an empty array.
-    offers: array(ref(CATALOG_SCHEMA_IDS.itemOfferView)),
-  },
-  [
-    'id',
-    'name',
-    'brand',
-    'imageUrl',
-    'sku',
-    'ean',
-    'unitSize',
-    'packCount',
-    'category',
-    'defaultUnit',
-    'productGroupId',
-  ]
+  itemViewProperties,
+  itemViewRequired
 );
 
 const productGroupOfferView = object(
@@ -2077,6 +2091,42 @@ const shopPage = paginated(
   CATALOG_SCHEMA_IDS.shopView
 );
 
+/**
+ * A shop and the availability of some products there (plan 0163, section 2).
+ *
+ * No `userId`, like `item.getMany`: a shop and whether it stocks a product are
+ * not private, and a guest reading a shared basket is who asks.
+ */
+const shopAvailabilityRequest = object(
+  CATALOG_SCHEMA_IDS.shopAvailabilityRequest,
+  {
+    supermarketLocationId: nonEmptyString(),
+    itemIds: array(nonEmptyString()),
+  },
+  ['supermarketLocationId']
+);
+
+const shopItemAvailabilityView = object(
+  CATALOG_SCHEMA_IDS.shopItemAvailabilityView,
+  {
+    itemId: nonEmptyString(),
+    // Null is a row that says nothing, which is not the same as no row: a
+    // product with no row is absent from the answer.
+    available: { type: ['boolean', 'null'] },
+  },
+  ['itemId', 'available']
+);
+
+const shopAvailabilityView = object(
+  CATALOG_SCHEMA_IDS.shopAvailabilityView,
+  {
+    location: ref(CATALOG_SCHEMA_IDS.supermarketLocationView),
+    supermarket: ref(CATALOG_SCHEMA_IDS.supermarketView),
+    availability: array(ref(CATALOG_SCHEMA_IDS.shopItemAvailabilityView)),
+  },
+  ['location', 'supermarket', 'availability']
+);
+
 export const catalogSchemas: JsonSchema[] = [
   enumOf(CATALOG_SCHEMA_IDS.itemCategory, Object.values(ItemCategory)),
   enumOf(CATALOG_SCHEMA_IDS.unitOfMeasure, Object.values(UnitOfMeasure)),
@@ -2235,6 +2285,9 @@ export const catalogSchemas: JsonSchema[] = [
   searchShopsRequest,
   shopView,
   shopPage,
+  shopAvailabilityRequest,
+  shopItemAvailabilityView,
+  shopAvailabilityView,
 ];
 
 export const catalogMessageContracts: Record<
@@ -2492,5 +2545,9 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_LOCATION_PATTERNS.search]: {
     request: CATALOG_SCHEMA_IDS.searchShopsRequest,
     response: CATALOG_SCHEMA_IDS.shopPage,
+  },
+  [SUPERMARKET_LOCATION_PATTERNS.shopAvailability]: {
+    request: CATALOG_SCHEMA_IDS.shopAvailabilityRequest,
+    response: CATALOG_SCHEMA_IDS.shopAvailabilityView,
   },
 };

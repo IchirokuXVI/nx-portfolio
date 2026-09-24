@@ -429,6 +429,70 @@ describe('contract schemas', () => {
             { zoneId: 'z', listId: 'l' },
             { zoneId: 'z2', listId: null },
           ],
+          supermarketLocationId: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('the basket header names the shop it was started at (plan 0163)', () => {
+      const header = {
+        id: 'gl',
+        kind: 'GENERATED',
+        name: null,
+        status: 'OPEN',
+        generatedAt: '2026-01-01T00:00:00.000Z',
+        sources: [],
+      };
+      expect(
+        validateMessageResponse('basket.create', {
+          basket: { ...header, supermarketLocationId: 'loc-1' },
+          list: { ...header, supermarketLocationId: 'loc-1' },
+        }).valid
+      ).toBe(true);
+      // Required and nullable, so a client can tell "no shop" from "not told".
+      expect(validateMessageResponse('basket.update', header).valid).toBe(
+        false
+      );
+    });
+
+    it('supermarketLocation.shopAvailability answers a shop and its three availability states (plan 0163)', () => {
+      expect(
+        validateMessageRequest('supermarketLocation.shopAvailability', {
+          supermarketLocationId: 'loc-1',
+          itemIds: ['i-1'],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('supermarketLocation.shopAvailability', {
+          location: {
+            id: 'loc-1',
+            supermarketId: 's-1',
+            priceScopeId: 'ps-store',
+            priceScopeIds: ['ps-store', 'ps-region'],
+            label: null,
+            address: null,
+            city: null,
+            country: null,
+            postalCode: '14008',
+            postalCodeSource: null,
+            latitude: null,
+            longitude: null,
+            externalRef: null,
+            externalProvider: null,
+          },
+          supermarket: {
+            id: 's-1',
+            name: { en: 'Lidl', es: 'Lidl' },
+            logoUrl: null,
+            websiteUrl: null,
+            externalBrandKey: null,
+            defaultPriceScopeId: null,
+          },
+          availability: [
+            { itemId: 'i-1', available: true },
+            { itemId: 'i-2', available: false },
+            { itemId: 'i-3', available: null },
+          ],
         }).valid
       ).toBe(true);
     });

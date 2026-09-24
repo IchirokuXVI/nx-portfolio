@@ -1,3 +1,5 @@
+> **PR:** [#479](https://github.com/IchirokuXVI/nx-portfolio/pull/479)
+
 # 0163: a basket names the shop it is bought at
 
 > Frontend half: velista `0102`, buying at one shop. Followed by `0164` (shops near a point,
