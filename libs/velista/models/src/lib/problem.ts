@@ -91,6 +91,16 @@ export const ERROR_CODES = [
    */
   'basket_finished',
   /**
+   * The basket was started at a shop and the request named another (backend `0163`),
+   * as a 409.
+   *
+   * The page never sends one on purpose: a basket's own shop is drawn locked and
+   * only a device's choice can differ from it. So the app answers it by acting
+   * rather than by a sentence of its own: the store drops the device's choice and
+   * reads the basket again at its own shop (velista `0102`).
+   */
+  'basket_shop_locked',
+  /**
    * The number this write was moving is not where the caller believed it started
    * (backend plans 0056 and 0057), as a 409.
    *

@@ -348,6 +348,15 @@ export interface BasketProduct {
    */
   readonly offers: readonly ProductOffer[];
   /**
+   * What the shop the basket was read at says about this product (velista `0102`;
+   * backend `0163`, section 2), or null when the read named no shop.
+   *
+   * **The server decides the price at a shop**, from that shop's own stack of
+   * scopes, so nothing here picks a scope out of {@link offers} for a shop: a row
+   * with a shop chosen draws this and nothing else.
+   */
+  readonly atShop: BasketProductAtShop | null;
+  /**
    * What aisles this product belongs to, for the category grouping (velista
    * `0077`, section 2).
    *
@@ -381,6 +390,60 @@ export interface BasketPriceScope {
    * only to be collapsed at every call site.
    */
   readonly locations: readonly ScopeLocation[];
+}
+
+/**
+ * One product at one shop (velista `0102`; `BasketProductAtShopView` on the wire).
+ *
+ * Every field can be null on its own, and each null means something different. A
+ * null {@link price} is a shop that has no price for the product, which is what
+ * sinks a row as "not listed" (`0078`). A null {@link available} is a shop nobody
+ * has said anything about, which is most shops today and is never drawn.
+ */
+export interface BasketProductAtShop {
+  /**
+   * The scope whose price won at this shop, which is what a settle made here sends
+   * as its `priceScopeId`. Null exactly when {@link price} is.
+   */
+  readonly priceScopeId: string | null;
+  readonly price: number | null;
+  readonly currency: string | null;
+  /**
+   * What catalog has stored about this product at this shop: true, false, or null
+   * for nothing stored. **Read and never inferred**, so a chain that stocks the
+   * product says nothing about this door.
+   */
+  readonly available: boolean | null;
+}
+
+/**
+ * A shop, named for a person (velista `0102`; `BasketShopView` on the wire).
+ *
+ * The one model for "where somebody is buying", whichever read named it: the
+ * basket's own shop, or a shop picked from the basket's scopes on this device.
+ * The chain and the shop's own name stay {@link LocalizedName}s, for the reason
+ * `BasketProduct.name` gives: the reader's language can change under an open page.
+ */
+export interface BasketShop {
+  /** The `supermarket_locations` id, which is what a read and a settle send. */
+  readonly id: string;
+  /** The chain's id, or null where the read named the chain and not its id. */
+  readonly supermarketId: string | null;
+  readonly chain: LocalizedName;
+  /** The shop's own name, which most shops of a chain do not have. */
+  readonly label: LocalizedName | null;
+  readonly address: string | null;
+  readonly city: string | null;
+  readonly postalCode: string | null;
+  /**
+   * Whether the shop's postal code is one of the basket owner's areas (backend
+   * `0163`, section 3), or null where no read said.
+   *
+   * False draws "Outside your areas" wherever the shop is named. Null draws
+   * nothing: a shop picked from the basket's own scopes is one of the profile's
+   * shops, and the server states the fact only for a shop it was asked about.
+   */
+  readonly inProfile: boolean | null;
 }
 
 /** One shop of a scope, as much of it as the pick sheet draws. */
@@ -611,35 +674,166 @@ export function basketRowProduct(
 }
 
 /**
- * The offer a basket row draws for its product (velista `0078`, section 5).
+ * A price a row draws, and the scope it was read at.
  *
- * **The chosen shop's**, when one is in use, and the cheapest at the run's scopes
- * otherwise. Null when there is no offer, and null for an offer with no number on it,
- * which draws the same blank.
+ * Narrower than {@link ProductOffer} because it has two sources: the cheapest offer
+ * anywhere, and a product's price at one shop, which carries a number and a scope and
+ * nothing else. The row draws the number and a settle sends the scope.
+ */
+export interface ShownPrice {
+  readonly price: number;
+  readonly currency: string | null;
+  readonly priceScopeId: string;
+}
+
+/**
+ * The price a basket row draws for its product (velista `0078`, section 5; `0102`).
+ *
+ * **The shop's**, when the rows are priced at one: the product's `atShop`, which the
+ * server decided from that shop's stack. The cheapest at the run's scopes otherwise.
+ * Null when there is no price, which draws the same blank either way.
+ *
+ * @param atShop Whether the rows are priced at a chosen shop, which is
+ *   `basketPricedAtShop` and never a test of this product alone.
  */
 export function shownOffer(
   product: BasketProduct | null | undefined,
-  shop: string | null
-): ProductOffer | null {
+  atShop: boolean
+): ShownPrice | null {
   if (product === null || product === undefined) {
     return null;
   }
-  const offer = shop === null ? product.offer : offerAt(product, shop);
-  return offer === null || offer.price === null ? null : offer;
+  if (atShop) {
+    const here = product.atShop;
+    return here === null || here.price === null || here.priceScopeId === null
+      ? null
+      : {
+          price: here.price,
+          currency: here.currency,
+          priceScopeId: here.priceScopeId,
+        };
+  }
+  const offer = product.offer;
+  return offer === null || offer.price === null
+    ? null
+    : {
+        price: offer.price,
+        currency: offer.currency,
+        priceScopeId: offer.priceScopeId,
+      };
 }
 
 /**
  * The price scope a settle names (velista `0095`, section 6): exactly the scope of the
- * offer the row drew, or undefined when it drew no price.
+ * price the row drew, or undefined when it drew no price.
  *
  * Read through {@link shownOffer}, which the row draws from, so what is sent is what
  * was drawn by construction.
  */
 export function shownPriceScope(
   product: BasketProduct | null | undefined,
-  shop: string | null
+  atShop: boolean
 ): string | undefined {
-  return shownOffer(product, shop)?.priceScopeId ?? undefined;
+  return shownOffer(product, atShop)?.priceScopeId ?? undefined;
+}
+
+/**
+ * Where a settle says it happened, as a body fragment to spread (velista `0102`).
+ *
+ * **The one place a settle body learns about a shop**, used by the row, its reel and
+ * the settle sheet alike, so the three cannot disagree.
+ *
+ * - With a shop chosen, the shop and the scope of the price the row drew, which is
+ *   the product's `atShop.priceScopeId`. The server copies the chain beside them.
+ * - In "any of your shops" mode, **no shop, ever**: the scope of the cheapest price
+ *   is not where the person stood, and a guess here would be counted by `0104` as a
+ *   place something was bought. The scope of the price shown still travels, which
+ *   is `0095`.
+ *
+ * @param shop The chosen shop's id, the basket's own on a basket started at one, or
+ *   null for any of your shops.
+ * @param atShop Whether the rows are priced at that shop (`basketPricedAtShop`).
+ */
+export function basketSettleShop(
+  product: BasketProduct | null | undefined,
+  shop: string | null,
+  atShop: boolean
+): { readonly priceScopeId?: string; readonly supermarketLocationId?: string } {
+  const priceScopeId = shownPriceScope(product, shop !== null && atShop);
+  return {
+    ...(priceScopeId === undefined ? {} : { priceScopeId }),
+    ...(shop === null ? {} : { supermarketLocationId: shop }),
+  };
+}
+
+/**
+ * What a row says about the shelf at the chosen shop (velista `0102`), or nothing.
+ *
+ * - `unavailable`: **every** product the row offers is known missing at this shop.
+ * - `instead`: the product the row buys by default is known missing and another of
+ *   its options is not, so the row offers that one and a settle buys it.
+ *
+ * A mark and never a move: the row keeps its place and its controls, because the
+ * shelf may be restocked and the person is the one looking at it.
+ */
+export type BasketShelfMark =
+  | { readonly kind: 'unavailable' }
+  | {
+      readonly kind: 'instead';
+      /** The option the row offers in place of its default. */
+      readonly optionId: string;
+      /** The default it replaced, which the caption names. */
+      readonly replacedId: string;
+    };
+
+/**
+ * The shelf mark for one row, from the products' `atShop.available` (velista `0102`).
+ *
+ * **Only a stored false counts.** Unknown is never marked, because availability is
+ * read and never inferred, and most shops have no record at all yet: a row with one
+ * option whose shop said nothing is an ordinary row.
+ *
+ * Only products the read named are asked, and a product it could not name is
+ * neither missing nor present. The replacement prefers an option known to be there,
+ * and then one nobody has said anything about, in the server's option order.
+ *
+ * @param atShop Whether the products' `atShop` describes the chosen shop. False
+ *   answers null for every row, which is "any of your shops" and a read in flight.
+ */
+export function basketShelfMark(
+  row: Pick<BasketRow, 'optionIds'>,
+  products: ReadonlyMap<string, BasketProduct>,
+  atShop: boolean
+): BasketShelfMark | null {
+  if (!atShop) {
+    return null;
+  }
+
+  const options = row.optionIds
+    .map((id) => products.get(id))
+    .filter((product): product is BasketProduct => product !== undefined);
+  if (options.length === 0) {
+    return null;
+  }
+
+  const missing = (product: BasketProduct) =>
+    product.atShop?.available === false;
+  if (options.every(missing)) {
+    return { kind: 'unavailable' };
+  }
+
+  const fallback = row.optionIds[0];
+  const first = fallback === undefined ? undefined : products.get(fallback);
+  if (first === undefined || !missing(first)) {
+    return null;
+  }
+
+  const other =
+    options.find((product) => product.atShop?.available === true) ??
+    options.find((product) => !missing(product));
+  return other === undefined
+    ? null
+    : { kind: 'instead', optionId: other.id, replacedId: first.id };
 }
 
 /** How a run of lines is progressing: got, had none, and how many there are. */
@@ -692,6 +886,33 @@ export interface Basket {
    * scope is not here resolves to no place and is still a price.
    */
   readonly scopes: ReadonlyMap<string, BasketPriceScope>;
+  /**
+   * The shop this basket was started at, or null (velista `0102`; backend `0163`,
+   * section 1).
+   *
+   * **The lock is the server's fact.** It is {@link lockedShopId}, which core
+   * always answers; this is that shop named, and null when catalog could not name
+   * it this time. Never set on a `LIVE` basket, whose shop is a choice of the
+   * device.
+   */
+  readonly shop: BasketShop | null;
+  /**
+   * The id of the shop this basket was started at, or null for a basket nobody
+   * started anywhere. Set only by the request that created it, and never changed
+   * by anybody after, the owner included.
+   */
+  readonly lockedShopId: string | null;
+  /**
+   * The shop this read was made at, which is the shop every product's `atShop`
+   * describes, or null for a read at no shop.
+   *
+   * The mapper cannot know the request, so it answers {@link lockedShopId} (the
+   * server always reads a started basket at its own shop), and `BasketStore`
+   * stamps the device's choice on an answer it asked for with one. A view that
+   * compares this with the shop it wants is how a row avoids quoting the last
+   * shop's prices while the read at the next one is still out.
+   */
+  readonly readAt: string | null;
   /**
    * Over the rows that are not `REMOVED`. **The server's, never recounted.**
    *
@@ -835,6 +1056,14 @@ export interface BasketSettleRequest {
    * itself, as the basket's owner, at this scope (backend `0143`).
    */
   readonly priceScopeId?: string;
+  /**
+   * The shop the person is standing in (velista `0102`; backend `0163`, section 5).
+   *
+   * Sent on every settle made while a shop is chosen, and absent in "any of your
+   * shops" mode, always. On a basket started at a shop it is that shop, and the
+   * server records it when this is absent too.
+   */
+  readonly supermarketLocationId?: string;
 }
 
 /**

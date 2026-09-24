@@ -6,8 +6,10 @@ import type {
   BasketProgress,
   BasketRow,
   BasketRowEntry,
+  BasketShelfMark,
+  BasketShop,
 } from './basket-view';
-import { basketRowPick, offerAt } from './basket-view';
+import { basketRowPick, basketShelfMark } from './basket-view';
 import type { BasketRowState, ProductCategory } from './enums';
 import { inLocale } from './shopping-profile';
 
@@ -39,7 +41,14 @@ export type BasketViewProperty = 'order' | 'grouping' | 'shop' | 'lists';
 export interface BasketViewState {
   readonly order: BasketOrder;
   readonly grouping: BasketGrouping;
-  /** The price scope whose prices are shown, or null for the cheapest anywhere (`0078`). */
+  /**
+   * The shop the person is buying at, a supermarket location id, or null for any
+   * of their shops (velista `0102`).
+   *
+   * A shop and not a price scope since that plan: the answer does three jobs, and
+   * pricing the rows is only one of them. On a basket started at a shop it is that
+   * shop, whatever this device chose.
+   */
   readonly shop: string | null;
   /**
    * The source lists kept, or null for all of them. Never remembered.
@@ -95,6 +104,15 @@ export interface BasketViewContext {
    * which draws no marks at all rather than marks naming nobody.
    */
   readonly scopes: ReadonlyMap<string, BasketPriceScope>;
+  /**
+   * The chosen shop, named, **when the read the products came from was made at
+   * it**, and null otherwise (velista `0102`).
+   *
+   * Null while a read at a newly chosen shop is still out, which keeps every row
+   * from quoting the last shop's `atShop` under the new shop's name. The pipeline
+   * marks and prices nothing until this names {@link BasketViewState.shop}.
+   */
+  readonly shop: BasketShop | null;
 }
 
 /**
@@ -182,6 +200,16 @@ export interface BasketViewRow {
    * backend `0130` gave a row and velista `0093` draws.
    */
   readonly priceMark: BasketPriceMark | null;
+  /**
+   * What the chosen shop is known not to have on this row, or null (velista
+   * `0102`).
+   *
+   * Beside {@link priceMark} rather than inside its union, because a row can carry
+   * both: a product the shop neither prices nor stocks sinks with the unlisted and
+   * says it is missing too. **It never moves a row.** Only {@link priceMark}'s
+   * `unlisted` does, and that is `0078`'s rule unchanged.
+   */
+  readonly shelf: BasketShelfMark | null;
 }
 
 /**
@@ -311,17 +339,17 @@ export function composeBasketView(
 }
 
 /**
- * What the chosen shop makes of this basket: a mark per line, and which lines sank.
+ * What the chosen shop makes of this basket: a mark per line, which lines sank, and
+ * what the shop is known not to have (velista `0078`; `0102`).
  *
- * Null wherever no marking may be drawn, and there are three such cases rather than
- * one. No shop is chosen, which is the default and the ordinary state of the screen.
- * A shop this basket was not priced at, which is a remembered choice against a
- * basket that has changed (`0076`) and cannot say anything about it. And **a scope
- * that lists nothing on this basket**, which is velista `0078` section 5.1 and is
- * the one that matters in the world as it is today: staging and production carry no
- * prices at all, a profile's shops exist whether or not the harvester has reached
- * them, and a shop nobody has priced is not a shop that stocks nothing. Marking
- * every line "not listed at Mercadona" there would be the app inventing a fact.
+ * Null when the products were not read at the chosen shop: no shop is chosen, which
+ * is the default, or a read at a newly chosen one is still out. With a shop, the
+ * price half is empty for **a shop that prices nothing on this basket**, which is
+ * velista `0078` section 5.1 and is the case that matters today: a shop nobody has
+ * priced is not a shop that stocks nothing, and marking every line "not listed at
+ * Mercadona" there would be the app inventing a fact. The shelf half does not wait
+ * for prices, because a shop can say what it lacks without saying what anything
+ * costs, and the one source of shop availability today prints no prices at all.
  */
 interface PriceView {
   /** The chosen shop's chain, in the reader's language, for every sentence here. */
@@ -330,6 +358,8 @@ interface PriceView {
   readonly marks: ReadonlyMap<string, BasketPriceMark>;
   /** The rows this shop does not list, by `rowKey`, which sink and are marked. */
   readonly unlisted: ReadonlySet<string>;
+  /** What the shop is known not to have, by `rowKey`. Never moves a row. */
+  readonly shelves: ReadonlyMap<string, BasketShelfMark>;
 }
 
 function priceView(
@@ -337,40 +367,44 @@ function priceView(
   state: BasketViewState,
   context: BasketViewContext
 ): PriceView | null {
-  const shop = basketPricedScope(rows, state, context);
-  if (shop === null) {
+  const shop = context.shop;
+  if (!basketReadAtShop(state, context) || shop === null) {
     return null;
   }
 
-  const scope = context.scopes.get(shop);
-  if (scope === undefined) {
-    return null;
-  }
-
-  const chain = inLocale(scope.supermarketName, context.locale);
+  const chain = inLocale(shop.chain, context.locale);
   const marks = new Map<string, BasketPriceMark>();
   const unlisted = new Set<string>();
+  const shelves = new Map<string, BasketShelfMark>();
+  const priced = basketPricedAtShop(rows, state, context);
 
   for (const row of rows) {
+    const shelf = basketShelfMark(row, context.products, true);
+    if (shelf !== null) {
+      shelves.set(row.rowKey, shelf);
+    }
+
     const product = basketRowPick(row, context.products);
-    if (product === undefined) {
-      // No product, or one the catalog can no longer resolve. There is nothing to
-      // be unlisted, so the row says nothing and never sinks.
+    if (!priced || product === undefined) {
+      // No price anywhere at this shop, or no product to be unlisted: the row says
+      // nothing about prices and never sinks.
       continue;
     }
 
-    const here = offerAt(product, shop);
-    const best = cheapestElsewhere(product, shop, context);
+    const here = product.atShop;
+    const best = cheapestElsewhere(
+      product,
+      here?.priceScopeId ?? null,
+      context
+    );
 
-    if (here === null) {
+    if (here === null || here.price === null) {
       unlisted.add(row.rowKey);
       marks.set(row.rowKey, { kind: 'unlisted', chain, elsewhere: best });
       continue;
     }
 
-    // A scope can carry a product with no number on it, which is listed and
-    // unpriced. Nothing can be called cheaper than a price that does not exist.
-    if (here.price !== null && best !== null && best.price < here.price) {
+    if (best !== null && best.price < here.price) {
       marks.set(row.rowKey, {
         kind: 'cheaper',
         price: best.price,
@@ -380,41 +414,52 @@ function priceView(
     }
   }
 
-  return { chain, marks, unlisted };
+  return { chain, marks, unlisted, shelves };
 }
 
 /**
- * The scope every row on this screen quotes, or null for the cheapest anywhere
- * (velista `0078`, sections 5 and 5.1).
+ * Whether the products carry what the chosen shop says about them (velista `0102`).
  *
- * Exported because the **row component** needs the same answer the pipeline needs:
- * it draws `offerAt(pick, this)` where it used to draw the cheapest, and a row that
- * read `BasketViewState.shop` directly would quote nothing at all on a basket where
- * this says null. One question, so the price a row shows and the marks the pipeline
- * writes cannot come from different shops.
- *
- * Three ways to answer null, and the third is the one that matters today. No shop is
- * chosen. A shop this basket was not priced at, which a remembered choice can be
- * (`0076`). Or **a shop that lists nothing on this basket**: staging and production
- * carry no prices, a profile's shops exist whether or not the harvester has reached
- * them, and a shop nobody has priced is not a shop that stocks nothing. One priced
- * product is enough to say the harvester has been to this chain, which is what makes
- * its silence about the rest worth drawing.
+ * True only when a shop is chosen **and** the read was made at it. Everything this
+ * pipeline says about a shop waits for this: the shelf marks, the prices and the
+ * sink. A read still out at a newly chosen shop answers false, so no row quotes the
+ * last shop under the next one's name.
  */
-export function basketPricedScope(
-  rows: readonly BasketRow[],
-  state: BasketViewState,
-  context: Pick<BasketViewContext, 'products' | 'scopes'>
-): string | null {
-  const shop = state.shop;
-  if (shop === null || !context.scopes.has(shop)) {
-    return null;
-  }
+export function basketReadAtShop(
+  state: Pick<BasketViewState, 'shop'>,
+  context: Pick<BasketViewContext, 'shop'>
+): boolean {
+  return state.shop !== null && context.shop?.id === state.shop;
+}
 
-  const priced = rows.some(
-    (row) => offerAt(basketRowPick(row, context.products), shop) !== null
-  );
-  return priced ? shop : null;
+/**
+ * Whether every row on this screen quotes the chosen shop's price (velista `0078`,
+ * sections 5 and 5.1; `0102`).
+ *
+ * Exported because the **row component** and the **settle** need the same answer
+ * the pipeline needs: a row draws its product's `atShop` price when this is true and
+ * the cheapest anywhere when it is false, and a settle names the scope of whichever
+ * it drew. One question, so the price a row shows, the marks the pipeline writes and
+ * the scope a settle sends cannot come from different places.
+ *
+ * False when no shop is chosen, when the read at it is still out, and for **a shop
+ * that prices nothing on this basket**: a shop nobody has priced is not a shop that
+ * stocks nothing, so every row draws as under "any of your shops" and nothing claims
+ * a line is unlisted. One priced product is enough to say somebody has priced this
+ * shop, which is what makes its silence about the rest worth drawing.
+ */
+export function basketPricedAtShop(
+  rows: readonly BasketRow[],
+  state: Pick<BasketViewState, 'shop'>,
+  context: Pick<BasketViewContext, 'products' | 'shop'>
+): boolean {
+  if (!basketReadAtShop(state, context)) {
+    return false;
+  }
+  return rows.some((row) => {
+    const here = basketRowPick(row, context.products)?.atShop;
+    return here !== undefined && here !== null && here.price !== null;
+  });
 }
 
 /**
@@ -422,7 +467,9 @@ export function basketPricedScope(
  *
  * A minimum rather than the first entry, although backend `0109` sorts them cheapest
  * first: an ordering promised by a response is not one this file can be held to, and
- * the scan is over a handful of offers.
+ * the scan is over a handful of offers. "Other" is every scope but the one the shop's
+ * own price was read at, which is `0078`'s comparison with the shop's price now read
+ * from `atShop`.
  *
  * A scope {@link BasketViewContext.scopes} cannot name is skipped rather than drawn
  * with its id. "1.99 € at 7f3c…" is not a sentence, and the offer it came
@@ -430,14 +477,14 @@ export function basketPricedScope(
  */
 function cheapestElsewhere(
   product: BasketProduct,
-  shop: string,
+  here: string | null,
   context: BasketViewContext
 ): { price: number; currency: string | null; chain: string } | null {
   let best: { price: number; currency: string | null; chain: string } | null =
     null;
 
   for (const offer of product.offers) {
-    if (offer.priceScopeId === shop || offer.price === null) {
+    if (offer.priceScopeId === here || offer.price === null) {
       continue;
     }
     const scope = context.scopes.get(offer.priceScopeId);
@@ -742,6 +789,7 @@ function byList(
         row,
         entry,
         priceMark: prices?.marks.get(row.rowKey) ?? null,
+        shelf: prices?.shelves.get(row.rowKey) ?? null,
       };
 
       const listId = entry.listId;
@@ -822,6 +870,7 @@ function rowsOf(
     row,
     entry: null,
     priceMark: prices?.marks.get(row.rowKey) ?? null,
+    shelf: prices?.shelves.get(row.rowKey) ?? null,
   }));
 }
 
@@ -958,6 +1007,13 @@ export interface BasketViewChip {
   readonly key: string;
   /** What that key interpolates, or null when it takes nothing. */
   readonly args: Readonly<Record<string, string | number>> | null;
+  /**
+   * Set on the shop chip of a basket started at a shop (velista `0102`), which draws
+   * a lock and no x: an x that does nothing is a broken promise, and nobody can put
+   * that shop back to any, the owner included. Tapping it opens the sheet, where the
+   * line under the fieldset says why.
+   */
+  readonly locked?: true;
 }
 
 /**
@@ -985,6 +1041,8 @@ export function basketViewChips(
     readonly listCount: number;
     /** The chosen shop's chain, which `0078` supplies. */
     readonly chainName?: string | null;
+    /** Whether the shop is the basket's own, which no chip can take off (`0102`). */
+    readonly shopLocked?: boolean;
   }
 ): readonly BasketViewChip[] {
   const chips: BasketViewChip[] = [];
@@ -1013,6 +1071,7 @@ export function basketViewChips(
       property: 'shop',
       key: 'basket.view.chip.shop',
       args: { name: names.chainName ?? state.shop },
+      ...(names.shopLocked === true ? { locked: true as const } : {}),
     });
   }
 
