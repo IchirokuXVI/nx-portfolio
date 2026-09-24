@@ -53,12 +53,17 @@ export type LineComposerButton = 'add' | 'record';
  * resets to one so the seventh item does not silently inherit the sixth one's count.
  * A FAB would put a dialog between every pair of those six.
  *
- * ## It is absent without `WRITE`, never disabled
+ * ## It is absent without `WRITE`, and locked only with a reason and a way out
  *
  * That decision belongs to the container, which knows whether the caller may write.
  * This component is simply not rendered in that case, because a disabled text field at
  * the bottom of a screen is an invitation that does not work and costs a tap to find
  * out (section 3.2).
+ *
+ * The one disabled state it has is {@link lockReasonId} (velista `0110`), and it is not
+ * the case that sentence argues against: the container sets it only while one step is
+ * missing that the person can take from where they stand, names that step in words the
+ * field is described by, and answers a tap on the field with {@link lockedPressed}.
  *
  * It is drawn from certainty since velista plan 0030: `myPermissions` arrives with the
  * list, so the composer is absent from the first frame for somebody who may not add,
@@ -156,24 +161,34 @@ export class LineComposer {
   readonly busy = input(false);
 
   /**
-   * Whether the container is not ready to receive a line (velista `0092`,
-   * section 7.2).
+   * The id of the element that says why the composer is closed, or null while it is
+   * open (velista `0110`).
    *
    * One input and no knowledge of why. The basket's composer sets it while no
-   * target list has been chosen, because every line added there names a list
-   * now; the list page's never sets it, because a line added on a list is
-   * already on one. A composer that knew which of those it was would be a
-   * component that knows about baskets.
+   * target list has been chosen, because every line added there names a list; the
+   * list page's never sets it, because a line added on a list is already on one. A
+   * composer that knew which of those it was would be a component that knows about
+   * baskets.
    *
-   * **The field stays usable**, which is the whole point of this being separate
-   * from {@link busy}: somebody in an aisle types the thing they just remembered
-   * and chooses where it goes second, rather than losing it to a sheet.
+   * **The field and the button are both held**, and the suggestions with them.
+   * Plans `0091` and `0092` kept the field usable so that somebody could type first
+   * and choose the list second, and in practice the typed words then went nowhere:
+   * the typeahead ran, a suggestion was chosen, and nothing happened. So nothing can
+   * be typed until the step the container is waiting for has been taken.
    *
-   * It holds the suggestion list too. Choosing a suggestion **is** the submit
-   * (section 6), so a live dropdown over a disabled button would be one way in
-   * that works and one that does not.
+   * The field is `aria-disabled` and read only rather than `disabled`, so it stays
+   * focusable: a tap or a focus from the keyboard emits {@link lockedPressed}, which
+   * is how the container shows the reason and the way to take that step. The id is
+   * what the field names in `aria-describedby`, so a screen reader hears the reason
+   * with the field.
    */
-  readonly submitDisabled = input(false);
+  readonly lockReasonId = input<string | null>(null);
+
+  /** Whether the composer is closed. See {@link lockReasonId}. */
+  readonly locked = computed(() => this.lockReasonId() !== null);
+
+  /** The closed field was tapped or focused. The container says why, and how to open it. */
+  readonly lockedPressed = output<void>();
 
   /**
    * Whether to take focus on creation.
@@ -462,6 +477,11 @@ export class LineComposer {
   }
 
   onInput(event: Event): void {
+    // The field is read only while locked, so this is the belt: nothing typed may
+    // reach the container, which would ask the catalog for it.
+    if (this.locked()) {
+      return;
+    }
     const typed = (event.target as HTMLInputElement).value;
     this.content.set(typed);
     // Typing is asking again. See `_dismissed`.
@@ -500,10 +520,10 @@ export class LineComposer {
    * decides which brand later, on the line page, by trimming a set it already has.
    */
   choose(suggestion: CatalogSuggestion): void {
-    // Held like the button while a submit is out, and while the container is not
-    // ready for a line: choosing **is** the submit, so the two have to be held
-    // by the same conditions or one way in would work and the other would not.
-    if (this.busy() || this.submitDisabled()) {
+    // Held like the button while a submit is out, and while the composer is
+    // locked: choosing **is** the submit, so the two have to be held by the same
+    // conditions or one way in would work and the other would not.
+    if (this.busy() || this.locked()) {
       return;
     }
 
@@ -671,6 +691,24 @@ export class LineComposer {
   }
 
   /**
+   * The locked field was tapped or focused (velista `0110`). An open field says
+   * nothing: this is only the container's cue to explain the lock.
+   */
+  protected onFieldTouched(): void {
+    if (this.locked()) {
+      this.lockedPressed.emit();
+    }
+  }
+
+  /**
+   * Put focus back on the field without anything else happening, for a container
+   * that moved it away and is handing it back (velista `0110`).
+   */
+  focusField(): void {
+    this._field()?.nativeElement.focus();
+  }
+
+  /**
    * The form's own submit, which is what makes the phone keyboard's Go key work.
    *
    * `(submit)` and not `(ngSubmit)`: the latter is `NgForm`'s output and needs
@@ -699,7 +737,7 @@ export class LineComposer {
   submit(): void {
     // Enter reaches this through the form's submit, which a disabled button does not
     // stop, so the hold has to be here as well as on the button. See `busy`.
-    if (this.busy() || !this.canSubmit()) {
+    if (this.busy() || this.locked() || !this.canSubmit()) {
       return;
     }
 

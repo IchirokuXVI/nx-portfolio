@@ -1,3 +1,4 @@
+import { CdkOverlayOrigin } from '@angular/cdk/overlay';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -49,6 +50,7 @@ import {
   visitNoticeKey,
 } from '@portfolio/velista/platform';
 import {
+  AnchoredPopover,
   ChangesBanner,
   ChevronLeftIcon,
   ChipRow,
@@ -59,6 +61,7 @@ import {
   PersonIcon,
   ShareIcon,
   VisitNotice,
+  type AnchoredPopoverClose,
   type ChipRowItem,
   type SuggestionHolding,
   type SuggestionHoldingChange,
@@ -142,7 +145,9 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 @Component({
   selector: 'lib-basket-page',
   imports: [
+    AnchoredPopover,
     BasketRow,
+    CdkOverlayOrigin,
     ChangesBanner,
     ChevronLeftIcon,
     ChipRow,
@@ -1500,6 +1505,64 @@ export class BasketPage {
   }
 
   /**
+   * Whether the popover saying a list comes first is up (velista `0110`).
+   *
+   * Drawn only while there is still no target, so choosing a list closes it
+   * without anything here having to watch for that.
+   */
+  protected readonly needsListOpen = signal(false);
+
+  /**
+   * Set for the moment this page hands focus back to the locked field itself, so
+   * the focus it causes is not read as somebody asking why the field is locked.
+   */
+  private _quietFocus = false;
+
+  /** The locked field was tapped or focused. */
+  protected openNeedsList(): void {
+    if (!this._quietFocus) {
+      this.needsListOpen.set(true);
+    }
+  }
+
+  /**
+   * The popover asked to close. On Escape, focus goes back to the field when it
+   * had moved into the popover, which is where it was before the popover opened.
+   * A press outside leaves focus wherever that press put it.
+   */
+  protected closeNeedsList(reason: AnchoredPopoverClose): void {
+    if (!this.needsListOpen()) {
+      return;
+    }
+    this.needsListOpen.set(false);
+    if (reason === 'escape') {
+      this._refocusField();
+    }
+  }
+
+  /**
+   * The popover's own button: the chip's sheet, from where the person is looking.
+   *
+   * Focus is put back on the field before the sheet opens, because the sheet hands
+   * focus back on its way out to whatever held it when it opened, and the popover's
+   * button is gone by then.
+   */
+  protected chooseFromNeedsList(): void {
+    this.needsListOpen.set(false);
+    this._refocusField();
+    this.openTarget();
+  }
+
+  private _refocusField(): void {
+    this._quietFocus = true;
+    try {
+      this._composer()?.focusField();
+    } finally {
+      this._quietFocus = false;
+    }
+  }
+
+  /**
    * What the composer offers under the field, in the **server's** order.
    *
    * Never re-sorted here, for the reason written on `CatalogApi.suggest`: the
@@ -1669,7 +1732,10 @@ export class BasketPage {
   private readonly _suggestEffect = effect((onCleanup) => {
     const query = this._query().trim();
 
-    if (query.length < SUGGEST_MIN_CHARS) {
+    // No list to add to, no request (velista `0110`). The field is locked then and
+    // cannot be typed into, so this is the belt: a suggestion offered with nowhere
+    // to put it is the thing that plan removed.
+    if (query.length < SUGGEST_MIN_CHARS || this.target() === null) {
       // Cleared synchronously rather than after the debounce: a dropdown that
       // lingered over a field somebody has just emptied is offering matches for
       // nothing.
