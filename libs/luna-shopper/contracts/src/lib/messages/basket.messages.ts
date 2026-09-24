@@ -194,8 +194,22 @@ export interface BasketView {
    * is served chains and scopes and never an address. The shops are the owner's
    * profile rather than a fact about any list, so the per list rule of `0130`
    * section 6 cannot answer it and this flag does.
+   *
+   * Since plan 0163 it is true for **every** participant, a link visitor
+   * included: a guest picks the shop they are standing in from the same list
+   * the owner sees. The field stays so that a client reading it keeps working.
    */
   servesLocations: boolean;
+  /**
+   * The shop this basket was started at, or null (plan 0163, section 1).
+   *
+   * Set only by the request that created the basket and never changed after,
+   * by anybody, and always null on a `LIVE` basket, whose shop is a choice of
+   * the device rather than of the basket. The gateway turns it into
+   * `BasketResult.shop`; it is here as an id so that the lock is a fact core
+   * states even when catalog cannot name the shop.
+   */
+  supermarketLocationId: string | null;
 }
 
 /**
@@ -238,7 +252,15 @@ export interface BasketResult extends BasketView {
    * request, because a basket that never ends cannot freeze a profile its owner
    * goes on editing.
    */
-  products: ItemView[];
+  products: BasketProductView[];
+  /**
+   * The basket's own shop, named, or null (plan 0163, section 1).
+   *
+   * Null on a basket started at no shop, which is every `LIVE` basket, and
+   * null too when catalog could not name the shop this time: the lock itself
+   * is {@link BasketView.supermarketLocationId}, which core always answers.
+   */
+  shop: BasketShopView | null;
   /**
    * What each scope an offer names **is**: one entry per scope id that appears
    * on any `bestOffer` above, and no others (plan 0066, section 4).
@@ -272,6 +294,61 @@ export interface BasketPriceScopeView extends PriceScopeChainView {
    * and empty for a scope catalog cannot place; both draw the chain alone.
    */
   locations: BasketScopeLocationView[];
+}
+
+/**
+ * A product of the basket read, with what the read's shop says about it (plan
+ * 0163, section 2).
+ */
+export interface BasketProductView extends ItemView {
+  /** Null when the read has no shop. */
+  atShop: BasketProductAtShopView | null;
+}
+
+/**
+ * One product at the shop the read is made at (plan 0163, section 2).
+ *
+ * The price is the one catalog materializes for the shop's most specific scope,
+ * which already applies the rule of plan 0117 over the shop's whole stack: the
+ * narrowest scope with a valid price wins. The gateway picks nothing itself.
+ */
+export interface BasketProductAtShopView {
+  /**
+   * The scope the price was read at, which is what a settle at this shop sends
+   * as its `priceScopeId`. Null when the shop has no price for the product.
+   */
+  priceScopeId: string | null;
+  price: number | null;
+  currency: string | null;
+  /**
+   * `supermarket_location_items.available` for this product at this shop, or
+   * null when there is no row. Read, never inferred: the chain's own
+   * availability is not a shop's.
+   */
+  available: boolean | null;
+}
+
+/**
+ * A shop, named for a person (plan 0163, section 1).
+ *
+ * The same shape `0164` answers for a shop near a point, so one client model
+ * draws both.
+ */
+export interface BasketShopView {
+  /** The `supermarket_locations` id. */
+  id: string;
+  supermarketId: string;
+  supermarketName: LocalizedText;
+  label: LocalizedText | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+  /**
+   * Whether the shop's postal code is one of the postal codes of the basket
+   * owner's pricing profile (plan 0163, section 3). A fact for the client to
+   * warn about, and it changes nothing on the server.
+   */
+  inProfile: boolean;
 }
 
 /** One shop of a scope, as much of it as the pick sheet draws. */
@@ -462,6 +539,13 @@ export interface BasketSearchScope {
    */
   servesLocations: boolean;
   /**
+   * The shop the basket was started at, or null (plan 0163, section 5).
+   *
+   * The basket's, like the owner and the profile. A settle on a basket with
+   * its own shop records that shop, and one naming another shop is refused.
+   */
+  supermarketLocationId: string | null;
+  /**
    * The product a settle on the requested row records when it names none, and
    * how many the row offers (plan 0151). Present exactly when the request
    * named a `rowKey`.
@@ -629,6 +713,11 @@ export interface BasketHeaderView {
   generatedAt: string;
   /** What the run was asked to draw from, as it was named (section 4). */
   sources: BasketSourceView[];
+  /**
+   * The shop the basket was started at, or null (plan 0163, section 1). Fixed
+   * when the basket is created and never changed after.
+   */
+  supermarketLocationId: string | null;
 }
 
 /**
@@ -742,6 +831,14 @@ export interface CreateBasketRequest {
    * only for a person the owner shares no approved group with, or several.
    */
   globalUsernames?: UserUsernameView[];
+  /**
+   * The shop the basket is bought at (plan 0163, section 1).
+   *
+   * The gateway has already asked catalog that the shop exists. It does not
+   * have to be in the owner's profile. It is fixed for the life of the basket
+   * and applies to everybody in it: no request changes it afterwards.
+   */
+  supermarketLocationId?: string;
 }
 
 export interface BasketIdRequest {

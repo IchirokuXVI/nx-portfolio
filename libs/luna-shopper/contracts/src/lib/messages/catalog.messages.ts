@@ -99,6 +99,18 @@ export const SUPERMARKET_LOCATION_PATTERNS = {
    * query is a listing, a query narrows the same read.
    */
   search: 'supermarketLocation.search',
+  /**
+   * One shop as a basket read at it needs it: the shop with its scope stack,
+   * its chain, and the stored availability of a set of products there (plan
+   * 0163, section 2).
+   *
+   * One subject rather than `get` plus a second read, because the basket read
+   * asks both at once and a shopper is standing in the shop. Service to service
+   * and carrying no `userId`: a shop and whether it stocks a product are not
+   * private, and the gateway has already decided the reader may be told them.
+   * An unknown shop is the ordinary 404 for a location.
+   */
+  shopAvailability: 'supermarketLocation.shopAvailability',
 } as const;
 
 export const ITEM_PATTERNS = {
@@ -1240,6 +1252,39 @@ export interface UpdateSupermarketLocationRequest extends AdminCredential {
 
 export interface SupermarketLocationIdRequest extends AdminCredential {
   supermarketLocationId: string;
+}
+
+/**
+ * A shop and what catalog stores about these products there (plan 0163,
+ * section 2).
+ */
+export interface ShopAvailabilityRequest {
+  supermarketLocationId: string;
+  /**
+   * The products to answer availability for, at most
+   * {@link ITEM_LOOKUP_LIMITS.maxIds}. Empty or absent asks for the shop alone,
+   * which is what a create and a settle need.
+   */
+  itemIds?: string[];
+}
+
+/** The shop, its chain, and the availability rows it holds for the products asked. */
+export interface ShopAvailabilityView {
+  /** Carries the scope stack, most specific first, in `priceScopeIds`. */
+  location: SupermarketLocationView;
+  supermarket: SupermarketView;
+  /**
+   * One entry per product asked about that has a row for this shop. A product
+   * with no row is absent, which means nobody knows: it is never read as false.
+   */
+  availability: ShopItemAvailabilityView[];
+}
+
+/** `supermarket_location_items.available` for one product at one shop. */
+export interface ShopItemAvailabilityView {
+  itemId: string;
+  /** True, false, or null when the row exists and says nothing. */
+  available: boolean | null;
 }
 
 export interface ListSupermarketLocationsRequest extends PageQuery {

@@ -29,7 +29,11 @@ import { COMMON_IDS } from '../common.schemas';
 import { ENUM_IDS } from '../enums.schemas';
 import { AUTH_SCHEMA_IDS } from './auth.schemas';
 import { BASKET_SHARING_SCHEMA_IDS } from './basket-sharing.schemas';
-import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
+import {
+  CATALOG_SCHEMA_IDS,
+  itemViewProperties,
+  itemViewRequired,
+} from './catalog.schemas';
 import { LIST_SCHEMA_IDS } from './list.schemas';
 
 /**
@@ -53,6 +57,10 @@ export const BASKET_SCHEMA_IDS = {
   result: schemaId('basket/BasketResult'),
   priceScopeView: schemaId('basket/BasketPriceScopeView'),
   scopeLocationView: schemaId('basket/BasketScopeLocationView'),
+  // A read at a shop (plan 0163): the basket's own shop, and each product at it.
+  shopView: schemaId('basket/BasketShopView'),
+  productView: schemaId('basket/BasketProductView'),
+  productAtShopView: schemaId('basket/BasketProductAtShopView'),
   allocationEntry: schemaId('basket/BasketAllocationEntry'),
   rowResult: schemaId('basket/BasketRowResult'),
   searchScope: schemaId('basket/BasketSearchScope'),
@@ -189,6 +197,9 @@ const viewProperties = {
   // a client can draw the banner without asking whether the server told it.
   unseenChangeCount: integer({ minimum: 0 }),
   newestUnseenChangeId: nullableString(),
+  // The shop the basket was started at (plan 0163). Null on every `LIVE`
+  // basket, and required, so a client can tell "no shop" from "not told".
+  supermarketLocationId: nullableString(),
 };
 
 const viewRequired = [
@@ -206,6 +217,7 @@ const viewRequired = [
   'servesLocations',
   'unseenChangeCount',
   'newestUnseenChangeId',
+  'supermarketLocationId',
 ];
 
 const view = object(BASKET_SCHEMA_IDS.view, viewProperties, viewRequired);
@@ -243,16 +255,68 @@ const priceScopeView = object(
   ['priceScopeId', 'supermarketId', 'supermarketName', 'locations']
 );
 
+const shopView = object(
+  BASKET_SCHEMA_IDS.shopView,
+  {
+    id: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+    label: { anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }] },
+    address: nullableString(),
+    city: nullableString(),
+    postalCode: nullableString(),
+    inProfile: boolean(),
+  },
+  [
+    'id',
+    'supermarketId',
+    'supermarketName',
+    'label',
+    'address',
+    'city',
+    'postalCode',
+    'inProfile',
+  ]
+);
+
+const productAtShopView = object(
+  BASKET_SCHEMA_IDS.productAtShopView,
+  {
+    priceScopeId: nullableString(),
+    price: { type: ['number', 'null'] },
+    currency: nullableString(),
+    // The stored value, or null when the shop holds no row for the product.
+    available: { type: ['boolean', 'null'] },
+  },
+  ['priceScopeId', 'price', 'currency', 'available']
+);
+
+// A catalog product plus what the read's shop says about it. The product's own
+// fields are catalog's, listed once over there.
+const productView = object(
+  BASKET_SCHEMA_IDS.productView,
+  {
+    ...itemViewProperties,
+    atShop: {
+      anyOf: [ref(BASKET_SCHEMA_IDS.productAtShopView), { type: 'null' }],
+    },
+  },
+  [...itemViewRequired, 'atShop']
+);
+
 const result = object(
   BASKET_SCHEMA_IDS.result,
   {
     ...viewProperties,
-    products: array(ref(CATALOG_SCHEMA_IDS.itemView)),
+    products: array(ref(BASKET_SCHEMA_IDS.productView)),
+    // The basket's own shop, named (plan 0163). Null when it has none, or when
+    // catalog could not name it this time.
+    shop: { anyOf: [ref(BASKET_SCHEMA_IDS.shopView), { type: 'null' }] },
     // Required and possibly empty, never absent: nothing about it is redacted
     // as a whole, only the shops inside each entry are.
     scopes: array(ref(BASKET_SCHEMA_IDS.priceScopeView)),
   },
-  [...viewRequired, 'products', 'scopes']
+  [...viewRequired, 'products', 'shop', 'scopes']
 );
 
 const allocationEntry = object(
@@ -288,8 +352,11 @@ const searchScope = object(
     // Only when the request named a row: which product a settle that names
     // none records there, answered by core, which writes it (plan 0151).
     pick: ref(LIST_SCHEMA_IDS.settlePick),
+    // The basket's own shop, which a settle records and may not contradict
+    // (plan 0163, section 5).
+    supermarketLocationId: nullableString(),
   },
-  ['ownerUserId', 'profileId', 'servesLocations']
+  ['ownerUserId', 'profileId', 'servesLocations', 'supermarketLocationId']
 );
 
 const getRequest = object(
@@ -450,8 +517,18 @@ const headerView = object(
     status: ref(BASKET_SCHEMA_IDS.basketStatus),
     generatedAt: nonEmptyString(),
     sources: array(ref(BASKET_SCHEMA_IDS.basketSourceView)),
+    // The shop the basket was started at, fixed for its life (plan 0163).
+    supermarketLocationId: nullableString(),
   },
-  ['id', 'kind', 'name', 'status', 'generatedAt', 'sources']
+  [
+    'id',
+    'kind',
+    'name',
+    'status',
+    'generatedAt',
+    'sources',
+    'supermarketLocationId',
+  ]
 );
 
 const historyViewProperties = {
@@ -558,6 +635,9 @@ const createRequest = object(
       uniqueItems: true,
     },
     globalUsernames: array(ref(AUTH_SCHEMA_IDS.userUsernameView)),
+    // The shop the basket is bought at, checked by the gateway against catalog
+    // before this message is sent (plan 0163, section 1).
+    supermarketLocationId: nonEmptyString(),
   },
   ['userId']
 );
@@ -617,6 +697,9 @@ export const basketSchemas: JsonSchema[] = [
   summaryView,
   scopeLocationView,
   priceScopeView,
+  shopView,
+  productAtShopView,
+  productView,
   result,
   allocationEntry,
   rowResult,

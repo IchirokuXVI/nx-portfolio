@@ -145,6 +145,18 @@ export class BasketFinishedException extends DomainException {
 }
 
 /**
+ * The basket has its own shop, and the request named a different one (plan
+ * 0163).
+ *
+ * Renders as 409. A basket created with a shop keeps it for life and for every
+ * participant, so a read or a settle at another shop is refused rather than
+ * answered at the basket's own, which the caller did not ask for.
+ */
+export class BasketShopLockedException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_SHOP_LOCKED;
+}
+
+/**
  * The number being moved is not where the caller believed it started (plan 0057,
  * section 5).
  *

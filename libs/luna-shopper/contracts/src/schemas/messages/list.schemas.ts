@@ -243,6 +243,9 @@ const settlementPaid = object(
   {
     priceScopeId: nonEmptyString(),
     supermarketLocationId: nullableString(),
+    // The shop's chain (plan 0163, section 5). Optional, so a message from a
+    // gateway older than that plan is still read, and absent is null.
+    supermarketId: nullableString(),
     pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
     pricePaidCurrency: { type: ['string', 'null'], maxLength: 3 },
   },

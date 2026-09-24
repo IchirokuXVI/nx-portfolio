@@ -72,6 +72,16 @@ export const ERROR_CODES = {
    */
   BASKET_FINISHED: 'basket_finished',
   /**
+   * The basket was started at a shop, and the request named another one (plan
+   * 0163).
+   *
+   * A basket created with a shop keeps it for life and for everybody in it, so a
+   * read or a settle that names a different shop is refused rather than quietly
+   * answered at the basket's own. Its own code, because the client's reaction is
+   * particular: redraw the basket at its own shop and stop offering the choice.
+   */
+  BASKET_SHOP_LOCKED: 'basket_shop_locked',
+  /**
    * The number this write was moving is not where the caller believed it started
    * (plan 0057, section 5; plan 0056, section 3.2).
    *
@@ -286,6 +296,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // conflict is. It stays distinguishable from a plain `conflict` by its code,
   // which is what lets velista say "this basket is finished".
   [ERROR_CODES.BASKET_FINISHED]: HttpStatus.CONFLICT,
+  // 409 for the same reason: the request was well formed, and what refuses it
+  // is the basket's own shop, which was fixed when the basket was made.
+  [ERROR_CODES.BASKET_SHOP_LOCKED]: HttpStatus.CONFLICT,
   // 409 for the same reason and apart from it by code: the request was well
   // formed, and what it conflicts with is state that moved underneath it.
   [ERROR_CODES.STALE_QUANTITY]: HttpStatus.CONFLICT,
