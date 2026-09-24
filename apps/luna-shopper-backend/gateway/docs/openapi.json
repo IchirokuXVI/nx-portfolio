@@ -10991,6 +10991,106 @@
         ]
       }
     },
+    "/v1/baskets/{id}/shops/nearby": {
+      "post": {
+        "operationId": "BasketShopsController_nearby_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BasketNearbyShopsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The shops within 750 m of the point, nearest first, judged against the basket’s pricing profile, and either the shop picked or why none was. The point is not stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.NearbyShopsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`not_a_participant` — You are no longer part of this shopping list.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`basket_shop_locked` — This basket was started at a shop, and that shop cannot be changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "baskets"
+        ]
+      }
+    },
     "/v1/catalog/supermarkets": {
       "get": {
         "operationId": "CatalogSupermarketsController_list_v1",
@@ -12291,6 +12391,102 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ShopPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/shops/nearby": {
+      "post": {
+        "operationId": "CatalogNearbyShopsController_nearby_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NearbyShopsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The shops within 750 m of the point, nearest first, and either the shop picked for you or why none was. The point is not stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.NearbyShopsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -19431,6 +19627,62 @@
         ]
       }
     },
+    "/v1/account/recent-shops": {
+      "get": {
+        "operationId": "RecentShopsController_recentShops_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The shops you marked something bought at in the last 60 days, newest first. Composed from your purchases and the catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/purchase.RecentShopsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
     "/v1/purchases/sessions": {
       "get": {
         "operationId": "PurchaseController_listSessions_v1",
@@ -24636,6 +24888,65 @@
             "description": "What to call this person on the screen. Unverified text on an unauthenticated link, so it is never treated as identity; skipping it gets them \"Guest N\"."
           }
         }
+      },
+      "BasketNearbyShopsDto": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "Degrees, as the device reported them. Not stored."
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "Degrees, as the device reported them. Not stored."
+          },
+          "accuracyMetres": {
+            "type": "number",
+            "minimum": 0,
+            "description": "The radius in metres the device is sure of, as `GeolocationCoordinates.accuracy` reports it. Over 150 nothing is picked automatically. Not stored."
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude",
+          "accuracyMetres"
+        ]
+      },
+      "NearbyShopsDto": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "Degrees, as the device reported them. Not stored."
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "Degrees, as the device reported them. Not stored."
+          },
+          "accuracyMetres": {
+            "type": "number",
+            "minimum": 0,
+            "description": "The radius in metres the device is sure of, as `GeolocationCoordinates.accuracy` reports it. Over 150 nothing is picked automatically. Not stored."
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Judge the shops against this profile of yours rather than your default one. Somebody else’s profile is not found."
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude",
+          "accuracyMetres"
+        ]
       },
       "LookupItemsDto": {
         "type": "object",
@@ -30968,6 +31279,128 @@
         ],
         "additionalProperties": false
       },
+      "catalog.NearbyShopPickView": {
+        "type": "object",
+        "properties": {
+          "locationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "distanceMetres": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "locationId",
+          "distanceMetres"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.NearbyShopsView": {
+        "type": "object",
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.NearbyShopView"
+            }
+          },
+          "pick": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.NearbyShopPickView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "noPick": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.NearbyShopNoPick"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "candidates",
+          "pick",
+          "noPick"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.NearbyShopView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketName": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postalCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inProfile": {
+            "type": "boolean"
+          },
+          "distanceMetres": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "excluded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "supermarketId",
+          "supermarketName",
+          "label",
+          "address",
+          "city",
+          "postalCode",
+          "inProfile",
+          "distanceMetres",
+          "excluded"
+        ],
+        "additionalProperties": false
+      },
       "catalog.PostalCodeCoverageView": {
         "type": "object",
         "properties": {
@@ -32435,6 +32868,15 @@
           "APPROVED",
           "REJECTED",
           "CANCELLED"
+        ]
+      },
+      "enums.NearbyShopNoPick": {
+        "type": "string",
+        "enum": [
+          "NONE_NEARBY",
+          "LOW_ACCURACY",
+          "AMBIGUOUS",
+          "OUTSIDE_PROFILE"
         ]
       },
       "enums.ParticipantKind": {
@@ -36211,6 +36653,38 @@
           "listName",
           "zoneId",
           "content"
+        ],
+        "additionalProperties": false
+      },
+      "purchase.RecentShopsView": {
+        "type": "object",
+        "properties": {
+          "shops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/purchase.RecentShopView"
+            }
+          }
+        },
+        "required": [
+          "shops"
+        ],
+        "additionalProperties": false
+      },
+      "purchase.RecentShopView": {
+        "type": "object",
+        "properties": {
+          "shop": {
+            "$ref": "#/components/schemas/basket.BasketShopView"
+          },
+          "lastBoughtAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "shop",
+          "lastBoughtAt"
         ],
         "additionalProperties": false
       },
