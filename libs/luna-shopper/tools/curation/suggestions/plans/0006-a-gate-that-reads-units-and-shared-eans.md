@@ -1,3 +1,5 @@
+> **PR:** [#467](https://github.com/IchirokuXVI/nx-portfolio/pull/467)
+
 # 0006 A gate that reads units and shared EANs
 
 > Found by `apps/luna-shopper-backend/plans/0150` (report findings 10 and 11, and
@@ -57,8 +59,12 @@ of brands to register as a file an operator can act on.
 - `start` with an empty registry stops and prints the command below, unless
   `--allow-empty-registry` is given.
 - A new command, `propose-brands --run-dir <dir>`, reads the queue with no model and writes
-  `brands-to-register.json`: each printed brand, its key, how many entries carry it, and a
-  suggested label. The file is the body `brands/register-many` takes, after a person edits it.
+  `brands-to-register.json`: one suggested label per printed brand. The file is the body
+  `brands/register-many` takes, after a person edits it: `{ brands: [{ label,
+privateLabelSupermarketId }] }` and nothing else, because the gateway rejects unknown fields.
+  More than 200 brands are split into `brands-to-register-2.json` and on, one body per request.
+  Each brand's key, spellings and entry count, and the chain ids, go in
+  `brands-to-register.notes.json` beside it.
 
 ### Scope
 

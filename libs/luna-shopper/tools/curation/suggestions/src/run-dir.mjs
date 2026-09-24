@@ -2,7 +2,8 @@
  * The run directory: the only state this library keeps (plan 0001).
  *
  * A killed run resumes for free because everything a subcommand needs is on
- * disk between invocations. There are three files and nothing else:
+ * disk between invocations. There are four files a walk reads, and a fifth
+ * nothing reads back:
  *
  * - `state.json`: the run's identity, the two urls, the chain walk cursor, the
  *   ids already decided, the candidate set each row of the current batch was
@@ -12,6 +13,15 @@
  * - `brands.json`: the brand registry as `start` read it (plan 0004). Written
  *   once, never rewritten, and read by every later step, so one walk applies
  *   one registry from its first row to its last.
+ * - `shared-eans.json`: which queued entries print an EAN another queued entry
+ *   of their chain prints, as `start` read the queue (plan 0006). Written once,
+ *   like `brands.json`.
+ * - `brands-to-register.json`: what `propose-brands` suggests registering, as
+ *   the body `POST /v1/admin/catalog/brands/register-many` takes. More than 200
+ *   brands are split into `brands-to-register-2.json` and on, one body each.
+ *   `brands-to-register.notes.json` beside them holds what a person reads while
+ *   editing: each brand's key, spellings and entry count, and the chain ids a
+ *   house label names. Nothing in a walk reads any of them.
  *
  * The decided ids live in `state.json` *and* are recoverable from the JSONL, on
  * purpose. `state.json` is rewritten whole and could be lost to a kill between
@@ -23,7 +33,9 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -77,6 +89,80 @@ export function readBrands(dir) {
     );
   }
   return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+const SHARED_EANS_FILE = 'shared-eans.json';
+const BRANDS_TO_REGISTER_FILE = 'brands-to-register.json';
+const BRANDS_TO_REGISTER_NOTES_FILE = 'brands-to-register.notes.json';
+/** Every body file `writeBrandsToRegister` writes, and nothing else. */
+const BRANDS_TO_REGISTER_PART = /^brands-to-register(-\d+)?\.json$/;
+
+export function sharedEansPath(dir) {
+  return join(dir, SHARED_EANS_FILE);
+}
+
+/** Body 1 is `brands-to-register.json`, body n is `brands-to-register-<n>.json`. */
+export function brandsToRegisterPath(dir, part = 1) {
+  return part === 1
+    ? join(dir, BRANDS_TO_REGISTER_FILE)
+    : join(dir, `brands-to-register-${part}.json`);
+}
+
+export function brandsToRegisterNotesPath(dir) {
+  return join(dir, BRANDS_TO_REGISTER_NOTES_FILE);
+}
+
+/**
+ * The queued entries whose EAN another queued entry of the same chain prints,
+ * as `start` read the queue (plan 0006).
+ *
+ * `{ readAt, entries: { <entry id>: [<the other entry ids>] } }`. Written once,
+ * beside `brands.json` and for the same reason: `state.json` is rewritten whole
+ * on every step, and this is a snapshot every later step reads unchanged.
+ */
+export function writeSharedEans(dir, snapshot) {
+  const path = sharedEansPath(dir);
+  writeFileSync(path, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+  return path;
+}
+
+/**
+ * The snapshot, or an empty one for a run started before plan 0006.
+ *
+ * A missing file is not an error, unlike a missing `brands.json`: a run that
+ * never indexed its EANs behaves exactly as it did when it was started.
+ */
+export function readSharedEans(dir) {
+  const path = sharedEansPath(dir);
+  if (!existsSync(path)) {
+    return { readAt: null, entries: {} };
+  }
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+/**
+ * The brands `propose-brands` suggests registering, for a person to edit.
+ *
+ * `bodies` holds one request body per element, each `{ brands }`, and `notes`
+ * is what the sibling notes file holds. The bodies of an earlier proposal are
+ * removed first, so a directory never keeps a stale part a person might send.
+ * Answers the body paths in order and the notes path.
+ */
+export function writeBrandsToRegister(dir, bodies, notes) {
+  mkdirSync(dir, { recursive: true });
+  for (const name of readdirSync(dir)) {
+    if (BRANDS_TO_REGISTER_PART.test(name)) {
+      rmSync(join(dir, name));
+    }
+  }
+  const files = bodies.map((body, index) => {
+    const path = brandsToRegisterPath(dir, index + 1);
+    writeFileSync(path, `${JSON.stringify(body, null, 2)}\n`, 'utf8');
+    return path;
+  });
+  const notesFile = brandsToRegisterNotesPath(dir);
+  writeFileSync(notesFile, `${JSON.stringify(notes, null, 2)}\n`, 'utf8');
+  return { files, notesFile };
 }
 
 /** Every non empty line of a JSONL file, parsed. */
