@@ -111,13 +111,22 @@
         The combobox that owns the panel's grid (rule 8 of velista 0101): a card
         holds several controls, which a listbox option may not.
       -->
+      <!--
+        Locked (velista 0110): aria-disabled and read only rather than disabled, so a
+        tap or the keyboard still reaches it and the container can say why.
+      -->
       <input
+        (click)="onFieldTouched()"
+        (focus)="onFieldTouched()"
         (input)="onInput($event)"
         [attr.aria-controls]="panelOpen() ? panelId : null"
+        [attr.aria-describedby]="lockReasonId()"
+        [attr.aria-disabled]="locked() ? 'true' : null"
         [attr.aria-expanded]="panelOpen()"
         [attr.aria-label]="'list.add.placeholder' | rokuT"
         [attr.maxlength]="maxLength"
         [placeholder]="'list.add.placeholder' | rokuT"
+        [readOnly]="locked()"
         [value]="content()"
         #field
         aria-autocomplete="list"
@@ -162,9 +171,7 @@
     <button
       (click)="press()"
       [attr.aria-label]="buttonLabel() | rokuT"
-      [disabled]="
-        busy() || submitDisabled() || (button() === 'add' && !canSubmit())
-      "
+      [disabled]="busy() || locked() || (button() === 'add' && !canSubmit())"
       [type]="button() === 'add' ? 'submit' : 'button'"
       class="send"
     >

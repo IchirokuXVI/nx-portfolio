@@ -258,6 +258,110 @@ describe('LineComposer, one slot and the empty field decides', () => {
     });
   });
 
+  /**
+   * Velista `0110`. The basket's composer while no list is chosen: the field and the
+   * button are held, and the field stays focusable so a tap can ask why.
+   */
+  describe('while locked', () => {
+    const OAT: CatalogSuggestion = {
+      kind: 'item',
+      item: {
+        id: 'item-oat',
+        name: { es: 'Bebida de avena', en: 'Oat drink' },
+        brand: 'Oatly',
+        size: null,
+        unit: 'UNIT',
+        productGroupId: null,
+        category: 'OTHER',
+        offer: null,
+        chainPrices: [],
+        imageUrl: null,
+        packCount: null,
+        unitBasis: null,
+      },
+    };
+
+    function field(fixture: ComponentFixture<LineComposer>): HTMLInputElement {
+      const found =
+        host(fixture).querySelector<HTMLInputElement>('input.field');
+      if (found === null) {
+        throw new Error('there is no field');
+      }
+      return found;
+    }
+
+    async function locked() {
+      const rendered = await render(fakeCapture(), { voice: false });
+      rendered.fixture.componentRef.setInput('lockReasonId', 'why-locked');
+      rendered.fixture.detectChanges();
+      return rendered;
+    }
+
+    it('holds the field and the button, and says why through the field', async () => {
+      const { fixture } = await locked();
+
+      expect(field(fixture).readOnly).toBe(true);
+      expect(field(fixture).getAttribute('aria-disabled')).toBe('true');
+      expect(field(fixture).getAttribute('aria-describedby')).toBe(
+        'why-locked'
+      );
+      // Focusable, so the keyboard can reach it and ask: `disabled` would not be.
+      expect(field(fixture).disabled).toBe(false);
+      expect(button(fixture).disabled).toBe(true);
+    });
+
+    it('lets nothing typed through, and sends nothing on Enter or on a suggestion', async () => {
+      const { fixture } = await locked();
+      const queries: string[] = [];
+      const added: unknown[] = [];
+      fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      fixture.componentRef.setInput('suggestions', [OAT]);
+
+      type(fixture, 'oat');
+      host(fixture)
+        .querySelector('form.composer')
+        ?.dispatchEvent(new Event('submit'));
+      fixture.componentInstance.choose(OAT);
+
+      expect(queries).toEqual([]);
+      expect(added).toEqual([]);
+    });
+
+    it('asks for the reason when the field is tapped or focused', async () => {
+      const { fixture } = await locked();
+      let pressed = 0;
+      fixture.componentInstance.lockedPressed.subscribe(() => (pressed += 1));
+
+      field(fixture).dispatchEvent(new Event('focus'));
+      field(fixture).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(pressed).toBe(2);
+    });
+
+    it('works as before once unlocked, and asks for nothing', async () => {
+      const { fixture } = await locked();
+      let pressed = 0;
+      const added: unknown[] = [];
+      fixture.componentInstance.lockedPressed.subscribe(() => (pressed += 1));
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+
+      fixture.componentRef.setInput('lockReasonId', null);
+      fixture.detectChanges();
+      field(fixture).dispatchEvent(new Event('focus'));
+      type(fixture, 'oat');
+      host(fixture)
+        .querySelector('form.composer')
+        ?.dispatchEvent(new Event('submit'));
+
+      expect(pressed).toBe(0);
+      expect(field(fixture).readOnly).toBe(false);
+      expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
+      expect(field(fixture).hasAttribute('aria-describedby')).toBe(false);
+      expect(added).toEqual([{ content: 'oat', quantity: 1 }]);
+    });
+  });
+
   it('adds the line when there is something typed, and records nothing', async () => {
     const { fixture, detector } = await render();
     const added: { content: string; quantity: number }[] = [];
