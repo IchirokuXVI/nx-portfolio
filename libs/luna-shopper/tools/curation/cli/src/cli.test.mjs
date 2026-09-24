@@ -315,6 +315,27 @@ test('an unknown effort is refused before anything is started', async () => {
   assert.deepEqual(spawned, []);
 });
 
+test('--chain with the groups decider is refused before a slot is taken', async () => {
+  const spawned = [];
+  await assert.rejects(
+    () =>
+      main(['--implementation', 'groups', '--chain', 'chain-1'], {
+        env: {},
+        stdout: sink(),
+        stderr: sink(),
+        isTty: false,
+        spawn: async (...call) => {
+          spawned.push(call);
+          return { code: 0, stdout: '{}', stderr: '' };
+        },
+        repoRoot: '/repo',
+        platform: 'linux',
+      }),
+    /--chain works with the suggestions decider only/
+  );
+  assert.deepEqual(spawned, []);
+});
+
 test('parseLimit reads a row count and refuses everything else', () => {
   assert.equal(parseLimit(undefined), null);
   assert.equal(parseLimit('40'), 40);

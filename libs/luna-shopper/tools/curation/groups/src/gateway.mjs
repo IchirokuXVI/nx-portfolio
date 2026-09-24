@@ -7,6 +7,8 @@
  * only which paths, which query parameters and how a page is walked.
  */
 
+import { capSearchText } from './rules.mjs';
+
 /** The gateway's own cap. Asking for more is a 400. */
 const PAGE_SIZE = 100;
 
@@ -77,13 +79,18 @@ export function makeGateway(session) {
      * product in this run created is found here by the tsvector search rather
      * than by a local scan, so the duplicate check and the candidate list are
      * one thing rather than two that can disagree.
+     *
+     * Every query is capped here, the one place a search leaves this library,
+     * so a caller that forgets the cap still cannot send a text the gateway
+     * refuses (plan 0002).
      */
     async searchGroups(query, limit = CANDIDATE_LIMIT) {
-      if (!query) {
+      const text = capSearchText(query);
+      if (!text) {
         return [];
       }
       const answer = await session.fetch(GROUPS_PATH, {
-        query: { query, limit },
+        query: { query: text, limit },
       });
       return answer?.items ?? [];
     },

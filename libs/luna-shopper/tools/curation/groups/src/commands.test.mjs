@@ -7,6 +7,7 @@ import {
   BULK_GROUP_ASSIGNMENTS_PATH,
   apply,
   buildOperations,
+  collectCandidates,
   decide,
   end,
   next,
@@ -182,6 +183,44 @@ test('--limit caps the run at the products the operator asked for', async () => 
   const answer = await startIn(dir, w, { limit: 2 });
   assert.equal(answer.remaining, 2);
   assert.equal(answer.ungrouped, 3);
+});
+
+test('start refuses --chain by name before it signs in anywhere', async () => {
+  const dir = runDir();
+  const w = world({ items: [item('i1', 'Leche')] });
+
+  await assert.rejects(
+    () => startIn(dir, w, { chain: 'mercadona' }),
+    /--chain is not taken by the groups decider/
+  );
+  // A bare `--chain` is refused the same way rather than read as nothing.
+  await assert.rejects(
+    () => startIn(dir, w, { chain: true }),
+    /--chain is not taken/
+  );
+  assert.equal(w.mainSession.calls.length, 0);
+});
+
+test('start honours --local by recording it for the run and its report', async () => {
+  const dir = runDir();
+  const w = world({ items: [item('i1', 'Leche')] });
+
+  await startIn(dir, w, { local: true });
+
+  const state = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8'));
+  assert.equal(state.local, true);
+  const { report } = end({ runDir: dir });
+  assert.equal(JSON.parse(readFileSync(report, 'utf8')).local, true);
+});
+
+test('a run started without --local records that it was not local', async () => {
+  const dir = runDir();
+  const w = world({ items: [item('i1', 'Leche')] });
+
+  await startIn(dir, w);
+
+  const state = JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8'));
+  assert.equal(state.local, false);
 });
 
 // ---------------------------------------------------------------------------
@@ -867,5 +906,111 @@ test('a file of nothing but REVIEWs sends no request at all', async () => {
     session: { fetch: () => assert.fail('a REVIEW must reach no route') },
   });
   assert.equal(answer.operations, 0);
-  assert.equal(answer.applied, false);
+  // Nothing to write is done, not refused: the suggestions decider answers the
+  // same, and the orchestrator reads `applied: false` as a failed walk.
+  assert.equal(answer.applied, true);
+  assert.equal(answer.error, null);
+  assert.deepEqual(answer.results, []);
+});
+
+// ---------------------------------------------------------------------------
+// The search cap (plan 0002)
+// ---------------------------------------------------------------------------
+
+const LONG_TUNA = `Atún claro en aceite de oliva ${'pack ahorro familiar '.repeat(10)}Hacendado`;
+
+function sentSearches(w) {
+  return [...w.mainSession.calls, ...w.rehearsalSession.calls]
+    .map((call) => call.query?.query)
+    .filter((text) => typeof text === 'string');
+}
+
+test('a product with a name over the cap is walked, not refused by the gateway', async () => {
+  const dir = runDir();
+  const w = world({
+    items: [item('i1', LONG_TUNA, { defaultUnit: 'GRAM' })],
+    groups: [
+      group('g1', 'Atún claro en aceite de oliva', 'atun-claro', {
+        referenceUnit: 'GRAM',
+      }),
+    ],
+  });
+  await startIn(dir, w);
+
+  const answer = await next({ runDir: dir, gateways: w.gateways });
+
+  assert.equal(answer.item.id, 'i1');
+  assert.deepEqual(
+    answer.candidates.map((c) => c.groupId),
+    ['g1']
+  );
+  const searches = sentSearches(w);
+  assert.ok(searches.length >= 2);
+  for (const text of searches) {
+    assert.ok(
+      text.length <= 120,
+      `a search of ${text.length} characters was sent`
+    );
+  }
+});
+
+test('a proposed group with names over the cap is checked, not refused by the gateway', async () => {
+  const dir = runDir();
+  const w = world({
+    items: [item('i1', 'Atún claro', { defaultUnit: 'GRAM' })],
+  });
+  await startIn(dir, w);
+  await next({ runDir: dir, gateways: w.gateways });
+
+  const answer = await decideIn(dir, w, 'i1', {
+    decision: 'CREATE_GROUP',
+    confidence: 0.95,
+    group: {
+      nameEs: `Atún ${'claro en aceite '.repeat(12)}`.trim(),
+      nameEn: `Tuna ${'light in oil '.repeat(12)}`.trim(),
+      slug: 'atun-claro',
+      referenceUnit: 'GRAM',
+      synonyms: { es: [], en: [] },
+    },
+    reasoning: 'nothing found fits',
+  });
+
+  assert.equal(answer.retryable, false);
+  const searches = sentSearches(w);
+  assert.ok(searches.length > 0);
+  for (const text of searches) {
+    assert.ok(
+      text.length <= 120,
+      `a search of ${text.length} characters was sent`
+    );
+  }
+});
+
+test('a product with a long name reaches its group through a shorter key', async () => {
+  const shampoo = {
+    id: 'g-shampoo',
+    slug: 'shampoo',
+    name: { es: 'Champú', en: 'Shampoo' },
+  };
+  const main = makeGateway(
+    makeFakeSession({
+      catalog: makeCatalog({ groups: [shampoo] }),
+      label: 'main',
+    })
+  );
+  const rehearsal = makeGateway(
+    makeFakeSession({ catalog: makeCatalog(), label: 'rehearsal' })
+  );
+
+  const { candidates } = await collectCandidates({
+    item: item('i-1', 'Champú Liss Frizz Control para cabello rebelde'),
+    main,
+    rehearsal,
+    createdRefs: {},
+  });
+
+  assert.deepEqual(
+    candidates.map((candidate) => candidate.id ?? candidate.groupId),
+    ['g-shampoo']
+  );
 });
