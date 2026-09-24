@@ -98,6 +98,9 @@ export function buildEntryPacket({
   eanMatch,
   brands = new Map(),
   supermarkets = [],
+  // The other queued entries of this chain printing the same EAN, as `start`
+  // indexed them (plan 0006), or null when the barcode is this entry's alone.
+  sharedEan = null,
 }) {
   return {
     entry: {
@@ -105,6 +108,10 @@ export function buildEntryPacket({
       name: entry.name,
       brand: entry.brand ?? null,
       ean: entry.ean ?? null,
+      sharedEan:
+        Array.isArray(sharedEan) && sharedEan.length > 0
+          ? [...sharedEan]
+          : null,
       unitSize: entry.unitSize ?? null,
       sizeFormat: entry.sizeFormat ?? null,
       categoryPath: entry.categoryPath ?? [],

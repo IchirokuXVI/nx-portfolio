@@ -8,18 +8,21 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { createAdminSession } from '../../auth/src/session.mjs';
 import {
   CONFIDENCE_THRESHOLD,
   checkDecisionShape,
   issue,
   retryableIssues,
+  sharedEanIssue,
   validateDecision,
 } from './decision.mjs';
 import { CANDIDATE_LIMIT, makeGateway, toCreateItemBody } from './gateway.mjs';
 import { buildEntryPacket, toCandidate } from './packet.mjs';
 import {
   PRIVATE_LABEL_WARN_LINES,
+  brandKey,
   buildDecisionSchema,
   buildSystemPrompt,
   chainName,
@@ -27,6 +30,7 @@ import {
   loadVocabularies,
   normalizeName,
   privateLabelLines,
+  suggestBrandLabel,
 } from './rules.mjs';
 import {
   appendDecision,
@@ -35,8 +39,12 @@ import {
   loadRun,
   readBrands,
   readJsonl,
+  readSharedEans,
+  statePath,
   writeBrands,
+  writeBrandsToRegister,
   writeReport,
+  writeSharedEans,
   writeState,
 } from './run-dir.mjs';
 
@@ -80,6 +88,74 @@ function refFor(entryId) {
   return `ref-${entryId}`;
 }
 
+/** How many queue rows one page of a whole queue walk asks for. */
+const WALK_PAGE = 100;
+
+/** Every row of one chain's queue, handed to `visit` in queue order. */
+async function walkQueue(main, supermarketId, visit) {
+  let cursor = undefined;
+  for (;;) {
+    const page = await main.queuePage(supermarketId, {
+      cursor,
+      limit: WALK_PAGE,
+    });
+    for (const row of page?.items ?? []) {
+      visit(row);
+    }
+    cursor = page?.nextCursor ?? null;
+    if (!cursor) {
+      return;
+    }
+  }
+}
+
+/**
+ * The queued rows by chain and EAN (plan 0006).
+ *
+ * Keyed on the chain as well as the barcode, because the plan 0150 walk found
+ * twenty EANs shared by 56 products of one chain, and a barcode two chains
+ * print is one product sold twice, which the EAN check already handles.
+ */
+export class EanIndex {
+  #rows = new Map();
+
+  add(row) {
+    const ean = typeof row?.ean === 'string' ? row.ean.trim() : '';
+    if (!ean || !row.id) {
+      return;
+    }
+    const key = `${row.supermarketId ?? ''}\u0000${ean}`;
+    const ids = this.#rows.get(key) ?? [];
+    ids.push(row.id);
+    this.#rows.set(key, ids);
+  }
+
+  /** `{ <entry id>: [<the other entry ids>] }`, for every EAN printed twice. */
+  shared() {
+    const entries = {};
+    for (const ids of this.#rows.values()) {
+      if (ids.length < 2) {
+        continue;
+      }
+      for (const id of ids) {
+        entries[id] = ids.filter((other) => other !== id);
+      }
+    }
+    return entries;
+  }
+}
+
+/** The `propose-brands` command line `start` prints when the registry is empty. */
+function proposeBrandsCommand({ runDir, mainUrl, mainUser, chain }) {
+  return [
+    'node libs/luna-shopper/tools/curation/suggestions/src/cli.mjs propose-brands',
+    `--run-dir ${runDir}`,
+    `--main-url ${normalizeUrl(mainUrl)}`,
+    ...(mainUser ? [`--main-user ${mainUser}`] : []),
+    ...(chain ? [`--chain ${chain}`] : []),
+  ].join(' ');
+}
+
 // ---------------------------------------------------------------------------
 // start
 // ---------------------------------------------------------------------------
@@ -105,6 +181,8 @@ export async function start({
   // `decide`, which is the only way a resumed run applies one rule throughout.
   local = false,
   chain = null,
+  // Walk against an empty brand registry rather than stop (plan 0006).
+  allowEmptyRegistry = false,
   makeSession = defaultMakeSession,
   vocabularies = loadVocabularies(),
 }) {
@@ -135,6 +213,24 @@ export async function start({
   // this writes and never the route, so one walk applies one registry from its
   // first row to its last, the way it already applies one `local` flag.
   const registry = await main.listBrands();
+  const brands = indexBrands(registry);
+
+  // An empty registry stops here unless the operator says it is meant (plan
+  // 0006). A walk against one turns every CREATE naming a brand into a REVIEW,
+  // which is honest and also most of a run's model time spent on rows a person
+  // then has to redo. What the operator needs instead is the list of brands to
+  // register, and `propose-brands` writes it without a model.
+  if (brands.size === 0 && !allowEmptyRegistry) {
+    throw new Error(
+      [
+        `The brand registry on ${normalizeUrl(mainUrl)} is empty, so every CREATE naming a brand would be a REVIEW. Write the brands the queue prints first:`,
+        '',
+        `  ${proposeBrandsCommand({ runDir, mainUrl, mainUser, chain })}`,
+        '',
+        'then register them with POST /v1/admin/catalog/brands/register-many, or pass --allow-empty-registry to walk anyway.',
+      ].join('\n')
+    );
+  }
 
   const chains = supermarkets
     .filter((supermarket) => !chain || supermarket.id === chain)
@@ -153,25 +249,20 @@ export async function start({
 
   // One counting pass, so `remaining` means something from the first row on.
   // The walk itself pages again from its own cursor; this pass keeps no cursor.
+  // It is also the one pass that sees the whole queue at once, so it is where
+  // the EANs two queued rows share are found (plan 0006).
   let total = 0;
+  const byEan = new EanIndex();
   for (const entry of chains) {
-    let cursor = undefined;
-    for (;;) {
-      const page = await main.queuePage(entry.supermarketId, {
-        cursor,
-        limit: 100,
-      });
-      total += page?.items?.length ?? 0;
-      cursor = page?.nextCursor ?? null;
-      if (!cursor) {
-        break;
-      }
-    }
+    await walkQueue(main, entry.supermarketId, (row) => {
+      total += 1;
+      byEan.add(row);
+    });
   }
+  const sharedEans = byEan.shared();
 
   const runId = randomUUID();
   const readAt = new Date().toISOString();
-  const brands = indexBrands(registry);
   const labels = privateLabelLines(brands, supermarkets);
 
   const notes = [
@@ -187,6 +278,12 @@ export async function start({
       `${labels.length} of them are private labels, and every one is a line of the system prompt billed on every row of this run.`
     );
   }
+  const sharing = Object.keys(sharedEans).length;
+  if (sharing > 0) {
+    notes.push(
+      `${sharing} queued entries print an EAN another queued entry of their chain prints. Each of them is a REVIEW, whatever the model answers.`
+    );
+  }
 
   createRun(runDir, {
     runId,
@@ -200,10 +297,13 @@ export async function start({
     total,
   });
   writeBrands(runDir, { readAt, brands: registry });
+  writeSharedEans(runDir, { readAt, entries: sharedEans });
 
   return {
     runId,
     remaining: total,
+    // How many rows the EAN index demoted before a model saw them (plan 0006).
+    sharedEans: sharing,
     // What the registry held when this run opened, and what the operator has
     // to know about it. stdout is the only thing this library writes, so the
     // warnings are in the answer rather than on a stream of their own.
@@ -416,6 +516,8 @@ export async function next({
   // The registry `start` wrote, read off disk rather than off the gateway, so
   // a resumed walk annotates its packets with the brands it started with.
   brands = loadBrands(runDir),
+  // The EAN index `start` wrote (plan 0006), read off disk for the same reason.
+  sharedEans = readSharedEans(runDir).entries ?? {},
 }) {
   const { state } = loadRun(runDir);
   const { main, rehearsal } =
@@ -455,6 +557,7 @@ export async function next({
           eanMatch,
           brands,
           supermarkets: state.supermarkets ?? [],
+          sharedEan: sharedEans[row.id] ?? null,
         });
         handouts[row.id] = candidateIdentities(packet);
         rows.push(packet);
@@ -558,6 +661,8 @@ export async function decide({
   // The same file `next` read. No step after `start` asks the gateway for a
   // brand, which is what makes a resumed run one run (plan 0004).
   brands = loadBrands(runDir),
+  // The EAN index `start` wrote (plan 0006).
+  sharedEans = readSharedEans(runDir).entries ?? {},
 }) {
   const { state } = loadRun(runDir);
   if ((state.decidedIds ?? []).includes(entryId)) {
@@ -594,6 +699,7 @@ export async function decide({
         eanMatch: collected.eanMatch,
         brands,
         supermarkets: state.supermarkets ?? [],
+        sharedEan: sharedEans[entryId] ?? null,
       });
       // The refreshed set becomes the handout, so the answer to the refreshed
       // question is judged against the question that was asked. Without that
@@ -615,8 +721,13 @@ export async function decide({
     }
   }
 
+  // A row whose EAN another queued row of its chain prints is a REVIEW whatever
+  // the model answers (plan 0006), so an answer that could buy a second attempt
+  // buys nothing here: the second attempt would be demoted exactly the same.
+  const sharedWith = sharedEans[entryId] ?? null;
+
   const shape = checkDecisionShape(input);
-  if (!shape.ok && !final) {
+  if (!shape.ok && !final && !sharedWith) {
     return {
       accepted: false,
       retryable: true,
@@ -640,6 +751,7 @@ export async function decide({
     status: entry.status ?? null,
     lastSeenAt: entry.lastSeenAt ?? null,
   };
+  const shared = sharedEanIssue(entry, sharedWith);
 
   if (!shape.ok) {
     return record({
@@ -650,7 +762,10 @@ export async function decide({
       decision: 'REVIEW',
       proposedDecision: null,
       confidence: 0,
-      issues: [issue('MODEL_OUTPUT_INVALID', shape.error)],
+      issues: [
+        issue('MODEL_OUTPUT_INVALID', shape.error),
+        ...(shared ? [shared] : []),
+      ],
       reasoning: '',
       remaining: remainingAfter(),
     });
@@ -669,11 +784,14 @@ export async function decide({
       )
     );
   }
+  if (shared) {
+    found.push(shared);
+  }
 
   // Collected once. The staleness check above already ran the two lookups when
   // this row was handed out by a `next`, and re-running them here would be the
   // same two answers at twice the cost.
-  const { candidates, itemsById, runItems } =
+  collected =
     collected ??
     (await collectCandidates({
       entry,
@@ -681,27 +799,32 @@ export async function decide({
       rehearsal,
       createdRefs: state.createdRefs,
     }));
+  const { candidates, itemsById, runItems } = collected;
+
+  // What the model was shown, as the ids and refs it could name (plan 0006).
+  // The handout when a `next` handed this row out, which the staleness check
+  // above has just proved equal to the lookups; the lookups themselves when the
+  // row is driven by hand, because those are what such a caller saw. A LINK
+  // may only name one of these. The catalog is not asked about any other id,
+  // since holding it is not the same as having been compared against it.
+  const shown = new Set(handout ?? candidateIdentities(collected));
 
   let linkTarget = null;
   let linkRef = null;
+  let linkTargetShown = true;
   if (proposal.decision === 'LINK') {
-    if (proposal.itemId) {
-      linkTarget =
-        itemsById.get(proposal.itemId) ?? (await main.getItem(proposal.itemId));
-    } else if (proposal.itemRef) {
+    const named = proposal.itemId ?? proposal.itemRef;
+    // An unshown name is left unresolved: the validator names the slip, and
+    // it is retryable.
+    linkTargetShown = shown.has(named);
+    if (linkTargetShown && proposal.itemId) {
+      linkTarget = itemsById.get(proposal.itemId) ?? null;
+    } else if (linkTargetShown) {
       const created = [...runItems.values()].find(
         (row) => row.ref === proposal.itemRef
       );
       linkTarget = created?.item ?? null;
       linkRef = created ? proposal.itemRef : null;
-      if (!created) {
-        found.push(
-          issue(
-            'LINK_TARGET_MISSING',
-            `Ref ${proposal.itemRef} names no product this run created.`
-          )
-        );
-      }
     }
   }
 
@@ -716,6 +839,7 @@ export async function decide({
       entry,
       supermarket,
       linkTarget,
+      linkTargetShown,
       eanOwner,
       brands,
       supermarkets: state.supermarkets ?? [],
@@ -733,8 +857,11 @@ export async function decide({
   // unparseable reply buys. Nothing is written, exactly as nothing is written
   // for a `MODEL_OUTPUT_INVALID`, and `final: true` falls through to the REVIEW
   // below carrying the code.
+  //
+  // A shared EAN outranks all of that. The row is a REVIEW whatever a second
+  // attempt answers, so asking one would be model time spent on nothing.
   const retryable = retryableIssues(found);
-  if (retryable.length > 0 && !final) {
+  if (retryable.length > 0 && !final && !shared) {
     return {
       accepted: false,
       retryable: true,
@@ -971,6 +1098,140 @@ export function end({ runDir, usage = null }) {
   });
 
   return { report: path, counts, decided: records.length, reasks };
+}
+
+// ---------------------------------------------------------------------------
+// propose-brands (plan 0006)
+// ---------------------------------------------------------------------------
+
+/** How many brands `brands/register-many` takes in one request (backend plan 0160). */
+export const REGISTER_MANY_LIMIT = 200;
+
+/**
+ * The brands the queue prints and the registry does not hold, grouped by key.
+ *
+ * `rows` are queue entries. A key the registry already holds is left out, and
+ * so is an entry that prints no brand. Each brand answers every spelling the
+ * chains printed for it, most printed first, how many entries print it, and
+ * the label `suggestBrandLabel` makes of those spellings.
+ */
+export function tallyPrintedBrands(rows, registered = new Map()) {
+  const byKey = new Map();
+  for (const row of rows ?? []) {
+    const printed = typeof row?.brand === 'string' ? row.brand.trim() : '';
+    const key = brandKey(printed);
+    if (!key || registered.has(key)) {
+      continue;
+    }
+    const found = byKey.get(key) ?? { key, entries: 0, spellings: new Map() };
+    found.entries += 1;
+    found.spellings.set(printed, (found.spellings.get(printed) ?? 0) + 1);
+    byKey.set(key, found);
+  }
+  return [...byKey.values()]
+    .map((found) => {
+      const printed = [...found.spellings.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([spelling]) => spelling);
+      return {
+        label: suggestBrandLabel(printed),
+        // Which chain owns the brand, when it is a house label. The queue
+        // cannot say, so a person fills it or leaves it null.
+        privateLabelOf: null,
+        key: found.key,
+        printed,
+        entries: found.entries,
+      };
+    })
+    .sort((a, b) => b.entries - a.entries || a.key.localeCompare(b.key));
+}
+
+/**
+ * Reads the queue with no model and writes the brands to register as a file.
+ *
+ * The CLI registers nothing (plan 0006). The file is a proposal: a person reads
+ * it, corrects a label, drops what is not a brand, marks a house label with
+ * `privateLabelOf`, and sends what is left to `brands/register-many`. The
+ * `key`, `printed` and `entries` of each row are there to be read while doing
+ * that, and are not part of what the route takes.
+ *
+ * It needs no run: `start` stops on an empty registry before it writes one and
+ * prints this command instead. When the directory does hold a run, the urls,
+ * the username and the chains are read from it, so the proposal is about the
+ * queue that run walks.
+ */
+export async function proposeBrands({
+  runDir,
+  mainUrl = null,
+  mainUser,
+  mainPassword,
+  chain = null,
+  makeSession = defaultMakeSession,
+  gateway = null,
+}) {
+  const state = existsSync(statePath(runDir)) ? loadRun(runDir).state : null;
+  const url = mainUrl ?? state?.mainUrl ?? null;
+  if (!url && !gateway) {
+    throw new Error(
+      `${runDir} holds no run, so propose-brands needs --main-url to know which queue to read.`
+    );
+  }
+
+  const username = mainUser ?? state?.mainUser ?? null;
+  const main =
+    gateway ??
+    makeGateway(
+      makeSession({
+        baseUrl: url,
+        ...(username ? { username } : {}),
+        ...(mainPassword === undefined ? {} : { password: mainPassword }),
+        label: 'main',
+      })
+    );
+  await main.session.verify();
+
+  const supermarkets = await main.listSupermarkets();
+  const registered = indexBrands(await main.listBrands());
+  const chainIds = state
+    ? state.chains.map((entry) => entry.supermarketId)
+    : supermarkets
+        .filter((supermarket) => !chain || supermarket.id === chain)
+        .map((supermarket) => supermarket.id);
+  if (chainIds.length === 0) {
+    throw new Error(
+      chain
+        ? `No catalog supermarket answers to ${chain}.`
+        : 'The main catalog holds no supermarkets, so there is no queue to read.'
+    );
+  }
+
+  const rows = [];
+  for (const supermarketId of chainIds) {
+    await walkQueue(main, supermarketId, (row) => rows.push(row));
+  }
+
+  const brands = tallyPrintedBrands(rows, registered);
+  // `{ brands }` and nothing beside it, so the file is the request body once a
+  // person has edited the rows.
+  const file = writeBrandsToRegister(runDir, { brands });
+
+  const notes = [
+    'Nothing was registered. Edit the file: correct a label, set privateLabelOf on a house label, drop a row that is not a brand. Then send each row as { label, privateLabelOf } to POST /v1/admin/catalog/brands/register-many.',
+  ];
+  if (brands.length > REGISTER_MANY_LIMIT) {
+    notes.push(
+      `${brands.length} brands is more than the ${REGISTER_MANY_LIMIT} one request takes, so send them in ${Math.ceil(brands.length / REGISTER_MANY_LIMIT)} requests.`
+    );
+  }
+
+  return {
+    file,
+    entries: rows.length,
+    withBrand: rows.filter((row) => brandKey(row?.brand)).length,
+    registered: registered.size,
+    proposed: brands.length,
+    notes,
+  };
 }
 
 // ---------------------------------------------------------------------------

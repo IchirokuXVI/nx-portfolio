@@ -155,3 +155,25 @@ test('a packet built with no registry names no brand and still carries the field
   });
   assert.equal(packet.entry.brandMatch, null);
 });
+
+test('the packet names the entries sharing its EAN, and null otherwise (plan 0006)', () => {
+  const shared = buildEntryPacket({
+    entry: entry({ ean: '8480000000017' }),
+    supermarket: MERCADONA,
+    candidates: [],
+    eanMatch: null,
+    sharedEan: ['e3', 'e4'],
+  });
+  assert.deepEqual(shared.entry.sharedEan, ['e3', 'e4']);
+
+  for (const sharedEan of [undefined, null, []]) {
+    const alone = buildEntryPacket({
+      entry: entry(),
+      supermarket: MERCADONA,
+      candidates: [],
+      eanMatch: null,
+      sharedEan,
+    });
+    assert.equal(alone.entry.sharedEan, null);
+  }
+});

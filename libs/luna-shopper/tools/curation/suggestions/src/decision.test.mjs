@@ -4,6 +4,7 @@ import {
   checkDecisionShape,
   issue,
   retryableIssues,
+  sharedEanIssue,
   validateDecision,
 } from './decision.mjs';
 import { indexBrands } from './rules.mjs';
@@ -807,4 +808,136 @@ test('the private label comparison is by chain id, not by chain name', () => {
     units: UNITS,
   });
   assert.ok(codes(issues).includes('PRIVATE_LABEL_CROSSES_CHAIN'));
+});
+
+// ---------------------------------------------------------------------------
+// Plan 0006: formats in base units, a target nobody was shown, shared EANs
+// ---------------------------------------------------------------------------
+
+function linkIssues(entry, linkTarget) {
+  return codes(
+    validateDecision({
+      decision: linkDecision(),
+      entry: { ...ENTRY, ...entry },
+      supermarket: MERCADONA,
+      linkTarget: { id: 'i1', ...linkTarget },
+      categories: CATEGORIES,
+      units: UNITS,
+    })
+  );
+}
+
+test('FORMAT_MISMATCH reads 420 g and 0.42 kg as one format', () => {
+  // Row 173 of the plan 0150 walk: Mercadona prints the unit alone and states
+  // the number in kilograms, and the catalog product was created in grams.
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 0.42, sizeFormat: 'kg' },
+      { unitSize: 420, defaultUnit: 'GRAM' }
+    ),
+    []
+  );
+  // The other way round, and with the size printed whole.
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 420, sizeFormat: '420 g' },
+      { unitSize: 0.42, defaultUnit: 'KILOGRAM' }
+    ),
+    []
+  );
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 1.5, sizeFormat: 'l' },
+      { unitSize: 1500, defaultUnit: 'MILLILITER' }
+    ),
+    []
+  );
+  // Centilitres are millilitres times ten.
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 33, sizeFormat: '33 cl' },
+      { unitSize: 330, defaultUnit: 'MILLILITER' }
+    ),
+    []
+  );
+});
+
+test('FORMAT_MISMATCH still fires on a different size once converted', () => {
+  const found = validateDecision({
+    decision: linkDecision(),
+    entry: { ...ENTRY, unitSize: 0.5, sizeFormat: 'kg' },
+    supermarket: MERCADONA,
+    linkTarget: { id: 'i1', unitSize: 420, defaultUnit: 'GRAM' },
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.ok(codes(found).includes('FORMAT_MISMATCH'));
+  // The detail names both units, which is what the reviewer has to see.
+  assert.match(
+    found.find((entry) => entry.code === 'FORMAT_MISMATCH').detail,
+    /0\.5 kg.*420 GRAM/
+  );
+});
+
+test('FORMAT_MISMATCH never reads a weight as a volume', () => {
+  assert.ok(
+    linkIssues(
+      { unitSize: 1, sizeFormat: 'kg' },
+      { unitSize: 1, defaultUnit: 'LITER' }
+    ).includes('FORMAT_MISMATCH')
+  );
+});
+
+test('FORMAT_MISMATCH compares the numbers when a unit cannot be read', () => {
+  // `m` is metres, which the catalog has no unit for.
+  assert.ok(
+    linkIssues(
+      { unitSize: 0.42, sizeFormat: 'm' },
+      { unitSize: 420, defaultUnit: 'GRAM' }
+    ).includes('FORMAT_MISMATCH')
+  );
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 30, sizeFormat: 'm' },
+      { unitSize: 30, defaultUnit: 'UNIT' }
+    ),
+    []
+  );
+});
+
+test('LINK_TARGET_NOT_SHOWN fires in place of LINK_TARGET_MISSING', () => {
+  const found = validateDecision({
+    decision: linkDecision('i-real'),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    // A real product the caller could have fetched. It still was not shown.
+    linkTarget: null,
+    linkTargetShown: false,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.deepEqual(codes(found), ['LINK_TARGET_NOT_SHOWN']);
+  assert.match(found[0].detail, /i-real was not among the candidates/);
+});
+
+test('LINK_TARGET_NOT_SHOWN is worth asking the same row about again', () => {
+  assert.deepEqual(
+    retryableIssues([
+      issue('LINK_TARGET_NOT_SHOWN', 'not shown'),
+      issue('LINK_TARGET_MISSING', 'gone'),
+      issue('SHARED_EAN', 'shared'),
+    ]).map((entry) => entry.code),
+    ['LINK_TARGET_NOT_SHOWN']
+  );
+});
+
+test('SHARED_EAN names the barcode and the other entries, and only when shared', () => {
+  const found = sharedEanIssue({ ...ENTRY, ean: '8480000000017' }, [
+    'e3',
+    'e4',
+  ]);
+  assert.equal(found.code, 'SHARED_EAN');
+  assert.match(found.detail, /EAN 8480000000017 .*e3, e4/);
+  assert.equal(sharedEanIssue(ENTRY, null), null);
+  assert.equal(sharedEanIssue(ENTRY, []), null);
 });

@@ -2,7 +2,8 @@
  * The run directory: the only state this library keeps (plan 0001).
  *
  * A killed run resumes for free because everything a subcommand needs is on
- * disk between invocations. There are three files and nothing else:
+ * disk between invocations. There are four files a walk reads, and a fifth
+ * nothing reads back:
  *
  * - `state.json`: the run's identity, the two urls, the chain walk cursor, the
  *   ids already decided, the candidate set each row of the current batch was
@@ -12,6 +13,11 @@
  * - `brands.json`: the brand registry as `start` read it (plan 0004). Written
  *   once, never rewritten, and read by every later step, so one walk applies
  *   one registry from its first row to its last.
+ * - `shared-eans.json`: which queued entries print an EAN another queued entry
+ *   of their chain prints, as `start` read the queue (plan 0006). Written once,
+ *   like `brands.json`.
+ * - `brands-to-register.json`: what `propose-brands` suggests registering. It
+ *   is for a person to edit and nothing in a walk reads it.
  *
  * The decided ids live in `state.json` *and* are recoverable from the JSONL, on
  * purpose. `state.json` is rewritten whole and could be lost to a kill between
@@ -77,6 +83,53 @@ export function readBrands(dir) {
     );
   }
   return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+const SHARED_EANS_FILE = 'shared-eans.json';
+const BRANDS_TO_REGISTER_FILE = 'brands-to-register.json';
+
+export function sharedEansPath(dir) {
+  return join(dir, SHARED_EANS_FILE);
+}
+
+export function brandsToRegisterPath(dir) {
+  return join(dir, BRANDS_TO_REGISTER_FILE);
+}
+
+/**
+ * The queued entries whose EAN another queued entry of the same chain prints,
+ * as `start` read the queue (plan 0006).
+ *
+ * `{ readAt, entries: { <entry id>: [<the other entry ids>] } }`. Written once,
+ * beside `brands.json` and for the same reason: `state.json` is rewritten whole
+ * on every step, and this is a snapshot every later step reads unchanged.
+ */
+export function writeSharedEans(dir, snapshot) {
+  const path = sharedEansPath(dir);
+  writeFileSync(path, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+  return path;
+}
+
+/**
+ * The snapshot, or an empty one for a run started before plan 0006.
+ *
+ * A missing file is not an error, unlike a missing `brands.json`: a run that
+ * never indexed its EANs behaves exactly as it did when it was started.
+ */
+export function readSharedEans(dir) {
+  const path = sharedEansPath(dir);
+  if (!existsSync(path)) {
+    return { readAt: null, entries: {} };
+  }
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+/** The brands `propose-brands` suggests registering, for a person to edit. */
+export function writeBrandsToRegister(dir, proposal) {
+  mkdirSync(dir, { recursive: true });
+  const path = brandsToRegisterPath(dir);
+  writeFileSync(path, `${JSON.stringify(proposal, null, 2)}\n`, 'utf8');
+  return path;
 }
 
 /** Every non empty line of a JSONL file, parsed. */

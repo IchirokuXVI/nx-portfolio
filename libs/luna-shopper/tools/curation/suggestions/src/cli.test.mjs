@@ -45,7 +45,10 @@ test('parseArgs refuses a bare argument', () => {
 
 test('no command answers the usage rather than doing anything', async () => {
   const answer = await run([]);
-  assert.match(answer.usage, /start\|next\|decide\|end\|apply\|serve/);
+  assert.match(
+    answer.usage,
+    /start\|next\|decide\|end\|apply\|propose-brands\|serve/
+  );
 });
 
 test('serve is in the usage and not in the commands that answer one object', async () => {

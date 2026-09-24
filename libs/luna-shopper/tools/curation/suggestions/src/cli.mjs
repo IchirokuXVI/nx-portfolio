@@ -13,6 +13,7 @@
  *   node .../cli.mjs end --run-dir <dir>
  *   node .../cli.mjs apply --main-url <u> --file <decisions.jsonl>
  *   node .../cli.mjs serve                                 # one process, many steps
+ *   node .../cli.mjs propose-brands --run-dir <dir>        # no model, writes a file
  *
  * `serve` is the same five commands over a line protocol, so a walk pays one
  * process start instead of one per step (plan 0002). See `serve.mjs`.
@@ -22,19 +23,21 @@
 
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { apply, decide, end, next, start } from './commands.mjs';
+import { apply, decide, end, next, proposeBrands, start } from './commands.mjs';
 import { serve } from './serve.mjs';
 
-const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply|serve> [options]
+const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply|propose-brands|serve> [options]
 
   start   --main-url <u> --rehearsal-url <u> --run-dir <dir>
           [--main-user <name>] [--main-password <p>] [--model <name>] [--chain <id>]
-          [--local]
+          [--local] [--allow-empty-registry]
           --local says the model answering this run is on this machine, which
           buys the run one extra validator (plan 0003).
           Verifies both admin logins, counts the queue, snapshots the brand
           registry into the run directory, and answers
           { runId, remaining, brands, notes, prompt }.
+          An empty brand registry stops here and prints the propose-brands
+          command to run instead, unless --allow-empty-registry is given.
 
   next    --run-dir <dir> [--count <n>] [--main-password <p>]
           Answers one row: { entry, candidates, eanMatch, remaining },
@@ -65,6 +68,14 @@ const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply|serve> [options]
           each. Reads one request per line on stdin,
           { id, command, args, input }, and answers one line per request,
           { id, answer } or { id, error }. Ends when stdin closes.
+
+  propose-brands --run-dir <dir> [--main-url <u>] [--main-user <name>]
+          [--main-password <p>] [--chain <id>]
+          Reads the queue with no model and writes brands-to-register.json
+          into the run directory: each brand the queue prints that the
+          registry does not hold, with its key, the spellings printed, how
+          many entries carry it and a suggested label. Registers nothing.
+          --main-url is needed only when the directory holds no run.
 `;
 
 export function parseArgs(argv) {
@@ -134,6 +145,21 @@ export async function run(argv, { stdin = readStdin } = {}) {
           : undefined,
       model: typeof flags.model === 'string' ? flags.model : null,
       local: flags.local === true,
+      chain: typeof flags.chain === 'string' ? flags.chain : null,
+      allowEmptyRegistry: flags['allow-empty-registry'] === true,
+    });
+  }
+
+  if (command === 'propose-brands') {
+    return proposeBrands({
+      runDir: required(flags, 'run-dir'),
+      mainUrl: typeof flags['main-url'] === 'string' ? flags['main-url'] : null,
+      mainUser:
+        typeof flags['main-user'] === 'string' ? flags['main-user'] : undefined,
+      mainPassword:
+        typeof flags['main-password'] === 'string'
+          ? flags['main-password']
+          : undefined,
       chain: typeof flags.chain === 'string' ? flags.chain : null,
     });
   }
