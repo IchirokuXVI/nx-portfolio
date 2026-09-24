@@ -50,6 +50,9 @@
             @if (shop.where !== null) {
               <span class="where">{{ shop.where }}</span>
             }
+            @if (mode() === 'pick' && shop.outsideAreas === true) {
+              <lib-outside-areas />
+            }
           </span>
 
           <!--

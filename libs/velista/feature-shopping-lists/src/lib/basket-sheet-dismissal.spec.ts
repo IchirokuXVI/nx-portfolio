@@ -111,6 +111,10 @@ function storeDouble() {
     rows: signal([]),
     products: signal(new Map()),
     lists: signal(new Map()),
+    // The device's shop (velista `0102`), which no sheet here chooses.
+    readAt: signal(null),
+    shopRead: signal(null),
+    readAtShop: jest.fn().mockResolvedValue(undefined),
     participants: signal([]),
     me: signal(null),
     participantsById: signal(new Map()),

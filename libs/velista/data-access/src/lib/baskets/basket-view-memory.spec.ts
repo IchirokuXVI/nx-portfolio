@@ -3,6 +3,7 @@ import {
   dropExpired,
   forget,
   hasExpired,
+  holdsLegacyShop,
   parseBasketViewMemory,
   remember,
   toBasketViewMemory,
@@ -35,18 +36,40 @@ describe('toBasketViewMemory', () => {
         version: 1,
         order: { value: 'alpha', until: null },
         grouping: { value: 'category', until: null },
-        shop: { value: 'scope-1', until: at(HOUR) },
+        location: { value: 'loc-1', until: at(HOUR) },
       })
     ).toEqual({
       version: 1,
       order: { value: 'alpha', until: null },
       grouping: { value: 'category', until: null },
-      shop: { value: 'scope-1', until: at(HOUR) },
+      location: { value: 'loc-1', until: at(HOUR) },
     });
   });
 
   it('reads a record holding none of them', () => {
     expect(toBasketViewMemory({ version: 1 })).toEqual({ version: 1 });
+  });
+
+  /**
+   * Velista `0102`: `shop` held a price scope id, and a scope id is not a shop.
+   * Both are uuids, so the old value is dropped rather than read as a location,
+   * and the rest of the record still applies.
+   */
+  it('drops a price scope id kept under the old key, and keeps the rest', () => {
+    const raw = {
+      version: 1,
+      order: { value: 'alpha', until: null },
+      shop: { value: 'scope-1', until: at(HOUR) },
+    };
+
+    expect(toBasketViewMemory(raw)).toEqual({
+      version: 1,
+      order: { value: 'alpha', until: null },
+    });
+    expect(holdsLegacyShop(JSON.stringify(raw))).toBe(true);
+    expect(holdsLegacyShop(JSON.stringify({ version: 1 }))).toBe(false);
+    expect(holdsLegacyShop('not json')).toBe(false);
+    expect(holdsLegacyShop(null)).toBe(false);
   });
 
   it.each([
@@ -67,7 +90,7 @@ describe('toBasketViewMemory', () => {
       { grouping: { value: 'aisle', until: null } },
     ],
     ['a value of the wrong type', { order: { value: 4, until: null } }],
-    ['a shop that is empty', { shop: { value: '', until: null } }],
+    ['a shop that is empty', { location: { value: '', until: null } }],
     ['a property that is not a record', { order: 'alpha' }],
     [
       'an until that is not an instant',
@@ -142,7 +165,7 @@ describe('dropExpired', () => {
       version: 1,
       order: { value: 'alpha', until: null },
       grouping: { value: 'category', until: at(HOUR) },
-      shop: { value: 'scope-1', until: at(-HOUR) },
+      location: { value: 'loc-1', until: at(-HOUR) },
     };
 
     expect(dropExpired(memory, NOW)).toEqual({
@@ -169,9 +192,9 @@ describe('dropExpired', () => {
 
 describe('remember', () => {
   it('dates a property from its own lifetime', () => {
-    expect(remember({ version: 1 }, 'shop', 'scope-1', NOW)).toEqual({
+    expect(remember({ version: 1 }, 'location', 'loc-1', NOW)).toEqual({
       version: 1,
-      shop: { value: 'scope-1', until: at(2 * HOUR) },
+      location: { value: 'loc-1', until: at(2 * HOUR) },
     });
   });
 
@@ -186,12 +209,12 @@ describe('remember', () => {
   it('carries every other property over with its own date', () => {
     const memory: BasketViewMemory = {
       version: 1,
-      shop: { value: 'scope-1', until: at(HOUR) },
+      location: { value: 'loc-1', until: at(HOUR) },
     };
 
     expect(remember(memory, 'grouping', 'category', NOW + HOUR)).toEqual({
       version: 1,
-      shop: { value: 'scope-1', until: at(HOUR) },
+      location: { value: 'loc-1', until: at(HOUR) },
       grouping: { value: 'category', until: null },
     });
   });
@@ -200,14 +223,17 @@ describe('remember', () => {
 describe('forget', () => {
   it('takes a property out', () => {
     expect(
-      forget({ version: 1, shop: { value: 'scope-1', until: null } }, 'shop')
+      forget(
+        { version: 1, location: { value: 'loc-1', until: null } },
+        'location'
+      )
     ).toEqual({ version: 1 });
   });
 
   it('gives back the record it was given when the property is not there', () => {
     const memory: BasketViewMemory = { version: 1 };
 
-    expect(forget(memory, 'shop')).toBe(memory);
+    expect(forget(memory, 'location')).toBe(memory);
   });
 });
 
@@ -220,7 +246,7 @@ describe('BASKET_VIEW_LIFETIME_MS', () => {
     expect(BASKET_VIEW_LIFETIME_MS).toEqual({
       order: null,
       grouping: null,
-      shop: 2 * HOUR,
+      location: 2 * HOUR,
     });
   });
 });

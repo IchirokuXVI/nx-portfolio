@@ -88,8 +88,13 @@ export interface BasketServiceI {
    * The answer is **redacted per reader** by the server (backend `0130`,
    * section 6), and the redaction is `Basket.lists`: a guest is served no list
    * refs, so every entry they receive names no list.
+   *
+   * `locationId` reads it at one shop (velista `0102`; backend `0163`, section 2):
+   * every product carries `atShop`. On a basket started at a shop the server
+   * reads at that shop whatever is sent, and a different id is refused with
+   * `basket_shop_locked`.
    */
-  getBasket(basketId: string): Promise<Basket>;
+  getBasket(basketId: string, locationId?: string): Promise<Basket>;
 
   /**
    * The caller's own permanent basket (`GET /v1/baskets/live`), velista `0091`.
@@ -104,7 +109,7 @@ export interface BasketServiceI {
    * back on the answer and every later request names it, which is why nothing
    * else here takes a `'live'`.
    */
-  getLiveBasket(): Promise<Basket>;
+  getLiveBasket(locationId?: string): Promise<Basket>;
 
   /**
    * The three numbers the dashboard card draws (`GET /v1/baskets/live/summary`).

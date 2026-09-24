@@ -7,18 +7,24 @@
   @for (chip of visible(); track chip.id) {
     <li class="item">
       <button
-        (click)="remove.emit(chip.id)"
+        (click)="chip.locked ? more.emit() : remove.emit(chip.id)"
         [attr.aria-label]="chip.removeLabel"
+        [class.is-locked]="chip.locked"
         class="chip"
         type="button"
       >
+        @if (chip.locked) {
+          <lib-lock-icon class="chip-lock" />
+        }
         <span class="chip-label">{{ chip.label }}</span>
         <!--
           The glyph is drawn here rather than taken from the icon library because the
           x inside a chip is 14px artwork at a stroke weight of its own, and the
           shared close icon is sized for a 44px control.
         -->
-        <span aria-hidden="true" class="chip-x">&times;</span>
+        @if (!chip.locked) {
+          <span aria-hidden="true" class="chip-x">&times;</span>
+        }
       </button>
     </li>
   }
@@ -51,8 +57,13 @@
 <div aria-hidden="true" class="ruler">
   @for (chip of chips(); track chip.id) {
     <span #ruler class="chip">
+      @if (chip.locked) {
+        <lib-lock-icon class="chip-lock" />
+      }
       <span class="chip-label">{{ chip.label }}</span>
-      <span class="chip-x">&times;</span>
+      @if (!chip.locked) {
+        <span class="chip-x">&times;</span>
+      }
     </span>
   }
   <!--

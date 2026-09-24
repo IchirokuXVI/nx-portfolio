@@ -11,6 +11,8 @@ import type {
   BasketListRef,
   BasketPriceScope,
   BasketRow,
+  BasketShop,
+  ParticipantKind,
 } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
@@ -108,6 +110,10 @@ function render(options: {
   /** The lists this reader was served, which is what the sheet offers. */
   readonly served?: readonly BasketListRef[];
   readonly scopes?: readonly BasketPriceScope[];
+  /** Who is reading. The owner unless a test says otherwise. */
+  readonly meKind?: ParticipantKind;
+  /** The shop the basket was started at, which locks it (velista `0102`). */
+  readonly own?: BasketShop;
 }) {
   TestBed.resetTestingModule();
 
@@ -123,14 +129,27 @@ function render(options: {
     ref('l-groceries', 'Groceries'),
     ref('l-weekly', 'Weekly shop'),
   ];
+  // The device's shop (velista `0102`), read at once by this double.
+  const readAt = signal<string | null>(null);
   const store = {
+    readAt,
+    shopRead: readAt,
+    readAtShop: jest.fn((locationId: string | null) => {
+      readAt.set(locationId);
+      return Promise.resolve();
+    }),
     rows: signal(options.lines),
     // How a sheet addresses its own basket since velista `0091`: off the store,
     // never off `paramMap`, which has no id under `shopping-lists/live`.
     address: signal({ basketId: BASKET_ID }),
     products: signal(new Map()),
-    me: signal(null),
-    basket: computed(() => ({ scopes: scopes() })),
+    me: signal({ kind: options.meKind ?? 'OWNER' }),
+    basket: computed(() => ({
+      scopes: scopes(),
+      shop: options.own ?? null,
+      lockedShopId: options.own?.id ?? null,
+      readAt: options.own?.id ?? readAt(),
+    })),
     lists: signal(new Map(served.map((held) => [held.listId, held]))),
   };
 
@@ -430,7 +449,7 @@ describe('FilterSheet', () => {
         scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
       });
 
-      view.setShop('s-merca');
+      view.setShop('s-merca-0');
       fixture.detectChanges();
 
       expect(text(fixture, '.shops .choice-body .choice-title')).toBe(
@@ -460,7 +479,7 @@ describe('FilterSheet', () => {
         scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
       });
 
-      view.setShop('s-merca');
+      view.setShop('s-merca-0');
       fixture.detectChanges();
 
       fixture.debugElement
@@ -472,22 +491,135 @@ describe('FilterSheet', () => {
       fixture.debugElement
         .queryAll(By.css('input[name="basket-shop"]'))[1]
         .triggerEventHandler('change', { target: {} });
-      expect(view.shop()).toBe('s-merca');
+      expect(view.shop()).toBe('s-merca-0');
 
       expect(sheets.leaveTo).not.toHaveBeenCalled();
     });
 
-    /** A guest is told these are "the shops" and never "your shops". */
-    it('says whose shops these are from the locations the server sent', () => {
+    /**
+     * A guest picks from the same shops the owner sees (backend `0163`, section 4),
+     * and is told they are "the shops" and never "your shops".
+     */
+    it('offers a guest the same shops, and never calls them theirs', () => {
       const { fixture } = render({
         lines: GUEST_LINES,
         served: [],
-        scopes: [scope('s-merca', 'Mercadona')],
+        meKind: 'GUEST',
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
       });
 
       expect(text(fixture, '.shops .choice-title')).toBe(
         'basket.view.shop.anyGuest'
       );
+      expect(text(fixture, '.shops .pick')).toBe('basket.view.shop.choose');
+    });
+
+    it('calls them the owner’s own shops for the owner', () => {
+      const { fixture } = render({
+        lines: OWNER_LINES,
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
+      });
+
+      expect(text(fixture, '.shops .choice-title')).toBe(
+        'basket.view.shop.any'
+      );
+    });
+
+    it('is titled Buying at', () => {
+      const { fixture } = render({
+        lines: OWNER_LINES,
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
+      });
+
+      expect(legends(fixture)).toContain('basket.view.shop.legend');
+    });
+
+    /**
+     * Velista `0102`: a basket started at a shop. **The lock is the server's fact**,
+     * drawn from the basket read, and nobody can change it, the owner included.
+     */
+    describe('on a basket started at a shop', () => {
+      const MERCADONA: BasketShop = {
+        id: 'loc-mayor',
+        supermarketId: 'sm-merca',
+        chain: { en: 'Mercadona', es: 'Mercadona' },
+        label: null,
+        address: 'Calle Mayor 3',
+        city: 'Córdoba',
+        postalCode: '14001',
+        inProfile: true,
+      };
+
+      it.each<ParticipantKind>(['OWNER', 'GUEST'])(
+        'draws the shop checked and disabled for the %s, with the line under it',
+        (meKind) => {
+          const { fixture, view } = render({
+            lines: OWNER_LINES,
+            meKind,
+            scopes: [
+              scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32']),
+            ],
+            own: MERCADONA,
+          });
+
+          const fieldset = fixture.debugElement.query(By.css('fieldset.shops'))
+            .nativeElement as HTMLFieldSetElement;
+          expect(fieldset.disabled).toBe(true);
+
+          const radios = choices(fixture, 'basket-shop').map(
+            (node) => node.nativeElement as HTMLInputElement
+          );
+          expect(radios[0].checked).toBe(false);
+          expect(radios[1].checked).toBe(true);
+
+          expect(text(fixture, '.shops .choice-body .choice-title')).toBe(
+            'Mercadona'
+          );
+          expect(text(fixture, '.shops .choice-body .choice-hint')).toBe(
+            'Calle Mayor 3'
+          );
+          // A padlock where Change would be, and no Change at all.
+          expect(
+            fixture.debugElement.query(By.css('.shops .lock'))
+          ).not.toBeNull();
+          expect(fixture.debugElement.query(By.css('.shops .pick'))).toBeNull();
+          expect(text(fixture, '.locked-note')).toBe('basket.view.shop.locked');
+          expect(view.shop()).toBe('loc-mayor');
+        }
+      );
+
+      it('says a shop outside the owner’s areas is outside them', () => {
+        const { fixture } = render({
+          lines: OWNER_LINES,
+          scopes: [],
+          own: {
+            ...MERCADONA,
+            chain: { en: 'Lidl', es: 'Lidl' },
+            address: 'Avenida de Andalucía 21',
+            city: 'Málaga',
+            inProfile: false,
+          },
+        });
+
+        expect(text(fixture, '.shops .choice-body .choice-hint')).toBe(
+          'Avenida de Andalucía 21, Málaga'
+        );
+        expect(
+          fixture.debugElement.query(By.css('.shops lib-outside-areas'))
+        ).not.toBeNull();
+      });
+
+      it('draws no note for a shop in the owner’s areas', () => {
+        const { fixture } = render({
+          lines: OWNER_LINES,
+          scopes: [],
+          own: MERCADONA,
+        });
+
+        expect(
+          fixture.debugElement.query(By.css('.shops lib-outside-areas'))
+        ).toBeNull();
+      });
     });
 
     /**

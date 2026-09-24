@@ -1239,20 +1239,22 @@
         "listHint": "each list’s own amounts"
       },
       "shop": {
-        "legend": "Prices from",
+        "legend": "Buying at",
         "any": "Any of your shops",
         "anyGuest": "Any of the shops",
         "anyHint": "the cheapest",
         "none": "One shop",
         "choose": "Choose",
-        "chooseLabel": "Choose the shop prices are from",
+        "chooseLabel": "Choose the shop you are buying at",
         "change": "Change",
-        "changeLabel": "Change the shop prices are from",
-        "title": "Prices from",
+        "changeLabel": "Change the shop you are buying at",
+        "title": "Buying at",
         "back": "Back to filter and order",
         "search": "Shop, chain or street",
         "count_one": "{{count}} shop",
-        "count_other": "{{count}} shops"
+        "count_other": "{{count}} shops",
+        "locked": "Set when this list was started",
+        "outside": "Outside your areas"
       },
       "lists": {
         "legend": "Lists",
@@ -1265,7 +1267,8 @@
         "byList": "By list",
         "shop": "{{name}}",
         "more": "+{{count}}",
-        "moreLabel": "{{count}} more, open filter and order"
+        "moreLabel": "{{count}} more, open filter and order",
+        "lockedLabel": "{{name}}, set when this list was started"
       }
     },
     "price": {
@@ -1560,6 +1563,10 @@
         "unknown": "“{{name}}” changed",
         "inList": "in {{list}}"
       }
+    },
+    "shelf": {
+      "unavailable": "Not available at this shop",
+      "instead": "Instead of {{name}}, not available at this shop"
     }
   },
   "getList": {
@@ -1586,6 +1593,17 @@
     "error": "That did not go through. Try again",
     "people": {
       "label": "Share with"
+    },
+    "shop": {
+      "label": "Buying at",
+      "any": "Any of your shops",
+      "anyHint": "Choose a shop when you are about to go in, and the list is priced there.",
+      "chosenHint": "Everybody in this list buys here, and it cannot be changed after Generate.",
+      "chooseLabel": "Choose the shop this list is bought at",
+      "change": "Change",
+      "changeLabel": "Change the shop this list is bought at",
+      "clearLabel": "Buy at any of your shops instead",
+      "back": "Back to get shopping list"
     }
   },
   "history": {

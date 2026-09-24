@@ -5,6 +5,7 @@ import {
   output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { OutsideAreas } from './outside-areas';
 
 /** One shop, with every string already chosen in the reader's language. */
 export interface ShopRow {
@@ -20,6 +21,12 @@ export interface ShopRow {
   /** The brand is refused, which makes this row inert (backend plan 0064, section 2.1). */
   readonly excludedChain: boolean;
   readonly failed: boolean;
+  /**
+   * The shop is outside the basket owner's areas (velista `0102`), which draws
+   * "Outside your areas" under it. Absent everywhere but the shop picker, and false
+   * for every shop of the owner's own profile.
+   */
+  readonly outsideAreas?: boolean;
 }
 
 /**
@@ -83,7 +90,7 @@ export interface ShopGroup {
  */
 @Component({
   selector: 'lib-shop-list',
-  imports: [RokuTranslatorPipe],
+  imports: [OutsideAreas, RokuTranslatorPipe],
   templateUrl: './shop-list.html',
   styleUrl: './shop-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

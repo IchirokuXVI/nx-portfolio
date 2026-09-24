@@ -1,3 +1,5 @@
+> **PR:** [#482](https://github.com/IchirokuXVI/nx-portfolio/pull/482)
+
 # 0102: buying at one shop
 
 > **Mock first.** Every velista page is mocked before it is built. There is no mock for this

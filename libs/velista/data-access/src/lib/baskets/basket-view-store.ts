@@ -1,7 +1,9 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import {
-  basketPricedScope,
+  basketPricedAtShop,
+  basketReadAtShop,
+  basketSettleShop,
   basketViewActiveCount,
   basketViewChips,
   basketViewRows,
@@ -13,7 +15,9 @@ import {
   type BasketGrouping,
   type BasketOrder,
   type BasketPriceScope,
+  type BasketProduct,
   type BasketRow,
+  type BasketShop,
   type BasketViewProperty,
   type BasketViewState,
 } from '@portfolio/velista/models';
@@ -22,6 +26,7 @@ import { BasketStore } from './basket-store';
 import {
   dropExpired,
   forget,
+  holdsLegacyShop,
   NO_BASKET_VIEW_MEMORY,
   parseBasketViewMemory,
   remember,
@@ -29,27 +34,36 @@ import {
 } from './basket-view-memory';
 
 /**
- * The chosen shop, named for a person (velista `0078`, section 3).
+ * The chosen shop, named for a person (velista `0078`, section 3; `0102`).
  *
- * What the filter sheet's second radio draws and what the chip says. Resolved here
- * rather than in the sheet because the chip row on the page behind it needs the same
- * words, and two places resolving a `LocalizedName` is two places to forget the
+ * What the filter sheet's "Buying at" row draws and what the chip says. Resolved
+ * here rather than in the sheet because the chip row on the page behind it needs the
+ * same words, and two places resolving a `LocalizedName` is two places to forget the
  * locale changed.
  */
 export interface BasketChosenShop {
-  readonly priceScopeId: string;
+  /** The shop's id, which the read and every settle send. */
+  readonly id: string;
   /** The chain, which is what the chip says and what every mark on a row names. */
   readonly chain: string;
   /**
-   * The shop itself, under the chain in the sheet, or null.
-   *
-   * The scope's **first** location, which is `0062` section 5.1's rule for a place
-   * with several: a scope is a set of shops one chain charges the same in, so any of
-   * them is where the price comes from and enumerating four addresses answers a
-   * question the sheet cannot answer anyway. Null for a reader the server sent no
-   * locations to, which is a guest, and for a scope catalog cannot place.
+   * The shop itself, under the chain in the sheet, or null: its own name, else its
+   * street, else its town, which is the order anybody standing outside it reads
+   * them in.
    */
   readonly shop: string | null;
+  /**
+   * The shop is outside the basket owner's areas (backend `0163`, section 3), which
+   * draws "Outside your areas" under it. False where nobody said, which is every
+   * shop picked from the basket's own scopes: those are the profile's shops.
+   */
+  readonly outsideAreas: boolean;
+  /**
+   * The basket was started at this shop, so it is drawn disabled for everybody,
+   * the owner included. **The server's fact**, from `Basket.lockedShopId`, and
+   * never something this device stored.
+   */
+  readonly locked: boolean;
 }
 
 /** One row of the filter sheet's LISTS section, and of nothing else. */
@@ -118,13 +132,37 @@ export class BasketViewStore {
    */
   private readonly _state = signal<BasketViewState>(DEFAULT_BASKET_VIEW_STATE);
 
-  readonly state = this._state.asReadonly();
+  /**
+   * The shop the person is buying at, or null for any of their shops (velista
+   * `0102`).
+   *
+   * **The basket's own shop when it was started at one**, whatever this device
+   * chose, because the lock is the server's fact. Otherwise the device's choice,
+   * which `BasketStore` holds because every read it makes has to send it. So this
+   * store keeps no copy of the shop in {@link _state}: two copies of one choice are
+   * two things to keep in step, and the one the reads send is the one that counts.
+   */
+  readonly shop = computed<string | null>(
+    () => this._basket.basket()?.lockedShopId ?? this._basket.readAt()
+  );
+
+  /**
+   * Whether the shop is the basket's own, fixed when it was started (velista
+   * `0102`). Never on a `LIVE` basket, and never from anything stored here.
+   */
+  readonly shopLocked = computed(
+    () => (this._basket.basket()?.lockedShopId ?? null) !== null
+  );
+
+  /** Everything the sheet decides, with the shop the reads are made at. */
+  readonly state = computed<BasketViewState>(() => ({
+    ...this._state(),
+    shop: this.shop(),
+  }));
 
   readonly order = computed(() => this._state().order);
 
   readonly grouping = computed(() => this._state().grouping);
-
-  readonly shop = computed(() => this._state().shop);
 
   /** The kept source lists, or null for all of them. See {@link keptLists}. */
   readonly lists = computed(() => this._state().lists);
@@ -145,28 +183,39 @@ export class BasketViewStore {
   /**
    * The chosen shop, named, or null while prices come from anywhere.
    *
-   * Null too for a shop this basket was not priced at, which {@link restore} already
-   * refuses to apply: a state that survived the check could still be outrun by a
-   * refetch that changed the run's scopes, and the honest answer then is the same
-   * one the sheet gives before anything is chosen.
+   * Null too for a shop this basket's read cannot name, which {@link restore}
+   * already refuses to apply: a choice that survived the check could still be
+   * outrun by a refetch that changed the run's scopes, and the honest answer then
+   * is the same one the sheet gives before anything is chosen.
    */
   readonly chosenShop = computed<BasketChosenShop | null>(() => {
-    const shop = this._state().shop;
+    const id = this.shop();
+    const shop = id === null ? null : this._named(id);
     if (shop === null) {
-      return null;
-    }
-
-    const scope = this._basket.basket()?.scopes.get(shop);
-    if (scope === undefined) {
       return null;
     }
 
     const locale = this._locale();
     return {
-      priceScopeId: scope.priceScopeId,
-      chain: inLocale(scope.supermarketName, locale),
-      shop: shopNameOf(scope, locale),
+      id: shop.id,
+      chain: inLocale(shop.chain, locale),
+      shop: shopNameOf(shop, locale),
+      outsideAreas: shop.inProfile === false,
+      locked: this.shopLocked(),
     };
+  });
+
+  /**
+   * The chosen shop, named, **once the read the products came from was made at
+   * it**, or null (velista `0102`).
+   *
+   * What the pipeline and every settle are told about the shop. Null while a read
+   * at a newly chosen shop is still out, so no row quotes the last shop's price
+   * under the new shop's name.
+   */
+  readonly shopAt = computed<BasketShop | null>(() => {
+    const read = this._basket.shopRead();
+    return read === null ? null : this._named(read);
   });
 
   /**
@@ -220,7 +269,7 @@ export class BasketViewStore {
    * (section 7).
    */
   readonly sections = computed(() =>
-    composeBasketView(this._basket.rows(), this._state(), {
+    composeBasketView(this._basket.rows(), this.state(), {
       query: this._query(),
       products: this._basket.products(),
       locale: this._locale(),
@@ -228,6 +277,7 @@ export class BasketViewStore {
       // Empty until the basket loads, and empty for a read the gateway could not
       // price: the pipeline then marks nothing, which is the same screen as before.
       scopes: this._basket.basket()?.scopes ?? new Map(),
+      shop: this.shopAt(),
     })
   );
 
@@ -256,22 +306,31 @@ export class BasketViewStore {
   readonly visibleCount = computed(() => this.visibleRows().length);
 
   /**
-   * The scope every row quotes, or null for the cheapest anywhere (`0078`).
+   * Whether every row quotes the chosen shop's price, or the cheapest anywhere
+   * (`0078`; `0102`).
    *
    * Not the same question as {@link shop}, which is what the sheet's radio says: a
-   * shop this basket was not priced at, and a shop that lists nothing on it, both
-   * answer null here and leave the rows exactly as they were. What the page hands
+   * read at the shop still out, and a shop that prices nothing on this basket, both
+   * answer false here and leave the rows exactly as they were. What the page hands
    * each row, so one basket asks the question once.
    */
-  readonly pricedShop = computed(() =>
-    basketPricedScope(this._basket.rows(), this._state(), {
+  readonly pricedAtShop = computed(() =>
+    basketPricedAtShop(this._basket.rows(), this.state(), {
       products: this._basket.products(),
-      scopes: this._basket.basket()?.scopes ?? new Map(),
+      shop: this.shopAt(),
     })
   );
 
+  /**
+   * Whether the products describe the chosen shop at all, priced or not, which is
+   * what the shelf marks and the option offered instead turn on (`0102`).
+   */
+  readonly readAtShop = computed(() =>
+    basketReadAtShop(this.state(), { shop: this.shopAt() })
+  );
+
   /** How many of the four properties are on, for the filter button's badge. */
-  readonly activeCount = computed(() => basketViewActiveCount(this._state()));
+  readonly activeCount = computed(() => basketViewActiveCount(this.state()));
 
   /**
    * The chips the page draws, as keys and arguments rather than words.
@@ -281,7 +340,7 @@ export class BasketViewStore {
    * rendered text.
    */
   readonly chips = computed(() =>
-    basketViewChips(this._state(), {
+    basketViewChips(this.state(), {
       lists: this._basket.lists(),
       listCount: this.sourceLists().length,
       // The chain and never the shop (velista `0078`, section 5): the chip row is
@@ -289,8 +348,24 @@ export class BasketViewStore {
       // view from the default while a street name distinguishes one Mercadona from
       // another.
       chainName: this.chosenShop()?.chain ?? null,
+      shopLocked: this.shopLocked(),
     })
   );
+
+  /**
+   * Where a settle of this product says it happened, as a body fragment (velista
+   * `0102`): the chosen shop and the scope of the price the row drew, or in "any of
+   * your shops" mode the scope alone and never a shop.
+   *
+   * The row, its reel and the settle sheet all ask here, so what one sends the others
+   * send too.
+   */
+  settleShop(product: BasketProduct | null | undefined): {
+    readonly priceScopeId?: string;
+    readonly supermarketLocationId?: string;
+  } {
+    return basketSettleShop(product, this.shop(), this.pricedAtShop());
+  }
 
   /** Search for this, or for nothing when it is empty. */
   search(query: string): void {
@@ -316,18 +391,26 @@ export class BasketViewStore {
   }
 
   /**
-   * Show one shop's prices, or the cheapest anywhere (`0078`).
+   * Buy at this shop, or at any of the person's shops (`0078`; `0102`).
    *
-   * Choosing the cheapest anywhere **forgets** the shop rather than remembering a
-   * null, and the two are the same thing to the next basket: a property the record
-   * does not hold leaves the state's own default in place, and that default is null.
+   * The basket is read again at the new shop straight away, because that read is
+   * where the shop's prices and shelf come from. Choosing any **forgets** the shop
+   * rather than remembering a null, and the two are the same thing to the next
+   * basket: a property the record does not hold leaves the default in place, and
+   * that default is none.
+   *
+   * **Refused on a basket started at a shop**, by doing nothing: nobody can change
+   * that shop, the owner included, and the sheet draws no control that would ask.
    */
   setShop(shop: string | null): void {
-    this._state.update((state) => ({ ...state, shop }));
+    if (this.shopLocked()) {
+      return;
+    }
+    void this._basket.readAtShop(shop);
     this._store((memory, now) =>
       shop === null
-        ? forget(memory, 'shop')
-        : remember(memory, 'shop', shop, now)
+        ? forget(memory, 'location')
+        : remember(memory, 'location', shop, now)
     );
   }
 
@@ -371,6 +454,12 @@ export class BasketViewStore {
    * the absence of a value, so choosing it forgets instead.
    */
   resetProperty(property: BasketViewProperty): void {
+    if (property === 'shop') {
+      // Held by `BasketStore`, and forgotten rather than remembered as a null.
+      this.setShop(null);
+      return;
+    }
+
     this._state.update((state) => resetBasketViewProperty(state, property));
 
     if (property === 'lists') {
@@ -396,6 +485,9 @@ export class BasketViewStore {
    */
   reset(): void {
     this._state.set(DEFAULT_BASKET_VIEW_STATE);
+    // Any of the person's shops, which a basket started at a shop ignores: its
+    // shop is not this device's to reset.
+    void this._basket.readAtShop(null);
     // A record holding nothing, rather than three properties each holding their
     // default. Reset is the one gesture that says "forget all of this", and writing
     // the defaults back would be indistinguishable from three separate choices.
@@ -419,21 +511,24 @@ export class BasketViewStore {
    * the basket behind them is still loading.
    */
   restore(): void {
-    const stored = this._read();
+    const raw = this._browser.readStorage(StorageKeys.basketView);
+    const stored = parseBasketViewMemory(raw);
     if (stored === null) {
       return;
     }
 
     const now = Date.now();
     const kept = dropExpired(stored, now);
-    if (kept !== stored) {
+    if (kept !== stored || holdsLegacyShop(raw)) {
       // An expired property is gone for good, and the record says so from now on.
+      // So is a price scope id stored before velista `0102`, which the parse has
+      // already left out.
       this._write(kept);
     }
 
     const order = kept.order?.value;
     const grouping = kept.grouping?.value;
-    const shop = kept.shop?.value;
+    const location = kept.location?.value;
 
     this._state.update((state) => ({
       ...state,
@@ -441,8 +536,12 @@ export class BasketViewStore {
       ...(grouping === undefined || !this._offersGrouping(grouping)
         ? {}
         : { grouping }),
-      ...(shop === undefined || !this._pricesAt(shop) ? {} : { shop }),
     }));
+
+    if (location !== undefined && this._offersShop(location)) {
+      // The read at the remembered shop, which is what prices the rows there.
+      void this._basket.readAtShop(location);
+    }
   }
 
   /**
@@ -481,15 +580,52 @@ export class BasketViewStore {
   }
 
   /**
-   * Whether this basket has any price from the remembered shop.
+   * Whether the remembered shop is one this basket offers to buy at.
    *
-   * A record written on a basket priced at other shops, or a shopping profile that
-   * has changed since, names a scope this basket knows nothing about, and a view
-   * filtered to it would mark nothing. Dropped silently and, like the grouping, kept
-   * in storage: the next basket is very possibly priced there again.
+   * Never on a basket started at a shop, whose shop is not this device's to choose.
+   * Otherwise the shop has to be one the read names among the basket's scopes: a
+   * record written against another profile's shops, or a shop since closed, names
+   * a place this basket knows nothing about. Dropped silently and, like the
+   * grouping, kept in storage: the next basket is very possibly bought there again.
    */
-  private _pricesAt(shop: string): boolean {
-    return this._basket.basket()?.scopes.has(shop) === true;
+  private _offersShop(location: string): boolean {
+    return !this.shopLocked() && this._named(location) !== null;
+  }
+
+  /**
+   * A shop by id, named from what the read carried, or null.
+   *
+   * The basket's own shop first, which is the one read that states whether the
+   * shop is in the owner's areas. Otherwise the shop as a location of one of the
+   * basket's scopes, with the chain from that scope and no statement about its
+   * areas: those are the profile's own shops, and a read at a device's shop is
+   * served that shop inside its scopes by the gateway (backend `0163`, section 2).
+   */
+  private _named(id: string): BasketShop | null {
+    const basket = this._basket.basket();
+    if (basket === null) {
+      return null;
+    }
+    if (basket.shop?.id === id) {
+      return basket.shop;
+    }
+
+    for (const scope of basket.scopes.values()) {
+      const location = scope.locations.find((candidate) => candidate.id === id);
+      if (location !== undefined) {
+        return {
+          id,
+          supermarketId: null,
+          chain: scope.supermarketName,
+          label: location.label,
+          address: location.address,
+          city: location.city,
+          postalCode: location.postalCode,
+          inProfile: null,
+        };
+      }
+    }
+    return null;
   }
 
   /** The stored record, or null for anything this build cannot read (rule D4). */
@@ -522,20 +658,24 @@ export class BasketViewStore {
 }
 
 /**
- * A scope's shop in one string, or null when the scope names none.
+ * A shop in one string, or null when it names nothing.
  *
  * The label the catalog holds, falling back to the street and then to the town,
  * which is the order the pick sheet reads them in: any of the three identifies the
- * place to somebody standing outside it, and a scope with all three null is one the
- * catalog cannot put on a map.
+ * place to somebody standing outside it. A shop outside the owner's areas names its
+ * town beside its street, because it is somewhere else (velista `0102`).
  */
-function shopNameOf(scope: BasketPriceScope, locale: string): string | null {
-  const shop = scope.locations[0];
-  if (shop === undefined) {
-    return null;
+function shopNameOf(shop: BasketShop, locale: string): string | null {
+  const label = shop.label === null ? '' : inLocale(shop.label, locale);
+  if (label !== '') {
+    return label;
   }
 
-  const label = shop.label === null ? '' : inLocale(shop.label, locale);
-  const named = label !== '' ? label : (shop.address ?? shop.city ?? '');
+  const parts =
+    shop.inProfile === false ? [shop.address, shop.city] : [shop.address];
+  const street = parts
+    .filter((part): part is string => part !== null && part.trim() !== '')
+    .join(', ');
+  const named = street !== '' ? street : (shop.city ?? '');
   return named === '' ? null : named;
 }

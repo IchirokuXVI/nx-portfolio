@@ -21,10 +21,8 @@ import {
 import { SheetNavigation } from '@portfolio/velista/platform';
 import {
   ChevronLeftIcon,
-  FranchiseButtons,
-  SearchIcon,
   SheetShell,
-  ShopList,
+  ShopPicker,
   type ShopGroup,
   type ShopRow,
 } from '@portfolio/velista/ui';
@@ -33,15 +31,14 @@ import { filterSheetPath } from '../basket-paths';
 /**
  * One shop of the basket, flattened out of the scope it belongs to.
  *
- * A scope is a set of shops one chain charges the same in, so a scope with two
- * locations is two rows here and **both pick the same scope**: the price is the
- * scope's, and which of two shops somebody is standing in changes nothing about it.
- * Picking either is therefore the same act, which is what {@link priceScopeId} says.
+ * Picking one picks **the shop** since velista `0102`, and not its scope: the shop
+ * is where the person is standing, which prices the rows, marks what it lacks and
+ * is recorded on every purchase. The server decides the price there, so nothing
+ * here carries a scope any more.
  */
 interface PickerShop {
-  /** The location's own id, which is what a radio is keyed by. */
+  /** The location's own id, which is what a radio is keyed by and what is chosen. */
   readonly id: string;
-  readonly priceScopeId: string;
   readonly chainKey: string;
   readonly chain: string;
   readonly name: string | null;
@@ -50,14 +47,13 @@ interface PickerShop {
 }
 
 /**
- * Which shop the basket's prices come from (velista `0078`, section 4).
+ * Which shop the person is buying at (velista `0078`, section 4; `0102`).
  *
  * A sheet of its own rather than a third radio group on the filter sheet, because a
- * profile can hold fifty shops: a flat list of them is a wall, and fifty of one
- * chain shadow the four of the next. So it is the supermarkets page's own shape
- * (`0059`), top to bottom in that page's order — a search across every chain, the
- * chain buttons, then the open chain's shops under their postal codes — with a radio
- * per row instead of a checkbox.
+ * profile can hold fifty shops. The body is `ShopPicker` from `ui`, which the get a
+ * list sheet draws too; this is its container over **the shops the basket read
+ * carried**, and it decides what they are, which chain is open and what a search
+ * matched.
  *
  * ## It holds no state of its own
  *
@@ -71,28 +67,18 @@ interface PickerShop {
  *
  * The filter sheet pushes this one, and every way out of here pops: the chevron,
  * the scrim, Escape, the phone's back gesture and a pick all land on the filter
- * sheet, exactly once (`0031`). This used to go both ways with `leaveTo`, so the
- * filter sheet's entry was replaced by this one and the chevron, which pops, landed
- * on the basket instead. The filter sheet's URL is the fallback for a cold load on
- * this sheet's own address.
+ * sheet, exactly once (`0031`). The filter sheet's URL is the fallback for a cold
+ * load on this sheet's own address.
  *
- * ## A guest picks a chain
+ * ## A guest picks from the same shops
  *
- * A reader the server sent no locations to has chain buttons and nothing under them,
- * so tapping one **picks that chain's scope** rather than opening a list of shops it
- * cannot draw. A chain with two scopes and no locations to tell them apart is two
- * buttons with one name, which is honest and rare.
+ * Backend `0163` serves every participant the shops, so a guest's picker is the
+ * owner's picker. The chain buttons that used to pick a whole scope for a reader
+ * with no shops are gone with the scope: a chain is not a place to stand in.
  */
 @Component({
   selector: 'lib-shop-picker-sheet',
-  imports: [
-    ChevronLeftIcon,
-    FranchiseButtons,
-    RokuTranslatorPipe,
-    SearchIcon,
-    SheetShell,
-    ShopList,
-  ],
+  imports: [ChevronLeftIcon, RokuTranslatorPipe, SheetShell, ShopPicker],
   templateUrl: './shop-picker-sheet.html',
   styleUrl: './shop-picker-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -118,71 +104,71 @@ export class ShopPickerSheet {
   /** What is in the search field, exactly as typed. */
   protected readonly typed = signal('');
 
-  /** Whether a word is being searched, which decides what the body draws. */
-  protected readonly searching = computed(() => this.typed().trim() !== '');
-
-  /**
-   * Which row is the checked radio: the **first** shop of the chosen scope.
-   *
-   * A radio group has one checked control and a scope can hold four shops, all of
-   * which charge the same and any of which picks that scope. So the group checks the
-   * first, which is the same shop the filter sheet names under the chain, and the
-   * two therefore say the same thing about a pick rather than two different ones.
-   *
-   * Null while prices come from anywhere, and null for a scope this basket no longer
-   * carries, where nothing on this screen can be checked.
-   */
+  /** Which row is the checked radio: the chosen shop, when this basket names it. */
   protected readonly pickedId = computed<string | null>(() => {
-    const scope = this._view.shop();
-    return scope === null
-      ? null
-      : (this._shops().find((shop) => shop.priceScopeId === scope)?.id ?? null);
+    const shop = this._view.shop();
+    return shop !== null && this._shops().some((row) => row.id === shop)
+      ? shop
+      : null;
   });
 
-  /** Every shop of every scope, in the order the read named them. */
+  /**
+   * Every shop of every scope, in the order the read named them, once each.
+   *
+   * A shop can sit in two scopes of its own stack, so it is kept the first time it
+   * is met: it is one door, whichever scope a read happened to list it under.
+   */
   private readonly _shops = computed<readonly PickerShop[]>(() => {
     const locale = this._locale();
+    const seen = new Set<string>();
+    const shops: PickerShop[] = [];
 
-    return this._view.priceScopes().flatMap((scope) =>
-      scope.locations.map((location) => ({
-        id: location.id,
-        priceScopeId: scope.priceScopeId,
-        chainKey: chainKeyOf(scope),
-        chain: inLocale(scope.supermarketName, locale),
-        name: location.label === null ? null : inLocale(location.label, locale),
-        where: whereOf(location),
-        postalCode: location.postalCode,
-      }))
-    );
+    for (const scope of this._view.priceScopes()) {
+      for (const location of scope.locations) {
+        if (seen.has(location.id)) {
+          continue;
+        }
+        seen.add(location.id);
+        shops.push({
+          id: location.id,
+          chainKey: chainKeyOf(scope),
+          chain: inLocale(scope.supermarketName, locale),
+          name:
+            location.label === null ? null : inLocale(location.label, locale),
+          where: whereOf(location),
+          postalCode: location.postalCode,
+        });
+      }
+    }
+    return shops;
   });
 
   /**
-   * One button per chain among the basket's scopes, with the count of its shops.
+   * One button per chain with a shop to pick, with the count of its shops.
    *
    * **No OTHER button**: that bucket is the supermarkets page's answer to a chain
    * with no brand key, and a basket's scopes all belong to a chain by construction.
-   * The three exclusion states are never set here either, for the reason the rows
-   * draw none: this sheet asks where the reader is and not which shops they will go
-   * to.
+   * A chain none of whose scopes names a shop has no button, because there is no
+   * door under it to choose.
    *
    * Keyed on the chain's **name** rather than on an id, because a scope carries no
    * supermarket id: it carries the name the read resolved, which is the only thing
-   * two scopes of one chain have in common here. A guest's two nameless scopes of
-   * one chain therefore collapse to one button, which is the honest reading of a
-   * read that tells them nothing else about the two.
+   * two scopes of one chain have in common here.
    */
   protected readonly chains = computed<readonly FranchiseButton[]>(() => {
     const buttons = new Map<string, FranchiseButton>();
+    const names = new Map(
+      this._view
+        .priceScopes()
+        .map((scope) => [chainKeyOf(scope), scope.supermarketName])
+    );
 
-    for (const scope of this._view.priceScopes()) {
-      const key = chainKeyOf(scope);
-      const held = buttons.get(key);
-      buttons.set(key, {
-        key,
-        // The first scope's name, kept: two scopes of one chain answer the same key
-        // and so carry the same name, and taking the first says so plainly.
-        name: held?.name ?? scope.supermarketName,
-        locations: (held?.locations ?? 0) + scope.locations.length,
+    for (const shop of this._shops()) {
+      const held = buttons.get(shop.chainKey);
+      buttons.set(shop.chainKey, {
+        key: shop.chainKey,
+        name: held?.name ?? names.get(shop.chainKey) ?? null,
+        locations: (held?.locations ?? 0) + 1,
         excluded: 0,
         state: 'none',
       });
@@ -190,27 +176,6 @@ export class ShopPickerSheet {
 
     return [...buttons.values()];
   });
-
-  /**
-   * The scope a chain button picks, for a reader with no locations to pick between.
-   *
-   * The **first** scope of that chain. A chain with two scopes and nothing to tell
-   * them apart offers no way to choose the second, and inventing one would be a
-   * control that says nothing about what it does.
-   */
-  private readonly _scopeByChain = computed<ReadonlyMap<string, string>>(() => {
-    const first = new Map<string, string>();
-    for (const scope of this._view.priceScopes()) {
-      const key = chainKeyOf(scope);
-      if (!first.has(key)) {
-        first.set(key, scope.priceScopeId);
-      }
-    }
-    return first;
-  });
-
-  /** Whether any shop was sent at all, which is what a guest's picker turns on. */
-  protected readonly hasLocations = computed(() => this._shops().length > 0);
 
   /**
    * What a search matched, across every chain, over the five fields `0059` names.
@@ -235,7 +200,7 @@ export class ShopPickerSheet {
     );
   });
 
-  /** How many shops the search matched, for the count this sheet announces. */
+  /** How many shops the search matched, for the count the body announces. */
   protected readonly matches = computed(() => this._matches().length);
 
   /** The matches as one ungrouped run, which is what a search answers with. */
@@ -297,55 +262,33 @@ export class ShopPickerSheet {
     }));
   });
 
-  onQuery(event: Event): void {
-    this.typed.set((event.target as HTMLInputElement).value);
+  onQuery(query: string): void {
+    this.typed.set(query);
   }
 
   /**
-   * A chain button was pressed: open it, or pick it when there is nothing to open.
+   * A chain button was pressed: open it, or close it when it is open.
    *
-   * Two acts behind one control, and they are one act to the reader: a chain with
-   * shops under it is a place to look, and a chain with none is the finest thing
-   * this reader can say about where they are.
-   *
-   * The search is cleared either way, which is `ShopStore.select`'s own rule and
-   * holds here for its reason: the buttons and the flat matches are two answers to
-   * the same question, and leaving a query behind would draw one over the other.
+   * The search is cleared, which is `ShopStore.select`'s own rule and holds here for
+   * its reason: the buttons and the flat matches are two answers to the same
+   * question, and leaving a query behind would draw one over the other.
    */
   select(key: string): void {
     this.typed.set('');
-
-    if (this.hasLocations()) {
-      this.openChain.update((open) => (open === key ? null : key));
-      return;
-    }
-
-    const scope = this._scopeByChain().get(key);
-    if (scope !== undefined) {
-      this.pick(scope);
-    }
+    this.openChain.update((open) => (open === key ? null : key));
   }
 
   /**
-   * A shop was chosen. Write the **scope** and go back to the filter sheet.
+   * A shop was chosen. Write it, and go back to the filter sheet.
    *
-   * The id a row carries is a location's and the id a price belongs to is a scope's,
-   * which is why the two are separate fields on {@link PickerShop}: two shops of one
-   * scope are two rows, and picking either is the same pick.
-   */
-  pickShop(locationId: string): void {
-    const shop = this._shops().find((row) => row.id === locationId);
-    if (shop !== undefined) {
-      this.pick(shop.priceScopeId);
-    }
-  }
-
-  /**
    * The pick is written to the store first, so the filter sheet this pops back onto
    * draws it the moment it is recreated.
    */
-  private pick(priceScopeId: string): void {
-    this._view.setShop(priceScopeId);
+  pickShop(locationId: string): void {
+    if (!this._shops().some((row) => row.id === locationId)) {
+      return;
+    }
+    this._view.setShop(locationId);
     void this._sheet.dismiss(this._filterUrl());
   }
 
@@ -388,7 +331,7 @@ function toRow(shop: PickerShop): ShopRow {
  * shared with another's English name cannot collapse two brands into one button.
  */
 function chainKeyOf(scope: BasketPriceScope): string {
-  return `${scope.supermarketName.en} ${scope.supermarketName.es}`;
+  return `${scope.supermarketName.en} ${scope.supermarketName.es}`;
 }
 
 /** Street and town on one line, or null when the read holds neither. */

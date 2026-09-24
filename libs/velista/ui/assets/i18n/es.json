@@ -1239,20 +1239,22 @@
         "listHint": "las cantidades de cada lista"
       },
       "shop": {
-        "legend": "Precios de",
+        "legend": "Comprando en",
         "any": "Cualquiera de tus tiendas",
         "anyGuest": "Cualquiera de las tiendas",
         "anyHint": "el más barato",
         "none": "Una tienda",
         "choose": "Elegir",
-        "chooseLabel": "Elegir la tienda de la que vienen los precios",
+        "chooseLabel": "Elegir la tienda en la que compras",
         "change": "Cambiar",
-        "changeLabel": "Cambiar la tienda de la que vienen los precios",
-        "title": "Precios de",
+        "changeLabel": "Cambiar la tienda en la que compras",
+        "title": "Comprando en",
         "back": "Volver a filtrar y ordenar",
         "search": "Tienda, cadena o calle",
         "count_one": "{{count}} tienda",
-        "count_other": "{{count}} tiendas"
+        "count_other": "{{count}} tiendas",
+        "locked": "Fijada al empezar esta lista",
+        "outside": "Fuera de tus zonas"
       },
       "lists": {
         "legend": "Listas",
@@ -1265,7 +1267,8 @@
         "byList": "Por lista",
         "shop": "{{name}}",
         "more": "+{{count}}",
-        "moreLabel": "{{count}} más, abrir filtrar y ordenar"
+        "moreLabel": "{{count}} más, abrir filtrar y ordenar",
+        "lockedLabel": "{{name}}, fijada al empezar esta lista"
       }
     },
     "price": {
@@ -1560,6 +1563,10 @@
         "unknown": "«{{name}}» ha cambiado",
         "inList": "en {{list}}"
       }
+    },
+    "shelf": {
+      "unavailable": "No disponible en esta tienda",
+      "instead": "En lugar de {{name}}, que no está disponible en esta tienda"
     }
   },
   "getList": {
@@ -1586,6 +1593,17 @@
     "error": "No se pudo completar. Inténtalo de nuevo",
     "people": {
       "label": "Compartir con"
+    },
+    "shop": {
+      "label": "Comprando en",
+      "any": "Cualquiera de tus tiendas",
+      "anyHint": "Elige una tienda cuando vayas a entrar, y la lista tendrá sus precios.",
+      "chosenHint": "Todos en esta lista compran aquí, y no se puede cambiar después de Generar.",
+      "chooseLabel": "Elegir la tienda en la que se compra esta lista",
+      "change": "Cambiar",
+      "changeLabel": "Cambiar la tienda en la que se compra esta lista",
+      "clearLabel": "Comprar en cualquiera de tus tiendas",
+      "back": "Volver a obtener lista de la compra"
     }
   },
   "history": {

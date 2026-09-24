@@ -1,0 +1,83 @@
+<!--
+  The search, across every chain, and always drawn: somebody typing a street name
+  is looking for a shop and not for a shop of a particular brand (`0059`, section
+  3.1). The label is visible, as it is on the supermarkets page.
+-->
+<div class="search">
+  <label [attr.for]="fieldId()" class="field-label">
+    {{ 'shops.search.label' | rokuT }}
+  </label>
+  <span class="search-field">
+    <lib-search-icon class="search-glyph" />
+    <input
+      (input)="onQuery($event)"
+      [id]="fieldId()"
+      [placeholder]="'basket.view.shop.search' | rokuT"
+      [value]="query()"
+      autocapitalize="none"
+      autocomplete="off"
+      class="search-input"
+      enterkeyhint="search"
+      type="search"
+    />
+  </span>
+</div>
+
+@if (state() === 'loading') {
+  <p aria-live="polite" class="note" role="status">
+    <lib-spinner-icon class="spinner" />
+    {{ 'shops.loading' | rokuT }}
+  </p>
+} @else if (state() === 'failed') {
+  <p class="note" role="alert">{{ 'shops.error.load' | rokuT }}</p>
+} @else {
+  <!--
+    One button per chain, with the count of its shops under it. They stay while a
+    query is typed, exactly as they do on the supermarkets page: the search narrows
+    what is below them and not what they are.
+  -->
+  <lib-franchise-buttons
+    (chosen)="chosen.emit($event)"
+    [chains]="chains()"
+    [openKey]="openKey()"
+  />
+
+  @if (searching()) {
+    <!--
+      The count, announced. A search that silently empties the screen is
+      indistinguishable from one that broke.
+    -->
+    <p aria-live="polite" class="result-count" role="status">
+      {{ 'shops.search.results' | rokuT: { count: matchCount() } }}
+    </p>
+
+    @if (matchCount() === 0) {
+      <p class="empty">{{ 'shops.empty.noMatch' | rokuT }}</p>
+    } @else {
+      <lib-shop-list
+        (pick)="picked.emit($event)"
+        [grouped]="false"
+        [groups]="matches()"
+        [mode]="'pick'"
+        [pickedId]="pickedId()"
+      />
+    }
+  } @else if (openKey() !== null) {
+    <section class="chain">
+      @if (openName(); as name) {
+        <h3 class="chain-title">{{ name }}</h3>
+      }
+
+      <!--
+        The open chain's shops, under their postal codes. A radio each, because the
+        question is which one door the person is standing at.
+      -->
+      <lib-shop-list
+        (pick)="picked.emit($event)"
+        [groups]="groups()"
+        [mode]="'pick'"
+        [pickedId]="pickedId()"
+      />
+    </section>
+  }
+}

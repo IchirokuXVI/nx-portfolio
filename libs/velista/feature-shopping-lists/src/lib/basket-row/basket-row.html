@@ -198,6 +198,27 @@
       }
 
       <!--
+        What the chosen shop is known not to have (velista 0102). Under the product
+        and never instead of it: the row keeps its place, its controls and its
+        number, because the shelf may be restocked. "Not available" is the danger
+        role 0002 gives a shop that had none, with a glyph beside the words so the
+        colour never carries it alone. The option offered instead is plain words: it
+        is a suggestion the row has already taken, not a fault.
+      -->
+      @if (shelfCaption(); as shelf) {
+        @if (shelf.key === 'basket.shelf.unavailable') {
+          <span class="shelf is-unavailable">
+            <lib-slash-circle-icon class="shelf-glyph" />
+            {{ shelf.key | rokuT }}
+          </span>
+        } @else {
+          <span class="shelf is-instead">{{
+            shelf.key | rokuT: { name: shelf.name }
+          }}</span>
+        }
+      }
+
+      <!--
         Who got the bread. Drawn on the row rather than behind a tap, because that
         is the question in a shop where four people work one list.
       -->
