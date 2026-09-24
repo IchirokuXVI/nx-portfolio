@@ -18,7 +18,9 @@ import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
   imports: [RokuTranslatorPipe, RouterLink],
   template: `
     @if (cell().key; as key) {
-      <span class="word">{{ key | rokuT: cell().args ?? {} }}</span>
+      <span [class.flag]="cell().flag === true" class="word">{{
+        key | rokuT: cell().args ?? {}
+      }}</span>
     } @else if (cell().link; as link) {
       <!-- A reference with somewhere to go (admin plan 0023, section 2.3): a
            real anchor, in its own tab stop, named by the text it shows and
@@ -59,6 +61,20 @@ import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
 
     .word {
       color: var(--admin-ink-muted);
+    }
+
+    /* An empty value that is a gap to fix rather than a resting state: a
+       chain with no default price scope. A chip on the attention wash, so it
+       reads as something to act on and not as a quiet "none". */
+    .word.flag {
+      display: inline-block;
+      padding: 0 0.5em;
+      border: 1px solid var(--admin-status-attention);
+      border-radius: 999px;
+      background: var(--admin-status-attention-wash);
+      font-size: 0.8em;
+      color: var(--admin-status-attention-on-wash);
+      white-space: nowrap;
     }
 
     a {

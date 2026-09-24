@@ -30,6 +30,7 @@ import {
 import { formatInstant } from './format-instant';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
+import { RunPricesTab } from './run-prices-tab';
 import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
 
 /**
@@ -59,6 +60,7 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
     ConfirmDialog,
     HarvestNotice,
     RunProgressView,
+    RunPricesTab,
   ],
   template: `
     <p class="back">
@@ -82,232 +84,270 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
         }
       </header>
 
-      <lib-run-progress [progress]="watch.progress()!" [run]="run" />
-
-      @if (watch.paused()) {
-        <p class="note">{{ 'harvest.run.paused' | rokuT }}</p>
-      }
-
-      @if (run.abortRequestedAt !== null && !watch.finished()) {
-        <p class="note">{{ 'harvest.run.aborting' | rokuT }}</p>
-      }
-
-      @if (blockedKey(); as key) {
-        <p class="failure" role="alert">{{ key | rokuT }}</p>
-      } @else if (run.error; as message) {
-        <p class="failure" role="alert">{{ message }}</p>
-      }
-
-      @if (watch.error() !== null) {
-        <p class="note" role="alert">{{ 'harvest.run.pollFailed' | rokuT }}</p>
-      }
-
-      <dl class="facts">
-        @for (fact of facts(); track fact.key) {
-          @if (fact.value !== '') {
-            <div>
-              <dt>{{ 'harvest.run.fact.' + fact.key | rokuT }}</dt>
-              <dd>{{ fact.value }}</dd>
-            </div>
-          }
-        }
-      </dl>
-
-      <!-- What a walk wrote and fetched (admin plan 0029, section 6): the
-           settings it resolved, its detail phase, and the scopes it copied
-           to. Drawn only where the report says any of it, so an import and a
-           run from before backend plans 0118 and 0119 read as they did. -->
-      @if (hasReport()) {
-        <section class="report">
-          <h2>{{ 'harvest.run.report.heading' | rokuT }}</h2>
-          <dl class="facts">
-            @if (report().writes !== '') {
-              <div>
-                <dt>{{ 'harvest.run.report.writes' | rokuT }}</dt>
-                <dd>
-                  {{ 'harvest.runs.start.writes.' + report().writes | rokuT }}
-                </dd>
-              </div>
-            }
-            @if (report().detailFetch !== '') {
-              <div>
-                <dt>{{ 'harvest.run.report.details' | rokuT }}</dt>
-                <dd>
-                  {{
-                    'harvest.runs.start.details.' + report().detailFetch | rokuT
-                  }}
-                </dd>
-              </div>
-            }
-            @if (report().details; as counts) {
-              <div>
-                <dt>{{ 'harvest.run.report.detailRequested' | rokuT }}</dt>
-                <dd class="count">{{ counts.requested }}</dd>
-              </div>
-              <div>
-                <dt>{{ 'harvest.run.report.detailSkipped' | rokuT }}</dt>
-                <dd class="count">{{ counts.skipped }}</dd>
-              </div>
-              <div>
-                <dt>{{ 'harvest.run.report.detailWithoutEan' | rokuT }}</dt>
-                <dd class="count">{{ counts.withoutEan }}</dd>
-              </div>
-            }
-          </dl>
-
-          @if (report().copies.length > 0) {
-            <table class="copies">
-              <caption>
-                {{
-                  'harvest.run.report.copies.caption' | rokuT
-                }}
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">
-                    {{ 'harvest.run.report.copies.from' | rokuT }}
-                  </th>
-                  <th scope="col">
-                    {{ 'harvest.run.report.copies.to' | rokuT }}
-                  </th>
-                  <th class="number" scope="col">
-                    {{ 'harvest.run.report.copies.prices' | rokuT }}
-                  </th>
-                  <th class="number" scope="col">
-                    {{ 'harvest.run.report.copies.availability' | rokuT }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (copy of report().copies; track copy.from) {
-                  <tr>
-                    <th scope="row">{{ scopeName(copy.from) }}</th>
-                    <td>
-                      {{ targetNames(copy.from, copy.to) }}
-                      @if (hiddenTargets(copy.from, copy.to) > 0) {
-                        <button
-                          (click)="expandCopy(copy.from)"
-                          class="more"
-                          type="button"
-                        >
-                          {{
-                            'harvest.run.report.copies.more'
-                              | rokuT
-                                : { count: hiddenTargets(copy.from, copy.to) }
-                          }}
-                        </button>
-                      }
-                    </td>
-                    <td class="number">{{ copy.pricesCopied }}</td>
-                    <td class="number">{{ copy.availabilityCopied }}</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          }
-        </section>
-      }
-
-      <!-- The export (admin plan 0014, section 2). Offered on a finished walk
-           and a finished import, and on nothing else: those are the two runs
-           that hold rows worth carrying to another cluster. It is a read, so it
-           is offered whether or not this deployment may start runs, which is the
-           whole point of it. -->
-      @if (canExport()) {
-        <section class="export">
-          <button (click)="exportRun()" [disabled]="exporting()" type="button">
-            {{
-              (exporting()
-                ? 'harvest.run.export.working'
-                : 'harvest.run.export.action'
-              ) | rokuT
-            }}
-          </button>
-          <p class="note">{{ 'harvest.run.export.help' | rokuT }}</p>
-          @if (exportFailed()) {
-            <p class="failure" role="alert">
-              {{ 'harvest.run.export.failed' | rokuT }}
-            </p>
-          }
-        </section>
-      }
-
-      <!-- The import half (admin plan 0010, section 5). Additive, and drawn
-           only for a file import: a crawl's warnings list is empty, so without
-           the guard every catalog run would carry an empty table. -->
-      @if (fileImport()) {
-        @if (queueLink(); as link) {
-          <p class="queued">
-            <a [queryParams]="link.params" [routerLink]="link.path">{{
-              'harvest.run.queue.open' | rokuT
-            }}</a>
-            <span class="count">{{
-              'harvest.run.queue.count' | rokuT: { count: queued() }
-            }}</span>
-          </p>
-        }
-      }
-
-      <!-- Every run's warnings, and not only an import's: a walk that copies
-           warns too (backend plan 0118). A run with none draws nothing. -->
-      @if (warnings().length > 0) {
-        <section class="warnings">
-          <h2>{{ 'harvest.run.warnings.heading' | rokuT }}</h2>
-          <p class="note">{{ 'harvest.run.warnings.lead' | rokuT }}</p>
-          <ul>
-            @for (warning of warnings(); track warning.key) {
-              <li>
-                <span class="code">{{
-                  'harvest.warning.' + warning.code | rokuT
-                }}</span>
-                @if (warning.offerId !== '') {
-                  <span class="offer">{{ warning.offerId }}</span>
-                }
-                @if (warning.page !== '') {
-                  <span class="page">{{ warning.page }}</span>
-                }
-                @if (warning.name !== '') {
-                  <strong>{{ warning.name }}</strong>
-                }
-                <span class="message">{{ warning.message }}</span>
-              </li>
-            }
-          </ul>
-        </section>
-      }
-
-      @if (run.revertedAt !== null) {
-        <p class="note">{{ 'harvest.run.reverted.done' | rokuT }}</p>
-      }
-
-      <div class="controls">
-        @if (watch.canAbort()) {
-          <button (click)="watch.abort()" class="danger" type="button">
-            {{ 'harvest.run.abort' | rokuT }}
-          </button>
-        } @else if (watch.aborting()) {
-          <button disabled type="button">
-            {{ 'resource.action.working' | rokuT }}
-          </button>
-        }
-
-        @if (watch.canRevert()) {
-          <button (click)="confirming.set(true)" class="danger" type="button">
-            {{ 'harvest.run.revert.action' | rokuT }}
-          </button>
-        }
+      <!-- Two views of one run (admin plan 0033): what it did, counted, and
+           the price rows it left in the catalog, listed. -->
+      <div
+        [attr.aria-label]="'harvest.run.tabs.label' | rokuT"
+        class="tabs"
+        role="tablist"
+      >
+        <button
+          (click)="tab.set('overview')"
+          [attr.aria-selected]="tab() === 'overview'"
+          [class.current]="tab() === 'overview'"
+          role="tab"
+          type="button"
+        >
+          {{ 'harvest.run.tabs.overview' | rokuT }}
+        </button>
+        <button
+          (click)="tab.set('prices')"
+          [attr.aria-selected]="tab() === 'prices'"
+          [class.current]="tab() === 'prices'"
+          role="tab"
+          type="button"
+        >
+          {{ 'harvest.run.tabs.prices' | rokuT }}
+        </button>
       </div>
 
-      @if (confirming()) {
-        <lib-confirm-dialog
-          (confirm)="revert()"
-          (dismiss)="confirming.set(false)"
-          [bodyArgs]="confirmCounts()"
-          [bodyKey]="confirmBodyKey()"
-          [busy]="watch.reverting()"
-          [confirmKey]="'harvest.run.revert.action'"
-          [headingKey]="'harvest.run.revert.heading'"
-        />
+      @if (tab() === 'prices') {
+        <lib-run-prices-tab [runId]="run.id" role="tabpanel" />
+      } @else {
+        <lib-run-progress [progress]="watch.progress()!" [run]="run" />
+
+        @if (watch.paused()) {
+          <p class="note">{{ 'harvest.run.paused' | rokuT }}</p>
+        }
+
+        @if (run.abortRequestedAt !== null && !watch.finished()) {
+          <p class="note">{{ 'harvest.run.aborting' | rokuT }}</p>
+        }
+
+        @if (blockedKey(); as key) {
+          <p class="failure" role="alert">{{ key | rokuT }}</p>
+        } @else if (run.error; as message) {
+          <p class="failure" role="alert">{{ message }}</p>
+        }
+
+        @if (watch.error() !== null) {
+          <p class="note" role="alert">
+            {{ 'harvest.run.pollFailed' | rokuT }}
+          </p>
+        }
+
+        <dl class="facts">
+          @for (fact of facts(); track fact.key) {
+            @if (fact.value !== '') {
+              <div>
+                <dt>{{ 'harvest.run.fact.' + fact.key | rokuT }}</dt>
+                <dd>{{ fact.value }}</dd>
+              </div>
+            }
+          }
+        </dl>
+
+        <!-- What a walk wrote and fetched (admin plan 0029, section 6): the
+             settings it resolved, its detail phase, and the scopes it copied
+             to. Drawn only where the report says any of it, so an import and a
+             run from before backend plans 0118 and 0119 read as they did. -->
+        @if (hasReport()) {
+          <section class="report">
+            <h2>{{ 'harvest.run.report.heading' | rokuT }}</h2>
+            <dl class="facts">
+              @if (report().writes !== '') {
+                <div>
+                  <dt>{{ 'harvest.run.report.writes' | rokuT }}</dt>
+                  <dd>
+                    {{ 'harvest.runs.start.writes.' + report().writes | rokuT }}
+                  </dd>
+                </div>
+              }
+              @if (report().detailFetch !== '') {
+                <div>
+                  <dt>{{ 'harvest.run.report.details' | rokuT }}</dt>
+                  <dd>
+                    {{
+                      'harvest.runs.start.details.' + report().detailFetch
+                        | rokuT
+                    }}
+                  </dd>
+                </div>
+              }
+              @if (report().details; as counts) {
+                <div>
+                  <dt>{{ 'harvest.run.report.detailRequested' | rokuT }}</dt>
+                  <dd class="count">{{ counts.requested }}</dd>
+                </div>
+                <div>
+                  <dt>{{ 'harvest.run.report.detailSkipped' | rokuT }}</dt>
+                  <dd class="count">{{ counts.skipped }}</dd>
+                </div>
+                <div>
+                  <dt>{{ 'harvest.run.report.detailWithoutEan' | rokuT }}</dt>
+                  <dd class="count">{{ counts.withoutEan }}</dd>
+                </div>
+              }
+            </dl>
+
+            @if (report().copies.length > 0) {
+              <table class="copies">
+                <caption>
+                  {{
+                    'harvest.run.report.copies.caption' | rokuT
+                  }}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">
+                      {{ 'harvest.run.report.copies.from' | rokuT }}
+                    </th>
+                    <th scope="col">
+                      {{ 'harvest.run.report.copies.to' | rokuT }}
+                    </th>
+                    <th class="number" scope="col">
+                      {{ 'harvest.run.report.copies.prices' | rokuT }}
+                    </th>
+                    <th class="number" scope="col">
+                      {{ 'harvest.run.report.copies.availability' | rokuT }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (copy of report().copies; track copy.from) {
+                    <tr>
+                      <th scope="row">{{ scopeName(copy.from) }}</th>
+                      <td>
+                        {{ targetNames(copy.from, copy.to) }}
+                        @if (hiddenTargets(copy.from, copy.to) > 0) {
+                          <button
+                            (click)="expandCopy(copy.from)"
+                            class="more"
+                            type="button"
+                          >
+                            {{
+                              'harvest.run.report.copies.more'
+                                | rokuT
+                                  : { count: hiddenTargets(copy.from, copy.to) }
+                            }}
+                          </button>
+                        }
+                      </td>
+                      <td class="number">{{ copy.pricesCopied }}</td>
+                      <td class="number">{{ copy.availabilityCopied }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
+          </section>
+        }
+
+        <!-- The export (admin plan 0014, section 2). Offered on a finished walk
+             and a finished import, and on nothing else: those are the two runs
+             that hold rows worth carrying to another cluster. It is a read, so it
+             is offered whether or not this deployment may start runs, which is the
+             whole point of it. -->
+        @if (canExport()) {
+          <section class="export">
+            <button
+              (click)="exportRun()"
+              [disabled]="exporting()"
+              type="button"
+            >
+              {{
+                (exporting()
+                  ? 'harvest.run.export.working'
+                  : 'harvest.run.export.action'
+                ) | rokuT
+              }}
+            </button>
+            <p class="note">{{ 'harvest.run.export.help' | rokuT }}</p>
+            @if (exportFailed()) {
+              <p class="failure" role="alert">
+                {{ 'harvest.run.export.failed' | rokuT }}
+              </p>
+            }
+          </section>
+        }
+
+        <!-- The import half (admin plan 0010, section 5). Additive, and drawn
+             only for a file import: a crawl's warnings list is empty, so without
+             the guard every catalog run would carry an empty table. -->
+        @if (fileImport()) {
+          @if (queueLink(); as link) {
+            <p class="queued">
+              <a [queryParams]="link.params" [routerLink]="link.path">{{
+                'harvest.run.queue.open' | rokuT
+              }}</a>
+              <span class="count">{{
+                'harvest.run.queue.count' | rokuT: { count: queued() }
+              }}</span>
+            </p>
+          }
+        }
+
+        <!-- Every run's warnings, and not only an import's: a walk that copies
+             warns too (backend plan 0118). A run with none draws nothing. -->
+        @if (warnings().length > 0) {
+          <section class="warnings">
+            <h2>{{ 'harvest.run.warnings.heading' | rokuT }}</h2>
+            <p class="note">{{ 'harvest.run.warnings.lead' | rokuT }}</p>
+            <ul>
+              @for (warning of warnings(); track warning.key) {
+                <li>
+                  <span class="code">{{
+                    'harvest.warning.' + warning.code | rokuT
+                  }}</span>
+                  @if (warning.offerId !== '') {
+                    <span class="offer">{{ warning.offerId }}</span>
+                  }
+                  @if (warning.page !== '') {
+                    <span class="page">{{ warning.page }}</span>
+                  }
+                  @if (warning.name !== '') {
+                    <strong>{{ warning.name }}</strong>
+                  }
+                  <span class="message">{{ warning.message }}</span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
+        @if (run.revertedAt !== null) {
+          <p class="note">{{ 'harvest.run.reverted.done' | rokuT }}</p>
+        }
+
+        <div class="controls">
+          @if (watch.canAbort()) {
+            <button (click)="watch.abort()" class="danger" type="button">
+              {{ 'harvest.run.abort' | rokuT }}
+            </button>
+          } @else if (watch.aborting()) {
+            <button disabled type="button">
+              {{ 'resource.action.working' | rokuT }}
+            </button>
+          }
+
+          @if (watch.canRevert()) {
+            <button (click)="confirming.set(true)" class="danger" type="button">
+              {{ 'harvest.run.revert.action' | rokuT }}
+            </button>
+          }
+        </div>
+
+        @if (confirming()) {
+          <lib-confirm-dialog
+            (confirm)="revert()"
+            (dismiss)="confirming.set(false)"
+            [bodyArgs]="confirmCounts()"
+            [bodyKey]="confirmBodyKey()"
+            [busy]="watch.reverting()"
+            [confirmKey]="'harvest.run.revert.action'"
+            [headingKey]="'harvest.run.revert.heading'"
+          />
+        }
       }
     }
   `,
@@ -334,6 +374,30 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
 
     lib-run-progress {
       inline-size: 100%;
+    }
+
+    .tabs {
+      display: flex;
+      gap: var(--admin-space-1);
+      inline-size: 100%;
+      border-block-end: 1px solid var(--admin-border);
+    }
+
+    .tabs button {
+      margin-block-end: -1px;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: 0;
+      border-block-end: 2px solid transparent;
+      border-radius: 0;
+      background: none;
+      color: var(--admin-ink-muted);
+      cursor: pointer;
+    }
+
+    .tabs button.current {
+      border-block-end-color: var(--admin-accent);
+      color: var(--admin-ink);
+      font-weight: 600;
     }
 
     .status {
@@ -548,6 +612,13 @@ export class RunPage {
   private readonly _references = inject(ResourceReferences);
 
   readonly shell = inject(HarvestShell);
+
+  /**
+   * Which view of the run is drawn: the counters and the report, or the price
+   * rows it wrote (admin plan 0033). The overview first, because a run being
+   * watched is the common case and its rows are still arriving.
+   */
+  readonly tab = signal<'overview' | 'prices'>('overview');
 
   readonly watch = inject(RunWatches).for(
     this._route.snapshot.paramMap.get('id') ?? ''

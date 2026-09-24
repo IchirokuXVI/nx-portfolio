@@ -291,6 +291,10 @@ describe('the chain sources screen, creating a row', () => {
  * gateway's OpenAPI document and is the admin's own account of what the route
  * accepts. A seventh adapter fails this file on the commit that generates it,
  * rather than on the day somebody looks for it in the dropdown.
+ *
+ * It reads the **upsert's** union and not the view's, since admin plan 0034:
+ * `osm-places` stays in the view because old rows hold it, and the upsert no
+ * longer takes it, so the picker offers what can be written.
  */
 describe('the chain sources screen, and the adapters it offers', () => {
   const WIRE_TYPES = readFileSync(
@@ -308,15 +312,21 @@ describe('the chain sources screen, and the adapters it offers', () => {
     'utf8'
   );
 
-  /** Every member of the generated `EnumsAdapterKey` union, in its own order. */
-  const declared = (): readonly string[] => {
-    const union = /export type EnumsAdapterKey =([^;]+);/.exec(WIRE_TYPES);
+  /** The members of a union in the generated file, in its own order. */
+  const members = (pattern: RegExp): readonly string[] => {
+    const union = pattern.exec(WIRE_TYPES);
     if (union === null) {
-      throw new Error('wire-types.ts declares no EnumsAdapterKey union');
+      throw new Error(`wire-types.ts has nothing matching ${pattern}`);
     }
 
     return [...union[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
   };
+
+  /** What the upsert accepts, which is what the picker may offer. */
+  const declared = (): readonly string[] =>
+    members(
+      /export type UpsertSupermarketSourceDto = \{\s*adapterKey:([^;]+);/
+    );
 
   const options = (fixture: ComponentFixture<SourcesPage>): readonly string[] =>
     [
@@ -340,6 +350,55 @@ describe('the chain sources screen, and the adapters it offers', () => {
     fixture.detectChanges();
 
     expect([...options(fixture)].sort()).toEqual([...declared()].sort());
+  });
+
+  /**
+   * Backend plan 0153. OpenStreetMap is asked for every postal code and has no
+   * row to switch it on, so neither the upsert nor the picker offers it, while
+   * the view still reads it off a row written before.
+   */
+  it('offers no OpenStreetMap adapter, though a row may still hold one', async () => {
+    const fixture = await render();
+
+    fixture.componentInstance.startCreate();
+    fixture.detectChanges();
+
+    expect(options(fixture)).not.toContain('osm-places');
+    expect(declared()).not.toContain('osm-places');
+    expect(members(/export type EnumsAdapterKey =([^;]+);/)).toContain(
+      'osm-places'
+    );
+  });
+
+  it('says OpenStreetMap is always asked, as a line and not a row', async () => {
+    const fixture = await render();
+
+    expect(text(fixture)).toContain(
+      'OpenStreetMap: always asked for every postal code'
+    );
+    expect(fixture.nativeElement.querySelector('.always button')).toBeNull();
+  });
+
+  /**
+   * A row written before the adapter went: its edit form opens on `manual`,
+   * which is what it can be saved as, and its trust toggle sends nothing,
+   * because the upsert would resend a key the server refuses.
+   */
+  it('opens an old OpenStreetMap row on manual and never resends its key', async () => {
+    const fixture = await render();
+    const page = fixture.componentInstance;
+    const service = TestBed.inject(HARVEST_SERVICE);
+    const upsert = jest.spyOn(service, 'upsertSource');
+    const old = { ...page.sources()[0], adapterKey: 'osm-places' as const };
+    page.sources.set([old]);
+    fixture.detectChanges();
+
+    page.edit(old);
+    expect(page.adapterKey()).toBe('manual');
+
+    await page.toggleTrust(old);
+    expect(upsert).not.toHaveBeenCalled();
+    expect(page.writable(old)).toBe(false);
   });
 
   it('offers every one of them when editing a row too', async () => {

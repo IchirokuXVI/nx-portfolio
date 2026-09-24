@@ -1103,7 +1103,6 @@ export type UpsertSupermarketSourceDto = {
     | 'deza-web'
     | 'carrefour-web'
     | 'lidl-api'
-    | 'osm-places'
     | 'manual';
   enabled?: boolean;
   autoImportPlaces?: boolean;

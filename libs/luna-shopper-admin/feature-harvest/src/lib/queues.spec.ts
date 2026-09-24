@@ -268,6 +268,11 @@ describe('the discovered places queue as a list', () => {
   /**
    * With no chain picked, the bulk body stays empty and catalog resolves the
    * chain from each place's own brand, exactly as before admin plan 0024.
+   *
+   * Two seeded places are refused, and that is admin plan 0034's bulk rule:
+   * the Libertador Mercadona answers `place_matches_location`, and an
+   * unbranded OpenStreetMap place cannot name its chain. Both stay in the
+   * queue and are named in the report; nothing is linked or forced.
    */
   it('imports every selected place with no chain named when the picker is empty', async () => {
     const { page, calls } = await listed();
@@ -288,8 +293,19 @@ describe('the discovered places queue as a list', () => {
     for (const args of named(calls, 'importPlace')) {
       expect(args[1]).toEqual({});
     }
-    expect(page.queue.items()).toEqual([]);
-    expect(page.report()?.succeeded).toBe(wanted.length);
+    expect(named(calls, 'linkPlace')).toHaveLength(0);
+    expect(page.queue.items().map((place) => place.id)).toEqual([
+      'place-mercadona-libertador',
+      'place-osm-unbranded',
+    ]);
+    expect(page.report()?.succeeded).toBe(wanted.length - 2);
+    expect(page.report()?.failed).toEqual([
+      {
+        name: 'Mercadona Libertador',
+        reasonKey: 'harvest.places.error.matchesLocation',
+      },
+      { name: 'Supermercado Deza', reasonKey: 'resource.error.conflict' },
+    ]);
   });
 
   /**

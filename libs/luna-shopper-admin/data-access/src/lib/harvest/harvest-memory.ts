@@ -5,7 +5,10 @@ import { GatewayError } from '../gateway-error';
 import {
   DISCOVERED_PLACE_SEED,
   HARVEST_RUN_PRESET_SEED,
+  HARVEST_RUN_PRICE_SEED,
   HARVEST_RUN_SEED,
+  ITEM_SOURCE_ENTRY_SEED,
+  PLACE_CANDIDATE_SEED,
   POSTAL_CODE_DISCOVERY_SEED,
   SOURCE_ENTRY_SEED,
   SOURCE_LOCATION_SEED,
@@ -23,6 +26,7 @@ import type {
   PlaceGroupQuery,
   PlaceQuery,
   PostalCodeQuery,
+  RunPriceQuery,
   RunQuery,
   ShopQuery,
   SourceEntryAcceptResult,
@@ -51,6 +55,12 @@ const PAGE_SIZE = 25;
 export class HarvestMemory implements HarvestServiceI {
   private readonly _runs: Wire.HarvestHarvestRunView[] =
     clone(HARVEST_RUN_SEED);
+  private readonly _runPrices: Wire.CatalogItemPriceView[] = clone(
+    HARVEST_RUN_PRICE_SEED
+  );
+  private readonly _itemEntries: Wire.HarvestSourceCatalogEntryView[] = clone(
+    ITEM_SOURCE_ENTRY_SEED
+  );
   private readonly _places: Wire.HarvestDiscoveredPlaceView[] = clone(
     DISCOVERED_PLACE_SEED
   );
@@ -323,11 +333,15 @@ export class HarvestMemory implements HarvestServiceI {
       (place) => query.runId === undefined || place.runId === query.runId
     );
 
-    // Grouped on `brand:wikidata` and never on the name, which is the whole
-    // point of the key: `Dia` and `Maxi Dia` share one QID.
+    // Grouped on `brand:wikidata` first, which is the whole point of the key:
+    // `Dia` and `Maxi Dia` share one QID. A place with no key is grouped by its
+    // printed brand, then its name, as the harvester does since backend plan
+    // 0154, so unbranded shops no longer share one arbitrary bucket.
     const byKey = new Map<string, Wire.HarvestDiscoveredPlaceView[]>();
     for (const place of matching) {
-      const key = place.brandKey ?? '';
+      const key =
+        place.brandKey ??
+        `name:${(place.brandName ?? place.name ?? '').trim().toLowerCase()}`;
       byKey.set(key, [...(byKey.get(key) ?? []), place]);
     }
 
@@ -344,14 +358,70 @@ export class HarvestMemory implements HarvestServiceI {
     };
   }
 
+  /**
+   * An import, refused the ways the server refuses one (backend plans 0152 and
+   * 0153).
+   *
+   * An imported place answers `place_already_imported`. A place the seed says
+   * the catalog may already hold answers `place_matches_location` with the
+   * candidates under `details`, unless `force` is sent. An OpenStreetMap place
+   * with no brand key and no chain named answers the plain conflict the
+   * harvester answers, because the place cannot say what language its name is
+   * in; `newChain` is the way through.
+   */
   async importPlace(
     id: string,
     input: Wire.ImportDiscoveredPlaceDto
   ): Promise<Wire.HarvestDiscoveredPlaceView> {
+    const place = this._undecidedPlace(id);
+
+    if (input.force !== true) {
+      const candidates = PLACE_CANDIDATE_SEED[place.id] ?? [];
+      if (candidates.length > 0) {
+        throw new GatewayError({
+          code: 'place_matches_location',
+          status: 409,
+          correlationId: '',
+          details: { candidates: candidates.map((row) => ({ ...row })) },
+        });
+      }
+    }
+
+    const unnamed =
+      place.provider.toLowerCase() === 'osm' &&
+      place.brandKey === null &&
+      (input.supermarketId ?? '') === '' &&
+      input.newChain === undefined;
+    if (unnamed) {
+      throw new GatewayError({
+        code: 'conflict',
+        status: 409,
+        correlationId: '',
+        detail:
+          'Places from osm do not say what language they name things in. ' +
+          'Pass an explicit supermarketId, or newChain with a name and its ' +
+          'language.',
+      });
+    }
+
     return this._decidePlace(id, 'IMPORTED', input.supermarketId ?? null);
   }
 
+  /** A place joins a shop the catalog holds, and nothing is created. */
+  async linkPlace(
+    id: string,
+    input: Wire.LinkDiscoveredPlaceDto
+  ): Promise<Wire.HarvestDiscoveredPlaceView> {
+    this._undecidedPlace(id);
+    return this._decidePlace(id, 'IMPORTED', input.supermarketLocationId);
+  }
+
+  /**
+   * An imported place answers 409 `place_already_imported` (backend plan 0152,
+   * section 5): removing its shop is a catalog act on the location.
+   */
   async rejectPlace(id: string): Promise<Wire.HarvestDiscoveredPlaceView> {
+    this._undecidedPlace(id);
     return this._decidePlace(id, 'REJECTED', null);
   }
 
@@ -591,6 +661,53 @@ export class HarvestMemory implements HarvestServiceI {
       })),
       warnings: [],
     };
+  }
+
+  /**
+   * The rows a run wrote, from a table of its own.
+   *
+   * An unknown run answers an empty page, as the route does: a run id is only
+   * a filter over catalog's rows.
+   */
+  async listRunPrices(
+    runId: string,
+    query: RunPriceQuery
+  ): Promise<Wire.CatalogItemPricePage> {
+    const matching = this._runPrices.filter(
+      (row) =>
+        (row.sourceRunId === runId || row.lastObservedRunId === runId) &&
+        (query.itemId === undefined ||
+          query.itemId === '' ||
+          row.itemId === query.itemId)
+    );
+
+    return page(matching, query);
+  }
+
+  /**
+   * The rows naming one product: the bound seed, and any queue row an accept
+   * bound since, so an accept on the queue shows on the product.
+   */
+  async listItemEntries(
+    itemId: string,
+    query: PageQuery
+  ): Promise<Wire.HarvestItemSourceEntryPage> {
+    const everyRow = [...this._itemEntries, ...this._entries];
+    const matching = everyRow
+      .filter((entry) => entry.itemId === itemId)
+      .map((entry) => ({
+        ...entry,
+        eanSharedBy:
+          entry.ean === null
+            ? null
+            : everyRow.filter(
+                (other) =>
+                  other.supermarketId === entry.supermarketId &&
+                  other.ean === entry.ean
+              ).length,
+      }));
+
+    return page(matching, query);
   }
 
   /**
@@ -941,6 +1058,22 @@ export class HarvestMemory implements HarvestServiceI {
       throw notFound();
     }
     return shop;
+  }
+
+  /** The place, refused with the server's code when it is imported already. */
+  private _undecidedPlace(id: string): Wire.HarvestDiscoveredPlaceView {
+    const place = this._places.find((candidate) => candidate.id === id);
+    if (place === undefined) {
+      throw notFound();
+    }
+    if (place.status === 'IMPORTED') {
+      throw new GatewayError({
+        code: 'place_already_imported',
+        status: 409,
+        correlationId: '',
+      });
+    }
+    return place;
   }
 
   private _decidePlace(

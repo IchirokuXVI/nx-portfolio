@@ -86,8 +86,14 @@ interface FieldBase<T extends ResourceRow> {
    * than move this one. A form offering a control the server ignores is worse
    * than one that does not: the operator types a value, sees the form succeed,
    * and finds nothing changed.
+   *
+   * **`'edit'` is the mirror image: fixed at creation, settable afterwards.** A
+   * chain's default price scope is one (admin plan 0034, section 2):
+   * `CreateSupermarketDto` has no such property, because catalog makes the
+   * chain's national scope and makes it the default in the same write, and
+   * there is no scope of a chain that does not exist yet to pick.
    */
-  readonly editable?: boolean | 'create';
+  readonly editable?: boolean | 'create' | 'edit';
   /**
    * Where this field's displayed value comes from, when it is not the property.
    *
@@ -205,6 +211,25 @@ export interface ReferenceField<T extends ResourceRow> extends FieldBase<T> {
    * the answer is {@link nameFrom} and a backend join, never the lookup.
    */
   readonly nameLookup?: true;
+  /**
+   * What the picker is limited to, read from the row as the form holds it,
+   * exactly as {@link ReferencesField.scopeFrom} does for several ids.
+   *
+   * A chain's default price scope is the first single reference that needs it
+   * (admin plan 0034, section 2): the gateway refuses a scope of another
+   * chain, so a picker offering every chain's scopes offers mostly refusals.
+   * `null` disables the picker until the form knows enough to search.
+   */
+  scopeFrom?(row: Partial<T>): ReferenceScope | null;
+  /**
+   * A translation key the list draws as a flag when the reference is empty.
+   *
+   * For a reference whose absence is a gap somebody has to fix rather than a
+   * resting state. A chain with no default scope is one: its shops price
+   * against nothing a shopper can fall back to (admin plan 0034, section 2).
+   * Absent, an empty reference reads as the ordinary "none".
+   */
+  readonly unsetFlag?: string;
 }
 
 /**
@@ -349,6 +374,9 @@ export function isEditable<T extends ResourceRow>(
 ): boolean {
   if (field.editable === 'create') {
     return mode === 'create';
+  }
+  if (field.editable === 'edit') {
+    return mode === 'edit';
   }
   return field.editable !== false;
 }

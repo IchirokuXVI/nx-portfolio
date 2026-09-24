@@ -16,6 +16,7 @@ import type {
   PlaceGroupQuery,
   PlaceQuery,
   PostalCodeQuery,
+  RunPriceQuery,
   RunQuery,
   ShopQuery,
   SourceEntryAcceptResult,
@@ -23,6 +24,9 @@ import type {
 
 /** Everything under `/v1/admin/harvest`, which is where all of it already is. */
 const ROOT = '/v1/admin/harvest';
+
+/** Where catalog lists price rows, which a run's written prices are read from. */
+const ITEM_PRICES = '/v1/admin/catalog/item-prices';
 
 /**
  * The harvester's REST surface, as the screens call it (plan 0006, section 1).
@@ -154,6 +158,16 @@ export class HarvestApi implements HarvestServiceI {
     });
   }
 
+  /** A POST to a verb, like import and reject beside it (backend plan 0152). */
+  linkPlace(
+    id: string,
+    input: Wire.LinkDiscoveredPlaceDto
+  ): Promise<Wire.HarvestDiscoveredPlaceView> {
+    return this._send('post', `${ROOT}/places/${segment(id)}/link`, {
+      body: input,
+    });
+  }
+
   /**
    * The one queue, over one flat collection (backend plan 0086, section 10).
    *
@@ -215,6 +229,30 @@ export class HarvestApi implements HarvestServiceI {
    */
   exportRun(id: string): Promise<Readonly<Record<string, unknown>>> {
     return this._send('get', `${ROOT}/runs/${segment(id)}/export`);
+  }
+
+  /**
+   * The rows a run wrote, which catalog holds and answers (backend plan 0160).
+   *
+   * The one route in this file outside `/v1/admin/harvest`: the rows are
+   * catalog's, and the run is only the filter.
+   */
+  listRunPrices(
+    runId: string,
+    query: RunPriceQuery
+  ): Promise<Wire.CatalogItemPricePage> {
+    return this._send('get', ITEM_PRICES, {
+      params: toParams({ ...query, runId }),
+    });
+  }
+
+  listItemEntries(
+    itemId: string,
+    query: PageQuery
+  ): Promise<Wire.HarvestItemSourceEntryPage> {
+    return this._send('get', `${ROOT}/items/${segment(itemId)}/entries`, {
+      params: toParams(query),
+    });
   }
 
   /**

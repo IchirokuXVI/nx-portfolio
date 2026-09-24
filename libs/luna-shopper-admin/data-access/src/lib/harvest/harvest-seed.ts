@@ -324,6 +324,171 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
 ];
 
 /**
+ * The price rows the completed walk wrote (admin plan 0033; backend plan 0160).
+ *
+ * Catalog's rows rather than the harvester's, keyed on catalog's ids, so the
+ * product and scope ids are the ones the catalog seed holds and a row on the
+ * run screen opens a product that exists with nothing listening. Two rows the
+ * walk inserted and one an earlier walk inserted that this one confirmed, which
+ * are the two answers `writtenBy` has.
+ */
+export const HARVEST_RUN_PRICE_SEED: readonly (Wire.CatalogItemPriceView & {
+  readonly writtenBy: Wire.EnumsItemPriceWrittenBy;
+})[] = [
+  {
+    id: 'ip_run_milk_4661',
+    itemId: 'it_milk_1l',
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'OFFICIAL_API',
+    price: 0.92,
+    currency: 'EUR',
+    unitPrice: 0.92,
+    unitPriceLabel: '1 L',
+    observedAt: NOW,
+    lastObservedAt: NOW,
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: 'run-catalog-completed',
+    lastObservedRunId: 'run-catalog-completed',
+    overrides: null,
+    protectedUntil: null,
+    details: null,
+    writtenBy: 'INSERTED',
+  },
+  {
+    id: 'ip_run_6pack_4661',
+    itemId: 'it_milk_6pack',
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'OFFICIAL_API',
+    price: 5.34,
+    currency: 'EUR',
+    unitPrice: 0.89,
+    unitPriceLabel: '1 L',
+    observedAt: NOW,
+    lastObservedAt: NOW,
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: 'run-catalog-completed',
+    lastObservedRunId: 'run-catalog-completed',
+    overrides: null,
+    protectedUntil: null,
+    details: null,
+    writtenBy: 'INSERTED',
+  },
+  {
+    id: 'ip_run_oil_4661',
+    itemId: 'it_olive_oil_1l',
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'OFFICIAL_API',
+    price: 8.9,
+    currency: 'EUR',
+    unitPrice: 8.9,
+    unitPriceLabel: '1 L',
+    observedAt: '2026-09-01T06:12:00.000Z',
+    lastObservedAt: NOW,
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: 'run-catalog-reverted',
+    lastObservedRunId: 'run-catalog-completed',
+    overrides: null,
+    protectedUntil: null,
+    details: null,
+    writtenBy: 'CONFIRMED',
+  },
+];
+
+/**
+ * Source rows bound to catalog products, for the item screen's "Source
+ * products" panel (admin plan 0033).
+ *
+ * Apart from {@link SOURCE_ENTRY_SEED} because they are `ACTIVE`, which is a
+ * decision already made, and the queue seed is about the ones waiting. Two
+ * Mercadona rows share one barcode, which is the warning the panel exists to
+ * show: backend plan 0150 counted them with psql.
+ */
+export const ITEM_SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
+  [
+    {
+      id: 'entry-bound-milk',
+      supermarketId: MERCADONA,
+      externalId: '10381',
+      sourceKind: 'OFFICIAL_API',
+      name: 'Leche entera Hacendado',
+      brand: 'Hacendado',
+      ean: '8480000123459',
+      unitSize: 1,
+      sizeFormat: '1 L',
+      categoryPath: ['Lacteos', 'Leche'],
+      url: 'https://tienda.mercadona.es/product/10381',
+      extra: null,
+      timesSeen: 12,
+      firstSeenAt: '2026-07-01T07:00:00.000Z',
+      lastSeenAt: NOW,
+      firstRunId: 'run-catalog-reverted',
+      lastRunId: 'run-catalog-completed',
+      itemId: 'it_milk_1l',
+      candidateEntryId: null,
+      status: 'ACTIVE',
+      matchedBy: 'EAN',
+      confidence: 1,
+      decidedAt: '2026-07-01T07:00:00.000Z',
+      prices: [],
+    },
+    {
+      id: 'entry-bound-milk-promo',
+      supermarketId: MERCADONA,
+      externalId: '10382',
+      sourceKind: 'OFFICIAL_API',
+      name: 'Leche entera Hacendado pack ahorro',
+      brand: 'Hacendado',
+      ean: '8480000123459',
+      unitSize: 1,
+      sizeFormat: '1 L',
+      categoryPath: ['Lacteos', 'Leche'],
+      url: null,
+      extra: null,
+      timesSeen: 3,
+      firstSeenAt: '2026-08-20T07:00:00.000Z',
+      lastSeenAt: '2026-09-01T07:00:00.000Z',
+      firstRunId: 'run-catalog-reverted',
+      lastRunId: 'run-catalog-reverted',
+      itemId: 'it_milk_1l',
+      candidateEntryId: null,
+      status: 'CANDIDATE',
+      matchedBy: 'NAME_BRAND_SIZE',
+      confidence: 0.7,
+      decidedAt: null,
+      prices: [],
+    },
+    {
+      id: 'entry-bound-milk-deza',
+      supermarketId: DEZA,
+      externalId: 'deza-leche-1l',
+      sourceKind: 'OFFICIAL_WEB',
+      name: 'Leche entera 1 l',
+      brand: null,
+      ean: null,
+      unitSize: 1,
+      sizeFormat: '1 l',
+      categoryPath: [],
+      url: null,
+      extra: null,
+      timesSeen: 1,
+      firstSeenAt: '2026-08-28T07:00:00.000Z',
+      lastSeenAt: '2026-08-28T07:00:00.000Z',
+      firstRunId: null,
+      lastRunId: null,
+      itemId: 'it_milk_1l',
+      candidateEntryId: null,
+      status: 'ACTIVE',
+      matchedBy: 'MANUAL',
+      confidence: 1,
+      decidedAt: '2026-08-29T07:00:00.000Z',
+      prices: [],
+    },
+  ];
+
+/**
  * Two places on the same street corner, which is the whole reason this queue
  * exists. A place matching neither the provider ref nor the same brand within
  * fifty metres is offered as new, so near duplicates arrive as two rows and only
@@ -403,7 +568,101 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       firstSeenAt: '2026-09-01T08:03:00.000Z',
       lastSeenAt: '2026-09-01T08:03:00.000Z',
     },
+    {
+      // The shop the catalog already holds (backend plan 0152). The run that
+      // found it declared warehouse 4661, and an import answers 409
+      // `place_matches_location` with the seeded shop as a candidate, so the
+      // link path is reachable with nothing listening. Near
+      // `loc_cordoba_centro` in the catalog seed, and carrying Mercadona's
+      // brand key, so the duplicates panel finds that shop too.
+      id: 'place-mercadona-libertador',
+      runId: 'run-store-aborted',
+      provider: 'mercadona',
+      externalRef: 'mercadona/3014',
+      brandKey: 'Q1888874',
+      brandName: 'Mercadona',
+      name: 'Mercadona Libertador',
+      latitude: 37.8884,
+      longitude: -4.7792,
+      street: 'Avenida del Gran Capitán 12',
+      city: 'Córdoba',
+      postalCode: '14001',
+      postalCodeSource: 'SOURCE',
+      country: 'ES',
+      website: null,
+      openingHours: null,
+      tags: { 'mercadona:warehouse': '4661' },
+      scopeKey: '4661',
+      status: 'NEW',
+      supermarketLocationId: null,
+      firstSeenAt: '2026-09-01T08:04:00.000Z',
+      lastSeenAt: '2026-09-01T08:04:00.000Z',
+    },
+    {
+      // An OpenStreetMap place with no brand key, whose chain the catalog does
+      // not hold (backend plan 0153). OpenStreetMap prints no language, so an
+      // import names the chain with `newChain` or is refused.
+      id: 'place-osm-unbranded',
+      runId: 'run-store-aborted',
+      provider: 'osm',
+      externalRef: 'node/5550001',
+      brandKey: null,
+      brandName: 'Deza',
+      name: 'Supermercado Deza',
+      latitude: 37.8791,
+      longitude: -4.7646,
+      street: 'Calle Isla de Fuerteventura 48',
+      city: 'Córdoba',
+      postalCode: '14011',
+      postalCodeSource: 'DERIVED',
+      country: 'ES',
+      website: null,
+      openingHours: null,
+      tags: { shop: 'supermarket', brand: 'Deza' },
+      scopeKey: null,
+      status: 'NEW',
+      supermarketLocationId: null,
+      firstSeenAt: '2026-09-01T08:05:00.000Z',
+      lastSeenAt: '2026-09-01T08:05:00.000Z',
+    },
   ];
+
+/**
+ * One catalog shop a place may be, as the 409 `place_matches_location` lists
+ * it under `details.candidates` (backend plan 0152, section 2).
+ *
+ * Not a generated type: the candidates travel in the error envelope's
+ * `details`, which the document describes as an open object. The memory
+ * harvester throws exactly this shape so the screen's mapper reads it the way
+ * it reads the server's.
+ */
+export interface SeededPlaceCandidate {
+  readonly supermarketLocationId: string;
+  readonly label: Readonly<Record<string, string>> | null;
+  readonly address: string | null;
+  readonly postalCode: string | null;
+  readonly rung: 'EXTERNAL_REF' | 'NEARBY' | 'ADDRESS';
+}
+
+/**
+ * What an import of each seeded place would find in the catalog, by place id.
+ *
+ * A place absent here matches nothing and imports. The ids are shops of the
+ * catalog seed, so a link names a shop the locations screen can open.
+ */
+export const PLACE_CANDIDATE_SEED: Readonly<
+  Record<string, readonly SeededPlaceCandidate[]>
+> = {
+  'place-mercadona-libertador': [
+    {
+      supermarketLocationId: 'loc_cordoba_centro',
+      label: null,
+      address: 'Avenida del Gran Capitán 12',
+      postalCode: '14001',
+      rung: 'NEARBY',
+    },
+  ],
+};
 
 /**
  * The one queue, in every shape it draws (backend plan 0086, section 3; admin
@@ -732,7 +991,27 @@ export const SOURCE_LOCATION_SEED: readonly Wire.HarvestSourceLocationView[] = [
     lastSeenAt: NOW,
     firstRunId: 'run-store-aborted',
     lastRunId: 'run-catalog-running',
-    candidates: [],
+    // Two candidates, listed weakest first on purpose so the screen's own
+    // ordering is what a spec proves (backend plan 0154, section 1). Only the
+    // one carrying every printed token is strong.
+    candidates: [
+      {
+        supermarketLocationId: 'loc_cordoba_oeste',
+        label: null,
+        address: 'Calle Historiador Domínguez Ortiz 4',
+        postalCode: '14005',
+        score: 0.5,
+        strong: false,
+      },
+      {
+        supermarketLocationId: 'loc_cordoba_centro',
+        label: { en: 'Marrubial', es: 'Marrubial' },
+        address: 'Ronda del Marrubial 2',
+        postalCode: '14001',
+        score: 1,
+        strong: true,
+      },
+    ],
   },
   {
     id: 'shop-t2',
