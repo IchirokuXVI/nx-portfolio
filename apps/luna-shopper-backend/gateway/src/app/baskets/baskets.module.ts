@@ -1,12 +1,18 @@
-import { Module } from '@nestjs/common';
+import {
+  Module,
+  type MiddlewareConsumer,
+  type NestModule,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { WithholdBodyMiddleware } from '@portfolio/luna-shopper/platform';
 import { GatewayCatalogModule } from '../catalog/catalog.module';
 import type { GatewayConfig } from '../config/app-config';
 import { MessagingModule } from '../messaging/messaging.module';
 import { BasketCatalogService } from './basket-catalog.service';
 import { BasketPresenceService } from './basket-presence.service';
 import { BASKET_SHARING_CONTROLLERS } from './basket-sharing.controller';
+import { BasketShopsController } from './basket-shops.controller';
 import { BasketController, BasketLiveController } from './basket.controller';
 import { BasketsController } from './baskets.controller';
 import { ParticipantThrottlerGuard } from './participant-throttler.guard';
@@ -43,6 +49,8 @@ import { SettlePriceService } from './settle-price.service';
  * 3. {@link BasketController} — `GET /v1/baskets/:id` and the row writes.
  * 4. `BASKET_SHARING_CONTROLLERS`, which states the same rule internally so
  *    that `:id/participants/mine` wins over `:id/participants/:participantId`.
+ * 5. {@link BasketShopsController} — `POST /v1/baskets/:id/shops/nearby`
+ *    (plan 0164), last because nothing above it has that shape.
  *
  * Merging two modules into one is exactly how that order gets lost, so the list
  * below is the rule and `basket-shared.spec.ts` is what proves it.
@@ -80,6 +88,8 @@ import { SettlePriceService } from './settle-price.service';
     BasketsController,
     BasketController,
     ...BASKET_SHARING_CONTROLLERS,
+    // Plan 0164: `POST :id/shops/nearby`, whose shape no route above has.
+    BasketShopsController,
   ],
   // The throttler guard is a provider rather than a bare class in `@UseGuards`
   // so Nest injects the throttler's options and its Redis storage into it, the
@@ -96,4 +106,13 @@ import { SettlePriceService } from './settle-price.service';
   // instances would be two of everything it caches through.
   exports: [SettlePriceService],
 })
-export class GatewayBasketsModule {}
+export class GatewayBasketsModule implements NestModule {
+  /**
+   * The body of `POST /v1/baskets/:id/shops/nearby` is a point a device
+   * reported, and it never reaches a log line (plan 0164). A middleware, so
+   * the request is marked before the participant guard can fail it.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(WithholdBodyMiddleware).forRoutes(BasketShopsController);
+  }
+}

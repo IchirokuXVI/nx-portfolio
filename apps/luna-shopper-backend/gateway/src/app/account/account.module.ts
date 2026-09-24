@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ScopeResolutionService } from '../catalog/scope-resolution.service';
 import { MessagingModule } from '../messaging/messaging.module';
 import { AccountController } from './account.controller';
+import { RecentShopsController } from './recent-shops.controller';
 
 /**
  * The caller's own account: deletion (plan 0011), the profile routes (plan 0018)
@@ -15,7 +16,8 @@ import { AccountController } from './account.controller';
  */
 @Module({
   imports: [MessagingModule],
-  controllers: [AccountController],
+  // Plan 0164: the shops the caller bought at recently.
+  controllers: [AccountController, RecentShopsController],
   providers: [ScopeResolutionService],
 })
 export class GatewayAccountModule {}
