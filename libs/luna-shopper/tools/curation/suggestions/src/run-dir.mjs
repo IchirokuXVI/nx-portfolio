@@ -16,8 +16,12 @@
  * - `shared-eans.json`: which queued entries print an EAN another queued entry
  *   of their chain prints, as `start` read the queue (plan 0006). Written once,
  *   like `brands.json`.
- * - `brands-to-register.json`: what `propose-brands` suggests registering. It
- *   is for a person to edit and nothing in a walk reads it.
+ * - `brands-to-register.json`: what `propose-brands` suggests registering, as
+ *   the body `POST /v1/admin/catalog/brands/register-many` takes. More than 200
+ *   brands are split into `brands-to-register-2.json` and on, one body each.
+ *   `brands-to-register.notes.json` beside them holds what a person reads while
+ *   editing: each brand's key, spellings and entry count, and the chain ids a
+ *   house label names. Nothing in a walk reads any of them.
  *
  * The decided ids live in `state.json` *and* are recoverable from the JSONL, on
  * purpose. `state.json` is rewritten whole and could be lost to a kill between
@@ -29,7 +33,9 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -87,13 +93,23 @@ export function readBrands(dir) {
 
 const SHARED_EANS_FILE = 'shared-eans.json';
 const BRANDS_TO_REGISTER_FILE = 'brands-to-register.json';
+const BRANDS_TO_REGISTER_NOTES_FILE = 'brands-to-register.notes.json';
+/** Every body file `writeBrandsToRegister` writes, and nothing else. */
+const BRANDS_TO_REGISTER_PART = /^brands-to-register(-\d+)?\.json$/;
 
 export function sharedEansPath(dir) {
   return join(dir, SHARED_EANS_FILE);
 }
 
-export function brandsToRegisterPath(dir) {
-  return join(dir, BRANDS_TO_REGISTER_FILE);
+/** Body 1 is `brands-to-register.json`, body n is `brands-to-register-<n>.json`. */
+export function brandsToRegisterPath(dir, part = 1) {
+  return part === 1
+    ? join(dir, BRANDS_TO_REGISTER_FILE)
+    : join(dir, `brands-to-register-${part}.json`);
+}
+
+export function brandsToRegisterNotesPath(dir) {
+  return join(dir, BRANDS_TO_REGISTER_NOTES_FILE);
 }
 
 /**
@@ -124,12 +140,29 @@ export function readSharedEans(dir) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-/** The brands `propose-brands` suggests registering, for a person to edit. */
-export function writeBrandsToRegister(dir, proposal) {
+/**
+ * The brands `propose-brands` suggests registering, for a person to edit.
+ *
+ * `bodies` holds one request body per element, each `{ brands }`, and `notes`
+ * is what the sibling notes file holds. The bodies of an earlier proposal are
+ * removed first, so a directory never keeps a stale part a person might send.
+ * Answers the body paths in order and the notes path.
+ */
+export function writeBrandsToRegister(dir, bodies, notes) {
   mkdirSync(dir, { recursive: true });
-  const path = brandsToRegisterPath(dir);
-  writeFileSync(path, `${JSON.stringify(proposal, null, 2)}\n`, 'utf8');
-  return path;
+  for (const name of readdirSync(dir)) {
+    if (BRANDS_TO_REGISTER_PART.test(name)) {
+      rmSync(join(dir, name));
+    }
+  }
+  const files = bodies.map((body, index) => {
+    const path = brandsToRegisterPath(dir, index + 1);
+    writeFileSync(path, `${JSON.stringify(body, null, 2)}\n`, 'utf8');
+    return path;
+  });
+  const notesFile = brandsToRegisterNotesPath(dir);
+  writeFileSync(notesFile, `${JSON.stringify(notes, null, 2)}\n`, 'utf8');
+  return { files, notesFile };
 }
 
 /** Every non empty line of a JSONL file, parsed. */

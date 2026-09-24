@@ -9,6 +9,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
+import { basename } from 'node:path';
 import { createAdminSession } from '../../auth/src/session.mjs';
 import {
   CONFIDENCE_THRESHOLD,
@@ -227,7 +228,7 @@ export async function start({
         '',
         `  ${proposeBrandsCommand({ runDir, mainUrl, mainUser, chain })}`,
         '',
-        'then register them with POST /v1/admin/catalog/brands/register-many, or pass --allow-empty-registry to walk anyway.',
+        'It writes brands-to-register.json into the run directory. Edit it, then send it as it is to POST /v1/admin/catalog/brands/register-many, or pass --allow-empty-registry to walk anyway.',
       ].join('\n')
     );
   }
@@ -1104,8 +1105,37 @@ export function end({ runDir, usage = null }) {
 // propose-brands (plan 0006)
 // ---------------------------------------------------------------------------
 
+/** The route `propose-brands` writes a body for (backend plan 0160). */
+export const REGISTER_MANY_ROUTE =
+  'POST /v1/admin/catalog/brands/register-many';
+
 /** How many brands `brands/register-many` takes in one request (backend plan 0160). */
 export const REGISTER_MANY_LIMIT = 200;
+
+/** The longest label the route takes (`BRAND_LABEL_MAX_LENGTH` in the contracts). */
+export const BRAND_LABEL_MAX_LENGTH = 120;
+
+/**
+ * The request bodies for a tally, at most `REGISTER_MANY_LIMIT` brands each.
+ *
+ * Each row carries only what `RegisterBrandsEntryDto` declares, because the
+ * gateway rejects any other field. `privateLabelSupermarketId` is null: the
+ * queue cannot say which chain owns a house label, so a person fills in that
+ * chain's id or leaves it null. An empty tally is no body at all, because the
+ * route refuses an empty list.
+ */
+export function registerManyBodies(tally) {
+  const bodies = [];
+  for (let i = 0; i < tally.length; i += REGISTER_MANY_LIMIT) {
+    bodies.push({
+      brands: tally.slice(i, i + REGISTER_MANY_LIMIT).map((brand) => ({
+        label: brand.label,
+        privateLabelSupermarketId: null,
+      })),
+    });
+  }
+  return bodies;
+}
 
 /**
  * The brands the queue prints and the registry does not hold, grouped by key.
@@ -1135,9 +1165,6 @@ export function tallyPrintedBrands(rows, registered = new Map()) {
         .map(([spelling]) => spelling);
       return {
         label: suggestBrandLabel(printed),
-        // Which chain owns the brand, when it is a house label. The queue
-        // cannot say, so a person fills it or leaves it null.
-        privateLabelOf: null,
         key: found.key,
         printed,
         entries: found.entries,
@@ -1150,10 +1177,12 @@ export function tallyPrintedBrands(rows, registered = new Map()) {
  * Reads the queue with no model and writes the brands to register as a file.
  *
  * The CLI registers nothing (plan 0006). The file is a proposal: a person reads
- * it, corrects a label, drops what is not a brand, marks a house label with
- * `privateLabelOf`, and sends what is left to `brands/register-many`. The
- * `key`, `printed` and `entries` of each row are there to be read while doing
- * that, and are not part of what the route takes.
+ * it, corrects a label, drops what is not a brand, sets a house label's
+ * `privateLabelSupermarketId`, and sends the file as it is to
+ * `brands/register-many`. Each file is that route's body and holds nothing
+ * else, since the gateway rejects unknown fields. The `key`, `printed` and
+ * `entries` of each brand, and the chain ids, are in the notes file beside it.
+ * More than `REGISTER_MANY_LIMIT` brands are split into one file per request.
  *
  * It needs no run: `start` stops on an empty registry before it writes one and
  * prints this command instead. When the directory does hold a run, the urls,
@@ -1211,21 +1240,48 @@ export async function proposeBrands({
   }
 
   const brands = tallyPrintedBrands(rows, registered);
-  // `{ brands }` and nothing beside it, so the file is the request body once a
-  // person has edited the rows.
-  const file = writeBrandsToRegister(runDir, { brands });
+  const bodies = registerManyBodies(brands);
+  // The bodies hold only what the route takes, because it rejects any other
+  // field. What a person reads while editing them goes in the notes file.
+  const { files, notesFile } = writeBrandsToRegister(runDir, bodies, {
+    route: REGISTER_MANY_ROUTE,
+    chains: supermarkets
+      .filter((supermarket) => chainIds.includes(supermarket.id))
+      .map((supermarket) => ({
+        supermarketId: supermarket.id,
+        name: chainName(supermarket),
+      })),
+    brands,
+  });
 
-  const notes = [
-    'Nothing was registered. Edit the file: correct a label, set privateLabelOf on a house label, drop a row that is not a brand. Then send each row as { label, privateLabelOf } to POST /v1/admin/catalog/brands/register-many.',
-  ];
-  if (brands.length > REGISTER_MANY_LIMIT) {
+  const notes = [];
+  if (files.length === 0) {
     notes.push(
-      `${brands.length} brands is more than the ${REGISTER_MANY_LIMIT} one request takes, so send them in ${Math.ceil(brands.length / REGISTER_MANY_LIMIT)} requests.`
+      'Nothing was registered, and the queue prints no brand the registry lacks, so there is no body to send.'
+    );
+  } else {
+    notes.push(
+      `Nothing was registered. Edit ${files.map((path) => basename(path)).join(', ')}: correct a label, drop a row that is not a brand, and on a house label set privateLabelSupermarketId to the chain id ${basename(notesFile)} lists. Then send each file as it is to ${REGISTER_MANY_ROUTE}. The route derives each key from the label, so a label a brand already holds answers EXISTS and writes nothing.`
+    );
+  }
+  if (files.length > 1) {
+    notes.push(
+      `${brands.length} brands is more than the ${REGISTER_MANY_LIMIT} one request takes, so they are split into ${files.length} files. Send them in ${files.length} requests.`
+    );
+  }
+  const long = brands.filter(
+    (brand) => brand.label.length > BRAND_LABEL_MAX_LENGTH
+  );
+  if (long.length > 0) {
+    notes.push(
+      `${long.length} labels are longer than the ${BRAND_LABEL_MAX_LENGTH} characters the route takes. Shorten them, or the whole request is refused: ${long.map((brand) => brand.label).join(', ')}.`
     );
   }
 
   return {
-    file,
+    file: files[0] ?? null,
+    files,
+    notesFile,
     entries: rows.length,
     withBrand: rows.filter((row) => brandKey(row?.brand)).length,
     registered: registered.size,

@@ -73,9 +73,13 @@ const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply|propose-brands|s
   propose-brands --run-dir <dir> [--main-url <u>] [--main-user <name>]
           [--main-password <p>] [--chain <id>]
           Reads the queue with no model and writes brands-to-register.json
-          into the run directory: each brand the queue prints that the
-          registry does not hold, with its key, the spellings printed, how
-          many entries carry it and a suggested label. Registers nothing.
+          into the run directory: the body POST
+          /v1/admin/catalog/brands/register-many takes, one suggested label
+          per brand the queue prints that the registry does not hold. More
+          than 200 brands go into brands-to-register-2.json and on, one body
+          per request. brands-to-register.notes.json beside it holds each
+          brand's key, the spellings printed, how many entries carry it, and
+          the chain ids a house label names. Registers nothing.
           --main-url is needed only when the directory holds no run.
 `;
 
