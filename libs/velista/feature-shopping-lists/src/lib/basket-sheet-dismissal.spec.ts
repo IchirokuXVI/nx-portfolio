@@ -15,6 +15,8 @@ import {
   LINE_SERVICE,
   provideFakeZoneStore,
   SessionStore,
+  SHOP_FINDER_SERVICE,
+  ShopFinderMemory,
 } from '@portfolio/velista/data-access';
 import {
   provideFakeBrowserFacade,
@@ -193,6 +195,9 @@ async function render(
       // And a fresh `Map` for what it remembers (`0076`), so no test in this file
       // inherits an order or a grouping another one chose.
       provideFakeBrowserFacade(new Map()),
+      // The shop picker's nearby and recent shops (velista `0103`), which nothing
+      // here asks for, bound to the fake so the picker sheet can be built.
+      { provide: SHOP_FINDER_SERVICE, useClass: ShopFinderMemory },
       // The settle sheet reads a line's settlement history through this. These tests
       // are about the URL a sheet leaves on and never open that pane, so an empty page
       // is enough: what matters is that the injection resolves.

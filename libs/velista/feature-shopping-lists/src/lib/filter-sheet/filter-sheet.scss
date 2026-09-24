@@ -53,6 +53,24 @@
   text-transform: uppercase;
 }
 
+// "Buying at" draws its card on the options rather than on the fieldset (velista
+// `0103`), so the message after "Near me" picked a shop sits between the legend
+// and the card instead of inside it.
+.shops {
+  border: none;
+}
+
+.shop-options {
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  overflow: hidden;
+}
+
+.pick-message {
+  display: block;
+  margin-block-end: var(--app-space-3);
+}
+
 // The whole label is the target, so the tap area is the option and not the dot.
 .choice {
   display: flex;

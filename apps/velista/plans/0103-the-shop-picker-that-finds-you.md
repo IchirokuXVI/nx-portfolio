@@ -1,3 +1,5 @@
+> **PR:** [#484](https://github.com/IchirokuXVI/nx-portfolio/pull/484)
+
 # 0103: the shop picker that finds you
 
 > **Mock first.** There is no mock for this plan yet. The session that builds it adds the

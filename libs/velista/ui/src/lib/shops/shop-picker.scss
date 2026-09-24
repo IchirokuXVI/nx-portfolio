@@ -2,6 +2,121 @@
   display: block;
 }
 
+// A section above the search (velista `0103`): the shops near the device, and
+// the recent ones. The heading is the field label's style, with a quiet hint
+// beside it that says how the rows are ordered.
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin-block-end: var(--app-space-5);
+
+  // The list's own margin is for sitting under the chain buttons.
+  lib-shop-list {
+    margin-block-start: var(--app-space-2);
+  }
+}
+
+.section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--app-space-3);
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.section-hint {
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+// One line of copy: the reason there was no pick, or why nothing could be asked.
+.line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+
+  // A failure stands alone where the section would be, with the recent shops
+  // and the search carrying on below it.
+  &.is-alone {
+    margin-block-end: var(--app-space-5);
+  }
+}
+
+.line-glyph {
+  margin-block-start: var(--app-space-2);
+  font-size: var(--app-icon-sm);
+  color: var(--app-status-info-fg);
+}
+
+// The placeholder rows while the device and the server answer, in the shape of
+// the shop list's own card and rows.
+.card {
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  overflow: hidden;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-3) var(--app-space-4);
+  border-block-start: 1px solid var(--app-border-subtle);
+
+  &:first-child {
+    border-block-start: none;
+  }
+}
+
+.skeleton-dot {
+  flex: none;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+}
+
+.skeleton-lines {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.skeleton-line {
+  display: block;
+  block-size: var(--app-space-4);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+
+  &.is-title {
+    inline-size: 35%;
+  }
+
+  &.is-where {
+    inline-size: 60%;
+    block-size: var(--app-space-3);
+  }
+
+  &.is-aside {
+    flex: none;
+    inline-size: var(--app-space-9);
+  }
+}
+
 // The search field, written the way the supermarkets page writes it: a visible
 // label above a bordered row holding the glyph and the input. Sass cannot cross a
 // library boundary, so the shapes are repeated rather than imported, and every

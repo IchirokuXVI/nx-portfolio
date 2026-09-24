@@ -1003,3 +1003,23 @@ export class PinIcon {
       import('./pin-icon.svg?raw')
   );
 }
+
+/**
+ * A crosshair: find where I am (velista `0103`).
+ *
+ * On "Near me" in the shop picker and at the leading edge of the message after it
+ * picked a shop. Always beside its words, so it never has to say anything alone.
+ */
+@Component({
+  selector: 'lib-locate-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class LocateIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./locate-icon.svg?raw')
+  );
+}

@@ -35,7 +35,7 @@
           -->
           <input
             (change)="choose(shop.id)"
-            [attr.name]="mode() === 'pick' ? 'shop-pick' : null"
+            [attr.name]="mode() === 'pick' ? groupName() : null"
             [checked]="isChecked(shop)"
             [disabled]="mode() === 'exclude' && shop.excludedChain"
             [type]="mode() === 'pick' ? 'radio' : 'checkbox'"
@@ -59,6 +59,12 @@
             The word, beside the dimming and the unticked box. Three signals, and none of
             them is the colour.
           -->
+          @if (mode() === 'pick' && shop.aside; as aside) {
+            <span [class.is-distance]="aside.kind === 'distance'" class="aside">
+              {{ aside.text }}
+            </span>
+          }
+
           @if (mode() === 'exclude') {
             @if (shop.excludedChain) {
               <span class="mark">{{ 'shops.row.chainExcluded' | rokuT }}</span>

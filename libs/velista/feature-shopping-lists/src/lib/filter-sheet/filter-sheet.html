@@ -132,33 +132,53 @@
     >
       <legend class="legend">{{ 'basket.view.shop.legend' | rokuT }}</legend>
 
-      <label
-        [class.is-locked]="locked()"
-        [class.picked]="!oneShop()"
-        class="choice"
-      >
-        <input
-          (change)="setAnyShop()"
-          [checked]="!oneShop()"
-          class="control"
-          name="basket-shop"
-          type="radio"
+      <!--
+        What "Near me" picked (velista 0103), with the distance and a way to change
+        it, until dismissed or until the shop changes. Above the radios, because it
+        explains the one that is checked.
+      -->
+      @if (pickMessage(); as message) {
+        <lib-shop-pick-message
+          (changeShop)="openPicker()"
+          (dismissed)="dismissPickMessage()"
+          [distance]="message.distance"
+          [shop]="message.shop"
+          class="pick-message"
         />
-        <span class="choice-title">
-          @if (ownShops()) {
-            {{ 'basket.view.shop.any' | rokuT }}
-          } @else {
-            {{ 'basket.view.shop.anyGuest' | rokuT }}
-          }
-        </span>
-        @if (!locked()) {
-          <span class="choice-note">{{
-            'basket.view.shop.anyHint' | rokuT
-          }}</span>
-        }
-      </label>
+      }
 
       <!--
+        The two radios in their own card, so the message above sits between the
+        legend and the card, as the mock draws it (velista 0103).
+      -->
+      <div class="shop-options">
+        <label
+          [class.is-locked]="locked()"
+          [class.picked]="!oneShop()"
+          class="choice"
+        >
+          <input
+            (change)="setAnyShop()"
+            [checked]="!oneShop()"
+            class="control"
+            name="basket-shop"
+            type="radio"
+          />
+          <span class="choice-title">
+            @if (ownShops()) {
+              {{ 'basket.view.shop.any' | rokuT }}
+            } @else {
+              {{ 'basket.view.shop.anyGuest' | rokuT }}
+            }
+          </span>
+          @if (!locked()) {
+            <span class="choice-note">{{
+              'basket.view.shop.anyHint' | rokuT
+            }}</span>
+          }
+        </label>
+
+        <!--
         The second radio is the shop. Before one has been chosen it is **live, and
         it opens the picker**: a radio that did nothing when tapped read as broken,
         and the tap on it was already the answer to "which shop". It stays
@@ -170,63 +190,64 @@
         the line under the fieldset says why. A padlock takes Change's place,
         because a button that could never do anything is a promise broken.
       -->
-      <div
-        [class.is-locked]="locked()"
-        [class.picked]="oneShop()"
-        class="choice"
-      >
-        <!--
+        <div
+          [class.is-locked]="locked()"
+          [class.picked]="oneShop()"
+          class="choice"
+        >
+          <!--
           A `div` holding a label and a button, where every other row here is one
           label: a label wrapping a button would make the button's tap toggle the
           radio too, which is the one thing Change must not do.
         -->
-        <label class="choice-pick">
-          <input
-            (change)="setOneShop($event)"
-            [checked]="oneShop()"
-            class="control"
-            name="basket-shop"
-            type="radio"
-          />
+          <label class="choice-pick">
+            <input
+              (change)="setOneShop($event)"
+              [checked]="oneShop()"
+              class="control"
+              name="basket-shop"
+              type="radio"
+            />
 
-          @if (shopRow(); as shop) {
-            <span class="choice-body">
-              <span class="choice-title">{{ shop.chain }}</span>
-              @if (shop.shop !== null) {
-                <span class="choice-hint">{{ shop.shop }}</span>
-              }
-              @if (shop.outsideAreas) {
-                <lib-outside-areas class="choice-outside" />
-              }
-            </span>
+            @if (shopRow(); as shop) {
+              <span class="choice-body">
+                <span class="choice-title">{{ shop.chain }}</span>
+                @if (shop.shop !== null) {
+                  <span class="choice-hint">{{ shop.shop }}</span>
+                }
+                @if (shop.outsideAreas) {
+                  <lib-outside-areas class="choice-outside" />
+                }
+              </span>
+            } @else {
+              <span class="choice-title is-muted">
+                {{ 'basket.view.shop.none' | rokuT }}
+              </span>
+            }
+          </label>
+
+          @if (locked()) {
+            <lib-lock-icon class="lock" />
+          } @else if (shopRow() === null) {
+            <button
+              (click)="openPicker()"
+              [attr.aria-label]="'basket.view.shop.chooseLabel' | rokuT"
+              class="pick"
+              type="button"
+            >
+              {{ 'basket.view.shop.choose' | rokuT }}
+            </button>
           } @else {
-            <span class="choice-title is-muted">
-              {{ 'basket.view.shop.none' | rokuT }}
-            </span>
+            <button
+              (click)="openPicker()"
+              [attr.aria-label]="'basket.view.shop.changeLabel' | rokuT"
+              class="pick"
+              type="button"
+            >
+              {{ 'basket.view.shop.change' | rokuT }}
+            </button>
           }
-        </label>
-
-        @if (locked()) {
-          <lib-lock-icon class="lock" />
-        } @else if (shopRow() === null) {
-          <button
-            (click)="openPicker()"
-            [attr.aria-label]="'basket.view.shop.chooseLabel' | rokuT"
-            class="pick"
-            type="button"
-          >
-            {{ 'basket.view.shop.choose' | rokuT }}
-          </button>
-        } @else {
-          <button
-            (click)="openPicker()"
-            [attr.aria-label]="'basket.view.shop.changeLabel' | rokuT"
-            class="pick"
-            type="button"
-          >
-            {{ 'basket.view.shop.change' | rokuT }}
-          </button>
-        }
+        </div>
       </div>
     </fieldset>
 

@@ -1,14 +1,24 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
+  inject,
   input,
   output,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { FranchiseButton } from '@portfolio/velista/models';
-import { SearchIcon, SpinnerIcon } from '../icons/icons';
+import {
+  RokuLocaleStore,
+  RokuTranslatorPipe,
+} from '@portfolio/localization/rokutranslator-angular';
+import {
+  formatDistance,
+  NEARBY_RADIUS_METRES,
+  type FranchiseButton,
+  type NearbyNoPick,
+} from '@portfolio/velista/models';
+import { InfoIcon, SearchIcon, SpinnerIcon } from '../icons/icons';
 import { FranchiseButtons } from './franchise-buttons';
-import { ShopList, type ShopGroup } from './shop-list';
+import { ShopList, type ShopGroup, type ShopRow } from './shop-list';
 
 /**
  * Where the list body stands, for a caller that asks a server for it.
@@ -21,11 +31,39 @@ import { ShopList, type ShopGroup } from './shop-list';
 export type ShopPickerState = 'ready' | 'loading' | 'failed';
 
 /**
+ * What "Near me" has to show (velista `0103`), which the container works out from
+ * the device and the server and this draws.
+ *
+ * - `idle`: nothing, because nobody has pressed.
+ * - `locating`: the section's heading over two placeholder rows.
+ * - `answered`: the candidates nearest first, each with its distance, under one
+ *   line for the reason there was no pick. A pick closes the picker, so it is
+ *   never drawn here.
+ * - `denied`, `timed-out`, `failed`: one line, and the rest of the picker works
+ *   as it did before.
+ */
+export type ShopPickerNear =
+  | {
+      readonly state: 'idle' | 'locating' | 'denied' | 'timed-out' | 'failed';
+    }
+  | {
+      readonly state: 'answered';
+      readonly reason: NearbyNoPick | null;
+      /** Nearest first, as the server ordered them, each with its distance aside. */
+      readonly candidates: readonly ShopRow[];
+    };
+
+/**
  * The body of "which shop am I buying at" (velista `0078`, section 4; `0102`).
  *
- * Top to bottom in the supermarkets page's order (`0059`): a search across every
- * chain, the chain buttons, and then the open chain's shops under their postal
- * codes, or the flat matches while something is typed. One radio per shop.
+ * Top to bottom: the shops near the device once "Near me" was pressed, the shops
+ * this person bought at recently (velista `0103`), and then the supermarkets
+ * page's order (`0059`): a search across every chain, the chain buttons, and the
+ * open chain's shops under their postal codes, or the flat matches while something
+ * is typed. One radio per shop, one radio group per section.
+ *
+ * "Near me" itself is not here. It sits in the title row, which each sheet owns,
+ * so it is `NearMeButton` and the sheet draws it.
  *
  * ## Why it is here, and why it holds nothing
  *
@@ -47,6 +85,7 @@ export type ShopPickerState = 'ready' | 'loading' | 'failed';
     FranchiseButtons,
     RokuTranslatorPipe,
     SearchIcon,
+    InfoIcon,
     ShopList,
     SpinnerIcon,
   ],
@@ -91,6 +130,16 @@ export class ShopPicker {
    */
   readonly fieldId = input('shop-picker-search');
 
+  /** What "Near me" has to show. See {@link ShopPickerNear}. */
+  readonly near = input<ShopPickerNear>({ state: 'idle' });
+
+  /**
+   * The shops this person bought at recently, newest first, each with its day
+   * aside. Empty draws no section, which is also what a guest gets: the container
+   * never asks for a guest.
+   */
+  readonly recent = input<readonly ShopRow[]>([]);
+
   /** Something was typed. The container decides what it matches. */
   readonly queried = output<string>();
 
@@ -102,6 +151,34 @@ export class ShopPicker {
 
   /** A shop's radio was chosen: its location id. */
   readonly picked = output<string>();
+
+  private readonly _locale = inject(RokuLocaleStore).locale;
+
+  /** How far the server looks, in the reader's language, for the heading. */
+  protected readonly radius = computed(() =>
+    formatDistance(NEARBY_RADIUS_METRES, this._locale())
+  );
+
+  /** The candidates as one ungrouped run, which is what the list draws. */
+  protected readonly nearGroups = computed<readonly ShopGroup[]>(() => {
+    const near = this.near();
+    return near.state === 'answered' && near.candidates.length > 0
+      ? [{ key: 'near', heading: '', code: null, shops: near.candidates }]
+      : [];
+  });
+
+  /** The reason there was no pick, or null for none to say. */
+  protected readonly reason = computed<NearbyNoPick | null>(() => {
+    const near = this.near();
+    return near.state === 'answered' ? near.reason : null;
+  });
+
+  /** The recent shops as one ungrouped run. */
+  protected readonly recentGroups = computed<readonly ShopGroup[]>(() =>
+    this.recent().length === 0
+      ? []
+      : [{ key: 'recent', heading: '', code: null, shops: this.recent() }]
+  );
 
   /** Whether a word is being searched, which decides what the body draws. */
   protected searching(): boolean {

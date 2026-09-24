@@ -1254,7 +1254,33 @@
         "count_one": "{{count}} tienda",
         "count_other": "{{count}} tiendas",
         "locked": "Fijada al empezar esta lista",
-        "outside": "Fuera de tus zonas"
+        "outside": "Fuera de tus zonas",
+        "near": {
+          "button": "Cerca de mí",
+          "buttonLabel": "Buscar las tiendas cerca de mí",
+          "finding": "Buscándote",
+          "heading": "Cerca de ti",
+          "headingHint": "la más cercana primero, a menos de {{distance}}",
+          "reason": {
+            "AMBIGUOUS": "Hay varias tiendas cerca. Elige la tuya.",
+            "LOW_ACCURACY": "Tu ubicación no es lo bastante precisa para elegir por ti.",
+            "OUTSIDE_PROFILE": "Esta tienda está fuera de tus zonas.",
+            "NONE_NEARBY": "No hay ninguna tienda a menos de {{distance}}."
+          },
+          "denied": "Velista no puede ver tu ubicación. Elige tu tienda abajo.",
+          "timedOut": "Encontrarte ha tardado demasiado. Vuelve a probar Cerca de mí, o elige abajo.",
+          "failed": "No se han podido buscar tiendas cerca de ti. Elige abajo.",
+          "picked": "Comprando en {{shop}} ({{distance}}).",
+          "change": "Cambiar",
+          "changeLabel": "Cambiar la tienda en la que compras",
+          "dismiss": "Cerrar este aviso"
+        },
+        "recent": {
+          "heading": "Recientes",
+          "headingHint": "donde compraste, lo más reciente primero",
+          "today": "Hoy",
+          "yesterday": "Ayer"
+        }
       },
       "lists": {
         "legend": "Listas",

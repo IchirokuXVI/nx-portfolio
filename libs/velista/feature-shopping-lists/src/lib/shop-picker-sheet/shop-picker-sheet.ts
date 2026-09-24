@@ -2,18 +2,29 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
+  RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore, BasketViewStore } from '@portfolio/velista/data-access';
+import {
+  BasketStore,
+  BasketViewStore,
+  SHOP_FINDER_SERVICE,
+  ShopFinder,
+  ShopPickNotices,
+  type ShopFinderServiceI,
+} from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   foldForSearch,
   inLocale,
+  nearbyPickedShop,
   type BasketPriceScope,
   type FranchiseButton,
   type ScopeLocation,
@@ -21,9 +32,13 @@ import {
 import { SheetNavigation } from '@portfolio/velista/platform';
 import {
   ChevronLeftIcon,
+  nearbyShopRow,
+  NearMeButton,
+  recentShopRow,
   SheetShell,
   ShopPicker,
   type ShopGroup,
+  type ShopPickerNear,
   type ShopRow,
 } from '@portfolio/velista/ui';
 import { filterSheetPath } from '../basket-paths';
@@ -75,10 +90,29 @@ interface PickerShop {
  * Backend `0163` serves every participant the shops, so a guest's picker is the
  * owner's picker. The chain buttons that used to pick a whole scope for a reader
  * with no shops are gone with the scope: a chain is not a place to stand in.
+ *
+ * ## Near me, and the shops you bought at (velista `0103`)
+ *
+ * "Near me" asks the device where it is only when pressed, and then the basket's
+ * own nearby route, which any participant may ask, a guest included. The answer
+ * is judged against the owner's profile, and a guest may choose a nearby shop the
+ * owner never listed, because a read at any shop is priced (backend `0163`). When
+ * the server picks a shop, it is set, the picker closes, and the filter sheet it
+ * lands on says what was chosen. Otherwise the candidates are drawn at the top.
+ *
+ * The recent shops are the signed in reader's own, asked for once when the reader
+ * is known and never for a guest.
  */
 @Component({
   selector: 'lib-shop-picker-sheet',
-  imports: [ChevronLeftIcon, RokuTranslatorPipe, SheetShell, ShopPicker],
+  imports: [
+    ChevronLeftIcon,
+    NearMeButton,
+    RokuTranslatorPipe,
+    SheetShell,
+    ShopPicker,
+  ],
+  providers: [ShopFinder],
   templateUrl: './shop-picker-sheet.html',
   styleUrl: './shop-picker-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -97,6 +131,70 @@ export class ShopPickerSheet {
    * all, and a sheet that read one there would dismiss to `/shopping-lists/`.
    */
   private readonly _address = inject(BasketStore).address;
+
+  private readonly _basket = inject(BasketStore);
+  private readonly _finder = inject(ShopFinder);
+  private readonly _finderService =
+    inject<ShopFinderServiceI>(SHOP_FINDER_SERVICE);
+  private readonly _notices = inject(ShopPickNotices);
+  private readonly _translator = inject(RokuTranslatorService);
+
+  constructor() {
+    // The recent shops, once the reader is known, and only for somebody signed
+    // in. By an effect and not in the constructor, because under
+    // `shopping-lists/live` a cold load builds this sheet before the basket, and
+    // its reader, have arrived.
+    let asked = false;
+    effect(() => {
+      const me = this._basket.me();
+      if (asked || me === null || me.kind === 'GUEST') {
+        return;
+      }
+      asked = true;
+      untracked(() => void this._finder.loadRecent());
+    });
+  }
+
+  /** Whether "Near me" is working, which is what the button says. */
+  protected readonly finding = computed(
+    () => this._finder.finding().state === 'locating'
+  );
+
+  /** What "Near me" answered, as the picker draws it. */
+  protected readonly near = computed<ShopPickerNear>(() => {
+    const finding = this._finder.finding();
+    if (finding.state !== 'answered') {
+      return { state: finding.state };
+    }
+    const locale = this._locale();
+    return {
+      state: 'answered',
+      reason: finding.answer.noPick,
+      candidates: finding.answer.candidates.map((shop) =>
+        nearbyShopRow(shop, locale)
+      ),
+    };
+  });
+
+  /** The reader's recent shops, newest first, with the day of the last purchase. */
+  protected readonly recent = computed<readonly ShopRow[]>(() => {
+    const locale = this._locale();
+    const words = {
+      today: this._translator.t(
+        'basket.view.shop.recent.today',
+        undefined,
+        locale
+      ),
+      yesterday: this._translator.t(
+        'basket.view.shop.recent.yesterday',
+        undefined,
+        locale
+      ),
+    };
+    return this._finder
+      .recent()
+      .map((recent) => recentShopRow(recent, locale, words));
+  });
 
   /** Which chain's shops are open, or null when none is. */
   protected readonly openChain = signal<string | null>(null);
@@ -285,11 +383,62 @@ export class ShopPickerSheet {
    * draws it the moment it is recreated.
    */
   pickShop(locationId: string): void {
-    if (!this._shops().some((row) => row.id === locationId)) {
+    if (!this._offers(locationId)) {
       return;
     }
+    // A pick by hand is not the automatic one, so any message about that goes.
+    this._notices.dismiss();
     this._view.setShop(locationId);
     void this._sheet.dismiss(this._filterUrl());
+  }
+
+  /**
+   * "Near me" was pressed (velista `0103`): ask the device, then the basket's route.
+   *
+   * **The server decides.** With a pick, the shop it named is set, the message is
+   * left for the filter sheet, and this sheet closes onto it. With none, the
+   * candidates and the reason are drawn at the top and the person chooses.
+   */
+  async findNear(): Promise<void> {
+    const basketId = this._basket.basket()?.id;
+    if (basketId === undefined) {
+      return;
+    }
+    const answer = await this._finder.find((point) =>
+      this._finderService.nearBasket(basketId, point)
+    );
+    const shop = answer === null ? null : nearbyPickedShop(answer);
+    const pick = answer?.pick ?? null;
+    if (shop === null || pick === null) {
+      return;
+    }
+
+    this._notices.show({
+      basket: basketId,
+      shop,
+      distanceMetres: pick.distanceMetres,
+    });
+    this._view.setShop(shop.id);
+    void this._sheet.dismiss(this._filterUrl());
+  }
+
+  /**
+   * Whether a shop is one this sheet offered: one of the basket's, one of the
+   * reader's recent shops, or one the server found near the device. A shop outside
+   * the basket's scopes is priced by the read made at it (backend `0163`).
+   */
+  private _offers(locationId: string): boolean {
+    if (this._shops().some((row) => row.id === locationId)) {
+      return true;
+    }
+    if (this._finder.recent().some((recent) => recent.shop.id === locationId)) {
+      return true;
+    }
+    const finding = this._finder.finding();
+    return (
+      finding.state === 'answered' &&
+      finding.answer.candidates.some((shop) => shop.id === locationId)
+    );
   }
 
   /**

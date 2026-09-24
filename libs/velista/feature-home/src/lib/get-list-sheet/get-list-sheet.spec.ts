@@ -9,9 +9,13 @@ import {
   LIST_SERVICE,
   provideFakeSessionStore,
   provideFakeZoneStore,
+  SHOP_FINDER_SERVICE,
   SHOP_SERVICE,
+  ShopFinderMemory,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileStore,
+  toNearbyShops,
+  toRecentShops,
   type ListServiceI,
   type ShopServiceI,
   type ShoppingProfileServiceI,
@@ -28,7 +32,9 @@ import type {
   ShoppingProfile,
 } from '@portfolio/velista/models';
 import {
+  fakeGeolocationReader,
   provideFakeBrowserFacade,
+  provideFakeGeolocationReader,
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
@@ -112,6 +118,10 @@ interface Options {
   readonly pageSize?: number;
   /** The reader's contacts, as the flat memberships the contacts read answers. */
   readonly contacts?: readonly Contact[];
+  /** What the nearby and recent shops routes answer (velista `0103`). */
+  readonly finder?: ShopFinderMemory;
+  /** What the device says when "Near me" is pressed. */
+  readonly reader?: ReturnType<typeof fakeGeolocationReader>;
   /** The profile's shops, which the "Buying at" picker offers (velista `0102`). */
   readonly shops?: readonly Shop[];
 }
@@ -316,6 +326,19 @@ async function render(
       },
       { provide: SHOPPING_PROFILE_SERVICE, useValue: profileService },
       { provide: SHOP_SERVICE, useValue: shopService(options.shops ?? []) },
+      {
+        provide: SHOP_FINDER_SERVICE,
+        useValue: options.finder ?? new ShopFinderMemory(),
+      },
+      provideFakeGeolocationReader(
+        options.reader ??
+          fakeGeolocationReader({
+            outcome: {
+              state: 'located',
+              point: { latitude: 37.88, longitude: -4.78, accuracyMetres: 12 },
+            },
+          })
+      ),
       // The real store's own behaviour is covered by its spec; here it is a recorder,
       // so what is under test is what the sheet decides to send.
       { provide: BasketListStore, useValue: generated },
@@ -1097,5 +1120,194 @@ describe('GetListSheet: buying at', () => {
     fixture.detectChanges();
 
     expect(query(fixture, '.shop-row lib-outside-areas')).toBeNull();
+  });
+});
+
+/**
+ * "Near me" and the recent shops in the get a list sheet (velista `0103`): there
+ * is no basket yet, so the catalog's route, judged against the profile the list
+ * will use; and the person is signed in, so their recent shops head the picker.
+ */
+describe('GetListSheet: the shop picker that finds you', () => {
+  function view(id: string, chain: string, postalCode = '14001') {
+    return {
+      id,
+      supermarketId: `sm-${chain}`,
+      supermarketName: { en: chain, es: chain },
+      label: null,
+      address: `Calle ${id}`,
+      city: 'Córdoba',
+      postalCode,
+      inProfile: true,
+    };
+  }
+
+  async function opened(options: Options = {}) {
+    const fixture = await render({
+      profiles: [
+        profile('p1', {
+          isDefault: true,
+          postalCodes: [{ id: 'pc1', postalCode: '14001', label: null }],
+        } as Partial<ShoppingProfile>),
+      ],
+      ...options,
+    });
+    fixture.componentInstance.openShopPicker();
+    await drawn(fixture);
+    return fixture;
+  }
+
+  async function drawn(fixture: ComponentFixture<GetListSheet>) {
+    for (let i = 0; i < 6; i++) {
+      await Promise.resolve();
+    }
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  function pressNearMe(fixture: ComponentFixture<GetListSheet>) {
+    (query(fixture, 'lib-near-me-button button') as HTMLButtonElement).click();
+  }
+
+  it('asks for no position until Near me is pressed', async () => {
+    const reader = fakeGeolocationReader();
+    await opened({ reader });
+
+    expect(reader.state.reads).toBe(0);
+  });
+
+  it('picks through the catalog route for the profile, closes, and says what it chose', async () => {
+    const finder = new ShopFinderMemory();
+    finder.nearby = toNearbyShops({
+      candidates: [
+        {
+          ...view('near-1', 'Mercadona'),
+          distanceMetres: 120,
+          excluded: false,
+        },
+      ],
+      pick: { locationId: 'near-1', distanceMetres: 120 },
+      noPick: null,
+    });
+    const fixture = await opened({ finder });
+
+    pressNearMe(fixture);
+    await drawn(fixture);
+
+    expect(finder.calls).toContain('profile');
+    expect(finder.asked).toEqual(['p1']);
+    expect(fixture.componentInstance.pane()).toBe('form');
+    expect(fixture.componentInstance.shop()?.id).toBe('near-1');
+    const message = query(fixture, 'lib-shop-pick-message');
+    expect(message?.textContent).toContain('basket.view.shop.near.picked');
+
+    // It goes when dismissed, and the shop stays.
+    (
+      query(fixture, 'lib-shop-pick-message .dismiss') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    expect(query(fixture, 'lib-shop-pick-message')).toBeNull();
+    expect(fixture.componentInstance.shop()?.id).toBe('near-1');
+
+    await fixture.componentInstance.submit();
+    expect(created[0]?.supermarketLocationId).toBe('near-1');
+  });
+
+  it('drops the message when the shop is changed by hand', async () => {
+    const finder = new ShopFinderMemory();
+    finder.nearby = toNearbyShops({
+      candidates: [
+        {
+          ...view('near-1', 'Mercadona'),
+          distanceMetres: 120,
+          excluded: false,
+        },
+      ],
+      pick: { locationId: 'near-1', distanceMetres: 120 },
+      noPick: null,
+    });
+    const fixture = await opened({ finder });
+    pressNearMe(fixture);
+    await drawn(fixture);
+
+    (query(fixture, '.shop-clear') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(query(fixture, 'lib-shop-pick-message')).toBeNull();
+  });
+
+  it('draws the candidates when there is no pick, and one can be chosen by hand', async () => {
+    const finder = new ShopFinderMemory();
+    finder.nearby = toNearbyShops({
+      candidates: [
+        {
+          ...view('near-1', 'Mercadona'),
+          distanceMetres: 180,
+          excluded: false,
+        },
+        { ...view('near-2', 'Dia'), distanceMetres: 230, excluded: false },
+      ],
+      pick: null,
+      noPick: 'AMBIGUOUS',
+    });
+    const fixture = await opened({ finder });
+
+    pressNearMe(fixture);
+    await drawn(fixture);
+
+    expect(fixture.componentInstance.pane()).toBe('shop');
+    expect(query(fixture, '.near-region')?.textContent).toContain(
+      'basket.view.shop.near.reason.AMBIGUOUS'
+    );
+    all(fixture, '.near-region input')[1].click();
+    await drawn(fixture);
+
+    expect(fixture.componentInstance.shop()?.id).toBe('near-2');
+    expect(query(fixture, 'lib-shop-pick-message')).toBeNull();
+  });
+
+  it('says so in one line when the position is refused', async () => {
+    const fixture = await opened({
+      reader: fakeGeolocationReader({ outcome: { state: 'denied' } }),
+    });
+
+    pressNearMe(fixture);
+    await drawn(fixture);
+
+    expect(query(fixture, '.near-region .line')?.textContent).toContain(
+      'basket.view.shop.near.denied'
+    );
+    expect(query(fixture, 'lib-franchise-buttons')).not.toBeNull();
+  });
+
+  it('draws the recent shops first, and a pick from them is the list’s shop', async () => {
+    const finder = new ShopFinderMemory();
+    finder.recent = toRecentShops({
+      shops: [
+        {
+          shop: view('recent-1', 'Lidl', '29002'),
+          lastBoughtAt: '2026-09-01T10:00:00Z',
+        },
+      ],
+    });
+    const fixture = await opened({ finder });
+
+    expect(finder.calls).toEqual(['recent']);
+    const section = query(fixture, '.section') as HTMLElement;
+    expect(section.textContent).toContain('basket.view.shop.recent.heading');
+
+    (section.querySelector('input') as HTMLInputElement).click();
+    await drawn(fixture);
+
+    expect(fixture.componentInstance.shop()?.id).toBe('recent-1');
+    // A shop outside the profile's areas is still one to choose, and says so.
+    expect(query(fixture, '.shop-row lib-outside-areas')).not.toBeNull();
+  });
+
+  it('draws no recent section when the person has none', async () => {
+    const fixture = await opened();
+
+    expect(text(fixture)).not.toContain('basket.view.shop.recent.heading');
   });
 });

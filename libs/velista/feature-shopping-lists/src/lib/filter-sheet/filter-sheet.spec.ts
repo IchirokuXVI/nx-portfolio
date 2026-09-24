@@ -6,7 +6,11 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore, BasketViewStore } from '@portfolio/velista/data-access';
+import {
+  BasketStore,
+  BasketViewStore,
+  ShopPickNotices,
+} from '@portfolio/velista/data-access';
 import type {
   BasketListRef,
   BasketPriceScope,
@@ -146,6 +150,7 @@ function render(options: {
     products: signal(new Map()),
     me: signal({ kind: options.meKind ?? 'OWNER' }),
     basket: computed(() => ({
+      id: BASKET_ID,
       scopes: scopes(),
       shop: options.own ?? null,
       lockedShopId: options.own?.id ?? null,
@@ -656,6 +661,101 @@ function text(
     (node?.nativeElement as HTMLElement | undefined)?.textContent?.trim() ?? ''
   );
 }
+
+/**
+ * The message after "Near me" picked the shop (velista `0103`): drawn in the
+ * "Buying at" section, with the distance and Change, until dismissed or until the
+ * shop changes.
+ */
+describe('FilterSheet, the pick message', () => {
+  const SCOPES = [scope('s-merca', 'Mercadona', ['Calle Mayor 3'])];
+  const PICKED: BasketShop = {
+    id: 's-merca-0',
+    supermarketId: 'sm-merca',
+    chain: { en: 'Mercadona', es: 'Mercadona' },
+    label: null,
+    address: 'Calle Mayor 3',
+    city: 'Córdoba',
+    postalCode: '14001',
+    inProfile: true,
+  };
+
+  function picked(basket = BASKET_ID) {
+    const rendered = render({ lines: OWNER_LINES, scopes: SCOPES });
+    rendered.view.setShop(PICKED.id);
+    TestBed.inject(ShopPickNotices).show({
+      basket,
+      shop: PICKED,
+      distanceMetres: 120,
+    });
+    rendered.fixture.detectChanges();
+    return rendered;
+  }
+
+  const message = (fixture: ReturnType<typeof render>['fixture']) =>
+    fixture.debugElement.query(By.css('lib-shop-pick-message'));
+
+  it('names the shop and the distance above the radios', () => {
+    const { fixture } = picked();
+
+    const node = message(fixture);
+    expect(node).not.toBeNull();
+    expect(node.componentInstance.shop()).toBe('Mercadona, Calle Mayor 3');
+    expect(node.componentInstance.distance()).toBe('120 m');
+  });
+
+  it('goes when dismissed, and the shop stays', () => {
+    const { fixture, view } = picked();
+
+    (
+      fixture.nativeElement.querySelector(
+        'lib-shop-pick-message .dismiss'
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+
+    expect(message(fixture)).toBeNull();
+    expect(view.shop()).toBe(PICKED.id);
+  });
+
+  it('opens the picker from Change', () => {
+    const { fixture } = picked();
+
+    (
+      fixture.nativeElement.querySelector(
+        'lib-shop-pick-message .change'
+      ) as HTMLButtonElement
+    ).click();
+
+    expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
+      `/en/shopping-lists/${BASKET_ID}/sheet/filter/shop`
+    );
+  });
+
+  it('goes when the shop changes, and does not come back with the same shop', () => {
+    const { fixture, view } = picked();
+
+    const radios = fixture.debugElement.queryAll(
+      By.css('input[name="basket-shop"]')
+    );
+    radios[0].triggerEventHandler('change', {
+      target: radios[0].nativeElement,
+    });
+    fixture.detectChanges();
+    expect(view.shop()).toBeNull();
+    expect(message(fixture)).toBeNull();
+
+    view.setShop(PICKED.id);
+    fixture.detectChanges();
+    expect(message(fixture)).toBeNull();
+  });
+
+  it('is not drawn over another basket', () => {
+    const { fixture } = picked('another-basket');
+
+    expect(message(fixture)).toBeNull();
+  });
+});
 
 /**
  * Only what I usually buy here (velista `0104`).

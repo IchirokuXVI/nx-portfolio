@@ -13,15 +13,23 @@ import {
 import {
   BasketStore,
   BasketViewStore,
+  ShopPickNotices,
   type BasketChosenShop,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  formatDistance,
   type BasketGrouping,
   type BasketOrder,
 } from '@portfolio/velista/models';
 import { SheetNavigation } from '@portfolio/velista/platform';
-import { LockIcon, OutsideAreas, SheetShell } from '@portfolio/velista/ui';
+import {
+  LockIcon,
+  OutsideAreas,
+  SheetShell,
+  ShopPickMessage,
+  shopSentenceOf,
+} from '@portfolio/velista/ui';
 import { basketPath, shopPickerPath } from '../basket-paths';
 
 /**
@@ -70,7 +78,13 @@ import { basketPath, shopPickerPath } from '../basket-paths';
  */
 @Component({
   selector: 'lib-filter-sheet',
-  imports: [LockIcon, OutsideAreas, RokuTranslatorPipe, SheetShell],
+  imports: [
+    LockIcon,
+    OutsideAreas,
+    RokuTranslatorPipe,
+    SheetShell,
+    ShopPickMessage,
+  ],
   templateUrl: './filter-sheet.html',
   styleUrl: './filter-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -137,6 +151,34 @@ export class FilterSheet {
 
   /** Whether the person is buying at that shop, which is which radio is checked. */
   protected readonly oneShop = computed(() => this._chosenShop() !== null);
+
+  private readonly _notices = inject(ShopPickNotices);
+  private readonly _basket = inject(BasketStore).basket;
+  private readonly _basketId = computed(() => this._basket()?.id ?? null);
+
+  /**
+   * The message after "Near me" picked the shop (velista `0103`), named and
+   * measured, or null.
+   *
+   * Drawn only while this basket is still bought at the shop it names, so a change
+   * of shop, by any control, takes it away; the x takes it away too. It is about
+   * this basket and no other one this device opens.
+   */
+  protected readonly pickMessage = computed(() => {
+    const notice = this._notices.notice();
+    if (
+      notice === null ||
+      notice.basket !== this._basketId() ||
+      notice.shop.id !== this._view.shop()
+    ) {
+      return null;
+    }
+    const locale = this._locale();
+    return {
+      shop: shopSentenceOf(notice.shop, locale),
+      distance: formatDistance(notice.distanceMetres, locale),
+    };
+  });
 
   /**
    * Whether the basket was started at its shop, which disables the whole fieldset
@@ -215,7 +257,15 @@ export class FilterSheet {
    */
   protected setAnyShop(): void {
     this._lastShop.set(this._chosenShop());
+    // The shop changed, so the message about how it was chosen is over, and
+    // choosing the same shop again by hand must not bring it back.
+    this._notices.dismiss();
     this._view.setShop(null);
+  }
+
+  /** The x on the pick message: the message goes, and the shop stays. */
+  protected dismissPickMessage(): void {
+    this._notices.dismiss();
   }
 
   /**

@@ -25,6 +25,7 @@ export * from './lib/join-code';
 export * from './lib/limits';
 export * from './lib/line-detail-view';
 export * from './lib/list-view';
+export * from './lib/nearby-shops';
 export * from './lib/problem';
 export * from './lib/purchases';
 export * from './lib/requests';

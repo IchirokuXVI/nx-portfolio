@@ -11,6 +11,33 @@ import { InjectionToken } from '@angular/core';
 export interface DevicePoint {
   readonly latitude: number;
   readonly longitude: number;
+  /**
+   * How sure the device is, as the radius in metres `GeolocationCoordinates.accuracy`
+   * reports. **Present only when the call asked for it** ({@link LocationReadOptions}),
+   * which today is the shop picker alone (velista `0103`): the server refuses to pick a
+   * shop for a point it cannot trust. Every other caller turns the point into a postal
+   * code and has no use for it, so it never receives it.
+   */
+  readonly accuracyMetres?: number;
+}
+
+/**
+ * How one read asks the browser (velista `0103`).
+ *
+ * Per call rather than per reader, because the two questions differ. A postal code
+ * is a neighbourhood, so a coarse, cached fix answers it at once; which shop door the
+ * person is standing at needs the satellite fix and a fresh one. Every field left out
+ * keeps the default the postal code callers were written against.
+ */
+export interface LocationReadOptions {
+  /** Ask for the GPS fix. Default false. */
+  readonly enableHighAccuracy?: boolean;
+  /** How long to wait for a fix, in milliseconds. Default ten seconds. */
+  readonly timeoutMs?: number;
+  /** How old a cached fix may be, in milliseconds. Default a minute. */
+  readonly maximumAgeMs?: number;
+  /** Carry {@link DevicePoint.accuracyMetres} on the point. Default false. */
+  readonly withAccuracy?: boolean;
 }
 
 /**
@@ -83,7 +110,7 @@ export interface GeolocationReaderI {
    * for each of them and a thrown error would collapse four different sentences into
    * one apology.
    */
-  read(): Promise<LocationOutcome>;
+  read(options?: LocationReadOptions): Promise<LocationOutcome>;
 }
 
 /**
@@ -131,7 +158,7 @@ export class BrowserGeolocationReader implements GeolocationReaderI {
     }
   }
 
-  read(): Promise<LocationOutcome> {
+  read(options: LocationReadOptions = {}): Promise<LocationOutcome> {
     const geolocation = globalThis.navigator?.geolocation;
     if (geolocation === undefined) {
       return Promise.resolve({ state: 'unavailable' });
@@ -145,16 +172,20 @@ export class BrowserGeolocationReader implements GeolocationReaderI {
             point: {
               latitude: position.coords.latitude,
               longitude: position.coords.longitude,
+              ...(options.withAccuracy === true
+                ? { accuracyMetres: position.coords.accuracy }
+                : {}),
             },
           }),
         (error) => resolve(outcomeOf(error)),
         {
-          // Coarse is enough and cheaper: the answer is a postal code, and asking for
-          // high accuracy spends the GPS and the battery to sharpen a number that is
-          // rounded to a neighbourhood anyway.
-          enableHighAccuracy: false,
-          timeout: TIMEOUT_MS,
-          maximumAge: MAX_AGE_MS,
+          // Coarse is the default and cheaper: the postal code callers round the
+          // answer to a neighbourhood, and asking for high accuracy spends the GPS and
+          // the battery to sharpen a number that is rounded away anyway. The shop
+          // picker asks for more, per call (velista `0103`).
+          enableHighAccuracy: options.enableHighAccuracy ?? false,
+          timeout: options.timeoutMs ?? TIMEOUT_MS,
+          maximumAge: options.maximumAgeMs ?? MAX_AGE_MS,
         }
       );
     });

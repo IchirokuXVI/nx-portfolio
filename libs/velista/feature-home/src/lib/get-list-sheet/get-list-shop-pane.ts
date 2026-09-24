@@ -18,20 +18,37 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { ShopStore } from '@portfolio/velista/data-access';
+import {
+  SHOP_FINDER_SERVICE,
+  ShopFinder,
+  ShopStore,
+  type ShopFinderServiceI,
+} from '@portfolio/velista/data-access';
 import {
   inLocale,
+  nearbyPickedShop,
   OTHER_CHAINS,
+  type BasketShop,
   type FranchiseButton,
   type Shop,
 } from '@portfolio/velista/models';
 import {
   ChevronLeftIcon,
+  nearbyShopRow,
+  NearMeButton,
+  recentShopRow,
   ShopPicker,
   type ShopGroup,
+  type ShopPickerNear,
   type ShopPickerState,
   type ShopRow,
 } from '@portfolio/velista/ui';
+
+/** A shop "Near me" picked, with the distance the message says it was chosen on. */
+export interface NearShopPick {
+  readonly shop: Shop;
+  readonly distanceMetres: number;
+}
 
 /**
  * How long typing waits before it asks, so a word costs one request and not one
@@ -56,11 +73,20 @@ const SEARCH_DEBOUNCE_MS = 250;
  *
  * It holds no choice of its own. A pick is handed to the sheet, which keeps it until
  * Generate and can change it as often as the person likes.
+ *
+ * ## Near me, and the shops you bought at (velista `0103`)
+ *
+ * There is no basket yet, so "Near me" asks the catalog's nearby route, judged
+ * against the profile the list will use. When the server picks a shop, the pane
+ * hands it to the sheet as a pick made near the person, and the sheet says so. The
+ * person is signed in here, so their recent shops head the picker when they have
+ * any. A shop from either section can be chosen, including one outside the
+ * profile's areas: a list started there is priced there (backend `0163`).
  */
 @Component({
   selector: 'lib-get-list-shop-pane',
-  imports: [ChevronLeftIcon, RokuTranslatorPipe, ShopPicker],
-  providers: [ShopStore],
+  imports: [ChevronLeftIcon, NearMeButton, RokuTranslatorPipe, ShopPicker],
+  providers: [ShopStore, ShopFinder],
   templateUrl: './get-list-shop-pane.html',
   styleUrl: './get-list-shop-pane.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -69,6 +95,9 @@ export class GetListShopPane {
   private readonly _shops = inject(ShopStore);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _translator = inject(RokuTranslatorService);
+  private readonly _finder = inject(ShopFinder);
+  private readonly _finderService =
+    inject<ShopFinderServiceI>(SHOP_FINDER_SERVICE);
 
   /** The profile the list will be priced against, whose shops are offered. */
   readonly profileId = input.required<string>();
@@ -78,6 +107,12 @@ export class GetListShopPane {
 
   /** A shop was chosen. The whole row, because the sheet names it afterwards. */
   readonly picked = output<Shop>();
+
+  /**
+   * "Near me" picked a shop (velista `0103`). Its own output, because the sheet
+   * says this one out loud with its distance, and a pick by hand it does not.
+   */
+  readonly pickedNear = output<NearShopPick>();
 
   /** The chevron: back to the form, with nothing chosen. */
   readonly back = output<void>();
@@ -100,6 +135,10 @@ export class GetListShopPane {
       const profileId = this.profileId();
       untracked(() => void this._shops.open(profileId));
     });
+
+    // The person is signed in on this sheet, so their recent shops are theirs to
+    // see. Asked once, when the pane opens; the device's position is not.
+    void this._finder.loadRecent();
 
     inject(DestroyRef).onDestroy(() => {
       if (this._debounce !== null) {
@@ -245,13 +284,116 @@ export class GetListShopPane {
     void this._shops.select(key);
   }
 
-  /** A shop's radio: hand the whole row to the sheet. */
-  protected pick(locationId: string): void {
-    const shop = this._offered().find((row) => row.id === locationId);
-    if (shop !== undefined) {
-      this.picked.emit(shop);
+  /** Whether "Near me" is working, which is what the button says. */
+  protected readonly finding = computed(
+    () => this._finder.finding().state === 'locating'
+  );
+
+  /** What "Near me" answered, as the picker draws it. */
+  protected readonly near = computed<ShopPickerNear>(() => {
+    const finding = this._finder.finding();
+    if (finding.state !== 'answered') {
+      return { state: finding.state };
+    }
+    const locale = this._locale();
+    return {
+      state: 'answered',
+      reason: finding.answer.noPick,
+      candidates: finding.answer.candidates.map((shop) =>
+        nearbyShopRow(shop, locale)
+      ),
+    };
+  });
+
+  /** The person's recent shops, newest first, with the day of the last purchase. */
+  protected readonly recent = computed<readonly ShopRow[]>(() => {
+    const locale = this._locale();
+    const words = {
+      today: this._translator.t(
+        'basket.view.shop.recent.today',
+        undefined,
+        locale
+      ),
+      yesterday: this._translator.t(
+        'basket.view.shop.recent.yesterday',
+        undefined,
+        locale
+      ),
+    };
+    return this._finder
+      .recent()
+      .map((recent) => recentShopRow(recent, locale, words));
+  });
+
+  /**
+   * "Near me" was pressed: ask the device, then the catalog's route for the
+   * profile the list will use. **The server decides**: a pick goes to the sheet,
+   * and no pick draws the candidates here.
+   */
+  protected async findNear(): Promise<void> {
+    const profileId = this.profileId();
+    const answer = await this._finder.find((point) =>
+      this._finderService.nearProfile(point, profileId)
+    );
+    const shop = answer === null ? null : nearbyPickedShop(answer);
+    const pick = answer?.pick ?? null;
+    if (shop !== null && pick !== null) {
+      this.pickedNear.emit({
+        shop: shopOf(shop, shop.excluded),
+        distanceMetres: pick.distanceMetres,
+      });
     }
   }
+
+  /**
+   * A shop's radio: hand the whole shop to the sheet, from whichever section drew
+   * it. The open chain's first, then the recent ones, then the ones near the device.
+   */
+  protected pick(locationId: string): void {
+    const offered = this._offered().find((row) => row.id === locationId);
+    if (offered !== undefined) {
+      this.picked.emit(offered);
+      return;
+    }
+
+    const recent = this._finder
+      .recent()
+      .find((row) => row.shop.id === locationId);
+    if (recent !== undefined) {
+      this.picked.emit(shopOf(recent.shop, false));
+      return;
+    }
+
+    const finding = this._finder.finding();
+    const near =
+      finding.state === 'answered'
+        ? finding.answer.candidates.find((row) => row.id === locationId)
+        : undefined;
+    if (near !== undefined) {
+      this.picked.emit(shopOf(near, near.excluded));
+    }
+  }
+}
+
+/**
+ * A shop the server named, as the catalog's `Shop` the sheet keeps until Generate.
+ * The sheet reads its id, chain, name, street, town and postal code, and nothing
+ * else of it.
+ */
+function shopOf(shop: BasketShop, excluded: boolean): Shop {
+  return {
+    id: shop.id,
+    supermarketId: shop.supermarketId ?? '',
+    chainName: shop.chain,
+    name: shop.label,
+    address: shop.address,
+    city: shop.city,
+    postalCode: shop.postalCode,
+    postalCodeDerived: false,
+    provider: null,
+    excluded,
+    excludedChain: false,
+  };
 }
 
 /** One catalog shop as the list draws it, in the reader's language. */

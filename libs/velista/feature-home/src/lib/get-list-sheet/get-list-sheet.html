@@ -12,6 +12,7 @@
     <lib-get-list-shop-pane
       (back)="closeShopPicker()"
       (picked)="pickShop($event)"
+      (pickedNear)="pickNearShop($event)"
       [pickedId]="shop()?.id ?? null"
       [profileId]="selectedProfileId() ?? ''"
     />
@@ -103,6 +104,19 @@
     <span class="label shop-label" id="get-list-shop-label">
       {{ 'getList.shop.label' | rokuT }}
     </span>
+    <!--
+      What "Near me" picked (velista 0103), with the distance and a way to change
+      it, until dismissed or until the shop changes.
+    -->
+    @if (nearPickMessage(); as message) {
+      <lib-shop-pick-message
+        (changeShop)="openShopPicker()"
+        (dismissed)="dismissNearPick()"
+        [distance]="message.distance"
+        [shop]="message.shop"
+        class="shop-pick-message"
+      />
+    }
     @if (chosenShop(); as chosen) {
       <div class="shop-row is-chosen">
         <lib-pin-icon class="shop-pin" />

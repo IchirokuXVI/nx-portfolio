@@ -50,8 +50,10 @@ import {
   RealtimeSocket,
   SessionStore,
   SessionValidation,
+  SHOP_FINDER_SERVICE,
   SHOP_SERVICE,
   ShopApi,
+  ShopFinderApi,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileApi,
   StartupProbe,
@@ -268,6 +270,9 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // What the reader bought, with or without a basket (velista `0095`): the history
   // page's "Bought" tab.
   provideService(PURCHASE_SERVICE, PurchaseApi),
+  // The shops near you and the ones you bought at (velista 0103), for the shop
+  // picker. Bound apart so a nearby lookup that fails costs one line in the picker.
+  provideService(SHOP_FINDER_SERVICE, ShopFinderApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches

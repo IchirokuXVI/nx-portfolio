@@ -140,6 +140,12 @@
 // One card, the height of a field, in the tree's own border and radius. "Any" is a
 // single button that opens the picker; a chosen shop is a card holding its name,
 // Change and the x that puts it back to any.
+// What "Near me" picked (velista `0103`), above the row it explains.
+.shop-pick-message {
+  display: block;
+  margin-block-end: var(--app-space-3);
+}
+
 .shop-row {
   display: flex;
   align-items: center;

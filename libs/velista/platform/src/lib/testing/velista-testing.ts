@@ -12,6 +12,7 @@ import {
   type GeolocationReaderI,
   type LocationOutcome,
   type LocationPermission,
+  type LocationReadOptions,
 } from '../geolocation-reader';
 import { VELISTA_PLATFORM_PROVIDERS } from '../platform-providers';
 
@@ -230,6 +231,11 @@ export function fakeGeolocationReader(
     reads: 0,
     /** How many times the permission was asked about, which prompts nobody. */
     queries: 0,
+    /**
+     * What each read asked the browser for, in order, with `{}` for a read that
+     * passed nothing (velista `0103`).
+     */
+    options: [] as LocationReadOptions[],
   };
 
   const reader: GeolocationReaderI = {
@@ -237,8 +243,9 @@ export function fakeGeolocationReader(
       state.queries++;
       return options.permission ?? 'prompt';
     },
-    read: async () => {
+    read: async (readOptions?: LocationReadOptions) => {
       state.reads++;
+      state.options.push(readOptions ?? {});
       return (
         options.outcome ?? {
           state: 'located',

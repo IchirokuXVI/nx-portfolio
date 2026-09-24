@@ -28,6 +28,8 @@
 }
 
 .title {
+  flex: 1 1 auto;
+  min-inline-size: 0;
   margin: 0;
   font-family: var(--app-font-display);
   font-weight: 400;
