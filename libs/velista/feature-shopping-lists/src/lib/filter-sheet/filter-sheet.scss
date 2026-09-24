@@ -196,14 +196,12 @@
   background: none;
 }
 
-// The padlock at the row's trailing edge, where Change sits on an open basket.
+// The padlock at the row's trailing edge, where Change sits on an open basket. The
+// icon is sized by its font size, and the margin centres it in the width Change
+// takes, so the row keeps its shape between an open basket and a locked one.
 .lock {
   flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
+  margin-inline: calc((var(--app-touch-target) - var(--app-icon-sm)) / 2);
   font-size: var(--app-icon-sm);
   color: var(--app-text-muted);
 }
