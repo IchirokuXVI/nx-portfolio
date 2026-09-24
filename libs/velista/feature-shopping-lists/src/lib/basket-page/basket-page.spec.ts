@@ -26,6 +26,7 @@ import type {
   BasketRow,
   BasketRowEntry,
   BasketRowResult,
+  BasketShop,
   CatalogSuggestion,
   ErrorCode,
 } from '@portfolio/velista/models';
@@ -203,6 +204,11 @@ interface Options {
    * and never takes it down after a tap.
    */
   readonly unseenChanges?: number;
+  /**
+   * The shop this device reads the basket at, already answered (velista `0102`),
+   * or none. What the usual filter of velista `0104` needs to have anything to do.
+   */
+  readonly readAtShop?: BasketShop;
 }
 
 function guest(
@@ -265,6 +271,7 @@ function line(content: string, overrides: Partial<BasketRow> = {}): BasketRow {
     optionIds: [],
     touchedBy: null,
     touchedAt: null,
+    usual: null,
     entries: [entry(null, `zl-${content}`, left)],
     ...overrides,
   };
@@ -348,7 +355,7 @@ async function render(options: Options = {}): Promise<{
 
   const me = options.me === undefined ? participant(owner()) : options.me;
   // The device's shop (velista `0102`), read at once by this double.
-  const readAt = signal<string | null>(null);
+  const readAt = signal<string | null>(options.readAtShop?.id ?? null);
 
   const store: FakeStore = {
     live: signal(options.live ?? true),
@@ -461,6 +468,8 @@ async function render(options: Options = {}): Promise<{
             me,
             products: new Map(),
             scopes: new Map(),
+            // The shop the read was made at, which names it (velista `0102`).
+            shop: options.readAtShop ?? null,
             progress: options.progress ?? {
               done: 0,
               unavailable: 0,
@@ -2981,5 +2990,85 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
         visiting.fixture.componentInstance as unknown as CardSurface
       ).productLink()
     ).toBeNull();
+  });
+});
+
+/**
+ * Only what I usually buy here, on the page (velista `0104`).
+ *
+ * The message under a kept row, and the empty state when the filter hides every
+ * row, with the one button that turns it off.
+ */
+describe('BasketPage: what you usually buy here', () => {
+  const MERCADONA: BasketShop = {
+    id: 'loc-mayor',
+    supermarketId: 'sm-merca',
+    chain: { en: 'Mercadona', es: 'Mercadona' },
+    label: null,
+    address: 'Calle Mayor 3',
+    city: 'Córdoba',
+    postalCode: '14001',
+    inProfile: true,
+  };
+
+  function usual(
+    content: string,
+    state: 'NEVER_BOUGHT' | 'NO_SHOP_KNOWN' | 'ELSEWHERE' | 'HERE',
+    bought = 0,
+    of = 0
+  ): BasketRow {
+    return line(content, { usual: { state, bought, of } });
+  }
+
+  function drawnRows(fixture: ComponentFixture<BasketPage>) {
+    return fixture.debugElement
+      .queryAll(By.directive(BasketRowComponent))
+      .map((node) => node.componentInstance as BasketRowComponent);
+  }
+
+  it('hands a kept row its message only while the switch is on', async () => {
+    const { fixture } = await render({
+      lines: [usual('Eggs', 'HERE', 2, 6), usual('Milk', 'ELSEWHERE', 0, 6)],
+      readAtShop: MERCADONA,
+    });
+
+    expect(drawnRows(fixture).map((drawn) => drawn.usual())).toEqual([
+      null,
+      null,
+    ]);
+
+    TestBed.inject(BasketViewStore).setUsual(true);
+    fixture.detectChanges();
+
+    expect(drawnRows(fixture).map((drawn) => drawn.row().content)).toEqual([
+      'Eggs',
+    ]);
+    expect(drawnRows(fixture)[0].usual()).toEqual({ bought: 2, of: 6 });
+  });
+
+  it('says why it hid everything, and turns itself off from the button', async () => {
+    const { fixture } = await render({
+      lines: [
+        usual('Milk', 'ELSEWHERE', 0, 6),
+        usual('Bread', 'NO_SHOP_KNOWN', 0, 3),
+      ],
+      readAtShop: MERCADONA,
+    });
+    const view = TestBed.inject(BasketViewStore);
+
+    view.setUsual(true);
+    fixture.detectChanges();
+
+    expect(drawnRows(fixture)).toHaveLength(0);
+    expect(text(fixture)).toContain('basket.view.usual.emptyTitle');
+    expect(text(fixture)).toContain('basket.view.usual.emptyNote');
+    expect(text(fixture)).not.toContain('basket.view.none');
+
+    const button = fixture.debugElement.query(By.css('.empty-action'));
+    (button.nativeElement as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(view.usual()).toBe(false);
+    expect(drawnRows(fixture)).toHaveLength(2);
   });
 });

@@ -227,6 +227,16 @@
       }
 
       <!--
+        How often this was bought at the chosen shop's chain (velista 0104). Only
+        with the usual filter on, only on a row bought here fewer than five times of
+        its last six, and a shade brighter than the captions around it, because it is
+        the one thing on the row that answers the question the filter asked.
+      -->
+      @if (usualCaption(); as said) {
+        <span class="usual">{{ said }}</span>
+      }
+
+      <!--
         Which household this came from. Drawn only for a list this reader was served,
         which a guest never is: the data decides, so there is no flag here to get
         wrong (section 4.1).

@@ -416,8 +416,30 @@
           find is very often the next line.
         -->
         @if (visibleCount() === 0) {
-          <div class="empty">
-            @if (searching()) {
+          <div [class.is-usual]="usualHidesAll()" class="empty">
+            @if (usualHidesAll()) {
+              <!--
+                The usual filter hid every row (velista 0104). The first weeks look
+                exactly like this, because no purchase before it recorded a chain,
+                so the page says why and offers the one way out: the switch, off.
+              -->
+              <p class="empty-title">
+                {{ 'basket.view.usual.emptyTitle' | rokuT }}
+              </p>
+              <p class="empty-body">
+                {{ 'basket.view.usual.emptyBody' | rokuT }}
+              </p>
+              <p class="empty-body is-quiet">
+                {{ 'basket.view.usual.emptyNote' | rokuT }}
+              </p>
+              <button
+                (click)="showEveryLine()"
+                class="empty-action"
+                type="button"
+              >
+                {{ 'basket.view.usual.showAll' | rokuT }}
+              </button>
+            } @else if (searching()) {
               <p class="empty-title">
                 {{ 'basket.search.none' | rokuT: { query: searchQuery() } }}
               </p>
@@ -507,6 +529,7 @@
                         [products]="products()"
                         [row]="row.row"
                         [shelf]="row.shelf"
+                        [usual]="row.usual"
                       />
                     </li>
                   }

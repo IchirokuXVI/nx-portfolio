@@ -100,6 +100,21 @@ export class FilterSheet {
   protected readonly keptLists = this._view.keptLists;
   private readonly _chosenShop = this._view.chosenShop;
 
+  /** Whether the switch "Only what I usually buy here" is on (velista `0104`). */
+  protected readonly usual = this._view.usual;
+
+  /**
+   * The chosen shop's chain, which the switch's hint names, or null while no shop
+   * is chosen, which is when the switch is not drawn at all (velista `0104`).
+   *
+   * The **chosen** shop and never the one the second radio merely offers: a shop
+   * held after "any" was picked is not one anything is counted at. A basket's own
+   * locked shop is chosen, so it draws the switch too.
+   */
+  protected readonly usualChain = computed(
+    () => this._chosenShop()?.chain ?? null
+  );
+
   /**
    * The shop the second radio offers, which outlives choosing the first one.
    *
@@ -237,6 +252,16 @@ export class FilterSheet {
     void this._router.navigateByUrl(
       shopPickerPath(this._locale(), this._basePath, this._address())
     );
+  }
+
+  /**
+   * The usual switch, which applies at once like every other control here, and is
+   * put back by hand when the store refuses it, as {@link toggleList} does.
+   */
+  protected setUsual(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this._view.setUsual(input.checked);
+    input.checked = this.usual();
   }
 
   protected reset(): void {

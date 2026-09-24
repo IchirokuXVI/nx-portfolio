@@ -236,6 +236,38 @@
         {{ 'basket.view.shop.locked' | rokuT }}
       </p>
     }
+
+    <!--
+      Only what is usually bought at this shop's chain (velista 0104). Drawn only
+      once a shop is chosen, a basket's own locked shop included, because it counts
+      purchases at that shop's chain and there is nothing to count without one.
+
+      A real checkbox with the switch role, inside its label, so the words and the
+      hint are its accessible name and the whole row is the target. It is off every
+      time a basket opens and nothing remembers it. The hint names the chain and
+      never the street: a purchase at any shop of the chain counts.
+    -->
+    @if (usualChain(); as chain) {
+      <div class="group usual">
+        <label class="choice">
+          <span class="choice-body">
+            <span class="choice-title">
+              {{ 'basket.view.usual.label' | rokuT }}
+            </span>
+            <span class="choice-hint">
+              {{ 'basket.view.usual.hint' | rokuT: { chain } }}
+            </span>
+          </span>
+          <input
+            (change)="setUsual($event)"
+            [checked]="usual()"
+            class="switch"
+            role="switch"
+            type="checkbox"
+          />
+        </label>
+      </div>
+    }
   }
 
   <!--
