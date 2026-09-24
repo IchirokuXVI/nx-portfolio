@@ -1,0 +1,73 @@
+:host {
+  display: block;
+}
+
+// The information role: it reports what was done and asks nothing of anybody.
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+  padding-block: var(--app-space-2);
+  padding-inline: var(--app-space-4) var(--app-space-1);
+  border: 1px solid var(--app-status-info-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-status-info-bg);
+}
+
+.glyph {
+  margin-block-start: var(--app-space-5);
+  font-size: var(--app-icon-sm);
+  color: var(--app-status-info-fg);
+}
+
+.text {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  margin: 0;
+  padding-block: var(--app-space-4);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+}
+
+// A link in the sentence, because it is part of what the sentence says. The row
+// the message sits over is the larger target for the same act.
+.change {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: var(--app-space-2);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.dismiss {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: none;
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.dismiss-glyph {
+  font-size: var(--app-icon-sm);
+}

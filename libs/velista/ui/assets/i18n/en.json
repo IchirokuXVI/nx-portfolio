@@ -1254,7 +1254,33 @@
         "count_one": "{{count}} shop",
         "count_other": "{{count}} shops",
         "locked": "Set when this list was started",
-        "outside": "Outside your areas"
+        "outside": "Outside your areas",
+        "near": {
+          "button": "Near me",
+          "buttonLabel": "Find the shops near me",
+          "finding": "Finding you",
+          "heading": "Near you",
+          "headingHint": "nearest first, within {{distance}}",
+          "reason": {
+            "AMBIGUOUS": "Several shops are close. Choose yours.",
+            "LOW_ACCURACY": "Your location is not precise enough to choose for you.",
+            "OUTSIDE_PROFILE": "This shop is outside your areas.",
+            "NONE_NEARBY": "No shop within {{distance}}."
+          },
+          "denied": "Velista cannot see your location. Choose your shop below.",
+          "timedOut": "Finding you took too long. Try Near me again, or choose below.",
+          "failed": "Could not find shops near you. Choose below.",
+          "picked": "Buying at {{shop}} ({{distance}}).",
+          "change": "Change",
+          "changeLabel": "Change the shop you are buying at",
+          "dismiss": "Dismiss this message"
+        },
+        "recent": {
+          "heading": "Recent",
+          "headingHint": "where you bought, newest first",
+          "today": "Today",
+          "yesterday": "Yesterday"
+        }
       },
       "lists": {
         "legend": "Lists",

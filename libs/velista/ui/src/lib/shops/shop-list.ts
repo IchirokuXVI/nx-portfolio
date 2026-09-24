@@ -27,6 +27,22 @@ export interface ShopRow {
    * for every shop of the owner's own profile.
    */
   readonly outsideAreas?: boolean;
+  /**
+   * One short fact at the end of the row, under `pick` only (velista `0103`): how
+   * far the shop is for a shop near the device, and when this person last bought
+   * there for a recent one. Absent everywhere else.
+   */
+  readonly aside?: ShopRowAside;
+}
+
+/**
+ * The fact at the end of a pick row. A distance is the thing a candidate is chosen
+ * by, so it is drawn as strongly as the name beside it; a day is context, drawn
+ * quietly.
+ */
+export interface ShopRowAside {
+  readonly text: string;
+  readonly kind: 'distance' | 'when';
 }
 
 /**
@@ -112,6 +128,15 @@ export class ShopList {
 
   /** The picked shop under `pick`, so the group has one checked radio. */
   readonly pickedId = input<string | null>(null);
+
+  /**
+   * The radio group's name under `pick` (velista `0103`).
+   *
+   * One per section of the picker, so the recent shops, the shops near the device
+   * and a chain's shops are three groups: the arrow keys stay inside the section
+   * they started in, and a shop drawn in two sections is checked in both.
+   */
+  readonly groupName = input('shop-pick');
 
   /**
    * A row's checkbox was tapped under `exclude`.

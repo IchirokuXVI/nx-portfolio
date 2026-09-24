@@ -2,7 +2,11 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import type { FranchiseButton } from '@portfolio/velista/models';
 import type { ShopGroup, ShopRow } from './shop-list';
-import { ShopPicker, type ShopPickerState } from './shop-picker';
+import {
+  ShopPicker,
+  type ShopPickerNear,
+  type ShopPickerState,
+} from './shop-picker';
 
 function shop(id: string, outsideAreas = false): ShopRow {
   return {
@@ -153,6 +157,179 @@ describe('ShopPicker', () => {
     const failed = await render({ state: 'failed' });
     expect(element(failed).querySelector('.note')?.textContent).toContain(
       'shops.error.load'
+    );
+  });
+});
+
+/**
+ * "Near me" and the recent shops (velista `0103`). The container works out what
+ * the device and the server said and hands it over as `near`; the body draws the
+ * candidates nearest first, one line per reason, and one line per failure.
+ */
+describe('ShopPicker, near me and recent shops', () => {
+  async function renderNear(
+    near: ShopPickerNear,
+    recent: readonly ShopRow[] = []
+  ): Promise<ComponentFixture<ShopPicker>> {
+    const fixture = await render({ openKey: 'merca' });
+    fixture.componentRef.setInput('near', near);
+    fixture.componentRef.setInput('recent', recent);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function candidate(id: string, distance: string, outsideAreas = false) {
+    return {
+      ...shop(id, outsideAreas),
+      aside: { text: distance, kind: 'distance' as const },
+    };
+  }
+
+  const nearSection = (fixture: ComponentFixture<ShopPicker>) =>
+    element(fixture).querySelector('.near-region') as HTMLElement;
+
+  it('draws nothing above the search until somebody presses', async () => {
+    const fixture = await renderNear({ state: 'idle' });
+
+    expect(nearSection(fixture).textContent?.trim()).toBe('');
+    expect(element(fixture).querySelector('.section')).toBeNull();
+  });
+
+  it('says it is finding you, over two placeholder rows, while it works', async () => {
+    const fixture = await renderNear({ state: 'locating' });
+
+    const section = nearSection(fixture).querySelector('.section');
+    expect(section?.getAttribute('aria-busy')).toBe('true');
+    expect(section?.textContent).toContain('basket.view.shop.near.heading');
+    expect(section?.querySelectorAll('.skeleton-row')).toHaveLength(2);
+    // The rest of the picker still works while it waits.
+    expect(
+      element(fixture).querySelector('lib-franchise-buttons')
+    ).not.toBeNull();
+  });
+
+  it.each([
+    ['AMBIGUOUS', 3],
+    ['LOW_ACCURACY', 2],
+    ['OUTSIDE_PROFILE', 1],
+  ] as const)(
+    'draws the candidates nearest first under one line for %s',
+    async (reason, count) => {
+      const candidates = [
+        candidate('near-1', '140 m', reason === 'OUTSIDE_PROFILE'),
+        candidate('near-2', '230 m'),
+        candidate('near-3', '610 m'),
+      ].slice(0, count);
+      const fixture = await renderNear({
+        state: 'answered',
+        reason,
+        candidates,
+      });
+
+      const region = nearSection(fixture);
+      expect(region.querySelector('.line')?.textContent).toContain(
+        `basket.view.shop.near.reason.${reason}`
+      );
+      const rows = [...region.querySelectorAll('.row')];
+      expect(rows).toHaveLength(count);
+      // In the order the server gave, each with its distance at the end.
+      expect(
+        rows.map((row) => row.querySelector('.aside')?.textContent?.trim())
+      ).toEqual(candidates.map((row) => row.aside.text));
+      // The candidates are their own radio group, apart from the chain's shops.
+      expect(region.querySelector('input')?.getAttribute('name')).toBe(
+        'shop-pick-near'
+      );
+      if (reason === 'OUTSIDE_PROFILE') {
+        // The one clear shop is a candidate with the warning, never the pick.
+        expect(rows[0].querySelector('lib-outside-areas')).not.toBeNull();
+      }
+    }
+  );
+
+  it('says there is no shop within the radius in one line, with no empty box', async () => {
+    const fixture = await renderNear({
+      state: 'answered',
+      reason: 'NONE_NEARBY',
+      candidates: [],
+    });
+
+    const region = nearSection(fixture);
+    expect(region.querySelector('.line')?.textContent).toContain(
+      'basket.view.shop.near.reason.NONE_NEARBY'
+    );
+    expect(region.querySelector('lib-shop-list')).toBeNull();
+  });
+
+  it('reports a candidate chosen by hand, like any other shop', async () => {
+    const fixture = await renderNear({
+      state: 'answered',
+      reason: 'AMBIGUOUS',
+      candidates: [candidate('near-1', '180 m'), candidate('near-2', '230 m')],
+    });
+    const picked: string[] = [];
+    fixture.componentInstance.picked.subscribe((id) => picked.push(id));
+
+    const radios = nearSection(fixture).querySelectorAll('input');
+    (radios[1] as HTMLInputElement).click();
+
+    expect(picked).toEqual(['near-2']);
+  });
+
+  it.each([
+    ['denied', 'basket.view.shop.near.denied'],
+    ['timed-out', 'basket.view.shop.near.timedOut'],
+    ['failed', 'basket.view.shop.near.failed'],
+  ] as const)(
+    'draws one line for %s and leaves the rest of the picker working',
+    async (state, key) => {
+      const fixture = await renderNear({ state });
+
+      const region = nearSection(fixture);
+      expect(region.querySelectorAll('.line')).toHaveLength(1);
+      expect(region.querySelector('.line')?.textContent).toContain(key);
+      expect(region.querySelector('.section')).toBeNull();
+      expect(element(fixture).querySelector('.search-input')).not.toBeNull();
+      expect(
+        element(fixture).querySelector('lib-franchise-buttons')
+      ).not.toBeNull();
+      expect(element(fixture).querySelectorAll('.chain .row')).toHaveLength(2);
+    }
+  );
+
+  it('draws the recent shops first, newest first as given, with their day', async () => {
+    const recent = [
+      { ...shop('recent-1'), aside: { text: 'Today', kind: 'when' as const } },
+      {
+        ...shop('recent-2'),
+        aside: { text: 'Tuesday', kind: 'when' as const },
+      },
+    ];
+    const fixture = await renderNear({ state: 'idle' }, recent);
+
+    const sections = element(fixture).querySelectorAll('.section');
+    expect(sections).toHaveLength(1);
+    expect(sections[0].textContent).toContain(
+      'basket.view.shop.recent.heading'
+    );
+    expect(
+      [...sections[0].querySelectorAll('.aside')].map((aside) =>
+        aside.textContent?.trim()
+      )
+    ).toEqual(['Today', 'Tuesday']);
+    // Above the search, which is what makes them the first thing to tap.
+    const search = element(fixture).querySelector('.search') as HTMLElement;
+    expect(
+      sections[0].compareDocumentPosition(search) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('draws no recent section when there are none, which is also every guest', async () => {
+    const fixture = await renderNear({ state: 'idle' }, []);
+
+    expect(element(fixture).textContent).not.toContain(
+      'basket.view.shop.recent.heading'
     );
   });
 });

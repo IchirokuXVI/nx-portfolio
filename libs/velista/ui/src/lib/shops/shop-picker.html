@@ -1,4 +1,115 @@
 <!--
+  "Near me" (velista 0103): what the device and the server answered, above
+  everything else because it is the fastest answer to "where am I". A polite live
+  region that is always there, so the reason line, the failure line and the
+  candidates are heard when they arrive rather than only seen.
+-->
+<div aria-live="polite" class="near-region">
+  @switch (near().state) {
+    @case ('locating') {
+      <section aria-busy="true" class="section">
+        <h3 class="section-heading">
+          {{ 'basket.view.shop.near.heading' | rokuT }}
+        </h3>
+        <!--
+          Two rows in the shape of the answer, so the list does not jump when it
+          arrives. Nothing to read in them, so nothing is announced.
+        -->
+        <div aria-hidden="true" class="card skeleton">
+          @for (row of [0, 1]; track row) {
+            <div class="skeleton-row">
+              <span class="skeleton-dot"></span>
+              <span class="skeleton-lines">
+                <span class="skeleton-line is-title"></span>
+                <span class="skeleton-line is-where"></span>
+              </span>
+              <span class="skeleton-line is-aside"></span>
+            </div>
+          }
+        </div>
+      </section>
+    }
+    @case ('answered') {
+      <section class="section">
+        <h3 class="section-heading">
+          {{ 'basket.view.shop.near.heading' | rokuT }}
+          <span class="section-hint">
+            {{
+              'basket.view.shop.near.headingHint'
+                | rokuT: { distance: radius() }
+            }}
+          </span>
+        </h3>
+
+        @if (reason(); as why) {
+          <p class="line">
+            <lib-info-icon class="line-glyph" />
+            <span>
+              {{
+                'basket.view.shop.near.reason.' + why
+                  | rokuT: { distance: radius() }
+              }}
+            </span>
+          </p>
+        }
+
+        @if (nearGroups().length > 0) {
+          <lib-shop-list
+            (pick)="picked.emit($event)"
+            [grouped]="false"
+            [groups]="nearGroups()"
+            [mode]="'pick'"
+            [pickedId]="pickedId()"
+            groupName="shop-pick-near"
+          />
+        }
+      </section>
+    }
+    @case ('denied') {
+      <p class="line is-alone">
+        <lib-info-icon class="line-glyph" />
+        <span>{{ 'basket.view.shop.near.denied' | rokuT }}</span>
+      </p>
+    }
+    @case ('timed-out') {
+      <p class="line is-alone">
+        <lib-info-icon class="line-glyph" />
+        <span>{{ 'basket.view.shop.near.timedOut' | rokuT }}</span>
+      </p>
+    }
+    @case ('failed') {
+      <p class="line is-alone">
+        <lib-info-icon class="line-glyph" />
+        <span>{{ 'basket.view.shop.near.failed' | rokuT }}</span>
+      </p>
+    }
+  }
+</div>
+
+<!--
+  The shops this person bought at recently, newest first (velista 0103). Not
+  drawn when there are none, and never for a guest, whom nobody asks.
+-->
+@if (recentGroups().length > 0) {
+  <section class="section">
+    <h3 class="section-heading">
+      {{ 'basket.view.shop.recent.heading' | rokuT }}
+      <span class="section-hint">
+        {{ 'basket.view.shop.recent.headingHint' | rokuT }}
+      </span>
+    </h3>
+    <lib-shop-list
+      (pick)="picked.emit($event)"
+      [grouped]="false"
+      [groups]="recentGroups()"
+      [mode]="'pick'"
+      [pickedId]="pickedId()"
+      groupName="shop-pick-recent"
+    />
+  </section>
+}
+
+<!--
   The search, across every chain, and always drawn: somebody typing a street name
   is looking for a shop and not for a shop of a particular brand (`0059`, section
   3.1). The label is visible, as it is on the supermarkets page.
