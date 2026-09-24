@@ -12,6 +12,7 @@ import {
   DestroyRef,
   ElementRef,
   inject,
+  Injector,
   input,
   output,
   signal,
@@ -23,7 +24,7 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { inLocale, type CatalogSuggestion } from '@portfolio/velista/models';
+import { catalogName, type CatalogSuggestion } from '@portfolio/velista/models';
 import { formatMoney } from '@portfolio/velista/platform';
 import {
   BasketIcon,
@@ -266,6 +267,8 @@ export class SuggestionList {
 
   private readonly _translator = inject(RokuTranslatorService);
 
+  private readonly _injector = inject(Injector);
+
   /**
    * What each card says, in the order it is drawn. The composer's placement only;
    * the line page keeps its one line rows.
@@ -383,10 +386,47 @@ export class SuggestionList {
 
   protected toggleChains(card: SuggestionCardView): void {
     this.openChains.update((open) => (open === card.key ? null : card.key));
+    this._showOpened(card, this.openChains);
   }
 
   protected toggleGroup(card: SuggestionCardView): void {
     this.openGroup.update((open) => (open === card.key ? null : card.key));
+    this._showOpened(card, this.openGroup);
+  }
+
+  /**
+   * An opened card grows downward, past the panel's bottom edge, and the panel
+   * never grows (rule 3). So once it has drawn, the panel scrolls just far enough
+   * to show the whole card, or its top when the card is taller than the panel.
+   * Nothing moves when a card closes.
+   */
+  private _showOpened(
+    card: SuggestionCardView,
+    open: () => string | null
+  ): void {
+    if (open() !== card.key) {
+      return;
+    }
+    afterNextRender(
+      () => {
+        const panel = this._panel()?.nativeElement;
+        const drawn = panel?.querySelector<HTMLElement>(
+          `[data-card="${card.key}"]`
+        );
+        if (panel === undefined || drawn === null || drawn === undefined) {
+          return;
+        }
+        const top = drawn.offsetTop;
+        const bottom = top + drawn.offsetHeight;
+        if (bottom > panel.scrollTop + panel.clientHeight) {
+          panel.scrollTop = bottom - panel.clientHeight;
+        }
+        if (top < panel.scrollTop) {
+          panel.scrollTop = top;
+        }
+      },
+      { injector: this._injector }
+    );
   }
 
   protected toggleInfo(card: SuggestionCardView): void {
@@ -438,8 +478,8 @@ export class SuggestionList {
   /** One suggestion's name, in the reader's language. */
   nameOf(suggestion: CatalogSuggestion): string {
     return suggestion.kind === 'group'
-      ? inLocale(suggestion.group.name, this._locale())
-      : inLocale(suggestion.item.name, this._locale());
+      ? catalogName(suggestion.group.name, this._locale())
+      : catalogName(suggestion.item.name, this._locale());
   }
 
   /**

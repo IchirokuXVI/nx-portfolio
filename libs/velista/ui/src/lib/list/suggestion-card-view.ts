@@ -1,5 +1,5 @@
 import {
-  inLocale,
+  catalogName,
   type CatalogItem,
   type CatalogSuggestion,
   type ChainPrice,
@@ -122,7 +122,7 @@ function itemView(
   options: SuggestionCardOptions
 ): SuggestionCardView {
   const { locale, translate } = options;
-  const name = inLocale(item.name, locale);
+  const name = catalogName(item.name, locale);
   const size = sizeText(item.size, item.unit, options);
   const meta = joined([item.brand, size]);
   const offer = item.offer;
@@ -170,12 +170,12 @@ function groupView(
   options: SuggestionCardOptions
 ): SuggestionCardView {
   const { locale, translate } = options;
-  const name = inLocale(suggestion.group.name, locale);
+  const name = catalogName(suggestion.group.name, locale);
   const count = suggestion.itemIds.length;
   const floor = priceText(suggestion.offer, locale);
   const members = suggestion.members.map((member) => ({
     id: member.id,
-    name: inLocale(member.name, locale),
+    name: catalogName(member.name, locale),
     brand: member.brand,
     price: priceText(member.offer, locale),
   }));
@@ -227,12 +227,12 @@ function chainRow(
     return null;
   }
 
-  const leadName = inLocale(lead.chain.name, options.locale);
+  const leadName = catalogName(lead.chain.name, options.locale);
   return {
     lead: leadName,
     marks: prices.slice(0, CHAIN_MARKS_SHOWN).map((row) => ({
       id: row.chain.id,
-      initial: initialOf(inLocale(row.chain.name, options.locale)),
+      initial: initialOf(catalogName(row.chain.name, options.locale)),
     })),
     more: Math.max(0, prices.length - CHAIN_MARKS_SHOWN),
     label:
@@ -251,7 +251,7 @@ function shopView(
 ): ShopPriceView {
   return {
     id: row.chain.id,
-    name: inLocale(row.chain.name, options.locale),
+    name: catalogName(row.chain.name, options.locale),
     price: priceText(row.offer, options.locale),
     note: row.offer.stale ? seenText(row.offer, options) : null,
     // The mapper sorted them, so the first is the cheapest whenever it has a price.

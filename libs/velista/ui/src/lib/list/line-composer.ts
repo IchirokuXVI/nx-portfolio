@@ -16,7 +16,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  inLocale,
+  catalogName,
   LINE_CONTENT_COUNTER_FROM,
   LINE_CONTENT_MAX_LENGTH,
   type CatalogSuggestion,
@@ -485,8 +485,8 @@ export class LineComposer {
 
     const content =
       suggestion.kind === 'group'
-        ? inLocale(suggestion.group.name, this._locale())
-        : inLocale(suggestion.item.name, this._locale());
+        ? catalogName(suggestion.group.name, this._locale())
+        : catalogName(suggestion.item.name, this._locale());
     const itemIds =
       suggestion.kind === 'group' ? suggestion.itemIds : [suggestion.item.id];
 

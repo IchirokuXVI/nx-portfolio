@@ -31,6 +31,7 @@
     >
       @for (card of cards(); track card.key) {
         <div
+          [attr.data-card]="card.key"
           [class.group]="card.group"
           [class.open]="openChains() === card.key || openGroup() === card.key"
           class="sug"
@@ -80,6 +81,7 @@
                   [cdkConnectedOverlayOpen]="infoFor() === card.key"
                   [cdkConnectedOverlayOrigin]="badge"
                   [cdkConnectedOverlayPositions]="popoverPositions"
+                  [cdkConnectedOverlayUsePopover]="'inline'"
                   cdkConnectedOverlay
                 >
                   <div
