@@ -4,6 +4,7 @@ import {
   ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   type BasketPriceScopeView,
+  type BasketResult,
   type BasketScopeLocationView,
   type BasketSearchScope,
   type BasketView,
@@ -13,16 +14,30 @@ import {
   type GetItemsResult,
   type ItemView,
   type ListSupermarketLocationsRequest,
+  type ShopAvailabilityRequest,
+  type ShopAvailabilityView,
   type SupermarketLocationPage,
 } from '@portfolio/luna-shopper/contracts';
-import { MAX_PAGE_SIZE } from '@portfolio/luna-shopper/platform';
+import {
+  BasketShopLockedException,
+  MAX_PAGE_SIZE,
+} from '@portfolio/luna-shopper/platform';
 import {
   CatalogSuggestService,
   productScopeIds,
   type SuggestInput,
 } from '../catalog/catalog-suggest.service';
-import { ScopeResolutionService } from '../catalog/scope-resolution.service';
+import {
+  ScopeResolutionService,
+  type ShopperSelection,
+} from '../catalog/scope-resolution.service';
 import { NatsClient } from '../messaging/nats-client';
+import {
+  atShopOf,
+  quotedScopeOf,
+  toBasketShopView,
+  withShopInScopes,
+} from './basket-shop';
 
 /** What the run's profile refuses: chains, and individual shops (plan 0064). */
 interface ShopRefusalIds {
@@ -77,6 +92,116 @@ export class BasketCatalogService {
   }
 
   /**
+   * Core's basket, with the catalog half added: the products, the scopes that
+   * price them, and what the read's shop says (plan 0066; plan 0163).
+   *
+   * ## The shop of a read
+   *
+   * In order: the basket's own shop, else `locationId`, else none (plan 0163,
+   * section 2). With none, the read is exactly the read before that plan. A
+   * basket started at a shop refuses a different `locationId` with
+   * `basket_shop_locked`, because answering at the basket's own shop is not
+   * what the caller asked.
+   *
+   * With a shop, catalog is asked once for the shop's scope stack and for the
+   * stored availability of the basket's products there. The shop's quoted
+   * scope is added to the scopes the read prices at, so a shop outside the
+   * owner's postal codes is priced correctly. Nothing about the owner's profile
+   * is checked for that, as the user decided on 2026-09-24.
+   */
+  async compose(
+    basket: BasketView,
+    participantId: string,
+    locationId: string | undefined
+  ): Promise<BasketResult> {
+    const own = basket.supermarketLocationId ?? null;
+    if (own && locationId && locationId !== own) {
+      throw new BasketShopLockedException(
+        'This basket was started at another shop'
+      );
+    }
+    const shopId = own ?? locationId ?? null;
+    const itemIds = [...new Set(basket.rows.flatMap((row) => row.optionIds))];
+
+    const [owner, shop] = await Promise.all([
+      this.ownerScopeOf(basket.id, participantId),
+      shopId ? this.shopAt(shopId, itemIds) : Promise.resolve(null),
+    ]);
+    const resolved = owner?.view;
+    const quoted = shop ? quotedScopeOf(shop) : null;
+    const priceScopeIds = [
+      ...new Set([
+        ...(resolved?.priceScopeIds ?? []),
+        ...(quoted ? [quoted] : []),
+      ]),
+    ];
+    const products = await this.productsOf(basket, priceScopeIds);
+
+    // The profile's postal codes and refusals, read once for both halves that
+    // need them: the refusals trim the shops a scope lists, and the codes say
+    // whether the basket's own shop is in the profile (section 3).
+    const profileId = owner?.scope.profileId ?? null;
+    const selection =
+      owner !== null &&
+      profileId !== null &&
+      (basket.servesLocations || (own !== null && shop !== null))
+        ? await this.selectionOf(owner.scope.ownerUserId, profileId)
+        : null;
+
+    const described =
+      owner && resolved
+        ? await this.scopesOf(
+            products,
+            owner.scope.ownerUserId,
+            resolved,
+            basket.servesLocations,
+            selection
+          )
+        : [];
+
+    return {
+      ...basket,
+      products: products.map((product) => ({
+        ...product,
+        atShop: shop ? atShopOf(product, shop) : null,
+      })),
+      shop:
+        own && shop
+          ? toBasketShopView(shop, selection?.postalCodes ?? [])
+          : null,
+      scopes: shop
+        ? withShopInScopes(described, shop, basket.servesLocations)
+        : described,
+    };
+  }
+
+  /**
+   * One shop and the stored availability of these products there (plan 0163,
+   * section 2), or null.
+   *
+   * **It never throws.** A shop catalog cannot name this time costs the read
+   * its shop half, and the rows and their prices still come back: the read
+   * fails empty, like every other catalog half of it.
+   */
+  async shopAt(
+    supermarketLocationId: string,
+    itemIds: readonly string[]
+  ): Promise<ShopAvailabilityView | null> {
+    const req: ShopAvailabilityRequest = {
+      supermarketLocationId,
+      itemIds: [...itemIds],
+    };
+    try {
+      return await this.nats.send<ShopAvailabilityView>(
+        SUPERMARKET_LOCATION_PATTERNS.shopAvailability,
+        req
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * The products every row names, in one catalog round trip, priced at the
    * basket's scopes when there are any.
    */
@@ -120,17 +245,22 @@ export class BasketCatalogService {
    *
    * The flag is **`BasketView.servesLocations`** since plan 0136, and it is not
    * the per list rule beside it: the shops are the owner's profile rather than a
-   * fact about any list, so no list's permissions can decide who reads them. The
-   * owner and every named person are served them; a link visitor, guest or
-   * registered, is served chains and scopes and never an address, which is the
-   * same empty array the client already draws for a scope whose stores catalog
-   * cannot place.
+   * fact about any list, so no list's permissions can decide who reads them.
+   * Since plan 0163 core answers it true for every participant, a link visitor
+   * included, so that a guest picks the shop they stand in from the owner's
+   * list; the cost of that is written where core decides it. The gateway still
+   * obeys the flag, so narrowing the rule again is a change in one place.
    */
   async scopesOf(
     products: ItemView[],
     userId: string,
     resolved: CatalogScopeView,
-    servesLocations: boolean
+    servesLocations: boolean,
+    /**
+     * The profile's postal codes and refusals when the caller already read
+     * them, null when they could not be read, and undefined to read them here.
+     */
+    selection?: ShopperSelection | null
   ): Promise<BasketPriceScopeView[]> {
     // Every scope that quoted anything, not only the ones that quoted the
     // cheapest of something (plan 0109, section 3).
@@ -147,9 +277,11 @@ export class BasketCatalogService {
       // scope it cannot name, and answers none when the listing fails.
       const [chains, refused] = await Promise.all([
         this.suggestions.chainsOf(userId, referenced, resolved),
-        servesLocations
-          ? this.refusalsOf(userId, resolved.profileId)
-          : NO_REFUSALS,
+        !servesLocations
+          ? NO_REFUSALS
+          : selection === undefined
+            ? this.refusalsOf(userId, resolved.profileId)
+            : refusalsFrom(selection),
       ]);
 
       return await Promise.all(
@@ -188,21 +320,28 @@ export class BasketCatalogService {
    * pricing somebody else's basket against your own shops answers a question
    * nobody asked, and quietly tells the owner's guests where the guest shops.
    *
-   * Every branch that cannot produce a scope set produces **null**, and the read
-   * proceeds unpriced: a basket with no profile, a profile since deleted, core
-   * slow, Redis down. A basket in an aisle is worth more than a price.
+   * Every branch that cannot produce a scope set leaves `view` undefined, and
+   * the read proceeds unpriced: a basket with no profile, a profile since
+   * deleted, Redis down. Core not answering at all is null. A basket in an
+   * aisle is worth more than a price.
+   *
+   * The answer also carries the basket's own shop (plan 0163), which the read
+   * takes from core's view of the basket instead, so that the lock holds even
+   * when this question fails.
    */
-  async resolvedScopesOf(
+  private async ownerScopeOf(
     basketId: string,
     participantId: string
-  ): Promise<{ ownerUserId: string; view: CatalogScopeView } | null> {
+  ): Promise<{
+    scope: BasketSearchScope;
+    view: CatalogScopeView | undefined;
+  } | null> {
     try {
       const scope = await this.nats.send<BasketSearchScope>(
         BASKET_PATTERNS.searchScope,
         { basketId, participantId }
       );
-      const view = await this.describeScopes(scope);
-      return view ? { ownerUserId: scope.ownerUserId, view } : null;
+      return { scope, view: await this.describeScopes(scope) };
     } catch {
       return null;
     }
@@ -289,14 +428,31 @@ export class BasketCatalogService {
     if (!profileId) {
       return NO_REFUSALS;
     }
+    return refusalsFrom(await this.selectionOf(userId, profileId));
+  }
+
+  /**
+   * The basket profile's postal codes and refusals, or null when they cannot
+   * be read. It never throws, for the reason {@link refusalsOf} gives.
+   */
+  private async selectionOf(
+    userId: string,
+    profileId: string
+  ): Promise<ShopperSelection | null> {
     try {
-      const selection = await this.scopes.forShops(userId, { profileId });
-      return {
-        supermarketIds: selection.excludedSupermarketIds,
-        supermarketLocationIds: selection.excludedSupermarketLocationIds,
-      };
+      return await this.scopes.forShops(userId, { profileId });
     } catch {
-      return NO_REFUSALS;
+      return null;
     }
   }
+}
+
+/** The refusals of a selection, or none when it could not be read. */
+function refusalsFrom(selection: ShopperSelection | null): ShopRefusalIds {
+  return selection
+    ? {
+        supermarketIds: selection.excludedSupermarketIds,
+        supermarketLocationIds: selection.excludedSupermarketLocationIds,
+      }
+    : NO_REFUSALS;
 }

@@ -7,6 +7,7 @@ import {
   LINE_PATTERNS,
   ParticipantKind,
   SettlementOutcome,
+  SUPERMARKET_LOCATION_PATTERNS,
   type BasketParticipantContext,
   type BasketSearchScopeRequest,
   type SettleBasketRowRequest,
@@ -44,6 +45,7 @@ const ITEM = '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13';
 const PAID = {
   priceScopeId: SCOPE,
   supermarketLocationId: null,
+  supermarketId: null,
   pricePaidCents: 95,
   pricePaidCurrency: 'EUR',
 };
@@ -486,6 +488,237 @@ describe('a settle with no itemId (plan 0151)', () => {
         PAID
       );
     });
+  });
+});
+
+/**
+ * A settle at a shop (plan 0163, section 5).
+ *
+ * The real {@link SettlePriceService} runs over a catalog that knows two shops:
+ * one in the owner's profile, and one outside it that the profile never
+ * resolves. The settle's resolution is the owner's scopes **plus** the stack of
+ * the settle's shop, so the second is priced and recorded like the first, with
+ * its chain beside it. A settle in "any shop" mode records neither id.
+ */
+describe('a settle at a shop (plan 0163)', () => {
+  /** A LIDL shop in another city, on no scope the owner's profile reaches. */
+  const FAR_SHOP = '5c7e9a1b-3d5f-4a7b-9c1d-3e5f7a9b1c3d';
+  const FAR_STORE_SCOPE = '7a9b1c3d-5c7e-4a7b-9c1d-3e5f7a9b1c3d';
+  const FAR_REGION_SCOPE = '1c3d5c7e-9a1b-4a7b-9c1d-3e5f7a9b1c3d';
+  const LIDL = '3d5f7a9b-1c3d-4a7b-9c1d-3e5f7a9b1c3d';
+  const OTHER_SHOP = '9b1c3d5c-7e9a-4a7b-9c1d-3e5f7a9b1c3d';
+
+  const resolution = {
+    priceScopeIds: [SCOPE],
+    scopes: [
+      {
+        priceScopeId: SCOPE,
+        supermarketId: 'mercadona',
+        postalCode: '14013',
+        origin: 'POSTAL_CODE',
+        approximate: false,
+      },
+    ],
+    coverage: [],
+    approximate: false,
+    profileId: OWNER_PROFILE,
+    explicit: false,
+  };
+
+  function wire(
+    options: {
+      basketShop?: string | null;
+      servesLocations?: boolean;
+    } = {}
+  ) {
+    const sent: { subject: string; payload: unknown }[] = [];
+    const send = jest.fn(async (subject: string, payload: unknown) => {
+      sent.push({ subject, payload });
+      switch (subject) {
+        case BASKET_PATTERNS.searchScope:
+          return {
+            ownerUserId: OWNER,
+            profileId: OWNER_PROFILE,
+            servesLocations: options.servesLocations ?? true,
+            supermarketLocationId: options.basketShop ?? null,
+          };
+        case SUPERMARKET_LOCATION_PATTERNS.shopAvailability: {
+          const id = (payload as { supermarketLocationId: string })
+            .supermarketLocationId;
+          if (id !== FAR_SHOP) {
+            throw new Error('not found');
+          }
+          return {
+            location: {
+              id: FAR_SHOP,
+              supermarketId: LIDL,
+              priceScopeId: FAR_STORE_SCOPE,
+              priceScopeIds: [FAR_STORE_SCOPE, FAR_REGION_SCOPE],
+              postalCode: '28013',
+            },
+            supermarket: { id: LIDL, name: { en: 'Lidl', es: 'Lidl' } },
+            availability: [],
+          };
+        }
+        case ITEM_PATTERNS.getMany:
+          return {
+            items: [
+              {
+                id: ITEM,
+                offers: [
+                  {
+                    itemId: ITEM,
+                    priceScopeId: SCOPE,
+                    price: 0.95,
+                    currency: 'EUR',
+                  },
+                  {
+                    itemId: ITEM,
+                    priceScopeId: FAR_STORE_SCOPE,
+                    price: 1.1,
+                    currency: 'EUR',
+                  },
+                ],
+              },
+            ],
+          };
+        case BASKET_PATTERNS.rowSettle:
+          return { row: {}, progress: {} };
+        default:
+          return { line: {}, settlement: {} };
+      }
+    });
+    const nats = { send } as never;
+    const prices = new SettlePriceService(nats, {
+      describe: jest.fn(async () => resolution),
+    } as never);
+    return {
+      basket: new BasketController(nats, {} as never, prices),
+      sent,
+      paid: () =>
+        (
+          sent.find((call) => call.subject === BASKET_PATTERNS.rowSettle)
+            ?.payload as SettleBasketRowRequest | undefined
+        )?.paid,
+    };
+  }
+
+  it('prices a shop outside the profile at its own stack, and records the shop and its chain', async () => {
+    const w = wire();
+
+    await w.basket.settle(
+      actor(ParticipantKind.OWNER, OWNER),
+      BASKET,
+      'row-1',
+      body({ priceScopeId: FAR_STORE_SCOPE, supermarketLocationId: FAR_SHOP })
+    );
+
+    expect(w.paid()).toEqual({
+      priceScopeId: FAR_STORE_SCOPE,
+      supermarketLocationId: FAR_SHOP,
+      supermarketId: LIDL,
+      pricePaidCents: 110,
+      pricePaidCurrency: 'EUR',
+    });
+  });
+
+  it('records a guest at the shop too, since every participant is served shops', async () => {
+    const w = wire();
+
+    await w.basket.settle(
+      actor(ParticipantKind.GUEST, null),
+      BASKET,
+      'row-1',
+      body({ priceScopeId: FAR_STORE_SCOPE, supermarketLocationId: FAR_SHOP })
+    );
+
+    expect(w.paid()).toMatchObject({
+      supermarketLocationId: FAR_SHOP,
+      supermarketId: LIDL,
+    });
+  });
+
+  // The scope of the cheapest price is not where the person stood.
+  it('records neither id in any shop mode, and keeps the scope and the price', async () => {
+    const w = wire();
+
+    await w.basket.settle(
+      actor(ParticipantKind.OWNER, OWNER),
+      BASKET,
+      'row-1',
+      body({ priceScopeId: SCOPE })
+    );
+
+    expect(w.paid()).toEqual({
+      priceScopeId: SCOPE,
+      supermarketLocationId: null,
+      supermarketId: null,
+      pricePaidCents: 95,
+      pricePaidCurrency: 'EUR',
+    });
+    expect(w.sent.map((call) => call.subject)).not.toContain(
+      SUPERMARKET_LOCATION_PATTERNS.shopAvailability
+    );
+  });
+
+  it("records the basket's own shop when the settle names none", async () => {
+    const w = wire({ basketShop: FAR_SHOP });
+
+    await w.basket.settle(
+      actor(ParticipantKind.REGISTERED, ACTOR),
+      BASKET,
+      'row-1',
+      body({ priceScopeId: FAR_STORE_SCOPE })
+    );
+
+    expect(w.paid()).toMatchObject({
+      priceScopeId: FAR_STORE_SCOPE,
+      supermarketLocationId: FAR_SHOP,
+      supermarketId: LIDL,
+      pricePaidCents: 110,
+    });
+  });
+
+  it('refuses another shop on a basket started at one, and writes nothing', async () => {
+    const w = wire({ basketShop: FAR_SHOP });
+
+    await expect(
+      w.basket.settle(
+        actor(ParticipantKind.OWNER, OWNER),
+        BASKET,
+        'row-1',
+        body({ priceScopeId: SCOPE, supermarketLocationId: OTHER_SHOP })
+      )
+    ).rejects.toMatchObject({ code: 'basket_shop_locked' });
+    expect(w.sent.map((call) => call.subject)).not.toContain(
+      BASKET_PATTERNS.rowSettle
+    );
+  });
+
+  it('refuses another shop even when the settle names no scope', async () => {
+    const w = wire({ basketShop: FAR_SHOP });
+
+    await expect(
+      w.basket.settle(
+        actor(ParticipantKind.OWNER, OWNER),
+        BASKET,
+        'row-1',
+        body({ priceScopeId: undefined, supermarketLocationId: OTHER_SHOP })
+      )
+    ).rejects.toMatchObject({ code: 'basket_shop_locked' });
+  });
+
+  it('drops a shop whose stack does not hold the scope, and keeps the price', async () => {
+    const w = wire();
+
+    await w.basket.settle(
+      actor(ParticipantKind.OWNER, OWNER),
+      BASKET,
+      'row-1',
+      body({ priceScopeId: SCOPE, supermarketLocationId: FAR_SHOP })
+    );
+
+    expect(w.paid()).toEqual({ ...PAID });
   });
 });
 

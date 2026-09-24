@@ -6,15 +6,12 @@ import {
   type GetItemsRequest,
   type GetItemsResult,
   type ItemOfferView,
-  type ListSupermarketLocationsRequest,
   type SettlePick,
   type SettlementPaid,
-  type SupermarketLocationPage,
+  type ShopAvailabilityRequest,
+  type ShopAvailabilityView,
 } from '@portfolio/luna-shopper/contracts';
-import {
-  MAX_PAGE_SIZE,
-  ValidationException,
-} from '@portfolio/luna-shopper/platform';
+import { ValidationException } from '@portfolio/luna-shopper/platform';
 import { ScopeResolutionService } from '../catalog/scope-resolution.service';
 import { NatsClient } from '../messaging/nats-client';
 
@@ -92,6 +89,11 @@ export interface SettlePriceInput {
   profileId: string | undefined;
   itemId: string | undefined;
   priceScopeId: string | undefined;
+  /**
+   * The settle's shop: the basket's own when it has one, else the one the
+   * client named (plan 0163, section 5). Its scope stack is added to the
+   * owner's scopes, so a shop outside the owner's profile is priced too.
+   */
   supermarketLocationId: string | undefined;
   /** Plan 0136's one condition for serving `locations` to this reader. */
   servedLocations: boolean;
@@ -167,6 +169,7 @@ export class SettlePriceService {
             ? {
                 priceScopeId,
                 supermarketLocationId: null,
+                supermarketId: null,
                 pricePaidCents: null,
                 pricePaidCurrency: null,
               }
@@ -185,25 +188,31 @@ export class SettlePriceService {
     progress: LookupProgress
   ): Promise<SettlementPaid | null> {
     // Step 2. The cached pair of round trips the basket read already made a
-    // moment ago. A scope outside the resolution is refused by answering null
-    // rather than by an error.
+    // moment ago, and beside it the settle's shop with its scope stack (plan
+    // 0163, section 5): the resolution is the owner's scopes **plus** that
+    // stack, so a shop outside the owner's profile is priced like one inside
+    // it. A scope outside both is refused by answering null rather than by an
+    // error.
+    //
+    // The shop is asked first and awaited second, so the two round trips
+    // overlap, and a scope the owner's resolution names counts as resolved the
+    // moment that answer lands, as it did before there was a shop to wait for.
+    const shopping = this.shopOf(input);
     const resolved = await this.resolvedScopes(input);
-    if (!resolved.priceScopeIds.includes(priceScopeId)) {
+    if (resolved.priceScopeIds.includes(priceScopeId)) {
+      progress.scopeResolved = true;
+    }
+    const shop = await shopping;
+    const stack = shop?.location.priceScopeIds ?? [];
+    if (!progress.scopeResolved && !stack.includes(priceScopeId)) {
       return null;
     }
     progress.scopeResolved = true;
 
-    // Steps 3 and 4 in parallel: neither needs the other, and a settle is made
-    // standing in a shop.
-    const [offer, shop] = await Promise.all([
-      this.offerOf(input.itemId, priceScopeId),
-      this.shopIn(
-        input,
-        priceScopeId,
-        resolved.scopes.find((scope) => scope.priceScopeId === priceScopeId)
-          ?.supermarketId
-      ),
-    ]);
+    // Step 3. The shop was read beside the resolution, so only the price is
+    // left, and step 4 is a question about what is already in hand.
+    const offer = await this.offerOf(input.itemId, priceScopeId);
+    const at = this.shopIn(shop, priceScopeId);
 
     const priced =
       offer && offer.price !== null && offer.currency !== null
@@ -215,7 +224,12 @@ export class SettlePriceService {
           }
         : { pricePaidCents: null, pricePaidCurrency: null };
 
-    return { priceScopeId, supermarketLocationId: shop, ...priced };
+    return {
+      priceScopeId,
+      supermarketLocationId: at?.location.id ?? null,
+      supermarketId: at?.supermarket.id ?? null,
+      ...priced,
+    };
   }
 
   /**
@@ -282,45 +296,51 @@ export class SettlePriceService {
   }
 
   /**
-   * The shop, confirmed to belong to the scope (step 4).
+   * The settle's shop, with its scope stack and its chain, or null.
    *
-   * Two things make it null, and neither is an error. A reader who is not
-   * served shops never records one, because what they may not be told they may
-   * not write into a household's history either; and a shop outside the scope
-   * is a client that named two places, which is refused quietly for the reason
-   * step 2 gives.
+   * A reader who is not served shops never records one, because what they may
+   * not be told they may not write into a household's history either, so
+   * catalog is not asked. Since plan 0163 that is nobody on a basket, and the
+   * list page is always its own caller's.
    *
-   * It is the read `locationsOf` already makes, narrowed to the one scope, so
-   * catalog answers from the same index the pick sheet used.
+   * **It never throws.** A shop catalog cannot answer for is a shop the settle
+   * does not record, and the settle still stands.
    */
-  private async shopIn(
-    input: SettlePriceInput,
-    priceScopeId: string,
-    supermarketId: string | undefined
-  ): Promise<string | null> {
-    const wanted = input.supermarketLocationId;
-    // A scope the resolution named but could not place has no chain to list
-    // the shops of, which is the same nothing every other branch answers.
-    if (!wanted || !input.servedLocations || !supermarketId) {
+  private async shopOf(
+    input: SettlePriceInput
+  ): Promise<ShopAvailabilityView | null> {
+    if (!input.supermarketLocationId || !input.servedLocations) {
       return null;
     }
-    const req: ListSupermarketLocationsRequest = {
-      userId: input.userId,
-      supermarketId,
-      priceScopeId,
-      limit: MAX_PAGE_SIZE,
+    const req: ShopAvailabilityRequest = {
+      supermarketLocationId: input.supermarketLocationId,
     };
     try {
-      const page = await this.nats.send<SupermarketLocationPage>(
-        SUPERMARKET_LOCATION_PATTERNS.list,
+      return await this.nats.send<ShopAvailabilityView>(
+        SUPERMARKET_LOCATION_PATTERNS.shopAvailability,
         req
       );
-      return page.items.some((location) => location.id === wanted)
-        ? wanted
-        : null;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * The shop, confirmed to belong to the scope (step 4).
+   *
+   * The shop is kept when the scope is one of its stack, which is the whole of
+   * what "this shop sells at this scope" means (plan 0105, section 3). A shop
+   * outside the scope is a client that named two places, which is refused
+   * quietly for the reason step 2 gives, and the price still stands. The chain
+   * comes with it, because it is the shop's (plan 0163, section 5).
+   */
+  private shopIn(
+    shop: ShopAvailabilityView | null,
+    priceScopeId: string
+  ): ShopAvailabilityView | null {
+    return shop && shop.location.priceScopeIds.includes(priceScopeId)
+      ? shop
+      : null;
   }
 }
 

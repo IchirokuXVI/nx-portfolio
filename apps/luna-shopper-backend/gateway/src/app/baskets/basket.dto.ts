@@ -97,7 +97,7 @@ export class SettleBasketRowDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The one shop you are standing in. Sent only by a client that was served shops, and ignored from any other.',
+      'The one shop you are standing in, when you chose one. Recorded with its chain, and priced at that shop even when it is outside the basket owner’s areas; send the `atShop.priceScopeId` of the product as `priceScopeId`. Leave it out in "any shop" mode, which records no shop. On a basket started at a shop, that shop is recorded when this is left out, and a different one answers 409 `basket_shop_locked`.',
   })
   @IsOptional()
   @IsUUID()
@@ -255,6 +255,22 @@ export class RenameBasketRowDto {
  * the page is twenty by default and a hundred at most, stated in the contract so
  * core and the gateway cannot name different numbers.
  */
+/**
+ * The query half of the basket read (plan 0163, section 2).
+ *
+ * Only a shop id travels. A person's coordinates never reach this read.
+ */
+export class BasketReadQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Read the basket at this shop: every product carries `atShop`, its price at the shop and what is known about its availability there, and the shop is named in `scopes`. The shop does not have to be in the owner’s areas. On a basket started at a shop, that shop is always used and a different one answers 409 `basket_shop_locked`.',
+  })
+  @IsOptional()
+  @IsUUID()
+  locationId?: string;
+}
+
 export class BasketChangesQueryDto {
   @ApiPropertyOptional({
     description: 'The `nextCursor` of the previous page. Opaque.',
@@ -383,6 +399,15 @@ export class CreateBasketDto {
   @ArrayUnique()
   @IsUUID('all', { each: true })
   memberUserIds?: string[];
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The shop the basket is bought at. It must exist (404 otherwise) and does not have to be in your areas. It is fixed for the life of the basket and for everybody in it: no request changes it afterwards.',
+  })
+  @IsOptional()
+  @IsUUID()
+  supermarketLocationId?: string;
 }
 
 export class UpdateBasketDto {
