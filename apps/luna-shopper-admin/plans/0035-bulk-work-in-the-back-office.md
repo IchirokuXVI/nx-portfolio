@@ -1,3 +1,5 @@
+> **PR:** [#470](https://github.com/IchirokuXVI/nx-portfolio/pull/470)
+
 # 0035 Bulk work in the back office
 
 > Backend half: `apps/luna-shopper-backend/plans/0160` for the brand batch route. The other two
