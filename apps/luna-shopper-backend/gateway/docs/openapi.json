@@ -8467,7 +8467,18 @@
     "/v1/baskets/live": {
       "get": {
         "operationId": "BasketLiveController_live_v1",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "locationId",
+            "required": false,
+            "in": "query",
+            "description": "Read the basket at this shop: every product carries `atShop`, its price at the shop and what is known about its availability there, and the shop is named in `scopes`. The shop does not have to be in the owner’s areas. On a basket started at a shop, that shop is always used and a different one answers 409 `basket_shop_locked`.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Composed by the gateway from more than one service.",
@@ -8475,6 +8486,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/basket.BasketResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -9008,6 +9029,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "locationId",
+            "required": false,
+            "in": "query",
+            "description": "Read the basket at this shop: every product carries `atShop`, its price at the shop and what is known about its availability there, and the shop is named in `scopes`. The shop does not have to be in the owner’s areas. On a basket started at a shop, that shop is always used and a different one answers 409 `basket_shop_locked`.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9017,6 +9048,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/basket.BasketResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -9033,6 +9074,16 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`basket_shop_locked` — This basket was started at a shop, and that shop cannot be changed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9140,7 +9191,7 @@
             }
           },
           "409": {
-            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`basket_shop_locked` — This basket was started at a shop, and that shop cannot be changed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24347,6 +24398,11 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "supermarketLocationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The shop the basket is bought at. It must exist (404 otherwise) and does not have to be in your areas. It is fixed for the life of the basket and for everybody in it: no request changes it afterwards."
           }
         }
       },
@@ -24429,7 +24485,7 @@
           "supermarketLocationId": {
             "type": "string",
             "format": "uuid",
-            "description": "The one shop you are standing in. Sent only by a client that was served shops, and ignored from any other."
+            "description": "The one shop you are standing in, when you chose one. Recorded with its chain, and priced at that shop even when it is outside the basket owner’s areas; send the `atShop.priceScopeId` of the product as `priceScopeId`. Leave it out in \"any shop\" mode, which records no shop. On a basket started at a shop, that shop is recorded when this is left out, and a different one answers 409 `basket_shop_locked`."
           },
           "allocations": {
             "description": "Which household got what. Derived oldest first when absent. Every `lineId` must belong to a list you were served a ref for.",
@@ -28902,6 +28958,12 @@
             "items": {
               "$ref": "#/components/schemas/basket.BasketSourceView"
             }
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -28910,7 +28972,8 @@
           "name",
           "status",
           "generatedAt",
-          "sources"
+          "sources",
+          "supermarketLocationId"
         ],
         "additionalProperties": false
       },
@@ -29067,6 +29130,145 @@
         ],
         "additionalProperties": false
       },
+      "basket.BasketProductAtShopView": {
+        "type": "object",
+        "properties": {
+          "priceScopeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "price": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "available": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "priceScopeId",
+          "price",
+          "currency",
+          "available"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketProductView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sku": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ean": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unitSize": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "packCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 1000
+          },
+          "category": {
+            "$ref": "#/components/schemas/enums.ItemCategory"
+          },
+          "defaultUnit": {
+            "$ref": "#/components/schemas/enums.UnitOfMeasure"
+          },
+          "productGroupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bestOffer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.ItemOfferView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "offers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemOfferView"
+            }
+          },
+          "atShop": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/basket.BasketProductAtShopView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "brand",
+          "imageUrl",
+          "sku",
+          "ean",
+          "unitSize",
+          "packCount",
+          "category",
+          "defaultUnit",
+          "productGroupId",
+          "atShop"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketProgress": {
         "type": "object",
         "properties": {
@@ -29158,11 +29360,27 @@
               "null"
             ]
           },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "products": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/catalog.ItemView"
+              "$ref": "#/components/schemas/basket.BasketProductView"
             }
+          },
+          "shop": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/basket.BasketShopView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "scopes": {
             "type": "array",
@@ -29186,7 +29404,9 @@
           "servesLocations",
           "unseenChangeCount",
           "newestUnseenChangeId",
+          "supermarketLocationId",
           "products",
+          "shop",
           "scopes"
         ],
         "additionalProperties": false
@@ -29412,6 +29632,64 @@
           "address",
           "city",
           "postalCode"
+        ],
+        "additionalProperties": false
+      },
+      "basket.BasketShopView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketName": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postalCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inProfile": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "supermarketId",
+          "supermarketName",
+          "label",
+          "address",
+          "city",
+          "postalCode",
+          "inProfile"
         ],
         "additionalProperties": false
       },
@@ -35414,6 +35692,7 @@
               "not_configured",
               "client_too_old",
               "basket_finished",
+              "basket_shop_locked",
               "stale_quantity",
               "account_locked",
               "postal_code_unknown",
