@@ -1,3 +1,5 @@
+> **PR:** [#467](https://github.com/IchirokuXVI/nx-portfolio/pull/467)
+
 # 0006 A gate that reads units and shared EANs
 
 > Found by `apps/luna-shopper-backend/plans/0150` (report findings 10 and 11, and
