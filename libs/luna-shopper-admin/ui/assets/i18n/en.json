@@ -860,7 +860,7 @@
       "empty": "Every discovered place has been decided.",
       "import": "Add to the catalog",
       "reject": "Not a shop we want",
-      "why": "Nothing in the catalog matched this: neither its OpenStreetMap reference nor the same brand nearby. It is being offered rather than created.",
+      "why": "Discovery did not match this to a shop in the catalog by itself, so it is offered to a person rather than created. Any shop of the chain the catalog holds nearby is listed with it.",
       "supermarketId": "Chain to file it under (optional)",
       "near": {
         "heading": "Others of the same brand nearby",
@@ -901,7 +901,8 @@
         "back": "Back to the queue",
         "empty": "Discovery has found no places yet.",
         "noBrand": "No brand",
-        "count": "{{count}} places",
+        "count_one": "{{count}} place",
+        "count_other": "{{count}} places",
         "unknownChain": "No chain in the catalog yet",
         "knownChain": "Filed under {{chain}}"
       },
