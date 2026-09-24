@@ -492,7 +492,9 @@
                         (open)="openRow(row.row)"
                         (revert)="revertRow(row.row)"
                         (settle)="settleRow(row.row)"
+                        [atShop]="pricedAtShop()"
                         [busy]="isBusy(row.row)"
+                        [chosenId]="insteadOf(row.row)"
                         [entry]="row.entry"
                         [finished]="finished()"
                         [highlight]="highlight()"
@@ -504,7 +506,7 @@
                         [priceMark]="row.priceMark"
                         [products]="products()"
                         [row]="row.row"
-                        [shop]="pricedShop()"
+                        [shelf]="row.shelf"
                       />
                     </li>
                   }

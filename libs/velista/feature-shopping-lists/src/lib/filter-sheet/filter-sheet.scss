@@ -168,3 +168,66 @@
 
   flex: 1;
 }
+
+// A basket started at a shop (velista `0102`). The fieldset is disabled, so the
+// radios are too; the rows go quiet with them and keep their shape, because the
+// shop is still the answer and it is still worth reading.
+.is-locked {
+  cursor: default;
+
+  .choice-pick {
+    cursor: default;
+  }
+
+  .choice-title {
+    color: var(--app-text-muted);
+  }
+}
+
+// The chosen shop keeps its name in the primary colour when locked: it is the
+// fact the row states, and the muted "any" beside it is the option that is gone.
+.is-locked.picked .choice-title {
+  color: var(--app-text-primary);
+}
+
+// A tint says "chosen" and the lock says "cannot change", and a locked row is
+// both, so the tint is dropped: it would read as a live choice.
+.shops.has-note .picked.is-locked {
+  background: none;
+}
+
+// The padlock at the row's trailing edge, where Change sits on an open basket.
+.lock {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+.shops.has-note {
+  margin-block-end: var(--app-space-2);
+}
+
+// The one line under a locked fieldset that says why nothing in it moves.
+.locked-note {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin: 0 0 var(--app-space-4) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.locked-glyph {
+  flex: none;
+  font-size: var(--app-icon-sm);
+}
+
+.choice-outside {
+  margin-block-start: var(--app-space-2);
+}
