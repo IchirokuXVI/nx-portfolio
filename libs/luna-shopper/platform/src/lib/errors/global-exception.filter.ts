@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { throwError, type Observable } from 'rxjs';
 import { getRequestContext } from '../context/request-context';
 import { DEFAULT_LOCALE, type SupportedLocale } from '../localization/locale';
+import { isBodyWithheld, WITHHELD_BODY } from '../logging/withheld-body';
 import { isDomainException, retryAfterSecondsOf } from './domain-exception';
 import { ERROR_CODES, type ErrorCode } from './error-codes';
 import {
@@ -226,7 +227,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             url: req?.originalUrl ?? req?.url,
             params: req?.params,
             query: req?.query,
-            body: req?.body,
+            // A route may mark its bodies as never logged (plan 0164): the
+            // point a device reports is one of them.
+            body: isBodyWithheld(req) ? WITHHELD_BODY : req?.body,
           },
         },
         'Unhandled error while processing request'
