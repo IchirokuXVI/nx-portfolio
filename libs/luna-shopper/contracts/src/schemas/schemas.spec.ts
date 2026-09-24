@@ -455,6 +455,60 @@ describe('contract schemas', () => {
       );
     });
 
+    it('a basket read names its chain and each row says where it is usually bought (plan 0165)', () => {
+      expect(
+        validateMessageRequest('basket.get', {
+          basketId: 'gl',
+          participantId: 'p',
+          supermarketId: 's-1',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('basket.live', {
+          userId: 'u',
+          supermarketId: 's-1',
+        }).valid
+      ).toBe(true);
+
+      const row = {
+        rowKey: 'l-1',
+        content: 'Milk',
+        left: 1,
+        bought: 0,
+        asked: 1,
+        state: 'WANTED',
+        note: null,
+        noteAt: null,
+        mark: null,
+        awaitingApproval: false,
+        optionIds: [],
+        touchedBy: null,
+        touchedAt: null,
+        entries: [],
+      };
+      const progress = { done: 0, unavailable: 0, total: 1, pending: 1 };
+      const answer = (usual: unknown) =>
+        validateMessageResponse('basket.row.settle', {
+          row: { ...row, usual },
+          progress,
+        }).valid;
+
+      expect(answer(null)).toBe(true);
+      expect(answer({ state: 'HERE', bought: 2, of: 6 })).toBe(true);
+      expect(answer({ state: 'NEVER_BOUGHT', bought: 0, of: 0 })).toBe(true);
+      expect(answer({ state: 'NO_SHOP_KNOWN', bought: 0, of: 3 })).toBe(true);
+      // Required and nullable, so "no shop" is never mistaken for "not told".
+      expect(
+        validateMessageResponse('basket.row.settle', { row, progress }).valid
+      ).toBe(false);
+      // Counts only: seven is past the window, and nothing else may ride along.
+      expect(answer({ state: 'HERE', bought: 7, of: 7 })).toBe(false);
+      expect(answer({ state: 'SOMEWHERE', bought: 0, of: 1 })).toBe(false);
+      expect(
+        answer({ state: 'HERE', bought: 1, of: 1, supermarketId: 's-1' })
+      ).toBe(false);
+    });
+
     it('supermarketLocation.shopAvailability answers a shop and its three availability states (plan 0163)', () => {
       expect(
         validateMessageRequest('supermarketLocation.shopAvailability', {

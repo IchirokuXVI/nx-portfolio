@@ -79,6 +79,28 @@ export enum BasketRowMark {
   REMOVED = 'REMOVED',
 }
 
+/**
+ * How a row's lines were bought at the read's chain, lately (plan 0165,
+ * section 1).
+ *
+ * Derived on every read from each line's last six purchases, like everything
+ * else in this file, and never stored. `NO_SHOP_KNOWN` and `ELSEWHERE` are two
+ * values rather than one although a client filter hides both: a purchase made
+ * before plan 0163 names no chain, and keeping that apart is what lets the
+ * client show those rows again with a one line change if the decision to hide
+ * them is reversed.
+ */
+export enum BasketRowUsualState {
+  /** No line of the row has a purchase. Shown by the filter. */
+  NEVER_BOUGHT = 'NEVER_BOUGHT',
+  /** Bought, but no purchase in any window names a chain. Hidden by the filter. */
+  NO_SHOP_KNOWN = 'NO_SHOP_KNOWN',
+  /** Some purchase names a chain, and none of them names the read's. Hidden. */
+  ELSEWHERE = 'ELSEWHERE',
+  /** At least one purchase in the windows names the read's chain. Shown. */
+  HERE = 'HERE',
+}
+
 // --- The status, the people and the refusals (plans 0050, 0051, 0114) --------
 /**
  * Generated shopping list enums (plan 0050, sections 1 and 9). The constant sets

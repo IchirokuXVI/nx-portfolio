@@ -2,6 +2,7 @@ import {
   BASKET_PATTERNS,
   BasketKind,
   BasketRowState,
+  BasketRowUsualState,
   BasketStatus,
   ITEM_PATTERNS,
   ItemCategory,
@@ -21,7 +22,7 @@ import {
 import { CatalogSuggestService } from '../catalog/catalog-suggest.service';
 import type { ShopperSelection } from '../catalog/scope-resolution.service';
 import { BasketCatalogService } from './basket-catalog.service';
-import { BasketController } from './basket.controller';
+import { BasketController, BasketLiveController } from './basket.controller';
 import { SettlePriceService } from './settle-price.service';
 
 /**
@@ -114,6 +115,7 @@ const basketView = (servesLocations: boolean): BasketView => ({
           demandEditable: true,
         },
       ],
+      usual: null,
     },
   ],
   lists: [],
@@ -241,6 +243,7 @@ function build(world: World = {}) {
     calls.push({ subject, payload });
     switch (subject) {
       case BASKET_PATTERNS.get:
+      case BASKET_PATTERNS.live:
         return {
           ...basketView(world.servesLocations ?? false),
           supermarketLocationId: world.basketShop ?? null,
@@ -337,7 +340,18 @@ function build(world: World = {}) {
       .filter((call) => call.subject === SUPERMARKET_LOCATION_PATTERNS.list)
       .map((call) => call.payload as { priceScopeId?: string; userId: string });
 
-  return { controller, send, describe, forShops, lookups, locationReads };
+  const live = new BasketLiveController({ send } as never, catalog);
+
+  return {
+    controller,
+    live,
+    send,
+    calls,
+    describe,
+    forShops,
+    lookups,
+    locationReads,
+  };
 }
 
 describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
@@ -830,7 +844,7 @@ describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
     expect(result.shop).toBeNull();
   });
 
-  it('asks catalog once, for the shop and every product the rows name', async () => {
+  it('asks catalog for the shop alone before the rows, then for the shop and every product the rows name', async () => {
     const { controller, send } = build({ shop: farShop() });
 
     await controller.get(participant(), BASKET_ID, { locationId: FAR_SHOP });
@@ -839,6 +853,11 @@ describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
       ([subject]) => subject === SUPERMARKET_LOCATION_PATTERNS.shopAvailability
     );
     expect(asked).toEqual([
+      // The chain, which core needs on the row read (plan 0165).
+      [
+        SUPERMARKET_LOCATION_PATTERNS.shopAvailability,
+        { supermarketLocationId: FAR_SHOP, itemIds: [] },
+      ],
       [
         SUPERMARKET_LOCATION_PATTERNS.shopAvailability,
         {
@@ -968,5 +987,133 @@ describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
     expect(result.products.every((product) => product.atShop === null)).toBe(
       true
     );
+  });
+
+  describe('the read names its chain to core (plan 0165)', () => {
+    const coreReads = (calls: { subject: string; payload: unknown }[]) =>
+      calls
+        .filter(
+          (call) =>
+            call.subject === BASKET_PATTERNS.get ||
+            call.subject === BASKET_PATTERNS.live
+        )
+        .map((call) => call.payload);
+
+    it('sends the chain of the shop the read names', async () => {
+      const { controller, calls } = build({ shop: farShop() });
+
+      await controller.get(participant(), BASKET_ID, { locationId: FAR_SHOP });
+
+      expect(coreReads(calls)).toEqual([
+        { basketId: BASKET_ID, participantId: 'p-1', supermarketId: 'lidl' },
+      ]);
+      // The chain is learned before the rows are read, not after.
+      const subjects = calls.map((call) => call.subject);
+      expect(
+        subjects.indexOf(SUPERMARKET_LOCATION_PATTERNS.shopAvailability)
+      ).toBeLessThan(subjects.indexOf(BASKET_PATTERNS.get));
+    });
+
+    it('sends the chain of the basket’s own shop when the read names none', async () => {
+      const { controller, calls } = build({
+        basketShop: FAR_SHOP,
+        shop: farShop(),
+      });
+
+      await controller.get(participant(), BASKET_ID);
+
+      expect(coreReads(calls)).toEqual([
+        { basketId: BASKET_ID, participantId: 'p-1', supermarketId: 'lidl' },
+      ]);
+    });
+
+    it('sends no chain when the read has no shop, and asks catalog nothing about one', async () => {
+      const { controller, calls } = build();
+
+      await controller.get(participant(), BASKET_ID);
+
+      expect(coreReads(calls)).toEqual([
+        { basketId: BASKET_ID, participantId: 'p-1' },
+      ]);
+      expect(calls.map((call) => call.subject)).not.toContain(
+        SUPERMARKET_LOCATION_PATTERNS.shopAvailability
+      );
+    });
+
+    it('sends no chain when catalog cannot name the shop, and still reads', async () => {
+      const { controller, calls } = build({ shop: 'throws' });
+
+      const result = await controller.get(participant(), BASKET_ID, {
+        locationId: FAR_SHOP,
+      });
+
+      expect(coreReads(calls)).toEqual([
+        { basketId: BASKET_ID, participantId: 'p-1' },
+      ]);
+      expect(result.id).toBe(BASKET_ID);
+    });
+
+    it('asks core whose basket it is once per read, not twice', async () => {
+      const { controller, calls } = build({ shop: farShop() });
+
+      await controller.get(participant(), BASKET_ID, { locationId: FAR_SHOP });
+
+      expect(
+        calls.filter((call) => call.subject === BASKET_PATTERNS.searchScope)
+      ).toHaveLength(1);
+    });
+
+    it('refuses another shop before reading the rows', async () => {
+      const { controller, calls } = build({
+        basketShop: FAR_SHOP,
+        shop: farShop(),
+      });
+
+      await expect(
+        controller.get(participant(), BASKET_ID, { locationId: OTHER_SHOP })
+      ).rejects.toMatchObject({ code: 'basket_shop_locked' });
+      expect(coreReads(calls)).toEqual([]);
+    });
+
+    it('sends the chain of the device’s shop on the permanent basket', async () => {
+      const { live, calls } = build({ shop: farShop() });
+
+      await live.live({ userId: OWNER } as never, { locationId: FAR_SHOP });
+
+      expect(coreReads(calls)).toEqual([
+        { userId: OWNER, supermarketId: 'lidl' },
+      ]);
+    });
+
+    it('sends no chain on the permanent basket read with no shop', async () => {
+      const { live, calls } = build();
+
+      await live.live({ userId: OWNER } as never);
+
+      expect(coreReads(calls)).toEqual([{ userId: OWNER }]);
+    });
+
+    it('passes core’s `usual` through untouched', async () => {
+      const { controller, send } = build({ shop: farShop() });
+      const usual = { state: BasketRowUsualState.HERE, bought: 2, of: 6 };
+      const inner = send.getMockImplementation();
+      send.mockImplementation(async (subject: string, payload: unknown) => {
+        const answer = await inner?.(subject, payload);
+        if (subject !== BASKET_PATTERNS.get) {
+          return answer;
+        }
+        const view = answer as BasketView;
+        return {
+          ...view,
+          rows: view.rows.map((row) => ({ ...row, usual })),
+        } as never;
+      });
+
+      const result = await controller.get(participant(), BASKET_ID, {
+        locationId: FAR_SHOP,
+      });
+
+      expect(result.rows[0].usual).toEqual(usual);
+    });
   });
 });

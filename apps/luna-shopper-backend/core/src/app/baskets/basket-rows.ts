@@ -387,6 +387,8 @@ export function toRowView(
     touchedBy: touched?.participantId ?? null,
     touchedAt: touched ? touched.at.toISOString() : null,
     entries,
+    // Filled by the read when it has a chain (plan 0165), and null otherwise.
+    usual: null,
   };
 }
 

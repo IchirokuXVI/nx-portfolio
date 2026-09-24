@@ -29785,6 +29785,30 @@
         ],
         "additionalProperties": false
       },
+      "basket.BasketRowUsualView": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/enums.BasketRowUsualState"
+          },
+          "bought": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "of": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          }
+        },
+        "required": [
+          "state",
+          "bought",
+          "of"
+        ],
+        "additionalProperties": false
+      },
       "basket.BasketRowView": {
         "type": "object",
         "properties": {
@@ -29863,6 +29887,16 @@
             "items": {
               "$ref": "#/components/schemas/basket.BasketRowEntryView"
             }
+          },
+          "usual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/basket.BasketRowUsualView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -29879,7 +29913,8 @@
           "optionIds",
           "touchedBy",
           "touchedAt",
-          "entries"
+          "entries",
+          "usual"
         ],
         "additionalProperties": false
       },
@@ -32661,6 +32696,15 @@
           "NOT_AVAILABLE",
           "SKIPPED",
           "REMOVED"
+        ]
+      },
+      "enums.BasketRowUsualState": {
+        "type": "string",
+        "enum": [
+          "NEVER_BOUGHT",
+          "NO_SHOP_KNOWN",
+          "ELSEWHERE",
+          "HERE"
         ]
       },
       "enums.BasketStatus": {

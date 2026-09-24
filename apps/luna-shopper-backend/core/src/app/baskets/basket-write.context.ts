@@ -234,5 +234,6 @@ function emptyRow(rowKey: string): BasketRowView {
     touchedBy: null,
     touchedAt: null,
     entries: [],
+    usual: null,
   };
 }
