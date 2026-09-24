@@ -5,7 +5,9 @@ import { GatewayError } from '../gateway-error';
 import {
   DISCOVERED_PLACE_SEED,
   HARVEST_RUN_PRESET_SEED,
+  HARVEST_RUN_PRICE_SEED,
   HARVEST_RUN_SEED,
+  ITEM_SOURCE_ENTRY_SEED,
   POSTAL_CODE_DISCOVERY_SEED,
   SOURCE_ENTRY_SEED,
   SOURCE_LOCATION_SEED,
@@ -23,6 +25,7 @@ import type {
   PlaceGroupQuery,
   PlaceQuery,
   PostalCodeQuery,
+  RunPriceQuery,
   RunQuery,
   ShopQuery,
   SourceEntryAcceptResult,
@@ -51,6 +54,12 @@ const PAGE_SIZE = 25;
 export class HarvestMemory implements HarvestServiceI {
   private readonly _runs: Wire.HarvestHarvestRunView[] =
     clone(HARVEST_RUN_SEED);
+  private readonly _runPrices: Wire.CatalogItemPriceView[] = clone(
+    HARVEST_RUN_PRICE_SEED
+  );
+  private readonly _itemEntries: Wire.HarvestSourceCatalogEntryView[] = clone(
+    ITEM_SOURCE_ENTRY_SEED
+  );
   private readonly _places: Wire.HarvestDiscoveredPlaceView[] = clone(
     DISCOVERED_PLACE_SEED
   );
@@ -591,6 +600,53 @@ export class HarvestMemory implements HarvestServiceI {
       })),
       warnings: [],
     };
+  }
+
+  /**
+   * The rows a run wrote, from a table of its own.
+   *
+   * An unknown run answers an empty page, as the route does: a run id is only
+   * a filter over catalog's rows.
+   */
+  async listRunPrices(
+    runId: string,
+    query: RunPriceQuery
+  ): Promise<Wire.CatalogItemPricePage> {
+    const matching = this._runPrices.filter(
+      (row) =>
+        (row.sourceRunId === runId || row.lastObservedRunId === runId) &&
+        (query.itemId === undefined ||
+          query.itemId === '' ||
+          row.itemId === query.itemId)
+    );
+
+    return page(matching, query);
+  }
+
+  /**
+   * The rows naming one product: the bound seed, and any queue row an accept
+   * bound since, so an accept on the queue shows on the product.
+   */
+  async listItemEntries(
+    itemId: string,
+    query: PageQuery
+  ): Promise<Wire.HarvestItemSourceEntryPage> {
+    const everyRow = [...this._itemEntries, ...this._entries];
+    const matching = everyRow
+      .filter((entry) => entry.itemId === itemId)
+      .map((entry) => ({
+        ...entry,
+        eanSharedBy:
+          entry.ean === null
+            ? null
+            : everyRow.filter(
+                (other) =>
+                  other.supermarketId === entry.supermarketId &&
+                  other.ean === entry.ean
+              ).length,
+      }));
+
+    return page(matching, query);
   }
 
   /**

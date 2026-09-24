@@ -5,6 +5,7 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-brands';
 import {
   CatalogDashboard,
+  catalogRoutes,
   ITEMS,
   LOCATION_ITEMS,
   LOCATIONS,
@@ -132,6 +133,9 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
       PRICE_POLICIES,
       LOCATION_ITEMS,
     ],
+    // One product at every scope (admin plan 0033), reached from the product
+    // and from a price's history rather than from the navigation.
+    screens: catalogRoutes(),
   },
   {
     key: 'shoppers',

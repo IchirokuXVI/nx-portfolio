@@ -166,6 +166,33 @@ export interface HarvestServiceI {
    */
   exportRun(id: string): Promise<Readonly<Record<string, unknown>>>;
 
+  /**
+   * The price rows one run wrote (admin plan 0033; backend plan 0160).
+   *
+   * The rows it inserted and the rows whose `lastObservedAt` it moved last,
+   * each marked `writtenBy`. Catalog answers it, at
+   * `/v1/admin/catalog/item-prices?runId=`, and it lives here beside the export
+   * because the run screen is what asks: the export is the document a run
+   * read, and this is what it left in the catalog.
+   */
+  listRunPrices(
+    runId: string,
+    query: RunPriceQuery
+  ): Promise<Wire.CatalogItemPricePage>;
+
+  /**
+   * The source rows that name one product, newest observation first (backend
+   * plan 0160).
+   *
+   * Each carries `eanSharedBy`, how many rows of its chain list the same
+   * barcode. A product nothing names answers an empty page rather than a 404,
+   * because the harvester does not own products.
+   */
+  listItemEntries(
+    itemId: string,
+    query: PageQuery
+  ): Promise<Wire.HarvestItemSourceEntryPage>;
+
   listShops(query: ShopQuery): Promise<Wire.HarvestSourceLocationPage>;
   mapShop(
     id: string,
@@ -268,6 +295,16 @@ export interface RunQuery extends PageQuery {
   readonly reverted?: boolean;
   /** Runs started from one preset (backend plan 0120, section 7). */
   readonly presetId?: string;
+}
+
+/**
+ * A run's price rows, narrowed to one product (backend plan 0160).
+ *
+ * The product is the only narrowing the route takes with a run: a scope is
+ * refused beside `runId`, so there is no field for one here.
+ */
+export interface RunPriceQuery extends PageQuery {
+  readonly itemId?: string;
 }
 
 /**

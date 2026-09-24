@@ -258,6 +258,21 @@
       }
     },
     "items": {
+      "pricesLink": "Prices at every scope",
+      "sources": {
+        "heading": "Source products",
+        "empty": "No chain product is bound to or proposed for this product.",
+        "chain": "Chain",
+        "externalId": "Chain id",
+        "name": "Chain name",
+        "ean": "Barcode",
+        "status": "Status",
+        "matchedBy": "Matched by",
+        "sharedEan": "{{count}} rows of this chain share this barcode",
+        "matchSharedEan": "A barcode other products share",
+        "matchNone": "Not matched",
+        "more": "Show more"
+      },
       "one": "product",
       "many": "Products",
       "id": "Identifier",
@@ -374,6 +389,33 @@
         "noLocations": "No shop prices against it yet.",
         "counting": "Counting the shops it covers…",
         "none": "Choose a price scope. A price belongs to a scope, not to a shop."
+      },
+      "observedAtFuture": "The observed date cannot be in the future.",
+      "observedAtTooOld": "The observed date can go back 30 days at most.",
+      "proposal": {
+        "heading": "Proposed unit price: {{price}} / {{label}}",
+        "caution": "Worked out as the price divided by the size. The chain’s own figure can differ, so check it before you use it.",
+        "use": "Use this unit price",
+        "inUse": "The unit price field holds this proposal."
+      },
+      "byItem": {
+        "open": "Every scope for this product",
+        "back": "Back to the product",
+        "lead": "Every scope that prices this product, the rows each one weighed, and why the shown price is the one shown.",
+        "empty": "No scope prices this product.",
+        "stale": "Shown on sufferance",
+        "nothingShown": "No row is shown at this scope.",
+        "protectedUntil": "Protected until {{date}}",
+        "protectionEnded": "Protection ended {{date}}",
+        "history": "History, and add a price here",
+        "more": "Show more scopes",
+        "because": {
+          "PROTECTED_ADMIN": "A person typed this price, it is inside its seven days of protection, and no source disputes it.",
+          "POLICY_PRIORITY": "Several rows were eligible, and this source comes first in the price policies.",
+          "ONLY_ROW": "No other row was a candidate.",
+          "NEWEST": "It is the newest: two eligible rows ranked the same, or nothing was eligible and the newest is shown as stale.",
+          "UNKNOWN": "The server gave a reason this screen does not know."
+        }
       }
     },
     "pricePolicies": {
@@ -848,6 +890,29 @@
         "revertedPrices": "Prices deleted",
         "revertedBy": "Reverted by",
         "correlationId": "Correlation identifier"
+      },
+      "tabs": {
+        "label": "Views of this run",
+        "overview": "Overview",
+        "prices": "Prices written"
+      },
+      "prices": {
+        "lead": "The price rows this run inserted, and the rows it saw again. A later run that repeats a price takes the confirmation over, so this list can shrink.",
+        "filter": "Product",
+        "item": "Product",
+        "scope": "Scope",
+        "kind": "Source",
+        "price": "Price",
+        "unitPrice": "Unit price",
+        "writtenBy": "Written",
+        "written": {
+          "INSERTED": "Inserted",
+          "CONFIRMED": "Confirmed",
+          "UNKNOWN": "Unknown"
+        },
+        "empty": "This run wrote no prices.",
+        "emptyForItem": "This run wrote no prices for this product.",
+        "more": "Show more"
       }
     },
     "places": {
@@ -1438,7 +1503,20 @@
         "ownerUserId": "Belonging to this person",
         "zoneId": "With lines from this zone"
       },
-      "note": "A shopping list is a record of what somebody took to the shop, so nothing here can be changed. It was put together from the household’s lists at a moment it remembers, and its lines carry what was claimed and settled while that person walked round. What an operator can correct is the list it came from."
+      "note": "A shopping list is a record of what somebody took to the shop, so nothing here can be changed. It was put together from the household’s lists at a moment it remembers, and its lines carry what was claimed and settled while that person walked round. What an operator can correct is the list it came from.",
+      "settlement": {
+        "none": "Not settled yet.",
+        "outcome": {
+          "BOUGHT": "Bought",
+          "NOT_AVAILABLE": "Not available",
+          "UNKNOWN": "Unknown outcome"
+        },
+        "noPrice": "No price",
+        "at": "at {{shop}}",
+        "by": "by {{name}}",
+        "byGuest": "by a guest ({{id}})",
+        "reverted": "Taken back"
+      }
     },
     "admins": {
       "one": "admin",

@@ -324,6 +324,171 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
 ];
 
 /**
+ * The price rows the completed walk wrote (admin plan 0033; backend plan 0160).
+ *
+ * Catalog's rows rather than the harvester's, keyed on catalog's ids, so the
+ * product and scope ids are the ones the catalog seed holds and a row on the
+ * run screen opens a product that exists with nothing listening. Two rows the
+ * walk inserted and one an earlier walk inserted that this one confirmed, which
+ * are the two answers `writtenBy` has.
+ */
+export const HARVEST_RUN_PRICE_SEED: readonly (Wire.CatalogItemPriceView & {
+  readonly writtenBy: Wire.EnumsItemPriceWrittenBy;
+})[] = [
+  {
+    id: 'ip_run_milk_4661',
+    itemId: 'it_milk_1l',
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'OFFICIAL_API',
+    price: 0.92,
+    currency: 'EUR',
+    unitPrice: 0.92,
+    unitPriceLabel: '1 L',
+    observedAt: NOW,
+    lastObservedAt: NOW,
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: 'run-catalog-completed',
+    lastObservedRunId: 'run-catalog-completed',
+    overrides: null,
+    protectedUntil: null,
+    details: null,
+    writtenBy: 'INSERTED',
+  },
+  {
+    id: 'ip_run_6pack_4661',
+    itemId: 'it_milk_6pack',
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'OFFICIAL_API',
+    price: 5.34,
+    currency: 'EUR',
+    unitPrice: 0.89,
+    unitPriceLabel: '1 L',
+    observedAt: NOW,
+    lastObservedAt: NOW,
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: 'run-catalog-completed',
+    lastObservedRunId: 'run-catalog-completed',
+    overrides: null,
+    protectedUntil: null,
+    details: null,
+    writtenBy: 'INSERTED',
+  },
+  {
+    id: 'ip_run_oil_4661',
+    itemId: 'it_olive_oil_1l',
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'OFFICIAL_API',
+    price: 8.9,
+    currency: 'EUR',
+    unitPrice: 8.9,
+    unitPriceLabel: '1 L',
+    observedAt: '2026-09-01T06:12:00.000Z',
+    lastObservedAt: NOW,
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: 'run-catalog-reverted',
+    lastObservedRunId: 'run-catalog-completed',
+    overrides: null,
+    protectedUntil: null,
+    details: null,
+    writtenBy: 'CONFIRMED',
+  },
+];
+
+/**
+ * Source rows bound to catalog products, for the item screen's "Source
+ * products" panel (admin plan 0033).
+ *
+ * Apart from {@link SOURCE_ENTRY_SEED} because they are `ACTIVE`, which is a
+ * decision already made, and the queue seed is about the ones waiting. Two
+ * Mercadona rows share one barcode, which is the warning the panel exists to
+ * show: backend plan 0150 counted them with psql.
+ */
+export const ITEM_SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
+  [
+    {
+      id: 'entry-bound-milk',
+      supermarketId: MERCADONA,
+      externalId: '10381',
+      sourceKind: 'OFFICIAL_API',
+      name: 'Leche entera Hacendado',
+      brand: 'Hacendado',
+      ean: '8480000123459',
+      unitSize: 1,
+      sizeFormat: '1 L',
+      categoryPath: ['Lacteos', 'Leche'],
+      url: 'https://tienda.mercadona.es/product/10381',
+      extra: null,
+      timesSeen: 12,
+      firstSeenAt: '2026-07-01T07:00:00.000Z',
+      lastSeenAt: NOW,
+      firstRunId: 'run-catalog-reverted',
+      lastRunId: 'run-catalog-completed',
+      itemId: 'it_milk_1l',
+      candidateEntryId: null,
+      status: 'ACTIVE',
+      matchedBy: 'EAN',
+      confidence: 1,
+      decidedAt: '2026-07-01T07:00:00.000Z',
+      prices: [],
+    },
+    {
+      id: 'entry-bound-milk-promo',
+      supermarketId: MERCADONA,
+      externalId: '10382',
+      sourceKind: 'OFFICIAL_API',
+      name: 'Leche entera Hacendado pack ahorro',
+      brand: 'Hacendado',
+      ean: '8480000123459',
+      unitSize: 1,
+      sizeFormat: '1 L',
+      categoryPath: ['Lacteos', 'Leche'],
+      url: null,
+      extra: null,
+      timesSeen: 3,
+      firstSeenAt: '2026-08-20T07:00:00.000Z',
+      lastSeenAt: '2026-09-01T07:00:00.000Z',
+      firstRunId: 'run-catalog-reverted',
+      lastRunId: 'run-catalog-reverted',
+      itemId: 'it_milk_1l',
+      candidateEntryId: null,
+      status: 'CANDIDATE',
+      matchedBy: 'NAME_BRAND_SIZE',
+      confidence: 0.7,
+      decidedAt: null,
+      prices: [],
+    },
+    {
+      id: 'entry-bound-milk-deza',
+      supermarketId: DEZA,
+      externalId: 'deza-leche-1l',
+      sourceKind: 'OFFICIAL_WEB',
+      name: 'Leche entera 1 l',
+      brand: null,
+      ean: null,
+      unitSize: 1,
+      sizeFormat: '1 l',
+      categoryPath: [],
+      url: null,
+      extra: null,
+      timesSeen: 1,
+      firstSeenAt: '2026-08-28T07:00:00.000Z',
+      lastSeenAt: '2026-08-28T07:00:00.000Z',
+      firstRunId: null,
+      lastRunId: null,
+      itemId: 'it_milk_1l',
+      candidateEntryId: null,
+      status: 'ACTIVE',
+      matchedBy: 'MANUAL',
+      confidence: 1,
+      decidedAt: '2026-08-29T07:00:00.000Z',
+      prices: [],
+    },
+  ];
+
+/**
  * Two places on the same street corner, which is the whole reason this queue
  * exists. A place matching neither the provider ref nor the same brand within
  * fifty metres is offered as new, so near duplicates arrive as two rows and only
