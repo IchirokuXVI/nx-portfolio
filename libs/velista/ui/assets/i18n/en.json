@@ -294,7 +294,76 @@
     "badge": "{{count}} still to get"
   },
   "catalog": {
-    "soon": "The catalog is on its way."
+    "title": "Catalog",
+    "near": "near {{code}}",
+    "search": {
+      "all": "Search every supermarket",
+      "chain": "Search {{chain}}",
+      "label": "Search the catalog",
+      "clear": "Clear the search"
+    },
+    "chips": {
+      "label": "Shops",
+      "all": "All shops"
+    },
+    "order": {
+      "label": "Order",
+      "relevance": "Best match",
+      "name": "A to Z",
+      "created": "Newest"
+    },
+    "count": "{{count}} products",
+    "countMore": "More than {{count}} products",
+    "chain": {
+      "shops": "{{count}} shops near you. Prices are what {{chain}} charges here."
+    },
+    "row": {
+      "noPrice": "no price"
+    },
+    "unit": {
+      "KILOGRAM": "{{price}} / kg",
+      "LITER": "{{price}} / L",
+      "UNIT": "{{price}} / unit",
+      "DOZEN": "{{price}} / dozen",
+      "WASH": "{{price}} / wash"
+    },
+    "empty": {
+      "title": "Nothing matches \"{{query}}\"",
+      "body": "Check the spelling, or look for a shorter word.",
+      "clear": "Clear the search",
+      "chainTitle": "Nothing from {{chain}} yet",
+      "chainBody": "Velista has not read this shop yet. Choose All shops to see everything."
+    },
+    "noScope": {
+      "title": "We do not know where you shop",
+      "body": "You can read the whole catalog without a postal code. Prices need one, because they are not the same in two towns.",
+      "add": "Add my postal code"
+    },
+    "unserved": {
+      "title": "No shop we know is near {{code}}",
+      "body": "You can read the whole catalog. Prices appear when a supermarket near you is in Velista."
+    },
+    "refused": {
+      "title": "You turned off every shop near you",
+      "body": "You can read the whole catalog. Prices come from the shops you use, so turn one back on to see them.",
+      "action": "Choose my shops"
+    },
+    "more": "Loading more",
+    "error": {
+      "title": "The catalog did not load",
+      "body": "Check your connection and try again.",
+      "retry": "Try again",
+      "more": "More products did not load."
+    },
+    "product": {
+      "cheapest": "CHEAPEST",
+      "notSold": "not sold here",
+      "seen": "Seen {{when}}. Velista reads the shops, so a price can be behind the shelf.",
+      "loading": "Looking up the prices",
+      "failed": "The prices did not load. Close this and try again.",
+      "noShops": "We do not know where you shop, so there are no prices to show.",
+      "close": "Close"
+    }
   },
   "home": {
     "loading": "Loading your groups",

@@ -294,7 +294,76 @@
     "badge": "quedan {{count}}"
   },
   "catalog": {
-    "soon": "El catálogo está en camino."
+    "title": "Catálogo",
+    "near": "cerca de {{code}}",
+    "search": {
+      "all": "Buscar en todos los supermercados",
+      "chain": "Buscar en {{chain}}",
+      "label": "Buscar en el catálogo",
+      "clear": "Borrar la búsqueda"
+    },
+    "chips": {
+      "label": "Tiendas",
+      "all": "Todas las tiendas"
+    },
+    "order": {
+      "label": "Orden",
+      "relevance": "Más parecido",
+      "name": "A a Z",
+      "created": "Más nuevos"
+    },
+    "count": "{{count}} productos",
+    "countMore": "Más de {{count}} productos",
+    "chain": {
+      "shops": "{{count}} tiendas cerca. Los precios son los de {{chain}} aquí."
+    },
+    "row": {
+      "noPrice": "sin precio"
+    },
+    "unit": {
+      "KILOGRAM": "{{price}} / kg",
+      "LITER": "{{price}} / L",
+      "UNIT": "{{price}} / unidad",
+      "DOZEN": "{{price}} / docena",
+      "WASH": "{{price}} / lavado"
+    },
+    "empty": {
+      "title": "No hay nada que coincida con \"{{query}}\"",
+      "body": "Revisa la ortografía o prueba con una palabra más corta.",
+      "clear": "Borrar la búsqueda",
+      "chainTitle": "Todavía no hay nada de {{chain}}",
+      "chainBody": "Velista aún no ha leído esta tienda. Elige Todas las tiendas para verlo todo."
+    },
+    "noScope": {
+      "title": "No sabemos dónde compras",
+      "body": "Puedes ver todo el catálogo sin código postal. Los precios lo necesitan, porque no son iguales en dos pueblos.",
+      "add": "Añadir mi código postal"
+    },
+    "unserved": {
+      "title": "No conocemos ninguna tienda cerca de {{code}}",
+      "body": "Puedes ver todo el catálogo. Los precios aparecerán cuando un supermercado cercano esté en Velista."
+    },
+    "refused": {
+      "title": "Has quitado todas las tiendas cercanas",
+      "body": "Puedes ver todo el catálogo. Los precios salen de las tiendas que usas, así que vuelve a activar una para verlos.",
+      "action": "Elegir mis tiendas"
+    },
+    "more": "Cargando más",
+    "error": {
+      "title": "El catálogo no se ha cargado",
+      "body": "Revisa la conexión e inténtalo de nuevo.",
+      "retry": "Reintentar",
+      "more": "No se han cargado más productos."
+    },
+    "product": {
+      "cheapest": "MÁS BARATO",
+      "notSold": "aquí no se vende",
+      "seen": "Visto {{when}}. Velista lee las tiendas, así que un precio puede ir por detrás del lineal.",
+      "loading": "Buscando los precios",
+      "failed": "No se han cargado los precios. Cierra y vuelve a intentarlo.",
+      "noShops": "No sabemos dónde compras, así que no hay precios que mostrar.",
+      "close": "Cerrar"
+    }
   },
   "home": {
     "loading": "Cargando tus grupos",

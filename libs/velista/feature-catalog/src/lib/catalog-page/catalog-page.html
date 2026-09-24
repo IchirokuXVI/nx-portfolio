@@ -1,0 +1,187 @@
+<div class="page">
+  <header class="head">
+    <h1 class="title">{{ 'catalog.title' | rokuT }}</h1>
+    @if (near(); as code) {
+      <span class="near">{{ 'catalog.near' | rokuT: { code } }}</span>
+    }
+  </header>
+
+  <!--
+    The tools, all on the screen (rule C1), held at the top while the list scrolls
+    under them. The title scrolls away; the field, the chips and the order do not.
+  -->
+  <div class="tools">
+    <label class="visually-hidden" for="catalog-search">
+      {{ 'catalog.search.label' | rokuT }}
+    </label>
+    <span class="field">
+      <lib-search-icon aria-hidden="true" class="field-glyph" />
+      <input
+        (input)="onInput($event)"
+        (keydown.escape)="clearSearch()"
+        [placeholder]="placeholderKey() | rokuT: { chain: chosenChainName() }"
+        [value]="typed()"
+        autocapitalize="none"
+        autocomplete="off"
+        class="field-input"
+        enterkeyhint="search"
+        id="catalog-search"
+        type="search"
+      />
+      @if (typed() !== '') {
+        <button
+          (click)="clearSearch()"
+          [attr.aria-label]="'catalog.search.clear' | rokuT"
+          class="field-clear"
+          type="button"
+        >
+          <lib-close-icon class="field-clear-glyph" />
+        </button>
+      }
+    </span>
+
+    @if (chips().length > 0) {
+      <lib-chain-chips
+        (chosen)="chooseChain($event)"
+        [chains]="chips()"
+        [selected]="chain()"
+        class="chips"
+      />
+    }
+
+    <lib-order-pills
+      (chosen)="chooseOrder($event)"
+      [orders]="orders()"
+      [selected]="order()"
+    />
+
+    @if (chosenChain(); as chosen) {
+      <p class="note">
+        {{
+          'catalog.chain.shops'
+            | rokuT: { count: chosen.locations, chain: chosenChainName() }
+        }}
+      </p>
+    } @else if (query().trim() !== '' && status() === 'ready') {
+      <p aria-hidden="true" class="note">
+        {{ countKey() | rokuT: { count: count() } }}
+      </p>
+    }
+  </div>
+
+  <!--
+    How many products are drawn, heard on a keystroke (section 7). A search that
+    silently empties the screen is indistinguishable from one that broke.
+  -->
+  <p aria-live="polite" class="visually-hidden" role="status">
+    @if (status() === 'ready') {
+      {{ countKey() | rokuT: { count: count() } }}
+    }
+  </p>
+
+  <section class="list">
+    <!--
+      Why there are no prices, once, above a full list (0069, section 2). Never in
+      place of the list: every product is still drawn, each saying no price.
+    -->
+    @switch (card()) {
+      @case ('noPlace') {
+        <div class="card">
+          <h2 class="card-title">{{ 'catalog.noScope.title' | rokuT }}</h2>
+          <p class="card-body">{{ 'catalog.noScope.body' | rokuT }}</p>
+          <a [routerLink]="placePath()" class="card-action">
+            {{ 'catalog.noScope.add' | rokuT }}
+          </a>
+        </div>
+      }
+      @case ('unserved') {
+        <div class="card">
+          <h2 class="card-title">
+            {{ 'catalog.unserved.title' | rokuT: { code: near() ?? '' } }}
+          </h2>
+          <p class="card-body">{{ 'catalog.unserved.body' | rokuT }}</p>
+        </div>
+      }
+      @case ('refused') {
+        <div class="card">
+          <h2 class="card-title">{{ 'catalog.refused.title' | rokuT }}</h2>
+          <p class="card-body">{{ 'catalog.refused.body' | rokuT }}</p>
+          <a [routerLink]="placePath()" class="card-action">
+            {{ 'catalog.refused.action' | rokuT }}
+          </a>
+        </div>
+      }
+    }
+
+    @switch (status()) {
+      @case ('loading') {
+        <div aria-hidden="true" class="rows">
+          @for (bone of skeletonRows; track bone) {
+            <lib-product-row-skeleton />
+          }
+        </div>
+      }
+      @case ('failed') {
+        <div class="empty" role="alert">
+          <p class="empty-title">{{ 'catalog.error.title' | rokuT }}</p>
+          <p class="empty-body">{{ 'catalog.error.body' | rokuT }}</p>
+          <button (click)="retry()" class="secondary" type="button">
+            {{ 'catalog.error.retry' | rokuT }}
+          </button>
+        </div>
+      }
+      @default {
+        @if (rows().length > 0) {
+          <ul class="rows">
+            @for (row of rows(); track row.id) {
+              <li><lib-product-row (opened)="open($event)" [row]="row" /></li>
+            }
+          </ul>
+        } @else if (query().trim() !== '') {
+          <div class="empty">
+            <p class="empty-title">
+              {{ 'catalog.empty.title' | rokuT: { query: query().trim() } }}
+            </p>
+            <p class="empty-body">{{ 'catalog.empty.body' | rokuT }}</p>
+            <button (click)="clearSearch()" class="secondary" type="button">
+              {{ 'catalog.empty.clear' | rokuT }}
+            </button>
+          </div>
+        } @else if (chosenChain() !== null) {
+          <div class="empty">
+            <p class="empty-title">
+              {{
+                'catalog.empty.chainTitle' | rokuT: { chain: chosenChainName() }
+              }}
+            </p>
+            <p class="empty-body">{{ 'catalog.empty.chainBody' | rokuT }}</p>
+          </div>
+        }
+
+        @switch (moreStatus()) {
+          @case ('loading') {
+            <div class="more">
+              <lib-product-row-skeleton />
+              <p class="more-note">{{ 'catalog.more' | rokuT }}</p>
+            </div>
+          }
+          @case ('failed') {
+            <div class="more">
+              <p class="more-note">{{ 'catalog.error.more' | rokuT }}</p>
+              <button (click)="loadMore()" class="secondary" type="button">
+                {{ 'catalog.error.retry' | rokuT }}
+              </button>
+            </div>
+          }
+        }
+
+        @if (hasMore()) {
+          <div #sentinel aria-hidden="true" class="sentinel"></div>
+        }
+      }
+    }
+  </section>
+</div>
+
+<!-- The product sheet, a child route over the list (section 5). -->
+<router-outlet />
