@@ -1295,6 +1295,17 @@
         "more": "+{{count}}",
         "moreLabel": "{{count}} more, open filter and order",
         "lockedLabel": "{{name}}, set when this list was started"
+      },
+      "usual": {
+        "label": "Only what I usually buy here",
+        "hint": "Counted at every {{chain}}",
+        "chip": "Usually bought here",
+        "here_one": "Bought here the one time it was bought",
+        "here_other": "Bought here {{bought}} of the last {{count}} times",
+        "emptyTitle": "Nothing on this list is something you usually buy here",
+        "emptyBody": "Every line was last bought at another shop, or bought with no shop chosen.",
+        "emptyNote": "Purchases made without a chosen shop are not counted. Buy with a shop chosen and this fills in.",
+        "showAll": "Show every line"
       }
     },
     "price": {

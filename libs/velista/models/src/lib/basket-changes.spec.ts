@@ -47,6 +47,7 @@ function row(state: BasketRowState, rowKey = 'zl-1'): BasketRow {
     optionIds: [],
     touchedBy: null,
     touchedAt: null,
+    usual: null,
     entries: [],
   };
 }

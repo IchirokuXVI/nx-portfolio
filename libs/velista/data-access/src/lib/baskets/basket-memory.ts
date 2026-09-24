@@ -1429,6 +1429,9 @@ export class BasketMemory implements BasketServiceI {
         touchedBy: newest?.by ?? null,
         touchedAt: newest?.at ?? null,
         entries,
+        // Nothing here knows which chain a purchase was made at, so no row says
+        // where it is usually bought, which the usual filter keeps (velista 0104).
+        usual: null,
       });
     }
 

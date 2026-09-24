@@ -5,6 +5,7 @@ import type {
   BasketRowNote,
   BasketRowState,
   BasketStatus,
+  BasketUsualState,
   ParticipantKind,
   ProductCategory,
   SettlementOutcome,
@@ -561,6 +562,32 @@ export interface BasketRow {
   readonly touchedAt: Date | null;
   /** Oldest first, the anchor at index 0. */
   readonly entries: readonly BasketRowEntry[];
+  /**
+   * How often this row's lines were bought at the chain of the shop the read was
+   * made at, or null (backend `0165`; velista `0104`).
+   *
+   * Null on a read with no shop, and on the row a write answers, which carries
+   * none: `BasketStore` keeps the value of its last read for such a row. The
+   * numbers are the server's and **never recounted here**.
+   */
+  readonly usual: BasketRowUsual | null;
+}
+
+/**
+ * Whether and how often a row was bought at the read's chain (backend `0165`,
+ * section 2).
+ *
+ * `bought` and `of` are averages over the row's lines, rounded by the server, so
+ * a row merging three lines still says a number from 0 to 6. "Here" is the
+ * **chain**: a purchase at any shop of it counts, so nothing about this names a
+ * street.
+ */
+export interface BasketRowUsual {
+  readonly state: BasketUsualState;
+  /** Purchases at the read's chain, 0 to 6. Never 0 on `HERE`. */
+  readonly bought: number;
+  /** Purchases counted, 0 to 6. 0 only on `NEVER_BOUGHT`. */
+  readonly of: number;
 }
 
 /**

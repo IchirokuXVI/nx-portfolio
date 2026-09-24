@@ -339,6 +339,28 @@ export const BASKET_CHANGE_MARKS = ['ADDED', 'CHANGED', 'REMOVED'] as const;
 export type BasketChangeMark = (typeof BASKET_CHANGE_MARKS)[number];
 
 /**
+ * Where a row's lines are usually bought, against the chain of the shop the read
+ * was made at (backend `0165`, section 1; velista `0104`).
+ *
+ * Four values, and `NO_SHOP_KNOWN` stays apart from `ELSEWHERE` although the usual
+ * filter hides both today. No purchase before backend `0163` names a chain, so on
+ * the day the filter ships nearly every line ever bought is `NO_SHOP_KNOWN`, and
+ * keeping it separate is what makes showing those rows again a one line change
+ * (backend `0165`, section 3).
+ *
+ * **There is no fallback.** A state this build does not know maps the whole value
+ * to null, which the filter keeps and draws no message for: a guess would hide a
+ * row, or say something about it, on the strength of a word nobody taught it.
+ */
+export const BASKET_USUAL_STATES = [
+  'NEVER_BOUGHT',
+  'NO_SHOP_KNOWN',
+  'ELSEWHERE',
+  'HERE',
+] as const;
+export type BasketUsualState = (typeof BASKET_USUAL_STATES)[number];
+
+/**
  * The statuses this app ever asks the server to write (velista `0057`).
  *
  * Two of the four, because there are two gestures: Finish ends the trip and Reopen

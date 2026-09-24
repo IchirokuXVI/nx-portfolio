@@ -243,6 +243,20 @@ export class BasketRow {
   readonly shelf = input<BasketShelfMark | null>(null);
 
   /**
+   * How often this row was bought at the chosen shop's chain, for the message
+   * under it, or null (velista `0104`).
+   *
+   * Composed by the pipeline, which is where the usual filter runs: it is set only
+   * while that filter is on, only on a row bought here, and only under five times,
+   * so the row draws what it is handed and decides nothing. The numbers are the
+   * server's.
+   */
+  readonly usual = input<{
+    readonly bought: number;
+    readonly of: number;
+  } | null>(null);
+
+  /**
    * What this row says about that shop, beside the number, or null.
    *
    * Composed by the pipeline rather than here, because the **sink** is decided
@@ -873,6 +887,27 @@ export class BasketRow {
   });
 
   /**
+   * "Bought here 2 of the last 6 times", or null (velista `0104`).
+   *
+   * Pluralised on the number of purchases counted, and never naming the shop:
+   * "here" is the chain, so a purchase at any shop of it counted.
+   */
+  protected readonly usualCaption = computed(() => {
+    const usual = this.usual();
+    return usual === null
+      ? null
+      : this._translator.t(
+          'basket.view.usual.here',
+          undefined,
+          this._locale(),
+          {
+            count: usual.of,
+            bought: usual.bought,
+          }
+        );
+  });
+
+  /**
    * The sentence under the number: the row's, or this household's share of it.
    *
    * One slot and not two, because they answer the same question about the same
@@ -952,6 +987,8 @@ export class BasketRow {
       // What the shop is known not to have, said as it is drawn (velista `0102`).
       this._shelfLabel(),
       this.touched() ?? '',
+      // How often it was bought here, said as it is drawn (velista `0104`).
+      this.usualCaption() ?? '',
       this.from() ?? '',
       // Said with the rest of the row, because a reader moving by button hears
       // this string and nothing else about it. On a skipped row it repeats what

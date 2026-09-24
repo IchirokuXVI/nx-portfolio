@@ -255,6 +255,37 @@ describe('toBasketRow', () => {
   });
 });
 
+describe('toBasketRow: where it is usually bought (velista 0104)', () => {
+  it('reads each state and its two numbers as the server sent them', () => {
+    for (const state of [
+      'NEVER_BOUGHT',
+      'NO_SHOP_KNOWN',
+      'ELSEWHERE',
+      'HERE',
+    ] as const) {
+      expect(
+        toBasketRow({ ...ROW, usual: { state, bought: 2, of: 6 } })?.usual
+      ).toEqual({ state, bought: 2, of: 6 });
+    }
+  });
+
+  it('reads a read with no shop, an absent field and an unknown state as null', () => {
+    expect(toBasketRow({ ...ROW, usual: null })?.usual).toBeNull();
+    expect(toBasketRow(ROW)?.usual).toBeNull();
+    expect(
+      toBasketRow({ ...ROW, usual: { state: 'SOMETIMES', bought: 1, of: 2 } })
+        ?.usual
+    ).toBeNull();
+  });
+
+  it('floors a negative count at zero and recounts nothing', () => {
+    expect(
+      toBasketRow({ ...ROW, usual: { state: 'HERE', bought: -1, of: 7 } })
+        ?.usual
+    ).toEqual({ state: 'HERE', bought: 0, of: 7 });
+  });
+});
+
 describe('restrictRowToServedLists', () => {
   it('drops an id the reader was not served, and keeps one they were', () => {
     const row = toBasketRow({

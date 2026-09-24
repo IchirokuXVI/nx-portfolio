@@ -1295,6 +1295,17 @@
         "more": "+{{count}}",
         "moreLabel": "{{count}} más, abrir filtrar y ordenar",
         "lockedLabel": "{{name}}, fijada al empezar esta lista"
+      },
+      "usual": {
+        "label": "Solo lo que suelo comprar aquí",
+        "hint": "Cuenta cualquier tienda {{chain}}",
+        "chip": "Lo habitual aquí",
+        "here_one": "Comprado aquí la única vez que se compró",
+        "here_other": "Comprado aquí {{bought}} de las últimas {{count}} veces",
+        "emptyTitle": "En esta lista no hay nada que suelas comprar aquí",
+        "emptyBody": "Cada línea se compró por última vez en otra tienda, o sin elegir tienda.",
+        "emptyNote": "Las compras hechas sin elegir tienda no cuentan. Compra con una tienda elegida y esto se irá llenando.",
+        "showAll": "Mostrar todas las líneas"
       }
     },
     "price": {

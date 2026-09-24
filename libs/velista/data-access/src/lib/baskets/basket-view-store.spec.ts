@@ -52,6 +52,7 @@ function row(
     optionIds: optionId === null ? [] : [optionId],
     touchedBy: null,
     touchedAt: null,
+    usual: null,
     entries,
   };
 }
@@ -331,6 +332,7 @@ describe('BasketViewStore, the view state', () => {
     grouping: 'none',
     shop: null,
     lists: null,
+    usual: false,
   };
 
   it('opens on the defaults: the shop order, ungrouped, every list, no shop', () => {
@@ -581,6 +583,7 @@ describe('BasketViewStore, what the sheet remembers', () => {
     grouping: 'none',
     shop: null,
     lists: null,
+    usual: false,
   };
 
   beforeEach(() => {
@@ -649,6 +652,7 @@ describe('BasketViewStore, what the sheet remembers', () => {
       grouping: 'category',
       shop: 'loc-mercadona',
       lists: null,
+      usual: false,
     });
     // And the basket is read at it, which is where its prices come from.
     expect(harnessed.readAt()).toBe('loc-mercadona');
@@ -1145,5 +1149,147 @@ describe('BasketViewStore: the chosen shop', () => {
       expect(harnessed.view.shop()).toBe('loc-lidl-malaga');
       expect(harnessed.readAt()).toBeNull();
     });
+  });
+});
+
+/**
+ * Only what I usually buy here (velista `0104`).
+ *
+ * Off by default, never remembered, meaningless without a shop, and the one
+ * empty state that is its own.
+ */
+describe('BasketViewStore: what you usually buy here', () => {
+  function usual(
+    rowKey: string,
+    content: string,
+    state: 'NEVER_BOUGHT' | 'NO_SHOP_KNOWN' | 'ELSEWHERE' | 'HERE',
+    bought = 0,
+    of = 0
+  ): BasketRow {
+    return { ...row(rowKey, content), usual: { state, bought, of } };
+  }
+
+  const basket: readonly BasketRow[] = [
+    usual('l-1', 'Milk', 'HERE', 2, 6),
+    usual('l-2', 'Bread', 'ELSEWHERE', 0, 6),
+    usual('l-3', 'Paper', 'NEVER_BOUGHT'),
+  ];
+
+  /** A basket whose read is made at a Mercadona the scopes can name. */
+  function atMercadona(rows: readonly BasketRow[] = basket): Harness {
+    const harnessed = harness(rows);
+    harnessed.scopes.set(
+      new Map([
+        [
+          'scope-mercadona',
+          {
+            priceScopeId: 'scope-mercadona',
+            supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+            locations: [
+              {
+                id: 'loc-tejares',
+                label: null,
+                address: 'Ronda de los Tejares 32',
+                city: 'Córdoba',
+                postalCode: '14008',
+              },
+            ],
+          },
+        ],
+      ])
+    );
+    harnessed.view.setShop('loc-tejares');
+    return harnessed;
+  }
+
+  it('is off by default, and hides nothing', () => {
+    const { view } = atMercadona();
+
+    expect(view.usual()).toBe(false);
+    expect(contents(view.visibleRows())).toEqual(['Milk', 'Bread', 'Paper']);
+  });
+
+  it('keeps what is bought here and what was never bought, in their order', () => {
+    const { view } = atMercadona();
+
+    view.setUsual(true);
+
+    expect(view.usual()).toBe(true);
+    expect(contents(view.visibleRows())).toEqual(['Milk', 'Paper']);
+    expect(view.chips().map((chip) => chip.property)).toEqual([
+      'shop',
+      'usual',
+    ]);
+  });
+
+  it('is refused without a shop', () => {
+    const { view } = harness(basket);
+
+    view.setUsual(true);
+
+    expect(view.usual()).toBe(false);
+    expect(contents(view.visibleRows())).toEqual(['Milk', 'Bread', 'Paper']);
+  });
+
+  it('goes with the shop, so choosing one again starts it off', () => {
+    const { view } = atMercadona();
+    view.setUsual(true);
+
+    view.resetProperty('shop');
+    view.setShop('loc-tejares');
+
+    expect(view.usual()).toBe(false);
+  });
+
+  it('is never written to the device, and is off on the next basket', () => {
+    const { view, storage } = atMercadona();
+
+    view.setUsual(true);
+    view.resetProperty('usual');
+    view.setUsual(true);
+
+    const stored = parseBasketViewMemory(
+      storage.get(StorageKeys.basketView) ?? null
+    );
+    expect(JSON.stringify(stored)).not.toContain('usual');
+
+    view.leave();
+    expect(view.usual()).toBe(false);
+  });
+
+  it('says it hid everything only when it is what left the page empty', () => {
+    const { view } = atMercadona([
+      usual('l-1', 'Milk', 'ELSEWHERE', 0, 6),
+      usual('l-2', 'Bread', 'NO_SHOP_KNOWN', 0, 2),
+    ]);
+
+    expect(view.usualHidesAll()).toBe(false);
+
+    view.setUsual(true);
+    expect(view.visibleCount()).toBe(0);
+    expect(view.usualHidesAll()).toBe(true);
+
+    // A search that matches nothing is its own empty state, whatever is on.
+    view.search('zzz');
+    expect(view.usualHidesAll()).toBe(false);
+  });
+
+  it('works the same on a basket started at its own shop', () => {
+    const harnessed = harness(basket);
+    harnessed.own.set({
+      id: 'loc-lidl',
+      supermarketId: 'sm-lidl',
+      chain: { en: 'Lidl', es: 'Lidl' },
+      label: null,
+      address: 'Avenida de Andalucía 21',
+      city: 'Málaga',
+      postalCode: '29002',
+      inProfile: true,
+    });
+
+    harnessed.view.setUsual(true);
+
+    expect(harnessed.view.usual()).toBe(true);
+    expect(contents(harnessed.view.visibleRows())).toEqual(['Milk', 'Paper']);
   });
 });

@@ -59,6 +59,7 @@ function row(entries: readonly BasketRowEntry[]): BasketRow {
     optionIds: [],
     touchedBy: null,
     touchedAt: null,
+    usual: null,
     entries,
   };
 }

@@ -11,6 +11,7 @@ import {
   basketPricedAtShop,
   basketReadAtShop,
   basketRowsProgress,
+  basketUsualApplies,
   basketViewActiveCount,
   basketViewChips,
   basketViewRows,
@@ -52,6 +53,7 @@ function row(
     optionIds: [],
     touchedBy: null,
     touchedAt: null,
+    usual: null,
     entries: [entry(null, { lineId: `zl-${rowKey}` })],
     ...extra,
   };
@@ -1299,5 +1301,211 @@ describe('composeBasketView: what the shop does not have', () => {
         context
       )
     ).toEqual([{ kind: 'unavailable' }, null]);
+  });
+});
+
+/**
+ * Only what I usually buy here (velista `0104`; backend `0165`, section 1).
+ *
+ * Three things, kept apart: **which rows stay**, one test per state; **what a kept
+ * row says**, with the threshold on each side; and **where the kept rows sit**,
+ * which is exactly where they sat with the switch off.
+ */
+describe('composeBasketView: what you usually buy here', () => {
+  function usualRow(
+    rowKey: string,
+    state: 'NEVER_BOUGHT' | 'NO_SHOP_KNOWN' | 'ELSEWHERE' | 'HERE',
+    bought = 0,
+    of = 0,
+    extra: Partial<BasketRow> = {}
+  ): BasketRow {
+    return row(rowKey, rowKey, {
+      usual: { state, bought, of },
+      ...extra,
+    });
+  }
+
+  const on = state({ shop: MERCA, usual: true });
+  const off = state({ shop: MERCA });
+  const keys = (sections: ReturnType<typeof composeBasketView>) =>
+    basketViewRows(sections).map((kept) => kept.rowKey);
+
+  it('keeps a row never bought, and says nothing under it', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'NEVER_BOUGHT')],
+      on,
+      priced()
+    );
+
+    expect(keys(sections)).toEqual(['a']);
+    expect(sections[0].rows[0].usual).toBeNull();
+  });
+
+  it('keeps a row bought here', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'HERE', 2, 6)],
+      on,
+      priced()
+    );
+
+    expect(keys(sections)).toEqual(['a']);
+  });
+
+  it('hides a row bought only at other chains', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'ELSEWHERE', 0, 6), usualRow('b', 'NEVER_BOUGHT')],
+      on,
+      priced()
+    );
+
+    expect(keys(sections)).toEqual(['b']);
+  });
+
+  it('hides a row bought with no shop chosen, which is its own state', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'NO_SHOP_KNOWN', 0, 4), usualRow('b', 'NEVER_BOUGHT')],
+      on,
+      priced()
+    );
+
+    expect(keys(sections)).toEqual(['b']);
+  });
+
+  it('says how often a row was bought here at 4, and nothing at 5', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'HERE', 4, 6), usualRow('b', 'HERE', 5, 6)],
+      on,
+      priced()
+    );
+
+    expect(sections[0].rows.map((drawn) => drawn.usual)).toEqual([
+      { bought: 4, of: 6 },
+      null,
+    ]);
+  });
+
+  it('passes the numbers through exactly as the server sent them', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'HERE', 1, 1)],
+      on,
+      priced()
+    );
+
+    expect(sections[0].rows[0].usual).toEqual({ bought: 1, of: 1 });
+  });
+
+  it('keeps the kept rows in exactly the order they had with it off', () => {
+    const rows = [
+      usualRow('a', 'HERE', 2, 6),
+      usualRow('b', 'ELSEWHERE', 0, 6),
+      usualRow('c', 'NEVER_BOUGHT'),
+      usualRow('d', 'NO_SHOP_KNOWN', 0, 3),
+      usualRow('e', 'HERE', 6, 6),
+      usualRow('f', 'NEVER_BOUGHT'),
+    ];
+
+    for (const order of ['shop', 'alpha'] as const) {
+      const without = keys(
+        composeBasketView(rows, { ...off, order }, priced())
+      );
+      const withIt = keys(composeBasketView(rows, { ...on, order }, priced()));
+
+      expect(withIt).toEqual(
+        without.filter((key) => ['a', 'c', 'e', 'f'].includes(key))
+      );
+    }
+  });
+
+  it('draws no message and hides nothing with the switch off', () => {
+    const rows = [
+      usualRow('a', 'HERE', 2, 6),
+      usualRow('b', 'ELSEWHERE', 0, 6),
+    ];
+
+    const sections = composeBasketView(rows, off, priced());
+
+    expect(keys(sections)).toEqual(['a', 'b']);
+    expect(sections[0].rows.every((drawn) => drawn.usual === null)).toBe(true);
+  });
+
+  it('does nothing while the read at the chosen shop is still out', () => {
+    const rows = [
+      usualRow('a', 'ELSEWHERE', 0, 6),
+      usualRow('b', 'HERE', 2, 6),
+    ];
+
+    const sections = composeBasketView(rows, on, { ...priced(), shop: null });
+
+    expect(keys(sections)).toEqual(['a', 'b']);
+    expect(sections[0].rows.every((drawn) => drawn.usual === null)).toBe(true);
+  });
+
+  it('keeps a row nobody has said anything about, and a removed row', () => {
+    const rows = [
+      row('a', 'Just added'),
+      usualRow('b', 'ELSEWHERE', 0, 6, { state: 'REMOVED', entries: [] }),
+      usualRow('c', 'ELSEWHERE', 0, 6),
+    ];
+
+    const sections = composeBasketView(rows, on, priced());
+
+    expect(keys(sections)).toEqual(['a', 'b']);
+  });
+
+  it('carries the message under the list grouping too', () => {
+    const lists = new Map([['l1', ref('l1', 'Groceries')]]);
+    const rows = [
+      usualRow('a', 'HERE', 3, 5, { entries: [entry('l1')] }),
+      usualRow('b', 'ELSEWHERE', 0, 6, { entries: [entry('l1')] }),
+    ];
+
+    const sections = composeBasketView(
+      rows,
+      { ...on, grouping: 'list' },
+      { ...priced(), lists }
+    );
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].rows.map((drawn) => drawn.usual)).toEqual([
+      { bought: 3, of: 5 },
+    ]);
+  });
+});
+
+describe('basketUsualApplies', () => {
+  it('is true only with the switch on and the read made at the chosen shop', () => {
+    const context = { shop: shop(MERCA, 'Mercadona') };
+
+    expect(
+      basketUsualApplies(state({ shop: MERCA, usual: true }), context)
+    ).toBe(true);
+    expect(basketUsualApplies(state({ shop: MERCA }), context)).toBe(false);
+    expect(basketUsualApplies(state({ usual: true }), context)).toBe(false);
+    expect(
+      basketUsualApplies(state({ shop: 'loc-other', usual: true }), context)
+    ).toBe(false);
+  });
+});
+
+describe('the usual chip', () => {
+  const names = { lists: new Map<string, BasketListRef>(), listCount: 0 };
+
+  it('is chipped and counted with a shop, and removable to its default', () => {
+    const on = state({ shop: MERCA, usual: true });
+
+    expect(basketViewChips(on, names)).toContainEqual({
+      property: 'usual',
+      key: 'basket.view.usual.chip',
+      args: null,
+    });
+    expect(basketViewActiveCount(on)).toBe(2);
+    expect(resetBasketViewProperty(on, 'usual').usual).toBe(false);
+  });
+
+  it('is neither chipped nor counted without a shop', () => {
+    const noShop = state({ usual: true });
+
+    expect(basketViewChips(noShop, names)).toEqual([]);
+    expect(basketViewActiveCount(noShop)).toBe(0);
   });
 });
