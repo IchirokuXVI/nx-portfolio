@@ -1,13 +1,17 @@
 import {
+  BrandBatchOutcome,
   BulkOperationErrorCode,
   ItemCategory,
+  ItemPriceWrittenBy,
   PostalCodeSource,
   PriceScopeKind,
+  PriceShownBecause,
   PriceSourceKind,
   UnitOfMeasure,
 } from '../../lib/enums/catalog.enums';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
+  BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
   BRAND_ORDERS,
   BRAND_PATTERNS,
@@ -81,6 +85,12 @@ export const CATALOG_SCHEMA_IDS = {
   listBrandsRequest: schemaId('msg/brand.list/request'),
   brandKeysRequest: schemaId('msg/brand.keys/request'),
   brandKeysResult: schemaId('msg/brand.keys/response'),
+  // Plan 0160: many brands at once, one outcome per name.
+  brandBatchOutcome: schemaId('enums/BrandBatchOutcome'),
+  registerBrandsEntry: schemaId('catalog/RegisterBrandsEntry'),
+  registerBrandsRequest: schemaId('msg/brand.registerMany/request'),
+  registerBrandsOutcome: schemaId('catalog/RegisterBrandsOutcome'),
+  registerBrandsResult: schemaId('msg/brand.registerMany/response'),
   catalogSuggestion: schemaId('catalog/CatalogSuggestion'),
   catalogSuggestResponse: schemaId('catalog/CatalogSuggestResponse'),
   createProductGroupRequest: schemaId('msg/productGroup.create/request'),
@@ -142,6 +152,12 @@ export const CATALOG_SCHEMA_IDS = {
   itemPriceDetails: schemaId('catalog/ItemPriceDetails'),
   itemPriceView: schemaId('catalog/ItemPriceView'),
   itemPricePage: schemaId('catalog/ItemPricePage'),
+  // Plan 0160: a run's rows, and one product at every scope.
+  itemPriceWrittenBy: schemaId('enums/ItemPriceWrittenBy'),
+  priceShownBecause: schemaId('enums/PriceShownBecause'),
+  itemScopePricesView: schemaId('catalog/ItemScopePricesView'),
+  itemScopePricesPage: schemaId('catalog/ItemScopePricesPage'),
+  itemPricesByItemRequest: schemaId('msg/itemPrice.byItem/request'),
   pricePolicyView: schemaId('catalog/PricePolicyView'),
   pricePolicyListView: schemaId('catalog/PricePolicyListView'),
   addItemPriceRequest: schemaId('msg/itemPrice.add/request'),
@@ -562,6 +578,8 @@ const itemPriceView = object(
     details: {
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceDetails), { type: 'null' }],
     },
+    // Plan 0160. On the run's read only, so stated and never required.
+    writtenBy: ref(CATALOG_SCHEMA_IDS.itemPriceWrittenBy),
   },
   [
     'id',
@@ -586,6 +604,49 @@ const itemPriceView = object(
 const itemPricePage = paginated(
   CATALOG_SCHEMA_IDS.itemPricePage,
   CATALOG_SCHEMA_IDS.itemPriceView
+);
+/**
+ * One scope of one product, with the row the price decision chose there and
+ * why (plan 0160). `shownBecause` comes from the decision function itself.
+ */
+const itemScopePricesView = object(
+  CATALOG_SCHEMA_IDS.itemScopePricesView,
+  {
+    priceScopeId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    scopeKind: ref(CATALOG_SCHEMA_IDS.priceScopeKind),
+    scopeExternalKey: nullableString(),
+    scopeLabel: nullableLocalized(),
+    scopePriority: integer(),
+    rows: array(ref(CATALOG_SCHEMA_IDS.itemPriceView)),
+    shownItemPriceId: nullableString(),
+    shownBecause: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.priceShownBecause), { type: 'null' }],
+    },
+    stale: boolean(),
+    protectedUntil: nullableString(),
+    overrides: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceOverrides), { type: 'null' }],
+    },
+  },
+  [
+    'priceScopeId',
+    'supermarketId',
+    'scopeKind',
+    'scopeExternalKey',
+    'scopeLabel',
+    'scopePriority',
+    'rows',
+    'shownItemPriceId',
+    'shownBecause',
+    'stale',
+    'protectedUntil',
+    'overrides',
+  ]
+);
+const itemScopePricesPage = paginated(
+  CATALOG_SCHEMA_IDS.itemScopePricesPage,
+  CATALOG_SCHEMA_IDS.itemScopePricesView
 );
 const pricePolicyView = object(
   CATALOG_SCHEMA_IDS.pricePolicyView,
@@ -1250,6 +1311,54 @@ const brandKeysResult = object(
   { keys: array(nonEmptyString()) },
   ['keys']
 );
+// Plan 0160. A name is what `brand.create` takes, without a link: a batch
+// registers brands, and a spelling is a decision about two of them.
+const registerBrandsEntry = object(
+  CATALOG_SCHEMA_IDS.registerBrandsEntry,
+  {
+    label: nonEmptyString({ maxLength: BRAND_LABEL_MAX_LENGTH }),
+    privateLabelSupermarketId: nullableString(),
+  },
+  ['label']
+);
+const registerBrandsRequest = object(
+  CATALOG_SCHEMA_IDS.registerBrandsRequest,
+  {
+    ...adminCredentialProperties,
+    brands: {
+      ...array(ref(CATALOG_SCHEMA_IDS.registerBrandsEntry)),
+      minItems: 1,
+      maxItems: BRAND_BATCH_MAX,
+    },
+  },
+  ['userId', 'brands']
+);
+const registerBrandsOutcome = object(
+  CATALOG_SCHEMA_IDS.registerBrandsOutcome,
+  {
+    label: string(),
+    outcome: ref(CATALOG_SCHEMA_IDS.brandBatchOutcome),
+    brandId: nullableString(),
+    linkedItems: integerOrNull(),
+    reason: {
+      anyOf: [
+        {
+          type: 'object',
+          additionalProperties: false,
+          properties: { code: nonEmptyString(), detail: string() },
+          required: ['code', 'detail'],
+        },
+        { type: 'null' },
+      ],
+    },
+  },
+  ['label', 'outcome', 'brandId', 'linkedItems', 'reason']
+);
+const registerBrandsResult = object(
+  CATALOG_SCHEMA_IDS.registerBrandsResult,
+  { results: array(ref(CATALOG_SCHEMA_IDS.registerBrandsOutcome)) },
+  ['results']
+);
 
 // The values one price row carries (plan 0080, section 9). No `overrides` and
 // no `protectedUntil`: an ADMIN add computes its snapshot server side, and a
@@ -1308,17 +1417,30 @@ const addItemPriceBatchResult = object(
   },
   ['inserted', 'confirmed']
 );
+// Either the history of one (item, scope), or one run's rows (plan 0160).
+// Which pair was named is checked by catalog, where the refusal can say so.
 const listItemPricesRequest = object(
   CATALOG_SCHEMA_IDS.listItemPricesRequest,
   {
     ...adminCredentialProperties,
     itemId: nonEmptyString(),
     priceScopeId: nonEmptyString(),
+    runId: nonEmptyString(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
   },
-  ['userId', 'itemId', 'priceScopeId']
+  ['userId']
+);
+const itemPricesByItemRequest = object(
+  CATALOG_SCHEMA_IDS.itemPricesByItemRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'itemId']
 );
 const itemPriceIdRequest = object(
   CATALOG_SCHEMA_IDS.itemPriceIdRequest,
@@ -1893,6 +2015,18 @@ export const catalogSchemas: JsonSchema[] = [
     CATALOG_SCHEMA_IDS.bulkOperationErrorCode,
     Object.values(BulkOperationErrorCode)
   ),
+  enumOf(
+    CATALOG_SCHEMA_IDS.itemPriceWrittenBy,
+    Object.values(ItemPriceWrittenBy)
+  ),
+  enumOf(
+    CATALOG_SCHEMA_IDS.priceShownBecause,
+    Object.values(PriceShownBecause)
+  ),
+  enumOf(
+    CATALOG_SCHEMA_IDS.brandBatchOutcome,
+    Object.values(BrandBatchOutcome)
+  ),
   localizedText,
   localizedSynonyms,
   supermarketView,
@@ -1927,6 +2061,10 @@ export const catalogSchemas: JsonSchema[] = [
   listBrandsRequest,
   brandKeysRequest,
   brandKeysResult,
+  registerBrandsEntry,
+  registerBrandsRequest,
+  registerBrandsOutcome,
+  registerBrandsResult,
   supermarketItemPage,
   adminSupermarketItemPage,
   supermarketLocationItemPage,
@@ -1965,6 +2103,9 @@ export const catalogSchemas: JsonSchema[] = [
   itemPriceDetails,
   itemPriceView,
   itemPricePage,
+  itemScopePricesView,
+  itemScopePricesPage,
+  itemPricesByItemRequest,
   pricePolicyView,
   pricePolicyListView,
   addItemPriceRequest,
@@ -2128,6 +2269,10 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.brandKeysRequest,
     response: CATALOG_SCHEMA_IDS.brandKeysResult,
   },
+  [BRAND_PATTERNS.registerMany]: {
+    request: CATALOG_SCHEMA_IDS.registerBrandsRequest,
+    response: CATALOG_SCHEMA_IDS.registerBrandsResult,
+  },
   [PRODUCT_GROUP_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createProductGroupRequest,
     response: CATALOG_SCHEMA_IDS.productGroupView,
@@ -2163,6 +2308,10 @@ export const catalogMessageContracts: Record<
   [ITEM_PRICE_PATTERNS.list]: {
     request: CATALOG_SCHEMA_IDS.listItemPricesRequest,
     response: CATALOG_SCHEMA_IDS.itemPricePage,
+  },
+  [ITEM_PRICE_PATTERNS.byItem]: {
+    request: CATALOG_SCHEMA_IDS.itemPricesByItemRequest,
+    response: CATALOG_SCHEMA_IDS.itemScopePricesPage,
   },
   [ITEM_PRICE_PATTERNS.delete]: {
     request: CATALOG_SCHEMA_IDS.itemPriceIdRequest,

@@ -2,7 +2,9 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
   ItemCategory,
+  ItemPriceWrittenBy,
   PriceScopeKind,
+  PriceShownBecause,
   PriceSourceKind,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
@@ -813,6 +815,144 @@ describeIntegration('item prices (real Postgres)', () => {
       expect(Number(atShop?.price)).toBe(1.09);
       // The region closes after the store's leaflet opens.
       expect(atShop?.nextBoundaryAt).toEqual(nextWeek);
+    });
+  });
+
+  describe('what the back office reads instead of psql (plan 0160)', () => {
+    it('lists the rows a run inserted and the rows it confirmed, and nothing else', async () => {
+      const day2 = new Date(Date.now() - DAY_MS);
+      const day1 = new Date(day2.getTime() - DAY_MS);
+      // OTHER_RUN writes 1.19, RUN repeats it and writes a national 1.49.
+      await crawl(1.19, day1, warehouseId, OTHER_RUN);
+      await crawl(1.19, day2, warehouseId, RUN);
+      await crawl(1.49, day2, nationalId, RUN);
+
+      const page = await prices.list({ userId: OPERATOR, runId: RUN });
+
+      expect(
+        page.items
+          .map((row) => [row.priceScopeId, row.price, row.writtenBy])
+          .sort()
+      ).toEqual(
+        [
+          [warehouseId, 1.19, ItemPriceWrittenBy.CONFIRMED],
+          [nationalId, 1.49, ItemPriceWrittenBy.INSERTED],
+        ].sort()
+      );
+      // The history read is unchanged and carries no writtenBy.
+      const history = await prices.list({
+        userId: OPERATOR,
+        itemId,
+        priceScopeId: warehouseId,
+      });
+      expect(history.items).toHaveLength(1);
+      expect(history.items[0].writtenBy).toBeUndefined();
+    });
+
+    it('refuses a read that names neither a run nor a key, or a run with a scope', async () => {
+      await expect(
+        prices.list({ userId: OPERATOR, itemId })
+      ).rejects.toMatchObject({ code: 'validation_failed' });
+      await expect(
+        prices.list({ userId: OPERATOR, runId: RUN, priceScopeId: warehouseId })
+      ).rejects.toMatchObject({ code: 'validation_failed' });
+    });
+
+    it('answers every scope of the item with the row shown there and why', async () => {
+      await crawl(1.49, new Date(), nationalId);
+      await prices.add({
+        userId: OPERATOR,
+        itemId,
+        priceScopeId: warehouseId,
+        sourceKind: PriceSourceKind.ADMIN,
+        price: 1.29,
+        currency: 'EUR',
+      });
+
+      const page = await prices.byItem({ userId: OPERATOR, itemId });
+      const byScope = new Map(page.items.map((row) => [row.priceScopeId, row]));
+
+      const national = byScope.get(nationalId);
+      expect(national?.shownBecause).toBe(PriceShownBecause.ONLY_ROW);
+      expect(national?.rows).toHaveLength(1);
+      expect(national?.protectedUntil).toBeNull();
+
+      // The warehouse weighs its own ADMIN row and the national crawl it
+      // falls through to. The snapshot recorded 1.49, so nothing disputes it.
+      const warehouse = byScope.get(warehouseId);
+      expect(warehouse?.shownBecause).toBe(PriceShownBecause.PROTECTED_ADMIN);
+      expect(warehouse?.rows.map((row) => row.sourceKind).sort()).toEqual([
+        PriceSourceKind.ADMIN,
+        PriceSourceKind.OFFICIAL_API,
+      ]);
+      const admin = warehouse?.rows.find(
+        (row) => row.sourceKind === PriceSourceKind.ADMIN
+      );
+      expect(warehouse?.shownItemPriceId).toBe(admin?.id);
+      expect(warehouse?.protectedUntil).toBe(admin?.protectedUntil);
+      expect(warehouse?.overrides).toEqual({
+        OFFICIAL_API: { price: 1.49, unitPrice: null },
+      });
+      // The explanation agrees with what the recompute stored.
+      expect((await shown(warehouseId))?.itemPriceId).toBe(admin?.id);
+    });
+
+    it('pages the scopes without a gap or a repeat', async () => {
+      await crawl(1.49, new Date(), nationalId);
+      await crawl(1.35, new Date(), warehouseId);
+
+      const first = await prices.byItem({ userId: OPERATOR, itemId, limit: 1 });
+      expect(first.items).toHaveLength(1);
+      expect(first.nextCursor).not.toBeNull();
+      const second = await prices.byItem({
+        userId: OPERATOR,
+        itemId,
+        limit: 1,
+        cursor: first.nextCursor ?? undefined,
+      });
+      expect(second.items).toHaveLength(1);
+      expect(second.nextCursor).toBeNull();
+      expect(
+        [first.items[0].priceScopeId, second.items[0].priceScopeId].sort()
+      ).toEqual([nationalId, warehouseId].sort());
+    });
+
+    it('takes an observedAt up to 30 days back, and protects from it', async () => {
+      const typedAt = new Date(Date.now() - 29 * DAY_MS);
+      const typed = await prices.add({
+        userId: OPERATOR,
+        itemId,
+        priceScopeId: warehouseId,
+        sourceKind: PriceSourceKind.ADMIN,
+        price: 1.29,
+        currency: 'EUR',
+        observedAt: typedAt.toISOString(),
+      });
+      expect(typed.observedAt).toBe(typedAt.toISOString());
+      // A past date protects for less time, never more: this one is over.
+      expect(typed.protectedUntil).toBe(
+        new Date(typedAt.getTime() + 7 * DAY_MS).toISOString()
+      );
+    });
+
+    it('refuses an observedAt in the future or older than 30 days', async () => {
+      const add = (observedAt: Date) =>
+        prices.add({
+          userId: OPERATOR,
+          itemId,
+          priceScopeId: warehouseId,
+          sourceKind: PriceSourceKind.ADMIN,
+          price: 1.29,
+          observedAt: observedAt.toISOString(),
+        });
+      await expect(add(new Date(Date.now() + 60_000))).rejects.toMatchObject({
+        code: 'validation_failed',
+        details: { observedAt: 'must not be in the future' },
+      });
+      await expect(
+        add(new Date(Date.now() - 31 * DAY_MS))
+      ).rejects.toMatchObject({ code: 'validation_failed' });
+      expect(await dataSource.getRepository(ItemPrice).count()).toBe(0);
     });
   });
 });

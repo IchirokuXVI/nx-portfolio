@@ -3,6 +3,7 @@ import { MessagingModule } from '../messaging/messaging.module';
 import {
   AdminHarvestEntriesController,
   AdminHarvestImportsController,
+  AdminHarvestItemsController,
   AdminHarvestPlacesController,
   AdminHarvestPostalCodesController,
   AdminHarvestPresetsController,
@@ -28,6 +29,7 @@ import {
     // crawl (plan 0086). The alias and item ref controllers were the same queue
     // over two other tables and are gone.
     AdminHarvestImportsController,
+    AdminHarvestItemsController,
     AdminHarvestPlacesController,
     AdminHarvestPostalCodesController,
     AdminHarvestEntriesController,

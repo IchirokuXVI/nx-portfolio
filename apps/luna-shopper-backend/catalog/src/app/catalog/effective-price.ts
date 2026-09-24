@@ -1,4 +1,5 @@
 import {
+  PriceShownBecause,
   PriceSourceKind,
   type ItemPriceOverrides,
 } from '@portfolio/luna-shopper/contracts';
@@ -72,6 +73,11 @@ export interface EffectivePrice {
   row: PriceRow | null;
   /** True when `row` came from the stale tier of section 5. */
   stale: boolean;
+  /**
+   * Which step below chose `row` (plan 0160). Null exactly when `row` is.
+   * Read from the same comparisons that chose it, never worked out again.
+   */
+  shownBecause: PriceShownBecause | null;
   /** The earliest instant at which this answer changes with no write. Null when it never does. */
   nextBoundaryAt: Date | null;
 }
@@ -143,25 +149,43 @@ export function resolveEffectivePrice(
       isProtected(row, now)
         ? Number.NEGATIVE_INFINITY
         : (policies.get(row.sourceKind)?.priority ?? Number.POSITIVE_INFINITY);
-    const [best] = [...survivors].sort(
+    const [best, runnerUp] = [...survivors].sort(
       (a, b) =>
         rank(a) - rank(b) ||
         b.lastObservedAt.getTime() - a.lastObservedAt.getTime()
     );
-    return { row: best, stale: false, nextBoundaryAt };
+    const shownBecause = isProtected(best, now)
+      ? PriceShownBecause.PROTECTED_ADMIN
+      : runnerUp === undefined
+        ? PriceShownBecause.ONLY_ROW
+        : rank(best) < rank(runnerUp)
+          ? PriceShownBecause.POLICY_PRIORITY
+          : PriceShownBecause.NEWEST;
+    return { row: best, stale: false, shownBecause, nextBoundaryAt };
   }
 
   // Newest first, and on a tie the narrower scope, so the stale answer does not
   // depend on the order the rows arrived in.
   const narrower = narrownessOf(input.priceScopeId, input.scopePriorities);
-  const [newest] = input.rows
-    .filter((row) => policies.get(row.sourceKind)?.enabled === true)
-    .sort(
-      (a, b) =>
-        b.lastObservedAt.getTime() - a.lastObservedAt.getTime() ||
-        narrower(a, b)
-    );
-  return { row: newest ?? null, stale: newest !== undefined, nextBoundaryAt };
+  const enabled = input.rows.filter(
+    (row) => policies.get(row.sourceKind)?.enabled === true
+  );
+  const [newest] = [...enabled].sort(
+    (a, b) =>
+      b.lastObservedAt.getTime() - a.lastObservedAt.getTime() || narrower(a, b)
+  );
+  if (newest === undefined) {
+    return { row: null, stale: false, shownBecause: null, nextBoundaryAt };
+  }
+  return {
+    row: newest,
+    stale: true,
+    shownBecause:
+      enabled.length === 1
+        ? PriceShownBecause.ONLY_ROW
+        : PriceShownBecause.NEWEST,
+    nextBoundaryAt,
+  };
 }
 
 /**

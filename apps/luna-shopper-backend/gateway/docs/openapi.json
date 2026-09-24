@@ -14873,6 +14873,91 @@
         ]
       }
     },
+    "/v1/admin/catalog/items/{id}/prices": {
+      "get": {
+        "operationId": "AdminCatalogItemsController_prices_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `itemPrice.byItem` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ItemScopePricesPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/catalog/product-groups": {
       "post": {
         "operationId": "AdminCatalogProductGroupsController_create_v1",
@@ -15781,6 +15866,102 @@
         ]
       }
     },
+    "/v1/admin/catalog/brands/register-many": {
+      "post": {
+        "operationId": "AdminCatalogBrandsController_registerMany_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterBrandsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `brand.registerMany` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.brand.registerMany.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/catalog/brands/{id}/spellings": {
       "get": {
         "operationId": "AdminCatalogBrandsController_spellings_v1",
@@ -16582,8 +16763,9 @@
         "parameters": [
           {
             "name": "itemId",
-            "required": true,
+            "required": false,
             "in": "query",
+            "description": "Required without `runId`. With `runId` it narrows the run to one product.",
             "schema": {
               "format": "uuid",
               "type": "string"
@@ -16591,8 +16773,19 @@
           },
           {
             "name": "priceScopeId",
-            "required": true,
+            "required": false,
             "in": "query",
+            "description": "Required without `runId`, and refused with it.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "runId",
+            "required": false,
+            "in": "query",
+            "description": "The rows this run inserted, and the rows whose `lastObservedAt` it moved last. Each carries `writtenBy`.",
             "schema": {
               "format": "uuid",
               "type": "string"
@@ -20592,6 +20785,91 @@
           },
           "409": {
             "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
+    "/v1/admin/harvest/items/{itemId}/entries": {
+      "get": {
+        "operationId": "AdminHarvestItemsController_entries_v1",
+        "parameters": [
+          {
+            "name": "itemId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `sourceEntry.listByItem` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.ItemSourceEntryPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24899,6 +25177,40 @@
           "label"
         ]
       },
+      "RegisterBrandsEntryDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "privateLabelSupermarketId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "The chain that owns this private label. Null, and usually absent, for an ordinary brand."
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "RegisterBrandsDto": {
+        "type": "object",
+        "properties": {
+          "brands": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RegisterBrandsEntryDto"
+            }
+          }
+        },
+        "required": [
+          "brands"
+        ]
+      },
       "UpdateBrandDto": {
         "type": "object",
         "properties": {
@@ -25002,7 +25314,7 @@
             "type": "string",
             "nullable": true,
             "format": "date-time",
-            "description": "When the price was observed. Defaults to now."
+            "description": "When the price was observed. Defaults to now. At most 30 days back, and never in the future. An ADMIN row is protected for seven days from this instant, so a past date protects it for less time, never more."
           },
           "validFrom": {
             "type": "string",
@@ -26437,6 +26749,12 @@
           "asked": {
             "type": "integer",
             "minimum": 0
+          },
+          "settlements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/admin-core.AdminBasketSettlementView"
+            }
           }
         },
         "required": [
@@ -26444,7 +26762,97 @@
           "content",
           "left",
           "bought",
-          "asked"
+          "asked",
+          "settlements"
+        ],
+        "additionalProperties": false
+      },
+      "admin-core.AdminBasketSettlementView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.SettlementOutcome"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pricePaidCents": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "pricePaidCurrency": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priceScopeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supermarketLocationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "settledByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "settledByParticipantId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "settledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revertedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "lineId",
+          "itemId",
+          "outcome",
+          "quantity",
+          "pricePaidCents",
+          "pricePaidCurrency",
+          "priceScopeId",
+          "supermarketLocationId",
+          "settledByUserId",
+          "settledByParticipantId",
+          "settledAt",
+          "revertedAt"
         ],
         "additionalProperties": false
       },
@@ -29956,6 +30364,9 @@
                 "type": "null"
               }
             ]
+          },
+          "writtenBy": {
+            "$ref": "#/components/schemas/enums.ItemPriceWrittenBy"
           }
         },
         "required": [
@@ -29976,6 +30387,120 @@
           "overrides",
           "protectedUntil",
           "details"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ItemScopePricesPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemScopePricesView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "catalog.ItemScopePricesView": {
+        "type": "object",
+        "properties": {
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scopeKind": {
+            "$ref": "#/components/schemas/enums.PriceScopeKind"
+          },
+          "scopeExternalKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scopeLabel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scopePriority": {
+            "type": "integer"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemPriceView"
+            }
+          },
+          "shownItemPriceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shownBecause": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.PriceShownBecause"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "protectedUntil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.ItemPriceOverrides"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "priceScopeId",
+          "supermarketId",
+          "scopeKind",
+          "scopeExternalKey",
+          "scopeLabel",
+          "scopePriority",
+          "rows",
+          "shownItemPriceId",
+          "shownBecause",
+          "stale",
+          "protectedUntil",
+          "overrides"
         ],
         "additionalProperties": false
       },
@@ -30441,6 +30966,61 @@
           "slug",
           "referenceUnit",
           "synonyms"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.RegisterBrandsOutcome": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.BrandBatchOutcome"
+          },
+          "brandId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "linkedItems": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "detail": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "detail"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "outcome",
+          "brandId",
+          "linkedItems",
+          "reason"
         ],
         "additionalProperties": false
       },
@@ -31315,6 +31895,14 @@
           "ARCHIVED"
         ]
       },
+      "enums.BrandBatchOutcome": {
+        "type": "string",
+        "enum": [
+          "CREATED",
+          "EXISTS",
+          "REFUSED"
+        ]
+      },
       "enums.BulkOperationErrorCode": {
         "type": "string",
         "enum": [
@@ -31427,6 +32015,13 @@
           "OTHER"
         ]
       },
+      "enums.ItemPriceWrittenBy": {
+        "type": "string",
+        "enum": [
+          "INSERTED",
+          "CONFIRMED"
+        ]
+      },
       "enums.ItemSourceMatch": {
         "type": "string",
         "enum": [
@@ -31532,6 +32127,15 @@
           "REGION",
           "LOCAL_AREA",
           "STORE"
+        ]
+      },
+      "enums.PriceShownBecause": {
+        "type": "string",
+        "enum": [
+          "PROTECTED_ADMIN",
+          "POLICY_PRIORITY",
+          "ONLY_ROW",
+          "NEWEST"
         ]
       },
       "enums.PriceSourceKind": {
@@ -32537,6 +33141,197 @@
           "page",
           "name",
           "message"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.ItemSourceEntryPage": {
+        "type": "object",
+        "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.ItemSourceEntryView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "harvest.ItemSourceEntryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "externalId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceKind": {
+            "$ref": "#/components/schemas/enums.PriceSourceKind"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ean": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unitSize": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "sizeFormat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "categoryPath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "extra": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "timesSeen": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "firstSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "firstRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "candidateEntryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.SourceEntryStatus"
+          },
+          "matchedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.ItemSourceMatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "decidedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryPriceView"
+            }
+          },
+          "eanSharedBy": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "supermarketId",
+          "externalId",
+          "sourceKind",
+          "name",
+          "brand",
+          "ean",
+          "unitSize",
+          "sizeFormat",
+          "categoryPath",
+          "url",
+          "extra",
+          "timesSeen",
+          "firstSeenAt",
+          "lastSeenAt",
+          "firstRunId",
+          "lastRunId",
+          "itemId",
+          "candidateEntryId",
+          "status",
+          "matchedBy",
+          "confidence",
+          "decidedAt",
+          "prices",
+          "eanSharedBy"
         ],
         "additionalProperties": false
       },
@@ -34319,6 +35114,21 @@
         },
         "required": [
           "revoked"
+        ],
+        "additionalProperties": false
+      },
+      "msg.brand.registerMany.response": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.RegisterBrandsOutcome"
+            }
+          }
+        },
+        "required": [
+          "results"
         ],
         "additionalProperties": false
       },

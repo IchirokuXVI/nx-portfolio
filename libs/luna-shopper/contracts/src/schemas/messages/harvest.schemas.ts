@@ -130,6 +130,10 @@ export const HARVEST_SCHEMA_IDS = {
   mapSourceLocationRequest: schemaId('msg/sourceLocation.map/request'),
   sourceLocationIdRequest: schemaId('msg/sourceLocation.id/request'),
   listEntriesRequest: schemaId('msg/sourceEntry.list/request'),
+  // Plan 0160: the rows that name one product.
+  listEntriesByItemRequest: schemaId('msg/sourceEntry.listByItem/request'),
+  itemSourceEntryView: schemaId('harvest/ItemSourceEntryView'),
+  itemSourceEntryPage: schemaId('harvest/ItemSourceEntryPage'),
   entryIdRequest: schemaId('msg/sourceEntry.id/request'),
   acceptEntryRequest: schemaId('msg/sourceEntry.accept/request'),
   createItemFromEntryRequest: schemaId('msg/sourceEntry.createItem/request'),
@@ -392,65 +396,76 @@ const discoveredPlaceGroupsResult = object(
  * verbatim, and a person's, which a run only reads. `sourceKind` is the
  * discriminator every code path reads; nothing parses `externalId`.
  */
+const sourceCatalogEntryProperties = {
+  id: nonEmptyString(),
+  supermarketId: nonEmptyString(),
+  externalId: nonEmptyString(),
+  sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+  name: nonEmptyString(),
+  brand: nullableString(),
+  ean: nullableString(),
+  unitSize: numberOrNull(),
+  sizeFormat: nullableString(),
+  categoryPath: array(string()),
+  url: nullableString(),
+  // Stored, shown, and never interpreted (plan 0086, section 6.1).
+  extra: nullableObject(),
+  timesSeen: integer({ minimum: 0 }),
+  firstSeenAt: string({ format: 'date-time' }),
+  lastSeenAt: string({ format: 'date-time' }),
+  firstRunId: nullableString(),
+  lastRunId: nullableString(),
+  itemId: nullableString(),
+  candidateEntryId: nullableString(),
+  status: ref(HARVEST_SCHEMA_IDS.sourceEntryStatus),
+  matchedBy: {
+    anyOf: [ref(HARVEST_SCHEMA_IDS.itemSourceMatch), { type: 'null' }],
+  },
+  confidence: { type: 'number', minimum: 0, maximum: 1 },
+  decidedAt: nullableString(),
+  // Inline, because there is one per scope and a chain has a handful of
+  // scopes, and the queue cannot decide a row without seeing what it holds.
+  prices: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceView)),
+};
+const sourceCatalogEntryRequired = [
+  'id',
+  'supermarketId',
+  'externalId',
+  'sourceKind',
+  'name',
+  'brand',
+  'ean',
+  'unitSize',
+  'sizeFormat',
+  'categoryPath',
+  'url',
+  'extra',
+  'timesSeen',
+  'firstSeenAt',
+  'lastSeenAt',
+  'firstRunId',
+  'lastRunId',
+  'itemId',
+  'candidateEntryId',
+  'status',
+  'matchedBy',
+  'confidence',
+  'decidedAt',
+  'prices',
+];
 const sourceCatalogEntryView = object(
   HARVEST_SCHEMA_IDS.sourceCatalogEntryView,
+  sourceCatalogEntryProperties,
+  sourceCatalogEntryRequired
+);
+/** A source row on the product's own read, with its EAN counted (plan 0160). */
+const itemSourceEntryView = object(
+  HARVEST_SCHEMA_IDS.itemSourceEntryView,
   {
-    id: nonEmptyString(),
-    supermarketId: nonEmptyString(),
-    externalId: nonEmptyString(),
-    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
-    name: nonEmptyString(),
-    brand: nullableString(),
-    ean: nullableString(),
-    unitSize: numberOrNull(),
-    sizeFormat: nullableString(),
-    categoryPath: array(string()),
-    url: nullableString(),
-    // Stored, shown, and never interpreted (plan 0086, section 6.1).
-    extra: nullableObject(),
-    timesSeen: integer({ minimum: 0 }),
-    firstSeenAt: string({ format: 'date-time' }),
-    lastSeenAt: string({ format: 'date-time' }),
-    firstRunId: nullableString(),
-    lastRunId: nullableString(),
-    itemId: nullableString(),
-    candidateEntryId: nullableString(),
-    status: ref(HARVEST_SCHEMA_IDS.sourceEntryStatus),
-    matchedBy: {
-      anyOf: [ref(HARVEST_SCHEMA_IDS.itemSourceMatch), { type: 'null' }],
-    },
-    confidence: { type: 'number', minimum: 0, maximum: 1 },
-    decidedAt: nullableString(),
-    // Inline, because there is one per scope and a chain has a handful of
-    // scopes, and the queue cannot decide a row without seeing what it holds.
-    prices: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceView)),
+    ...sourceCatalogEntryProperties,
+    eanSharedBy: { type: ['integer', 'null'], minimum: 1 },
   },
-  [
-    'id',
-    'supermarketId',
-    'externalId',
-    'sourceKind',
-    'name',
-    'brand',
-    'ean',
-    'unitSize',
-    'sizeFormat',
-    'categoryPath',
-    'url',
-    'extra',
-    'timesSeen',
-    'firstSeenAt',
-    'lastSeenAt',
-    'firstRunId',
-    'lastRunId',
-    'itemId',
-    'candidateEntryId',
-    'status',
-    'matchedBy',
-    'confidence',
-    'decidedAt',
-    'prices',
-  ]
+  [...sourceCatalogEntryRequired, 'eanSharedBy']
 );
 
 /**
@@ -686,6 +701,10 @@ const discoveredPlacePage = paginated(
 const sourceCatalogEntryPage = paginated(
   HARVEST_SCHEMA_IDS.sourceCatalogEntryPage,
   HARVEST_SCHEMA_IDS.sourceCatalogEntryView
+);
+const itemSourceEntryPage = paginated(
+  HARVEST_SCHEMA_IDS.itemSourceEntryPage,
+  HARVEST_SCHEMA_IDS.itemSourceEntryView
 );
 const sourceLocationPage = paginated(
   HARVEST_SCHEMA_IDS.sourceLocationPage,
@@ -1060,6 +1079,16 @@ const listEntriesRequest = object(
   },
   ['userId']
 );
+const listEntriesByItemRequest = object(
+  HARVEST_SCHEMA_IDS.listEntriesByItemRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'itemId']
+);
 const entryIdRequest = object(
   HARVEST_SCHEMA_IDS.entryIdRequest,
   { ...adminCredentialProperties, entryId: nonEmptyString() },
@@ -1359,6 +1388,7 @@ export const harvestSchemas: JsonSchema[] = [
   discoveredPlaceGroup,
   discoveredPlaceGroupsResult,
   sourceCatalogEntryView,
+  itemSourceEntryView,
   sourceEntryPriceView,
   sourceEntryAcceptResult,
   sourceLocationCandidate,
@@ -1369,6 +1399,7 @@ export const harvestSchemas: JsonSchema[] = [
   harvestRunPage,
   discoveredPlacePage,
   sourceCatalogEntryPage,
+  itemSourceEntryPage,
   sourceLocationPage,
   brandSuggestionChain,
   brandSuggestionView,
@@ -1400,6 +1431,7 @@ export const harvestSchemas: JsonSchema[] = [
   mapSourceLocationRequest,
   sourceLocationIdRequest,
   listEntriesRequest,
+  listEntriesByItemRequest,
   entryIdRequest,
   acceptEntryRequest,
   createItemFromEntryRequest,
@@ -1517,6 +1549,10 @@ export const harvestMessageContracts: Record<
   [SOURCE_ENTRY_PATTERNS.list]: {
     request: HARVEST_SCHEMA_IDS.listEntriesRequest,
     response: HARVEST_SCHEMA_IDS.sourceCatalogEntryPage,
+  },
+  [SOURCE_ENTRY_PATTERNS.listByItem]: {
+    request: HARVEST_SCHEMA_IDS.listEntriesByItemRequest,
+    response: HARVEST_SCHEMA_IDS.itemSourceEntryPage,
   },
   [SOURCE_ENTRY_PATTERNS.accept]: {
     request: HARVEST_SCHEMA_IDS.acceptEntryRequest,

@@ -36,12 +36,14 @@ import {
   type HarvestRunPresetView,
   type HarvestRunView,
   type ImportDiscoveredPlaceRequest,
+  type ItemSourceEntryPage,
   type LinkDiscoveredPlaceRequest,
   type ListBrandSuggestionsRequest,
   type ListDiscoveredPlacesRequest,
   type ListHarvestRunPresetsRequest,
   type ListHarvestRunsRequest,
   type ListPostalCodeDiscoveryRequestsRequest,
+  type ListSourceEntriesByItemRequest,
   type ListSourceEntriesRequest,
   type ListSourceLocationsRequest,
   type ListSupermarketSourcesRequest,
@@ -335,6 +337,14 @@ export class HarvestController {
     @Payload() req: ListSourceEntriesRequest
   ): Promise<SourceCatalogEntryPage> {
     return this.entries.list(req);
+  }
+
+  /** The rows that name one product, with each EAN counted (plan 0160). */
+  @MessagePattern(SOURCE_ENTRY_PATTERNS.listByItem)
+  listEntriesByItem(
+    @Payload() req: ListSourceEntriesByItemRequest
+  ): Promise<ItemSourceEntryPage> {
+    return this.entries.listByItem(req);
   }
 
   /**
