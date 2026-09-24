@@ -3,6 +3,7 @@ import type {
   BasketRowMark,
   BasketRowNote,
   BasketRowState,
+  BasketRowUsualState,
   BasketStatus,
 } from '../enums/basket.enums';
 import type {
@@ -144,6 +145,45 @@ export interface BasketRowView {
   touchedAt: string | null;
   /** Oldest first, the anchor at index 0. */
   entries: BasketRowEntryView[];
+  /**
+   * How often this row's lines were bought at the read's chain, lately (plan
+   * 0165).
+   *
+   * Null when the read has no shop, and null on the row a write answers,
+   * because a write is not made at a chain a reader chose. Counts only: it never
+   * names a person, a time, or any shop or chain but the read's.
+   */
+  usual: BasketRowUsualView | null;
+}
+
+/**
+ * How many purchases one line's window holds (plan 0165, section 1).
+ *
+ * The last six purchases of a line are what "usually" means. Changing it
+ * changes what every shopper is told, so it is a decision rather than a knob.
+ */
+export const BASKET_USUAL_WINDOW = 6;
+
+/**
+ * Whether and how often a row's lines were bought at the read's chain (plan
+ * 0165, section 2).
+ *
+ * Each line's window is its last {@link BASKET_USUAL_WINDOW} purchases that
+ * stand: outcome `BOUGHT`, not reverted, newest first. `bought` and `of` are
+ * averages over the lines that have a window, rounded half up, so a row that
+ * merges three lines still answers a number from 0 to 6. The client decides
+ * what to draw; the server filters nothing, because the filter is the viewer's
+ * choice and the rows are shared.
+ */
+export interface BasketRowUsualView {
+  state: BasketRowUsualState;
+  /**
+   * Purchases at the read's chain, 0 to 6. At least 1 whenever the average is
+   * above 0, so `HERE` never answers 0.
+   */
+  bought: number;
+  /** Purchases counted, 0 to 6. 0 only for `NEVER_BOUGHT`. */
+  of: number;
 }
 
 /** The three numbers a basket card draws, and the total they are of. */
@@ -372,11 +412,23 @@ export interface BasketScopeLocationView {
 export interface GetBasketRequest {
   basketId: string;
   participantId: string;
+  /**
+   * The chain of the shop the read is made at, sent by the gateway when the
+   * read has a shop (plan 0165). Every row then carries
+   * {@link BasketRowView.usual}; absent, every row carries null.
+   *
+   * The chain rather than the shop, because a purchase at any shop of a chain
+   * counts for every shop of it. The gateway resolves it through catalog,
+   * which is the service that knows which chain a shop belongs to.
+   */
+  supermarketId?: string;
 }
 
 /** The caller's permanent basket, created the first time they ask for it. */
 export interface GetLiveBasketRequest {
   userId: string;
+  /** The read's chain, exactly as {@link GetBasketRequest.supermarketId}. */
+  supermarketId?: string;
 }
 
 /**
