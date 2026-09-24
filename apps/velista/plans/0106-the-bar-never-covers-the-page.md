@@ -1,3 +1,5 @@
+> **PR:** [#488](https://github.com/IchirokuXVI/nx-portfolio/pull/488)
+
 # 0106: the bar never covers the page
 
 The bottom bar of plan `0097` hides the last part of a page. On a zone list and on a basket
