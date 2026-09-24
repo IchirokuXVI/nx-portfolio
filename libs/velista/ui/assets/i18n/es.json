@@ -409,10 +409,8 @@
     "section": {
       "zones": "Tus grupos"
     },
-    "liveBasket": {
-      "open": "Todo por comprar, quedan {{pending}}"
-    },
     "shoppingList": {
+      "label": "Tu compra reciente",
       "open": "{{name}}, faltan {{count}}",
       "more_one": "y {{count}} más",
       "more_other": "y {{count}} más",

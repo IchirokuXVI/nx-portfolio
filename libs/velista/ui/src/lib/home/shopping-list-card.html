@@ -26,16 +26,26 @@
   The accessible name is stated rather than read off the parts: left to itself a screen
   reader would say the name, then "4 of 12 got", then the date, which is three facts in
   the order they happen to be laid out. Section 7 asks for the name and what is left.
+
+  The label leads it (velista `0105`), so a reader hears what the row is before a date
+  that means nothing on its own.
 -->
 <button
   (click)="open.emit(vm.id)"
   [attr.aria-label]="
-    'home.shoppingList.open' | rokuT: { name: vm.name, count: outstanding() }
+    ('home.shoppingList.label' | rokuT) +
+    ': ' +
+    ('home.shoppingList.open' | rokuT: { name: vm.name, count: outstanding() })
   "
   class="card"
   type="button"
 >
   <span class="titles">
+    <!--
+      What the row is (velista `0105`). The title under it is a name somebody typed or,
+      far more often, a date, and a date alone does not say it is a shopping trip.
+    -->
+    <span class="label">{{ 'home.shoppingList.label' | rokuT }}</span>
     <span class="list-name">{{ vm.name }}</span>
 
     <!--

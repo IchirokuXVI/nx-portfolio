@@ -36,7 +36,6 @@ export * from './lib/home/bottom-action-bar';
 export * from './lib/home/guest-upgrade-banner';
 export * from './lib/home/home-hero';
 export * from './lib/home/list-preview-card';
-export * from './lib/home/live-basket-card';
 export * from './lib/home/shopping-list-card';
 export * from './lib/home/state-panels';
 export * from './lib/home/zone-card';
