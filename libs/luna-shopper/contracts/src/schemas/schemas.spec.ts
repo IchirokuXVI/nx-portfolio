@@ -1404,3 +1404,109 @@ describe('contract schemas', () => {
     });
   });
 });
+
+describe('the shops near a point and the recent shops (plan 0164)', () => {
+  const candidate = {
+    id: 'loc-1',
+    supermarketId: 's-1',
+    supermarketName: { en: 'Lidl', es: 'Lidl' },
+    label: null,
+    address: 'Calle Mayor 3',
+    city: 'Córdoba',
+    postalCode: '14001',
+    inProfile: true,
+    distanceMetres: 120,
+    excluded: false,
+  };
+
+  it('supermarketLocation.nearby takes a point with the profile, and answers a pick or a reason', () => {
+    expect(
+      validateMessageRequest('supermarketLocation.nearby', {
+        latitude: 37.88,
+        longitude: -4.77,
+        accuracyMetres: 12,
+        profilePostalCodes: ['14001'],
+        excludedSupermarketIds: [],
+        excludedSupermarketLocationIds: [],
+      }).valid
+    ).toBe(true);
+    expect(
+      validateMessageRequest('supermarketLocation.nearby', {
+        latitude: 91,
+        longitude: -4.77,
+        accuracyMetres: 12,
+        profilePostalCodes: [],
+        excludedSupermarketIds: [],
+        excludedSupermarketLocationIds: [],
+      }).valid
+    ).toBe(false);
+    expect(
+      validateMessageResponse('supermarketLocation.nearby', {
+        candidates: [candidate],
+        pick: { locationId: 'loc-1', distanceMetres: 120 },
+        noPick: null,
+      }).valid
+    ).toBe(true);
+    for (const noPick of [
+      'NONE_NEARBY',
+      'LOW_ACCURACY',
+      'AMBIGUOUS',
+      'OUTSIDE_PROFILE',
+    ]) {
+      expect(
+        validateMessageResponse('supermarketLocation.nearby', {
+          candidates: [],
+          pick: null,
+          noPick,
+        }).valid
+      ).toBe(true);
+    }
+    expect(
+      validateMessageResponse('supermarketLocation.nearby', {
+        candidates: [],
+        pick: null,
+        noPick: 'SOMEWHERE_ELSE',
+      }).valid
+    ).toBe(false);
+    // A candidate always says whether the profile refuses it.
+    const { excluded: _excluded, ...unmarked } = candidate;
+    expect(
+      validateMessageResponse('supermarketLocation.nearby', {
+        candidates: [unmarked],
+        pick: null,
+        noPick: 'AMBIGUOUS',
+      }).valid
+    ).toBe(false);
+  });
+
+  it('supermarketLocation.shopsById answers the shop view of plan 0163', () => {
+    expect(
+      validateMessageRequest('supermarketLocation.shopsById', {
+        supermarketLocationIds: ['loc-1'],
+        profilePostalCodes: [],
+      }).valid
+    ).toBe(true);
+    const { distanceMetres: _d, excluded: _e, ...shop } = candidate;
+    expect(
+      validateMessageResponse('supermarketLocation.shopsById', {
+        shops: [shop],
+      }).valid
+    ).toBe(true);
+  });
+
+  it('purchase.recentShops answers ids and dates for one account', () => {
+    expect(
+      validateMessageRequest('purchase.recentShops', { userId: 'u-1' }).valid
+    ).toBe(true);
+    expect(
+      validateMessageResponse('purchase.recentShops', {
+        shops: [
+          {
+            supermarketLocationId: 'loc-1',
+            lastBoughtAt: '2026-09-20T10:00:00.000Z',
+          },
+        ],
+      }).valid
+    ).toBe(true);
+  });
+});

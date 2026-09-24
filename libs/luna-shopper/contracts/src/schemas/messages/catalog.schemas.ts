@@ -3,6 +3,7 @@ import {
   BulkOperationErrorCode,
   ItemCategory,
   ItemPriceWrittenBy,
+  NearbyShopNoPick,
   PostalCodeSource,
   PriceScopeKind,
   PriceShownBecause,
@@ -238,6 +239,14 @@ export const CATALOG_SCHEMA_IDS = {
   ),
   shopAvailabilityView: schemaId('catalog/ShopAvailabilityView'),
   shopItemAvailabilityView: schemaId('catalog/ShopItemAvailabilityView'),
+  // The shops near a point and the automatic pick (plan 0164).
+  nearbyShopsRequest: schemaId('msg/supermarketLocation.nearby/request'),
+  nearbyShopNoPick: schemaId('enums/NearbyShopNoPick'),
+  nearbyShopView: schemaId('catalog/NearbyShopView'),
+  nearbyShopPickView: schemaId('catalog/NearbyShopPickView'),
+  nearbyShopsView: schemaId('catalog/NearbyShopsView'),
+  shopsByIdRequest: schemaId('msg/supermarketLocation.shopsById/request'),
+  shopsByIdView: schemaId('catalog/ShopsByIdView'),
   upsertLocationItemRequest: schemaId(
     'msg/supermarketLocationItem.upsert/request'
   ),
@@ -2127,6 +2136,108 @@ const shopAvailabilityView = object(
   ['location', 'supermarket', 'availability']
 );
 
+/**
+ * The shop view of plan 0163, by id rather than by import: basket.schemas
+ * imports this file, and a ref names a schema by its id alone.
+ */
+const BASKET_SHOP_VIEW_ID = schemaId('basket/BasketShopView');
+
+/**
+ * Where a device says it is (plan 0164, section 1). The bounds are the ones a
+ * coordinate has, and the point is never stored.
+ */
+const nearbyShopsRequest = object(
+  CATALOG_SCHEMA_IDS.nearbyShopsRequest,
+  {
+    latitude: { type: 'number', minimum: -90, maximum: 90 },
+    longitude: { type: 'number', minimum: -180, maximum: 180 },
+    accuracyMetres: { type: 'number', minimum: 0 },
+    profilePostalCodes: array(nonEmptyString()),
+    excludedSupermarketIds: array(nonEmptyString()),
+    excludedSupermarketLocationIds: array(nonEmptyString()),
+  },
+  [
+    'latitude',
+    'longitude',
+    'accuracyMetres',
+    'profilePostalCodes',
+    'excludedSupermarketIds',
+    'excludedSupermarketLocationIds',
+  ]
+);
+
+/**
+ * The shop view of plan 0163 with its distance and whether the profile
+ * refuses it. The eight fields are listed rather than extended, because a
+ * contract schema is one flat object.
+ */
+const nearbyShopView = object(
+  CATALOG_SCHEMA_IDS.nearbyShopView,
+  {
+    id: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+    label: nullableLocalized(),
+    address: nullableString(),
+    city: nullableString(),
+    postalCode: nullableString(),
+    inProfile: boolean(),
+    distanceMetres: integer({ minimum: 0 }),
+    excluded: boolean(),
+  },
+  [
+    'id',
+    'supermarketId',
+    'supermarketName',
+    'label',
+    'address',
+    'city',
+    'postalCode',
+    'inProfile',
+    'distanceMetres',
+    'excluded',
+  ]
+);
+
+const nearbyShopPickView = object(
+  CATALOG_SCHEMA_IDS.nearbyShopPickView,
+  {
+    locationId: nonEmptyString(),
+    distanceMetres: integer({ minimum: 0 }),
+  },
+  ['locationId', 'distanceMetres']
+);
+
+/** Exactly one of `pick` and `noPick` is set (plan 0164, section 2). */
+const nearbyShopsView = object(
+  CATALOG_SCHEMA_IDS.nearbyShopsView,
+  {
+    candidates: array(ref(CATALOG_SCHEMA_IDS.nearbyShopView)),
+    pick: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.nearbyShopPickView), { type: 'null' }],
+    },
+    noPick: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.nearbyShopNoPick), { type: 'null' }],
+    },
+  },
+  ['candidates', 'pick', 'noPick']
+);
+
+const shopsByIdRequest = object(
+  CATALOG_SCHEMA_IDS.shopsByIdRequest,
+  {
+    supermarketLocationIds: array(nonEmptyString()),
+    profilePostalCodes: array(nonEmptyString()),
+  },
+  ['supermarketLocationIds', 'profilePostalCodes']
+);
+
+const shopsByIdView = object(
+  CATALOG_SCHEMA_IDS.shopsByIdView,
+  { shops: array(ref(BASKET_SHOP_VIEW_ID)) },
+  ['shops']
+);
+
 export const catalogSchemas: JsonSchema[] = [
   enumOf(CATALOG_SCHEMA_IDS.itemCategory, Object.values(ItemCategory)),
   enumOf(CATALOG_SCHEMA_IDS.unitOfMeasure, Object.values(UnitOfMeasure)),
@@ -2288,6 +2399,13 @@ export const catalogSchemas: JsonSchema[] = [
   shopAvailabilityRequest,
   shopItemAvailabilityView,
   shopAvailabilityView,
+  enumOf(CATALOG_SCHEMA_IDS.nearbyShopNoPick, Object.values(NearbyShopNoPick)),
+  nearbyShopsRequest,
+  nearbyShopView,
+  nearbyShopPickView,
+  nearbyShopsView,
+  shopsByIdRequest,
+  shopsByIdView,
 ];
 
 export const catalogMessageContracts: Record<
@@ -2549,5 +2667,13 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_LOCATION_PATTERNS.shopAvailability]: {
     request: CATALOG_SCHEMA_IDS.shopAvailabilityRequest,
     response: CATALOG_SCHEMA_IDS.shopAvailabilityView,
+  },
+  [SUPERMARKET_LOCATION_PATTERNS.nearby]: {
+    request: CATALOG_SCHEMA_IDS.nearbyShopsRequest,
+    response: CATALOG_SCHEMA_IDS.nearbyShopsView,
+  },
+  [SUPERMARKET_LOCATION_PATTERNS.shopsById]: {
+    request: CATALOG_SCHEMA_IDS.shopsByIdRequest,
+    response: CATALOG_SCHEMA_IDS.shopsByIdView,
   },
 };

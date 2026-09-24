@@ -3,6 +3,7 @@ import type {
   BulkOperationErrorCode,
   ItemCategory,
   ItemPriceWrittenBy,
+  NearbyShopNoPick,
   PostalCodeSource,
   PriceScopeKind,
   PriceShownBecause,
@@ -11,6 +12,7 @@ import type {
 } from '../enums/catalog.enums';
 import type { PageQuery, Paginated } from '../pagination';
 import type { AdminCredential } from './admin-auth.messages';
+import type { BasketShopView } from './basket.messages';
 
 /**
  * Catalog message contracts (plan 0012). The gateway calls these on the catalog
@@ -111,6 +113,22 @@ export const SUPERMARKET_LOCATION_PATTERNS = {
    * An unknown shop is the ordinary 404 for a location.
    */
   shopAvailability: 'supermarketLocation.shopAvailability',
+  /**
+   * The shops near a point, and whether one of them is clearly the shop the
+   * person is standing in (plan 0164, sections 1 to 3).
+   *
+   * The point travels in this one message and is never stored, cached or
+   * logged. The gateway sends the profile's postal codes and refusals beside
+   * it, because catalog decides the pick and the pick depends on both. Service
+   * to service and carrying no `userId`: the gateway has already decided
+   * whose profile it is.
+   */
+  nearby: 'supermarketLocation.nearby',
+  /**
+   * Several shops by id, named for a person (plan 0164, section 4). Unknown ids
+   * are left out, so a shop deleted since it was recorded is simply absent.
+   */
+  shopsById: 'supermarketLocation.shopsById',
 } as const;
 
 export const ITEM_PATTERNS = {
@@ -1285,6 +1303,98 @@ export interface ShopItemAvailabilityView {
   itemId: string;
   /** True, false, or null when the row exists and says nothing. */
   available: boolean | null;
+}
+
+/**
+ * Whether a shop is in a pricing profile (plan 0163, section 3): its postal
+ * code is one of the profile's postal codes.
+ *
+ * A fact for the client to warn about ("this shop is outside your areas"). A
+ * shop with no postal code is in no profile, because there is nothing to
+ * compare. The codes are compared as they are stored, trimmed: a profile's
+ * codes are the national table's, and so are a shop's.
+ *
+ * Here rather than in the gateway since plan 0164, because catalog composes
+ * the shops near a point with the same rule the basket read uses, and one rule
+ * written twice is two rules.
+ */
+export function isInProfile(
+  postalCode: string | null,
+  profilePostalCodes: readonly string[]
+): boolean {
+  const code = postalCode?.trim();
+  if (!code) {
+    return false;
+  }
+  return profilePostalCodes.some((candidate) => candidate.trim() === code);
+}
+
+/**
+ * Where a device says it is, and what the profile it shops with says (plan
+ * 0164, section 1).
+ *
+ * **The point is never stored, cached, logged or put in an error.** It is read
+ * once, to find the shops around it, and nothing that answers carries it back.
+ */
+export interface NearbyShopsRequest {
+  /** Degrees. */
+  latitude: number;
+  /** Degrees. */
+  longitude: number;
+  /** The radius the device is sure of, in metres. Above 150 nothing is picked. */
+  accuracyMetres: number;
+  /** The profile's postal codes, for `inProfile`. Empty when there is no profile. */
+  profilePostalCodes: string[];
+  /** The chains the profile refuses (plan 0064). */
+  excludedSupermarketIds: string[];
+  /** The shops the profile refuses (plan 0064). */
+  excludedSupermarketLocationIds: string[];
+}
+
+/**
+ * One shop near the point (plan 0164, section 1): the shop view of plan 0163,
+ * with how far it is and whether the profile refuses it.
+ */
+export interface NearbyShopView extends BasketShopView {
+  /** From the point to the shop, rounded to the metre. At most 750. */
+  distanceMetres: number;
+  /**
+   * The profile refuses this shop, or its whole chain (plan 0064). It is still
+   * a candidate, so a person can choose it by hand, and it is never picked
+   * automatically.
+   */
+  excluded: boolean;
+}
+
+/** The shop picked for the person, which the client names so they can check it. */
+export interface NearbyShopPickView {
+  locationId: string;
+  distanceMetres: number;
+}
+
+/**
+ * The shops near a point and the automatic pick (plan 0164, section 2).
+ *
+ * **Exactly one of `pick` and `noPick` is set.** The candidates are every
+ * shop within 750 m in every case, nearest first, including the ones outside
+ * the profile and the ones it refuses.
+ */
+export interface NearbyShopsView {
+  candidates: NearbyShopView[];
+  pick: NearbyShopPickView | null;
+  noPick: NearbyShopNoPick | null;
+}
+
+/** Several shops by id, named against a profile's postal codes (plan 0164, section 4). */
+export interface ShopsByIdRequest {
+  supermarketLocationIds: string[];
+  /** The profile's postal codes, for `inProfile`. Empty when there is no profile. */
+  profilePostalCodes: string[];
+}
+
+/** The shops that still exist, in no particular order. */
+export interface ShopsByIdView {
+  shops: BasketShopView[];
 }
 
 export interface ListSupermarketLocationsRequest extends PageQuery {
