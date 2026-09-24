@@ -112,7 +112,14 @@ export class BasketCatalogService {
   async compose(
     basket: BasketView,
     participantId: string,
-    locationId: string | undefined
+    locationId: string | undefined,
+    /**
+     * What core answered `basket.searchScope` with, when the caller already
+     * asked it (plan 0165): null when that failed, and absent to have it asked
+     * here. The read at a shop asks it first, to learn the basket's own shop
+     * before the rows, and a second ask would be the same round trip twice.
+     */
+    searchScope?: BasketSearchScope | null
   ): Promise<BasketResult> {
     const own = basket.supermarketLocationId ?? null;
     if (own && locationId && locationId !== own) {
@@ -124,7 +131,9 @@ export class BasketCatalogService {
     const itemIds = [...new Set(basket.rows.flatMap((row) => row.optionIds))];
 
     const [owner, shop] = await Promise.all([
-      this.ownerScopeOf(basket.id, participantId),
+      searchScope === undefined
+        ? this.ownerScopeOf(basket.id, participantId)
+        : this.ownerScopeFrom(searchScope),
       shopId ? this.shopAt(shopId, itemIds) : Promise.resolve(null),
     ]);
     const resolved = owner?.view;
@@ -173,6 +182,55 @@ export class BasketCatalogService {
         ? withShopInScopes(described, shop, basket.servesLocations)
         : described,
     };
+  }
+
+  /**
+   * The read's shop and its chain, learned **before** core is asked for the
+   * rows (plan 0165).
+   *
+   * Core counts where each line was bought at the read's chain, and core
+   * cannot ask catalog which chain a shop belongs to, so the gateway says it on
+   * the request. The shop is the basket's own if it has one, else `locationId`,
+   * else none, which is the order {@link compose} reads it in. The basket's own
+   * shop comes from `basket.searchScope`, the question the composition asks
+   * anyway, so its answer is handed back for {@link compose} to reuse.
+   *
+   * A basket started at another shop refuses `locationId` here, before the
+   * rows are read, with the same `basket_shop_locked` the composition answers.
+   *
+   * **It never throws otherwise.** A chain catalog cannot name costs the read
+   * its `usual` half and nothing else: every row then carries null.
+   */
+  async readShopOf(
+    basketId: string,
+    participantId: string,
+    locationId: string | undefined
+  ): Promise<{
+    searchScope: BasketSearchScope | null;
+    supermarketId: string | undefined;
+  }> {
+    const searchScope = await this.searchScopeOf(basketId, participantId);
+    const own = searchScope?.supermarketLocationId ?? null;
+    if (own && locationId && locationId !== own) {
+      throw new BasketShopLockedException(
+        'This basket was started at another shop'
+      );
+    }
+    const shopId = own ?? locationId;
+    return {
+      searchScope,
+      supermarketId: shopId ? await this.chainOf(shopId) : undefined,
+    };
+  }
+
+  /**
+   * The chain a shop belongs to, or undefined when catalog cannot say (plan
+   * 0165). The shop alone, with no products, which is the smallest question
+   * `shopAvailability` answers.
+   */
+  async chainOf(supermarketLocationId: string): Promise<string | undefined> {
+    const shop = await this.shopAt(supermarketLocationId, []);
+    return shop?.supermarket.id;
   }
 
   /**
@@ -336,12 +394,29 @@ export class BasketCatalogService {
     scope: BasketSearchScope;
     view: CatalogScopeView | undefined;
   } | null> {
+    return this.ownerScopeFrom(
+      await this.searchScopeOf(basketId, participantId)
+    );
+  }
+
+  /** The same answer, from a `basket.searchScope` already asked. */
+  private async ownerScopeFrom(scope: BasketSearchScope | null): Promise<{
+    scope: BasketSearchScope;
+    view: CatalogScopeView | undefined;
+  } | null> {
+    return scope ? { scope, view: await this.describeScopes(scope) } : null;
+  }
+
+  /** Core's `basket.searchScope`, or null when core could not answer it. */
+  private async searchScopeOf(
+    basketId: string,
+    participantId: string
+  ): Promise<BasketSearchScope | null> {
     try {
-      const scope = await this.nats.send<BasketSearchScope>(
+      return await this.nats.send<BasketSearchScope>(
         BASKET_PATTERNS.searchScope,
         { basketId, participantId }
       );
-      return { scope, view: await this.describeScopes(scope) };
     } catch {
       return null;
     }
