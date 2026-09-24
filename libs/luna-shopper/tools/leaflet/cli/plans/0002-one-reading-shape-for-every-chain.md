@@ -1,3 +1,5 @@
+> **PR:** [#462](https://github.com/IchirokuXVI/nx-portfolio/pull/462)
+
 # 0002 One reading shape for every chain
 
 > Found by `apps/luna-shopper-backend/plans/0150` (report finding 1, and
