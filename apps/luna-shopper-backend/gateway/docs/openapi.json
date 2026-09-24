@@ -26416,7 +26416,6 @@
               "deza-web",
               "carrefour-web",
               "lidl-api",
-              "osm-places",
               "manual"
             ],
             "description": "`osm-places` is refused with 400: OpenStreetMap is asked for every postal code, so a source row for it switches nothing on."

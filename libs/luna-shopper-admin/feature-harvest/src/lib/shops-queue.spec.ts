@@ -678,3 +678,76 @@ describe('a chain with more shops than one page', () => {
     expect(page.rows().length).toBeGreaterThan(first);
   });
 });
+
+/**
+ * Admin plan 0034, section 3; backend plan 0154. Each unmapped shop shows the
+ * shops of ours it may be, best first, with a strong mark where every printed
+ * token was found, and one press maps it. Nothing maps without that press.
+ */
+describe('the source shops queue, with candidates', () => {
+  async function reviewing() {
+    const rendered = await opened();
+    rendered.fixture.nativeElement.querySelectorAll('.views button')[0].click();
+    await drain();
+    rendered.fixture.detectChanges();
+    return rendered;
+  }
+
+  it('lists the candidates best first, with the strong one marked', async () => {
+    const { fixture, page } = await reviewing();
+
+    expect(page.current()?.id).toBe('shop-t1');
+    expect(
+      page.current()?.candidates.map((found) => found.supermarketLocationId)
+    ).toEqual(['loc_cordoba_centro', 'loc_cordoba_oeste']);
+
+    const items = fixture.nativeElement.querySelectorAll('.candidates li');
+    expect(items).toHaveLength(2);
+    expect(items[0].textContent).toContain('Marrubial');
+    expect(items[0].textContent).toContain('harvest.shops.candidates.strong');
+    expect(items[1].textContent).not.toContain(
+      'harvest.shops.candidates.strong'
+    );
+  });
+
+  it('maps nothing until a candidate is pressed', async () => {
+    const { calls } = await reviewing();
+
+    expect(named(calls, 'mapShop')).toHaveLength(0);
+  });
+
+  it('maps the shop to the pressed candidate, in one press', async () => {
+    const { fixture, page, calls } = await reviewing();
+
+    fixture.nativeElement.querySelectorAll('.candidates li button')[1].click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(named(calls, 'mapShop')).toEqual([
+      ['shop-t1', { supermarketLocationId: 'loc_cordoba_oeste' }],
+    ]);
+    // Mapped, so it leaves the default filter and no dialog was asked for.
+    expect(page.rows().some((row) => row.id === 'shop-t1')).toBe(false);
+    expect(page.confirming()).toBeNull();
+  });
+
+  it('offers no candidates on a row that is already mapped', async () => {
+    const { page } = await opened();
+
+    page.chooseStatus({ target: { value: 'ACTIVE' } } as unknown as Event);
+    await drain();
+
+    expect(page.rows().length).toBeGreaterThan(0);
+    for (const row of page.rows()) {
+      expect(row.candidates).toEqual([]);
+    }
+  });
+
+  it('names the best candidate in the list view', async () => {
+    const { fixture } = await opened();
+
+    expect(fixture.nativeElement.querySelector('.rows').textContent).toContain(
+      'harvest.shops.candidates.best'
+    );
+  });
+});

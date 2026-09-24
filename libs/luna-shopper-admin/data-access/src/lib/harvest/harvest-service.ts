@@ -87,6 +87,18 @@ export interface HarvestServiceI {
     input: Wire.ImportDiscoveredPlaceDto
   ): Promise<Wire.HarvestDiscoveredPlaceView>;
   rejectPlace(id: string): Promise<Wire.HarvestDiscoveredPlaceView>;
+  /**
+   * Bind a place to a shop the catalog already holds (backend plan 0152,
+   * section 3).
+   *
+   * The other answer to an import refused with `place_matches_location`. It
+   * never creates a shop: it fills only what the named shop lacks and marks
+   * the place imported. The shop must be one of the place's own chain.
+   */
+  linkPlace(
+    id: string,
+    input: Wire.LinkDiscoveredPlaceDto
+  ): Promise<Wire.HarvestDiscoveredPlaceView>;
 
   /**
    * The one queue (admin plan 0014, section 1; backend plan 0086, section 10).
@@ -182,6 +194,33 @@ export interface HarvestServiceI {
    * and the run does not carry.
    */
   exportRun(id: string): Promise<Readonly<Record<string, unknown>>>;
+
+  /**
+   * The price rows one run wrote (admin plan 0033; backend plan 0160).
+   *
+   * The rows it inserted and the rows whose `lastObservedAt` it moved last,
+   * each marked `writtenBy`. Catalog answers it, at
+   * `/v1/admin/catalog/item-prices?runId=`, and it lives here beside the export
+   * because the run screen is what asks: the export is the document a run
+   * read, and this is what it left in the catalog.
+   */
+  listRunPrices(
+    runId: string,
+    query: RunPriceQuery
+  ): Promise<Wire.CatalogItemPricePage>;
+
+  /**
+   * The source rows that name one product, newest observation first (backend
+   * plan 0160).
+   *
+   * Each carries `eanSharedBy`, how many rows of its chain list the same
+   * barcode. A product nothing names answers an empty page rather than a 404,
+   * because the harvester does not own products.
+   */
+  listItemEntries(
+    itemId: string,
+    query: PageQuery
+  ): Promise<Wire.HarvestItemSourceEntryPage>;
 
   listShops(query: ShopQuery): Promise<Wire.HarvestSourceLocationPage>;
   mapShop(
@@ -285,6 +324,16 @@ export interface RunQuery extends PageQuery {
   readonly reverted?: boolean;
   /** Runs started from one preset (backend plan 0120, section 7). */
   readonly presetId?: string;
+}
+
+/**
+ * A run's price rows, narrowed to one product (backend plan 0160).
+ *
+ * The product is the only narrowing the route takes with a run: a scope is
+ * refused beside `runId`, so there is no field for one here.
+ */
+export interface RunPriceQuery extends PageQuery {
+  readonly itemId?: string;
 }
 
 /**
