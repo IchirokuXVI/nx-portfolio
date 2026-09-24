@@ -1,22 +1,14 @@
 @use '../basket-shared' as shared;
 
-// A screen tall page, so the composer at the end of it is at the bottom of the
-// screen rather than under the last line of a two line basket (plan 0053, section 6).
-//
-// `block-size: 100%` alone cannot do that: standalone there is no definite height
-// above this host for the percentage to resolve against, so it degrades to `auto`
-// and the page is as tall as what is in it. The minimum is the viewport less the one
-// inset between the two, `.app-main`'s bottom safe area. Mounted in the shell the
-// percentage does resolve and is already at least this, so the minimum never binds.
-// The list page's host says the same thing for the same reason.
-//
-// `svh` and not `dvh`: the app is sized in the small viewport everywhere, and
-// `AppLayout`'s stylesheet says why.
+// Exactly as tall as the app's page slot, so the composer at the end of it is at the
+// foot of the slot, directly above the bar, rather than under the last line of a two
+// line basket (plan 0053, section 6). The slot has a definite height in both run modes,
+// because the app is a frame one viewport tall that never scrolls (velista 0106). The
+// list page's host says the same thing for the same reason.
 :host {
   display: flex;
   flex-direction: column;
   block-size: 100%;
-  min-block-size: calc(100svh - var(--app-safe-bottom));
 }
 
 .page {
@@ -38,41 +30,31 @@
   min-block-size: 0;
   overflow-y: auto;
   // **No bottom safe area padding**, which is the one way this differs from the
-  // shared mixin: the composer is pinned below this column and owns that inset
-  // itself, so keeping it here would leave a gap the height of a home indicator
-  // between the last line and the field. The inset is still applied once, by
-  // `.app-main`, for the finished basket that draws no composer at all.
+  // shared mixin: the composer sits below this column and owns that inset itself,
+  // so keeping it here would leave a gap the height of a home indicator between the
+  // last line and the field. The basket is drawn with the bar, which carries the
+  // inset whenever the composer is not there.
+  //
+  // This is the one scroll container on the screen in both run modes (velista
+  // 0106), so the tools bar sticks to its top standalone and mounted alike.
   padding-block-end: var(--app-space-5);
-}
-
-// Standalone the document scrolls, so `.page` must not be a scroll container of its
-// own, or the sticky tools bar sticks to a box that never moves (velista 0079,
-// section 2). Nothing else changes: standalone `.page` is already as tall as its
-// content, so `overflow-y: auto` never produced a scroll there anyway.
-:host(.standalone) .page {
-  overflow-y: visible;
 }
 
 // Always at the bottom of the screen, which is what makes the field reachable with
 // a thumb no matter how long the basket is. The same treatment, and the same
 // reasoning, as the list page's dock.
 //
-// Sticky rather than fixed. Fixed would take it out of the flow and leave the last
-// line of a full basket underneath it forever, with no honest way to reserve the
-// space, since the composer's height is one row of text plus whatever the safe area
-// inset is on this device. Sticky keeps the box in the flow.
+// An ordinary item of the host's column, after `.page` (velista 0106). It used to be
+// `position: sticky` at the bottom of the document, which is exactly the strip the
+// bar covered. As the item after the scroller it is never over a line and nothing is
+// ever over it.
 //
-// It is also what keeps a footer off a sheet (plan 0040). A sheet is fixed to the
-// viewport at its own stacking order, well above this one, so the composer is
-// covered by the sheet and its scrim rather than floating a text field over the
-// settle controls.
+// A sheet still covers it (plan 0040): a sheet is fixed to the viewport at its own
+// stacking order, so the composer is under the sheet and its scrim rather than
+// floating a text field over the settle controls.
 .composer-dock {
   display: block;
-  position: sticky;
-  inset-block-end: 0;
-  // Above the rows it floats over. The composer paints its own surface, so without
-  // a stacking order a row's own raised background can show through it.
-  z-index: 1;
+  flex: none;
 }
 
 lib-line-composer {
@@ -551,20 +533,6 @@ lib-line-composer {
 .stale-glyph {
   flex-shrink: 0;
   font-size: var(--app-icon-sm);
-}
-
-// The composer, docked at the foot of the page (velista 0053, back with a target
-// list in 0092).
-//
-// `sticky` rather than `fixed`, so it sits inside the page's own scroll
-// container and the rows scroll under it. Above the rows it floats over: the
-// composer paints its own surface, and without a stacking order a row's raised
-// background shows through it.
-.composer-dock {
-  display: block;
-  position: sticky;
-  inset-block-end: 0;
-  z-index: 1;
 }
 
 // Where the next line goes, above the field (velista 0092, section 7.2).

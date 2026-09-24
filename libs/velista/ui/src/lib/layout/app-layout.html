@@ -8,8 +8,13 @@
   drawn below, outside this element, so it is the one thing left that does.
 -->
 <main [attr.inert]="tourUp() ? '' : null" class="app-main">
-  @if (mustUpdate()) {
-    <!--
+  <!--
+    The page slot and the bar are the two items of one column (velista 0106). The slot
+    scrolls and the document does not, so the bar is never over anything.
+  -->
+  <div class="app-page">
+    @if (mustUpdate()) {
+      <!--
       A build the deployment refuses (plan 0072 D1). First, and ahead of the startup
       screen and the connection screen both: a refused build usually looks offline as
       well, because every request it makes fails, and this is the screen that says why.
@@ -19,32 +24,19 @@
       actions end in a request this server will not answer, so there is nothing here
       worth showing.
     -->
-    <lib-update-screen
-      (reload)="reloadForUpdate()"
-      [body]="'update.required.body' | rokuT"
-      [failedBody]="'update.failed.body' | rokuT"
-      [failedTitle]="'update.failed.title' | rokuT"
-      [reloadLabel]="'update.failed.reload' | rokuT"
-      [spent]="updateFailed()"
-      [title]="'update.required.title' | rokuT"
-    />
-  } @else if (rendersNow()) {
-    <router-outlet></router-outlet>
-
-    <!--
-      The bar at the bottom of the app (plan 0097). **After the outlet**, which is what
-      puts it after the page in the focus order without anything carrying a `tabindex`,
-      and **inside this branch**, which is what keeps it off the startup, connection and
-      update screens by construction: those replace the outlet rather than covering it,
-      so no page is drawn at all and there is nothing for a bar to sit under.
-
-      Whether it is drawn on the screen below is `NavChrome`'s answer, not this file's.
-    -->
-    @if (navVisible()) {
-      <lib-app-nav [badge]="navBadge()" [url]="navUrl()" libTourAnchor="nav" />
-    }
-  } @else {
-    <!--
+      <lib-update-screen
+        (reload)="reloadForUpdate()"
+        [body]="'update.required.body' | rokuT"
+        [failedBody]="'update.failed.body' | rokuT"
+        [failedTitle]="'update.failed.title' | rokuT"
+        [reloadLabel]="'update.failed.reload' | rokuT"
+        [spent]="updateFailed()"
+        [title]="'update.required.title' | rokuT"
+      />
+    } @else if (rendersNow()) {
+      <router-outlet></router-outlet>
+    } @else {
+      <!--
       The startup gate (plan 0071 D3). The outlet is **not created** while the app is
       waiting for its first answer from the backend, rather than being covered: a page
       constructed behind a screen runs its resolvers and sends its requests on behalf
@@ -54,14 +46,35 @@
       Landing is the one route that draws through this, and it says so itself in route
       data rather than being named here.
     -->
-    <lib-startup-screen
-      (retry)="retryConnection()"
-      [connecting]="'startup.connecting' | rokuT"
-      [retryLabel]="'startup.slow.retry' | rokuT"
-      [slow]="startupSlow()"
-      [slowBody]="'startup.slow.body' | rokuT"
-      [slowTitle]="'startup.slow.title' | rokuT"
-    />
+      <lib-startup-screen
+        (retry)="retryConnection()"
+        [connecting]="'startup.connecting' | rokuT"
+        [retryLabel]="'startup.slow.retry' | rokuT"
+        [slow]="startupSlow()"
+        [slowBody]="'startup.slow.body' | rokuT"
+        [slowTitle]="'startup.slow.title' | rokuT"
+      />
+    }
+  </div>
+
+  @if (rendersNow() && !mustUpdate()) {
+    <!--
+      The bar at the bottom of the app (plan 0097). **After the page slot**, which is
+      what puts it after the page in the focus order without anything carrying a
+      `tabindex`, and **only where the outlet exists**, which keeps it off the startup,
+      connection and update screens by construction: those replace the outlet rather
+      than covering it, so no page is drawn at all and there is nothing for a bar to
+      sit under.
+
+      Whether it is drawn on the screen below is `NavChrome`'s answer, not this file's.
+      While a sheet has put it away the column keeps its room, so the page under the
+      sheet does not reflow.
+    -->
+    @if (navVisible()) {
+      <lib-app-nav [badge]="navBadge()" [url]="navUrl()" libTourAnchor="nav" />
+    } @else if (navReserved()) {
+      <div aria-hidden="true" class="nav-room"></div>
+    }
   }
 </main>
 

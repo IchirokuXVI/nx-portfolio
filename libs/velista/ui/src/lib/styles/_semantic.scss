@@ -348,8 +348,9 @@ $app-content-max: 480px;
   // inset. This is the value the bar itself reads, and it is never redefined.
   --app-nav-safe-bottom: env(safe-area-inset-bottom, 0px);
   --app-nav-pad-block-end: max(var(--app-space-6), var(--app-nav-safe-bottom));
-  // What the page above has to reserve, written once so the bar's own height and the
-  // room made for it cannot drift apart.
+  // How tall the bar is, written once so the bar's own height and the room the app
+  // keeps for it while a sheet has put it away cannot drift apart (velista 0106: the
+  // bar is in the app's column, so no page reserves anything for it any more).
   --app-nav-height: calc(
     var(--app-nav-tab-height) + var(--app-space-3) +
       var(--app-nav-pad-block-end)

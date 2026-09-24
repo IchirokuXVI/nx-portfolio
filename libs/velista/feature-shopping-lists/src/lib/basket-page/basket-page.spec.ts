@@ -1578,15 +1578,19 @@ describe('searching the basket', () => {
       expect(query(fixture, '.tools-bar lib-basket-row')).toBeNull();
     });
 
-    it('marks the standalone build, where the document is what scrolls', async () => {
-      // This harness supplies the standalone base path. The class is what lets the
-      // stylesheet stop `.page` being the bar's scroll container there, which jsdom
-      // cannot lay out, so the class is the half a spec can see.
-      const { fixture } = await render({ lines: threeLines });
+    it('scrolls in its own column in both run modes, with the composer after it', () => {
+      // velista 0106. The app is a frame that never scrolls, so `.page` is the tools
+      // bar's scroll container standalone and mounted alike, and the composer is the
+      // next item of the host rather than a row pinned to the document's foot, which
+      // is the strip the bottom bar covered. jsdom cannot lay any of this out, so the
+      // stylesheet is the half a spec can see.
+      const css = readFileSync(join(__dirname, 'basket-page.scss'), 'utf8')
+        // Comments out, because the stylesheet says what it used to do.
+        .replace(/\/\/.*$/gm, '');
 
-      expect(
-        (fixture.nativeElement as HTMLElement).classList.contains('standalone')
-      ).toBe(true);
+      expect(css).not.toContain('.standalone');
+      expect(css).not.toMatch(/position:\s*sticky/);
+      expect(css).toMatch(/\.composer-dock\s*\{[^}]*flex:\s*none/);
     });
   });
 
