@@ -39,12 +39,12 @@ export function makeCatalog({ items = [], groups = [] } = {}) {
     /**
      * The admin group search, standing in for the tsvector ranked one.
      *
-     * A group scores one per query word it answers to and the best score comes
-     * first, which is the property the library depends on. Requiring every word
-     * would be a stricter search than production's and would make the fake, not
-     * the library, decide what a candidate is: a product is named `Leche
-     * semidesnatada Hacendado 1 L` and the group it belongs to is named `Leche
-     * semidesnatada`.
+     * Every query word has to be answered, the way production's tsquery joins
+     * its terms with AND. Production also falls back to trigram similarity on
+     * the whole query, which only rescues a query about as short as a group
+     * name. A product named `Leche semidesnatada Hacendado 1 L` therefore finds
+     * nothing by its whole name, and the group `Leche semidesnatada` is found
+     * by a shorter key from the ladder in `itemSearchKeys`.
      */
     searchGroups(query) {
       const words = String(query ?? '')
@@ -65,11 +65,14 @@ export function makeCatalog({ items = [], groups = [] } = {}) {
           ]
             .filter(Boolean)
             .join(' ')
-            .toLowerCase();
+            .toLowerCase()
+            // Production folds accents too: `champu` finds `Champú`.
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
           const score = words.filter((word) => haystack.includes(word)).length;
           return { group, score };
         })
-        .filter((hit) => hit.score > 0)
+        .filter((hit) => hit.score === words.length)
         .sort((a, b) => b.score - a.score)
         .map((hit) => hit.group);
     },
@@ -122,6 +125,17 @@ export function makeFakeSession({
     async fetch(path, init = {}) {
       const query = init.query ?? null;
       calls.push({ path, query, method: init.method ?? 'GET' });
+
+      // The gateway's own validation: a search text over 120 characters is a
+      // 400 on both the item and the group search, and one long product name
+      // used to end a whole walk on it (plan 0002).
+      if (typeof query?.query === 'string' && query.query.length > 120) {
+        const error = new Error(
+          `GET ${path} answered 400: query must be shorter than or equal to 120 characters`
+        );
+        error.status = 400;
+        throw error;
+      }
 
       if (path === '/v1/admin/catalog/items') {
         return catalog.ungroupedPage({

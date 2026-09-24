@@ -1,3 +1,5 @@
+> **PR:** [#472](https://github.com/IchirokuXVI/nx-portfolio/pull/472)
+
 # 0100: the catalog tab
 
 > Backend half: `apps/luna-shopper-backend/plans/0146`, which must be merged first.

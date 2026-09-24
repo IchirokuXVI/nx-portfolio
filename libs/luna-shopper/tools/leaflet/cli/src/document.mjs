@@ -14,9 +14,14 @@
  * not print stays null and survives into the file as null, which is what makes
  * the document carry no `validity` and say so in its warnings.
  *
+ * **A person's word outranks the cover** (plan 0003). `--valid-from` and
+ * `--valid-until` set a bound on any engine, a bound somebody typed into
+ * `leaflet.json` survives every resume, and the cover is asked only for what
+ * neither of them says. See `resolveValidity` and `mergeLeafletJson`.
+ *
  * **A drift refusal stops the run before validate**, and `--update-baseline` is
  * never passed. A baseline is accepted by a person, by hand, after looking at
- * the document.
+ * the document, so the report prints the exact command and never runs it.
  *
  * **The command never uploads.** The report ends by printing the document's
  * path and the call to make with it. A leaflet reading is accepted by a person
@@ -31,6 +36,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runStreamed } from './child.mjs';
+import { updateBaselineCommand } from './commands.mjs';
 import { formatWarning, warning } from './read-pages.mjs';
 
 /** The three scripts are addressed beside this file rather than through the
@@ -122,15 +128,126 @@ export function extractionTool({ engine, model, slug, notice = null }) {
   return notice ? `${base}. ${notice}` : base;
 }
 
-/** Every validity field that was filled, for the operator to confirm. */
-export function formatValidity(leaflet) {
-  const lines = [
-    'Validity, as read from the cover. Confirm it before you upload:',
+/** What a date bound must look like, and a day that exists. */
+export function isDay(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const date = new Date(`${value}T00:00:00Z`);
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+  );
+}
+
+/**
+ * The window, bound by bound, from whoever said it with the most authority.
+ *
+ * - `stated` is this run's `--valid-from` and `--valid-until`, typed now.
+ * - `existing` is `leaflet.json` as it stands, which a person may have filled
+ *   by hand between two runs.
+ * - `recorded` is the flags an earlier run of this `--out` was given, kept in
+ *   `run.json`.
+ * - `asked` is what the model read off the cover, or null when it was not asked.
+ *
+ * Answers the window and where each field came from, which is printed beside it.
+ */
+export function resolveValidity({
+  stated = {},
+  existing = null,
+  recorded = null,
+  asked = null,
+}) {
+  const sources = [
+    ['this run', stated],
+    ['leaflet.json', existing],
+    ['run.json', recorded],
+    ['the cover', asked],
   ];
+  const pick = (field, from = sources) => {
+    for (const [name, bag] of from) {
+      const value = bag?.[field];
+      if (value !== null && value !== undefined && value !== '') {
+        return [value, name];
+      }
+    }
+    return [null, null];
+  };
+  const [from, fromOrigin] = pick('from');
+  const [until, untilOrigin] = pick('until');
+  // The printed wording is only ever read, off the cover or by a person.
+  const [rawText, rawOrigin] = pick('raw_text', [sources[1], sources[3]]);
+  return {
+    validity: { from, until, raw_text: rawText },
+    origins: { from: fromOrigin, until: untilOrigin, raw_text: rawOrigin },
+  };
+}
+
+/** Whether the window is known without asking the cover. */
+export const windowKnown = ({
+  stated = {},
+  existing = null,
+  recorded = null,
+}) =>
+  ['from', 'until'].every((field) =>
+    [stated, existing, recorded].some(
+      (bag) => bag?.[field] !== null && bag?.[field] !== undefined
+    )
+  );
+
+/** `leaflet.json` as it stands in `importDir`, or null. */
+export function readLeafletJson(
+  importDir,
+  { exists = existsSync, readFile = readFileSync } = {}
+) {
+  const path = join(importDir, 'leaflet.json');
+  if (!exists(path)) {
+    return null;
+  }
+  try {
+    return JSON.parse(readFile(path, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+const isObject = (value) =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * A fresh `leaflet.json` over the one already there, keeping what a person
+ * filled.
+ *
+ * `validity` is resolved before this is called, with `leaflet.json` as one of
+ * its sources, so it is taken from `fresh`. `campaign`, `notes` and
+ * `fixed_sections` are the other fields the README tells a person to fill, and a
+ * resume used to write the file whole and lose them. `pdf`, `page_count` and
+ * `extraction` describe this run and are the run's to write.
+ */
+export function mergeLeafletJson(fresh, existing) {
+  if (!isObject(existing)) {
+    return fresh;
+  }
+  return {
+    ...fresh,
+    fixed_sections: isObject(existing.fixed_sections)
+      ? existing.fixed_sections
+      : fresh.fixed_sections,
+    campaign: existing.campaign ?? fresh.campaign,
+    notes:
+      Array.isArray(existing.notes) && existing.notes.length > 0
+        ? existing.notes
+        : fresh.notes,
+  };
+}
+
+/** Every validity field that was filled, for the operator to confirm. */
+export function formatValidity(leaflet, origins = {}) {
+  const lines = ['Validity. Confirm it before you upload:'];
   for (const field of ['from', 'until', 'raw_text']) {
     const value = leaflet.validity[field];
+    const origin = origins[field] ? `, from ${origins[field]}` : '';
     lines.push(
-      `  ${field}: ${value === null ? 'null (the page printed none)' : value}`
+      `  ${field}: ${value === null ? 'null (the page printed none)' : `${value}${origin}`}`
     );
   }
   if (leaflet.validity.from === null || leaflet.validity.until === null) {
@@ -193,7 +310,8 @@ export async function runScripts({
   if (!exists(chain.baselinePath)) {
     stdout.write(
       `\nNo baseline for ${slug} yet, so there is nothing to drift check against. ` +
-        'Create one by hand with build-document.mjs --update-baseline once you have accepted this reading.\n'
+        'Once you have accepted this reading, create one with:\n' +
+        `  ${updateBaselineCommand({ importDir, leafletPath: join(importDir, 'leaflet.json'), document, slug })}\n`
     );
   } else {
     stdout.write('\nDrift check.\n');
@@ -246,7 +364,17 @@ export function formatReport({
   readFile = readFileSync,
   exists = existsSync,
   notice = null,
+  importDir = null,
+  resume = null,
 }) {
+  const baseline = importDir
+    ? updateBaselineCommand({
+        importDir,
+        leafletPath: join(importDir, 'leaflet.json'),
+        document: outcome.document,
+        slug,
+      })
+    : null;
   const lines = ['', 'Report'];
   lines.push(
     `  pages read: ${pagesRead}${skipped.length > 0 ? `, ${skipped.length} kept by --resume` : ''}`
@@ -290,6 +418,16 @@ export function formatReport({
       'The drift check refused this reading, so it was not validated and it is not ready.',
       'Read every statistic it named above before you do anything else with it.'
     );
+    if (baseline) {
+      lines.push(
+        'If every one of them is the leaflet and not the reading, accept it as the',
+        `new baseline, then run ${resume ? 'the resume below' : 'the same command'} again:`,
+        `  ${baseline}`
+      );
+    }
+    if (resume) {
+      lines.push('', 'Pick the run back up with:', `  ${resume}`);
+    }
     return lines.join('\n');
   }
 
@@ -299,7 +437,9 @@ export function formatReport({
   if (!outcome.built || outcome.validated !== 'valid') {
     lines.push(
       '',
-      'This reading is not ready, so there is nothing to upload yet. Fix what the lines above name and run the same command again with --resume.'
+      resume
+        ? `This reading is not ready, so there is nothing to upload yet. Fix what the lines above name and pick the run back up with:\n  ${resume}`
+        : 'This reading is not ready, so there is nothing to upload yet. Fix what the lines above name and run the same command again with --resume.'
     );
     return lines.join('\n');
   }
@@ -309,8 +449,12 @@ export function formatReport({
     `The document is at ${outcome.document}`,
     'Nothing was uploaded. Upload it yourself through the back office, at',
     `  harvest/imports/upload, with the chain ${slug}, the price scope, and the source kind OFFICIAL_LEAFLET.`,
-    'Once the reading is accepted, run build-document.mjs again with --update-baseline',
-    'so the next leaflet is checked against this one.'
+    baseline
+      ? 'Once the reading is accepted, make it the baseline the next leaflet is checked against:'
+      : 'Once the reading is accepted, run build-document.mjs again with --update-baseline',
+    baseline
+      ? `  ${baseline}`
+      : 'so the next leaflet is checked against this one.'
   );
   return lines.join('\n');
 }

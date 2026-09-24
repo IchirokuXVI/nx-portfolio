@@ -33,6 +33,11 @@ const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply|serve> [options]
 
   start   --main-url <u> --rehearsal-url <u> --run-dir <dir>
           [--main-user <name>] [--main-password <p>] [--model <name>] [--limit <n>]
+          [--local]
+          --local says the model answering this run is on this machine. It is
+          recorded in the run directory and the report.
+          --chain is refused: a product group spans every chain, so the walk
+          is every ungrouped product whichever chain sells it.
           Verifies both admin logins, counts the ungrouped products, and
           answers { runId, remaining, ungrouped, prompt }.
 
@@ -137,6 +142,10 @@ export async function run(argv, { stdin = readStdin } = {}) {
           : undefined,
       model: typeof flags.model === 'string' ? flags.model : null,
       limit: optionalCount(flags, 'limit'),
+      local: flags.local === true,
+      // Passed through as given, a bare flag included, so `start` refuses any
+      // spelling of it rather than this file dropping one without a word.
+      chain: flags.chain ?? null,
     });
   }
 

@@ -188,6 +188,9 @@ $app-content-max: 480px;
   --app-avatar-md: 24px;
   --app-avatar-lg: 30px;
   --app-tile-size: 38px;
+  // A catalog product's picture on its row (velista 0100, section 3): big enough to
+  // tell two cartons apart, and still under the two lines of text beside it.
+  --app-product-thumb-size: 52px;
   // The ring that separates one stacked avatar from the one behind it. Not a
   // hairline: it has to read as a gap at a glance, so it is exempt from nothing.
   --app-avatar-ring: 2px;

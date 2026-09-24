@@ -1051,7 +1051,9 @@ describe('the sheets and their exit animation', () => {
     //
     // `0093` added one sheet and therefore two entries again: what changed on the
     // covered lists is read over both baskets, for the same reason.
-    expect(sheets).toHaveLength(38);
+    //
+    // `0100` added the catalog's product sheet, one page and one entry.
+    expect(sheets).toHaveLength(39);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1195,17 +1197,28 @@ describe('the bottom bar', () => {
     expect(tab?.loadComponent).toBeDefined();
   });
 
-  /**
-   * The catalog has no screen yet (`0100`), and the route still has to exist: a tab
-   * that leads to this app's 404 is worse than no tab, so it draws one line saying the
-   * screen is coming.
-   */
   it('gives the catalog tab a route to open', () => {
     const catalog = pages.find((route) => route.path === 'catalog');
 
     expect(catalog?.loadComponent).toBeDefined();
     expect(catalog?.canActivate).toEqual(SIGNED_IN);
     expect(paths.indexOf('catalog')).toBeLessThan(paths.indexOf(''));
+  });
+
+  /**
+   * One product's prices (velista `0100`, section 5): a sheet over the catalog,
+   * addressed under the sheet segment and carrying the fall guard like every other,
+   * so back dismisses it and the URL says which product is open.
+   */
+  it('addresses the product sheet under the sheet segment, with the fall guard', () => {
+    const catalog = pages.find((route) => route.path === 'catalog');
+    const product = catalog?.children?.find(
+      (route) => route.path === `${SHEET_SEGMENT}/products/:itemId`
+    );
+
+    expect(product?.loadComponent).toBeDefined();
+    expect(product?.canDeactivate).toHaveLength(1);
+    expect(catalog?.children).toHaveLength(1);
   });
 });
 

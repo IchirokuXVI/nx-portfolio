@@ -15,10 +15,10 @@ import { CatalogApi } from './catalog-api';
  * service with its own database, and a line write must not be able to fail because a
  * product search was unavailable.
  *
- * There is deliberately **no list method here and never will be**. The catalog cannot
- * be listed whole (backend plan 0049): it is hundreds of thousands of products, it is
- * reachable only by search, and an interface offering `list()` would be an invitation
- * to page through it.
+ * There is deliberately **no list method here**. The composer never pages through the
+ * catalog, and an interface offering `list()` would be an invitation to. The one screen
+ * that does browse it, the catalog tab (velista `0100`), has its own service,
+ * `CatalogBrowseServiceI`, always narrowed and always one cursor page at a time.
  */
 export interface CatalogServiceI {
   /**

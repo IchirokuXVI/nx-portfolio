@@ -33,6 +33,7 @@ import { ShoppingProfileStore } from './profiles/shopping-profile-store';
 import { PurchaseMemory } from './purchases/purchase-memory';
 import { PurchaseStore } from './purchases/purchase-store';
 import { ShopMemory } from './shops/shop-memory';
+import { CatalogBrowseMemory } from './catalog/catalog-browse-memory';
 import { StartupProbe } from './startup-probe';
 import { ZoneMemory } from './zones/zone-memory';
 import { ZoneStore } from './zones/zone-store';
@@ -173,6 +174,10 @@ import { ZoneStore } from './zones/zone-store';
  * this library that is not: everything it holds is about the screen that is open, a
  * franchise somebody tapped and a word they typed, so it is provided by the supermarkets
  * page itself and destroyed with it. `ShopApi` stays out like every other real transport.
+ *
+ * `CatalogBrowseMemory` (velista `0100`) joins for `ShopMemory`'s reason exactly. The
+ * catalog tab holds its query, chain and pages on the page itself, so there is no store
+ * to list here, and `CatalogBrowseApi` stays out like every other real transport.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
@@ -200,6 +205,7 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ShoppingProfileMemory,
   ShoppingProfileStore,
   ShopMemory,
+  CatalogBrowseMemory,
   BasketListMemory,
   BasketListStore,
   SharedListStore,

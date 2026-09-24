@@ -71,7 +71,7 @@ function runDirFor(implementation, id) {
 }
 
 /** Every request `makeDecider` writes over one walk, as the child reads them. */
-async function requestsFor({ runDir, gatewayUrl, file, local }) {
+async function requestsFor({ runDir, gatewayUrl, file, local, chain }) {
   const { requests, startChild } = fakeChild([{}, {}, {}, {}, {}, {}]);
   const decider = makeDecider({
     startChild,
@@ -85,7 +85,7 @@ async function requestsFor({ runDir, gatewayUrl, file, local }) {
     mainUser: 'dev-admin',
     model: 'm',
     local,
-    chain: 'chain-1',
+    chain,
   });
   await decider.next();
   await decider.next(4);
@@ -116,6 +116,8 @@ for (const [implementation, run, alreadyDecided] of [
         gatewayUrl: gateway.url,
         file,
         local: true,
+        // Groups refuses a chain: a product group spans every chain.
+        chain: implementation === 'suggestions' ? 'chain-1' : null,
       });
       const outcomes = {};
       for (const request of requests) {

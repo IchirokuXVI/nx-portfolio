@@ -141,6 +141,21 @@ describe('GET /v1/catalog/items?soldBy', () => {
     expect(payload['supermarketId']).toBeUndefined();
   });
 
+  it('takes a chain whose id is not a version 4 uuid', async () => {
+    // Seeded chains carry version 5 ids, derived from a name (El Jamón's is one).
+    // `supermarketId` and `priceScopeId` accept any version, and a chain filter
+    // that refused the ids the catalog actually holds answered 400 for every chip
+    // but Mercadona's (velista `0100`).
+    const derived = '4b0f2e79-72e0-5f6c-bc20-3633663abafc';
+
+    const response = await fetch(
+      `${app.origin}/v1/catalog/items?soldBy=${derived}`
+    );
+
+    expect(response.status).toBe(200);
+    expect(searchPayload()['soldBy']).toEqual([derived]);
+  });
+
   it('sends nothing at all when the parameter is absent', async () => {
     const response = await fetch(`${app.origin}/v1/catalog/items`);
 
