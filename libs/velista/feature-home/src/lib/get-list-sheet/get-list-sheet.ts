@@ -27,6 +27,7 @@ import {
 import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
 import {
   APP_BASE_PATH,
+  formatDistance,
   formatGeneratedDate,
   BASKET_NAME_MAX_LENGTH,
   groupContacts,
@@ -45,10 +46,11 @@ import {
   PeoplePicker,
   PinIcon,
   SheetShell,
+  ShopPickMessage,
   SpinnerIcon,
   type PeoplePickerToggle,
 } from '@portfolio/velista/ui';
-import { GetListShopPane } from './get-list-shop-pane';
+import { GetListShopPane, type NearShopPick } from './get-list-shop-pane';
 
 /**
  * What a group contributes to the run.
@@ -140,6 +142,7 @@ const MAX_LIST_PAGES = 100;
     PeoplePicker,
     PinIcon,
     SheetShell,
+    ShopPickMessage,
     SpinnerIcon,
   ],
   templateUrl: './get-list-sheet.html',
@@ -187,6 +190,15 @@ export class GetListSheet {
    * fixed for everybody in it, with no way to change it afterwards.
    */
   readonly shop = signal<Shop | null>(null);
+
+  /**
+   * The shop "Near me" picked and how far it was (velista `0103`), for the message
+   * under the row, or null. Held until dismissed or until the shop changes.
+   */
+  readonly nearPick = signal<{
+    readonly shopId: string;
+    readonly distanceMetres: number;
+  } | null>(null);
 
   /**
    * The chosen shop as the row draws it, or null.
@@ -737,15 +749,54 @@ export class GetListSheet {
 
   /** A shop was chosen in the picker: keep it, and go back to the form. */
   pickShop(shop: Shop): void {
+    this.nearPick.set(null);
     this.shop.set(shop);
     this.closeShopPicker();
   }
+
+  /**
+   * "Near me" picked a shop (velista `0103`): keep it, go back to the form, and say
+   * which shop and how far, so a wrong automatic choice is easy to see and undo.
+   */
+  pickNearShop(pick: NearShopPick): void {
+    this.shop.set(pick.shop);
+    this.nearPick.set({
+      shopId: pick.shop.id,
+      distanceMetres: pick.distanceMetres,
+    });
+    this.closeShopPicker();
+  }
+
+  /** The x on the pick message: the message goes, and the shop stays. */
+  dismissNearPick(): void {
+    this.nearPick.set(null);
+  }
+
+  /**
+   * The message after "Near me" picked the shop, or null. Only while the shop it
+   * names is still the chosen one, so any change of shop takes it away.
+   */
+  protected readonly nearPickMessage = computed(() => {
+    const pick = this.nearPick();
+    const chosen = this.chosenShop();
+    if (pick === null || chosen === null || this.shop()?.id !== pick.shopId) {
+      return null;
+    }
+    return {
+      shop:
+        chosen.where === null || chosen.where === ''
+          ? chosen.chain
+          : `${chosen.chain}, ${chosen.where}`,
+      distance: formatDistance(pick.distanceMetres, this._locale()),
+    };
+  });
 
   /**
    * The x beside the chosen shop: back to any of the person's shops. Focus goes to
    * the row, which is redrawn as the "any" row, so it is not lost with the x.
    */
   clearShop(): void {
+    this.nearPick.set(null);
     this.shop.set(null);
     this._focusShopRow();
   }

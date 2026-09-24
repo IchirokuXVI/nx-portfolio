@@ -132,6 +132,21 @@
     >
       <legend class="legend">{{ 'basket.view.shop.legend' | rokuT }}</legend>
 
+      <!--
+        What "Near me" picked (velista 0103), with the distance and a way to change
+        it, until dismissed or until the shop changes. Above the radios, because it
+        explains the one that is checked.
+      -->
+      @if (pickMessage(); as message) {
+        <lib-shop-pick-message
+          (changeShop)="openPicker()"
+          (dismissed)="dismissPickMessage()"
+          [distance]="message.distance"
+          [shop]="message.shop"
+          class="pick-message"
+        />
+      }
+
       <label
         [class.is-locked]="locked()"
         [class.picked]="!oneShop()"

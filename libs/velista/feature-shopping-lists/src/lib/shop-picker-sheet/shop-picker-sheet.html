@@ -16,6 +16,11 @@
     <h2 class="title" id="shop-picker-title">
       {{ 'basket.view.shop.title' | rokuT }}
     </h2>
+    <!--
+      In the title row, reachable without scrolling (velista 0103). It asks for the
+      position only when pressed, even when the permission was granted long ago.
+    -->
+    <lib-near-me-button (pressed)="findNear()" [busy]="finding()" />
   </div>
 
   <!--
@@ -30,10 +35,12 @@
     [groups]="groups()"
     [matchCount]="matches()"
     [matches]="flat()"
+    [near]="near()"
     [openKey]="openChain()"
     [openName]="openName()"
     [pickedId]="pickedId()"
     [query]="typed()"
+    [recent]="recent()"
     fieldId="basket-shop-search"
   />
 </lib-sheet-shell>
