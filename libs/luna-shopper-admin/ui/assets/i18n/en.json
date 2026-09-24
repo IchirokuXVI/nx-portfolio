@@ -1580,7 +1580,7 @@
         "noPrice": "No price",
         "at": "at {{shop}}",
         "by": "by {{name}}",
-        "byGuest": "by a guest ({{id}})",
+        "byParticipant": "by participant {{id}}",
         "reverted": "Taken back"
       }
     },

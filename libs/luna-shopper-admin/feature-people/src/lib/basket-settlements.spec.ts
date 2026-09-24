@@ -89,7 +89,7 @@ describe('a basket row’s settlements', () => {
     expect(bought.shop).toBe('loc_cordoba_centro');
     // The person is, and is named.
     expect(bought.by).toBe('rosa');
-    expect(bought.byGuest).toBe(false);
+    expect(bought.byParticipant).toBe(false);
   });
 
   it('says there was no price rather than drawing nothing', async () => {
@@ -98,7 +98,7 @@ describe('a basket row’s settlements', () => {
     const [none] = page(fixture).settlementsOf('line-milk');
     expect(none.outcome).toBe('NOT_AVAILABLE');
     expect(none.paid).toBe('');
-    expect(none.byGuest).toBe(true);
+    expect(none.byParticipant).toBe(true);
     expect(text(fixture)).toContain('people.baskets.settlement.noPrice');
     expect(text(fixture)).toContain(
       'people.baskets.settlement.outcome.NOT_AVAILABLE'

@@ -98,8 +98,8 @@ import type { BasketRow } from './people-seed';
                             }
                             <span class="muted">
                               {{
-                                settlement.byGuest
-                                  ? ('people.baskets.settlement.byGuest'
+                                settlement.byParticipant
+                                  ? ('people.baskets.settlement.byParticipant'
                                     | rokuT: { id: settlement.by })
                                   : ('people.baskets.settlement.by'
                                     | rokuT: { name: settlement.by })
@@ -322,7 +322,9 @@ export class BasketDetailPage extends DetailPage<BasketRow> {
           ? ''
           : (names.get(`locations:${settlement.supermarketLocationId}`) ??
             settlement.supermarketLocationId),
-      byGuest:
+      // Only a participant id: the view does not say whether that participant
+      // is a guest or a signed in member, so the screen does not guess.
+      byParticipant:
         settlement.settledByUserId === null &&
         settlement.settledByParticipantId !== null,
       by:
