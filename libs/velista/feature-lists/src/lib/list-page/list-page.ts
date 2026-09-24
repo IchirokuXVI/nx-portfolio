@@ -64,9 +64,11 @@ import {
   BrowserFacade,
   lineQueryOf,
   listIdOf,
+  ListSearchNavigation,
   NOTIFICATION_TONE,
   PageNavigation,
   RECORDING_LIMITS,
+  searchOpenOf,
   sheetSegments,
   StorageKeys,
   TourAnchor,
@@ -718,6 +720,39 @@ export class ListPage {
   search(query: string): void {
     this._view.search(query);
   }
+
+  private readonly _search = inject(ListSearchNavigation);
+
+  /**
+   * Whether the search field is open, which is `?search=1` (velista `0109`).
+   *
+   * In the URL so the phone's back button closes the search rather than leaving the
+   * list: opening pushes the parameter, and back pops it.
+   */
+  readonly searchOpen = searchOpenOf(this._route);
+
+  /** The search button opens, and Cancel and Escape go back. */
+  setSearchOpen(open: boolean): void {
+    void (open
+      ? this._search.open(this._route)
+      : this._search.close(this._route));
+  }
+
+  /**
+   * The query goes when the field does, whichever way it closed: Cancel, Escape or the
+   * phone's back button. A search left running behind a closed field is a list missing
+   * lines for a reason nothing on it says.
+   */
+  private _searchWasOpen = false;
+
+  private readonly _clearClosedSearch = effect(() => {
+    const open = this.searchOpen();
+    const was = this._searchWasOpen;
+    this._searchWasOpen = open;
+    if (was && !open) {
+      untracked(() => this._view.search(''));
+    }
+  });
 
   openFilter(): void {
     void this._openSheet(['filter']);
@@ -1805,6 +1840,9 @@ export class ListPage {
   private _openSheet(path: readonly string[]): Promise<boolean> {
     return this._router.navigate(sheetSegments(...path), {
       relativeTo: this._route,
+      // An open search stays open under the sheet, so closing the sheet comes back
+      // to it (velista `0109`).
+      queryParams: this._search.kept(this._route),
     });
   }
 }

@@ -301,9 +301,11 @@
           The empty state and the no match block stay below it, in the scroll.
         -->
         <lib-list-tools
+          (openChange)="setSearchOpen($event)"
           (openFilter)="openFilter()"
           (queryChange)="search($event)"
           [activeCount]="activeCount()"
+          [open]="searchOpen()"
           [query]="searchQuery()"
           [shown]="shownCount()"
           [total]="countableRows().length"
