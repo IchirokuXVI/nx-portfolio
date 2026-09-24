@@ -1,3 +1,5 @@
+> **PR:** [#486](https://github.com/IchirokuXVI/nx-portfolio/pull/486)
+
 # 0109: back closes the search
 
 On a zone list or a basket, the search icon opens a search field (`ListTools`). With the field
