@@ -187,6 +187,12 @@
       "brandLinkKeepsKey": "A spelling of another brand keeps its key. Register the other spelling as its own brand.",
       "brandNotLinked": "Only a spelling linked to another brand can be deleted.",
       "openRow": "Open the row it names."
+    },
+    "bulk": {
+      "selectRow": "Select {{name}}",
+      "selectColumn": "Select",
+      "selected": "{{count}} selected",
+      "clear": "Clear the selection"
     }
   },
   "catalog": {
@@ -299,6 +305,12 @@
         "query": "Name or barcode contains",
         "category": "Category",
         "productGroupId": "Product group"
+      },
+      "setGroup": {
+        "action": "Set group",
+        "heading": "Set the group of {{count}} products",
+        "group": "Group",
+        "review": "Review"
       }
     },
     "productGroups": {
@@ -319,6 +331,43 @@
       },
       "filter": {
         "query": "Name contains"
+      },
+      "addItems": {
+        "heading": "Add items",
+        "lead": "Find products, tick them, and move them into this group after a review.",
+        "open": "Add items",
+        "search": "Search products",
+        "showingUngrouped": "Showing products in no group. Type to search every product.",
+        "showingMatches": "Showing every product that matches.",
+        "inNoGroup": "In no group",
+        "inGroup": "In {{group}}",
+        "inThisGroup": "Already in this group",
+        "selected": "{{count}} selected",
+        "review": "Review {{count}}"
+      },
+      "assign": {
+        "heading": "Move {{count}} products into {{group}}",
+        "lead": "Each product below moves into this group. Nothing moves until you press the button.",
+        "from": "From {{from}} to {{group}}",
+        "fromNone": "From no group to {{group}}",
+        "alreadyIn": "Already in this group, left out",
+        "confirm": "Move {{count}} into {{group}}",
+        "back": "Back",
+        "applied": "{{count}} products moved into {{group}}.",
+        "refused": "Nothing moved. The request was refused.",
+        "moved": "Moved",
+        "notMoved": "Not moved, because the request was refused.",
+        "close": "Done",
+        "error": {
+          "NOT_FOUND": "The product no longer exists.",
+          "NOT_PENDING": "The product cannot be moved right now.",
+          "EXPECT_MISMATCH": "The product changed group after the review.",
+          "DUPLICATE_SUBJECT": "The product is named twice.",
+          "UNKNOWN_REFERENCE": "The group named does not exist.",
+          "MALFORMED_OPERATION": "The request for this product was malformed.",
+          "ALREADY_TAKEN": "Something this product needs is already taken.",
+          "UNKNOWN": "Refused for a reason this app does not know."
+        }
       }
     },
     "prices": {
@@ -568,6 +617,32 @@
         "doneNone": "{{label}} registered. No product carries it yet.",
         "doneLinked": "{{spelling}} linked to {{label}}. {{count}} products now carry {{label}}.",
         "chainKept": "{{label}} was already registered, so its chain was kept."
+      },
+      "bulk": {
+        "start": "Select several",
+        "stop": "Stop selecting",
+        "selectRow": "Select {{name}}",
+        "selectColumn": "Select",
+        "selected": "{{count}} selected",
+        "full": "A batch holds at most {{max}} names.",
+        "review": "Review {{count}}",
+        "reviewHeading": "Register these brands",
+        "reviewLead": "Each name is registered under the label written here. Nothing is registered until you press Register.",
+        "reviewEmpty": "Nothing is selected. Go back to the list and tick the brands to register.",
+        "label": "Label",
+        "remove": "Remove",
+        "removeAria": "Remove {{name}} from the batch",
+        "noKey": "This label makes no key, so it cannot be a brand. Type at least one letter or digit.",
+        "keyDiffers": "This label makes the key {{key}}, not {{original}}. A batch registers names as they are and links nothing, so this row would stay a suggestion. Register it on its own to link it, or change the label back.",
+        "send": "Register {{count}}",
+        "back": "Back to the list",
+        "resultHeading": "What the batch did",
+        "created": "Registered. {{count}} products now carry it.",
+        "createdPlain": "Registered.",
+        "exists": "Already registered.",
+        "openExisting": "Open that brand",
+        "refused": "Refused.",
+        "refusedKept": "The refused names are still selected. Correct them and review again."
       }
     }
   },
@@ -1095,6 +1170,54 @@
         "rejectConfirm": {
           "heading": "Reject {{count}} products?",
           "body": "Each row stays as rejected, so no run asks about it again. You can find them later by asking for rejected rows."
+        }
+      },
+      "decisionsFile": {
+        "open": "Apply a decisions file",
+        "heading": "Apply a decisions file",
+        "lead": "A decisions.jsonl written by a curation run. Every operation it holds is listed before anything is sent, and the file is applied whole or not at all.",
+        "close": "Close",
+        "file": "Decisions file",
+        "run": "Run",
+        "decidedAgainst": "Decided against",
+        "counts": "Operations",
+        "countsValue": "{{creates}} new products, {{links}} links. {{reviews}} rows were left for review and send nothing.",
+        "otherGateway": "This file was decided against {{url}}, which is not the gateway this app talks to. Every row is still checked before anything is written.",
+        "nothing": "This file holds no operation to apply.",
+        "kind": "Kind",
+        "entry": "Entry",
+        "target": "Target",
+        "name": "Name",
+        "reason": "Reason",
+        "kindCreate": "New product",
+        "kindLink": "Link",
+        "apply": "Apply {{count}} operations",
+        "applied": "Applied {{count}} operations. {{prices}} prices written.",
+        "priceSkips": "Prices not written",
+        "refused": "Nothing was applied. The file was refused at {{step}}.",
+        "orphaned": "Products created and then left unbound: {{ids}}.",
+        "another": "Choose another file",
+        "step": {
+          "VALIDATE": "the check of every row",
+          "CREATE_ITEMS": "creating the new products",
+          "BIND": "binding the rows",
+          "UNKNOWN": "a step this app does not know"
+        },
+        "problem": {
+          "notJson": "Line {{line}} is not a JSON object, so this is not a decisions file.",
+          "noHeader": "This file has no header line, so it is not a decisions file.",
+          "empty": "This file is empty.",
+          "tooMany": "This file holds {{count}} operations and one request takes at most {{max}}. It is not split, because a split file is not applied whole."
+        },
+        "error": {
+          "NOT_FOUND": "The row no longer exists.",
+          "NOT_PENDING": "The row was already decided.",
+          "EXPECT_MISMATCH": "The row changed after the file was decided.",
+          "DUPLICATE_SUBJECT": "The row is named twice.",
+          "UNKNOWN_REFERENCE": "It names a product this file does not create.",
+          "MALFORMED_OPERATION": "The operation is malformed.",
+          "ALREADY_TAKEN": "Something it needs is already taken.",
+          "UNKNOWN": "Refused for a reason this app does not know."
         }
       }
     },

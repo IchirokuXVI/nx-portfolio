@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { GatewayError } from '@portfolio/luna-shopper-admin/data-access';
+import { GatewayError } from '@portfolio/luna-shopper-admin/data-access';
 import {
   ChainNames,
   formatInstant,
@@ -27,7 +27,36 @@ import {
 import { ReferencePicker, Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import { capitalizeBrand } from './brand-capitalization';
-import { BrandsGateway, type BrandSuggestion } from './brands-gateway';
+import { BRAND_BATCH_MAX } from './brand-sources';
+import {
+  BrandsGateway,
+  type BrandBatchResult,
+  type BrandSuggestion,
+} from './brands-gateway';
+
+/** A row ticked for a batch, and the label the person has settled on so far. */
+interface PickedBrand {
+  /** The suggestion's own key, which is what the batch has to register. */
+  readonly key: string;
+  /** How the chains print it, for the review to show beside the label. */
+  readonly spelling: string;
+  readonly label: string;
+}
+
+/** Why a label in the review cannot be sent, or `null` when it can. */
+type ReviewProblem = 'noKey' | 'keyDiffers' | null;
+
+/** One line of the review, with what its label would make. */
+interface ReviewLine extends PickedBrand {
+  readonly liveKey: string;
+  readonly problem: ReviewProblem;
+}
+
+/** One line of a batch's answer, beside the row it was about. */
+interface BatchLine {
+  readonly key: string;
+  readonly result: BrandBatchResult;
+}
 
 /**
  * The `details` key a `brand_key_taken` names the holding brand under.
@@ -59,9 +88,15 @@ const SEARCH_DELAY_MS = 250;
  *
  * **Registering is an inline panel, not a screen.** The decision is which
  * spelling becomes the label, and that decision is made while looking at the
- * spellings the chains used, which are on the row above it. There is no bulk
- * register for the same reason: every label is a decision, and the panel is what
- * a decision looks like.
+ * spellings the chains used, which are on the row above it.
+ *
+ * **Selecting several keeps every label a decision** (admin plan 0035, section
+ * 1). A person ticks each row, reads and edits each label in a review step, and
+ * only then registers them in one request. Nothing is sent from a tick. The
+ * batch registers names as they are and links nothing, so a label that makes a
+ * different key than its row is held back in the review with a sentence saying
+ * so: linking is the single panel's job, because it is decided while looking at
+ * the one row.
  */
 @Component({
   selector: 'lib-brand-suggestions-page',
@@ -85,6 +120,188 @@ const SEARCH_DELAY_MS = 250;
         data-search
       />
     </label>
+
+    <!-- Selecting several (admin plan 0035, section 1). A tick only marks a
+         row: the review below is the one place a batch is sent from. -->
+    <div class="bulk-bar" role="group">
+      @if (selecting()) {
+        <p aria-live="polite" class="bulk-count">
+          {{
+            'brands.suggested.bulk.selected' | rokuT: { count: pickedCount() }
+          }}
+          @if (pickedCount() >= batchMax) {
+            <span class="muted">{{
+              'brands.suggested.bulk.full' | rokuT: { max: batchMax }
+            }}</span>
+          }
+        </p>
+        <button
+          (click)="review()"
+          [disabled]="pickedCount() === 0 || reviewing()"
+          class="primary"
+          type="button"
+          data-review
+        >
+          {{ 'brands.suggested.bulk.review' | rokuT: { count: pickedCount() } }}
+        </button>
+        <button (click)="stopSelecting()" type="button" data-stop-selecting>
+          {{ 'brands.suggested.bulk.stop' | rokuT }}
+        </button>
+      } @else {
+        <button (click)="startSelecting()" type="button" data-select-mode>
+          {{ 'brands.suggested.bulk.start' | rokuT }}
+        </button>
+      }
+    </div>
+
+    @if (batch(); as lines) {
+      <section
+        [attr.aria-label]="'brands.suggested.bulk.resultHeading' | rokuT"
+        class="batch-result"
+        role="status"
+        data-batch-result
+      >
+        <h2>{{ 'brands.suggested.bulk.resultHeading' | rokuT }}</h2>
+        <ul>
+          @for (line of lines; track line.key) {
+            <li [attr.data-outcome]="line.result.outcome">
+              <strong>{{ line.result.label }}</strong>
+              @switch (line.result.outcome) {
+                @case ('CREATED') {
+                  <span>{{
+                    (line.result.linkedItems === null
+                      ? 'brands.suggested.bulk.createdPlain'
+                      : 'brands.suggested.bulk.created'
+                    ) | rokuT: { count: line.result.linkedItems }
+                  }}</span>
+                }
+                @case ('EXISTS') {
+                  <span>{{ 'brands.suggested.bulk.exists' | rokuT }}</span>
+                  @if (brandLink(line.result.brandId); as link) {
+                    <a [routerLink]="link">{{
+                      'brands.suggested.bulk.openExisting' | rokuT
+                    }}</a>
+                  }
+                }
+                @default {
+                  <span class="refused">{{
+                    'brands.suggested.bulk.refused' | rokuT
+                  }}</span>
+                  <span>{{ reasonKey(line.result.reasonCode) | rokuT }}</span>
+                  @if (line.result.reasonDetail; as detail) {
+                    <span class="detail">{{ detail }}</span>
+                  }
+                }
+              }
+            </li>
+          }
+        </ul>
+        @if (pickedCount() > 0) {
+          <p>{{ 'brands.suggested.bulk.refusedKept' | rokuT }}</p>
+        }
+      </section>
+    }
+
+    @if (reviewing()) {
+      <section
+        (keydown.escape)="backToList()"
+        [attr.aria-label]="'brands.suggested.bulk.reviewHeading' | rokuT"
+        class="review"
+        role="group"
+        tabindex="-1"
+        data-review-panel
+      >
+        <h2>{{ 'brands.suggested.bulk.reviewHeading' | rokuT }}</h2>
+        <p class="muted">{{ 'brands.suggested.bulk.reviewLead' | rokuT }}</p>
+
+        @if (reviewLines().length === 0) {
+          <p class="state">{{ 'brands.suggested.bulk.reviewEmpty' | rokuT }}</p>
+        } @else {
+          <ul class="review-lines">
+            @for (line of reviewLines(); track line.key) {
+              <li [attr.data-review-line]="line.key">
+                <div class="review-head">
+                  <span class="stack">
+                    <span class="spelling">{{ line.spelling }}</span>
+                    <span class="key">{{ line.key }}</span>
+                  </span>
+                  <button
+                    (click)="unpick(line.key)"
+                    [attr.aria-label]="
+                      'brands.suggested.bulk.removeAria'
+                        | rokuT: { name: line.spelling }
+                    "
+                    [disabled]="sendingBatch()"
+                    type="button"
+                    data-unpick
+                  >
+                    {{ 'brands.suggested.bulk.remove' | rokuT }}
+                  </button>
+                </div>
+                <label>
+                  <span>{{ 'brands.suggested.bulk.label' | rokuT }}</span>
+                  <input
+                    (input)="relabel(line.key, $event)"
+                    [disabled]="sendingBatch()"
+                    [value]="line.label"
+                    type="text"
+                    data-batch-label
+                  />
+                </label>
+                @if (line.problem === 'noKey') {
+                  <p class="warn-line">
+                    {{ 'brands.suggested.bulk.noKey' | rokuT }}
+                  </p>
+                } @else if (line.problem === 'keyDiffers') {
+                  <p class="warn-line">
+                    {{
+                      'brands.suggested.bulk.keyDiffers'
+                        | rokuT: { key: line.liveKey, original: line.key }
+                    }}
+                  </p>
+                } @else {
+                  <p class="key">
+                    {{
+                      'brands.suggested.register.makesKey'
+                        | rokuT: { key: line.liveKey }
+                    }}
+                  </p>
+                }
+              </li>
+            }
+          </ul>
+        }
+
+        @if (batchErrorKey(); as key) {
+          <p class="failure" role="alert">{{ key | rokuT }}</p>
+        }
+
+        <div class="controls">
+          <button
+            (click)="sendBatch()"
+            [disabled]="!canSend()"
+            class="primary"
+            type="button"
+            data-send
+          >
+            {{
+              (sendingBatch()
+                ? 'resource.action.working'
+                : 'brands.suggested.bulk.send'
+              ) | rokuT: { count: reviewLines().length }
+            }}
+          </button>
+          <button
+            (click)="backToList()"
+            [disabled]="sendingBatch()"
+            type="button"
+            data-back
+          >
+            {{ 'brands.suggested.bulk.back' | rokuT }}
+          </button>
+        </div>
+      </section>
+    }
 
     @if (done(); as said) {
       <p class="done" role="status">
@@ -117,7 +334,10 @@ const SEARCH_DELAY_MS = 250;
       </p>
     }
 
-    @if (loading()) {
+    @if (reviewing()) {
+      <!-- The list waits while the review is open: the review is the decision,
+           and a list still taking ticks beside it would make the two disagree. -->
+    } @else if (loading()) {
       <p class="state">{{ 'resource.list.loading' | rokuT }}</p>
     } @else if (failed()) {
       <p class="state error" role="alert">
@@ -140,7 +360,22 @@ const SEARCH_DELAY_MS = 250;
       <ul class="cards">
         @for (row of rows(); track row.key) {
           <li>
-            <article>
+            <article [class.picked]="isPicked(row.key)">
+              @if (selecting()) {
+                <label class="pick">
+                  <input
+                    (change)="toggle(row)"
+                    [checked]="isPicked(row.key)"
+                    [disabled]="!isPicked(row.key) && pickedCount() >= batchMax"
+                    type="checkbox"
+                    data-pick
+                  />
+                  <span>{{
+                    'brands.suggested.bulk.selectRow'
+                      | rokuT: { name: row.spelling }
+                  }}</span>
+                </label>
+              }
               <h2>
                 <span class="spelling">{{ row.spelling }}</span>
                 <span class="key">{{ row.key }}</span>
@@ -218,6 +453,13 @@ const SEARCH_DELAY_MS = 250;
         <table>
           <thead>
             <tr>
+              @if (selecting()) {
+                <th class="pick-cell" scope="col">
+                  <span class="sr-only">{{
+                    'brands.suggested.bulk.selectColumn' | rokuT
+                  }}</span>
+                </th>
+              }
               <th scope="col">{{ 'brands.suggested.brand' | rokuT }}</th>
               <th class="figure" scope="col">
                 {{ 'brands.suggested.products' | rokuT }}
@@ -233,7 +475,24 @@ const SEARCH_DELAY_MS = 250;
           </thead>
           <tbody>
             @for (row of rows(); track row.key) {
-              <tr>
+              <tr [class.picked]="isPicked(row.key)">
+                @if (selecting()) {
+                  <td class="pick-cell">
+                    <input
+                      (change)="toggle(row)"
+                      [attr.aria-label]="
+                        'brands.suggested.bulk.selectRow'
+                          | rokuT: { name: row.spelling }
+                      "
+                      [checked]="isPicked(row.key)"
+                      [disabled]="
+                        !isPicked(row.key) && pickedCount() >= batchMax
+                      "
+                      type="checkbox"
+                      data-pick
+                    />
+                  </td>
+                }
                 <th scope="row">
                   <span class="stack">
                     <span class="spelling">{{ row.spelling }}</span>
@@ -301,7 +560,7 @@ const SEARCH_DELAY_MS = 250;
 
               @if (openKey() === row.key) {
                 <tr class="panel-row">
-                  <td colspan="5">
+                  <td [attr.colspan]="selecting() ? 6 : 5">
                     <ng-container [ngTemplateOutlet]="panel" />
                   </td>
                 </tr>
@@ -312,7 +571,7 @@ const SEARCH_DELAY_MS = 250;
       </div>
     }
 
-    @if (hasMore()) {
+    @if (hasMore() && !reviewing()) {
       <button
         (click)="loadMore()"
         [disabled]="loadingMore()"
@@ -576,6 +835,124 @@ const SEARCH_DELAY_MS = 250;
       display: flex;
       flex-direction: column;
       gap: var(--admin-space-1);
+    }
+
+    .bulk-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
+      align-items: center;
+    }
+
+    .bulk-count {
+      display: flex;
+      flex-direction: column;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pick-cell {
+      inline-size: 2.75rem;
+    }
+
+    .pick {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+    }
+
+    input[type='checkbox'] {
+      inline-size: 1.25rem;
+      block-size: 1.25rem;
+      min-block-size: 0;
+      accent-color: var(--admin-accent);
+    }
+
+    tr.picked th,
+    tr.picked td,
+    article.picked {
+      background: var(--admin-accent-wash);
+    }
+
+    .review,
+    .batch-result {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-3);
+      align-items: flex-start;
+      inline-size: 100%;
+      max-inline-size: 48rem;
+      padding: var(--admin-space-4);
+      border: 1px solid var(--admin-accent);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+    }
+
+    .batch-result {
+      border-color: var(--admin-border);
+    }
+
+    .review-lines,
+    .batch-result ul {
+      display: flex;
+      flex-direction: column;
+      inline-size: 100%;
+      list-style: none;
+    }
+
+    .review-lines li {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+      padding-block: var(--admin-space-3);
+      border-block-start: 1px solid var(--admin-border);
+    }
+
+    .review-head {
+      display: flex;
+      gap: var(--admin-space-3);
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .review label {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+      max-inline-size: 24rem;
+    }
+
+    .review label span {
+      font-size: 0.75rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--admin-ink-muted);
+    }
+
+    .warn-line {
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: 1px solid var(--admin-status-attention);
+      border-radius: var(--admin-radius);
+      background: var(--admin-status-attention-wash);
+      color: var(--admin-status-attention-on-wash);
+    }
+
+    .batch-result li {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      align-items: baseline;
+      padding-block: var(--admin-space-2);
+    }
+
+    .batch-result .refused {
+      font-weight: 600;
+      color: var(--admin-danger);
+    }
+
+    .batch-result .detail {
+      flex-basis: 100%;
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
     }
 
     .panel-row td {
@@ -860,6 +1237,55 @@ export class BrandSuggestionsPage implements OnDestroy {
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
 
+  /** The most names one batch may carry. */
+  readonly batchMax = BRAND_BATCH_MAX;
+
+  /** Whether rows draw a tick box. */
+  readonly selecting = signal(false);
+
+  /**
+   * The rows ticked for a batch, by key, in the order they were ticked.
+   *
+   * Held apart from `rows` so a search or a second page never drops a tick:
+   * the spelling travels with it, because the review draws it whether or not
+   * the row is on screen.
+   */
+  readonly picked = signal<ReadonlyMap<string, PickedBrand>>(new Map());
+  readonly pickedCount = computed(() => this.picked().size);
+
+  /** Whether the review step is open. The only place a batch is sent from. */
+  readonly reviewing = signal(false);
+  readonly sendingBatch = signal(false);
+  private readonly _batchError = signal<GatewayError | null>(null);
+  readonly batchErrorKey = computed(() => gatewayErrorKey(this._batchError()));
+
+  /** What the last batch answered, name by name, until the next one starts. */
+  readonly batch = signal<readonly BatchLine[] | null>(null);
+
+  /**
+   * The review, one line per ticked row, with what each label would make.
+   *
+   * A label that makes the row's own key is sent. One that makes no key, or a
+   * different key, is held back with a sentence: the batch registers names as
+   * they are, so a different key would register another brand and leave this
+   * suggestion where it was.
+   */
+  readonly reviewLines = computed<readonly ReviewLine[]>(() =>
+    [...this.picked().values()].map((picked) => {
+      const liveKey = brandKey(picked.label) ?? '';
+      const problem: ReviewProblem =
+        liveKey === '' ? 'noKey' : liveKey !== picked.key ? 'keyDiffers' : null;
+      return { ...picked, liveKey, problem };
+    })
+  );
+
+  readonly canSend = computed(
+    () =>
+      !this.sendingBatch() &&
+      this.reviewLines().length > 0 &&
+      this.reviewLines().every((line) => line.problem === null)
+  );
+
   constructor() {
     void this._load();
   }
@@ -1005,6 +1431,168 @@ export class BrandSuggestionsPage implements OnDestroy {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  /** Draw a tick box on every row. */
+  startSelecting(): void {
+    this.openKey.set(null);
+    this.selecting.set(true);
+  }
+
+  /** Put the tick boxes away and forget what was ticked. */
+  stopSelecting(): void {
+    this.selecting.set(false);
+    this.reviewing.set(false);
+    this.picked.set(new Map());
+    this._batchError.set(null);
+    this._focusLater('[data-select-mode]');
+  }
+
+  isPicked(key: string): boolean {
+    return this.picked().has(key);
+  }
+
+  /**
+   * Tick or untick one row.
+   *
+   * The label starts capitalized, as the single panel's does, because that is
+   * the one a person keeps far more often than the chain's capitals.
+   */
+  toggle(row: BrandSuggestion): void {
+    const next = new Map(this.picked());
+    if (next.has(row.key)) {
+      next.delete(row.key);
+    } else if (next.size < this.batchMax) {
+      next.set(row.key, {
+        key: row.key,
+        spelling: row.spelling,
+        label: capitalizeBrand(row.spelling),
+      });
+    }
+    this.picked.set(next);
+  }
+
+  /** Take one name out of the batch, from the review. */
+  unpick(key: string): void {
+    const next = new Map(this.picked());
+    next.delete(key);
+    this.picked.set(next);
+  }
+
+  /** Change the label one ticked row will be registered under. */
+  relabel(key: string, event: Event): void {
+    const current = this.picked().get(key);
+    if (current === undefined) {
+      return;
+    }
+    const next = new Map(this.picked());
+    next.set(key, {
+      ...current,
+      label: (event.target as HTMLInputElement).value,
+    });
+    this.picked.set(next);
+  }
+
+  /** Open the review. Nothing is sent yet. */
+  review(): void {
+    if (this.pickedCount() === 0) {
+      return;
+    }
+    this.openKey.set(null);
+    this.batch.set(null);
+    this.done.set(null);
+    this._batchError.set(null);
+    this.reviewing.set(true);
+    this._focusLater('[data-review-panel]');
+  }
+
+  /** Close the review and go back to ticking, keeping every tick and label. */
+  backToList(): void {
+    if (this.sendingBatch()) {
+      return;
+    }
+    this.reviewing.set(false);
+    this._batchError.set(null);
+    this._focusLater('[data-review]');
+  }
+
+  /**
+   * Send the reviewed batch, one request for every name on it.
+   *
+   * What was registered, or already was, leaves the list and the selection,
+   * because its key is held now and the suggestions read would not answer it
+   * again. A refused name **stays ticked**, holding its label, so correcting it
+   * and reviewing again is a second pass over what failed rather than a new
+   * one. A request refused as a whole changes nothing and keeps the review
+   * open.
+   */
+  async sendBatch(): Promise<void> {
+    if (!this.canSend()) {
+      return;
+    }
+    const lines = this.reviewLines();
+
+    this.sendingBatch.set(true);
+    this._batchError.set(null);
+    try {
+      const results = await this._brands.registerMany(
+        lines.map((line) => ({ label: line.label }))
+      );
+
+      const answered: BatchLine[] = lines.map((line, index) => ({
+        key: line.key,
+        result: results[index] ?? {
+          label: line.label,
+          outcome: 'REFUSED',
+          brandId: null,
+          linkedItems: null,
+          reasonCode: null,
+          reasonDetail: null,
+        },
+      }));
+      const held = new Set(
+        answered
+          .filter((line) => line.result.outcome !== 'REFUSED')
+          .map((line) => line.key)
+      );
+
+      this.rows.set(this.rows().filter((row) => !held.has(row.key)));
+      const kept = new Map(this.picked());
+      for (const key of held) {
+        kept.delete(key);
+      }
+      this.picked.set(kept);
+      this.batch.set(answered);
+      this.reviewing.set(false);
+      if (kept.size === 0) {
+        this.selecting.set(false);
+      }
+      this._focusLater('[data-batch-result]');
+    } catch (error) {
+      this._batchError.set(error as GatewayError);
+    } finally {
+      this.sendingBatch.set(false);
+    }
+  }
+
+  /** Where a brand a batch named lives, or nothing. */
+  brandLink(brandId: string | null): readonly string[] | null {
+    const path = this._registry.pathOf('brands');
+    return brandId === null || path === null ? null : [...path, brandId];
+  }
+
+  /**
+   * The sentence for a refused name's code.
+   *
+   * The same keys the single panel reads, through the same function, so a
+   * `brand_label_empty` says the same thing whichever way it was refused.
+   */
+  reasonKey(code: string | null): string {
+    return (
+      gatewayErrorKey(
+        new GatewayError({ code: code ?? '', status: 400, correlationId: '' })
+      ) ?? 'resource.error.unknown'
+    );
   }
 
   /** The key of the row after this one, or `null` when it is the last. */

@@ -57,6 +57,13 @@ export const ITEM_SCOPE_PRICES_PATH = `${ITEMS_PATH}/{id}/prices`;
 export const PRODUCT_GROUPS_PATH = '/v1/admin/catalog/product-groups';
 
 /**
+ * Where many products are moved into groups in one transaction (backend plan
+ * 0100, admin plan 0035, section 2). A command, not a collection: it answers
+ * one outcome per operation rather than a row or a page.
+ */
+export const PRODUCT_GROUP_ASSIGNMENTS_PATH = `${PRODUCT_GROUPS_PATH}/assignments`;
+
+/**
  * Where the back office reads the effective prices (backend plan 0080,
  * section 7): the price a shopper sees, chosen among the rows behind it.
  *

@@ -5,6 +5,10 @@ import type {
   Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { serviceToken } from '@portfolio/shared/data-access';
+import type {
+  ApplyEntryDecisionsInput,
+  EntryDecisionsAnswer,
+} from './entry-decisions';
 import { HarvestMemory } from './harvest-memory';
 
 /**
@@ -146,6 +150,19 @@ export interface HarvestServiceI {
    * and a run does not get to overwrite a decision.
    */
   rejectEntry(id: string): Promise<Wire.HarvestSourceCatalogEntryView>;
+
+  /**
+   * Apply a whole decisions file, all or nothing (backend plan 0100, admin plan
+   * 0035, section 3).
+   *
+   * The route the curation toolchain applies with, reached from the queue. A
+   * refused file is an answer rather than an error: `applied` is false, and the
+   * operation that caused it carries its reason. What does throw is a request
+   * refused before any operation was read, an empty file or one over the cap.
+   */
+  applyEntryDecisions(
+    input: ApplyEntryDecisionsInput
+  ): Promise<EntryDecisionsAnswer>;
 
   /**
    * Start a `FILE_IMPORT` run for a document the operator dropped in.

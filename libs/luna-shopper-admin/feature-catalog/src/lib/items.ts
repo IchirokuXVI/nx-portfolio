@@ -12,6 +12,7 @@ import {
 } from './catalog-enums';
 import { itemSource } from './catalog-sources';
 import { ItemFormPage } from './item-form-page';
+import { SetGroupPanel } from './set-group-panel';
 
 /** A product, as the gateway describes it. */
 export type Item = Wire.CatalogItemView;
@@ -161,7 +162,19 @@ export const ITEMS = defineResource<Item>({
     },
   ],
 
-  actions: { create: true, edit: true, delete: true },
+  actions: {
+    create: true,
+    edit: true,
+    delete: true,
+    // Many products into one group, through a review (admin plan 0035).
+    bulk: [
+      {
+        name: 'setGroup',
+        label: 'catalog.items.setGroup.action',
+        panel: SetGroupPanel,
+      },
+    ],
+  },
 
   gateway: () => inject(RESOURCE_GATEWAYS).for<Item>(itemSource()),
 });
