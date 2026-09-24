@@ -1,4 +1,4 @@
-import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
+import { packCountOf, UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 
 /**
  * The printed size split into a number and a unit (plan 0089, section 6).
@@ -116,6 +116,21 @@ export function parseSize(printed: string | null | undefined): LidlSize | null {
     count,
     approximate,
   };
+}
+
+/**
+ * How many units the pack holds (plan 0162, section 1): the `N` of a printed
+ * `NxQ`, so `3x200 ml` is 3 and `4x1 / l` is 4.
+ *
+ * Read from {@link parseSize}'s own multiplier rather than from a second
+ * pattern, so a string that states no size states no count either. A size
+ * with no multiplier is a count of 1, which is not a pack and reads as null.
+ * Proved by the `4x1 / l` row of `search-page.json` and the literals in
+ * `size.spec.ts`.
+ */
+export function packCountIn(printed: string | null | undefined): number | null {
+  const size = parseSize(printed);
+  return size ? packCountOf(size.count) : null;
 }
 
 function round(value: number): number {

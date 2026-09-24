@@ -512,6 +512,8 @@ export class HarvestMemory implements HarvestServiceI {
       sku: entry.externalId,
       ean: input.ean ?? entry.ean,
       unitSize: input.unitSize ?? entry.unitSize,
+      packCount:
+        input.packCount === undefined ? entry.packCount : input.packCount,
       category: input.category ?? 'OTHER',
       defaultUnit: input.defaultUnit ?? 'UNIT',
       productGroupId: null,

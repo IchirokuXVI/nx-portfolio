@@ -12,6 +12,8 @@ export interface BackfillEntry {
   brand: string | null;
   unitSize: number | null;
   sizeFormat: string | null;
+  /** The count the crawl read (plan 0162), carried for the same reason. */
+  packCount: number | null;
   categoryPath: string[];
 }
 

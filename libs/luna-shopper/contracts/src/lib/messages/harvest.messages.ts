@@ -722,6 +722,12 @@ export interface SourceCatalogEntryView {
   unitSize: number | null;
   /** The source's own size text, and half of the key for a source with no id. */
   sizeFormat: string | null;
+  /**
+   * How many units the pack holds, as the last run that saw the row read it
+   * (plan 0162). Null when the source stated no count. It is the source's, so
+   * every run rewrites it exactly as it rewrites `sizeFormat`.
+   */
+  packCount: number | null;
   categoryPath: string[];
   url: string | null;
   /**
@@ -1301,6 +1307,8 @@ export interface CreateItemFromSourceEntryRequest extends AdminCredential {
   brand?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  /** Override the pack count the row read (plan 0162). Null creates a product with none. */
+  packCount?: number | null;
   /** Override the category the source's own tree mapped to. */
   category?: ItemCategory;
   /** Override the unit the source's own size text mapped to. */
@@ -1374,6 +1382,8 @@ export interface CreateItemFromSourceEntryOperation {
     brand?: string | null;
     ean?: string | null;
     unitSize?: number | null;
+    /** Plan 0162. Absent takes the row's own count. */
+    packCount?: number | null;
     category?: ItemCategory;
     defaultUnit?: UnitOfMeasure;
   };

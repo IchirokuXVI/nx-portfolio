@@ -115,6 +115,8 @@ export class CarrefourDetailRunner implements CatalogRunner {
             ean: detail.ean,
             unitSize: row.unitSize,
             sizeFormat: row.sizeFormat,
+            // The crawl's count, carried so the whole report does not blank it.
+            packCount: row.packCount,
             categoryPath: row.categoryPath,
             url: row.url,
             observedAt,

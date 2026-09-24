@@ -38,6 +38,7 @@ function row(externalId = 'p1'): BackfillEntry {
     name: 'Agua CARREFOUR',
     brand: 'CARREFOUR',
     unitSize: null,
+    packCount: null,
     sizeFormat: '1,5 l.',
     categoryPath: ['Bebidas'],
   };

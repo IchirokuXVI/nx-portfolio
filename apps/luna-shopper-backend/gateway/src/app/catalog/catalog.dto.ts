@@ -12,6 +12,8 @@ import {
   ITEM_LOOKUP_LIMITS,
   ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS,
   ItemCategory,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
   PriceScopeKind,
   PriceSourceKind,
   UnitOfMeasure,
@@ -31,6 +33,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -382,6 +385,20 @@ export class CreateItemDto {
   @Min(0)
   unitSize?: number | null;
 
+  @ApiPropertyOptional({
+    type: 'integer',
+    nullable: true,
+    minimum: PACK_COUNT_MIN,
+    maximum: PACK_COUNT_MAX,
+    description:
+      'How many units the pack holds (plan 0162). Null, or absent, for a product that is not a pack.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(PACK_COUNT_MIN)
+  @Max(PACK_COUNT_MAX)
+  packCount?: number | null;
+
   @ApiProperty({ enum: ItemCategory })
   @IsEnum(ItemCategory)
   category!: ItemCategory;
@@ -469,6 +486,20 @@ export class UpdateItemDto {
   @IsNumber()
   @Min(0)
   unitSize?: number | null;
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    nullable: true,
+    minimum: PACK_COUNT_MIN,
+    maximum: PACK_COUNT_MAX,
+    description:
+      'Set or correct the pack count, or clear it with null (plan 0162). The only write that changes a count that is set: a harvest run fills a null count and never overwrites one.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(PACK_COUNT_MIN)
+  @Max(PACK_COUNT_MAX)
+  packCount?: number | null;
 
   @ApiPropertyOptional({ enum: ItemCategory })
   @IsOptional()

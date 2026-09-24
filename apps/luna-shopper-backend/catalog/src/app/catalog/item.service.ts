@@ -5,11 +5,17 @@ import {
   BULK_DECISION_MAX_OPERATIONS,
   ITEM_LOOKUP_LIMITS,
   LINE_ITEM_SET_MAX,
+  PACK_COUNT_FILL_MAX,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
+  packCountOf,
   PRODUCT_GROUP_MEMBERS_MAX,
   type CreateItemInput,
   type CreateItemRequest,
   type CreateItemsRequest,
   type CreateItemsResult,
+  type FillPackCountsRequest,
+  type FillPackCountsResult,
   type FindItemByEanRequest,
   type FindItemByEanResult,
   type GetItemsRequest,
@@ -31,6 +37,7 @@ import {
   DEFAULT_LOCALE,
   encodeCursor,
   getRequestContext,
+  isUuid,
   NotFoundException,
   ValidationException,
   type SupportedLocale,
@@ -192,6 +199,7 @@ export class ItemService {
       sku: req.sku ?? null,
       ean: req.ean ?? null,
       unitSize: req.unitSize ?? null,
+      packCount: req.packCount ?? null,
       category: req.category,
       defaultUnit: req.defaultUnit,
       productGroupId: await this.resolveGroup(req.productGroupId ?? null),
@@ -269,6 +277,7 @@ export class ItemService {
         sku: input.sku ?? null,
         ean: input.ean ?? null,
         unitSize: input.unitSize ?? null,
+        packCount: input.packCount ?? null,
         category: input.category,
         defaultUnit: input.defaultUnit,
         productGroupId: await this.resolveGroup(input.productGroupId ?? null),
@@ -341,6 +350,9 @@ export class ItemService {
     if (req.unitSize !== undefined) {
       row.unitSize = req.unitSize;
     }
+    if (req.packCount !== undefined) {
+      row.packCount = req.packCount;
+    }
     if (req.category !== undefined) {
       row.category = req.category;
     }
@@ -375,6 +387,78 @@ export class ItemService {
 
   async get(req: ItemIdRequest): Promise<ItemView> {
     return toItemView(await this.load(req.itemId));
+  }
+
+  /**
+   * Write a pack count onto each product that has none (plan 0162, section 3).
+   *
+   * **One statement, and it never overwrites.** The `IS NULL` is the rule, not
+   * a detail of it: a count that is set was either read by an earlier run or
+   * typed by a person, and only {@link update} may change it, so a correction
+   * survives every run after it. A pair naming a product that is gone writes
+   * nothing and is not counted.
+   *
+   * The harvester already left out every product whose sources disagree, so a
+   * product named twice here is a caller's mistake and is refused whole rather
+   * than settled by whichever pair came last.
+   */
+  async fillPackCounts(
+    req: FillPackCountsRequest
+  ): Promise<FillPackCountsResult> {
+    const actor = await this.admin.requireAdmin(req);
+    if (req.entries.length > PACK_COUNT_FILL_MAX) {
+      throw new ValidationException(
+        `A pack count fill carries at most ${PACK_COUNT_FILL_MAX} products, ` +
+          `and this one carries ${req.entries.length}. Send several calls: ` +
+          'each product is written on its own merit, so nothing is half done.'
+      );
+    }
+    const ids = new Set<string>();
+    for (const entry of req.entries) {
+      if (ids.has(entry.itemId)) {
+        throw new ValidationException(
+          `The product ${entry.itemId} is named twice in one pack count fill.`
+        );
+      }
+      if (packCountOf(entry.packCount) !== entry.packCount) {
+        throw new ValidationException(
+          `The pack count ${entry.packCount} for ${entry.itemId} is not a ` +
+            `whole number from ${PACK_COUNT_MIN} to ${PACK_COUNT_MAX}.`
+        );
+      }
+      ids.add(entry.itemId);
+    }
+    // An id that is not a uuid names no product, and casting it would fail the
+    // whole statement rather than skip one pair.
+    const entries = req.entries.filter((entry) => isUuid(entry.itemId));
+    if (entries.length === 0) {
+      return { written: 0 };
+    }
+
+    return this.audit.write(actor, async (tx) => {
+      // `UPDATE ... RETURNING` answers `[rows, rowCount]` through `query()`.
+      const [rows] = (await tx.manager.query(
+        `UPDATE "items" AS i
+            SET "packCount" = v."packCount", "updatedAt" = now()
+           FROM unnest($1::uuid[], $2::smallint[]) AS v("id", "packCount")
+          WHERE i."id" = v."id"
+            AND i."packCount" IS NULL
+      RETURNING i."id", i."packCount"`,
+        [
+          entries.map((entry) => entry.itemId),
+          entries.map((entry) => entry.packCount),
+        ]
+      )) as [{ id: string; packCount: number }[], number];
+      // Only the one column moved, so the trail records that and nothing
+      // else: every other field reads the same on both sides.
+      for (const row of rows) {
+        await tx.recordUpdate(Item, { id: row.id, packCount: null }, {
+          id: row.id,
+          packCount: row.packCount,
+        } as Item);
+      }
+      return { written: rows.length };
+    });
   }
 
   /**

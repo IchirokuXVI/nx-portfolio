@@ -115,6 +115,7 @@ export class RunExecutor implements OnApplicationShutdown {
       brand: row.brand,
       unitSize: row.unitSize === null ? null : Number(row.unitSize),
       sizeFormat: row.sizeFormat,
+      packCount: row.packCount ?? null,
       categoryPath: row.categoryPath ?? [],
     }));
   }
@@ -672,6 +673,10 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     // Plan 0084, section 3: a person always wins, and the run reports the
     // disagreement rather than applying it.
     availabilityConflicts: written.conflicts,
+    // Plan 0162, section 3: counts written onto products that had none, and
+    // the products whose sources disagreed, which a person looks at.
+    packCountsFilled: written.packCountsFilled,
+    packCountConflicts: written.packCountConflicts,
   };
 }
 

@@ -150,6 +150,14 @@ export const ITEM_PATTERNS = {
    * nothing about it is the harvester's.
    */
   createMany: 'item.createMany',
+  /**
+   * Write a pack count onto products that have none (plan 0162, section 3).
+   *
+   * The harvester's, after a catalog discovery run. **It never overwrites a
+   * count that is set**: only {@link ITEM_PATTERNS.update}, which a person
+   * sends, changes one, so a correction survives every later run.
+   */
+  fillPackCounts: 'item.fillPackCounts',
 } as const;
 
 /**
@@ -763,6 +771,16 @@ export interface ItemView {
   ean: string | null;
   /** Without it `defaultUnit` says nothing: "LITER" is not a size. */
   unitSize: number | null;
+  /**
+   * How many units the pack holds, a whole number from {@link PACK_COUNT_MIN}
+   * to {@link PACK_COUNT_MAX}, or null for a product that is not a pack or
+   * whose source did not state a count (plan 0162).
+   *
+   * A number and not a word, because a number has no language: the client
+   * draws "Pack 6" or "Pack de 6" itself. It is what tells a six pack of litre
+   * cartons from a six litre jug, which `unitSize` alone reads the same.
+   */
+  packCount: number | null;
   category: ItemCategory;
   defaultUnit: UnitOfMeasure;
   /**
@@ -1347,6 +1365,8 @@ export interface CreateItemRequest extends AdminCredential {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  /** How many units the pack holds (plan 0162). See {@link ItemView.packCount}. */
+  packCount?: number | null;
   category: ItemCategory;
   defaultUnit: UnitOfMeasure;
   /** Assign the product to a group (plan 0048). Owner curation, never automatic. */
@@ -1382,10 +1402,79 @@ export interface UpdateItemRequest extends AdminCredential {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  /**
+   * Set, correct or (with `null`) clear the pack count (plan 0162).
+   *
+   * **The only write that changes a count that is set.** A run fills a null
+   * count and never overwrites one, so a person who corrected it keeps the
+   * correction.
+   */
+  packCount?: number | null;
   category?: ItemCategory;
   defaultUnit?: UnitOfMeasure;
   /** Assign, reassign or (with `null`) unassign the product's group (plan 0048). */
   productGroupId?: string | null;
+}
+
+/**
+ * The bounds of a pack count (plan 0162), which the column's check restates.
+ *
+ * A count of 1 is not a pack, and the card draws nothing for it, so it is
+ * stored as null. The upper bound is far above any pack a chain sells and low
+ * enough that a misread barcode or a weight cannot pass for a count.
+ */
+export const PACK_COUNT_MIN = 2;
+export const PACK_COUNT_MAX = 1000;
+
+/**
+ * A pack count, or null when the value is not one.
+ *
+ * Every adapter reads its count through this, so the one rule of plan 0162
+ * section 1 lives in one place: a whole number from {@link PACK_COUNT_MIN} to
+ * {@link PACK_COUNT_MAX}, and anything else is null. A string is accepted
+ * because the adapters read the count out of printed text.
+ */
+export function packCountOf(value: unknown): number | null {
+  const count =
+    typeof value === 'string' && /^\d+$/.test(value.trim())
+      ? Number(value.trim())
+      : value;
+  return typeof count === 'number' &&
+    Number.isInteger(count) &&
+    count >= PACK_COUNT_MIN &&
+    count <= PACK_COUNT_MAX
+    ? count
+    : null;
+}
+
+/** One product a run saw with a count, for {@link ITEM_PATTERNS.fillPackCounts}. */
+export interface PackCountFill {
+  itemId: string;
+  packCount: number;
+}
+
+/**
+ * Fill the pack count of products that have none (plan 0162, section 3).
+ *
+ * Sent by the harvester after a catalog discovery run, one pair per product the
+ * run saw bound to an entry that carries a count. Capped at
+ * {@link PACK_COUNT_FILL_MAX} pairs, and the harvester sends several calls for
+ * a longer list: each pair is written on its own merit, so two calls cannot
+ * leave anything half done.
+ */
+export interface FillPackCountsRequest extends AdminCredential {
+  entries: PackCountFill[];
+}
+
+/** How many pairs one {@link FillPackCountsRequest} may carry. */
+export const PACK_COUNT_FILL_MAX = 1000;
+
+export interface FillPackCountsResult {
+  /**
+   * How many products the call wrote. A product whose count was already set,
+   * or that no longer exists, is not counted.
+   */
+  written: number;
 }
 
 /** Find the item carrying this EAN, if catalog has one (plan 0038, section 6.2). */
