@@ -7,12 +7,14 @@ import { isUuid, ValidationException } from '@portfolio/luna-shopper/platform';
 /** ISO 4217 as catalog stores it: three upper case letters. */
 const CURRENCY_PATTERN = /^[A-Z]{3}$/;
 
-/** The four columns a settle writes, on every row it writes. */
+/** The five columns a settle writes, on every row it writes. */
 export interface SettlementPaidColumns {
   pricePaidCents: number | null;
   pricePaidCurrency: string | null;
   priceScopeId: string | null;
   supermarketLocationId: string | null;
+  /** The shop's chain, set exactly when the shop is (plan 0163, section 5). */
+  supermarketId: string | null;
 }
 
 /** Nothing was recorded, which is an ordinary settle. */
@@ -21,6 +23,7 @@ const NOTHING_PAID: SettlementPaidColumns = {
   pricePaidCurrency: null,
   priceScopeId: null,
   supermarketLocationId: null,
+  supermarketId: null,
 };
 
 /**
@@ -70,6 +73,22 @@ export function paidColumns(
       { messageArgs: { field: 'supermarketLocationId' } }
     );
   }
+  // The chain travels with the shop and never without it (plan 0163, section
+  // 5), which `ck_line_settlements_location_scope` also holds. A chain with no
+  // shop is a caller that built the message wrong, so it is refused rather
+  // than dropped.
+  const supermarketId = paid.supermarketId ?? null;
+  if (supermarketId !== null && !isUuid(supermarketId)) {
+    throw new ValidationException('supermarketId must be a valid chain', {
+      messageArgs: { field: 'supermarketId' },
+    });
+  }
+  if (supermarketId !== null && paid.supermarketLocationId === null) {
+    throw new ValidationException(
+      'a chain is recorded with its shop or not at all',
+      { messageArgs: { field: 'supermarketId' } }
+    );
+  }
 
   const hasAmount = paid.pricePaidCents !== null;
   const hasCurrency = paid.pricePaidCurrency !== null;
@@ -107,5 +126,6 @@ export function paidColumns(
     pricePaidCurrency: bought ? paid.pricePaidCurrency : null,
     priceScopeId: paid.priceScopeId,
     supermarketLocationId: paid.supermarketLocationId,
+    supermarketId,
   };
 }

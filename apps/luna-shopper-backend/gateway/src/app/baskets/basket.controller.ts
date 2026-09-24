@@ -38,6 +38,7 @@ import {
   type SkipBasketRowRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  BasketShopLockedException,
   ForbiddenException,
   UuidParam,
   ValidationException,
@@ -68,6 +69,7 @@ import {
   AcknowledgeBasketChangesDto,
   AddBasketLineDto,
   BasketChangesQueryDto,
+  BasketReadQueryDto,
   RenameBasketRowDto,
   RevertBasketRowDto,
   SetBasketRowDemandDto,
@@ -106,11 +108,17 @@ export class BasketLiveController {
    */
   @Get('live')
   @ApiComposedResponse(BASKET_SCHEMA_IDS.result)
-  @ApiProblemResponses({ auth: true })
-  async live(@AuthUser() user: CurrentUser): Promise<BasketResult> {
+  @ApiProblemResponses({ auth: true, body: true })
+  async live(
+    @AuthUser() user: CurrentUser,
+    @Query() query?: BasketReadQueryDto
+  ): Promise<BasketResult> {
     const req: GetLiveBasketRequest = { userId: user.userId };
     const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.live, req);
-    return this.compose(basket);
+    // The shop the device chose, which is the only way a `LIVE` basket's shop
+    // reaches the server (plan 0163; velista 0091, section 7). The permanent
+    // basket never has one of its own, so it is never locked.
+    return this.catalog.compose(basket, basket.me.id, query?.locationId);
   }
 
   /**
@@ -125,33 +133,6 @@ export class BasketLiveController {
   summary(@AuthUser() user: CurrentUser): Promise<BasketSummaryView> {
     const req: GetLiveBasketRequest = { userId: user.userId };
     return this.nats.send<BasketSummaryView>(BASKET_PATTERNS.liveSummary, req);
-  }
-
-  /**
-   * The catalog half, composed as the participant surface composes it.
-   *
-   * The owner reads their own permanent basket as their own participant row, so
-   * the answer is the same shape the shared screen gets and there is one basket
-   * screen rather than two.
-   */
-  private async compose(basket: BasketView): Promise<BasketResult> {
-    const resolved = await this.catalog.resolvedScopesOf(
-      basket.id,
-      basket.me.id
-    );
-    const products = await this.catalog.productsOf(
-      basket,
-      resolved?.view.priceScopeIds
-    );
-    const scopes = resolved
-      ? await this.catalog.scopesOf(
-          products,
-          resolved.ownerUserId,
-          resolved.view,
-          basket.servesLocations
-        )
-      : [];
-    return { ...basket, products, scopes };
   }
 }
 
@@ -181,37 +162,38 @@ export class BasketController {
     private readonly prices: SettlePriceService
   ) {}
 
-  /** The basket, its rows, its people and the products they name. */
+  /**
+   * The basket, its rows, its people and the products they name.
+   *
+   * `locationId` reads it at one shop (plan 0163, section 2): every product is
+   * priced at that shop's scope stack and carries what catalog knows about its
+   * availability there. A basket started at a shop is always read at that
+   * shop, and a different `locationId` answers 409 `basket_shop_locked`.
+   */
   @Get(':id')
   @ApiComposedResponse(BASKET_SCHEMA_IDS.result)
-  @ApiProblemResponses({ auth: true, participant: true, notFound: true })
+  @ApiProblemResponses({
+    auth: true,
+    participant: true,
+    notFound: true,
+    body: true,
+    shopLocked: true,
+  })
   async get(
     @Participant() participant: BasketParticipantContext,
-    @UuidParam('id') id: string
+    @UuidParam('id') id: string,
+    @Query() query?: BasketReadQueryDto
   ): Promise<BasketResult> {
     const req: GetBasketRequest = {
       basketId: id,
       participantId: participant.participantId,
     };
     const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.get, req);
-
-    const resolved = await this.catalog.resolvedScopesOf(
-      id,
-      participant.participantId
-    );
-    const products = await this.catalog.productsOf(
+    return this.catalog.compose(
       basket,
-      resolved?.view.priceScopeIds
+      participant.participantId,
+      query?.locationId
     );
-    const scopes = resolved
-      ? await this.catalog.scopesOf(
-          products,
-          resolved.ownerUserId,
-          resolved.view,
-          basket.servesLocations
-        )
-      : [];
-    return { ...basket, products, scopes };
   }
 
   /** Say what happened to a row at the shelf. */
@@ -230,6 +212,7 @@ export class BasketController {
     body: true,
     notFound: true,
     finishedBasket: true,
+    shopLocked: true,
   })
   async settle(
     @Participant() participant: BasketParticipantContext,
@@ -281,13 +264,16 @@ export class BasketController {
     participant: BasketParticipantContext,
     dto: SettleBasketRowDto
   ): Promise<SettlementPaid | null> {
-    if (!dto.priceScopeId) {
+    // A shop with no scope is still asked about, so that a basket started at
+    // another shop refuses it (plan 0163, section 5). Neither is nothing to
+    // record, and costs no round trip.
+    if (!dto.priceScopeId && !dto.supermarketLocationId) {
       return null;
     }
     const req: BasketSearchScopeRequest = {
       basketId,
       participantId: participant.participantId,
-      ...(dto.itemId === undefined ? { rowKey } : {}),
+      ...(dto.itemId === undefined && dto.priceScopeId ? { rowKey } : {}),
     };
     let scope: BasketSearchScope;
     try {
@@ -301,12 +287,26 @@ export class BasketController {
       // fail or succeed on its own terms.
       return null;
     }
+    // The settle's shop: the basket's own if it has one, else the one the
+    // client named, else none (plan 0163, section 5). A basket started at a
+    // shop refuses another, and a settle that names none records the basket's.
+    const own = scope.supermarketLocationId ?? null;
+    if (own && dto.supermarketLocationId && dto.supermarketLocationId !== own) {
+      throw new BasketShopLockedException(
+        'This basket was started at another shop'
+      );
+    }
+    if (!dto.priceScopeId) {
+      // A place with no scope is not recorded: the shop is never stored
+      // without the scope it was priced at.
+      return null;
+    }
     return this.prices.read({
       userId: scope.ownerUserId,
       profileId: scope.profileId ?? undefined,
       itemId: pricedItemId(dto.itemId, scope.pick),
       priceScopeId: dto.priceScopeId,
-      supermarketLocationId: dto.supermarketLocationId,
+      supermarketLocationId: own ?? dto.supermarketLocationId,
       servedLocations: scope.servesLocations,
     });
   }

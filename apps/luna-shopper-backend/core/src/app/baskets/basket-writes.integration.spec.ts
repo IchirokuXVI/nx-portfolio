@@ -629,6 +629,71 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
         ).rejects.toThrow();
       });
 
+      // Plan 0163, section 5: a settle at a shop writes the shop's chain beside
+      // it, and one in "any shop" mode writes neither.
+      it('writes the chain beside the shop, and neither in any shop mode', async () => {
+        const CHAIN = '0163abcd-1111-4000-a000-000000000003';
+        const listId = await list('Chain priced');
+        const { basket: held, participantId } = await basket(listId);
+        const atShop = await line(listId, 'Bread', 1);
+        const anyShop = await line(listId, 'Butter', 1);
+
+        await settleService.settle({
+          basketId: held.id,
+          participantId,
+          rowKey: atShop.id,
+          outcome: SettlementOutcome.BOUGHT,
+          quantity: 1,
+          from: 1,
+          paid: { ...PAID, supermarketId: CHAIN },
+        });
+        await settleService.settle({
+          basketId: held.id,
+          participantId,
+          rowKey: anyShop.id,
+          outcome: SettlementOutcome.BOUGHT,
+          quantity: 1,
+          from: 1,
+          paid: { ...PAID, supermarketLocationId: null, supermarketId: null },
+        });
+
+        const [shopRow] = await standingOf(atShop.id);
+        expect(shopRow).toMatchObject({
+          priceScopeId: SCOPE,
+          supermarketLocationId: SHOP,
+          supermarketId: CHAIN,
+        });
+        const [anyRow] = await standingOf(anyShop.id);
+        expect(anyRow).toMatchObject({
+          priceScopeId: SCOPE,
+          supermarketLocationId: null,
+          supermarketId: null,
+        });
+      });
+
+      it('refuses a chain with no shop by constraint', async () => {
+        const listId = await list('Constraint chain');
+        const row = await line(listId, 'Vinegar', 1);
+
+        await expect(
+          dataSource.getRepository(LineSettlement).insert({
+            lineId: row.id,
+            listId,
+            itemId: null,
+            outcome: SettlementOutcome.BOUGHT,
+            quantity: 1,
+            settledByUserId: ids.shopper,
+            settledByParticipantId: null,
+            settledAt: new Date(),
+            priceScopeId: SCOPE,
+            supermarketLocationId: null,
+            supermarketId: '0163abcd-1111-4000-a000-000000000003',
+            pricePaidCents: null,
+            pricePaidCurrency: null,
+          })
+        ).rejects.toThrow(/ck_line_settlements_location_scope/);
+      });
+
       it('refuses a shop with no scope by constraint', async () => {
         const listId = await list('Constraint shop');
         const row = await line(listId, 'Oil', 1);
@@ -780,6 +845,8 @@ describeIntegration('writing on a basket row (real Postgres)', () => {
       const paid = {
         priceScopeId: SCOPE,
         supermarketLocationId: SHOP,
+        // The chain goes with the shop onto the half that stands (plan 0163).
+        supermarketId: '0163abcd-1111-4000-a000-000000000003',
         pricePaidCents: 89,
         pricePaidCurrency: 'EUR',
       };

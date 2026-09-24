@@ -148,6 +148,9 @@ export class BasketLineAddService {
       // paid, learns whether this reader may record the shop they named without
       // reading a whole basket for one boolean.
       servesLocations: servesLocations(opened.participant),
+      // The basket's own shop, which a settle records when it names none and
+      // may not contradict (plan 0163, section 5).
+      supermarketLocationId: opened.basket.supermarketLocationId ?? null,
       ...(row === null
         ? {}
         : {

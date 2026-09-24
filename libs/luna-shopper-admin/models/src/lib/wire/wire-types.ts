@@ -188,6 +188,7 @@ export type CreateBasketDto = {
   name?: string | null;
   idempotencyKey?: string;
   memberUserIds?: string[];
+  supermarketLocationId?: string;
 };
 
 /**
@@ -502,6 +503,7 @@ export type ProblemDetails = {
     | 'not_configured'
     | 'client_too_old'
     | 'basket_finished'
+    | 'basket_shop_locked'
     | 'stale_quantity'
     | 'account_locked'
     | 'postal_code_unknown'
@@ -1841,6 +1843,7 @@ export type BasketBasketHeaderView = {
   status: EnumsBasketStatus;
   generatedAt: string;
   sources: BasketBasketSourceView[];
+  supermarketLocationId: string | null;
 };
 
 /**
@@ -1898,6 +1901,36 @@ export type BasketBasketPriceScopeView = {
 };
 
 /**
+ * `basket.BasketProductAtShopView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketProductAtShopView = {
+  priceScopeId: string | null;
+  price: number | null;
+  currency: string | null;
+  available: boolean | null;
+};
+
+/**
+ * `basket.BasketProductView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketProductView = {
+  id: string;
+  name: CatalogLocalizedText;
+  brand: string | null;
+  imageUrl: string | null;
+  sku: string | null;
+  ean: string | null;
+  unitSize: number | null;
+  packCount: number | null;
+  category: EnumsItemCategory;
+  defaultUnit: EnumsUnitOfMeasure;
+  productGroupId: string | null;
+  bestOffer?: CatalogItemOfferView | null;
+  offers?: CatalogItemOfferView[];
+  atShop: BasketBasketProductAtShopView | null;
+};
+
+/**
  * `basket.BasketProgress` in the gateway's OpenAPI document.
  */
 export type BasketBasketProgress = {
@@ -1925,7 +1958,9 @@ export type BasketBasketResult = {
   servesLocations: boolean;
   unseenChangeCount: number;
   newestUnseenChangeId: string | null;
-  products: CatalogItemView[];
+  supermarketLocationId: string | null;
+  products: BasketBasketProductView[];
+  shop: BasketBasketShopView | null;
   scopes: BasketBasketPriceScopeView[];
 };
 
@@ -1989,6 +2024,20 @@ export type BasketBasketScopeLocationView = {
   address: string | null;
   city: string | null;
   postalCode: string | null;
+};
+
+/**
+ * `basket.BasketShopView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketShopView = {
+  id: string;
+  supermarketId: string;
+  supermarketName: CatalogLocalizedText;
+  label: CatalogLocalizedText | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+  inProfile: boolean;
 };
 
 /**

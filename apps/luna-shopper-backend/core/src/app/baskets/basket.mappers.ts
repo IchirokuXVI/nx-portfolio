@@ -56,6 +56,8 @@ export function toBasketHeaderView(
     // What the run was asked to draw from (plan 0133, section 4). Empty on a
     // `LIVE` basket, whose coverage is a rule rather than a list of sources.
     sources,
+    // The shop it was started at, fixed for its life (plan 0163, section 1).
+    supermarketLocationId: row.supermarketLocationId ?? null,
   };
 }
 

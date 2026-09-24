@@ -16,6 +16,7 @@ import {
   type BasketParticipantContext,
   type BasketParticipantView,
   type ItemView,
+  type ShopAvailabilityView,
 } from '@portfolio/luna-shopper/contracts';
 import { CatalogSuggestService } from '../catalog/catalog-suggest.service';
 import type { ShopperSelection } from '../catalog/scope-resolution.service';
@@ -121,6 +122,9 @@ const basketView = (servesLocations: boolean): BasketView => ({
   progress: { done: 0, unavailable: 0, total: 1, pending: 1 },
   truncated: false,
   servesLocations,
+  unseenChangeCount: 0,
+  newestUnseenChangeId: null,
+  supermarketLocationId: null,
 });
 
 const item = (id: string, offer: ItemView['bestOffer']): ItemView => ({
@@ -217,6 +221,10 @@ interface World {
   readonly profileId?: string | null;
   /** What the basket's profile refuses (plan 0064), or a throw. */
   readonly refuses?: ShopperSelection | 'throws';
+  /** The shop the basket was started at (plan 0163), null for none. */
+  readonly basketShop?: string | null;
+  /** What catalog answers about a shop (plan 0163), or a throw. */
+  readonly shop?: ShopAvailabilityView | 'throws';
 }
 
 /** Refusing nothing, which is the default every test but two runs with. */
@@ -233,7 +241,10 @@ function build(world: World = {}) {
     calls.push({ subject, payload });
     switch (subject) {
       case BASKET_PATTERNS.get:
-        return basketView(world.servesLocations ?? false);
+        return {
+          ...basketView(world.servesLocations ?? false),
+          supermarketLocationId: world.basketShop ?? null,
+        };
       case BASKET_PATTERNS.searchScope:
         return {
           ownerUserId: OWNER,
@@ -242,7 +253,13 @@ function build(world: World = {}) {
           // that a settle can decide whether it may record a shop without
           // reading a whole basket for one boolean.
           servesLocations: world.servesLocations ?? false,
+          supermarketLocationId: world.basketShop ?? null,
         };
+      case SUPERMARKET_LOCATION_PATTERNS.shopAvailability:
+        if (world.shop === 'throws' || world.shop === undefined) {
+          throw new Error('catalog does not know that shop');
+        }
+        return world.shop;
       case ITEM_PATTERNS.getMany:
         if (world.items === 'throws') {
           throw new Error('catalog unreachable');
@@ -699,5 +716,257 @@ describe('GET /v1/baskets/:id: every shop (plan 0109)', () => {
     // A lookup that prices nothing has no offers to list, so the unpriced
     // request is exactly the one it always was.
     expect(lookups()[0]).not.toHaveProperty('offers');
+  });
+});
+
+/**
+ * The read at a shop (plan 0163, sections 2 and 3).
+ *
+ * A shop is named by the basket, else by `locationId`. With one, catalog is
+ * asked once for the shop's stack and the stored availability of the basket's
+ * products, the shop's quoted scope joins the scopes the read prices at, and
+ * every product carries `atShop`. The owner's profile is not consulted for
+ * any of it: a shop outside the owner's postal codes is priced like one inside.
+ */
+describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
+  /** A LIDL shop in Madrid, which the Córdoba profile never resolves. */
+  const FAR_SHOP = '5c7e9a1b-3d5f-4a7b-9c1d-3e5f7a9b1c3d';
+  const FAR_STORE = 'scope-far-store';
+  const FAR_REGION = 'scope-far-region';
+  const OTHER_SHOP = '9b1c3d5c-7e9a-4a7b-9c1d-3e5f7a9b1c3d';
+
+  const farShop = (
+    availability: ShopAvailabilityView['availability'] = [],
+    postalCode = '28013'
+  ): ShopAvailabilityView => ({
+    location: {
+      id: FAR_SHOP,
+      supermarketId: 'lidl',
+      priceScopeId: FAR_STORE,
+      priceScopeIds: [FAR_STORE, FAR_REGION],
+      label: { en: 'Lidl Gran Vía', es: 'Lidl Gran Vía' },
+      address: 'Gran Vía 1',
+      city: 'Madrid',
+      country: 'ES',
+      postalCode,
+      postalCodeSource: null,
+      latitude: null,
+      longitude: null,
+      externalRef: null,
+      externalProvider: null,
+    },
+    supermarket: {
+      id: 'lidl',
+      name: { en: 'Lidl', es: 'Lidl' },
+    } as ShopAvailabilityView['supermarket'],
+    availability,
+  });
+
+  /** Every product priced at the profile, and two of them at the far shop. */
+  const pricedEverywhere = (): ItemView[] => [
+    {
+      ...item('i-hacendado', offer('i-hacendado', SCOPE_A, 0.95)),
+      offers: [
+        offer('i-hacendado', SCOPE_A, 0.95),
+        offer('i-hacendado', FAR_STORE, 1.05),
+      ],
+    },
+    {
+      ...item('i-pascual', offer('i-pascual', SCOPE_A, 1.15)),
+      offers: [
+        offer('i-pascual', SCOPE_A, 1.15),
+        offer('i-pascual', FAR_STORE, 1.25),
+      ],
+    },
+    { ...item('i-unpriced', null), offers: [] },
+  ];
+
+  it('prices a shop outside the owner’s profile at that shop’s scope stack', async () => {
+    const { controller, lookups } = build({
+      servesLocations: true,
+      shop: farShop(),
+      items: pricedEverywhere(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: FAR_SHOP,
+    });
+
+    // The shop's quoted scope joins the owner's, so catalog prices it too.
+    expect(lookups()[0].priceScopeIds).toEqual([SCOPE_A, SCOPE_B, FAR_STORE]);
+    const [hacendado, pascual, unpriced] = result.products;
+    expect(hacendado.atShop).toEqual({
+      priceScopeId: FAR_STORE,
+      price: 1.05,
+      currency: 'EUR',
+      available: null,
+    });
+    expect(pascual.atShop?.price).toBe(1.25);
+    // No price at the shop is a null price and no scope, never a guess.
+    expect(unpriced.atShop).toEqual({
+      priceScopeId: null,
+      price: null,
+      currency: null,
+      available: null,
+    });
+    // The shop is named in `scopes`, so a client can draw it even though no
+    // scope of the owner's profile lists it.
+    const far = result.scopes.find((scope) => scope.priceScopeId === FAR_STORE);
+    expect(far).toEqual({
+      priceScopeId: FAR_STORE,
+      supermarketId: 'lidl',
+      supermarketName: { en: 'Lidl', es: 'Lidl' },
+      locations: [
+        {
+          supermarketLocationId: FAR_SHOP,
+          label: { en: 'Lidl Gran Vía', es: 'Lidl Gran Vía' },
+          address: 'Gran Vía 1',
+          city: 'Madrid',
+          postalCode: '28013',
+        },
+      ],
+    });
+    // A `LIVE` or unlocked basket has no shop of its own to name.
+    expect(result.shop).toBeNull();
+  });
+
+  it('asks catalog once, for the shop and every product the rows name', async () => {
+    const { controller, send } = build({ shop: farShop() });
+
+    await controller.get(participant(), BASKET_ID, { locationId: FAR_SHOP });
+
+    const asked = send.mock.calls.filter(
+      ([subject]) => subject === SUPERMARKET_LOCATION_PATTERNS.shopAvailability
+    );
+    expect(asked).toEqual([
+      [
+        SUPERMARKET_LOCATION_PATTERNS.shopAvailability,
+        {
+          supermarketLocationId: FAR_SHOP,
+          itemIds: ['i-hacendado', 'i-pascual', 'i-unpriced'],
+        },
+      ],
+    ]);
+  });
+
+  it('answers atShop.available as stored: true, false, and null with no row', async () => {
+    const { controller } = build({
+      shop: farShop([
+        { itemId: 'i-hacendado', available: true },
+        { itemId: 'i-pascual', available: false },
+      ]),
+      items: pricedEverywhere(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: FAR_SHOP,
+    });
+
+    expect(
+      result.products.map((product) => [product.id, product.atShop?.available])
+    ).toEqual([
+      ['i-hacendado', true],
+      ['i-pascual', false],
+      // No row for this shop: unknown, and never read off the chain.
+      ['i-unpriced', null],
+    ]);
+  });
+
+  it('answers a row the shop holds with a null value as null', async () => {
+    const { controller } = build({
+      shop: farShop([{ itemId: 'i-hacendado', available: null }]),
+      items: pricedEverywhere(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: FAR_SHOP,
+    });
+
+    expect(result.products[0].atShop?.available).toBeNull();
+  });
+
+  it('carries atShop null on every product, and no shop, when the read has none', async () => {
+    const { controller, send } = build({ items: pricedEverywhere() });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(result.products.every((product) => product.atShop === null)).toBe(
+      true
+    );
+    expect(result.shop).toBeNull();
+    expect(send.mock.calls.map(([subject]) => subject)).not.toContain(
+      SUPERMARKET_LOCATION_PATTERNS.shopAvailability
+    );
+  });
+
+  it('reads a basket started at a shop at that shop, and names it', async () => {
+    const { controller } = build({
+      basketShop: FAR_SHOP,
+      shop: farShop([], '14008'),
+      items: pricedEverywhere(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(result.supermarketLocationId).toBe(FAR_SHOP);
+    expect(result.products[0].atShop?.priceScopeId).toBe(FAR_STORE);
+    expect(result.shop).toEqual({
+      id: FAR_SHOP,
+      supermarketId: 'lidl',
+      supermarketName: { en: 'Lidl', es: 'Lidl' },
+      label: { en: 'Lidl Gran Vía', es: 'Lidl Gran Vía' },
+      address: 'Gran Vía 1',
+      city: 'Madrid',
+      postalCode: '14008',
+      // The profile's codes are 14008, so this shop is in it (section 3).
+      inProfile: true,
+    });
+  });
+
+  it('says a basket’s shop is outside the profile when its postal code is', async () => {
+    const { controller } = build({
+      basketShop: FAR_SHOP,
+      shop: farShop(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(result.shop?.inProfile).toBe(false);
+  });
+
+  it('accepts the basket’s own shop named again', async () => {
+    const { controller } = build({ basketShop: FAR_SHOP, shop: farShop() });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: FAR_SHOP,
+    });
+
+    expect(result.shop?.id).toBe(FAR_SHOP);
+  });
+
+  it('refuses another shop on a basket started at one, with 409 basket_shop_locked', async () => {
+    const { controller, lookups } = build({
+      basketShop: FAR_SHOP,
+      shop: farShop(),
+    });
+
+    await expect(
+      controller.get(participant(), BASKET_ID, { locationId: OTHER_SHOP })
+    ).rejects.toMatchObject({ code: 'basket_shop_locked' });
+    // Refused before catalog is asked anything.
+    expect(lookups()).toEqual([]);
+  });
+
+  it('keeps the read when catalog cannot name the shop, and draws no shop half', async () => {
+    const { controller } = build({ shop: 'throws' });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: FAR_SHOP,
+    });
+
+    expect(result.id).toBe(BASKET_ID);
+    expect(result.products.every((product) => product.atShop === null)).toBe(
+      true
+    );
   });
 });

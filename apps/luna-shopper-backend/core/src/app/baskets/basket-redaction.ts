@@ -1,4 +1,3 @@
-import { ParticipantKind } from '@portfolio/luna-shopper/contracts';
 import type { BasketParticipant } from '../entities';
 
 /**
@@ -75,22 +74,32 @@ export class BasketRedaction {
 }
 
 /**
- * Who is served shop addresses (plan 0136, section 2).
+ * Who is served shop addresses (plan 0163, section 4).
  *
- * **The owner and every named person**, which is somebody the owner added from
- * their groups (`invitedAt` set). A link visitor, guest or registered, is served
- * chains and price scopes and never a street address.
+ * **Every participant**, a link visitor included, guest or registered. A guest
+ * standing in a shop picks it from the same list the owner sees, and a settle
+ * they make there records the shop.
  *
- * It cannot be answered by the per list rule above, and that is why it is a
- * separate question rather than a consequence of one: the shops are the
- * **owner's profile**, so they are not a fact about any list and no list's
- * permissions can decide who reads them. Plan 0143 reads the same flag for the
- * price a settlement was paid at.
+ * ## This reverses plan 0136 section 2, and says what it costs
+ *
+ * That rule served addresses only to the owner and to the people the owner
+ * named, because the shops are the owner's profile. Serving them to anybody
+ * holding the link **tells a link visitor roughly where the owner shops**,
+ * which is roughly where the owner lives. The user chose that on 2026-09-24,
+ * so the next reader should not mistake it for an oversight.
+ *
+ * What a link visitor is still not served: the shops the owner bought at
+ * recently (plan 0164), and anything about the owner's purchases, including the
+ * shop a settlement recorded, which is served only in a person's own history.
+ *
+ * It is still a function of the participant rather than a constant, so that the
+ * callers ask one question in one place if the rule ever narrows again. Plan
+ * 0143 reads the same flag for the shop a settle may record.
  */
 export function servesLocations(
-  participant: BasketParticipant
+  // Read by no branch since plan 0163, and kept so the callers do not change
+  // shape when the rule does.
+  _participant: BasketParticipant
 ): boolean {
-  return (
-    participant.kind === ParticipantKind.OWNER || participant.invitedAt !== null
-  );
+  return true;
 }

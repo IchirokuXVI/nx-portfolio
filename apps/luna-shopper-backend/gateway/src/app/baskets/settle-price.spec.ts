@@ -30,7 +30,10 @@ const SCOPE = 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73';
 const OTHER_SCOPE = '1f37b4e2-c6a8-4d95-8a0b-2c6e4f9a1d73';
 const ITEM = '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13';
 const SHOP = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
-const OTHER_SHOP = '73b49a1d-e2c6-4a81-b37d-95f80b2c6e4f';
+/** The chain SHOP belongs to, recorded beside it (plan 0163). */
+const CHAIN = '4a81b37d-95f8-4b2c-8e4f-9a1d73b4e2c6';
+/** A scope no profile here resolves: the stack of a shop outside it. */
+const FAR_SCOPE = 'e2c64a81-b37d-495f-80b2-c6e4f9a1d73b';
 
 const offer = (
   priceScopeId: string,
@@ -84,8 +87,11 @@ interface World {
   readonly items?: ItemView[] | 'throws' | 'never answers';
   /** What the resolver answers with, a throw, or silence. */
   readonly resolves?: CatalogScopeView | 'throws' | 'never answers';
-  /** What the shop listing answers with, or a throw. */
-  readonly shops?: string[] | 'throws';
+  /**
+   * The scope stack catalog answers for SHOP (plan 0163), or a throw. The shop
+   * is kept exactly when the settle's scope is in it.
+   */
+  readonly shopStack?: string[] | 'throws';
 }
 
 function build(world: World = {}) {
@@ -103,13 +109,22 @@ function build(world: World = {}) {
           return new Promise(() => undefined);
         }
         return { items: world.items ?? [product([offer(SCOPE, 0.95)])] };
-      case SUPERMARKET_LOCATION_PATTERNS.list:
-        if (world.shops === 'throws') {
+      case SUPERMARKET_LOCATION_PATTERNS.shopAvailability:
+        if (world.shopStack === 'throws') {
           throw new Error('catalog unreachable');
         }
         return {
-          items: (world.shops ?? [SHOP]).map((id) => ({ id })),
-          nextCursor: null,
+          location: {
+            id: SHOP,
+            supermarketId: CHAIN,
+            priceScopeId: (world.shopStack ?? [SCOPE])[0],
+            priceScopeIds: world.shopStack ?? [SCOPE],
+          },
+          supermarket: {
+            id: CHAIN,
+            name: { en: 'Mercadona', es: 'Mercadona' },
+          },
+          availability: [],
         };
       default:
         throw new Error(`unexpected subject ${subject}`);
@@ -151,6 +166,7 @@ describe('the price a settle records (plan 0143, section 4.2)', () => {
     expect(await w.service.read(input())).toEqual({
       priceScopeId: SCOPE,
       supermarketLocationId: null,
+      supermarketId: null,
       // Catalog holds currency units with two decimals; the column is the
       // minor unit.
       pricePaidCents: 95,
@@ -224,6 +240,7 @@ describe('the price a settle records (plan 0143, section 4.2)', () => {
       expect(await w.service.read(input())).toEqual({
         priceScopeId: SCOPE,
         supermarketLocationId: null,
+        supermarketId: null,
         pricePaidCents: null,
         pricePaidCurrency: null,
       });
@@ -259,7 +276,7 @@ describe('the price a settle records (plan 0143, section 4.2)', () => {
   });
 
   describe('the shop (section 4.4)', () => {
-    it('is recorded when it belongs to the scope and the reader is served shops', async () => {
+    it('is recorded with its chain when it belongs to the scope and the reader is served shops', async () => {
       const w = build();
 
       const paid = await w.service.read(
@@ -267,11 +284,52 @@ describe('the price a settle records (plan 0143, section 4.2)', () => {
       );
 
       expect(paid?.supermarketLocationId).toBe(SHOP);
+      expect(paid?.supermarketId).toBe(CHAIN);
       expect(paid?.pricePaidCents).toBe(95);
     });
 
+    // Plan 0163, section 5: the resolution is the owner's scopes plus the
+    // stack of the settle's shop, so a shop no profile reaches is priced and
+    // recorded like any other.
+    it('prices and records a shop outside the owner’s profile, at its own stack', async () => {
+      const w = build({
+        shopStack: [FAR_SCOPE],
+        items: [product([offer(FAR_SCOPE, 1.1)])],
+      });
+
+      const paid = await w.service.read(
+        input({
+          priceScopeId: FAR_SCOPE,
+          supermarketLocationId: SHOP,
+          servedLocations: true,
+        })
+      );
+
+      expect(paid).toEqual({
+        priceScopeId: FAR_SCOPE,
+        supermarketLocationId: SHOP,
+        supermarketId: CHAIN,
+        pricePaidCents: 110,
+        pricePaidCurrency: 'EUR',
+      });
+    });
+
+    it('refuses a scope outside both the profile and the shop, as before', async () => {
+      const w = build({ shopStack: [FAR_SCOPE] });
+
+      expect(
+        await w.service.read(
+          input({
+            priceScopeId: 'ffffffff-1111-4111-8111-111111111111',
+            supermarketLocationId: SHOP,
+            servedLocations: true,
+          })
+        )
+      ).toBe(null);
+    });
+
     it('is dropped when the shop is not in the scope, and the price still stands', async () => {
-      const w = build({ shops: [OTHER_SHOP] });
+      const w = build({ shopStack: [OTHER_SCOPE] });
 
       const paid = await w.service.read(
         input({ supermarketLocationId: SHOP, servedLocations: true })
@@ -291,11 +349,13 @@ describe('the price a settle records (plan 0143, section 4.2)', () => {
       );
 
       expect(paid?.supermarketLocationId).toBe(null);
-      expect(w.calls).not.toContain(SUPERMARKET_LOCATION_PATTERNS.list);
+      expect(w.calls).not.toContain(
+        SUPERMARKET_LOCATION_PATTERNS.shopAvailability
+      );
     });
 
-    it('is dropped when the shop listing throws, and the price still stands', async () => {
-      const w = build({ shops: 'throws' });
+    it('is dropped when catalog cannot answer for the shop, and the price still stands', async () => {
+      const w = build({ shopStack: 'throws' });
 
       const paid = await w.service.read(
         input({ supermarketLocationId: SHOP, servedLocations: true })
@@ -303,6 +363,7 @@ describe('the price a settle records (plan 0143, section 4.2)', () => {
 
       expect(paid).toMatchObject({
         supermarketLocationId: null,
+        supermarketId: null,
         pricePaidCents: 95,
       });
     });
@@ -331,6 +392,7 @@ describe('the price a settle records (plan 0143, section 4.2)', () => {
       expect(await pending).toEqual({
         priceScopeId: SCOPE,
         supermarketLocationId: null,
+        supermarketId: null,
         pricePaidCents: null,
         pricePaidCurrency: null,
       });

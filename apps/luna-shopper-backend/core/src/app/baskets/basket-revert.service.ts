@@ -185,6 +185,8 @@ export class BasketRevertService {
                 pricePaidCurrency: candidate.pricePaidCurrency,
                 priceScopeId: candidate.priceScopeId,
                 supermarketLocationId: candidate.supermarketLocationId,
+                // The chain goes with the shop it names (plan 0163).
+                supermarketId: candidate.supermarketId,
               })
             );
           }
