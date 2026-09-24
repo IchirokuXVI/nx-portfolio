@@ -27,6 +27,7 @@ import {
   type BasketRowEntry,
   type BasketRow as BasketRowModel,
   type BasketRowState,
+  type BasketShelfMark,
 } from '@portfolio/velista/models';
 import { formatMoney } from '@portfolio/velista/platform';
 import {
@@ -217,8 +218,8 @@ export class BasketRow {
   readonly entry = input<BasketRowEntry | null>(null);
 
   /**
-   * The price scope this row quotes, or null for the cheapest anywhere
-   * (velista `0078`, section 5).
+   * Whether this row quotes the chosen shop's price, or the cheapest anywhere
+   * (velista `0078`, section 5; `0102`).
    *
    * An input rather than a store read, exactly as {@link canReopen} and
    * {@link ownName} are: one basket has a dozen of these components and the answer
@@ -226,9 +227,20 @@ export class BasketRow {
    *
    * It changes **which** number the caption carries and nothing else about the row:
    * a row priced at Mercadona and a row priced at the cheapest of five shops are the
-   * same shape, which is `0062` section 2's rule and holds here too.
+   * same shape, which is `0062` section 2's rule and holds here too. At a shop the
+   * number is the product's `atShop` price, which the server decided.
    */
-  readonly shop = input<string | null>(null);
+  readonly atShop = input(false);
+
+  /**
+   * What the chosen shop is known not to have on this row, or null (velista
+   * `0102`).
+   *
+   * Composed by the pipeline beside {@link priceMark}. **A mark and never a move**:
+   * the row keeps its place, its controls and its number, because the shelf may be
+   * restocked and the person is the one looking at it.
+   */
+  readonly shelf = input<BasketShelfMark | null>(null);
 
   /**
    * What this row says about that shop, beside the number, or null.
@@ -781,7 +793,7 @@ export class BasketRow {
    */
   protected readonly productPrice = computed<string | null>(() => {
     // The same lookup a settle reads its scope from (velista `0095`, section 6).
-    const offer = shownOffer(this._product(), this.shop());
+    const offer = shownOffer(this._product(), this.atShop());
     if (offer === null || offer.price === null) {
       return null;
     }
@@ -827,6 +839,37 @@ export class BasketRow {
       chain: elsewhere.chain,
     });
     return `${missing} · ${at}`;
+  });
+
+  /**
+   * What the shop's shelf says about this row, as a key and its arguments, or null
+   * (velista `0102`).
+   *
+   * "Not available at this shop" when every option is known missing. "Instead of
+   * Danone griego, not available at this shop" when the row is drawing the option
+   * it offers in place of a missing default, which is only while that option is the
+   * product in the trolley: somebody who chose another has answered the question.
+   */
+  protected readonly shelfCaption = computed<{
+    readonly key: string;
+    readonly name?: string;
+  } | null>(() => {
+    const shelf = this.shelf();
+    if (shelf === null) {
+      return null;
+    }
+    if (shelf.kind === 'unavailable') {
+      return { key: 'basket.shelf.unavailable' };
+    }
+
+    const replaced = this.products().get(shelf.replacedId);
+    if (this._product()?.id !== shelf.optionId || replaced === undefined) {
+      return null;
+    }
+    return {
+      key: 'basket.shelf.instead',
+      name: inLocale(replaced.name, this._locale()),
+    };
   });
 
   /**
@@ -906,6 +949,8 @@ export class BasketRow {
       this.productName() ?? '',
       this.productPrice() ?? '',
       this.markCaption() ?? '',
+      // What the shop is known not to have, said as it is drawn (velista `0102`).
+      this._shelfLabel(),
       this.touched() ?? '',
       this.from() ?? '',
       // Said with the rest of the row, because a reader moving by button hears
@@ -926,6 +971,16 @@ export class BasketRow {
     ];
     return parts.filter((part) => part !== '').join('. ');
   });
+
+  /** The shelf caption, said in full, or the empty string on a row with none. */
+  private _shelfLabel(): string {
+    const caption = this.shelfCaption();
+    return caption === null
+      ? ''
+      : this._translator.t(caption.key, undefined, this._locale(), {
+          name: caption.name ?? '',
+        });
+  }
 
   /** The tag, said in full, or the empty string on a row with no mark. */
   private _markLabel(): string {

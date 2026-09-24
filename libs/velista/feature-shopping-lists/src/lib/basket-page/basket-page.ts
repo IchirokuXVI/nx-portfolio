@@ -26,11 +26,11 @@ import {
 import {
   APP_BASE_PATH,
   basketRowProduct,
+  basketShelfMark,
   countableBasketRows,
   isLinkVisitor,
   LINK_VISIT_HOURS,
   selectBasketSurface,
-  shownPriceScope,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
   VISIT_WARNING_MINUTES,
@@ -943,24 +943,50 @@ export class BasketPage {
         outcome: 'BOUGHT',
         quantity: row.left,
         from: row.left,
-        ...this._scopeOf(row),
+        ...this._settleAt(row),
       })
     );
   }
 
   /**
-   * The scope of the price the row draws, as a body fragment to spread (velista `0095`,
-   * section 6). Empty when it draws none.
+   * Where a settle from the row happened and what it bought, as a body fragment to
+   * spread (velista `0095`, section 6; `0102`).
    *
-   * The row on this page is bound with no chosen product, so this asks the same
-   * question with the same null: what is sent is what the row drew.
+   * The scope of the price the row draws, and the shop the person is buying at,
+   * both from `BasketViewStore.settleShop`, which the settle sheet asks too. And the
+   * option the row offers in place of a default the shop is known not to have:
+   * the row names it, so the settle buys it.
+   *
+   * The row on this page is bound with no product anybody chose, so this asks the
+   * same question with the same answer: what is sent is what the row drew.
    */
-  private _scopeOf(row: BasketRowModel): { priceScopeId?: string } {
-    const scope = shownPriceScope(
-      basketRowProduct(row, this.products(), null),
-      this.pricedShop()
+  private _settleAt(row: BasketRowModel): {
+    itemId?: string;
+    priceScopeId?: string;
+    supermarketLocationId?: string;
+  } {
+    const instead = this.insteadOf(row);
+    return {
+      ...(instead === null ? {} : { itemId: instead }),
+      ...this._view.settleShop(basketRowProduct(row, this.products(), instead)),
+    };
+  }
+
+  /**
+   * The option this row offers in place of a default the chosen shop is known not
+   * to have, or null (velista `0102`).
+   *
+   * What the row draws as its product, and what a settle from the row buys. The
+   * page binds the row with it as the product in the trolley, because the row says
+   * so: "Instead of Danone griego, not available at this shop".
+   */
+  protected insteadOf(row: BasketRowModel): string | null {
+    const shelf = basketShelfMark(
+      row,
+      this.products(),
+      this._view.readAtShop()
     );
-    return scope === undefined ? {} : { priceScopeId: scope };
+    return shelf?.kind === 'instead' ? shelf.optionId : null;
   }
 
   /**
@@ -1032,7 +1058,7 @@ export class BasketPage {
       row.row.rowKey,
       change.to,
       change.from,
-      this._scopeOf(row.row).priceScopeId
+      this._settleAt(row.row)
     );
 
     if (result === null) {
@@ -1300,13 +1326,14 @@ export class BasketPage {
   );
 
   /**
-   * The scope every row quotes, or null for the cheapest anywhere (`0078`).
+   * Whether every row quotes the chosen shop's price, or the cheapest anywhere
+   * (`0078`; `0102`).
    *
    * Asked once for the whole basket and handed to each row, which is what this page
    * already does with `canReopen` and its own name: a component built once per line
    * has no business asking the same question a dozen times.
    */
-  protected readonly pricedShop = this._view.pricedShop;
+  protected readonly pricedAtShop = this._view.pricedAtShop;
 
   /** How many of the four properties are on, for the filter button's badge. */
   protected readonly activeCount = this._view.activeCount;
@@ -1334,12 +1361,17 @@ export class BasketPage {
         label,
         // "Remove: A to Z". The chip's own words go inside the name, so a screen
         // reader hears what pressing the x gets rid of rather than "button, x".
+        // A locked chip removes nothing, so it names what it is and why instead
+        // (velista `0102`).
         removeLabel: this._translator.t(
-          'basket.view.chip.remove',
+          chip.locked === true
+            ? 'basket.view.chip.lockedLabel'
+            : 'basket.view.chip.remove',
           undefined,
           locale,
           { name: label }
         ),
+        ...(chip.locked === true ? { locked: true } : {}),
       };
     });
   });

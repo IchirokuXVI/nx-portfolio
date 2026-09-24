@@ -21,6 +21,7 @@ import {
   type BasketPresenceEntry,
   type BasketPriceScope,
   type BasketProduct,
+  type BasketProductAtShop,
   type BasketProgress,
   type BasketRenameResult,
   type BasketRow,
@@ -28,6 +29,7 @@ import {
   type BasketRowResult,
   type BasketSession,
   type BasketShareLink,
+  type BasketShop,
   type LiveBasketSummary,
   type ScopeLocation,
 } from '@portfolio/velista/models';
@@ -547,6 +549,10 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         // `toProductOffer`, since a price nothing can be attributed to is a price no
         // shop charges.
         offers: mapArray(raw['offers'], toProductOffer),
+        // What the read's shop says (velista `0102`). Null for a read at no shop,
+        // and null from a gateway without backend `0163` behind it, which draws
+        // exactly as "any of your shops" does.
+        atShop: toBasketProductAtShop(raw['atShop']),
         // One wire value into a one element list (velista `0077`, section 2). The
         // field is required on `ItemView` and has been since the catalog existed, so
         // the fallback covers a thirteenth category rather than an older backend,
@@ -556,6 +562,62 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
           oneOf(raw['category'], PRODUCT_CATEGORIES, PRODUCT_CATEGORY_FALLBACK),
         ],
       };
+}
+
+/**
+ * From `BasketProductAtShopView` (velista `0102`; backend `0163`, section 2).
+ *
+ * Each field degrades to null on its own, which is always the least claiming
+ * reading. A price with no scope is dropped with the scope, because a settle sends
+ * the scope and a number nothing can be attributed to is a price no shop charges.
+ * An availability that is not a boolean is unknown, which is never drawn, and
+ * never false, which is: a malformed field must not mark a row missing.
+ */
+function toBasketProductAtShop(raw: unknown): BasketProductAtShop | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const priceScopeId = str(raw['priceScopeId']);
+  const price = priceScopeId === null ? null : nullableNum(raw['price']);
+  const available = raw['available'];
+  return {
+    priceScopeId: price === null ? null : priceScopeId,
+    price,
+    currency: price === null ? null : nullableStr(raw['currency']),
+    available: typeof available === 'boolean' ? available : null,
+  };
+}
+
+/**
+ * From `BasketShopView`: the shop a basket was started at (velista `0102`).
+ *
+ * Null without an id or a chain, because the fieldset draws both: a shop that
+ * cannot be named cannot be drawn, and the lock is `lockedShopId` either way.
+ * `inProfile` is read as a boolean or not at all, and not at all draws no note,
+ * which is the reading that claims nothing.
+ */
+export function toBasketShop(raw: unknown): BasketShop | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  if (id === null || !isRecord(raw['supermarketName'])) {
+    return null;
+  }
+
+  const inProfile = raw['inProfile'];
+  return {
+    id,
+    supermarketId: str(raw['supermarketId']),
+    chain: toLocalizedName(raw['supermarketName']),
+    label: isRecord(raw['label']) ? toLocalizedName(raw['label']) : null,
+    address: nullableStr(raw['address']),
+    city: nullableStr(raw['city']),
+    postalCode: nullableStr(raw['postalCode']),
+    inProfile: typeof inProfile === 'boolean' ? inProfile : null,
+  };
 }
 
 /** From `BasketScopeLocationView`: one shop, as much of it as the sheet draws. */
@@ -633,6 +695,9 @@ export function toBasket(raw: unknown): Basket | null {
 
   const lists = mapArray(raw['lists'], toBasketListRef);
   const served = new Set(lists.map((list) => list.listId));
+  // The lock is core's fact and arrives even when catalog could not name the
+  // shop, which is why it is read apart from `shop` (velista `0102`).
+  const lockedShopId = str(raw['supermarketLocationId']);
 
   return {
     id,
@@ -662,6 +727,13 @@ export function toBasket(raw: unknown): Basket | null {
         scope,
       ])
     ),
+    // A shop named without the lock that makes it the basket's is not the
+    // basket's shop, so it is dropped rather than drawn locked or unlocked.
+    shop: lockedShopId === null ? null : toBasketShop(raw['shop']),
+    lockedShopId,
+    // A basket started at a shop is always read at it (backend `0163`, section
+    // 2). A device's choice is stamped on by the store, which made the request.
+    readAt: lockedShopId,
     progress,
     // Lifted out of the wire's progress because the finish sheet and the home
     // card read it on its own, and the alternative is for one of them to

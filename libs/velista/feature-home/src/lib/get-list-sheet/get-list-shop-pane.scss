@@ -1,8 +1,9 @@
-@use '../basket-shared' as shared;
+:host {
+  display: block;
+}
 
-// The chevron and the title on one line, which is the supermarkets page's own head
-// with the page's back control folded into it: this sheet is reached from another
-// sheet, so the way back is a control here rather than a bar above it.
+// The chevron and the title on one line, which is the basket picker's own head:
+// this pane is reached from the sheet's form, so the way back is a control here.
 .head {
   display: flex;
   align-items: center;
@@ -11,16 +12,21 @@
 }
 
 .back {
-  @include shared.tap-target;
-
   display: flex;
   flex: none;
   align-items: center;
   justify-content: center;
+  min-inline-size: var(--app-touch-target);
+  min-block-size: var(--app-touch-target);
   border: none;
   background: none;
   color: var(--app-text-secondary);
   cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
 }
 
 .back-glyph {

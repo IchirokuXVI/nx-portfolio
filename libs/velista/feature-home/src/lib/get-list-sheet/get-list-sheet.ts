@@ -1,9 +1,13 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  type ElementRef,
   inject,
+  Injector,
   signal,
+  viewChild,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -26,19 +30,25 @@ import {
   formatGeneratedDate,
   BASKET_NAME_MAX_LENGTH,
   groupContacts,
+  inLocale,
   type BasketSource,
   type ProfileGenerationScope,
+  type Shop,
 } from '@portfolio/velista/models';
 import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CloseIcon,
+  OutsideAreas,
   PeoplePicker,
+  PinIcon,
   SheetShell,
   SpinnerIcon,
   type PeoplePickerToggle,
 } from '@portfolio/velista/ui';
+import { GetListShopPane } from './get-list-shop-pane';
 
 /**
  * What a group contributes to the run.
@@ -124,7 +134,11 @@ const MAX_LIST_PAGES = 100;
     CheckIcon,
     ChevronDownIcon,
     ChevronRightIcon,
+    CloseIcon,
+    GetListShopPane,
+    OutsideAreas,
     PeoplePicker,
+    PinIcon,
     SheetShell,
     SpinnerIcon,
   ],
@@ -152,6 +166,71 @@ export class GetListSheet {
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _route = inject(ActivatedRoute);
   private readonly _contacts = inject(ContactStore);
+  private readonly _injector = inject(Injector);
+
+  /**
+   * Which half of the sheet is showing: the form, or the shop picker a "Buying at"
+   * row opens (velista `0102`).
+   *
+   * A pane rather than a second sheet, because a second sheet would destroy this
+   * one and every name typed and group ticked in it. The settle sheet's panes are
+   * the same shape for the same reason.
+   */
+  readonly pane = signal<'form' | 'shop'>('form');
+
+  /**
+   * The shop the new list is bought at, or null for any of the person's shops
+   * (velista `0102`).
+   *
+   * **Kept here and nowhere else until Generate**, and changeable as often as the
+   * person likes until then: Generate sends it and from then on it is the basket's,
+   * fixed for everybody in it, with no way to change it afterwards.
+   */
+  readonly shop = signal<Shop | null>(null);
+
+  /**
+   * The chosen shop as the row draws it, or null.
+   *
+   * "Outside your areas" is worked out against the **profile the list uses**, with
+   * the server's own definition (backend `0163`, section 3): the shop's postal code
+   * is one of that profile's. So switching the profile after choosing a shop says
+   * so rather than quietly pricing a list somewhere the new profile does not reach.
+   */
+  readonly chosenShop = computed(() => {
+    const shop = this.shop();
+    if (shop === null) {
+      return null;
+    }
+
+    const locale = this._locale();
+    const profile = this.profiles().find(
+      (candidate) => candidate.id === this.selectedProfileId()
+    );
+    const code = shop.postalCode?.trim() ?? '';
+    const outsideAreas =
+      profile !== undefined &&
+      !profile.postalCodes.some(
+        (candidate) => code !== '' && candidate.postalCode.trim() === code
+      );
+    // The street, and the town beside it only for a shop somewhere else: inside
+    // the person's own areas the town goes without saying.
+    const where = (outsideAreas ? [shop.address, shop.city] : [shop.address])
+      .filter((part): part is string => part !== null && part.trim() !== '')
+      .join(', ');
+    return {
+      chain: inLocale(shop.chainName, locale),
+      where:
+        shop.name !== null
+          ? inLocale(shop.name, locale)
+          : where !== ''
+            ? where
+            : shop.city,
+      outsideAreas,
+    };
+  });
+
+  /** The "Buying at" row, which focus returns to when the picker closes. */
+  private readonly _shopRow = viewChild<ElementRef<HTMLButtonElement>>('shopRow');
 
   /**
    * The page this sheet is drawn over, named by the route rather than worked out from
@@ -579,6 +658,11 @@ export class GetListSheet {
         sources: this.sources(),
         idempotencyKey: this._idempotencyKey,
         ...(memberUserIds.length === 0 ? {} : { memberUserIds }),
+        // Only when one was chosen. "Any of your shops" sends no shop, ever
+        // (velista `0102`), and the list is then priced across the profile.
+        ...(this.shop() === null
+          ? {}
+          : { supermarketLocationId: this.shop()?.id }),
       });
 
       // Straight into the basket, which is where somebody who just pressed Generate is
@@ -620,9 +704,56 @@ export class GetListSheet {
    * pops, and popping lands on whichever page that was regardless of what is passed.
    */
   async dismiss(): Promise<void> {
+    if (this.pane() === 'shop') {
+      // Escape, the scrim and the back gesture close the picker first, back onto
+      // the form, which is where the person came from.
+      this.closeShopPicker();
+      return;
+    }
     await this._sheet.dismiss(
       appPath(this._locale(), this._basePath, this._returnTo)
     );
+  }
+
+  /**
+   * Open the shop picker over the form (velista `0102`), which is the "Buying at"
+   * row, its Change button and nothing else.
+   *
+   * It needs a profile to read shops from, and one is in hand the moment the
+   * profiles have arrived, which is before anybody can reach the row.
+   */
+  openShopPicker(): void {
+    if (this.selectedProfileId() === null || this.submitting()) {
+      return;
+    }
+    this.pane.set('shop');
+  }
+
+  /** Back to the form with the shop as it was, focus on the row that opened it. */
+  closeShopPicker(): void {
+    this.pane.set('form');
+    this._focusShopRow();
+  }
+
+  /** A shop was chosen in the picker: keep it, and go back to the form. */
+  pickShop(shop: Shop): void {
+    this.shop.set(shop);
+    this.closeShopPicker();
+  }
+
+  /**
+   * The x beside the chosen shop: back to any of the person's shops. Focus goes to
+   * the row, which is redrawn as the "any" row, so it is not lost with the x.
+   */
+  clearShop(): void {
+    this.shop.set(null);
+    this._focusShopRow();
+  }
+
+  private _focusShopRow(): void {
+    afterNextRender(() => this._shopRow()?.nativeElement.focus(), {
+      injector: this._injector,
+    });
   }
 
   onNameInput(event: Event): void {
