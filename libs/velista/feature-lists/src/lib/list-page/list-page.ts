@@ -166,10 +166,6 @@ import { voiceFailureCopy } from '../voice-error-copy';
   templateUrl: './list-page.html',
   styleUrl: './list-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    // Which element scrolls, for the sticky tools row: see `standalone`.
-    '[class.standalone]': 'standalone',
-  },
   // The composer's microphone, with this page's cap on it (plan 0038, section 4).
   //
   // Here rather than in `root`, so leaving the page releases the microphone: a
@@ -220,15 +216,6 @@ export class ListPage {
 
   /** The products on the lines, for their categories and names (section 3). */
   private readonly _itemNames = inject(ItemNames);
-
-  /**
-   * Whether this is the standalone build, where the document scrolls and not `.page`.
-   *
-   * The sticky tools row needs to know, for the reason `BasketPage.standalone` gives
-   * (velista `0079`, section 2): `overflow-y: auto` makes `.page` a scroll container
-   * whether or not it overflows, and standalone it never does.
-   */
-  protected readonly standalone = this._basePath === '';
 
   /** Both from the URL, and both signals: the router reuses this component. */
   readonly zoneId = zoneIdOf(this._route);
@@ -979,25 +966,17 @@ export class ListPage {
   /**
    * Put the end of the list on screen.
    *
-   * Which element scrolls depends on where the app is running, and the page cannot
-   * assume: mounted in the portfolio shell the column has a definite height and is the
-   * scroll container, standalone nothing above it sets one and the document scrolls
-   * instead (`list-page.scss` says why). So ask the column whether it overflows and fall
-   * back to the document, rather than picking one and being wrong in half the builds.
+   * The column is the one scroll container on this screen in both run modes, because
+   * the app is a frame that never scrolls (velista 0106), so it is the column that is
+   * asked to move.
    *
-   * Scrolling to the very end rather than bringing the row into view: at the end of the
-   * scroll the sticky composer has settled into its own place in the flow, so the newest
-   * line is directly above it. Anywhere short of that the composer floats over the last
-   * few pixels of the column and the row it was asked to reveal is the row behind it.
+   * Scrolling to the very end rather than bringing the row into view: the composer is
+   * the next item after the column, so at the end of the scroll the newest line is
+   * directly above the field.
    */
   private _scrollToNewest(column: HTMLElement): void {
-    const scroller =
-      column.scrollHeight > column.clientHeight
-        ? column
-        : this._browser.document.scrollingElement;
-
-    scroller?.scrollTo({
-      top: scroller.scrollHeight,
+    column.scrollTo?.({
+      top: column.scrollHeight,
       // Instant. The row appeared on the same frame and it is one row away, so an
       // animation here is a delay before somebody can type the next item, and this
       // field is built for entering six things in a row.

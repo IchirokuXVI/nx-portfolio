@@ -1,41 +1,23 @@
 @use '../list-page';
 
-// A screen tall page, so the composer at the end of it is at the bottom of the screen
-// rather than under the last line of a two item list.
-//
-// `block-size: 100%` alone cannot do that: standalone there is no definite height above
-// this host for the percentage to resolve against, so it degrades to `auto` and the page
-// is as tall as what is in it. The minimum is the viewport less the one inset between
-// the two, `.app-main`'s bottom safe area, which keeps a notched phone from gaining a
-// document scroll the height of its home indicator. Mounted in the shell the percentage
-// does resolve and is already at least this, so the minimum never binds.
-//
-// `svh` and not `dvh`: the app is sized in the small viewport everywhere, and
-// `AppLayout`'s stylesheet says why.
+// Exactly as tall as the app's page slot, so the composer at the end of it is at the
+// foot of the slot, directly above the bar, rather than under the last line of a two
+// item list. The slot has a definite height in both run modes, because the app is a
+// frame one viewport tall that never scrolls (velista 0106), so the percentage resolves
+// standalone and mounted alike.
 :host {
   display: flex;
   flex-direction: column;
   block-size: 100%;
-  min-block-size: calc(100svh - var(--app-safe-bottom));
 }
 
-// Whether this column is the scroll container depends on where the app is running,
-// and both answers are fine. Mounted in the portfolio shell it is: the shell's host is
-// a flex container, so the app's own host is a stretched flex item with a definite
-// height, `.app-main` resolves its `100%` against it and so does this page's host.
-// Standalone nothing above sets a height, `block-size: 100%` degrades to `auto`, and
-// the document scrolls instead. `overflow-y` stays because it is load bearing in the
-// first case; the composer is pinned by `position: sticky`, which is correct in both.
+// The one scroll container on this screen, in both run modes. The tools row sticks to
+// its top, and the composer is the next item of the host rather than a row inside it,
+// so the last line can always be scrolled to just above the field.
 .page {
   @include list-page.page;
-}
 
-// Standalone the document scrolls, so `.page` must not be a scroll container of its
-// own, or the sticky tools row sticks to a box that never moves (velista 0079,
-// section 2, which the basket page found first). Standalone `.page` is already as
-// tall as its content, so `overflow-y: auto` never produced a scroll there anyway.
-:host(.standalone) .page {
-  overflow-y: visible;
+  min-block-size: 0;
 }
 
 // The tools row (velista 0082, section 2), stretched over the column's own inline
@@ -57,27 +39,16 @@ lib-list-tools {
 // Always at the bottom of the screen, which is what makes the field reachable with a
 // thumb no matter how long the list is.
 //
-// Sticky rather than fixed. Fixed would take it out of the flow and leave the last line
-// of a full list underneath it forever, with no honest way to reserve the space, since
-// the composer's height is one row of text plus whatever the safe area inset is on this
-// device. Sticky keeps the box in the flow: it floats at the bottom edge while there is
-// still list below, and settles into its own place at the end of the scroll, where the
-// newest line sits directly above it rather than behind it.
-//
-// It is a sibling of the column rather than a child, so when the column is the scroller
-// this rule does nothing and the dock is simply the last row of the host.
+// An ordinary item of the host's column, after `.page` (velista 0106). It used to be
+// `position: sticky` at the bottom of the document, which is exactly the strip the bar
+// covered. As the item after the scroller it cannot be over a line and nothing can be
+// over it: the list scrolls above it and ends where it begins.
 //
 // The pin is on the dock rather than on the composer because the voice strip has to
-// travel with it. Two pinned boxes stacked need the height of the lower one to place
-// the upper, and that height is one row of text plus this device's safe area inset,
-// which no stylesheet can know. One container has no such problem.
+// travel with it: one container, one row after the column.
 .composer-dock {
   display: block;
-  position: sticky;
-  inset-block-end: 0;
-  // Above the rows it floats over. The composer paints its own surface, so without a
-  // stacking order a row's own raised background can show through it.
-  z-index: 1;
+  flex: none;
 }
 
 lib-line-composer {

@@ -3,13 +3,19 @@
   block-size: 100%;
 }
 
+// Exactly as tall as the app's page slot, not at least as tall (velista 0106). With a
+// minimum a long dashboard grew past the slot and took the dock down with it, so the
+// dock sat at the end of the zones rather than at the foot of the screen. The slot has
+// a definite height in both run modes, because the app is a frame that never scrolls.
 .page {
   display: flex;
   flex-direction: column;
-  min-block-size: 100%;
+  block-size: 100%;
 }
 
-// The dashboard scrolls its content between a fixed header and a fixed action bar.
+// The dashboard scrolls its content between a fixed header and a fixed dock, and this
+// is the one scroll container on the screen. `min-block-size: 0` is what lets it be
+// shorter than the zones in it.
 // The front door, which does not scroll at all, took its `.spacer` rule with it to
 // `landing-page.scss` when the two screens were split (plan 0007).
 .content {
@@ -17,6 +23,7 @@
   flex-direction: column;
   gap: var(--app-space-5);
   flex: 1;
+  min-block-size: 0;
   padding: var(--app-space-5) var(--app-space-5) var(--app-space-6);
   overflow-y: auto;
 }

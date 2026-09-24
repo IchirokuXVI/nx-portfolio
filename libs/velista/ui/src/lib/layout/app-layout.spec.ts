@@ -555,6 +555,93 @@ describe('AppLayout', () => {
 
       expect(host.classList).toContain('nav-up');
     });
+
+    // velista 0106: the app is a column one viewport tall that never scrolls. The page
+    // slot scrolls and the bar is the item after it, so nothing a page draws can be
+    // under the bar, and no page needs to know how tall the bar is.
+    describe('as the last item of the frame (velista 0106)', () => {
+      const SHEET_ROUTES: Routes = [
+        {
+          path: 'home',
+          component: TestPage,
+          children: [{ path: 'sheet/zones/new', component: TestPage }],
+        },
+      ];
+
+      async function onHome(): Promise<ComponentFixture<AppLayout>> {
+        const fixture = await createFixture({}, SHEET_ROUTES);
+        TestBed.inject(NavChrome).setUsable(true);
+        TestBed.inject(BackendReadiness).reportReady();
+        await TestBed.inject(Router).navigateByUrl('/home');
+        fixture.detectChanges();
+        return fixture;
+      }
+
+      function roomOf(fixture: ComponentFixture<AppLayout>): Element | null {
+        return (fixture.nativeElement as HTMLElement).querySelector(
+          '.nav-room'
+        );
+      }
+
+      it('comes after the page slot, which holds the outlet', async () => {
+        const fixture = await onHome();
+        const slot = (fixture.nativeElement as HTMLElement).querySelector(
+          '.app-page'
+        );
+
+        expect(slot?.contains(outletOf(fixture))).toBe(true);
+        expect(slot?.contains(navOf(fixture))).toBe(false);
+        expect(navOf(fixture)?.previousElementSibling).toBe(slot);
+      });
+
+      it('keeps its room while a sheet has put it away, so the page does not reflow', async () => {
+        const fixture = await onHome();
+        expect(roomOf(fixture)).toBeNull();
+
+        await TestBed.inject(Router).navigateByUrl('/home/sheet/zones/new');
+        fixture.detectChanges();
+
+        expect(navOf(fixture)).toBeNull();
+        expect(roomOf(fixture)).not.toBeNull();
+        expect(roomOf(fixture)?.getAttribute('aria-hidden')).toBe('true');
+
+        await TestBed.inject(Router).navigateByUrl('/home');
+        fixture.detectChanges();
+
+        expect(navOf(fixture)).not.toBeNull();
+        expect(roomOf(fixture)).toBeNull();
+      });
+
+      it('keeps no room on a screen that has no bar', async () => {
+        const fixture = await createFixture();
+        TestBed.inject(BackendReadiness).reportReady();
+        fixture.detectChanges();
+
+        expect(navOf(fixture)).toBeNull();
+        expect(roomOf(fixture)).toBeNull();
+      });
+
+      // jsdom lays nothing out, so the half a spec can see is the stylesheets. Comments
+      // are stripped first, because both files say what they used to do.
+      function rules(file: string): string {
+        return readFileSync(resolve(__dirname, file), 'utf8').replace(
+          /\/\/.*$/gm,
+          ''
+        );
+      }
+
+      it('sizes the frame to the small viewport and pads nothing under the page', () => {
+        const layout = rules('app-layout.scss');
+
+        expect(layout).toMatch(/:host\s*\{[^}]*block-size:\s*100svh/);
+        expect(layout).not.toContain('--app-page-foot');
+        expect(layout).not.toMatch(/padding-bottom/);
+      });
+
+      it('draws the bar in the flow rather than fixed over the page', () => {
+        expect(rules('app-nav.scss')).not.toMatch(/position:\s*fixed/);
+      });
+    });
   });
 
   /**

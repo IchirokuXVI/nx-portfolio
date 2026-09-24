@@ -64,11 +64,23 @@
 // start of the row: content at the left edge, and the app's ground colour not filling
 // the viewport (plan 0007, section 5).
 //
-// `flex: 1` is harmless in the standalone build, where the host is not a flex item and
-// the declaration is simply ignored.
+// Standalone, `AppRoot` is a flex row as well, so the same declaration applies in both
+// run modes.
 //
-// `min-block-size` was `100%`, which is the same class of mistake on the other axis: a
-// percentage height against a parent with no definite height resolves to `auto`.
+// **The app is a frame exactly one viewport tall, and the document never scrolls**
+// (velista 0106). It is a column: the page slot takes the free space and scrolls, and
+// the bottom bar is an ordinary item at its end. A bar that is part of the column takes
+// its real height out of the layout, so nothing can sit under it and no page needs to
+// know how tall it is. The bar used to be `position: fixed` with padding under the
+// outlet to make room for it, and padding moves nothing that is pinned to the bottom of
+// the viewport: a sticky composer sat exactly in the strip the bar covered.
+//
+// A `block-size` and not a minimum, because a minimum is not a definite height and every
+// percentage below it would resolve to `auto`. Mounted, the shell's host is a flex row at
+// least `100dvh` tall, so this is the space it gives the app whatever that host does.
+//
+// The height was once `min-block-size: 100%`, which is a percentage against a parent
+// with no definite height and resolves to `auto`.
 //
 // It was then `100dvh`, which is what the shell uses for its own host, and that is the
 // unit this app cannot use. **The full height of this app is `100svh`, everywhere.**
@@ -106,15 +118,12 @@
 :host {
   @include tokens.app-root;
 
-  // How much room the page leaves at its foot. The safe area on its own while the app
-  // draws no bar, and the whole bar once it does (plan 0097).
-  --app-page-foot: var(--app-safe-bottom);
-
-  display: block;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   // So a wide child cannot push the flex item past the viewport.
   min-inline-size: 0;
-  min-block-size: 100svh;
+  block-size: 100svh;
   background: var(--app-surface-ground);
   box-shadow: 0 50vmax 0 50vmax var(--app-surface-ground);
   color: var(--app-text-primary);
@@ -131,9 +140,11 @@
 //
 // One declaration rather than an edit to every dock in the app, and that is the point:
 // a dock added later is covered by it without knowing this rule exists.
+//
+// On a screen with no bar the swap is off, and the inset is the page's own to apply,
+// once: nothing in this frame pads the foot of the page slot (velista 0106).
 :host(.nav-up) {
   --app-safe-bottom: 0px;
-  --app-page-foot: var(--app-nav-height);
 }
 
 // A theme is a class on the app root that redefines the semantic colour layer,
@@ -151,26 +162,50 @@
   // Phone first (plan 0001, D3): the layout starts at the small screen and every
   // wider breakpoint is an addition, never the other way round.
   //
-  // Section 8: this is not a scroll container, and no page below it may become
-  // one. Scrolling is page level, because nested scroll areas fight the user on
-  // a touch device.
-  display: block;
-  // Insets, so content is not swallowed by a notch in landscape and a bottom
-  // action bar is not hidden behind the home indicator.
-  padding-right: var(--app-safe-right);
-  padding-left: var(--app-safe-left);
-  // The bar is fixed to the screen, so this is what keeps a page from ending
-  // underneath it: `box-sizing: border-box` is global, so a page sized `100%` of this
-  // element resolves against the content box and stops above the bar.
-  padding-bottom: var(--app-page-foot);
-  height: 100%;
+  // The column (velista 0106): the page slot, then the bar. `min-block-size: 0` so the
+  // slot can be shorter than what is in it, which is what lets it scroll.
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-block-size: 0;
+  inline-size: 100%;
 
   // Section 8: wide screens are not designed, only kept from breaking. One
   // centred column of about 480px is the phone layout given room to breathe,
   // which costs one media query rather than a second design. A shopping list
-  // stretched across 1900px is unusable.
+  // stretched across 1900px is unusable. The bar is inside the column, so it
+  // follows it without a rule of its own.
   @include tokens.app-from(tokens.$app-breakpoint-md) {
     max-width: tokens.$app-content-max;
     margin-inline: auto;
   }
+}
+
+// Where the page is drawn, and the one scroll container this frame has.
+//
+// A page with a scroller of its own (the list, the basket) is exactly as tall as this
+// slot, so the slot never overflows and the page's own column is the one that moves.
+// Every other page is allowed to be taller than the slot, and then the slot scrolls in
+// place of the document, which is where those pages scrolled before. Either way there is
+// one scroller on the screen at a time, and it ends at the top of the bar.
+//
+// `display: block` so a page's `block-size: 100%` resolves against the slot, whose
+// height is definite because it is a flexed item of a column that has one.
+.app-page {
+  display: block;
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  // Insets, so content is not swallowed by a notch in landscape. On the slot and not
+  // on the column, because the bar pads its own row for the same notch.
+  padding-inline: var(--app-safe-left) var(--app-safe-right);
+}
+
+// The room the bar takes, kept while a sheet has put the bar away (plan 0097: a sheet
+// hides the bar and keeps its room). Without it the page slot would grow by the bar's
+// height on the way into every sheet and shrink again on the way out, a reflow under a
+// scrim that nobody asked for.
+.nav-room {
+  flex: none;
+  block-size: var(--app-nav-height);
 }

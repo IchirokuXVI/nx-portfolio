@@ -140,7 +140,11 @@ export class AppLayout {
   readonly navVisible = this._nav.visible;
 
   /**
-   * Whether the page leaves room at its foot for the bar.
+   * Whether the bar belongs to the screen, drawn or not.
+   *
+   * It decides two things: the `nav-up` class, which takes the bottom inset off
+   * everything below this element because the bar carries it, and whether the column
+   * keeps the bar's room when it is not drawn (velista 0106).
    *
    * `reserved` and not `visible`, which differ on exactly one thing: a sheet hides the
    * bar and keeps its room. Reserving on `visible` would reflow the page under every

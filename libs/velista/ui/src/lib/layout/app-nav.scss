@@ -1,29 +1,20 @@
-@use '../styles/tokens' as tokens;
-
-// Fixed to the screen rather than placed in the column, because it belongs to the app
-// and not to the page: every screen in this app owns its own height, several are their
-// own scrollers, and a block at the end of the layout would be right on one of them
-// and wrong on the next. `AppLayout` reserves `--app-nav-height` under the outlet, so
-// nothing ends up behind this (`app-layout.scss`).
+// The last item of the app's column, not fixed to the screen (velista 0106). The bar
+// takes its own height out of the layout, so the page slot above it ends where the bar
+// begins and nothing a page draws can be under it. It was `position: fixed` with room
+// padded under the outlet, and padding does not move what a page pins to the bottom of
+// the screen: a sticky composer sat in exactly the strip this covered.
 //
 // The inline insets are here and the block one is inside the bar, because a notch in
 // landscape takes width off the whole row while the home indicator sits under the tabs.
 //
-// On a wide screen it follows the one centred column the rest of the app is drawn in,
-// rather than stretching a row of three tabs across 1900px (plan 0002, section 8).
+// On a wide screen it is as wide as the one centred column the rest of the app is drawn
+// in, because it is inside that column (plan 0002, section 8).
 :host {
-  position: fixed;
-  inset-block-end: 0;
-  inset-inline: 0;
-  z-index: var(--app-nav-z);
-  margin-inline: auto;
+  display: block;
+  flex: none;
   padding-inline: var(--app-safe-left) var(--app-safe-right);
   background: var(--app-surface-ground);
   border-block-start: 1px solid var(--app-border-subtle);
-
-  @include tokens.app-from(tokens.$app-breakpoint-md) {
-    max-inline-size: tokens.$app-content-max;
-  }
 }
 
 .bar {
