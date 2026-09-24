@@ -360,6 +360,42 @@ describe('BasketStore', () => {
     });
 
     /**
+     * A write answers `usual` null (backend `0165`), and taking that as the answer
+     * would put a row the usual filter hid back on the screen the moment it was
+     * settled (velista `0104`). The last read's value stays until the next read.
+     */
+    it('keeps the usual of the last read on a row a write answered', async () => {
+      const seeded = new BasketMemory();
+      const { store } = build({
+        getBasket: async () => {
+          const read = await seeded.getBasket();
+          return {
+            ...read,
+            rows: read.rows.map((row) => ({
+              ...row,
+              usual: { state: 'HERE' as const, bought: 3, of: 6 },
+            })),
+          };
+        },
+      });
+      await store.open('basket-saturday');
+
+      const milk = rowOf(store, 'Milk');
+      await store.settle(milk.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: milk.left,
+        from: milk.left,
+      });
+
+      expect(rowOf(store, 'Milk').left).toBe(0);
+      expect(rowOf(store, 'Milk').usual).toEqual({
+        state: 'HERE',
+        bought: 3,
+        of: 6,
+      });
+    });
+
+    /**
      * **It takes the answer's counts whole and patches nothing.** Every number on
      * this screen is one the server sent, so a store that added the units it just
      * sent to the number it was holding would be a second arithmetic.

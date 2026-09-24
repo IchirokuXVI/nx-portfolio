@@ -4,6 +4,7 @@ import {
   basketPricedAtShop,
   basketReadAtShop,
   basketSettleShop,
+  basketUsualApplies,
   basketViewActiveCount,
   basketViewChips,
   basketViewRows,
@@ -18,6 +19,7 @@ import {
   type BasketProduct,
   type BasketRow,
   type BasketShop,
+  type BasketViewContext,
   type BasketViewProperty,
   type BasketViewState,
 } from '@portfolio/velista/models';
@@ -154,11 +156,18 @@ export class BasketViewStore {
     () => (this._basket.basket()?.lockedShopId ?? null) !== null
   );
 
-  /** Everything the sheet decides, with the shop the reads are made at. */
-  readonly state = computed<BasketViewState>(() => ({
-    ...this._state(),
-    shop: this.shop(),
-  }));
+  /**
+   * Everything the sheet decides, with the shop the reads are made at.
+   *
+   * The usual filter is off whenever there is no shop, whatever was set: it counts
+   * purchases at the shop's chain, so without one it is a question with no answer,
+   * and the sheet draws no switch for it (velista `0104`).
+   */
+  readonly state = computed<BasketViewState>(() => {
+    const shop = this.shop();
+    const state = this._state();
+    return { ...state, shop, usual: state.usual && shop !== null };
+  });
 
   readonly order = computed(() => this._state().order);
 
@@ -166,6 +175,13 @@ export class BasketViewStore {
 
   /** The kept source lists, or null for all of them. See {@link keptLists}. */
   readonly lists = computed(() => this._state().lists);
+
+  /**
+   * Whether the switch "Only what I usually buy here" is on (velista `0104`).
+   *
+   * False with no shop chosen, which is also when the sheet does not draw it.
+   */
+  readonly usual = computed(() => this.state().usual);
 
   /**
    * Every scope the basket was priced at, in the order the read named them
@@ -269,17 +285,20 @@ export class BasketViewStore {
    * (section 7).
    */
   readonly sections = computed(() =>
-    composeBasketView(this._basket.rows(), this.state(), {
-      query: this._query(),
-      products: this._basket.products(),
-      locale: this._locale(),
-      lists: this._basket.lists(),
-      // Empty until the basket loads, and empty for a read the gateway could not
-      // price: the pipeline then marks nothing, which is the same screen as before.
-      scopes: this._basket.basket()?.scopes ?? new Map(),
-      shop: this.shopAt(),
-    })
+    composeBasketView(this._basket.rows(), this.state(), this._context())
   );
+
+  /** What the pipeline is told about the basket, beside what the sheet decided. */
+  private readonly _context = computed<BasketViewContext>(() => ({
+    query: this._query(),
+    products: this._basket.products(),
+    locale: this._locale(),
+    lists: this._basket.lists(),
+    // Empty until the basket loads, and empty for a read the gateway could not
+    // price: the pipeline then marks nothing, which is the same screen as before.
+    scopes: this._basket.basket()?.scopes ?? new Map(),
+    shop: this.shopAt(),
+  }));
 
   /**
    * The distinct rows on the screen, in the order they are drawn.
@@ -306,6 +325,29 @@ export class BasketViewStore {
   readonly visibleCount = computed(() => this.visibleRows().length);
 
   /**
+   * Whether the usual filter is what left the page empty (velista `0104`).
+   *
+   * True when it applies, nothing is drawn, and the same basket with the switch
+   * off would draw something. That last test is what tells this empty state from
+   * the others: a search that matches nothing says so in its own words, and so
+   * does a basket with nothing on it, whether or not the switch is on. The second
+   * composition runs only in the one case that asks, which is an empty page.
+   */
+  readonly usualHidesAll = computed(() => {
+    const state = this.state();
+    const context = this._context();
+    if (!basketUsualApplies(state, context) || this.visibleCount() > 0) {
+      return false;
+    }
+    const without = composeBasketView(
+      this._basket.rows(),
+      { ...state, usual: false },
+      context
+    );
+    return basketViewRows(without).length > 0;
+  });
+
+  /**
    * Whether every row quotes the chosen shop's price, or the cheapest anywhere
    * (`0078`; `0102`).
    *
@@ -329,7 +371,7 @@ export class BasketViewStore {
     basketReadAtShop(this.state(), { shop: this.shopAt() })
   );
 
-  /** How many of the four properties are on, for the filter button's badge. */
+  /** How many of the five properties are on, for the filter button's badge. */
   readonly activeCount = computed(() => basketViewActiveCount(this.state()));
 
   /**
@@ -406,6 +448,11 @@ export class BasketViewStore {
     if (this.shopLocked()) {
       return;
     }
+    if (shop === null) {
+      // The usual filter goes with the shop it counted against, so choosing a shop
+      // again later starts with the switch off, as it always starts (velista 0104).
+      this._state.update((state) => ({ ...state, usual: false }));
+    }
     void this._basket.readAtShop(shop);
     this._store((memory, now) =>
       shop === null
@@ -445,6 +492,22 @@ export class BasketViewStore {
   }
 
   /**
+   * Show only what is usually bought at the chosen shop's chain, or everything
+   * (velista `0104`).
+   *
+   * **Never remembered**, like the list filter: it is off on every basket that
+   * opens, because on the day it ships it hides nearly every line ever bought, and
+   * a device that switched it on once must not open the next basket that way.
+   * Refused without a shop, by doing nothing, since there is no chain to count at.
+   */
+  setUsual(usual: boolean): void {
+    if (usual && this.shop() === null) {
+      return;
+    }
+    this._state.update((state) => ({ ...state, usual }));
+  }
+
+  /**
    * Put one property back to its default, which is what a chip's x does.
    *
    * **The default is then remembered, as a choice.** Somebody who takes a remembered
@@ -462,8 +525,9 @@ export class BasketViewStore {
 
     this._state.update((state) => resetBasketViewProperty(state, property));
 
-    if (property === 'lists') {
-      // Never stored, so there is nothing to put back. `0075` section 6.
+    if (property === 'lists' || property === 'usual') {
+      // Never stored, so there is nothing to put back. `0075` section 6, and
+      // velista `0104` for the usual filter.
       return;
     }
 
