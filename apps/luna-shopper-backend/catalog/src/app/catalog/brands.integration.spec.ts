@@ -1,5 +1,9 @@
 import { JwtService } from '@nestjs/jwt';
-import { ItemCategory, UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
+import {
+  BrandBatchOutcome,
+  ItemCategory,
+  UnitOfMeasure,
+} from '@portfolio/luna-shopper/contracts';
 import {
   BrandKeyTakenException,
   BrandLabelEmptyException,
@@ -292,4 +296,73 @@ describeIntegration('the brand registry (real Postgres)', () => {
     const { keys } = await brands.keys({ userId: OWNER });
     expect(keys).toEqual(['alpha', 'bravo', 'charlie', 'delta']);
   }, 300_000);
+
+  describe('registering many at once (plan 0160)', () => {
+    it('answers one outcome per name and never fails the batch for one of them', async () => {
+      const held = await brands.create({ userId: OWNER, label: 'El Pozo' });
+      const beer = await product('Cerveza', 'MAHOU');
+
+      const { results } = await brands.registerMany({
+        userId: OWNER,
+        brands: [
+          { label: 'Mahou' },
+          { label: 'ELPOZO' },
+          { label: '---' },
+          { label: 'Hacendado', privateLabelSupermarketId: OWNER },
+        ],
+      });
+
+      expect(results).toEqual([
+        {
+          label: 'Mahou',
+          outcome: BrandBatchOutcome.CREATED,
+          brandId: expect.any(String),
+          linkedItems: 1,
+          reason: null,
+        },
+        {
+          label: 'ELPOZO',
+          outcome: BrandBatchOutcome.EXISTS,
+          brandId: held.id,
+          linkedItems: null,
+          reason: null,
+        },
+        {
+          label: '---',
+          outcome: BrandBatchOutcome.REFUSED,
+          brandId: null,
+          linkedItems: null,
+          reason: { code: 'brand_label_empty', detail: expect.any(String) },
+        },
+        // A chain that does not exist is one name's fault, not the batch's.
+        {
+          label: 'Hacendado',
+          outcome: BrandBatchOutcome.REFUSED,
+          brandId: null,
+          linkedItems: null,
+          reason: { code: 'not_found', detail: expect.any(String) },
+        },
+      ]);
+
+      // The created name claimed its products exactly as the single create does.
+      expect((await itemRow(beer.id)).brandId).toBe(results[0].brandId);
+      const [{ count }] = await dataSource.query(
+        `SELECT count(*)::int AS count FROM "brands"`
+      );
+      expect(count).toBe(2);
+    }, 180_000);
+
+    it('a name repeated in one batch is created once and then found', async () => {
+      const { results } = await brands.registerMany({
+        userId: OWNER,
+        brands: [{ label: 'Mahou' }, { label: 'MAHOU' }],
+      });
+
+      expect(results.map((row) => row.outcome)).toEqual([
+        BrandBatchOutcome.CREATED,
+        BrandBatchOutcome.EXISTS,
+      ]);
+      expect(results[1].brandId).toBe(results[0].brandId);
+    }, 180_000);
+  });
 });

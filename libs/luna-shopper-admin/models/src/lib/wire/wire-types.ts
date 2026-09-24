@@ -611,6 +611,21 @@ export type RegisterBrandSuggestionDto = {
 };
 
 /**
+ * `RegisterBrandsDto` in the gateway's OpenAPI document.
+ */
+export type RegisterBrandsDto = {
+  brands: RegisterBrandsEntryDto[];
+};
+
+/**
+ * `RegisterBrandsEntryDto` in the gateway's OpenAPI document.
+ */
+export type RegisterBrandsEntryDto = {
+  label: string;
+  privateLabelSupermarketId?: string | null;
+};
+
+/**
  * `RegisterDto` in the gateway's OpenAPI document.
  */
 export type RegisterDto = {
@@ -1179,6 +1194,26 @@ export type AdminCoreAdminBasketRowView = {
   left: number;
   bought: number;
   asked: number;
+  settlements: AdminCoreAdminBasketSettlementView[];
+};
+
+/**
+ * `admin-core.AdminBasketSettlementView` in the gateway's OpenAPI document.
+ */
+export type AdminCoreAdminBasketSettlementView = {
+  id: string;
+  lineId: string;
+  itemId: string | null;
+  outcome: EnumsSettlementOutcome;
+  quantity: number;
+  pricePaidCents: number | null;
+  pricePaidCurrency: string | null;
+  priceScopeId: string | null;
+  supermarketLocationId: string | null;
+  settledByUserId: string | null;
+  settledByParticipantId: string | null;
+  settledAt: string;
+  revertedAt: string | null;
 };
 
 /**
@@ -2229,6 +2264,35 @@ export type CatalogItemPriceView = {
   overrides: CatalogItemPriceOverrides | null;
   protectedUntil: string | null;
   details: CatalogItemPriceDetails | null;
+  writtenBy?: EnumsItemPriceWrittenBy;
+};
+
+/**
+ * `catalog.ItemScopePricesPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogItemScopePricesPage = {
+  items: CatalogItemScopePricesView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.ItemScopePricesView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemScopePricesView = {
+  priceScopeId: string;
+  supermarketId: string;
+  scopeKind: EnumsPriceScopeKind;
+  scopeExternalKey: string | null;
+  scopeLabel: CatalogLocalizedText | null;
+  scopePriority: number;
+  rows: CatalogItemPriceView[];
+  shownItemPriceId: string | null;
+  shownBecause: EnumsPriceShownBecause | null;
+  stale: boolean;
+  protectedUntil: string | null;
+  overrides: CatalogItemPriceOverrides | null;
 };
 
 /**
@@ -2391,6 +2455,20 @@ export type CatalogRegisterBrandSuggestionResult = {
   linked: CatalogBrandView | null;
   canonicalCreated: boolean;
   linkedItems: number;
+};
+
+/**
+ * `catalog.RegisterBrandsOutcome` in the gateway's OpenAPI document.
+ */
+export type CatalogRegisterBrandsOutcome = {
+  label: string;
+  outcome: EnumsBrandBatchOutcome;
+  brandId: string | null;
+  linkedItems: number | null;
+  reason: {
+    code: string;
+    detail: string;
+  } | null;
 };
 
 /**
@@ -2674,6 +2752,11 @@ export type EnumsBasketRowState =
 export type EnumsBasketStatus = 'OPEN' | 'FINISHED' | 'ARCHIVED';
 
 /**
+ * `enums.BrandBatchOutcome` in the gateway's OpenAPI document.
+ */
+export type EnumsBrandBatchOutcome = 'CREATED' | 'EXISTS' | 'REFUSED';
+
+/**
  * `enums.BulkOperationErrorCode` in the gateway's OpenAPI document.
  */
 export type EnumsBulkOperationErrorCode =
@@ -2776,6 +2859,11 @@ export type EnumsItemCategory =
   | 'OTHER';
 
 /**
+ * `enums.ItemPriceWrittenBy` in the gateway's OpenAPI document.
+ */
+export type EnumsItemPriceWrittenBy = 'INSERTED' | 'CONFIRMED';
+
+/**
  * `enums.ItemSourceMatch` in the gateway's OpenAPI document.
  */
 export type EnumsItemSourceMatch =
@@ -2866,6 +2954,15 @@ export type EnumsPriceScopeKind =
   | 'REGION'
   | 'LOCAL_AREA'
   | 'STORE';
+
+/**
+ * `enums.PriceShownBecause` in the gateway's OpenAPI document.
+ */
+export type EnumsPriceShownBecause =
+  | 'PROTECTED_ADMIN'
+  | 'POLICY_PRIORITY'
+  | 'ONLY_ROW'
+  | 'NEWEST';
 
 /**
  * `enums.PriceSourceKind` in the gateway's OpenAPI document.
@@ -3263,6 +3360,49 @@ export type HarvestHarvestRunWarning = {
   page: number | null;
   name: string | null;
   message: string;
+};
+
+/**
+ * `harvest.ItemSourceEntryPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestItemSourceEntryPage = {
+  items: HarvestItemSourceEntryView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.ItemSourceEntryView` in the gateway's OpenAPI document.
+ */
+export type HarvestItemSourceEntryView = {
+  id: string;
+  supermarketId: string;
+  externalId: string;
+  sourceKind: EnumsPriceSourceKind;
+  name: string;
+  brand: string | null;
+  ean: string | null;
+  unitSize: number | null;
+  sizeFormat: string | null;
+  categoryPath: string[];
+  url: string | null;
+  extra: {
+    [key: string]: unknown;
+  } | null;
+  timesSeen: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  firstRunId: string | null;
+  lastRunId: string | null;
+  itemId: string | null;
+  candidateEntryId: string | null;
+  status: EnumsSourceEntryStatus;
+  matchedBy: EnumsItemSourceMatch | null;
+  confidence: number;
+  decidedAt: string | null;
+  prices: HarvestSourceEntryPriceView[];
+  eanSharedBy: number | null;
 };
 
 /**
@@ -3786,6 +3926,13 @@ export type MsgBasketParticipantRevokeResponse = {
  */
 export type MsgBasketShareLinkRevokeResponse = {
   revoked: number;
+};
+
+/**
+ * `msg.brand.registerMany.response` in the gateway's OpenAPI document.
+ */
+export type MsgBrandRegisterManyResponse = {
+  results: CatalogRegisterBrandsOutcome[];
 };
 
 /**

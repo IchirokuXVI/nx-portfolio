@@ -246,7 +246,9 @@ describe('SourceEntryService', () => {
               priceScopeId: CORDOBA,
               price: 1.09,
               runId: 'run-tuesday',
-              validUntil: new Date('2026-09-24T00:00:00.000Z'),
+              // Open, relative to now: a fixed date made this price expire on
+              // 2026-09-24 and the test fail every day after.
+              validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
             }),
           ],
         }),

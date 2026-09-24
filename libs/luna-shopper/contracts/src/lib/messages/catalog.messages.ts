@@ -1,8 +1,11 @@
 import type {
+  BrandBatchOutcome,
   BulkOperationErrorCode,
   ItemCategory,
+  ItemPriceWrittenBy,
   PostalCodeSource,
   PriceScopeKind,
+  PriceShownBecause,
   PriceSourceKind,
   UnitOfMeasure,
 } from '../enums/catalog.enums';
@@ -246,6 +249,15 @@ export const BRAND_PATTERNS = {
    * rather than a bigger message.
    */
   keys: 'brand.keys',
+  /**
+   * Register many brands, one outcome per name (plan 0160).
+   *
+   * **Every name is its own transaction**, so one refused name never fails the
+   * batch: a name answers `CREATED`, `EXISTS` with the brand that holds its key,
+   * or `REFUSED` with the reason. A person still chose every name on the list,
+   * which keeps each registration a decision.
+   */
+  registerMany: 'brand.registerMany',
 } as const;
 
 /**
@@ -299,8 +311,18 @@ export const ITEM_PRICE_PATTERNS = {
    * many were inserted and how many merely confirmed (section 9).
    */
   addBatch: 'itemPrice.addBatch',
-  /** The history of one (item, scope), newest first, paged. Operator only. */
+  /**
+   * The history of one (item, scope), newest first, paged. Operator only.
+   *
+   * With a `runId` it is the rows one run wrote or confirmed instead (plan
+   * 0160), each marked with `writtenBy`.
+   */
   list: 'itemPrice.list',
+  /**
+   * One product at every scope that prices it, with the row each scope shows
+   * and why (plan 0160). Operator only, paged by scope.
+   */
+  byItem: 'itemPrice.byItem',
   /**
    * Remove one row by id. Operator only, and the materialized row is recomputed
    * behind it. A typed price with a typo is a row the operator removes and
@@ -972,7 +994,61 @@ export interface ItemPriceView {
    * only on the history read, and null for every row no leaflet wrote.
    */
   details: ItemPriceDetails | null;
+  /**
+   * What the run asked about did to this row (plan 0160). Present only on the
+   * run's read, `GET item-prices?runId=`, and absent everywhere else.
+   */
+  writtenBy?: ItemPriceWrittenBy;
 }
+
+/**
+ * One scope of one product on the all scopes price read (plan 0160): the rows
+ * the price decision weighed there, the one it chose, and why.
+ *
+ * The decision is the same function that writes `supermarket_items`, run again
+ * for this read. The sweep writes its answer within sixty seconds, so for that
+ * long this read can be ahead of the stored row, never behind it.
+ */
+export interface ItemScopePricesView {
+  priceScopeId: string;
+  supermarketId: string;
+  scopeKind: PriceScopeKind;
+  /** The source's own key for the scope, as `PriceScopeView.externalKey`. */
+  scopeExternalKey: string | null;
+  scopeLabel: LocalizedText | null;
+  /** The scope's priority. Lower is more specific. */
+  scopePriority: number;
+  /**
+   * The current row of each kind at this scope and at every scope it falls
+   * through to, newest first: everything the decision weighed. A row's own
+   * `priceScopeId` says which scope it came from. The full history of one
+   * scope is `GET item-prices?itemId=&priceScopeId=`.
+   */
+  rows: ItemPriceView[];
+  /** The row a shopper is shown here. Null when no row prices this key. */
+  shownItemPriceId: string | null;
+  /** Why that row wins. Null exactly when `shownItemPriceId` is. */
+  shownBecause: PriceShownBecause | null;
+  /** Nothing was eligible, so the newest enabled row is shown and flagged. */
+  stale: boolean;
+  /**
+   * The shown row's protection end, when it is an `ADMIN` row. A date in the
+   * past says the protection is over and the row competes on priority.
+   */
+  protectedUntil: string | null;
+  /**
+   * What the shown `ADMIN` row recorded for each automated kind when it was
+   * typed. A source that now states something else displaces it at once.
+   */
+  overrides: ItemPriceOverrides | null;
+}
+
+/** One product at every scope that prices it (plan 0160). */
+export interface ItemPricesByItemRequest extends PageQuery, AdminCredential {
+  itemId: string;
+}
+
+export type ItemScopePricesPage = Paginated<ItemScopePricesView>;
 
 /** One row of `price_policies` (plan 0080, section 3). Lower priority wins. */
 export interface PricePolicyView {
@@ -1664,6 +1740,48 @@ export interface BrandKeysResult {
   keys: string[];
 }
 
+/** The most names one brand batch may carry (plan 0160). */
+export const BRAND_BATCH_MAX = 200;
+
+/** One name of a brand batch: what `brand.create` takes, without a link. */
+export interface RegisterBrandsEntry {
+  label: string;
+  /** The chain whose private label this is. Null or absent for an ordinary brand. */
+  privateLabelSupermarketId?: string | null;
+}
+
+/** Register many brands, each in its own transaction (plan 0160). */
+export interface RegisterBrandsRequest extends AdminCredential {
+  brands: RegisterBrandsEntry[];
+}
+
+/** Why a name of a brand batch was refused. */
+export interface BrandBatchRefusal {
+  /** The error code the single create would have answered with. */
+  code: string;
+  detail: string;
+}
+
+/** What one name of a brand batch did, in the order the names were sent. */
+export interface RegisterBrandsOutcome {
+  /** The label as it was sent. */
+  label: string;
+  outcome: BrandBatchOutcome;
+  /**
+   * The brand created, or the brand that already holds the key. Null for a
+   * refused name.
+   */
+  brandId: string | null;
+  /** The products a created brand claimed. Null unless `CREATED`. */
+  linkedItems: number | null;
+  /** Null unless `REFUSED`. */
+  reason: BrandBatchRefusal | null;
+}
+
+export interface RegisterBrandsResult {
+  results: RegisterBrandsOutcome[];
+}
+
 // --- Item price requests (plan 0080, section 9) -----------------------------
 
 /** The values one price row carries, shared by the single and the batch write. */
@@ -1736,10 +1854,26 @@ export interface AddItemPriceBatchResult {
   confirmed: number;
 }
 
+/**
+ * The history of one (item, scope), or the rows one run wrote.
+ *
+ * Name `itemId` and `priceScopeId` together for the history. Name `runId` for
+ * the run's rows (plan 0160), optionally narrowed to one `itemId`: every row
+ * the run inserted, and every row whose `lastObservedAt` it moved last.
+ */
 export interface ListItemPricesRequest extends PageQuery, AdminCredential {
-  itemId: string;
-  priceScopeId: string;
+  itemId?: string;
+  priceScopeId?: string;
+  runId?: string;
 }
+
+/**
+ * How far back a hand typed `observedAt` may reach (plan 0160).
+ *
+ * Protection runs from `observedAt`, so a past date protects a row for less
+ * time, never more. A date in the future is refused.
+ */
+export const ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS = 30;
 
 export interface ItemPriceIdRequest extends AdminCredential {
   itemPriceId: string;

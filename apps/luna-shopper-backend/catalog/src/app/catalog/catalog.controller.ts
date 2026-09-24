@@ -53,7 +53,9 @@ import {
   type ItemPage,
   type ItemPriceIdRequest,
   type ItemPricePage,
+  type ItemPricesByItemRequest,
   type ItemPriceView,
+  type ItemScopePricesPage,
   type ItemView,
   type ListAdminPostalCodesRequest,
   type ListBrandsRequest,
@@ -80,6 +82,8 @@ import {
   type ProductGroupOfferPage,
   type ProductGroupPage,
   type ProductGroupView,
+  type RegisterBrandsRequest,
+  type RegisterBrandsResult,
   type RegisterBrandSuggestionRequest,
   type RegisterBrandSuggestionResult,
   type ResolvedScopesView,
@@ -438,6 +442,13 @@ export class CatalogController {
   brandKeys(@Payload() req: BrandKeysRequest): Promise<BrandKeysResult> {
     return this.brands.keys(req);
   }
+
+  @MessagePattern(BRAND_PATTERNS.registerMany)
+  registerBrands(
+    @Payload() req: RegisterBrandsRequest
+  ): Promise<RegisterBrandsResult> {
+    return this.brands.registerMany(req);
+  }
   @MessagePattern(PRODUCT_GROUP_PATTERNS.list)
   listProductGroups(
     @Payload() req: ListProductGroupsRequest
@@ -590,6 +601,13 @@ export class CatalogController {
     @Payload() req: ListItemPricesRequest
   ): Promise<ItemPricePage> {
     return this.itemPrices.list(req);
+  }
+
+  @MessagePattern(ITEM_PRICE_PATTERNS.byItem)
+  itemPricesByItem(
+    @Payload() req: ItemPricesByItemRequest
+  ): Promise<ItemScopePricesPage> {
+    return this.itemPrices.byItem(req);
   }
 
   @MessagePattern(ITEM_PRICE_PATTERNS.delete)

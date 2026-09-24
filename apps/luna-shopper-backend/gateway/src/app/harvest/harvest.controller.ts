@@ -33,6 +33,7 @@ import {
   type HarvestRunPresetPage,
   type HarvestRunPresetView,
   type HarvestRunView,
+  type ItemSourceEntryPage,
   type PostalCodeDiscoveryRequestPage,
   type PostalCodeDiscoveryRequestView,
   type PostalCodeDiscoverySummaryView,
@@ -44,7 +45,7 @@ import {
   type SupermarketSourcePage,
   type SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
-import { UuidParam } from '@portfolio/luna-shopper/platform';
+import { PageQueryDto, UuidParam } from '@portfolio/luna-shopper/platform';
 import type { Response } from 'express';
 import { adminCredential } from '../admin/admin-credential';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
@@ -591,6 +592,48 @@ export class AdminHarvestEntriesController {
     return this.nats.send<SourceCatalogEntryView>(
       SOURCE_ENTRY_PATTERNS.reject,
       { ...adminCredential(admin), entryId: id }
+    );
+  }
+}
+
+/**
+ * The queue read from the other side: a product, and the source rows that name
+ * it (plan 0160).
+ *
+ * The entries queue answers from the row's side only, so "which chain rows are
+ * bound to this product" used to be a psql query. Each row carries
+ * `eanSharedBy`, how many rows of its chain list the same barcode, which is the
+ * count operator plan 0150 made by hand.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/items', version: '1' })
+export class AdminHarvestItemsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * Every source row whose `itemId` is this product, newest observation first.
+   * `ACTIVE` rows are bound and a `CANDIDATE` row proposes the product; the
+   * status says which. A product id nothing names answers an empty page: the
+   * harvester does not own products, so it cannot say one does not exist.
+   */
+  @Get(':itemId/entries')
+  @ApiContractResponse(SOURCE_ENTRY_PATTERNS.listByItem)
+  entries(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('itemId') itemId: string,
+    @Query() query: PageQueryDto
+  ): Promise<ItemSourceEntryPage> {
+    return this.nats.send<ItemSourceEntryPage>(
+      SOURCE_ENTRY_PATTERNS.listByItem,
+      {
+        ...adminCredential(admin),
+        itemId,
+        cursor: query.cursor,
+        limit: query.limit,
+      }
     );
   }
 }

@@ -4,6 +4,7 @@ import type {
   AdminBasketDetailView,
   AdminBasketPage,
   AdminBasketRowView,
+  AdminBasketSettlementView,
   AdminBasketView,
   AdminListDetailView,
   AdminListIdRequest,
@@ -21,6 +22,7 @@ import type {
   ListAdminListsRequest,
   ListView,
   SetAdminLineApprovalRequest,
+  SettlementOutcome,
   UpdateAdminListLineRequest,
   UpdateAdminListRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -549,17 +551,32 @@ export class AdminListService {
     basket: Basket
   ): Promise<AdminBasketRowView[]> {
     if (basket.status === BasketStatus.OPEN) {
-      return (await this.basketRead.openRows(basket)).map((row) => ({
+      const open = await this.basketRead.openRows(basket);
+      const linesOf = (row: (typeof open)[number]) => [
+        ...new Set([row.rowKey, ...row.entries.map((entry) => entry.lineId)]),
+      ];
+      const settled = await this.settlementsOf(
+        basket.id,
+        open.flatMap(linesOf)
+      );
+      return open.map((row) => ({
         rowKey: row.rowKey,
         content: row.content,
         left: row.left,
         bought: row.bought,
         asked: row.asked,
+        settlements: bySettledAt(
+          linesOf(row).flatMap((lineId) => settled.get(lineId) ?? [])
+        ),
       }));
     }
     const rows = await this.baskets.query<FrozenRow[]>(
       FINISHED_BASKET_ROWS_SQL,
       [basket.id]
+    );
+    const settled = await this.settlementsOf(
+      basket.id,
+      rows.map((row) => row.lineId)
     );
     return rows.map((row) => ({
       rowKey: row.lineId,
@@ -567,7 +584,51 @@ export class AdminListService {
       left: Math.max(row.asked - row.bought, 0),
       bought: row.bought,
       asked: row.asked,
+      settlements: settled.get(row.lineId) ?? [],
     }));
+  }
+
+  /**
+   * Every settlement made through this basket on these lines, by line, oldest
+   * first (plan 0160).
+   *
+   * Reverted ones too, marked by `revertedAt`: "somebody said they got this
+   * and took it back" is part of what an operator is checking. Filtered on the
+   * lines first, so `ix_settlements_line` serves it; the basket's own partial
+   * index leaves the reverted rows out.
+   */
+  private async settlementsOf(
+    basketId: string,
+    lineIds: readonly string[]
+  ): Promise<Map<string, AdminBasketSettlementView[]>> {
+    const byLine = new Map<string, AdminBasketSettlementView[]>();
+    if (lineIds.length === 0) {
+      return byLine;
+    }
+    const rows = await this.baskets.query<SettlementRow[]>(
+      BASKET_SETTLEMENTS_SQL,
+      [basketId, [...new Set(lineIds)]]
+    );
+    for (const row of rows) {
+      const held = byLine.get(row.lineId) ?? [];
+      held.push({
+        id: row.id,
+        lineId: row.lineId,
+        itemId: row.itemId,
+        outcome: row.outcome,
+        quantity: row.quantity,
+        pricePaidCents: row.pricePaidCents,
+        pricePaidCurrency: row.pricePaidCurrency,
+        priceScopeId: row.priceScopeId,
+        supermarketLocationId: row.supermarketLocationId,
+        settledByUserId: row.settledByUserId,
+        settledByParticipantId: row.settledByParticipantId,
+        settledAt: row.settledAt.toISOString(),
+        revertedAt: row.revertedAt ? row.revertedAt.toISOString() : null,
+      });
+      byLine.set(row.lineId, held);
+    }
+    return byLine;
   }
 
   /**
@@ -637,6 +698,56 @@ interface FrozenRow {
   content: string;
   asked: number;
   bought: number;
+}
+
+/**
+ * The settlements one basket made on some of its lines (plan 0160). `$1` is
+ * the basket, `$2` the lines. Oldest first, so a row reads as a history.
+ */
+const BASKET_SETTLEMENTS_SQL = `
+  SELECT s.id AS "id",
+         s."lineId" AS "lineId",
+         s."itemId" AS "itemId",
+         s."outcome" AS "outcome",
+         s."quantity" AS "quantity",
+         s."pricePaidCents" AS "pricePaidCents",
+         s."pricePaidCurrency" AS "pricePaidCurrency",
+         s."priceScopeId" AS "priceScopeId",
+         s."supermarketLocationId" AS "supermarketLocationId",
+         s."settledByUserId" AS "settledByUserId",
+         s."settledByParticipantId" AS "settledByParticipantId",
+         s."settledAt" AS "settledAt",
+         s."revertedAt" AS "revertedAt"
+  FROM "line_settlements" s
+  WHERE s."lineId" = ANY($2::uuid[])
+    AND s."basketId" = $1::uuid
+  ORDER BY s."settledAt", s.id
+`;
+
+/** One row of {@link BASKET_SETTLEMENTS_SQL}. */
+interface SettlementRow {
+  id: string;
+  lineId: string;
+  itemId: string | null;
+  outcome: SettlementOutcome;
+  quantity: number;
+  pricePaidCents: number | null;
+  pricePaidCurrency: string | null;
+  priceScopeId: string | null;
+  supermarketLocationId: string | null;
+  settledByUserId: string | null;
+  settledByParticipantId: string | null;
+  settledAt: Date;
+  revertedAt: Date | null;
+}
+
+/** Oldest first, across the several lines one open row can cover. */
+function bySettledAt(
+  settlements: AdminBasketSettlementView[]
+): AdminBasketSettlementView[] {
+  return [...settlements].sort(
+    (a, b) => a.settledAt.localeCompare(b.settledAt) || a.id.localeCompare(b.id)
+  );
 }
 
 /** The raw shape both list reads select, before the counts are numbers. */
