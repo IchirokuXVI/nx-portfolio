@@ -23,6 +23,7 @@
 
 import { readFileSync } from 'node:fs';
 import { runCommand } from './child.mjs';
+import { formatPageList } from './commands.mjs';
 import { PY_CENSUS, pagesInDirectory } from './render.mjs';
 
 /** A page object, and not the `/Pages` tree node that holds them. */
@@ -151,14 +152,22 @@ export async function censusPdf({
   };
 }
 
-/** The census of a directory that already holds the page images. */
+/**
+ * The census of a directory that already holds the page images.
+ *
+ * **The page count is the highest page number there, not how many files there
+ * are** (plan 0003). A folder holding `page_05.png` to `page_16.png` is pages 5
+ * to 16 of a leaflet of at least 16 pages, and counting it as 12 refused pages
+ * 13 to 16 as past the end. `pages` is the ones that are there, and a run with
+ * no `--pages` reads exactly those.
+ */
 export function censusImages(dir, listPages = pagesInDirectory) {
   const pages = listPages(dir);
   return {
     kind: 'images',
     source: dir,
-    pageCount: pages.length,
-    pageCountFrom: 'the page images in the directory',
+    pageCount: pages.length > 0 ? Math.max(...pages) : 0,
+    pageCountFrom: 'the highest page_NN.png in the directory',
     pages,
     sizes: [],
     textLayer: null,
@@ -170,6 +179,13 @@ export function censusImages(dir, listPages = pagesInDirectory) {
 export function formatCensus(census) {
   const lines = [`Census of ${census.source}`];
   lines.push(`  pages: ${census.pageCount}, from ${census.pageCountFrom}`);
+  if (census.kind === 'images') {
+    lines.push(
+      `  page images there: ${census.pages.length}, pages ${formatPageList(census.pages) || 'none'}`,
+      '  text layer: not read. The input is a directory of page images, and an image carries no text layer.'
+    );
+    return lines.join('\n');
+  }
   if (census.sizes.length > 0) {
     lines.push(
       `  page size: ${census.sizes

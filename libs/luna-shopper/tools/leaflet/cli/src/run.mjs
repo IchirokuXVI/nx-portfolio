@@ -10,6 +10,9 @@
  * 7. Build, drift check, validate. The three existing scripts, unchanged.
  * 8. Report. What was read, what to look at, and the upload call to make.
  *
+ * `--finish` is steps 5 to 8 alone, for a manual run whose pages a person wrote
+ * (plan 0003). See `finishRun`.
+ *
  * Every process, file and clock this file touches is injected, so the whole of
  * it runs under `node --test` with no renderer installed and no model called.
  *
@@ -21,19 +24,30 @@ import { join, relative, resolve } from 'node:path';
 import { censusImages, censusPdf, formatCensus } from './census.mjs';
 import { runCommand, runStreamed } from './child.mjs';
 import {
+  checkPageCommand,
+  finishCommand,
+  formatPageList,
+  resumeCommand,
+} from './commands.mjs';
+import {
   askValidity,
   buildLeafletJson,
   extractionTool,
   formatReport,
   formatValidity,
+  mergeLeafletJson,
+  readLeafletJson,
+  resolveValidity,
   runScripts,
   validityWarning,
+  windowKnown,
   writeLeafletJson,
   writePagesManifest,
 } from './document.mjs';
 import { checkLayout, checkPages, formatMismatch } from './layout-check.mjs';
 import {
   collectManualReadings,
+  mergeRunFile,
   promptFile,
   writePromptFile,
   writeRunFile,
@@ -114,9 +128,69 @@ export function parsePages(spec, pageCount) {
 }
 
 /**
+ * Step 2 with the renderer it found, and the next one when that one cannot.
+ *
+ * A renderer that answered the probe and then wrote no page at all is not a
+ * renderer for this PDF: ImageMagick without Ghostscript is the case, and on
+ * the machine of backend plan 0150 it stood in front of everything else. So the
+ * run says what failed and asks for the next renderer, and Docker is the last
+ * of them. A renderer that wrote some pages and then failed is a broken page,
+ * and that one is named and stops the run.
+ *
+ * Answers the renderer that rendered, or null when none could.
+ */
+async function renderWithFallback({
+  renderer,
+  findRenderer,
+  render,
+  run,
+  source,
+  pagesDir,
+  dpi,
+  pages,
+  exists,
+  stdout,
+}) {
+  const tried = [];
+  let current = renderer;
+  while (current) {
+    stdout.write(
+      `\nRendering ${pages.length} page(s) at ${dpi} dpi with ${current.label}.\n`
+    );
+    try {
+      await render({
+        renderer: current,
+        pdf: source,
+        outDir: pagesDir,
+        dpi,
+        pages,
+        run,
+        exists,
+        say: (line) => stdout.write(`${line}\n`),
+      });
+      return current;
+    } catch (error) {
+      if (error?.rendered !== 0) {
+        throw error;
+      }
+      tried.push(current.key);
+      stdout.write(
+        `${error.message}\n${current.label} answered the probe and rendered no page, so the run tries the next renderer.\n`
+      );
+      current = await findRenderer({ run, skip: tried });
+    }
+  }
+  return null;
+}
+
+/**
  * One read, end to end.
  *
  * `engine` is null in manual mode, which is the one mode with no `ask` to call.
+ *
+ * `statedValidity` is this run's `--valid-from` and `--valid-until`, and
+ * `recordedValidity` is what an earlier run of this `--out` was given, read
+ * back from `run.json` by the caller on a resume.
  */
 export async function runRead({
   chain,
@@ -134,6 +208,8 @@ export async function runRead({
   engineName,
   model = null,
   isLocal = false,
+  statedValidity = {},
+  recordedValidity = null,
   prompt,
   layout,
   stripFence,
@@ -142,6 +218,7 @@ export async function runRead({
   run = runCommand,
   stream = runStreamed,
   findRenderer = probeRenderer,
+  render = renderPages,
   mkdir = mkdirSync,
   writeFile = writeFileSync,
   readFile = readFileSync,
@@ -179,7 +256,12 @@ export async function runRead({
     );
   }
 
-  const pages = parsePages(pagesSpec, census.pageCount);
+  // A folder of images with no `--pages` is read for the pages it holds, and
+  // not for every number up to the highest of them (plan 0003).
+  const pages =
+    sourceIsDirectory && (pagesSpec === null || pagesSpec === undefined)
+      ? census.pages
+      : parsePages(pagesSpec, census.pageCount);
 
   if (dryRun) {
     // The census and the layout, and nothing that costs a render or a call.
@@ -201,56 +283,69 @@ export async function runRead({
       );
     }
   } else {
-    if (!renderer) {
-      stdout.write(`\n${installLines()}\n`);
-      return { code: 2, rendered: false };
-    }
     const toRender = resume
       ? pages.filter((page) => !exists(pageImagePath(pagesDir, page)))
       : pages;
+    // A resume whose pages are all rendered needs no renderer at all.
     if (toRender.length > 0) {
-      stdout.write(
-        `\nRendering ${toRender.length} page(s) at ${dpi} dpi with ${renderer.label}.\n`
-      );
-      await renderPages({
-        renderer,
-        pdf: source,
-        outDir: pagesDir,
-        dpi,
-        pages: toRender,
-        run,
-      });
+      const used = renderer
+        ? await renderWithFallback({
+            renderer,
+            findRenderer,
+            render,
+            run,
+            source,
+            pagesDir,
+            dpi,
+            pages: toRender,
+            exists,
+            stdout,
+          })
+        : null;
+      if (!used) {
+        stdout.write(`\n${installLines()}\n`);
+        return { code: 2, rendered: false };
+      }
     }
   }
 
   const imageDir = sourceIsDirectory ? source : pagesDir;
-  const imagesFor = (page) => [
-    {
-      mediaType: 'image/png',
-      data: readFile(pageImagePath(imageDir, page)).toString('base64'),
-    },
-  ];
 
-  // What the pick up needs and nothing records: the PDF and the chain.
-  writeRunFile(
-    outDir,
-    {
-      chain: chain.slug,
-      pdf: resolve(source),
-      pdfIsDirectory: sourceIsDirectory === true,
-      pages,
-      dpi,
-      engine: engineName,
-      model,
-      startedAt: now().toISOString(),
-    },
-    writeFile
-  );
-
-  const warnings = [];
-  let readings;
-  let pagesRead = 0;
-  let skipped = [];
+  // What the pick up needs and nothing records: the PDF, the chain, the pages
+  // and the dates the operator stated. A resume merges into what the first pass
+  // wrote rather than writing it whole (plan 0003).
+  const stated = ['from', 'until'].some((field) => statedValidity?.[field]);
+  const record = {
+    chain: chain.slug,
+    pdf: resolve(source),
+    pdfIsDirectory: sourceIsDirectory === true,
+    pages,
+    pageCount: census.pageCount,
+    dpi,
+    engine: engineName,
+    model,
+    ...(stated
+      ? {
+          validity: {
+            from: statedValidity.from ?? null,
+            until: statedValidity.until ?? null,
+          },
+        }
+      : {}),
+  };
+  if (resume) {
+    mergeRunFile(
+      outDir,
+      { ...record, resumedAt: now().toISOString() },
+      { writeFile, exists, readFile }
+    );
+  } else {
+    writeRunFile(
+      outDir,
+      { ...record, startedAt: now().toISOString() },
+      writeFile
+    );
+  }
 
   if (manual && !resume) {
     // The hand off. The run stops here and the person reads the pages.
@@ -274,13 +369,27 @@ export async function runRead({
         `Paste ${path} into Claude Code, or into any model you like.`,
         'It names every page image by its absolute path and where each answer goes.',
         '',
-        'Then pick the run back up with:',
-        `  npx nx run luna-shopper/leaflet-cli:read -- --out ${outDir} --resume --engine manual`,
+        'Check each page as it is written, for example the first one:',
+        `  ${checkPageCommand({ outDir, page: pages[0] })}`,
+        '',
+        'When every page is written, build, drift check and validate with:',
+        `  ${finishCommand({ outDir })}`,
         '',
       ].join('\n')
     );
     return { code: 0, handedOff: true, promptPath: path };
   }
+
+  const imagesFor = (page) => [
+    {
+      mediaType: 'image/png',
+      data: readFile(pageImagePath(imageDir, page)).toString('base64'),
+    },
+  ];
+
+  const warnings = [];
+  let readings;
+  let skipped = [];
 
   if (manual) {
     // The pick up. Nothing is edited: a bad reading is named and refused.
@@ -291,7 +400,6 @@ export async function runRead({
       exists,
       readFile,
     });
-    pagesRead = readings.size;
   } else {
     // 3. The layout check, which is the only step that needs the model and the
     // chain description to agree. Manual mode never reaches it: the layout is
@@ -333,18 +441,97 @@ export async function runRead({
     readings = read.readings;
     warnings.push(...read.warnings);
     skipped = read.skipped;
-    pagesRead = readings.size;
   }
 
+  return completeRun({
+    chain,
+    defaults,
+    outDir,
+    importDir,
+    imageDir,
+    source,
+    sourceIsDirectory,
+    pages,
+    pageCount: census.pageCount,
+    readings,
+    warnings,
+    skipped,
+    engine,
+    engineName,
+    model,
+    isLocal,
+    notice,
+    statedValidity,
+    recordedValidity,
+    askImages: engine ? imagesFor(pages[0]) : null,
+    stripFence,
+    stdout,
+    stream,
+    readFile,
+    writeFile,
+    exists,
+    now,
+  });
+}
+
+/**
+ * Steps 5 to 8, whatever produced the readings: the sanity pass, the leaflet's
+ * own file, the three scripts, and the report.
+ *
+ * The cover is asked for the window only when an engine is there to ask and
+ * nobody has said both bounds already: not this run's flags, not a person
+ * editing `leaflet.json`, and not the flags an earlier run recorded.
+ */
+async function completeRun({
+  chain,
+  defaults,
+  outDir,
+  importDir,
+  imageDir,
+  source,
+  sourceIsDirectory,
+  pages,
+  pageCount,
+  readings,
+  warnings,
+  skipped,
+  engine,
+  engineName,
+  model,
+  isLocal,
+  notice,
+  statedValidity,
+  recordedValidity,
+  askImages,
+  stripFence,
+  stdout,
+  stream,
+  readFile,
+  writeFile,
+  exists,
+  now,
+}) {
   // 5. The sanity pass, for every engine, because every model has a systematic
   // defect and only the defect differs.
   warnings.push(...sanityPass(readings));
 
-  // 6. The leaflet's own file. Manual mode has no engine to ask, so its validity
-  // is left for the operator to fill in by hand rather than guessed.
-  const validity = manual
-    ? { from: null, until: null, raw_text: null }
-    : await askValidity({ engine, images: imagesFor(pages[0]), stripFence });
+  // 6. The leaflet's own file, over whatever a person already filled in.
+  const existing = readLeafletJson(importDir, { exists, readFile });
+  const known = windowKnown({
+    stated: statedValidity,
+    existing: existing?.validity,
+    recorded: recordedValidity,
+  });
+  const asked =
+    engine && !known
+      ? await askValidity({ engine, images: askImages, stripFence })
+      : null;
+  const { validity, origins } = resolveValidity({
+    stated: statedValidity,
+    existing: existing?.validity,
+    recorded: recordedValidity,
+    asked,
+  });
   // A leaflet that arrived as images has no one file to take a digest of, so
   // the run writes a manifest of the page digests and points `pdf` at that.
   const digested = sourceIsDirectory
@@ -357,21 +544,24 @@ export async function runRead({
         writeFile,
       })
     : resolve(source);
-  const leaflet = buildLeafletJson({
-    pdf: relative(importDir, digested) || digested,
-    pageCount: census.pageCount,
-    fixedSections: defaults.fixedSections ?? {},
-    validity,
-    tool: extractionTool({
-      engine: engineName,
-      model,
-      slug: chain.slug,
-      notice: isLocal ? localEngineShortNotice(engineName, model) : null,
+  const leaflet = mergeLeafletJson(
+    buildLeafletJson({
+      pdf: relative(importDir, digested) || digested,
+      pageCount,
+      fixedSections: defaults.fixedSections ?? {},
+      validity,
+      tool: extractionTool({
+        engine: engineName,
+        model,
+        slug: chain.slug,
+        notice: isLocal ? localEngineShortNotice(engineName, model) : null,
+      }),
+      date: now().toISOString(),
     }),
-    date: now().toISOString(),
-  });
+    existing
+  );
   writeLeafletJson(importDir, leaflet, writeFile);
-  stdout.write(`\n${formatValidity(leaflet)}\n`);
+  stdout.write(`\n${formatValidity(leaflet, origins)}\n`);
   const validityNote = validityWarning(leaflet);
   if (validityNote) {
     warnings.push(validityNote);
@@ -392,13 +582,18 @@ export async function runRead({
   stdout.write(
     `${formatReport({
       slug: chain.slug,
-      pagesRead,
+      pagesRead: readings.size,
       skipped,
       warnings,
       outcome,
       readFile,
       exists,
       notice,
+      importDir,
+      resume:
+        engineName === 'manual'
+          ? finishCommand({ outDir })
+          : resumeCommand({ outDir, engineName, model, pages, pageCount }),
     })}\n`
   );
 
@@ -407,4 +602,95 @@ export async function runRead({
   // reading as a finished one.
   const ready = outcome.built && outcome.validated === 'valid';
   return { code: ready ? 0 : 1, outcome, warnings };
+}
+
+/**
+ * `--finish`: a manual run's last three steps, from `run.json` alone (plan
+ * 0003).
+ *
+ * The chain, the pages, the page count, the dpi and the dates all come from the
+ * file the first pass wrote, so the command is `--out` and `--finish` and nothing
+ * else. It renders nothing, asks no model, and refuses a page with no reading or
+ * an unreadable one exactly as the manual pick up does. Build, drift check and
+ * validate then run in order and stop at the first failure.
+ */
+export async function finishRun({
+  chain,
+  defaults,
+  outDir,
+  recorded,
+  statedValidity = {},
+  stripFence,
+  stdout = process.stdout,
+  stream = runStreamed,
+  writeFile = writeFileSync,
+  readFile = readFileSync,
+  exists = existsSync,
+  now = () => new Date(),
+}) {
+  const pages = Array.isArray(recorded?.pages) ? recorded.pages : [];
+  if (pages.length === 0) {
+    throw new Error(
+      `${join(outDir, 'run.json')} names no pages, so there is nothing to finish. Start the run again with --pdf.`
+    );
+  }
+  const importDir = join(outDir, 'import');
+  const sourceIsDirectory = recorded.pdfIsDirectory === true;
+  const pageCount = recorded.pageCount ?? Math.max(...pages);
+  const engineName = recorded.engine ?? 'manual';
+
+  stdout.write(
+    `Finishing ${outDir}: ${chain.slug}, pages ${formatPageList(pages)} of ${pageCount}, ${recorded.dpi ?? defaults.dpi} dpi, read by ${engineName}${recorded.model && engineName !== 'manual' ? ` ${recorded.model}` : ''}.\n`
+  );
+
+  const readings = collectManualReadings({
+    pages,
+    importDir,
+    stripFence,
+    exists,
+    readFile,
+  });
+
+  if (['from', 'until'].some((field) => statedValidity?.[field])) {
+    mergeRunFile(
+      outDir,
+      {
+        validity: {
+          from: statedValidity.from ?? null,
+          until: statedValidity.until ?? null,
+        },
+      },
+      { writeFile, exists, readFile }
+    );
+  }
+
+  return completeRun({
+    chain,
+    defaults,
+    outDir,
+    importDir,
+    imageDir: sourceIsDirectory ? recorded.pdf : join(outDir, 'pages'),
+    source: recorded.pdf,
+    sourceIsDirectory,
+    pages,
+    pageCount,
+    readings,
+    warnings: [],
+    skipped: [],
+    engine: null,
+    engineName,
+    model: recorded.model ?? null,
+    isLocal: false,
+    notice: null,
+    statedValidity,
+    recordedValidity: recorded.validity ?? null,
+    askImages: null,
+    stripFence,
+    stdout,
+    stream,
+    readFile,
+    writeFile,
+    exists,
+    now,
+  });
 }
