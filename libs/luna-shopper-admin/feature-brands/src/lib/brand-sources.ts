@@ -43,6 +43,19 @@ export const BRAND_SUGGESTIONS_PATH = '/v1/admin/catalog/brand-suggestions';
 export const BRAND_REGISTER_SUGGESTION_PATH = `${BRANDS_PATH}/register-suggestion`;
 
 /**
+ * Where many names are registered in one request (backend plan 0160, admin plan
+ * 0035, section 1).
+ *
+ * A command like the one above, for the same reason: it answers one outcome per
+ * name rather than a row or a page. Each name is its own transaction on the
+ * server, so one refused name never fails the others.
+ */
+export const BRAND_REGISTER_MANY_PATH = `${BRANDS_PATH}/register-many`;
+
+/** How many names one batch may carry, which is the route's own cap. */
+export const BRAND_BATCH_MAX = 200;
+
+/**
  * The spellings read, as a template rather than a URL.
  *
  * Nothing ever requests this string: the collection is always addressed through

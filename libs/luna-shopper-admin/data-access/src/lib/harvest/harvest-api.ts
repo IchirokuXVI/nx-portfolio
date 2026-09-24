@@ -4,6 +4,11 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { toGatewayError } from '../gateway-error';
+import {
+  toEntryDecisionsAnswer,
+  type ApplyEntryDecisionsInput,
+  type EntryDecisionsAnswer,
+} from './entry-decisions';
 import type {
   AcceptSourceEntryInput,
   CreateItemFromSourceEntryInput,
@@ -188,6 +193,21 @@ export class HarvestApi implements HarvestServiceI {
     return this._send('post', `${ROOT}/entries/${segment(id)}/reject`, {
       body: {},
     });
+  }
+
+  /**
+   * A decisions file, applied in one request (admin plan 0035, section 3).
+   *
+   * The answer is read from `unknown`, because a refused file is a 201 whose
+   * body is the whole of what the operator is told.
+   */
+  async applyEntryDecisions(
+    input: ApplyEntryDecisionsInput
+  ): Promise<EntryDecisionsAnswer> {
+    const raw = await this._send<unknown>('post', `${ROOT}/entries/decisions`, {
+      body: input,
+    });
+    return toEntryDecisionsAnswer(raw);
   }
 
   /**

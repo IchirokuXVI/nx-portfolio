@@ -1,7 +1,13 @@
 import { Injectable } from '@angular/core';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
+import type { BulkOperationError } from '../bulk-operation-error';
 import { GatewayError } from '../gateway-error';
+import type {
+  ApplyEntryDecisionsInput,
+  EntryDecisionOutcome,
+  EntryDecisionsAnswer,
+} from './entry-decisions';
 import {
   DISCOVERED_PLACE_SEED,
   HARVEST_RUN_PRESET_SEED,
@@ -464,6 +470,156 @@ export class HarvestMemory implements HarvestServiceI {
     entry.matchedBy = 'MANUAL';
     entry.decidedAt = new Date().toISOString();
     return { ...entry };
+  }
+
+  /**
+   * A decisions file, against the memory queue, with the route's own rule:
+   * every operation is checked before anything is written, and one failed
+   * check refuses the whole file at `VALIDATE` with that operation marked.
+   *
+   * The checks are the ones an operator can meet with no backend: a row that
+   * is gone or already decided, a row that changed since the file was written,
+   * a row named twice, and a link to a product the file never created.
+   */
+  async applyEntryDecisions(
+    input: ApplyEntryDecisionsInput
+  ): Promise<EntryDecisionsAnswer> {
+    const operations = input.operations ?? [];
+    if (operations.length === 0) {
+      throw new GatewayError({
+        code: 'validation_failed',
+        status: 400,
+        correlationId: '',
+      });
+    }
+
+    const seen = new Set<string>();
+    const refs = new Set<string>();
+    const checked: EntryDecisionOutcome[] = operations.map((operation) => {
+      const entry = this._entries.find(
+        (candidate) => candidate.id === operation.entryId
+      );
+      let error: BulkOperationError | null = null;
+
+      if (seen.has(operation.entryId)) {
+        error = {
+          code: 'DUPLICATE_SUBJECT',
+          detail: `Entry ${operation.entryId} is named more than once.`,
+        };
+      } else if (entry === undefined) {
+        error = {
+          code: 'NOT_FOUND',
+          detail: `Entry ${operation.entryId} does not exist.`,
+        };
+      } else if (
+        entry.status !== 'CANDIDATE' &&
+        entry.status !== 'UNRESOLVED'
+      ) {
+        error = {
+          code: 'NOT_PENDING',
+          detail: `Entry ${operation.entryId} is ${entry.status}, not waiting for a decision.`,
+        };
+      } else if (
+        operation.expect.status !== entry.status ||
+        operation.expect.lastSeenAt !== entry.lastSeenAt
+      ) {
+        error = {
+          code: 'EXPECT_MISMATCH',
+          detail: `Entry ${operation.entryId} changed after the file was decided.`,
+        };
+      } else if (
+        operation.op === 'accept' &&
+        (operation.itemId === undefined || operation.itemId === '') &&
+        !(operation.itemRef !== undefined && refs.has(operation.itemRef))
+      ) {
+        error =
+          operation.itemRef === undefined
+            ? {
+                code: 'MALFORMED_OPERATION',
+                detail: `Accepting ${operation.entryId} names no product.`,
+              }
+            : {
+                code: 'UNKNOWN_REFERENCE',
+                detail: `${operation.itemRef} is not a product this file creates.`,
+              };
+      }
+
+      seen.add(operation.entryId);
+      if (operation.op === 'createItem' && operation.ref !== undefined) {
+        refs.add(operation.ref);
+      }
+      return {
+        op: operation.op,
+        entryId: operation.entryId,
+        ref: operation.ref ?? null,
+        applied: false,
+        itemId: operation.itemId ?? null,
+        pricesWritten: 0,
+        error,
+      };
+    });
+
+    const refused = {
+      runId: input.runId ?? null,
+      priceSkips: [],
+      orphanedItemIds: [],
+    };
+    if (checked.some((line) => line.error !== null)) {
+      return {
+        ...refused,
+        applied: false,
+        failedStep: 'VALIDATE',
+        error: null,
+        results: checked,
+      };
+    }
+
+    const created = new Map<string, string>();
+    const results: EntryDecisionOutcome[] = [];
+    for (const operation of operations) {
+      if (operation.op === 'createItem') {
+        const done = await this.createItemFromEntry(
+          operation.entryId,
+          operation.item ?? {}
+        );
+        const itemId = done.createdItem?.id ?? done.entry.itemId ?? null;
+        if (operation.ref !== undefined && itemId !== null) {
+          created.set(operation.ref, itemId);
+        }
+        results.push({
+          op: 'createItem',
+          entryId: operation.entryId,
+          ref: operation.ref ?? null,
+          applied: true,
+          itemId,
+          pricesWritten: done.pricesWritten,
+          error: null,
+        });
+      } else {
+        const itemId =
+          operation.itemId !== undefined && operation.itemId !== ''
+            ? operation.itemId
+            : (created.get(operation.itemRef ?? '') ?? '');
+        const done = await this.acceptEntry(operation.entryId, { itemId });
+        results.push({
+          op: 'accept',
+          entryId: operation.entryId,
+          ref: null,
+          applied: true,
+          itemId,
+          pricesWritten: done.pricesWritten,
+          error: null,
+        });
+      }
+    }
+
+    return {
+      ...refused,
+      applied: true,
+      failedStep: null,
+      error: null,
+      results,
+    };
   }
 
   /**

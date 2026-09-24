@@ -41,6 +41,7 @@ import {
   type QueueReport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
+import { DecisionsFilePanel } from './decisions-file-panel';
 import {
   proposalOf,
   toSourceEntryRow,
@@ -139,8 +140,27 @@ const BRAND_SEARCH_DELAY_MS = 250;
     HarvestNotice,
     ReferencePicker,
     ConfirmDialog,
+    DecisionsFilePanel,
   ],
   template: `
+    <!-- A curation run's decisions file, applied from here (admin plan 0035,
+         section 3). The panel reads and reviews it; only its own button sends. -->
+    @if (decisionsOpen()) {
+      <lib-decisions-file-panel
+        (applied)="reload()"
+        (closed)="decisionsOpen.set(false)"
+      />
+    } @else {
+      <button
+        (click)="decisionsOpen.set(true)"
+        class="decisions-open"
+        type="button"
+        data-open-decisions
+      >
+        {{ 'harvest.entries.decisionsFile.open' | rokuT }}
+      </button>
+    }
+
     <section class="filters">
       <div class="field">
         <label for="entries-chain">{{
@@ -603,6 +623,10 @@ const BRAND_SEARCH_DELAY_MS = 250;
       align-items: flex-start;
     }
 
+    .decisions-open {
+      align-self: flex-start;
+    }
+
     .identity {
       align-items: baseline;
       margin-block-end: var(--admin-space-3);
@@ -900,6 +924,9 @@ export class EntriesQueuePage implements OnDestroy {
   readonly errorKey = computed(() =>
     gatewayErrorKey(this.queue?.error() ?? null)
   );
+
+  /** Whether the decisions file panel is open (admin plan 0035, section 3). */
+  readonly decisionsOpen = signal(false);
 
   constructor() {
     // The chain a run's own link named, so an operator arriving from the run

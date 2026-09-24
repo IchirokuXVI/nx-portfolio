@@ -1,3 +1,4 @@
+import { NgComponentOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -9,7 +10,10 @@ import {
   type Signal,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
   ResourceListStore,
@@ -19,6 +23,8 @@ import {
   hasDetailScreen,
   toRowView,
   type ActionConfirmation,
+  type BulkAction,
+  type BulkPanelInputs,
   type FieldDescriptor,
   type FilterDescriptor,
   type NamedAction,
@@ -57,7 +63,7 @@ interface PendingAction extends RowAction {
  */
 @Component({
   selector: 'lib-resource-list-page',
-  imports: [ResourceList, ConfirmDialog],
+  imports: [ResourceList, ConfirmDialog, NgComponentOutlet, RokuTranslatorPipe],
   template: `
     <lib-resource-list
       (act)="run($event)"
@@ -67,6 +73,7 @@ interface PendingAction extends RowAction {
       (more)="store.loadMore()"
       (open)="open($event)"
       (orderChange)="store.setOrder($event)"
+      (pick)="pick($event)"
       (remove)="askToDelete($event)"
       (retry)="store.load()"
       [blockedBy]="blockedBy()"
@@ -93,9 +100,44 @@ interface PendingAction extends RowAction {
       [noticeKeys]="notices()"
       [order]="store.order()"
       [rows]="rows()"
+      [selectable]="bulkActions.length > 0"
+      [selected]="selected()"
+      [selectionLocked]="activeBulk() !== null"
       [sorts]="descriptor.sorts ?? []"
       [titleKey]="descriptor.labels.many"
-    />
+    >
+      @if (bulkActions.length > 0) {
+        <div class="bulk" listBulk>
+          @if (activeBulk(); as action) {
+            <ng-container
+              *ngComponentOutlet="action.panel; inputs: bulkInputs()"
+            />
+          } @else {
+            <p aria-live="polite" class="bulk-count">
+              {{
+                'resource.bulk.selected'
+                  | rokuT: { count: selectedRows().length }
+              }}
+            </p>
+            @for (action of bulkActions; track action.name) {
+              <button
+                (click)="openBulk(action)"
+                [attr.data-bulk]="action.name"
+                [disabled]="selectedRows().length === 0"
+                type="button"
+              >
+                {{ action.label | rokuT }}
+              </button>
+            }
+            @if (selectedRows().length > 0) {
+              <button (click)="clearSelection()" type="button" data-bulk-clear>
+                {{ 'resource.bulk.clear' | rokuT }}
+              </button>
+            }
+          }
+        </div>
+      }
+    </lib-resource-list>
 
     @if (deleting(); as row) {
       <lib-confirm-dialog
@@ -126,6 +168,39 @@ interface PendingAction extends RowAction {
       display: flex;
       flex: 1;
       flex-direction: column;
+    }
+
+    .bulk {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3);
+      align-items: center;
+    }
+
+    .bulk-count {
+      font-variant-numeric: tabular-nums;
+      color: var(--admin-ink-muted);
+    }
+
+    .bulk > button {
+      min-block-size: 2.75rem;
+      padding: var(--admin-space-2) var(--admin-space-4);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+      font: inherit;
+      color: var(--admin-ink);
+      cursor: pointer;
+    }
+
+    .bulk > button:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+
+    .bulk > button:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -174,6 +249,16 @@ export class ResourceListPage {
 
   /** The row something is happening to. */
   readonly busyRowId = signal<string | null>(null);
+
+  /** What can be done to several ticked rows (admin plan 0035, section 2). */
+  readonly bulkActions: readonly BulkAction[] =
+    this.descriptor.actions?.bulk ?? [];
+
+  /** The ticked rows, by id. */
+  readonly selected = signal<ReadonlySet<string>>(new Set());
+
+  /** The bulk action whose panel is open, or `null`. */
+  readonly activeBulk = signal<BulkAction | null>(null);
 
   readonly columns = computed(() => this._fields(this.descriptor.list.columns));
 
@@ -280,6 +365,60 @@ export class ResourceListPage {
 
   /** Whether a row leads to a detail screen. The route factory agrees, by construction. */
   readonly canOpen = computed(() => hasDetailScreen(this.descriptor));
+
+  /**
+   * The ticked rows that are on screen.
+   *
+   * A tick on a row a filter has since hidden is not counted or handed to a
+   * panel, because a review has to name every row it will write to.
+   */
+  readonly selectedRows = computed(() =>
+    this.rows().filter((row) => this.selected().has(row.id))
+  );
+
+  /** What the open panel is given. */
+  readonly bulkInputs = computed<Record<string, unknown>>(() => {
+    const inputs: BulkPanelInputs = {
+      rows: this.selectedRows(),
+      finish: (changed: boolean) => this.finishBulk(changed),
+    };
+    return { ...inputs };
+  });
+
+  /** Tick or untick one row. Nothing is sent. */
+  pick(id: string): void {
+    if (this.activeBulk() !== null) {
+      return;
+    }
+    const next = new Set(this.selected());
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    this.selected.set(next);
+  }
+
+  clearSelection(): void {
+    this.selected.set(new Set());
+  }
+
+  /** Open one bulk action's panel with the ticked rows. */
+  openBulk(action: BulkAction): void {
+    if (this.selectedRows().length === 0) {
+      return;
+    }
+    this.activeBulk.set(action);
+  }
+
+  /** The panel is done. A write clears the ticks and reads the page again. */
+  finishBulk(changed: boolean): void {
+    this.activeBulk.set(null);
+    if (changed) {
+      this.selected.set(new Set());
+      void this.store.load();
+    }
+  }
 
   constructor() {
     void this.store.load();

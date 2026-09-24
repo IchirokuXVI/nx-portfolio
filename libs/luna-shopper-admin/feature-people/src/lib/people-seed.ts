@@ -292,6 +292,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
         left: 2,
         bought: 0,
         asked: 2,
+        settlements: [],
       },
       {
         rowKey: 'line-bread',
@@ -299,6 +300,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
         left: 0,
         bought: 1,
         asked: 1,
+        settlements: [],
       },
     ],
   },
@@ -322,6 +324,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
         left: 0,
         bought: 3,
         asked: 3,
+        settlements: [],
       },
     ],
   },
