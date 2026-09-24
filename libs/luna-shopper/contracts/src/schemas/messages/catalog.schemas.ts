@@ -21,6 +21,7 @@ import {
   POSTAL_CODE_PATTERNS,
   PRICE_POLICY_PATTERNS,
   PRICE_SCOPE_PATTERNS,
+  PRODUCT_GROUP_MEMBERS_MAX,
   PRODUCT_GROUP_PATTERNS,
   SCOPE_ORIGINS,
   SUPERMARKET_ITEM_PATTERNS,
@@ -93,6 +94,7 @@ export const CATALOG_SCHEMA_IDS = {
   registerBrandsResult: schemaId('msg/brand.registerMany/response'),
   catalogSuggestion: schemaId('catalog/CatalogSuggestion'),
   catalogSuggestResponse: schemaId('catalog/CatalogSuggestResponse'),
+  priceScopeChainView: schemaId('catalog/PriceScopeChainView'),
   createProductGroupRequest: schemaId('msg/productGroup.create/request'),
   updateProductGroupRequest: schemaId('msg/productGroup.update/request'),
   productGroupIdRequest: schemaId('msg/productGroup.id/request'),
@@ -446,6 +448,11 @@ const productGroupOfferView = object(
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemOfferView), { type: 'null' }],
     },
     itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
+    // Plan 0161: the cheapest few members, only when the request asked.
+    members: {
+      ...array(ref(CATALOG_SCHEMA_IDS.itemView)),
+      maxItems: PRODUCT_GROUP_MEMBERS_MAX,
+    },
   },
   ['group', 'cheapestItem', 'offer', 'itemIds']
 );
@@ -464,8 +471,24 @@ const catalogSuggestion = object(
 
 const catalogSuggestResponse = object(
   CATALOG_SCHEMA_IDS.catalogSuggestResponse,
-  { suggestions: array(ref(CATALOG_SCHEMA_IDS.catalogSuggestion)) },
-  ['suggestions']
+  {
+    suggestions: array(ref(CATALOG_SCHEMA_IDS.catalogSuggestion)),
+    // Plan 0161: the chain behind every scope an offer above names. Required
+    // and possibly empty, like the basket's.
+    scopes: array(ref(CATALOG_SCHEMA_IDS.priceScopeChainView)),
+  },
+  ['suggestions', 'scopes']
+);
+
+/** Which chain a scope belongs to (plan 0161, section 3). No shops. */
+const priceScopeChainView = object(
+  CATALOG_SCHEMA_IDS.priceScopeChainView,
+  {
+    priceScopeId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+  },
+  ['priceScopeId', 'supermarketId', 'supermarketName']
 );
 
 // Stated once and used by both views below, so the admin view cannot drift
@@ -1167,6 +1190,8 @@ const searchItemsRequest = object(
     // Plan 0146: which chains sell the products, which is not what the scopes
     // above decide. Absent and empty both mean every chain.
     soldBy: array(nonEmptyString()),
+    // Plan 0161: every scope's offer, read as `item.getMany` reads it.
+    offers: string({ enum: ['best', 'all'] }),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -1179,6 +1204,10 @@ const searchOffersRequest = object(
     userId: nonEmptyString(),
     query: string(),
     priceScopeIds: array(nonEmptyString()),
+    // Plan 0161: every scope's offer on each cheapest member, and how many
+    // members to add as products. A larger count is clamped by the service.
+    offers: string({ enum: ['best', 'all'] }),
+    members: integer({ minimum: 1 }),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -2038,6 +2067,7 @@ export const catalogSchemas: JsonSchema[] = [
   productGroupOfferView,
   catalogSuggestion,
   catalogSuggestResponse,
+  priceScopeChainView,
   supermarketItemView,
   adminSupermarketItemView,
   supermarketLocationItemView,

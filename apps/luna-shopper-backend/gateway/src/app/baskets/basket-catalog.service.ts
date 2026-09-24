@@ -3,21 +3,24 @@ import {
   BASKET_PATTERNS,
   ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
-  SUPERMARKET_PATTERNS,
   type BasketPriceScopeView,
   type BasketScopeLocationView,
   type BasketSearchScope,
   type BasketView,
   type CatalogScopeView,
+  type CatalogSuggestResponse,
   type GetItemsRequest,
   type GetItemsResult,
   type ItemView,
   type ListSupermarketLocationsRequest,
-  type ListSupermarketsRequest,
   type SupermarketLocationPage,
-  type SupermarketPage,
 } from '@portfolio/luna-shopper/contracts';
 import { MAX_PAGE_SIZE } from '@portfolio/luna-shopper/platform';
+import {
+  CatalogSuggestService,
+  productScopeIds,
+  type SuggestInput,
+} from '../catalog/catalog-suggest.service';
 import { ScopeResolutionService } from '../catalog/scope-resolution.service';
 import { NatsClient } from '../messaging/nats-client';
 
@@ -62,8 +65,16 @@ export class BasketCatalogService {
     private readonly nats: NatsClient,
     // The run's profile turned into scope ids, through the same resolver and the
     // same Redis cache an account holder's own search uses.
-    private readonly scopes: ScopeResolutionService
+    private readonly scopes: ScopeResolutionService,
+    // Plan 0161: the dropdown, and the one helper that names a scope's chain
+    // for this read and for the dropdown alike.
+    private readonly suggestions: CatalogSuggestService
   ) {}
+
+  /** The composer's dropdown, priced at the basket's own scopes. */
+  suggest(input: SuggestInput): Promise<CatalogSuggestResponse> {
+    return this.suggestions.suggest(input);
+  }
 
   /**
    * The products every row names, in one catalog round trip, priced at the
@@ -121,20 +132,9 @@ export class BasketCatalogService {
     resolved: CatalogScopeView,
     servesLocations: boolean
   ): Promise<BasketPriceScopeView[]> {
-    const referenced = [
-      ...new Set(
-        products.flatMap((product) =>
-          product.offers
-            ? // Every scope that quoted anything, not only the ones that quoted
-              // the cheapest of something (plan 0109, section 3). A scope this
-              // array skipped would reach the client as a price with no shop.
-              product.offers.map((offer) => offer.priceScopeId)
-            : product.bestOffer
-              ? [product.bestOffer.priceScopeId]
-              : []
-        )
-      ),
-    ];
+    // Every scope that quoted anything, not only the ones that quoted the
+    // cheapest of something (plan 0109, section 3).
+    const referenced = productScopeIds(products);
     if (referenced.length === 0) {
       return [];
     }
@@ -142,55 +142,36 @@ export class BasketCatalogService {
     try {
       // The refusals are fetched beside the chain names rather than after them:
       // neither needs the other, and a basket read is made often enough that one
-      // round trip of latency is worth not spending.
+      // round trip of latency is worth not spending. The chains are named by
+      // the helper the dropdown uses (plan 0161, section 3): it leaves out a
+      // scope it cannot name, and answers none when the listing fails.
       const [chains, refused] = await Promise.all([
-        this.nats.send<SupermarketPage>(SUPERMARKET_PATTERNS.list, {
-          userId,
-          limit: MAX_PAGE_SIZE,
-        } satisfies ListSupermarketsRequest),
+        this.suggestions.chainsOf(userId, referenced, resolved),
         servesLocations
           ? this.refusalsOf(userId, resolved.profileId)
           : NO_REFUSALS,
       ]);
-      const chainById = new Map(chains.items.map((c) => [c.id, c]));
 
-      const views = await Promise.all(
-        referenced.map(
-          async (priceScopeId): Promise<BasketPriceScopeView | null> => {
-            const scope = resolved.scopes.find(
-              (s) => s.priceScopeId === priceScopeId
-            );
-            const chain = scope
-              ? chainById.get(scope.supermarketId)
-              : undefined;
-            if (!scope || !chain) {
-              // A scope the resolution did not name, or a chain the listing did
-              // not: an entry that cannot say which chain it is would be worse
-              // than none.
-              return null;
-            }
-            // Plan 0064, section 2.1: a refused chain hides every one of its
-            // shops, whatever their own rows say.
-            const refusedChain = refused.supermarketIds.includes(chain.id);
-            return {
-              priceScopeId,
-              supermarketId: chain.id,
-              supermarketName: chain.name,
-              locations:
-                servesLocations && !refusedChain
-                  ? await this.locationsOf(
-                      userId,
-                      chain.id,
-                      priceScopeId,
-                      refused.supermarketLocationIds
-                    )
-                  : [],
-            };
-          }
-        )
-      );
-      return views.filter(
-        (view): view is BasketPriceScopeView => view !== null
+      return await Promise.all(
+        chains.map(async (chain): Promise<BasketPriceScopeView> => {
+          // Plan 0064, section 2.1: a refused chain hides every one of its
+          // shops, whatever their own rows say.
+          const refusedChain = refused.supermarketIds.includes(
+            chain.supermarketId
+          );
+          return {
+            ...chain,
+            locations:
+              servesLocations && !refusedChain
+                ? await this.locationsOf(
+                    userId,
+                    chain.supermarketId,
+                    chain.priceScopeId,
+                    refused.supermarketLocationIds
+                  )
+                : [],
+          };
+        })
       );
     } catch {
       return [];

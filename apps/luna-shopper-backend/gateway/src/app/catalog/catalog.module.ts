@@ -13,6 +13,7 @@ import {
   AdminCatalogSupermarketItemsController,
   AdminCatalogSupermarketsController,
 } from './catalog-admin.controller';
+import { CatalogSuggestService } from './catalog-suggest.service';
 import {
   CatalogItemsController,
   CatalogLocationItemsController,
@@ -75,11 +76,14 @@ import { ScopeResolutionService } from './scope-resolution.service';
   ],
   // Plan 0049: every read that returns items or prices resolves where the caller
   // shops first, from an explicit selector or from their profile.
-  providers: [ScopeResolutionService],
+  // Plan 0161: the composer's dropdown and the chains behind its prices, for
+  // both suggest routes.
+  providers: [ScopeResolutionService, CatalogSuggestService],
   // Exported for the basket's own search (plan 0055, section 5.1), which
   // resolves the **run's** profile rather than the caller's and must share this
   // resolver's Redis cache and its invalidation rather than growing a second
-  // answer to the same question.
-  exports: [ScopeResolutionService],
+  // answer to the same question. The suggestion service goes with it, so the
+  // basket and the dropdown name a scope through one helper (plan 0161).
+  exports: [ScopeResolutionService, CatalogSuggestService],
 })
 export class GatewayCatalogModule {}

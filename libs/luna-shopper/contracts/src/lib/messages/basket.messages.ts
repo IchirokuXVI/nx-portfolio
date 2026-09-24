@@ -12,7 +12,11 @@ import type {
 import type { Paginated } from '../pagination';
 import type { UserUsernameView } from './auth.messages';
 import type { BasketParticipantView } from './basket-sharing.messages';
-import type { ItemView, LocalizedText } from './catalog.messages';
+import type {
+  ItemView,
+  LocalizedText,
+  PriceScopeChainView,
+} from './catalog.messages';
 import type { SettlePick, SettlementPaid } from './list.messages';
 
 /**
@@ -257,12 +261,12 @@ export interface BasketResult extends BasketView {
  * owner's geography, and it is an empty array for everybody else, which is the
  * same shape a scope whose stores we cannot place answers with. There is
  * deliberately no third state for the client to branch on.
+ *
+ * The chain half is {@link PriceScopeChainView}, which the composer's
+ * suggestions carry alone (plan 0161, section 3). One gateway helper names both,
+ * so the basket and the dropdown cannot name one scope differently.
  */
-export interface BasketPriceScopeView {
-  priceScopeId: string;
-  supermarketId: string;
-  /** The chain, both locales, resolved by the client. */
-  supermarketName: LocalizedText;
+export interface BasketPriceScopeView extends PriceScopeChainView {
   /**
    * The shops of this scope. Empty for a reader the server withheld them from,
    * and empty for a scope catalog cannot place; both draw the chain alone.

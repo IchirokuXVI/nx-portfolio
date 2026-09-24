@@ -15,7 +15,6 @@ import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
   BASKET_PATTERNS,
   BASKET_SCHEMA_IDS,
-  ITEM_PATTERNS,
   type AcknowledgeBasketChangesRequest,
   type AddBasketLineRequest,
   type BasketChangePage,
@@ -30,9 +29,7 @@ import {
   type BasketParticipantContext,
   type GetBasketRequest,
   type GetLiveBasketRequest,
-  type ItemPage,
   type ListBasketChangesRequest,
-  type ProductGroupOfferPage,
   type RenameBasketRowRequest,
   type RevertBasketRowRequest,
   type SetBasketRowDemandRequest,
@@ -605,37 +602,14 @@ export class BasketController {
       { basketId: id, participantId: participant.participantId }
     );
 
-    const common = {
+    // The owner's catalog read at the basket's scopes, whoever is asking, so a
+    // guest gets the same members and the same chains as the owner (plan 0161).
+    return this.catalog.suggest({
       userId: scope.ownerUserId,
       query: query.q,
-      priceScopeIds: (await this.catalog.describeScopes(scope))?.priceScopeIds,
       limit: query.limit,
-    };
-    const [groups, items] = await Promise.all([
-      this.nats
-        .send<ProductGroupOfferPage>(ITEM_PATTERNS.searchOffers, common)
-        .catch(
-          () => ({ items: [], nextCursor: null }) as ProductGroupOfferPage
-        ),
-      this.nats
-        .send<ItemPage>(ITEM_PATTERNS.search, common)
-        .catch(() => ({ items: [], nextCursor: null }) as ItemPage),
-    ]);
-
-    return {
-      suggestions: [
-        ...groups.items.map((group) => ({
-          kind: 'group' as const,
-          group,
-          item: null,
-        })),
-        ...items.items.map((item) => ({
-          kind: 'item' as const,
-          group: null,
-          item,
-        })),
-      ],
-    };
+      resolved: await this.catalog.describeScopes(scope),
+    });
   }
 }
 

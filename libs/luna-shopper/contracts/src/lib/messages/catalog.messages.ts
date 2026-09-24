@@ -822,9 +822,33 @@ export interface ProductGroupOfferView {
    * Capped at `LINE_ITEM_SET_MAX`, so what a suggestion offers is always
    * something a line can hold. A group past that cap is a curation problem, and
    * a suggestion that 400s on choosing is not the place to report it.
+   *
+   * Its length is also how many products the group holds, which is what the
+   * card's "and N more" counts from. {@link members} does not replace it.
    */
   itemIds: string[];
+  /**
+   * The cheapest few members as products, for the card's reveal (plan 0161,
+   * section 2). Present only when {@link SearchOffersRequest.members} asked for
+   * them, and at most {@link PRODUCT_GROUP_MEMBERS_MAX}.
+   *
+   * Ordered by the keys that pick {@link cheapestItem}: a member with a till
+   * price first, then unit price, then price, then id. A member with no offer at
+   * the requested scopes comes after every one that has one, by name, so a group
+   * nobody prices still reveals named products. `members[0]` is
+   * {@link cheapestItem} whenever both exist.
+   *
+   * Each carries `bestOffer` and never `offers`: the reveal draws one price per
+   * product.
+   */
+  members?: ItemView[];
 }
+
+/**
+ * How many members one {@link ProductGroupOfferView} may carry (plan 0161,
+ * section 2). A larger request is clamped to it.
+ */
+export const PRODUCT_GROUP_MEMBERS_MAX = 5;
 
 /**
  * The price a shopper sees for one item within one price scope (plan 0038,
@@ -1493,6 +1517,13 @@ export interface SearchItemsRequest extends PageQuery {
    * ids list what either chain sells.
    */
   soldBy?: string[];
+  /**
+   * How much of the pricing to attach (plan 0161, section 1), read exactly as
+   * {@link GetItemsRequest.offers} is: `best` is the default, `all` adds
+   * {@link ItemView.offers}, and `bestOffer` is then its first entry. Read only
+   * when {@link priceScopeIds} names a scope.
+   */
+  offers?: 'best' | 'all';
 }
 
 /**
@@ -1506,6 +1537,17 @@ export interface SearchOffersRequest extends PageQuery {
   userId: string;
   query?: string;
   priceScopeIds?: string[];
+  /**
+   * `all` fills {@link ItemView.offers} on each group's `cheapestItem` (plan
+   * 0161, section 1). The group's own `offer` is unchanged, and it is the first
+   * entry of that array. Read only when {@link priceScopeIds} names a scope.
+   */
+  offers?: 'best' | 'all';
+  /**
+   * Add {@link ProductGroupOfferView.members}, this many per group, clamped to
+   * {@link PRODUCT_GROUP_MEMBERS_MAX} (plan 0161, section 2). Absent adds none.
+   */
+  members?: number;
 }
 
 // --- Product group requests ------------------------------------------------
@@ -2322,6 +2364,33 @@ export interface CatalogSuggestion {
  */
 export interface CatalogSuggestResponse {
   suggestions: CatalogSuggestion[];
+  /**
+   * The chain behind every scope an offer on {@link suggestions} names, and no
+   * other scope (plan 0161, section 3). A scope is named once however many
+   * offers quote it.
+   *
+   * A scope the gateway cannot name is left out and never guessed, and the
+   * offer that names it still comes back. The whole map is empty when the chain
+   * listing fails, because naming never takes the dropdown down.
+   *
+   * A chain can appear under more than one scope. Choosing which of them to
+   * draw is a display rule and belongs to the client.
+   */
+  scopes: PriceScopeChainView[];
+}
+
+/**
+ * Which chain one price scope belongs to (plan 0161, section 3).
+ *
+ * The part of a scope that every reader may have, guests included: a chain's
+ * name is a product fact of the same class as the price it explains. The
+ * basket's {@link BasketPriceScopeView} extends it with the shops.
+ */
+export interface PriceScopeChainView {
+  priceScopeId: string;
+  supermarketId: string;
+  /** The chain, both locales, resolved by the client. */
+  supermarketName: LocalizedText;
 }
 
 /**

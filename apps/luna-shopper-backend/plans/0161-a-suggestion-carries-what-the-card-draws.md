@@ -1,3 +1,5 @@
+> **PR:** [#474](https://github.com/IchirokuXVI/nx-portfolio/pull/474)
+
 # 0161: a suggestion carries what the card draws
 
 > Frontend half: velista `0101`, the product suggestion card, and its mock at
