@@ -176,7 +176,6 @@ test('the decision schema takes its enum from the same unit vocabulary', () => {
   assert.deepEqual(schema.properties.group.properties.referenceUnit.enum, [
     'LITER',
     'UNIT',
-    null,
   ]);
   assert.deepEqual(schema.properties.group.properties.synonyms.properties.es, {
     type: 'array',
@@ -190,6 +189,32 @@ test('the decision schema takes its enum from the same unit vocabulary', () => {
     'issues',
     'reasoning',
   ]);
+});
+
+test('the decision schema makes an ASSIGN name its group', () => {
+  const schema = buildDecisionSchema({ units: ['LITER', 'UNIT'] });
+  const shapes = schema.anyOf.map((shape) => [
+    shape.properties.decision.const,
+    shape.required.filter((field) =>
+      ['groupId', 'groupRef', 'group'].includes(field)
+    ),
+  ]);
+
+  assert.deepEqual(shapes, [
+    ['ASSIGN', ['groupId']],
+    ['ASSIGN', ['groupRef']],
+    ['CREATE_GROUP', ['group']],
+    ['REVIEW', []],
+  ]);
+  // A group that is present has every field the shape check refuses it
+  // without, none of them nullable.
+  assert.deepEqual(schema.properties.group.required, [
+    'nameEs',
+    'nameEn',
+    'slug',
+    'referenceUnit',
+  ]);
+  assert.deepEqual(schema.properties.group.properties.slug, { type: 'string' });
 });
 
 // ---------------------------------------------------------------------------

@@ -255,7 +255,46 @@ export function buildSystemPrompt({
 export function buildDecisionSchema({ units = loadUnits() } = {}) {
   const nullableString = { type: ['string', 'null'] };
   const synonymList = { type: 'array', items: { type: 'string' } };
+
+  // A group that is present is a complete one: the four fields
+  // `checkDecisionShape` refuses a CREATE_GROUP without are required and non
+  // null. The root still admits `null` for the group, because an ASSIGN and a
+  // REVIEW carry none. This line is all the claude engine gets, since the
+  // Messages API refuses an alternation at the top of a tool schema.
+  const looseGroup = {
+    type: ['object', 'null'],
+    properties: {
+      nameEs: { type: 'string' },
+      nameEn: { type: 'string' },
+      slug: { type: 'string' },
+      referenceUnit: { type: 'string', enum: [...units] },
+      synonyms: {
+        type: ['object', 'null'],
+        properties: { es: synonymList, en: synonymList },
+      },
+    },
+    required: ['nameEs', 'nameEn', 'slug', 'referenceUnit'],
+  };
+  const shared = {
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          code: { type: 'string' },
+          detail: { type: 'string' },
+        },
+        required: ['code', 'detail'],
+      },
+    },
+    reasoning: { type: 'string' },
+  };
+  const sharedRequired = ['confidence', 'issues', 'reasoning'];
+
   return {
+    // Every field is still described at the root, so an engine that does not
+    // read `anyOf` is as well off as it was before.
     type: 'object',
     properties: {
       decision: {
@@ -264,33 +303,48 @@ export function buildDecisionSchema({ units = loadUnits() } = {}) {
       },
       groupId: nullableString,
       groupRef: nullableString,
-      group: {
-        type: ['object', 'null'],
-        properties: {
-          nameEs: nullableString,
-          nameEn: nullableString,
-          slug: nullableString,
-          referenceUnit: { type: ['string', 'null'], enum: [...units, null] },
-          synonyms: {
-            type: ['object', 'null'],
-            properties: { es: synonymList, en: synonymList },
-          },
-        },
-      },
-      confidence: { type: 'number', minimum: 0, maximum: 1 },
-      issues: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            code: { type: 'string' },
-            detail: { type: 'string' },
-          },
-          required: ['code', 'detail'],
-        },
-      },
-      reasoning: { type: 'string' },
+      group: looseGroup,
+      ...shared,
     },
-    required: ['decision', 'confidence', 'issues', 'reasoning'],
+    required: ['decision', ...sharedRequired],
+    // The shapes a decision can take, discriminated on `decision`. Ollama
+    // turns this into a grammar, so an ASSIGN that names no group cannot be
+    // produced at all. The flat schema allowed it, and 77 of 328 rows of a
+    // live gemma walk were re-asked for it and ended as REVIEW. The same fix
+    // is in the suggestions decider (its plan 0003).
+    anyOf: [
+      {
+        type: 'object',
+        properties: {
+          decision: { const: 'ASSIGN' },
+          groupId: { type: 'string' },
+          ...shared,
+        },
+        required: ['decision', 'groupId', ...sharedRequired],
+      },
+      {
+        type: 'object',
+        properties: {
+          decision: { const: 'ASSIGN' },
+          groupRef: { type: 'string' },
+          ...shared,
+        },
+        required: ['decision', 'groupRef', ...sharedRequired],
+      },
+      {
+        type: 'object',
+        properties: {
+          decision: { const: 'CREATE_GROUP' },
+          group: { ...looseGroup, type: 'object' },
+          ...shared,
+        },
+        required: ['decision', 'group', ...sharedRequired],
+      },
+      {
+        type: 'object',
+        properties: { decision: { const: 'REVIEW' }, ...shared },
+        required: ['decision', ...sharedRequired],
+      },
+    ],
   };
 }
