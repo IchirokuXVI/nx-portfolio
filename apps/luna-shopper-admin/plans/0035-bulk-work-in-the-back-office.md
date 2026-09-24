@@ -89,14 +89,14 @@ Stop and ask before: adding a dependency for file parsing, or adding a section.
   only for a resource that names one, and the panel receives the ticked rows and a `finish`
   callback. The panel is the review, so a tick still sends nothing. This touches
   `models` (`BulkAction`, `BulkPanelInputs`), `ui` (`ResourceList`) and `feature-resource`
-  (`ResourceListPage`), which the Scope did not list; nothing else could satisfy the target.
+  (`ResourceListPage`), which the Scope did not list. No other change gets to the target.
 - **A brand batch links nothing.** `register-many` takes labels, not a spelling and a label, so
-  a label that makes a different key than its row would register another brand and leave the
+  a label that makes a different key than its row registers another brand and leaves the
   suggestion behind. The review holds such a line back with a sentence and disables the send.
   Linking stays the single panel's job. The batch sends no private label chain either: that is
   a per brand fact, decided in the single panel.
 - **A decisions file decided against another gateway is warned about, not refused.** The CLI
-  refuses it. A browser may name the same machine differently from a terminal, and the route
+  refuses it. A browser and a terminal can name the same machine differently, and the route
   checks every row's expectation before it writes, so a foreign file is refused there anyway.
 - **The product group detail is a component now**, the generic form with "Add items" under
   it, the way the brand detail is built. That adds the `:id/edit` route the route factory gives
@@ -105,4 +105,4 @@ Stop and ask before: adding a dependency for file parsing, or adding a section.
   was drawn, so a product moved by somebody else in between is refused rather than moved again.
 - **`people-seed.ts` gained `settlements: []` on its three basket rows.** Backend plan 0160 made
   the field required, and without it `nx build luna-shopper-admin` failed before any change
-  here. Admin plan 0033 draws settlements and may replace these with real seed rows.
+  here. Admin plan 0033 draws settlements and is free to replace these with real seed rows.
