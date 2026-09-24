@@ -2,6 +2,7 @@ import {
   toAssistantReply,
   toCatalogItem,
   toCatalogSuggestion,
+  toCatalogSuggestions,
   toComment,
   toBasketFromView,
   toBasketRun,
@@ -19,6 +20,7 @@ import {
   toZone,
   toZonePresence,
 } from './mappers';
+import type { CatalogSuggestion } from '@portfolio/velista/models';
 
 /**
  * Rule D4's test surface (plan 0004, section 12). Every mapper takes `unknown`, so
@@ -1038,6 +1040,10 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       // Absent on this fixture, so it falls back (velista `0082`).
       category: 'OTHER',
       offer: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+      unitBasis: null,
     });
   });
 
@@ -1281,6 +1287,151 @@ describe('toCatalogSuggestion', () => {
     const mapped = toCatalogSuggestion(offer);
 
     expect(mapped?.kind === 'group' ? mapped.offer : 'wrong kind').toBeNull();
+  });
+});
+
+/**
+ * The suggest response as a whole (velista `0101`, backend `0161`): the card
+ * names chains, so every offer is resolved against the response's own scope
+ * map while the map is in hand.
+ */
+describe('toCatalogSuggestions', () => {
+  const at = (priceScopeId: string, price: number | null, stale = false) => ({
+    price,
+    currency: 'EUR',
+    unitPrice: price,
+    unitPriceLabel: 'EUR/L',
+    observedAt: '2026-09-20T08:00:00.000Z',
+    sourceKind: 'OFFICIAL_WEB',
+    stale,
+    priceScopeId,
+  });
+  const chain = (priceScopeId: string, id: string, name: string) => ({
+    priceScopeId,
+    supermarketId: id,
+    supermarketName: { es: name, en: name },
+  });
+  const milk = {
+    id: 'i1',
+    name: { es: 'Leche entera', en: 'Whole milk' },
+    brand: 'Asturiana',
+    imageUrl: 'https://img.example/i1.jpg',
+    bestOffer: at('s-merc-1', 1.19),
+    offers: [
+      at('s-dia', 1.29),
+      at('s-merc-2', 1.25),
+      at('s-merc-1', 1.19),
+      at('s-unknown', 0.5),
+      at('s-lidl', null),
+    ],
+  };
+  const body = {
+    suggestions: [{ kind: 'item', group: null, item: milk }],
+    scopes: [
+      chain('s-merc-1', 'mercadona', 'Mercadona'),
+      chain('s-merc-2', 'mercadona', 'Mercadona'),
+      chain('s-dia', 'dia', 'Dia'),
+      chain('s-lidl', 'lidl', 'Lidl'),
+    ],
+  };
+
+  function chainsOf(mapped: readonly CatalogSuggestion[]): unknown[] {
+    const first = mapped[0];
+    return first?.kind === 'item'
+      ? first.item.chainPrices.map((one) => [one.chain.id, one.offer.price])
+      : [];
+  }
+
+  it('names one row per chain, cheapest first, a chain keeping its cheapest scope', () => {
+    expect(chainsOf(toCatalogSuggestions(body))).toEqual([
+      ['mercadona', 1.19],
+      ['dia', 1.29],
+      ['lidl', null],
+    ]);
+  });
+
+  it('drops an offer whose scope the map does not name, never guessing a chain', () => {
+    const names = chainsOf(toCatalogSuggestions(body)).map(
+      (row) => (row as unknown[])[0]
+    );
+    expect(names).not.toContain(undefined);
+    expect(names).toHaveLength(3);
+  });
+
+  it('names no chain at all when the map is absent or empty', () => {
+    expect(chainsOf(toCatalogSuggestions({ ...body, scopes: [] }))).toEqual(
+      []
+    );
+    expect(
+      chainsOf(toCatalogSuggestions({ suggestions: body.suggestions }))
+    ).toEqual([]);
+  });
+
+  it('reads the photograph, and null where there is none', () => {
+    const [first] = toCatalogSuggestions(body);
+    expect(first?.kind === 'item' ? first.item.imageUrl : 'x').toBe(
+      'https://img.example/i1.jpg'
+    );
+    expect(toCatalogItem({ id: 'i2' })?.imageUrl).toBeNull();
+  });
+
+  it("carries a group's members with their chains resolved", () => {
+    const [group] = toCatalogSuggestions({
+      ...body,
+      suggestions: [
+        {
+          kind: 'group',
+          item: null,
+          group: {
+            group: { id: 'g1', name: { es: 'Leche', en: 'Milk' } },
+            itemIds: ['i1', 'i2', 'i3'],
+            offer: at('s-merc-1', 1.19),
+            members: [milk, { nope: true }],
+          },
+        },
+      ],
+    });
+
+    expect(group?.kind).toBe('group');
+    if (group?.kind === 'group') {
+      expect(group.members.map((one) => one.id)).toEqual(['i1']);
+      expect(group.members[0]?.chainPrices[0]?.chain.name.es).toBe(
+        'Mercadona'
+      );
+    }
+  });
+
+  it('reads a group with no members as an empty reveal', () => {
+    const [group] = toCatalogSuggestions({
+      suggestions: [
+        {
+          kind: 'group',
+          item: null,
+          group: {
+            group: { id: 'g1', name: { es: 'Leche', en: 'Milk' } },
+            itemIds: [],
+            offer: null,
+          },
+        },
+      ],
+    });
+    expect(group?.kind === 'group' ? group.members : null).toEqual([]);
+  });
+
+  it('answers nothing for a body that is not a response', () => {
+    expect(toCatalogSuggestions(null)).toEqual([]);
+    expect(toCatalogSuggestions('oops')).toEqual([]);
+  });
+});
+
+/** Backend `0162`: how many units a pack holds, a whole number from 2. */
+describe('toCatalogItem: the pack count', () => {
+  it('reads a whole number from 2 and nothing else', () => {
+    expect(toCatalogItem({ id: 'i', packCount: 6 })?.packCount).toBe(6);
+    expect(toCatalogItem({ id: 'i', packCount: 1 })?.packCount).toBeNull();
+    expect(toCatalogItem({ id: 'i', packCount: 2.5 })?.packCount).toBeNull();
+    expect(toCatalogItem({ id: 'i', packCount: '6' })?.packCount).toBeNull();
+    expect(toCatalogItem({ id: 'i' })?.packCount).toBeNull();
   });
 });
 

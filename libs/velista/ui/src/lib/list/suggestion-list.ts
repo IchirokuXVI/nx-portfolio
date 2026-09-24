@@ -1,21 +1,99 @@
 import {
+  CdkConnectedOverlay,
+  CdkOverlayOrigin,
+  type ConnectedPosition,
+} from '@angular/cdk/overlay';
+import {
+  afterNextRender,
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  ElementRef,
   inject,
   input,
   output,
+  signal,
   viewChild,
-  type ElementRef,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
+  RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import { inLocale, type CatalogSuggestion } from '@portfolio/velista/models';
 import { formatMoney } from '@portfolio/velista/platform';
-import { BasketIcon, PlusIcon, ProductIcon } from '../icons/icons';
+import {
+  BasketIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  InfoIcon,
+  PlusIcon,
+  ProductIcon,
+} from '../icons/icons';
+import { QuantityStepper } from './quantity-stepper';
+import {
+  suggestionCardView,
+  type SuggestionCardView,
+} from './suggestion-card-view';
+
+/**
+ * A line that already holds the product a card offers (velista `0101`, section 4).
+ *
+ * Built by the page, because only the page holds its lines: the zone list page
+ * joins its own lines, the basket its own rows, each already naming the list it
+ * came from. So it is a join in the client and not a field anybody asks for.
+ */
+export interface SuggestionHolding {
+  /** Unique within one card. The line id on a list, the row and line on a basket. */
+  readonly key: string;
+  readonly lineId: string;
+  /** The line's own words, so a renamed line says what it was renamed to (rule T7). */
+  readonly text: string;
+  /**
+   * The list the line is on, drawn above its words, or null. The basket names it
+   * because the same product reaches it from several lists; a list page does not,
+   * because the reader is looking at the list.
+   */
+  readonly listName: string | null;
+  readonly quantity: number;
+  /** Whether the stepper may move. A caller who may not change it sees it disabled. */
+  readonly editable: boolean;
+}
+
+/** A holding's stepper moved, once per press. */
+export interface SuggestionHoldingChange {
+  readonly holding: SuggestionHolding;
+  readonly from: number;
+  readonly to: number;
+}
+
+const NO_HOLDINGS: readonly SuggestionHolding[] = [];
+
+/**
+ * Where the group popover opens: above its badge, centred, since the panel sits
+ * over the keyboard and the room is upward; below it when the badge is near the
+ * top of the screen.
+ */
+const POPOVER_POSITIONS: ConnectedPosition[] = [
+  {
+    originX: 'center',
+    originY: 'top',
+    overlayX: 'center',
+    overlayY: 'bottom',
+    offsetY: -9,
+  },
+  {
+    originX: 'center',
+    originY: 'bottom',
+    overlayX: 'center',
+    overlayY: 'top',
+    offsetY: 9,
+  },
+];
 
 /**
  * What the catalog offers under a field somebody is typing into (velista plan 0043,
@@ -42,25 +120,41 @@ import { BasketIcon, PlusIcon, ProductIcon } from '../icons/icons';
  *   size and two cartons of the same milk are otherwise the same row twice over. See
  *   {@link sizeOf}, which is where the rule and its one exception live.
  *
- * ## Free text belongs to the caller
+ * ## Two drawings, by placement
  *
- * The last row, "add it as written", is drawn only when {@link asWritten} is given, and
- * that is the one thing that genuinely differs between the two callers. The composer
- * adds a line, and a line is free text first: "Something for dinner" is legitimate and
- * the moment the composer insists on a match, adding things becomes a fight. The line
- * page is **attaching a catalog product** to a line that already exists, and there is
- * no such thing as attaching a product that is not in the catalog, so it passes null
- * and the row is absent rather than present and refusing.
+ * The composer's panel (`'above'`) draws **product cards** since velista `0101`: a
+ * photograph's place, the name, the pack, the price, the price per unit when it
+ * differs, the chains that sell it with the cheapest named, a way through to the
+ * product, the lines already holding it, and one button down the right edge that is
+ * the only thing on the card that adds it. The mock is `apps/velista/plans/mocks/
+ * typeahead/`, and the canvas is the specification.
  *
- * ## Where it goes is the caller's, and {@link placement} is how it says so
+ * The line page (`'below'`) keeps its one line rows: `0101` changes the two composers
+ * and nowhere else.
  *
- * The rows are identical on both screens. What differs is the direction the list
- * grows in, and two things follow from that direction which are not decoration. See
- * {@link placement}.
+ * ## No free text row
+ *
+ * The composer used to end the panel with "add it as written". `0101` removed it: the
+ * composer's own button already adds the typed words, and the row cost a card's height
+ * in a panel that has to fit above the keyboard. A line is still free text first; the
+ * button beside the field is how.
  */
 @Component({
   selector: 'lib-suggestion-list',
-  imports: [RokuTranslatorPipe, BasketIcon, PlusIcon, ProductIcon],
+  imports: [
+    RokuTranslatorPipe,
+    BasketIcon,
+    ChevronDownIcon,
+    ChevronRightIcon,
+    ClockIcon,
+    InfoIcon,
+    PlusIcon,
+    ProductIcon,
+    QuantityStepper,
+    CdkConnectedOverlay,
+    CdkOverlayOrigin,
+    RouterLink,
+  ],
   templateUrl: './suggestion-list.html',
   styleUrl: './suggestion-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -79,8 +173,30 @@ export class SuggestionList {
    */
   readonly suggestions = input<readonly CatalogSuggestion[]>([]);
 
-  /** What has been typed, for the free text row, or null to omit that row entirely. */
-  readonly asWritten = input<string | null>(null);
+  /**
+   * The catalog is being asked and nothing has come back yet. The composer's
+   * panel draws three skeleton cards shaped like the cards they become, so the
+   * panel does not resize under the thumb when the answer lands (`Edge`).
+   */
+  readonly loading = input(false);
+
+  /**
+   * The lines already holding what a card offers, by the page that holds them
+   * (velista `0101`, section 4). The composer's cards only.
+   */
+  readonly holdingsOf =
+    input<(suggestion: CatalogSuggestion) => readonly SuggestionHolding[]>(
+      () => NO_HOLDINGS
+    );
+
+  /**
+   * The URL a card's "Details" opens for one product, or null for no link. A
+   * page that cannot open a product, a guest's basket, passes null.
+   */
+  readonly productLink = input<((itemId: string) => string) | null>(null);
+
+  /** The id the composer's field names in `aria-controls`. */
+  readonly panelId = input('suggestion-panel');
 
   /** The label above the list, for a screen reader. Each caller names its own. */
   readonly label = input('list.add.suggestions');
@@ -98,10 +214,9 @@ export class SuggestionList {
    * - **It is opaque.** It covers rows of somebody's shopping list, and a
    *   transparent panel over them is two lists of words in the same place. It was
    *   exactly that until this input existed.
-   * - **It opens at its last row.** The rows nearest the field are the ones under
-   *   the thumb, and the last of them is the free text row, which is the one that is
-   *   always there and always works. A panel that opened at the top of a scrolling
-   *   list hid it behind rows the catalog merely offered.
+   * - **It opens at its last row.** The card nearest the field is the one under
+   *   the thumb, and it is the server's best answer. A panel that opened at the top
+   *   of a scrolling list hid it behind cards the catalog ranked lower.
    * - **It is read bottom to top**, so the ranking is drawn that way round. See
    *   {@link rows}.
    */
@@ -120,16 +235,12 @@ export class SuggestionList {
    * sees first and the list climbs away from there. Drawn top to bottom, that put the
    * server's best answer furthest from the thumb, at the far end of a list that
    * usually needs scrolling to reach. Reversed, the panel reads outward from the
-   * field: the free text row at the bottom where it already was, the server's first
-   * suggestion directly above it, and the rest of the ranking climbing away in order.
+   * field: the server's first suggestion directly above it, and the rest of the
+   * ranking climbing away in order.
    *
    * The ranking is still the server's and is still never re-sorted. Reversing it is
    * not a second opinion about which answer is best; it is where the bottom of the
    * panel is, and a panel that opens at its bottom has to be filled from there.
-   *
-   * The free text row is not in here. It is drawn after these, so it stays the last
-   * row in both placements: at the far end of an inline list, and under the thumb in
-   * the composer's.
    */
   readonly rows = computed<readonly CatalogSuggestion[]>(() => {
     const offered = this.suggestions();
@@ -138,8 +249,8 @@ export class SuggestionList {
 
   readonly chose = output<CatalogSuggestion>();
 
-  /** The free text row was pressed. Only reachable when {@link asWritten} is set. */
-  readonly choseAsWritten = output<void>();
+  /** A line holding the product was stepped up or down from a card. */
+  readonly holdingChanged = output<SuggestionHoldingChange>();
 
   /**
    * The reader's language, for the catalog's two-language product names.
@@ -154,10 +265,82 @@ export class SuggestionList {
   /** The scrolling panel, absent while there is nothing to offer. */
   private readonly _panel = viewChild<ElementRef<HTMLElement>>('panel');
 
+  private readonly _translator = inject(RokuTranslatorService);
+
+  /**
+   * What each card says, in the order it is drawn. The composer's placement only;
+   * the line page keeps its one line rows.
+   */
+  protected readonly cards = computed<readonly SuggestionCardView[]>(() => {
+    if (this.placement() !== 'above') {
+      return [];
+    }
+    const locale = this._locale();
+    // Read so the cards are drawn again once the words arrive.
+    this._translator.loaded();
+    const now = new Date();
+    return this.rows().map((suggestion) =>
+      suggestionCardView(suggestion, {
+        locale,
+        now,
+        translate: (key, args) =>
+          this._translator.t(key, undefined, locale, args),
+      })
+    );
+  });
+
+  /** The three skeleton cards' bar widths, in percent, so each reads differently. */
+  protected readonly skeleton: readonly (readonly number[])[] = [
+    [62, 41, 33],
+    [48, 56, 29],
+    [70, 37, 33],
+  ];
+
+  protected readonly popoverPositions = POPOVER_POSITIONS;
+
+  /** The one card whose chain row is open, by key. One at a time: an opened card fills the panel. */
+  protected readonly openChains = signal<string | null>(null);
+
+  /** The one group whose products are revealed, by key. */
+  protected readonly openGroup = signal<string | null>(null);
+
+  /** The one group whose popover is open, by key. */
+  protected readonly infoFor = signal<string | null>(null);
+
+  /**
+   * The visual viewport's height, in pixels, or null before it is known.
+   *
+   * Read from `window.visualViewport` and not from `100svh`, because an iOS
+   * keyboard does not shorten the layout viewport, and the keyboard is exactly
+   * what this panel has to fit above (rule 3 of `0101`).
+   */
+  private readonly _viewport = signal<number | null>(null);
+
+  protected readonly viewportHeight = computed(() => {
+    const height = this._viewport();
+    return height === null ? null : `${Math.round(height)}px`;
+  });
+
   constructor() {
+    const host = inject<ElementRef<HTMLElement>>(ElementRef);
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() => {
+      const viewport = host.nativeElement.ownerDocument.defaultView
+        ?.visualViewport;
+      if (viewport === null || viewport === undefined) {
+        return;
+      }
+      const read = (): void => this._viewport.set(viewport.height);
+      read();
+      viewport.addEventListener('resize', read);
+      destroyRef.onDestroy(() =>
+        viewport.removeEventListener('resize', read)
+      );
+    });
+
     // Opened at its last row, for `'above'` only, and re-opened there on every new
-    // set of results: a panel that grows upward is read from the bottom, and the row
-    // at the bottom is the one that always works.
+    // set of results: a panel that grows upward is read from the bottom, and the card
+    // at the bottom is the server's best answer.
     //
     // `afterRenderEffect` because the rows have to be in the DOM before the panel can
     // be measured, and because it runs in the browser and never on the server (plan
@@ -176,7 +359,6 @@ export class SuggestionList {
       }
 
       this.suggestions();
-      this.asWritten();
 
       const panel = this._panel()?.nativeElement;
       if (panel === undefined) {
@@ -185,6 +367,75 @@ export class SuggestionList {
 
       panel.scrollTop = panel.scrollHeight;
     });
+  }
+
+  /**
+   * **Nothing in the panel may close the keyboard** (rule 2 of `0101`).
+   *
+   * The browser moves focus on `mousedown`, and iOS Safari raises a synthetic one
+   * before it does, so cancelling it here keeps the caret in the composer's field
+   * and the keyboard up, whatever inside the panel was pressed: the add button,
+   * the chain row, the reveal, the badge, the stepper, the popover (a native
+   * popover inserted beside its badge, so its events bubble through here too) or
+   * the card itself. Not `pointerdown` and not `touchstart`: those carry the
+   * panel's own scroll, and cancelling them would take it away.
+   */
+  protected holdFocus(event: MouseEvent): void {
+    event.preventDefault();
+  }
+
+  protected toggleChains(card: SuggestionCardView): void {
+    this.openChains.update((open) => (open === card.key ? null : card.key));
+  }
+
+  protected toggleGroup(card: SuggestionCardView): void {
+    this.openGroup.update((open) => (open === card.key ? null : card.key));
+  }
+
+  protected toggleInfo(card: SuggestionCardView): void {
+    this.infoFor.update((open) => (open === card.key ? null : card.key));
+  }
+
+  protected closeInfo(): void {
+    this.infoFor.set(null);
+  }
+
+  /** The popover closes on Escape, and the keypress goes no further. */
+  protected onPopoverKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeInfo();
+    }
+  }
+
+  protected holdingsFor(
+    card: SuggestionCardView
+  ): readonly SuggestionHolding[] {
+    return this.holdingsOf()(card.suggestion);
+  }
+
+  protected linkFor(card: SuggestionCardView): string | null {
+    const link = this.productLink();
+    return link === null || card.productId === null
+      ? null
+      : link(card.productId);
+  }
+
+  protected stepHolding(holding: SuggestionHolding, to: number): void {
+    if (to === holding.quantity) {
+      return;
+    }
+    this.holdingChanged.emit({ holding, from: holding.quantity, to });
+  }
+
+  /** The words the stepper is announced with, naming the line it moves. */
+  protected holdingLabel(holding: SuggestionHolding): string {
+    return this._translator.t(
+      'list.add.card.alreadyQuantity',
+      undefined,
+      this._locale(),
+      { line: holding.text }
+    );
   }
 
   /** One suggestion's name, in the reader's language. */

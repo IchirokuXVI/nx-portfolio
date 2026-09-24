@@ -282,6 +282,43 @@ $app-content-max: 480px;
   // top of the screen.
   --app-suggestions-max-height: 240px;
 
+  // The composer's product card (velista 0101, the `Budget` and `Sizes` artboards
+  // of `mocks/typeahead/`). **The keyboard sets these numbers**, so they are written
+  // down rather than chosen: on a 390 by 844 phone the keyboard takes 336px, and what
+  // is left once the header, two list rows and the composer have theirs is 237px.
+  // Three cards fit there, and the third card is what makes the list feel searched.
+  //
+  // A card is three lines of type (59px) and 8px either side, which clears the 48px
+  // photograph by 9px. The button that adds it stretches to the three lines and no
+  // further, so a card that also names the lines it is on keeps a 44 by 59 target
+  // rather than growing a 44 by 137 stripe.
+  --app-suggestion-thumb: 48px;
+  --app-suggestion-card: 73px;
+  --app-suggestion-body: 59px;
+  // A chain's mark on the collapsed row, and the row itself: the pill is 18px and its
+  // target grows to the touch target with a pseudo element, as a chip's does.
+  --app-chain-mark: 18px;
+  --app-chain-mark-radius: 5px;
+  // One product inside an opened group: name, brand and price on a single line.
+  --app-suggestion-inside-row: 22px;
+  // The group popover, wide enough for its two sentences at four lines each.
+  --app-suggestion-popover-width: 248px;
+  // The two bands the composer's panel is measured against. They are the page's
+  // header and the composer row as they are drawn today, stated here because the
+  // panel's height is arithmetic on the screen and these are two of its terms.
+  --app-suggestion-header-band: 52px;
+  --app-suggestion-composer-band: 60px;
+  // Never more than three cards, and 8px of air under the last one.
+  --app-suggestions-card-cap: calc(
+    3 * var(--app-suggestion-card) + var(--app-space-3)
+  );
+  // What the screen spends before the panel gets any: the header, the composer, two
+  // rows of the list so somebody can still see where they are, and the status inset.
+  --app-suggestions-chrome: calc(
+    var(--app-safe-top) + var(--app-suggestion-header-band) +
+      var(--app-suggestion-composer-band) + 2 * var(--app-line-row-height)
+  );
+
   // The progress bar on the resume card.
   --app-progress-height: 6px;
 

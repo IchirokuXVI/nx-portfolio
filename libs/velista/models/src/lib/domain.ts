@@ -11,7 +11,8 @@ import type {
   ZoneRole,
   ZoneStatus,
 } from './enums';
-import type { LocalizedName } from './shopping-profile';
+import type { PriceUnitBasis } from './catalog-browse';
+import type { LocalizedName, Supermarket } from './shopping-profile';
 
 /**
  * The app's own domain models (rule D4, plan 0004 section 4.1).
@@ -424,11 +425,27 @@ export interface ProductOffer {
    * The scope that quoted this price. Opaque.
    *
    * The basket resolves it against `BasketView.scopes` to name a chain and a
-   * shop. No other screen resolves it at all: the suggestion response is one
-   * array and carries no scopes to resolve against, and a typeahead row draws
-   * no place anyway (velista `0063`, section 6.5).
+   * shop. The suggestion card resolves it too since velista `0101`, which
+   * reversed `0063` section 6.5: the suggest response carries a scope map of
+   * chain names since backend `0161`, and the mapper turns each offer into a
+   * {@link ChainPrice} while that map is in hand.
    */
   readonly priceScopeId: string;
+}
+
+/**
+ * What one chain charges for one product, as the suggestion card draws it
+ * (velista `0101`, section 2).
+ *
+ * **One per chain**, which is a display rule and the client's (backend `0161`,
+ * section 3): a chain can price a product in more than one scope, and the card
+ * names chains, so the cheapest of that chain's offers stands for it. Resolved
+ * by the mapper, because the scope map that names a chain arrives in the same
+ * response and nowhere else.
+ */
+export interface ChainPrice {
+  readonly chain: Supermarket;
+  readonly offer: ProductOffer;
 }
 
 /**
@@ -481,6 +498,34 @@ export interface CatalogItem {
    * pack's price and is never derived from a smaller one.
    */
   readonly offer: ProductOffer | null;
+  /**
+   * Every chain's price for it, cheapest first, one per chain (velista `0101`).
+   *
+   * Filled only by the two suggest reads, which are the only ones that ask for
+   * every scope's offer and carry the scope map that names a chain. Empty
+   * everywhere else, and empty where a scope could not be named: an offer the
+   * card cannot attribute is not drawn as a chain.
+   */
+  readonly chainPrices: readonly ChainPrice[];
+  /**
+   * The front photograph, or null. On the wire since before velista `0101` and
+   * empty until backend `0126` to `0129` import one, so the card draws its
+   * state with no photograph until then.
+   */
+  readonly imageUrl: string | null;
+  /**
+   * How many units the pack holds, a whole number from 2, or null for a product
+   * that is not a pack (backend `0162`). A number rather than the words a chain
+   * prints, so the card renders "Pack 6" or "Pack de 6" itself.
+   */
+  readonly packCount: number | null;
+  /**
+   * What {@link ProductOffer.unitPrice} on {@link offer} is counted in, or null
+   * when unknown or when there is no offer (velista `0101`). The card's "1,09 € /
+   * L", read off the wire for `CatalogProduct.unitBasis`'s reason: the label is
+   * text for a human and not a unit to parse.
+   */
+  readonly unitBasis: PriceUnitBasis | null;
 }
 
 /** One catalog group: the thing "milk" means before it means a brand of it. */
@@ -521,6 +566,13 @@ export type CatalogSuggestion =
        * other read is a field nothing can trust.
        */
       readonly offer: ProductOffer | null;
+      /**
+       * The group's cheapest few products, for the card's reveal (velista
+       * `0101`, backend `0161`). At most five, in the server's order, cheapest
+       * first. {@link itemIds} is still the count; "and N more" is the
+       * difference between the two.
+       */
+      readonly members: readonly CatalogItem[];
     }
   | { readonly kind: 'item'; readonly item: CatalogItem };
 

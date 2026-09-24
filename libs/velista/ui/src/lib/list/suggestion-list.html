@@ -1,31 +1,319 @@
 <!--
   **No empty state, ever.** An absent list is the ordinary case for two characters, a
   rare word, or a shop the catalog has not been taught, and "no matches" would be a
-  screen telling somebody their shopping list is wrong.
-
-  Nothing at all is drawn when there is nothing to offer, so a caller that also draws
-  the free text row keeps it reachable by way of its own control rather than through an
-  empty list.
+  screen telling somebody their shopping list is wrong. Nothing at all is drawn when
+  there is nothing to offer: the composer's own button already adds the typed words.
 -->
-@if (rows().length > 0 || asWritten() !== null) {
+@if (placement() === 'above') {
   <!--
-    `above` is opaque and opens at its last row, which is what a panel drawn over
-    somebody's shopping list has to be. Stated by the caller through `placement`,
-    because the direction this list grows in is the caller's and always was.
+    The composer's panel: product cards (velista 0101). Opaque, bottom anchored and
+    scrolling, never growing past three cards or what the keyboard leaves.
+
+    `mousedown` is cancelled on the whole panel, once, which is rule 2: nothing in
+    here may take the focus from the field, so the keyboard stays up whatever was
+    pressed. See `holdFocus`.
   -->
+  @if (cards().length > 0) {
+    <!--
+      A grid and not a listbox (rule 8): a card holds an add button, a chain row, a
+      link and, on a group, a reveal and a badge, and `role="option"` may not
+      contain focusable children. The composer's field is the combobox that owns
+      it.
+    -->
+    <div
+      (mousedown)="holdFocus($event)"
+      [attr.aria-label]="label() | rokuT"
+      [id]="panelId()"
+      [style.--app-viewport]="viewportHeight()"
+      #panel
+      class="panel"
+      role="grid"
+    >
+      @for (card of cards(); track card.key) {
+        <div
+          [class.group]="card.group"
+          [class.open]="openChains() === card.key || openGroup() === card.key"
+          class="sug"
+          role="row"
+        >
+          <!--
+            The photograph's place. Photographs do not ship until backend 0126 to
+            0129 fill `imageUrl`, so every card draws the state with none: the
+            product glyph, or a crate for a group.
+          -->
+          <span aria-hidden="true" class="sug-thumb">
+            @if (card.group) {
+              <lib-basket-icon />
+            } @else {
+              <lib-product-icon />
+            }
+          </span>
+
+          <div class="sug-col" role="gridcell">
+            <span class="sug-l">
+              <span class="sug-name">{{ card.name }}</span>
+              @if (card.group) {
+                <!--
+                  The word, and the help for it: one element carries the label and
+                  the explanation. The popover is a CDK overlay against this badge,
+                  because the panel clips and scrolls and the popover opens towards
+                  the edge it clips at.
+                -->
+                <button
+                  (click)="toggleInfo(card)"
+                  [attr.aria-expanded]="infoFor() === card.key"
+                  [attr.aria-label]="'list.add.card.groupHelp' | rokuT"
+                  #badge="cdkOverlayOrigin"
+                  cdkOverlayOrigin
+                  class="group-badge"
+                  type="button"
+                >
+                  <span aria-hidden="true">{{
+                    'list.add.card.groupBadge' | rokuT
+                  }}</span>
+                  <lib-info-icon aria-hidden="true" class="badge-glyph" />
+                </button>
+                <ng-template
+                  (detach)="closeInfo()"
+                  (overlayKeydown)="onPopoverKey($event)"
+                  (overlayOutsideClick)="closeInfo()"
+                  [cdkConnectedOverlayOpen]="infoFor() === card.key"
+                  [cdkConnectedOverlayOrigin]="badge"
+                  [cdkConnectedOverlayPositions]="popoverPositions"
+                  cdkConnectedOverlay
+                >
+                  <div
+                    (mousedown)="holdFocus($event)"
+                    [attr.aria-label]="'list.add.card.groupHelp' | rokuT"
+                    class="pop"
+                    role="dialog"
+                  >
+                    <b class="pop-title">{{
+                      'list.add.card.groupHelpTitle' | rokuT
+                    }}</b>
+                    <span class="pop-p">{{
+                      'list.add.card.groupHelpBody' | rokuT
+                    }}</span>
+                    <span class="pop-p">{{
+                      'list.add.card.groupHelpSwap' | rokuT
+                    }}</span>
+                  </div>
+                </ng-template>
+              }
+              @if (card.pack; as pack) {
+                <!-- Part of what the product is, so never truncated, like the size. -->
+                <span class="fmt">{{ pack }}</span>
+              }
+              @if (card.price; as price) {
+                @if (card.stale) {
+                  <lib-clock-icon
+                    [attr.aria-label]="'list.add.card.stale' | rokuT"
+                    class="stale-mark"
+                    role="img"
+                  />
+                }
+                <span [class.stale]="card.stale" class="sug-price">{{
+                  price
+                }}</span>
+              }
+            </span>
+
+            @if (card.meta !== null || card.aside !== null) {
+              <span class="sug-l">
+                <span class="sug-meta">{{ card.meta }}</span>
+                @if (card.aside; as aside) {
+                  <span class="sug-unit">{{ aside }}</span>
+                }
+              </span>
+            }
+
+            @if (card.foot) {
+              <span class="sug-foot">
+                @if (card.chains; as chains) {
+                  <button
+                    (click)="toggleChains(card)"
+                    [attr.aria-controls]="card.key + '-shops'"
+                    [attr.aria-expanded]="openChains() === card.key"
+                    [attr.aria-label]="chains.label"
+                    class="chains"
+                    type="button"
+                  >
+                    @for (mark of chains.marks; track mark.id; let first = $first) {
+                      <span aria-hidden="true" class="mark">{{
+                        mark.initial
+                      }}</span>
+                      @if (first) {
+                        <span aria-hidden="true" class="lead-name">{{
+                          chains.lead
+                        }}</span>
+                      }
+                    }
+                    @if (chains.more > 0) {
+                      <span aria-hidden="true" class="more"
+                        >+{{ chains.more }}</span
+                      >
+                    }
+                    <lib-chevron-down-icon
+                      [class.flipped]="openChains() === card.key"
+                      aria-hidden="true"
+                      class="foot-glyph"
+                    />
+                  </button>
+                }
+                @if (card.reveal; as reveal) {
+                  <!-- It states how many, which decides whether opening it is worth the room. -->
+                  <button
+                    (click)="toggleGroup(card)"
+                    [attr.aria-controls]="card.key + '-inside'"
+                    [attr.aria-expanded]="openGroup() === card.key"
+                    class="reveal"
+                    type="button"
+                  >
+                    {{ reveal }}
+                    <lib-chevron-down-icon
+                      [class.flipped]="openGroup() === card.key"
+                      aria-hidden="true"
+                      class="foot-glyph"
+                    />
+                  </button>
+                }
+                @if (linkFor(card); as link) {
+                  <a
+                    [attr.aria-label]="
+                      'list.add.card.detailsOf' | rokuT: { name: card.name }
+                    "
+                    [routerLink]="link"
+                    class="details"
+                    >{{ 'list.add.card.details' | rokuT }}
+                    <lib-chevron-right-icon
+                      aria-hidden="true"
+                      class="foot-glyph"
+                  /></a>
+                }
+              </span>
+            }
+
+            @if (openChains() === card.key && card.shops.length > 0) {
+              <!-- The collapsed row said who sells it; this says for how much. -->
+              <ul
+                [attr.aria-label]="'list.add.card.shops' | rokuT"
+                [id]="card.key + '-shops'"
+                class="shops"
+              >
+                @for (shop of card.shops; track shop.id) {
+                  <li [class.best]="shop.best" class="shop">
+                    <span class="shop-name">{{ shop.name }}</span>
+                    @if (shop.note; as note) {
+                      <span class="shop-note">{{ note }}</span>
+                    }
+                    @if (shop.price; as price) {
+                      <span class="shop-price">{{ price }}</span>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+
+            @if (openGroup() === card.key && card.members.length > 0) {
+              <!-- Five products, cheapest first, and the count of whatever is left. -->
+              <ul [id]="card.key + '-inside'" class="inside">
+                @for (member of card.members; track member.id) {
+                  <li class="inside-row">
+                    <span class="inside-what">
+                      <span class="inside-name">{{ member.name }}</span>
+                      @if (member.brand; as brand) {
+                        <span class="inside-brand">{{ brand }}</span>
+                      }
+                    </span>
+                    @if (member.price; as price) {
+                      <span class="inside-price">{{ price }}</span>
+                    }
+                  </li>
+                }
+                @if (card.membersMore; as more) {
+                  <li class="inside-more">{{ more }}</li>
+                }
+              </ul>
+            }
+
+            @let holdings = holdingsFor(card);
+            @if (holdings.length > 0) {
+              <!--
+                The lines this product is already on, each with the app's own stepper
+                (section 4). The point of the card is to stop a second line being made
+                for a thing already on the list: stepping a line up is the shorter path
+                to two of it.
+              -->
+              <div class="already">
+                <span class="already-h">{{
+                  'list.add.card.already' | rokuT
+                }}</span>
+                @for (holding of holdings; track holding.key) {
+                  <div class="already-row">
+                    <span class="already-text">
+                      @if (holding.listName; as listName) {
+                        <span class="already-list">{{ listName }}</span>
+                      }
+                      <span class="already-line">{{ holding.text }}</span>
+                    </span>
+                    <lib-quantity-stepper
+                      (valueChange)="stepHolding(holding, $event)"
+                      [disabled]="!holding.editable"
+                      [label]="holdingLabel(holding)"
+                      [value]="holding.quantity"
+                    />
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <!--
+            The one thing on the card that adds it (rule 1). A column at the right
+            edge, 44px wide, stretching to the three lines of type and no further.
+          -->
+          <div class="pick-cell" role="gridcell">
+            <button
+              (click)="chose.emit(card.suggestion)"
+              [attr.aria-label]="card.pickLabel"
+              class="pick"
+              type="button"
+            >
+              <lib-plus-icon aria-hidden="true" class="pick-glyph" />
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  } @else if (loading()) {
+    <div
+      (mousedown)="holdFocus($event)"
+      [attr.aria-label]="'list.add.card.loading' | rokuT"
+      [style.--app-viewport]="viewportHeight()"
+      aria-busy="true"
+      class="panel"
+      role="status"
+    >
+      @for (bars of skeleton; track $index) {
+        <div aria-hidden="true" class="sk">
+          <span class="sk-thumb"></span>
+          <span class="sk-col">
+            @for (width of bars; track $index) {
+              <span [style.inline-size.%]="width" class="sk-bar"></span>
+            }
+          </span>
+        </div>
+      }
+    </div>
+  }
+} @else if (rows().length > 0) {
+  <!-- The line page's one line rows, which velista 0101 leaves as they were. -->
   <ul
     [attr.aria-label]="label() | rokuT"
-    [class.above]="placement() === 'above'"
     #panel
     class="suggestions"
     role="listbox"
   >
-    <!--
-      `rows`, not `suggestions`: a panel that opens at its bottom is read from the
-      bottom, so the server's ranking is drawn upward there and downward everywhere
-      else. Which way round is decided in the component, once, rather than by anything
-      here.
-    -->
     @for (suggestion of rows(); track $index) {
       <li role="none">
         <!--
@@ -111,35 +399,6 @@
               size.key | rokuT: size.args
             }}</span>
           }
-        </button>
-      </li>
-    }
-
-    <!--
-      Free text, always reachable and never nagged, for the caller that has any. It is
-      the last row rather than a hint under the field, so choosing to ignore the catalog
-      is the same kind of gesture as choosing something from it.
-
-      Absent for a caller attaching a catalog product to an existing line, because there
-      is no such thing as attaching a product that is not in the catalog.
-    -->
-    @if (asWritten(); as typed) {
-      <li role="none">
-        <button
-          (click)="choseAsWritten.emit()"
-          aria-selected="false"
-          class="suggestion plain"
-          role="option"
-          type="button"
-        >
-          <span aria-hidden="true" class="suggestion-glyph">
-            <lib-plus-icon />
-          </span>
-          <span class="suggestion-body">
-            <span class="suggestion-name">{{
-              'list.add.asWritten' | rokuT: { text: typed }
-            }}</span>
-          </span>
         </button>
       </li>
     }

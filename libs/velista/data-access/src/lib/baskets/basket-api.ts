@@ -34,7 +34,7 @@ import {
   toBasketShareLink,
   toLiveBasketSummary,
 } from '../mapping/basket-mappers';
-import { toCatalogSuggestion } from '../mapping/mappers';
+import { toCatalogSuggestions } from '../mapping/mappers';
 import { isRecord, mapArray } from '../mapping/primitives';
 import { required } from '../mapping/required';
 import type { BasketServiceI } from './basket-service';
@@ -425,9 +425,7 @@ export class BasketApi implements BasketServiceI {
       // The order is the server's and is never re-sorted here, for the reason
       // written on `CatalogApi.suggest`: the client holds none of the prices,
       // scopes or synonyms that decided it.
-      return isRecord(body)
-        ? mapArray(body['suggestions'], toCatalogSuggestion)
-        : [];
+      return toCatalogSuggestions(body);
     } catch {
       return [];
     }

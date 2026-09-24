@@ -12,7 +12,7 @@ import { operation } from '../auth/http-context';
 import { GatewayError } from '../errors';
 import {
   toCatalogItem,
-  toCatalogSuggestion,
+  toCatalogSuggestions,
   toProductGroup,
 } from '../mapping/mappers';
 import { isRecord, mapArray } from '../mapping/primitives';
@@ -57,9 +57,7 @@ export class CatalogApi implements CatalogServiceI {
       // The order is the server's, from `item.searchOffers`, and is deliberately not
       // re-sorted: a group ranks above an item for a bare word, and the client has
       // none of the prices, scopes or synonyms that decided it.
-      return isRecord(body)
-        ? mapArray(body['suggestions'], toCatalogSuggestion)
-        : [];
+      return toCatalogSuggestions(body);
     } catch {
       // **Empty rather than thrown.** A dropdown is an offer, and an offer that
       // errors is worse than one that is not there: the composer still submits, the
