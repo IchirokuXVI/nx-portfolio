@@ -313,13 +313,29 @@ export class BasketPage {
   );
 
   /**
+   * Whether this is the basket the bottom bar's basket tab opens (velista `0105`):
+   * the permanent one, or the newest basket being shopped, which is where
+   * `shopping-lists/current` sends the tab.
+   *
+   * The same `active()[0]` that redirect reads, so the two cannot disagree about
+   * which basket the tab means.
+   */
+  private readonly _isTabBasket = computed(
+    () => this._live || this._id === this._generated.active()[0]?.id
+  );
+
+  /**
    * Whether the reader has an app to go back to: the owner, and a registered member of
    * a shared basket. A guest has none, because they arrived on a link and this screen
    * is the whole app to them.
+   *
+   * Nor on the tab's own basket (velista `0105`). The bottom bar is on screen there
+   * with its basket tab lit, so the bar is the way out, and a chevron beside it would
+   * be a second one.
    */
   protected readonly canGoBack = computed(() => {
     const kind = this._store.me()?.kind;
-    return kind === 'OWNER' || kind === 'REGISTERED';
+    return (kind === 'OWNER' || kind === 'REGISTERED') && !this._isTabBasket();
   });
 
   /**

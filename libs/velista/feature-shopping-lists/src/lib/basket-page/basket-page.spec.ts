@@ -167,6 +167,12 @@ interface Options {
   /** Which basket this is (velista `0091`). `LIVE` draws the other surface. */
   readonly kind?: 'GENERATED' | 'LIVE' | 'UNKNOWN';
   /**
+   * The ids of the reader's baskets being shopped, newest first, which is where the
+   * basket tab sends them (velista `0105`). Empty by default, so this basket is an
+   * older one and keeps its way back.
+   */
+  readonly activeBasketIds?: readonly string[];
+  /**
    * How many rows are still to do, **by the server**.
    *
    * Zero with rows on the basket is what makes the "all done" prompt appear. The
@@ -619,7 +625,10 @@ async function render(options: Options = {}): Promise<{
       // through a control the owner alone is drawn.
       {
         provide: BasketListStore,
-        useValue: { setStatus: store.setStatus },
+        useValue: {
+          setStatus: store.setStatus,
+          active: signal((options.activeBasketIds ?? []).map((id) => ({ id }))),
+        },
       },
       // Listed after the testing module's own, which is what makes it win: a
       // translator that echoes its values, for the assertions that are about the
@@ -864,9 +873,10 @@ describe('the basket header, live', () => {
       });
 
     async function pressBack(
-      me: BasketParticipant
+      me: BasketParticipant,
+      options: Options = {}
     ): Promise<jest.SpyInstance | null> {
-      const { fixture } = await render({ me });
+      const { fixture } = await render({ ...options, me });
       const back = query(fixture, 'button.back');
       if (back === null) {
         return null;
@@ -894,6 +904,35 @@ describe('the basket header, live', () => {
 
     it('offers a guest no way back', async () => {
       expect(await pressBack(participant(guest('p-9', 1)))).toBeNull();
+    });
+
+    /**
+     * The basket tab's own baskets (velista `0105`). The bottom bar is on screen
+     * with that tab lit, so the bar is the way out and a chevron would be a second.
+     */
+    describe('on the basket the tab opens', () => {
+      it('draws no chevron on the permanent basket', async () => {
+        expect(
+          await pressBack(participant(owner()), { kind: 'LIVE' })
+        ).toBeNull();
+      });
+
+      it('draws no chevron on the newest basket being shopped', async () => {
+        expect(
+          await pressBack(participant(owner()), {
+            activeBasketIds: ['basket-saturday', 'basket-older'],
+          })
+        ).toBeNull();
+      });
+
+      it('keeps the chevron on an older basket opened from the history', async () => {
+        const spy = await pressBack(participant(owner()), {
+          activeBasketIds: ['basket-newer', 'basket-saturday'],
+        });
+
+        expect(spy).not.toBeNull();
+        expect(spy?.mock.calls[0]?.[0]).toMatch(/shopping-lists$/);
+      });
     });
   });
 

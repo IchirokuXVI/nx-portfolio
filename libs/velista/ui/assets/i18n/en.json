@@ -409,10 +409,8 @@
     "section": {
       "zones": "Your groups"
     },
-    "liveBasket": {
-      "open": "Everything to buy, {{pending}} left"
-    },
     "shoppingList": {
+      "label": "Your recent trip",
       "open": "{{name}}, {{count}} still to get",
       "more_one": "and {{count}} more",
       "more_other": "and {{count}} more",

@@ -2,7 +2,6 @@ import {
   displayNames,
   type BasketSummary,
   type Identity,
-  type LiveBasketSummary,
   type MyZone,
 } from '@portfolio/velista/models';
 import { selectHomeState } from './select-home-state';
@@ -77,7 +76,6 @@ function select(
     correlationId: null,
     activeShoppingLists: [],
     shoppingListNames: new Map(),
-    liveBasket: null,
     zoneOnline: () => [],
     listViewers: () => [],
     guestBannerDismissed: false,
@@ -387,47 +385,15 @@ describe('selectHomeState', () => {
 });
 
 /**
- * The basket that is always there, on the dashboard (velista `0091`, section 5).
+ * The permanent basket on the dashboard.
  *
- * Its own read and its own store, because the server leaves it out of the listing
- * the card below it is built from. What is worth asserting here is that it is
- * **always** offered: a card that disappears when the basket empties is a bug
- * report, and the card is the way into the screen.
+ * It had a card of its own at the top of the dock until velista `0105`, which gave
+ * the way in to the basket tab. What stays true is that the trip card never counts
+ * it and never shows it: the history it links to does not list this basket.
  */
-describe('selectHomeState: the live basket card', () => {
-  const summary = (pending: number, done = 0): LiveBasketSummary => ({
-    id: 'basket-live',
-    progress: { done, unavailable: 0, total: pending + done },
-    pending,
-  });
-
-  it('draws the sentence the basket page draws, from the same function', () => {
-    const state = select({ liveBasket: summary(12, 3) });
-
-    expect(state).toMatchObject({
-      liveBasket: {
-        sentence: {
-          key: 'basket.live.leftAndGot',
-          args: { pending: 12, done: 3 },
-          unavailable: 0,
-        },
-        pending: 12,
-      },
-    });
-  });
-
-  it('is drawn at nothing to buy, because it is the way in', () => {
-    const state = select({ liveBasket: summary(0) });
-
-    expect(state).toMatchObject({
-      liveBasket: { sentence: { key: 'basket.live.left' }, pending: 0 },
-    });
-  });
-
-  it('is null only until its summary arrives', () => {
-    // Which the card draws as a skeleton of its final height, rather than as an
-    // absence: the dock must not grow under a thumb already on its way to it.
-    expect(select({ liveBasket: null })).toMatchObject({ liveBasket: null });
+describe('selectHomeState: the permanent basket', () => {
+  it('has no card of its own on the dashboard', () => {
+    expect(select()).not.toHaveProperty('liveBasket');
   });
 
   it('is not counted by the card below it', () => {
@@ -438,7 +404,6 @@ describe('selectHomeState: the live basket card', () => {
         basket({ id: 'live', kind: 'LIVE', name: null }),
         basket({ id: 'gl1' }),
       ]),
-      liveBasket: summary(4),
     });
 
     expect(state).toMatchObject({
@@ -451,7 +416,6 @@ describe('selectHomeState: the live basket card', () => {
     // `generatedAt` would otherwise take the strip and draw a date nobody shopped.
     const state = select({
       ...withNames([basket({ id: 'live', kind: 'LIVE', name: null })]),
-      liveBasket: summary(4),
     });
 
     expect(state).toMatchObject({ shoppingList: null });

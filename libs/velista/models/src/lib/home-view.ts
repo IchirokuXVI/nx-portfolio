@@ -1,4 +1,3 @@
-import type { BasketProgressSentence } from './basket-view';
 import type { MembershipStatus, ZoneRole } from './enums';
 import type { ShoppingListCardVm } from './shopping-lists-view';
 
@@ -33,31 +32,6 @@ export interface ListRowVm {
    * every readable list in a subscribed zone.
    */
   readonly viewers: readonly string[];
-}
-
-/**
- * The `LIVE` basket's card on the dashboard (velista `0091`, section 5).
- *
- * Two lines and nothing else: what the basket is called, which is the same
- * words for everybody, and what is left to buy. No date, because it has none;
- * no presence, because the server keeps no presence room for it; no breakdown
- * bar, because there is no trip to be a fraction of.
- *
- * The sentence arrives as a key and its arguments rather than resolved, for
- * `ShoppingListCardVm.name`'s opposite reason: this one **can** be resolved in
- * the template, so it is, and a language change redraws it without a refetch.
- */
-export interface LiveBasketCardVm {
-  /**
-   * The same sentence the basket page draws, from the same function.
-   *
-   * It carries the unavailable count as its own clause, which is where the plan
-   * put a second field: one sentence with one trailing clause cannot disagree
-   * with itself, and two numbers on a view model eventually do.
-   */
-  readonly sentence: BasketProgressSentence;
-  /** What is left to buy, for the card's accessible name. */
-  readonly pending: number;
 }
 
 /** Who is waiting to be let into a zone. Absent when nobody is. */
@@ -188,15 +162,6 @@ export type HomeState =
        * feature exists and an empty card would say it twice.
        */
       readonly shoppingList: ShoppingListCardVm | null;
-      /**
-       * The basket that is always there (velista `0091`, section 5).
-       *
-       * Null only while its summary has not arrived, where the card draws a
-       * skeleton of its final height. It is **not** null for a person with
-       * nothing to buy: the card is the way into the basket, and a way in that
-       * disappears when the basket empties is a bug report.
-       */
-      readonly liveBasket: LiveBasketCardVm | null;
       readonly zones: readonly ZoneCardVm[];
       readonly guest: boolean;
     }

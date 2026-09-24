@@ -1,12 +1,9 @@
 import {
-  basketProgressSentence,
   outcomeBreakdown,
   type BasketSummary,
   type HomeState,
   type Identity,
   type ListRowVm,
-  type LiveBasketCardVm,
-  type LiveBasketSummary,
   type MyZone,
   type ShoppingListCardVm,
   type ZoneCardVm,
@@ -79,16 +76,6 @@ export function selectHomeState(input: {
    * in `HomePage`, which now counts a list viewer as somebody being here.
    */
   listViewers: (listId: string) => readonly string[];
-  /**
-   * The caller's permanent basket, or null while its summary is still out
-   * (velista `0091`, section 5).
-   *
-   * Its own read and its own store, because the server leaves this basket out of
-   * the listing the card above it is built from: it has no date, it is never
-   * finished, and a history that listed it would offer a delete on the one
-   * basket that cannot go away.
-   */
-  liveBasket: LiveBasketSummary | null;
   /** Whether the guest has dismissed the banner in this session. */
   guestBannerDismissed: boolean;
 }): HomeState {
@@ -122,7 +109,6 @@ export function selectHomeState(input: {
       input.activeShoppingLists,
       input.shoppingListNames
     ),
-    liveBasket: selectLiveBasket(input.liveBasket),
     zones: zones.map((zone) =>
       toZoneCard(zone, input.zoneOnline, input.listViewers)
     ),
@@ -173,31 +159,6 @@ function selectShoppingList(
     breakdown: outcomeBreakdown(newest),
     presentCount: newest.presentCount,
     otherActiveCount: trips.length - 1,
-  };
-}
-
-/**
- * The permanent basket's card, from the three numbers the summary carries.
- *
- * Null only while the first read is out, which the card draws as a skeleton of
- * its final height. It is **not** null for somebody with nothing to buy: the
- * sentence then says "0 to buy" and the card is still the way in, which is the
- * whole difference between this card and the one below it.
- *
- * The sentence comes from `basketProgressSentence`, the same function the basket
- * page reads, so the card and the screen it opens cannot describe one basket two
- * ways.
- */
-function selectLiveBasket(
-  summary: LiveBasketSummary | null
-): LiveBasketCardVm | null {
-  if (summary === null) {
-    return null;
-  }
-
-  return {
-    sentence: basketProgressSentence('LIVE', summary.progress, summary.pending),
-    pending: summary.pending,
   };
 }
 
