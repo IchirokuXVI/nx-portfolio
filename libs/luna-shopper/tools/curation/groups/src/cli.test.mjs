@@ -173,3 +173,44 @@ test('the usage names --local and says --chain is refused', async () => {
   assert.match(usage, /--local/);
   assert.match(usage, /--chain is refused/);
 });
+
+/**
+ * A run directory whose state already holds `i1`, so a `decide` that reaches
+ * the command says which row it was given, and says it before any gateway is
+ * opened.
+ */
+function decidedRunDir() {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-groups-row-'));
+  writeFileSync(
+    join(dir, 'state.json'),
+    JSON.stringify({ runId: 'r1', mainUrl: 'http://x', decidedIds: ['i1'] })
+  );
+  return dir;
+}
+
+test('decide takes the row as --row, which is what the orchestrator sends', async () => {
+  await assert.rejects(
+    () =>
+      run(['decide', '--run-dir', decidedRunDir(), '--row', 'i1'], {
+        stdin: () => '{}',
+      }),
+    /Product i1 is already in/
+  );
+});
+
+test('--item is still the same flag under its older name', async () => {
+  await assert.rejects(
+    () =>
+      run(['decide', '--run-dir', decidedRunDir(), '--item', 'i1'], {
+        stdin: () => '{}',
+      }),
+    /Product i1 is already in/
+  );
+});
+
+test('a decide with no row asks for --row', async () => {
+  await assert.rejects(
+    () => run(['decide', '--run-dir', '/tmp/r'], { stdin: () => '{}' }),
+    /--row is required/
+  );
+});
