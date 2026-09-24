@@ -32,6 +32,14 @@ export interface SourceEntryFields {
   ean: string | null;
   unitSize: number | null;
   sizeFormat: string | null;
+  /**
+   * How many units the pack holds, or null (plan 0162).
+   *
+   * **Absent means the source does not read counts at all**, which is the
+   * leaflet import: it leaves the stored count alone rather than blanking one a
+   * walk of the same chain read. Null is a statement, and is written.
+   */
+  packCount?: number | null;
   categoryPath: string[];
   url: string | null;
   /** The last observation's free bag. Stored and shown, never read (D6). */
@@ -55,6 +63,8 @@ export function sourceGroupChanged(
     existing.brand !== fields.brand ||
     existing.ean !== fields.ean ||
     existing.sizeFormat !== fields.sizeFormat ||
+    (fields.packCount !== undefined &&
+      (existing.packCount ?? null) !== fields.packCount) ||
     numeric(existing.unitSize) !== numeric(fields.unitSize) ||
     existing.url !== fields.url ||
     existing.sourceKind !== fields.sourceKind
@@ -82,6 +92,9 @@ export function applySourceGroup(
   row.ean = fields.ean;
   row.unitSize = fields.unitSize;
   row.sizeFormat = fields.sizeFormat;
+  if (fields.packCount !== undefined) {
+    row.packCount = fields.packCount;
+  }
   row.categoryPath = fields.categoryPath;
   row.url = fields.url;
   row.extra = fields.extra;

@@ -11,7 +11,11 @@ import {
   SourceEntryStatus,
   SourceLocationStatus,
 } from '../../lib/enums/harvest.enums';
-import { CONTENT_LOCALES } from '../../lib/messages/catalog.messages';
+import {
+  CONTENT_LOCALES,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
+} from '../../lib/messages/catalog.messages';
 import {
   ADAPTER_CAPABILITIES,
   ADAPTER_KEYS,
@@ -164,6 +168,12 @@ export const HARVEST_SCHEMA_IDS = {
 } as const;
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
+/** A pack count (plan 0162): a whole number in the bounds, or null. */
+const packCountOrNull = (): JsonSchema => ({
+  type: ['integer', 'null'],
+  minimum: PACK_COUNT_MIN,
+  maximum: PACK_COUNT_MAX,
+});
 const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
 /** A tag bag kept exactly as the provider sent it (plan 0038, section 8.2). */
 const stringMap = (): JsonSchema => ({
@@ -406,6 +416,7 @@ const sourceCatalogEntryProperties = {
   ean: nullableString(),
   unitSize: numberOrNull(),
   sizeFormat: nullableString(),
+  packCount: packCountOrNull(),
   categoryPath: array(string()),
   url: nullableString(),
   // Stored, shown, and never interpreted (plan 0086, section 6.1).
@@ -437,6 +448,7 @@ const sourceCatalogEntryRequired = [
   'ean',
   'unitSize',
   'sizeFormat',
+  'packCount',
   'categoryPath',
   'url',
   'extra',
@@ -1122,6 +1134,7 @@ const createItemFromEntryRequest = object(
     brand: nullableString(),
     ean: nullableString(),
     unitSize: numberOrNull(),
+    packCount: packCountOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
   },
@@ -1174,6 +1187,7 @@ const createItemEntryOperation = object(
         brand: nullableString(),
         ean: nullableString(),
         unitSize: numberOrNull(),
+        packCount: packCountOrNull(),
         category: ref(CATALOG_SCHEMA_IDS.itemCategory),
         defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
       },

@@ -84,6 +84,13 @@ export interface SourceObservation {
   ean: string | null;
   unitSize: number | null;
   sizeFormat: string | null;
+  /**
+   * How many units the pack holds, as the source's own adapter read it (plan
+   * 0162). Null is a statement that the product is not a pack. Absent is a
+   * source that reads no counts at all, the leaflet import, and leaves the
+   * stored count alone.
+   */
+  packCount?: number | null;
   categoryPath: string[];
   url: string | null;
   observedAt: Date;
@@ -1068,6 +1075,7 @@ function fieldsOf(
     ean: observation.ean,
     unitSize: observation.unitSize,
     sizeFormat: observation.sizeFormat,
+    packCount: observation.packCount,
     categoryPath: observation.categoryPath,
     url: observation.url,
     extra: observation.extra,

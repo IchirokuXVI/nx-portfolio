@@ -16,6 +16,7 @@ import {
   POSTAL_CODE_SOURCES,
   PRICE_SOURCE_KIND_FALLBACK,
   PRICE_SOURCE_KINDS,
+  PRICE_UNIT_BASES,
   PRODUCT_CATEGORIES,
   PRODUCT_CATEGORY_FALLBACK,
   SETTLEMENT_OUTCOME_FALLBACK,
@@ -33,16 +34,17 @@ import {
   type AssistantChoice,
   type AssistantListLink,
   type AssistantReply,
+  type BasketRun,
+  type BasketSummary,
   type CatalogItem,
   type CatalogScope,
   type CatalogSuggestion,
   type ChainPreference,
+  type ChainPrice,
   type Comment,
   type CommentRecording,
   type CommentTranscription,
   type Contact,
-  type BasketRun,
-  type BasketSummary,
   type Line,
   type LineSettlement,
   type ListAccessEntry,
@@ -81,6 +83,7 @@ import {
   nullableStr,
   numOr,
   oneOf,
+  oneOfOrNull,
   str,
   strOr,
 } from './primitives';
@@ -561,7 +564,10 @@ export function toProductOffer(raw: unknown): ProductOffer | null {
  * brand once per carton size. They were on the wire all along and dropped here,
  * which is what made those rows identical on screen.
  */
-export function toCatalogItem(raw: unknown): CatalogItem | null {
+export function toCatalogItem(
+  raw: unknown,
+  chains: ReadonlyMap<string, Supermarket> = NO_CHAINS
+): CatalogItem | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -570,6 +576,9 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
   if (id === null) {
     return null;
   }
+
+  const bestOffer = raw['bestOffer'];
+  const offer = toProductOffer(bestOffer);
 
   return {
     id,
@@ -585,8 +594,121 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
       PRODUCT_CATEGORIES,
       PRODUCT_CATEGORY_FALLBACK
     ),
-    offer: toProductOffer(raw['bestOffer']),
+    offer,
+    // Null with no offer, so a basis can never describe a price that is not
+    // there. The browse mapper's rule for the same field.
+    unitBasis:
+      offer !== null && isRecord(bestOffer)
+        ? oneOfOrNull(bestOffer['unitBasis'], PRICE_UNIT_BASES)
+        : null,
+    chainPrices: toChainPrices(raw['offers'], chains),
+    imageUrl: nullableStr(raw['imageUrl']),
+    packCount: toPackCount(raw['packCount']),
   };
+}
+
+/** The default for every read that carries no scope map: nothing can be named. */
+const NO_CHAINS: ReadonlyMap<string, Supermarket> = new Map();
+
+/**
+ * Every chain's price, cheapest first, one per chain (velista `0101`).
+ *
+ * An offer whose scope the map does not name is dropped, never guessed: the
+ * gateway leaves out a scope it cannot name (backend `0161`, section 3), and a
+ * price the card cannot attribute is not a chain's price. A chain priced in two
+ * scopes keeps its cheapest. An offer with no price sorts after every one that
+ * has one, so the chain named first is the chain the card's price came from.
+ */
+function toChainPrices(
+  raw: unknown,
+  chains: ReadonlyMap<string, Supermarket>
+): readonly ChainPrice[] {
+  if (chains.size === 0) {
+    return [];
+  }
+
+  const cheapest = new Map<string, ChainPrice>();
+  for (const offer of mapArray(raw, toProductOffer)) {
+    const chain = chains.get(offer.priceScopeId);
+    if (chain === undefined) {
+      continue;
+    }
+    const held = cheapest.get(chain.id);
+    if (held === undefined || cheaper(offer, held.offer)) {
+      cheapest.set(chain.id, { chain, offer });
+    }
+  }
+
+  // A stable sort, so two chains at the same price keep the server's order.
+  return [...cheapest.values()].sort((a, b) =>
+    cheaper(a.offer, b.offer) ? -1 : cheaper(b.offer, a.offer) ? 1 : 0
+  );
+}
+
+/** Whether `a` is the lower price. A null price is never lower than a number. */
+function cheaper(a: ProductOffer, b: ProductOffer): boolean {
+  if (a.price === null) {
+    return false;
+  }
+  return b.price === null || a.price < b.price;
+}
+
+/**
+ * How many units the pack holds (backend `0162`): a whole number from 2, or
+ * null. Anything else reads as not a pack, because "Pack 1" or "Pack 2,5" drawn
+ * beside a product is worse than drawing nothing.
+ */
+function toPackCount(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 2
+    ? raw
+    : null;
+}
+
+/**
+ * The chain behind every scope a suggest response names (backend `0161`,
+ * section 3), keyed by scope id. An entry that cannot name a chain is left
+ * out, so the offers that quote it are left out of the card too.
+ */
+function toScopeChains(raw: unknown): ReadonlyMap<string, Supermarket> {
+  const chains = new Map<string, Supermarket>();
+  if (!Array.isArray(raw)) {
+    return chains;
+  }
+  for (const entry of raw) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+    const scopeId = str(entry['priceScopeId']);
+    const chainId = str(entry['supermarketId']);
+    if (scopeId === null || chainId === null) {
+      continue;
+    }
+    chains.set(scopeId, {
+      id: chainId,
+      name: toLocalizedName(entry['supermarketName']),
+    });
+  }
+  return chains;
+}
+
+/**
+ * From `catalog.CatalogSuggestResponse`, the answer both suggest routes give:
+ * the suggestions, with every offer's chain resolved against the response's
+ * own scope map (velista `0101`). Empty for a body that is not one.
+ *
+ * The order is the server's and is never re-sorted, for the reason
+ * {@link toCatalogSuggestion} gives.
+ */
+export function toCatalogSuggestions(
+  body: unknown
+): readonly CatalogSuggestion[] {
+  if (!isRecord(body)) {
+    return [];
+  }
+  const chains = toScopeChains(body['scopes']);
+  return mapArray(body['suggestions'], (raw) =>
+    toCatalogSuggestion(raw, chains)
+  );
 }
 
 /**
@@ -603,7 +725,10 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
  * the prices, the scopes or the synonyms that produced the first one (velista
  * plan 0043, section 6).
  */
-export function toCatalogSuggestion(raw: unknown): CatalogSuggestion | null {
+export function toCatalogSuggestion(
+  raw: unknown,
+  chains: ReadonlyMap<string, Supermarket> = NO_CHAINS
+): CatalogSuggestion | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -631,10 +756,15 @@ export function toCatalogSuggestion(raw: unknown): CatalogSuggestion | null {
           // key here reads as a catalog with no prices in it rather than as a
           // mistake.
           offer: toProductOffer(groupOffer['offer']),
+          // The reveal's products (backend `0161`), each with its one best
+          // price. Absent on an older gateway, which draws a reveal of none.
+          members: mapArray(groupOffer['members'], (member) =>
+            toCatalogItem(member, chains)
+          ),
         };
   }
 
-  const item = toCatalogItem(raw['item']);
+  const item = toCatalogItem(raw['item'], chains);
   return item === null ? null : { kind: 'item', item };
 }
 
@@ -1248,9 +1378,7 @@ export function toCatalogScope(raw: unknown): CatalogScope | null {
  * fabricated `new Date()` would sort itself to the top of somebody's history and title
  * itself today. Dropping it costs one row and is counted, per rule D4.
  */
-export function toBasketSummary(
-  raw: unknown
-): BasketSummary | null {
+export function toBasketSummary(raw: unknown): BasketSummary | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -1371,9 +1499,7 @@ export function toBasketRun(raw: unknown): BasketRun | null {
  * somebody worked through, and counting it would let an empty basket report itself
  * finished.
  */
-export function toBasketFromView(
-  raw: unknown
-): BasketSummary | null {
+export function toBasketFromView(raw: unknown): BasketSummary | null {
   const summary = toBasketSummary(raw);
   if (summary === null || !isRecord(raw)) {
     return null;

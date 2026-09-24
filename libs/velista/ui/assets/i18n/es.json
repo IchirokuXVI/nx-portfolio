@@ -523,7 +523,33 @@
         "LITER": "{{size}} L",
         "PACK": "{{size}} packs"
       },
-      "asWritten": "Añadir “{{text}}” tal cual"
+      "asWritten": "Añadir “{{text}}” tal cual",
+      "card": {
+        "loading": "Buscando productos",
+        "add": "Añadir {{name}}",
+        "from": "desde {{price}}",
+        "pack": "Pack de {{count}}",
+        "seen": "visto {{when}}",
+        "stale": "Precio sin comprobar hace tiempo",
+        "soldAt": "Se vende en {{chain}}. Ver el precio de cada tienda",
+        "soldAtMany": "Se vende en {{count}} tiendas. Ver el precio de cada tienda",
+        "shops": "Precio en cada tienda",
+        "details": "Detalles",
+        "detailsOf": "Detalles de {{name}}",
+        "groupBadge": "Grupo",
+        "groupHelp": "Qué es un grupo de productos",
+        "groupHelpTitle": "Grupos de productos",
+        "groupHelpBody": "Un grupo reúne productos que sirven para lo mismo. Añade el grupo como una sola línea y Velista elige el más barato cuando vayas a comprar.",
+        "groupHelpSwap": "Puedes cambiarlo por otro producto del grupo cuando quieras.",
+        "groupLine_one": "Una línea, el producto más barato en la tienda",
+        "groupLine_other": "Una línea, el más barato de {{count}} en la tienda",
+        "groupProducts_one": "{{count}} producto",
+        "groupProducts_other": "{{count}} productos",
+        "groupMore_one": "y {{count}} más",
+        "groupMore_other": "y {{count}} más",
+        "already": "Ya está en tu lista",
+        "alreadyQuantity": "Cuántos de {{line}}"
+      }
     },
     "empty": {
       "title": "Todavía no hay nada en esta lista",

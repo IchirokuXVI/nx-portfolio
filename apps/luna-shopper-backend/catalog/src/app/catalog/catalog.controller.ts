@@ -43,6 +43,8 @@ import {
   type DeleteBrandResult,
   type DeleteItemPricesByRunRequest,
   type DeleteItemPricesByRunResult,
+  type FillPackCountsRequest,
+  type FillPackCountsResult,
   type FindItemByEanRequest,
   type FindItemByEanResult,
   type GetItemsRequest,
@@ -347,6 +349,17 @@ export class CatalogController {
   @MessagePattern(ITEM_PATTERNS.createMany)
   createItems(@Payload() req: CreateItemsRequest): Promise<CreateItemsResult> {
     return this.items.createMany(req);
+  }
+
+  /**
+   * The pack counts a catalog discovery run read (plan 0162, section 3),
+   * written only where a product has none.
+   */
+  @MessagePattern(ITEM_PATTERNS.fillPackCounts)
+  fillPackCounts(
+    @Payload() req: FillPackCountsRequest
+  ): Promise<FillPackCountsResult> {
+    return this.items.fillPackCounts(req);
   }
 
   // --- Product groups (plan 0048, section 1) -------------------------------

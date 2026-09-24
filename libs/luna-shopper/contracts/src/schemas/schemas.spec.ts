@@ -616,6 +616,7 @@ describe('contract schemas', () => {
               sku: null,
               ean: null,
               unitSize: null,
+              packCount: null,
               category: 'DAIRY',
               defaultUnit: 'LITER',
               productGroupId: null,
@@ -623,6 +624,36 @@ describe('contract schemas', () => {
           ],
           nextCursor: null,
         }).valid
+      ).toBe(true);
+    });
+
+    it('a pack count is a whole number from 2 to 1000, or null (plan 0162)', () => {
+      const update = (packCount: unknown) =>
+        validateMessageRequest('item.update', {
+          userId: 'owner',
+          itemId: 'i',
+          packCount,
+        }).valid;
+      expect(update(6)).toBe(true);
+      expect(update(null)).toBe(true);
+      expect(update(1)).toBe(false);
+      expect(update(1001)).toBe(false);
+      expect(update(2.5)).toBe(false);
+
+      expect(
+        validateMessageRequest('item.fillPackCounts', {
+          userId: 'harvester',
+          entries: [{ itemId: 'i', packCount: 6 }],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('item.fillPackCounts', {
+          userId: 'harvester',
+          entries: [{ itemId: 'i', packCount: null }],
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageResponse('item.fillPackCounts', { written: 3 }).valid
       ).toBe(true);
     });
 
@@ -640,6 +671,7 @@ describe('contract schemas', () => {
               sku: null,
               ean: null,
               unitSize: 1,
+              packCount: 6,
               category: 'DAIRY',
               defaultUnit: 'LITER',
               productGroupId: 'g',

@@ -34,6 +34,11 @@ export interface MercadonaProduct {
   unitSize: number | null;
   /** Null for `size_format: 'm'`, which has no `UnitOfMeasure` value. */
   unit: UnitOfMeasure | null;
+  /**
+   * How many units the pack holds, read from `price_instructions` (plan 0162,
+   * section 1). Null for a product that is not a pack.
+   */
+  packCount: number | null;
   category: ItemCategory;
   /** The path the walk took to reach it, deepest last. Drives the category map. */
   categoryPath: string[];
@@ -72,6 +77,8 @@ export interface MercadonaListProduct {
   unitSize: number | null;
   unit: UnitOfMeasure | null;
   sizeFormat: string | null;
+  /** As on {@link MercadonaProduct.packCount}: the listing carries the same block. */
+  packCount: number | null;
   price: number | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;

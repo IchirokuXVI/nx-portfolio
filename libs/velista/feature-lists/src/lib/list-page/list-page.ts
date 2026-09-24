@@ -89,6 +89,8 @@ import {
   ToBuyHeading,
   TripGroup,
   type LineRowAction,
+  type SuggestionHolding,
+  type SuggestionHoldingChange,
 } from '@portfolio/velista/ui';
 import {
   correlationIdOf,
@@ -1352,6 +1354,67 @@ export class ListPage {
    */
   readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
 
+  /**
+   * The catalog is being asked, from the moment the debounce fires until the answer
+   * that is still wanted lands. The composer draws skeleton cards for it while it has
+   * no cards to show (velista `0101`).
+   */
+  readonly suggesting = signal(false);
+
+  /**
+   * The lines on this list already holding what a card offers (velista `0101`,
+   * section 4), a join over lines this page already holds rather than a field to
+   * ask for.
+   *
+   * A product is held by a line whose products name it. A group is held by a line
+   * that follows it, because choosing a group again would make a second line for
+   * the same kind of thing. The stepper moves only for somebody who may decide
+   * quantities here, the rule the rows' own reel follows.
+   */
+  readonly holdingsOf = computed(() => {
+    const lines = this._lines.linesIn(this.listId());
+    const editable = this.loaded()?.abilities.canDecide ?? false;
+    return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] =>
+      lines
+        .filter((line) =>
+          suggestion.kind === 'group'
+            ? line.productGroupId === suggestion.group.id
+            : line.itemIds.includes(suggestion.item.id)
+        )
+        .map((line) => ({
+          key: line.id,
+          lineId: line.id,
+          text: line.content,
+          listName: null,
+          quantity: line.quantity,
+          editable,
+        }));
+  });
+
+  /** Where a card's "Details" opens a product: the catalog tab's product sheet. */
+  readonly productLink = computed(() => {
+    const locale = this._locale();
+    return (itemId: string): string =>
+      appPath(
+        locale,
+        this._basePath,
+        'catalog',
+        ...sheetSegments('products', itemId)
+      );
+  });
+
+  /**
+   * A card's stepper moved a line that already holds the product. The same write as
+   * the row's own reel, so the same guard, the same failure copy and the same
+   * sentence afterwards.
+   */
+  async changeHolding(change: SuggestionHoldingChange): Promise<void> {
+    await this.changeQuantity({
+      lineId: change.holding.lineId,
+      delta: change.to - change.from,
+    });
+  }
+
   /** The last thing typed, which the effect below watches. */
   private readonly _suggestQuery = signal('');
 
@@ -1388,12 +1451,16 @@ export class ListPage {
     if (query.length < SUGGEST_MIN_CHARS) {
       // Cleared synchronously rather than after the debounce: a dropdown that lingered
       // over a field somebody has just emptied is offering matches for nothing.
-      untracked(() => this.suggestions.set([]));
+      untracked(() => {
+        this.suggestions.set([]);
+        this.suggesting.set(false);
+      });
       return;
     }
 
     const timer = setTimeout(() => {
       const seq = (this._suggestSeq += 1);
+      this.suggesting.set(true);
       // **Scoped to where you shop** (velista plan 0047, section 3). The rule was
       // documented on `CatalogServiceI.suggest` and in plan 0043 section 6, implemented
       // in `CatalogApi`, and passed by nobody, which is the worst of the three states
@@ -1408,6 +1475,7 @@ export class ListPage {
         .then((found) => {
           if (seq === this._suggestSeq) {
             this.suggestions.set(found);
+            this.suggesting.set(false);
           }
         });
     }, SUGGEST_DEBOUNCE_MS);

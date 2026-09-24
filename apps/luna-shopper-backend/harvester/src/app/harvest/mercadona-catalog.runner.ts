@@ -255,6 +255,8 @@ export class MercadonaCatalogRunner implements CatalogRunner {
           // holds one size, so it holds the one this read saw.
           unitSize: detail.unitSize,
           sizeFormat: product.listing.sizeFormat,
+          // Read from the detail's own `price_instructions` (plan 0162).
+          packCount: detail.packCount,
           categoryPath: detail.categoryPath,
           url: detail.sourceUrl,
           observedAt,

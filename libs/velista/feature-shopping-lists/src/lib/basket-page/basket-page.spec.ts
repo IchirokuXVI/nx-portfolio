@@ -26,6 +26,7 @@ import type {
   BasketRow,
   BasketRowEntry,
   BasketRowResult,
+  CatalogSuggestion,
   ErrorCode,
 } from '@portfolio/velista/models';
 import {
@@ -2857,5 +2858,111 @@ describe('no control on the basket removes a row', () => {
     });
 
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * The lines a suggestion card names on the basket (velista `0101`, section 4): one
+ * per entry of each row holding the product, the list above it, and the settle
+ * sheet's demand write when one is stepped.
+ */
+describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
+  const MILK: CatalogSuggestion = {
+    kind: 'item',
+    item: {
+      id: 'item-milk',
+      name: { es: 'Leche entera', en: 'Whole milk' },
+      brand: 'Hacendado',
+      size: 1,
+      unit: 'LITER',
+      productGroupId: null,
+      category: 'DAIRY',
+      offer: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+      unitBasis: null,
+    },
+  };
+
+  interface CardSurface {
+    holdingsOf(): (suggestion: CatalogSuggestion) => readonly {
+      lineId: string;
+      text: string;
+      listName: string | null;
+      quantity: number;
+      editable: boolean;
+    }[];
+    productLink(): ((itemId: string) => string) | null;
+    changeHolding(change: {
+      holding: { lineId: string };
+      from: number;
+      to: number;
+    }): Promise<void>;
+  }
+
+  const milk = () =>
+    line('Milk', {
+      optionIds: ['item-milk'],
+      entries: [
+        entry('l-groceries', 'zl-1', 2),
+        entry('l-hidden', 'zl-2', 1, { demandEditable: false }),
+      ],
+    });
+
+  it('names each entry, with the list above it where this reader was served it', async () => {
+    const { fixture } = await render({
+      lines: [milk(), line('Bread')],
+      served: SERVED,
+    });
+    const page = fixture.componentInstance as unknown as CardSurface;
+
+    expect(
+      page
+        .holdingsOf()(MILK)
+        .map((held) => [
+          held.lineId,
+          held.text,
+          held.listName,
+          held.quantity,
+          held.editable,
+        ])
+    ).toEqual([
+      ['zl-1', 'Milk', 'Groceries', 2, true],
+      ['zl-2', 'Milk', null, 1, false],
+    ]);
+  });
+
+  it('sends the settle sheet’s demand write for the stepped entry', async () => {
+    const { fixture } = await render({ lines: [milk()], served: SERVED });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      setDemand: jest.Mock;
+    };
+
+    await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 3 });
+
+    expect(store.setDemand).toHaveBeenCalledWith('row-Milk', {
+      lineId: 'zl-1',
+      quantity: 3,
+      from: 2,
+    });
+  });
+
+  it('links to the product for an account, and to nothing for a guest', async () => {
+    const owned = await render({ lines: [milk()] });
+    expect(
+      (owned.fixture.componentInstance as unknown as CardSurface).productLink()
+    ).not.toBeNull();
+
+    const visiting = await render({
+      lines: [milk()],
+      me: participant(guest('p-1', 1)),
+    });
+    expect(
+      (
+        visiting.fixture.componentInstance as unknown as CardSurface
+      ).productLink()
+    ).toBeNull();
   });
 });

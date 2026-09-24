@@ -68,6 +68,11 @@ export interface CarrefourProduct {
    * checkable rather than a guess (plan 0090, section 6).
    */
   unitSize: number | null;
+  /**
+   * How many units the pack holds, read from the size the name printed (plan
+   * 0162), or null for a product that states no count.
+   */
+  packCount: number | null;
   brand: string | null;
   /** The till price in cents, or null for a card that printed no figure. */
   priceCents: number | null;

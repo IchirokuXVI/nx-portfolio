@@ -218,6 +218,7 @@ export type CreateItemDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  packCount?: number | null;
   category:
     | 'PRODUCE'
     | 'DAIRY'
@@ -243,6 +244,7 @@ export type CreateItemFromEntryDto = {
   brand?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  packCount?: number | null;
   category?:
     | 'PRODUCE'
     | 'DAIRY'
@@ -946,6 +948,7 @@ export type UpdateItemDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  packCount?: number | null;
   category?:
     | 'PRODUCE'
     | 'DAIRY'
@@ -2306,6 +2309,7 @@ export type CatalogItemView = {
   sku: string | null;
   ean: string | null;
   unitSize: number | null;
+  packCount: number | null;
   category: EnumsItemCategory;
   defaultUnit: EnumsUnitOfMeasure;
   productGroupId: string | null;
@@ -3395,6 +3399,7 @@ export type HarvestItemSourceEntryView = {
   ean: string | null;
   unitSize: number | null;
   sizeFormat: string | null;
+  packCount: number | null;
   categoryPath: string[];
   url: string | null;
   extra: {
@@ -3482,6 +3487,7 @@ export type HarvestSourceCatalogEntryView = {
   ean: string | null;
   unitSize: number | null;
   sizeFormat: string | null;
+  packCount: number | null;
   categoryPath: string[];
   url: string | null;
   extra: {

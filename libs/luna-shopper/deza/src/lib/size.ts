@@ -1,3 +1,5 @@
+import { packCountOf } from '@portfolio/luna-shopper/contracts';
+
 /**
  * Splitting the trailing size off a description (plan 0085, section 7).
  *
@@ -128,4 +130,38 @@ export function splitSize(description: string): SplitDescription {
     return { name: trimmed, sizeFormat: null };
   }
   return { name, sizeFormat: trimmed.slice(start).trim() };
+}
+
+/** One count times one quantity and a unit, `3x187 ml`, and nothing else. */
+const COUNT_TIMES_QUANTITY =
+  /^(\d+)\s*x\s*\d+(?:[.,]\d+)?\s*[A-Za-zÀ-ſ]{1,10}$/i;
+
+/**
+ * A pack phrase at the end of what is left once the size is split off:
+ * `pack de 8`, `pack 6`, `pack de 8 latas de`. The counted noun is optional and
+ * so is the `de` that joins the phrase to the size.
+ */
+const TRAILING_PACK =
+  /(?:^|\s)pack\s+(?:de\s+)?(\d+)(?:\s+[A-Za-zÀ-ÿ]{2,12})?(?:\s+de)?$/i;
+
+/**
+ * How many units the pack holds (plan 0162, section 1).
+ *
+ * Two shapes state it: the `N` of a trailing `NxQ` size, `3x187 ml`, and the
+ * count of a `pack de N ...` phrase just before the trailing size, or at the
+ * very end when the description states no size. A description that states both
+ * is null, because it prints a pack of packs and neither number alone is the
+ * count. Everything else is null, a summed `23+12 lavados` and a bare `6 ud`
+ * included: the first is a sum and the second is a size, and reading either as
+ * a pack is the guess the plan refuses. Proved by the `3x187 ml` row of
+ * `landing-page.html` and by the literals in `size.spec.ts`.
+ */
+export function packCountIn(description: string): number | null {
+  const { name, sizeFormat } = splitSize(description);
+  const multiplied = sizeFormat ? COUNT_TIMES_QUANTITY.exec(sizeFormat) : null;
+  const phrase = TRAILING_PACK.exec(name);
+  if (multiplied && phrase) {
+    return null;
+  }
+  return packCountOf(multiplied?.[1] ?? phrase?.[1] ?? null);
 }

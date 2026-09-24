@@ -28,7 +28,7 @@ export {
   parseRows,
 } from './lib/rows';
 export { leafSections, parseSectionTree } from './lib/sections';
-export { DEZA_SIZE_UNITS, splitSize } from './lib/size';
+export { DEZA_SIZE_UNITS, packCountIn, splitSize } from './lib/size';
 export type { SplitDescription } from './lib/size';
 export type {
   DezaClientOptions,

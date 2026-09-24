@@ -1,3 +1,5 @@
+> **PR:** [#477](https://github.com/IchirokuXVI/nx-portfolio/pull/477)
+
 # 0101: the product suggestion card
 
 > **Status, 2026-09-23: build this plan without the assistant.** All development on the

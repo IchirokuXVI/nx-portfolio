@@ -119,6 +119,8 @@ export interface LidlProduct {
   unit: UnitOfMeasure | null;
   /** The printed size, verbatim, so nothing is lost when the parse gives up. */
   sizeFormat: string | null;
+  /** The `N` of a printed `NxQ` (plan 0162), or null for a size that multiplies nothing. */
+  packCount: number | null;
   url: string | null;
   /**
    * `storeFacts.retail === true && storeFacts.online === false`, the clean

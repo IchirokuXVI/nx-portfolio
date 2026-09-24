@@ -1,8 +1,10 @@
 import { Logger } from '@nestjs/common';
 import {
   HarvestRunWrites,
+  PACK_COUNT_FILL_MAX,
   PriceSourceKind,
   SourceEntryStatus,
+  type PackCountFill,
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry } from '../entities';
@@ -21,6 +23,7 @@ import type {
 } from './run-report';
 import type {
   ReportedObservation,
+  SourceEntryOutcome,
   SourceIngest,
   SourceIngestSession,
 } from './source-ingest';
@@ -141,6 +144,19 @@ export interface RunReportResult {
    * item once per target. Not part of {@link availabilityWritten}.
    */
   availabilityCopied: Record<string, number>;
+  /**
+   * Products whose null pack count this run filled (plan 0162, section 3).
+   * A product whose count was already set is not counted: catalog keeps it.
+   */
+  packCountsFilled: number;
+  /**
+   * Products two entries of this run bound to with two different counts, and
+   * the counts they carried. Nothing was sent for them: under the merge rules a
+   * pack size makes a new product, so this is a bad merge for a person to look
+   * at, not a tie to break. Named rather than counted, like
+   * {@link shopsUnmapped}.
+   */
+  packCountConflicts: { itemId: string; packCounts: number[] }[];
 }
 
 export class RunReportSink implements RunReport {
@@ -190,6 +206,8 @@ export class RunReportSink implements RunReport {
     pricedScopes: [],
     pricesCopied: {},
     availabilityCopied: {},
+    packCountsFilled: 0,
+    packCountConflicts: [],
   };
 
   constructor(
@@ -275,13 +293,14 @@ export class RunReportSink implements RunReport {
       // used to be called for its side effect alone and the answer dropped on
       // the floor. That is why a walk's report named no price at all and the
       // screen fell back to `updated`, which is rows the ladder changed.
-      const { counters, copies } = await this.session.close();
+      const { outcomes, counters, copies } = await this.session.close();
       this.result.pricesRecorded += counters.pricesRecorded;
       this.result.pricesPublished += counters.pricesWritten;
       this.result.pricesConfirmed += counters.pricesConfirmed;
       this.result.pricesConflicted += counters.pricesConflicted;
       this.result.pricedScopes = [...copies.pricedScopes];
       this.result.pricesCopied = Object.fromEntries(copies.pricesCopied);
+      await this.fillPackCounts(outcomes);
     }
     this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
 
@@ -292,6 +311,53 @@ export class RunReportSink implements RunReport {
       await this.writeScopeAvailability();
     }
     return this.result;
+  }
+
+  /**
+   * The pack counts this run read, onto the products that have none (plan
+   * 0162, section 3).
+   *
+   * Only an `ACTIVE` row names its product, which is the rule that decides a
+   * price as well. The rows are grouped by product first: a product two rows
+   * bound to with two different counts is left out and named in the report,
+   * because a pack size makes a new product and a disagreement is a bad merge.
+   * Catalog writes each count only where the product has none, so a count a
+   * person corrected survives every run.
+   *
+   * A partial observation carries the row's stored count, which is what the
+   * last full read said, so a walk that fetched no detail still fills.
+   */
+  private async fillPackCounts(
+    outcomes: readonly SourceEntryOutcome[]
+  ): Promise<void> {
+    const counts = new Map<string, Set<number>>();
+    for (const outcome of outcomes) {
+      const count = outcome.entry.packCount ?? null;
+      if (!outcome.itemId || count === null) {
+        continue;
+      }
+      const held = counts.get(outcome.itemId) ?? new Set<number>();
+      held.add(Number(count));
+      counts.set(outcome.itemId, held);
+    }
+
+    const fills: PackCountFill[] = [];
+    for (const [itemId, held] of counts) {
+      if (held.size === 1) {
+        fills.push({ itemId, packCount: [...held][0] });
+        continue;
+      }
+      this.result.packCountConflicts.push({
+        itemId,
+        packCounts: [...held].sort((a, b) => a - b),
+      });
+    }
+    for (let i = 0; i < fills.length; i += PACK_COUNT_FILL_MAX) {
+      const { written } = await this.deps.catalog.fillPackCounts(
+        fills.slice(i, i + PACK_COUNT_FILL_MAX)
+      );
+      this.result.packCountsFilled += written;
+    }
   }
 
   /** Append to the serial chain, so writes happen in the order reported. */

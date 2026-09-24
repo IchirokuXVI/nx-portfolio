@@ -3,6 +3,7 @@ import {
   PriceSourceKind,
   SourceEntryStatus,
   SourceLocationStatus,
+  type PackCountFill,
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceLocation } from '../entities';
@@ -85,12 +86,16 @@ function build(
     pricedScopes?: string[];
     /** What the run writes of what it read (plan 0119). */
     writes?: HarvestRunWrites;
+    /** Products whose pack count catalog already holds (plan 0162). */
+    packCountSet?: string[];
   } = {}
 ) {
   const pushed: SourceObservation[][] = [];
   const opened: unknown[] = [];
+  /** Every outcome a push answered, which is what `close` answers for the run. */
+  const outcomes: unknown[] = [];
   const closed = jest.fn(async () => ({
-    outcomes: [],
+    outcomes,
     counters: {
       created: 0,
       updated: 0,
@@ -111,18 +116,22 @@ function build(
       return {
         push: jest.fn(async (chunk: readonly SourceObservation[]) => {
           pushed.push([...chunk]);
-          return chunk.map((each) => {
+          const answered = chunk.map((each) => {
             const resolved = options.resolves?.[each.externalId];
             return {
               entry: {
                 externalId: each.externalId,
                 itemId: resolved?.itemId ?? null,
+                // The row holds what the observation stated (plan 0162).
+                packCount: each.packCount ?? null,
               } as SourceCatalogEntry,
               created: true,
               rung: 1 as const,
               itemId: resolved?.active ? resolved.itemId : null,
             };
           });
+          outcomes.push(...answered);
+          return answered;
         }),
         close: closed,
       };
@@ -156,6 +165,14 @@ function build(
       written: 1,
       skipped: 0,
       conflicts: options.conflicts ?? [],
+    })),
+    // Catalog's rule, restated for the double: a count is written only where
+    // the product has none. The real statement is proved against Postgres in
+    // catalog's `item-pack-count.integration.spec.ts`.
+    fillPackCounts: jest.fn(async (entries: PackCountFill[]) => ({
+      written: entries.filter(
+        (entry) => !options.packCountSet?.includes(entry.itemId)
+      ).length,
     })),
   } as unknown as CatalogClient;
 
@@ -257,6 +274,86 @@ describe('RunReportSink', () => {
     expect(written.pricesRecorded).toBe(8154);
     expect(written.pricesPublished).toBe(0);
     expect(written.pricesConfirmed).toBe(0);
+  });
+
+  describe('the pack count fill (plan 0162, section 3)', () => {
+    it('sends every bound product with a count, once, and counts what catalog wrote', async () => {
+      const { sink, catalog } = build({
+        resolves: {
+          six: { itemId: 'item-six', active: true },
+          sixAgain: { itemId: 'item-six', active: true },
+          kept: { itemId: 'item-kept', active: true },
+          single: { itemId: 'item-single', active: true },
+        },
+        packCountSet: ['item-kept'],
+      });
+
+      sink.product(observation({ externalId: 'six', packCount: 6 }));
+      sink.product(observation({ externalId: 'sixAgain', packCount: 6 }));
+      sink.product(observation({ externalId: 'kept', packCount: 12 }));
+      sink.product(observation({ externalId: 'single', packCount: null }));
+      const written = await sink.drain();
+
+      expect(catalog.fillPackCounts).toHaveBeenCalledTimes(1);
+      expect(catalog.fillPackCounts).toHaveBeenCalledWith([
+        { itemId: 'item-six', packCount: 6 },
+        { itemId: 'item-kept', packCount: 12 },
+      ]);
+      // The product whose count was set already is sent, and catalog keeps it.
+      expect(written.packCountsFilled).toBe(1);
+      expect(written.packCountConflicts).toEqual([]);
+    });
+
+    it('sends nothing for a row that is not bound, or bound only as a proposal', async () => {
+      const { sink, catalog } = build({
+        resolves: { proposed: { itemId: 'item-p', active: false } },
+      });
+
+      sink.product(observation({ externalId: 'proposed', packCount: 6 }));
+      sink.product(observation({ externalId: 'loose', packCount: 6 }));
+      const written = await sink.drain();
+
+      expect(catalog.fillPackCounts).not.toHaveBeenCalled();
+      expect(written.packCountsFilled).toBe(0);
+    });
+
+    it('leaves out a product whose rows disagree, and names it in the report', async () => {
+      const { sink, catalog } = build({
+        resolves: {
+          four: { itemId: 'item-merged', active: true },
+          six: { itemId: 'item-merged', active: true },
+          fine: { itemId: 'item-fine', active: true },
+        },
+      });
+
+      sink.product(observation({ externalId: 'six', packCount: 6 }));
+      sink.product(observation({ externalId: 'four', packCount: 4 }));
+      sink.product(observation({ externalId: 'fine', packCount: 3 }));
+      const written = await sink.drain();
+
+      expect(catalog.fillPackCounts).toHaveBeenCalledWith([
+        { itemId: 'item-fine', packCount: 3 },
+      ]);
+      expect(written.packCountConflicts).toEqual([
+        { itemId: 'item-merged', packCounts: [4, 6] },
+      ]);
+    });
+
+    it('splits a long list into calls catalog accepts', async () => {
+      const resolves: Record<string, { itemId: string; active: boolean }> = {};
+      for (let i = 0; i < 1001; i += 1) {
+        resolves[`p${i}`] = { itemId: `item-${i}`, active: true };
+      }
+      const { sink, catalog } = build({ resolves });
+
+      for (let i = 0; i < 1001; i += 1) {
+        sink.product(observation({ externalId: `p${i}`, packCount: 6 }));
+      }
+      const written = await sink.drain();
+
+      expect(catalog.fillPackCounts).toHaveBeenCalledTimes(2);
+      expect(written.packCountsFilled).toBe(1001);
+    });
   });
 
   it('reports no price for a run that opened no session', async () => {

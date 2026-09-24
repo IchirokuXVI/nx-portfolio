@@ -523,7 +523,33 @@
         "LITER": "{{size}} L",
         "PACK": "{{size}} packs"
       },
-      "asWritten": "Add “{{text}}” as written"
+      "asWritten": "Add “{{text}}” as written",
+      "card": {
+        "loading": "Looking for products",
+        "add": "Add {{name}}",
+        "from": "from {{price}}",
+        "pack": "Pack {{count}}",
+        "seen": "seen {{when}}",
+        "stale": "Price not checked lately",
+        "soldAt": "Sold at {{chain}}. Show every shop price",
+        "soldAtMany": "Sold at {{count}} shops. Show every shop price",
+        "shops": "Price at each shop",
+        "details": "Details",
+        "detailsOf": "Details of {{name}}",
+        "groupBadge": "Group",
+        "groupHelp": "What a product group is",
+        "groupHelpTitle": "Product groups",
+        "groupHelpBody": "A group holds products that do the same job. Add the group as one line, and Velista picks the cheapest of them when you go shopping.",
+        "groupHelpSwap": "You can swap it for another product in the group at any time.",
+        "groupLine_one": "One line, the cheapest product at the shop",
+        "groupLine_other": "One line, cheapest of {{count}} at the shop",
+        "groupProducts_one": "{{count}} product",
+        "groupProducts_other": "{{count}} products",
+        "groupMore_one": "and {{count}} more",
+        "groupMore_other": "and {{count}} more",
+        "already": "Product already in your list",
+        "alreadyQuantity": "How many of {{line}}"
+      }
     },
     "empty": {
       "title": "Nothing on this list yet",

@@ -209,7 +209,12 @@ describe('LineComposer, one slot and the empty field decides', () => {
         size: null,
         unit: 'UNIT',
         productGroupId: null,
+        category: 'OTHER',
         offer: null,
+        chainPrices: [],
+        imageUrl: null,
+        packCount: null,
+        unitBasis: null,
       },
     };
 
@@ -473,7 +478,12 @@ describe('LineComposer, putting the suggestions down', () => {
         size: null,
         unit: 'UNIT',
         productGroupId: null,
+        category: 'OTHER',
         offer: null,
+        chainPrices: [],
+        imageUrl: null,
+        packCount: null,
+        unitBasis: null,
       },
     },
   ];
@@ -486,7 +496,7 @@ describe('LineComposer, putting the suggestions down', () => {
   }
 
   function drawn(fixture: ComponentFixture<LineComposer>): boolean {
-    return host(fixture).querySelector('ul.suggestions') !== null;
+    return host(fixture).querySelector('.panel') !== null;
   }
 
   function clickOn(fixture: ComponentFixture<LineComposer>, target: Element) {
@@ -539,7 +549,7 @@ describe('LineComposer, putting the suggestions down', () => {
     const chosen: { content: string }[] = [];
     fixture.componentInstance.submitted.subscribe((one) => chosen.push(one));
 
-    clickOn(fixture, find(fixture, 'button.suggestion'));
+    clickOn(fixture, find(fixture, 'button.pick'));
 
     // The dismissal must not race the choice: were the panel closed by the click
     // that lands on one of its own rows, choosing would be a coin toss.
@@ -556,5 +566,86 @@ describe('LineComposer, putting the suggestions down', () => {
     type(fixture, 'oat m');
 
     expect(drawn(fixture)).toBe(true);
+  });
+});
+
+/**
+ * The field is the combobox that owns the panel's grid (velista `0101`, rule 8),
+ * and the panel's cards reach the page through the composer.
+ */
+describe('LineComposer, the field and its cards', () => {
+  const OAT: CatalogSuggestion = {
+    kind: 'item',
+    item: {
+      id: 'item-oat',
+      name: { es: 'Bebida de avena', en: 'Oat drink' },
+      brand: 'Oatly',
+      size: null,
+      unit: 'UNIT',
+      productGroupId: null,
+      category: 'OTHER',
+      offer: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+      unitBasis: null,
+    },
+  };
+
+  function field(fixture: ComponentFixture<LineComposer>): HTMLInputElement {
+    const found = host(fixture).querySelector<HTMLInputElement>('input.field');
+    if (found === null) {
+      throw new Error('there is no field');
+    }
+    return found;
+  }
+
+  it('names the panel it controls while it is open, and nothing while it is not', async () => {
+    const { fixture } = await render();
+
+    expect(field(fixture).getAttribute('role')).toBe('combobox');
+    expect(field(fixture).getAttribute('aria-expanded')).toBe('false');
+    expect(field(fixture).getAttribute('aria-controls')).toBeNull();
+
+    fixture.componentRef.setInput('suggestions', [OAT]);
+    type(fixture, 'oat');
+
+    const panel = host(fixture).querySelector('.panel');
+    expect(field(fixture).getAttribute('aria-expanded')).toBe('true');
+    expect(field(fixture).getAttribute('aria-controls')).toBe(panel?.id);
+  });
+
+  it('draws the skeleton while the page is asking the catalog', async () => {
+    const { fixture } = await render();
+    fixture.componentRef.setInput('suggesting', true);
+    type(fixture, 'oat');
+
+    expect(host(fixture).querySelectorAll('.sk')).toHaveLength(3);
+  });
+
+  it('hands a stepped line from a card to the page', async () => {
+    const { fixture } = await render();
+    const holding = {
+      key: 'l1',
+      lineId: 'l1',
+      text: 'Oat drink',
+      listName: null,
+      quantity: 1,
+      editable: true,
+    };
+    const changed: unknown[] = [];
+    fixture.componentInstance.holdingChanged.subscribe((one) =>
+      changed.push(one)
+    );
+    fixture.componentRef.setInput('suggestions', [OAT]);
+    fixture.componentRef.setInput('holdingsOf', () => [holding]);
+    type(fixture, 'oat');
+
+    host(fixture)
+      .querySelectorAll<HTMLButtonElement>('.already .step')[1]
+      ?.click();
+    fixture.detectChanges();
+
+    expect(changed).toEqual([{ holding, from: 1, to: 2 }]);
   });
 });

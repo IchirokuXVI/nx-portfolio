@@ -24817,6 +24817,13 @@
             "minimum": 0,
             "description": "Without it `defaultUnit` says nothing: \"LITER\" is not a size."
           },
+          "packCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 1000,
+            "description": "How many units the pack holds (plan 0162). Null, or absent, for a product that is not a pack."
+          },
           "category": {
             "type": "string",
             "enum": [
@@ -24903,6 +24910,13 @@
             "nullable": true,
             "minimum": 0,
             "description": "Without it `defaultUnit` says nothing: \"LITER\" is not a size."
+          },
+          "packCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 1000,
+            "description": "Set or correct the pack count, or clear it with null (plan 0162). The only write that changes a count that is set: a harvest run fills a null count and never overwrites one."
           },
           "category": {
             "type": "string",
@@ -26268,6 +26282,13 @@
           "unitSize": {
             "type": "number",
             "nullable": true
+          },
+          "packCount": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 2,
+            "maximum": 1000,
+            "description": "Override the pack count the row read (plan 0162). Null creates the product with none."
           },
           "category": {
             "type": "string",
@@ -30550,6 +30571,14 @@
               "null"
             ]
           },
+          "packCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 1000
+          },
           "category": {
             "$ref": "#/components/schemas/enums.ItemCategory"
           },
@@ -30587,6 +30616,7 @@
           "sku",
           "ean",
           "unitSize",
+          "packCount",
           "category",
           "defaultUnit",
           "productGroupId"
@@ -33248,6 +33278,14 @@
               "null"
             ]
           },
+          "packCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 1000
+          },
           "categoryPath": {
             "type": "array",
             "items": {
@@ -33351,6 +33389,7 @@
           "ean",
           "unitSize",
           "sizeFormat",
+          "packCount",
           "categoryPath",
           "url",
           "extra",
@@ -33597,6 +33636,14 @@
               "null"
             ]
           },
+          "packCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 1000
+          },
           "categoryPath": {
             "type": "array",
             "items": {
@@ -33693,6 +33740,7 @@
           "ean",
           "unitSize",
           "sizeFormat",
+          "packCount",
           "categoryPath",
           "url",
           "extra",

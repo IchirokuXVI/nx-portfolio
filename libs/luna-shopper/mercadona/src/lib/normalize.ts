@@ -1,4 +1,4 @@
-import { ItemCategory } from '@portfolio/luna-shopper/contracts';
+import { ItemCategory, packCountOf } from '@portfolio/luna-shopper/contracts';
 import { resolveCategory, type CategoryPathNode } from './categories';
 import {
   isRecord,
@@ -82,6 +82,7 @@ function toListProduct(
     unitSize: readNumber(price, 'unit_size'),
     unit: mapSizeFormat(sizeFormat),
     sizeFormat,
+    packCount: readPackCount(price),
     price: readNumber(price, 'unit_price'),
     unitPrice: readNumber(price, 'bulk_price'),
     unitPriceLabel: readString(price, 'reference_format'),
@@ -129,6 +130,7 @@ export function normalizeProduct(
     brand: readString(raw, 'brand'),
     unitSize: readNumber(price, 'unit_size'),
     unit: mapSizeFormat(sizeFormat),
+    packCount: readPackCount(price),
     category: path.length > 0 ? resolveCategory(path) : ItemCategory.OTHER,
     categoryPath: path.map((node) => node.name),
     price: readNumber(price, 'unit_price'),
@@ -141,6 +143,33 @@ export function normalizeProduct(
     sourceUrl: readString(raw, 'share_url'),
     observedAt: options.observedAt ?? new Date(),
   };
+}
+
+/**
+ * How many units the pack holds (plan 0162, section 1).
+ *
+ * **Only a pack has a count.** When `is_pack` is true the count is `pack_size`,
+ * or `total_units` when `pack_size` is not set. When both are set and differ
+ * the source contradicts itself and the answer is null, because a count is
+ * read and never chosen. `is_pack` false or absent is null whatever the other
+ * two say: `total_units` alone is also set on products sold per capsule or per
+ * piece that are not packs.
+ *
+ * Proved by `product-capsules-per-unit.json` (`is_pack: true`, `pack_size: 20`,
+ * `total_units: 20`, so the two agree) and by `product-detail-es.json`
+ * (`is_pack: false`). The other two cases are that capsule fixture with one
+ * field changed in the spec, because no captured product shows them.
+ */
+function readPackCount(price: Json): number | null {
+  if (readBoolean(price, 'is_pack') !== true) {
+    return null;
+  }
+  const packSize = readNumber(price, 'pack_size');
+  const totalUnits = readNumber(price, 'total_units');
+  if (packSize !== null && totalUnits !== null && packSize !== totalUnits) {
+    return null;
+  }
+  return packCountOf(packSize ?? totalUnits);
 }
 
 /**
@@ -182,6 +211,7 @@ export function unavailableProduct(
     brand: null,
     unitSize: null,
     unit: null,
+    packCount: null,
     category: ItemCategory.OTHER,
     categoryPath: [],
     price: null,

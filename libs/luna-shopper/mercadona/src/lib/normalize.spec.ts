@@ -29,6 +29,7 @@ describe('normalizeProduct', () => {
       brand: 'Hacendado',
       unitSize: 1,
       unit: UnitOfMeasure.LITER,
+      packCount: null,
       category: ItemCategory.PANTRY,
       categoryPath: ['Aceite, especias y salsas', 'Aceite, vinagre y sal'],
       price: 8.75,
@@ -107,6 +108,67 @@ describe('normalizeProduct', () => {
     expect(product.unit).toBeNull();
     expect(product.unitSize).toBe(30);
     expect(isImportableSizeFormat('m')).toBe(false);
+  });
+
+  describe('the pack count (plan 0162, section 1)', () => {
+    /** The capsule fixture with its price block changed, for the cases no capture shows. */
+    const capsulesWith = (fields: Record<string, unknown>) => ({
+      ...capsules,
+      price_instructions: { ...capsules.price_instructions, ...fields },
+    });
+
+    it('reads pack_size when is_pack is true', () => {
+      // `pack_size` and `total_units` are both 20 on this product: a box of
+      // twenty capsules, and the two fields agree.
+      expect(normalizeProduct(capsules).packCount).toBe(20);
+    });
+
+    it('reads total_units when is_pack is true and pack_size is not set', () => {
+      expect(
+        normalizeProduct(capsulesWith({ pack_size: null })).packCount
+      ).toBe(20);
+    });
+
+    it('states no count when pack_size and total_units disagree', () => {
+      expect(
+        normalizeProduct(capsulesWith({ total_units: 24 })).packCount
+      ).toBeNull();
+    });
+
+    it('states no count when is_pack is false, whatever the other two say', () => {
+      expect(normalizeProduct(oliveOil).packCount).toBeNull();
+      expect(
+        normalizeProduct(capsulesWith({ is_pack: false })).packCount
+      ).toBeNull();
+    });
+
+    it('states no count when is_pack is absent', () => {
+      const { is_pack: _dropped, ...rest } = capsules.price_instructions;
+      expect(
+        normalizeProduct({ ...capsules, price_instructions: rest }).packCount
+      ).toBeNull();
+    });
+
+    it('states no count for 1 or a number outside the bounds', () => {
+      for (const count of [1, 0, 1001, 2.5]) {
+        expect(
+          normalizeProduct(
+            capsulesWith({ pack_size: count, total_units: count })
+          ).packCount
+        ).toBeNull();
+      }
+    });
+
+    it('reads the same count from a category listing', () => {
+      const [cheese] = normalizeCategoryProducts(categoryExpanded);
+      expect(cheese.packCount).toBeNull();
+      const [pack] = normalizeCategoryProducts({
+        ...categoryExpanded,
+        products: [capsules],
+        categories: [],
+      });
+      expect(pack.packCount).toBe(20);
+    });
   });
 
   it('describes a 404 as unavailable and priceless, never as a stale price', () => {
