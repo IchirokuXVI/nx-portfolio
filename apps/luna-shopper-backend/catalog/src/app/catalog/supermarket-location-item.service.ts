@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  ITEM_LOOKUP_LIMITS,
   PriceSourceKind,
   type GetSupermarketLocationItemRequest,
   type ListSupermarketLocationItemsRequest,
   type SetSupermarketLocationItemAvailabilityRequest,
   type SetSupermarketLocationItemAvailabilityResult,
+  type ShopAvailabilityRequest,
+  type ShopAvailabilityView,
   type SupermarketLocationItemAvailabilityConflict,
   type SupermarketLocationItemPage,
   type SupermarketLocationItemView,
@@ -15,6 +18,7 @@ import {
   clampPageSize,
   decodeCursor,
   encodeCursor,
+  isUuid,
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { In, Repository, type EntityManager } from 'typeorm';
@@ -25,8 +29,12 @@ import {
   SupermarketLocationItem,
 } from '../entities';
 import { AuditedWrite, CatalogAuditService } from './catalog-audit.service';
-import { toSupermarketLocationItemView } from './catalog.mappers';
-import { LocationScopeService } from './location-scopes';
+import {
+  toSupermarketLocationItemView,
+  toSupermarketLocationView,
+  toSupermarketView,
+} from './catalog.mappers';
+import { idsOf, LocationScopeService } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
 
 interface LocationItemCursor {
@@ -399,6 +407,56 @@ export class SupermarketLocationItemService {
       }
     }
     return held;
+  }
+
+  /**
+   * One shop as a basket read at it needs it (plan 0163, section 2): the shop
+   * with its scope stack, its chain, and the stored availability of these
+   * products there.
+   *
+   * **Read, never inferred.** A product with no row for this shop is absent
+   * from the answer, and the chain wide `supermarket_items.available` is not
+   * consulted: whether a chain carries a product is not whether this shop does.
+   *
+   * An unknown shop is the ordinary not found for a location, which is what a
+   * basket created with one answers before core writes anything.
+   */
+  async shopAvailability(
+    req: ShopAvailabilityRequest
+  ): Promise<ShopAvailabilityView> {
+    const location = isUuid(req.supermarketLocationId)
+      ? await this.locations.findOne({
+          where: { id: req.supermarketLocationId },
+          relations: { supermarket: true },
+        })
+      : null;
+    if (!location) {
+      throw new NotFoundException('Supermarket location not found');
+    }
+    const itemIds = [...new Set((req.itemIds ?? []).filter(isUuid))].slice(
+      0,
+      ITEM_LOOKUP_LIMITS.maxIds
+    );
+    const [stacks, rows] = await Promise.all([
+      this.stacks.stacksFor(this.locations.manager, [location.id]),
+      itemIds.length === 0
+        ? Promise.resolve([] as SupermarketLocationItem[])
+        : this.rows.find({
+            select: { itemId: true, available: true },
+            where: { supermarketLocationId: location.id, itemId: In(itemIds) },
+          }),
+    ]);
+    return {
+      location: toSupermarketLocationView(
+        location,
+        idsOf(stacks.get(location.id))
+      ),
+      supermarket: toSupermarketView(location.supermarket),
+      availability: rows.map((row) => ({
+        itemId: row.itemId,
+        available: row.available,
+      })),
+    };
   }
 
   private async requireItemAndLocation(
