@@ -113,7 +113,15 @@ export class BasketLiveController {
     @AuthUser() user: CurrentUser,
     @Query() query?: BasketReadQueryDto
   ): Promise<BasketResult> {
-    const req: GetLiveBasketRequest = { userId: user.userId };
+    // The chain of the shop the device chose, so each row says whether it is
+    // usually bought there (plan 0165). Absent when the read has no shop.
+    const supermarketId = query?.locationId
+      ? await this.catalog.chainOf(query.locationId)
+      : undefined;
+    const req: GetLiveBasketRequest = {
+      userId: user.userId,
+      ...(supermarketId ? { supermarketId } : {}),
+    };
     const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.live, req);
     // The shop the device chose, which is the only way a `LIVE` basket's shop
     // reaches the server (plan 0163; velista 0091, section 7). The permanent
@@ -169,6 +177,10 @@ export class BasketController {
    * priced at that shop's scope stack and carries what catalog knows about its
    * availability there. A basket started at a shop is always read at that
    * shop, and a different `locationId` answers 409 `basket_shop_locked`.
+   *
+   * A read with a shop also says, on every row, how often its lines were
+   * bought at that shop's chain (plan 0165). The chain is learned before core
+   * is asked for the rows, because core counts and catalog knows chains.
    */
   @Get(':id')
   @ApiComposedResponse(BASKET_SCHEMA_IDS.result)
@@ -184,15 +196,22 @@ export class BasketController {
     @UuidParam('id') id: string,
     @Query() query?: BasketReadQueryDto
   ): Promise<BasketResult> {
+    const { searchScope, supermarketId } = await this.catalog.readShopOf(
+      id,
+      participant.participantId,
+      query?.locationId
+    );
     const req: GetBasketRequest = {
       basketId: id,
       participantId: participant.participantId,
+      ...(supermarketId ? { supermarketId } : {}),
     };
     const basket = await this.nats.send<BasketView>(BASKET_PATTERNS.get, req);
     return this.catalog.compose(
       basket,
       participant.participantId,
-      query?.locationId
+      query?.locationId,
+      searchScope
     );
   }
 

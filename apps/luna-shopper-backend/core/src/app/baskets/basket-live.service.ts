@@ -50,7 +50,8 @@ export class BasketLiveService {
   async live(req: GetLiveBasketRequest): Promise<BasketView> {
     const basket = await this.ensure(req.userId);
     const participant = await this.sharing.ensureOwnerParticipant(basket);
-    return this.read.view(basket, participant);
+    // The chain of the shop the device chose, when it chose one (plan 0165).
+    return this.read.view(basket, participant, req.supermarketId);
   }
 
   /**

@@ -3,12 +3,14 @@ import {
   BasketRowMark,
   BasketRowNote,
   BasketRowState,
+  BasketRowUsualState,
   BasketStatus,
 } from '../../lib/enums/basket.enums';
 import { BASKET_SHARING_LIMITS } from '../../lib/messages/basket-sharing.messages';
 import {
   BASKET_LIMITS,
   BASKET_PATTERNS,
+  BASKET_USUAL_WINDOW,
 } from '../../lib/messages/basket.messages';
 import { LINE_QUANTITY_MAX } from '../../lib/messages/list.messages';
 import {
@@ -50,6 +52,9 @@ export const BASKET_SCHEMA_IDS = {
   listRef: schemaId('basket/BasketListRef'),
   rowEntryView: schemaId('basket/BasketRowEntryView'),
   rowView: schemaId('basket/BasketRowView'),
+  // Where a row is usually bought, at the read's chain (plan 0165).
+  rowUsualState: schemaId('enums/BasketRowUsualState'),
+  rowUsualView: schemaId('basket/BasketRowUsualView'),
   progress: schemaId('basket/BasketProgress'),
   view: schemaId('basket/BasketView'),
   summaryView: schemaId('basket/BasketSummaryView'),
@@ -103,6 +108,21 @@ const rowState = enumOf(
 );
 const rowNote = enumOf(BASKET_SCHEMA_IDS.rowNote, Object.values(BasketRowNote));
 const rowMark = enumOf(BASKET_SCHEMA_IDS.rowMark, Object.values(BasketRowMark));
+const rowUsualState = enumOf(
+  BASKET_SCHEMA_IDS.rowUsualState,
+  Object.values(BasketRowUsualState)
+);
+
+/** Counts only (plan 0165, section 2): no person, no time, no other chain. */
+const rowUsualView = object(
+  BASKET_SCHEMA_IDS.rowUsualView,
+  {
+    state: ref(BASKET_SCHEMA_IDS.rowUsualState),
+    bought: integer({ minimum: 0, maximum: BASKET_USUAL_WINDOW }),
+    of: integer({ minimum: 0, maximum: BASKET_USUAL_WINDOW }),
+  },
+  ['state', 'bought', 'of']
+);
 
 const listRef = object(
   BASKET_SCHEMA_IDS.listRef,
@@ -149,6 +169,8 @@ const rowView = object(
     touchedBy: nullableString(),
     touchedAt: nullableString(),
     entries: array(ref(BASKET_SCHEMA_IDS.rowEntryView)),
+    // Required and nullable: null means the read had no shop (plan 0165).
+    usual: { anyOf: [ref(BASKET_SCHEMA_IDS.rowUsualView), { type: 'null' }] },
   },
   [
     'rowKey',
@@ -165,6 +187,7 @@ const rowView = object(
     'touchedBy',
     'touchedAt',
     'entries',
+    'usual',
   ]
 );
 
@@ -364,6 +387,8 @@ const getRequest = object(
   {
     basketId: nonEmptyString(),
     participantId: nonEmptyString(),
+    // The read's chain, sent when the read has a shop (plan 0165).
+    supermarketId: nonEmptyString(),
   },
   ['basketId', 'participantId']
 );
@@ -380,7 +405,7 @@ const searchScopeRequest = object(
 
 const liveRequest = object(
   BASKET_SCHEMA_IDS.liveRequest,
-  { userId: nonEmptyString() },
+  { userId: nonEmptyString(), supermarketId: nonEmptyString() },
   ['userId']
 );
 
@@ -689,6 +714,8 @@ export const basketSchemas: JsonSchema[] = [
   rowState,
   rowNote,
   rowMark,
+  rowUsualState,
+  rowUsualView,
   listRef,
   rowEntryView,
   rowView,

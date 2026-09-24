@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   BASKET_LIMITS,
+  BASKET_USUAL_WINDOW,
   BasketKind,
   isOpenBasket,
   PURCHASE_SESSION_GAP_MS,
@@ -35,6 +36,8 @@ import {
   type BasketSettlementFact,
   type BasketSkipFact,
 } from './basket-rows';
+import { usualLineIdsOf, withUsual } from './basket-usual';
+import { USUAL_WINDOWS_SQL, type UsualWindowRow } from './basket-usual.sql';
 import {
   BASKET_LIST_REFS_SQL,
   BASKET_SESSION_LOOKBACK_MS,
@@ -55,6 +58,7 @@ import {
   BasketMarksReader,
   NO_BASKET_MARKS,
   type BasketMarks,
+  type RemovedGroup,
 } from './changes/basket-marks.reader';
 import { removedRows } from './changes/basket-removed-rows';
 
@@ -78,9 +82,10 @@ import { removedRows } from './changes/basket-removed-rows';
  * lines, their product sets, the settlements in scope, the standing skips (plan
  * 0137) and the owner's walk history (plan 0141). The settlements read rides
  * `ix_settlements_basket_live` from plan 0134, the skips read rides
- * `ix_basket_line_skips_standing` and the history rides both. The participants
- * and the list names are two more, and the access reads run **before any
- * transaction** (plan 0130, section 13).
+ * `ix_basket_line_skips_standing` and the history rides both. A read at a shop
+ * adds one more, the windows of plan 0165, on `ix_settlements_line`. The
+ * participants and the list names are two more, and the access reads run
+ * **before any transaction** (plan 0130, section 13).
  */
 @Injectable()
 export class BasketReadService {
@@ -111,7 +116,7 @@ export class BasketReadService {
   /** The basket as one participant reads it. */
   async read(req: GetBasketRequest): Promise<BasketView> {
     const { basket, participant } = await this.resolve(req);
-    return this.view(basket, participant);
+    return this.view(basket, participant, req.supermarketId);
   }
 
   /**
@@ -164,7 +169,12 @@ export class BasketReadService {
    */
   async view(
     basket: Basket,
-    participant: BasketParticipant
+    participant: BasketParticipant,
+    /**
+     * The read's chain (plan 0165). With it every row carries `usual`; without
+     * it, which is every write's own answer, every row carries null.
+     */
+    supermarketId?: string
   ): Promise<BasketView> {
     const covered = await this.coverage.listsOf(basket);
     const coveredListIds = covered.map((row) => row.listId);
@@ -178,17 +188,18 @@ export class BasketReadService {
         )
       : BasketRedaction.none(participant);
 
-    const [{ rows, truncated, marks }, people, lists] = await Promise.all([
-      // The marks are read for **this** viewer, which is why they are asked for
-      // here and not by the callers that have no reader to measure (plan 0138,
-      // section 7).
-      this.rowsOf(basket, coveredListIds, redaction, participant.id),
-      this.sharing.listParticipants({
-        basketId: basket.id,
-        asParticipantId: participant.id,
-      }),
-      this.listRefs(redaction),
-    ]);
+    const [{ rows: drawn, truncated, marks }, people, lists] =
+      await Promise.all([
+        // The marks are read for **this** viewer, which is why they are asked for
+        // here and not by the callers that have no reader to measure (plan 0138,
+        // section 7).
+        this.rowsOf(basket, coveredListIds, redaction, participant.id),
+        this.sharing.listParticipants({
+          basketId: basket.id,
+          asParticipantId: participant.id,
+        }),
+        this.listRefs(redaction),
+      ]);
 
     const me = people.participants.find((row) => row.id === participant.id);
     if (!me) {
@@ -196,6 +207,10 @@ export class BasketReadService {
       // landed in between rather than a caller who was never here.
       throw new NotAParticipantException('Not a participant of this basket');
     }
+
+    const rows = supermarketId
+      ? await this.usualAt(drawn, marks.removed, supermarketId)
+      : drawn;
 
     return {
       id: basket.id,
@@ -368,6 +383,34 @@ export class BasketReadService {
       truncated,
       marks,
     };
+  }
+
+  /**
+   * The rows with where each is usually bought, at one chain (plan 0165).
+   *
+   * One query over every line of every row, after the cap, so a basket of a
+   * thousand rows costs one statement and not a thousand. A removed row (plan
+   * 0138) answers from the lines that went, which is why the removed groups
+   * come in beside the rows.
+   */
+  private async usualAt(
+    rows: BasketRowView[],
+    removed: readonly RemovedGroup[],
+    supermarketId: string
+  ): Promise<BasketRowView[]> {
+    const removedLineIds = new Map(
+      removed.map((group) => [group.rowKey, group.lineIds])
+    );
+    const lineIds = usualLineIdsOf(rows, removedLineIds);
+    const windows =
+      lineIds.length === 0
+        ? []
+        : await this.baskets.query<UsualWindowRow[]>(USUAL_WINDOWS_SQL, [
+            lineIds,
+            supermarketId,
+            BASKET_USUAL_WINDOW,
+          ]);
+    return withUsual(rows, windows, removedLineIds);
   }
 
   /**

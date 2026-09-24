@@ -1988,6 +1988,15 @@ export type BasketBasketRowResult = {
 };
 
 /**
+ * `basket.BasketRowUsualView` in the gateway's OpenAPI document.
+ */
+export type BasketBasketRowUsualView = {
+  state: EnumsBasketRowUsualState;
+  bought: number;
+  of: number;
+};
+
+/**
  * `basket.BasketRowView` in the gateway's OpenAPI document.
  */
 export type BasketBasketRowView = {
@@ -2005,6 +2014,7 @@ export type BasketBasketRowView = {
   touchedBy: string | null;
   touchedAt: string | null;
   entries: BasketBasketRowEntryView[];
+  usual: BasketBasketRowUsualView | null;
 };
 
 /**
@@ -2808,6 +2818,15 @@ export type EnumsBasketRowState =
   | 'NOT_AVAILABLE'
   | 'SKIPPED'
   | 'REMOVED';
+
+/**
+ * `enums.BasketRowUsualState` in the gateway's OpenAPI document.
+ */
+export type EnumsBasketRowUsualState =
+  | 'NEVER_BOUGHT'
+  | 'NO_SHOP_KNOWN'
+  | 'ELSEWHERE'
+  | 'HERE';
 
 /**
  * `enums.BasketStatus` in the gateway's OpenAPI document.
