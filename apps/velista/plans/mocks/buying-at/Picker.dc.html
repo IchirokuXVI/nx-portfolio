@@ -1,0 +1,294 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ PICKER, SIGNED IN ============ -->
+  <div style="width: 390px; display: flex; flex-direction: column; gap: 12px;">
+    <span style="min-height: 34px; font-size: 13px; line-height: 1.3; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE PICKER &middot; Near me in the title row, then your recent shops, then the search and the chains</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
+
+      <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; top: 44px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42); display: flex; flex-direction: column; overflow: hidden;">
+        <div style="flex: none; width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+        <div style="flex: none; display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          <div style="flex: 1; font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">Buying at</div>
+          <span style="flex: none; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(255,180,84,0.55); color: #ffb454; font-size: 14px; font-weight: 600;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="1.9" fill="#ffb454"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>Near me</span>
+        </div>
+        <div style="flex: none; display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;"><span>RECENT</span><span style="font-weight: 500; letter-spacing: 0;">where you bought, newest first</span></div>
+        <div style="flex: none; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 4px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Mercadona</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Calle Mayor 3, C&oacute;rdoba</span>
+            </span>
+            <span style="flex: none; padding-right: 9px; font-size: 12px; color: #6f7899;">Today</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 4px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Dia</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Calle Mayor 40, C&oacute;rdoba</span>
+            </span>
+            <span style="flex: none; padding-right: 9px; font-size: 12px; color: #6f7899;">Tuesday</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 4px 6px 13px;">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Lidl</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Avenida de Andaluc&iacute;a 21, M&aacute;laga</span>
+              <span style="display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 12px; font-weight: 600; color: #a78bfa;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>Outside your areas</span>
+            </span>
+            <span style="flex: none; padding-right: 9px; font-size: 12px; color: #6f7899;">2 Sep</span>
+          </div>
+        </div>
+        <div style="flex: none; height: 44px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; gap: 8px; padding: 0 12px; margin-bottom: 14px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+          <span style="flex: 1; font-size: 16px; color: #6f7899;">Shop, chain or street</span>
+        </div>
+        <div style="flex: none; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
+          <span style="display: flex; flex-direction: column; gap: 3px; min-height: 44px; padding: 9px 14px; border-radius: 14px; border: 1px solid #ffb454; box-shadow: inset 0 0 0 1px #ffb454; background: #0a0c14;"><span style="font-size: 14px; font-weight: 650;">Mercadona</span><span style="font-size: 12px; color: #98a0bb;">10 shops</span></span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-height: 44px; padding: 9px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.35); background: #0a0c14;"><span style="font-size: 14px; font-weight: 650; color: #c2c8db;">Lidl</span><span style="font-size: 12px; color: #98a0bb;">3 shops</span></span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-height: 44px; padding: 9px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.35); background: #0a0c14;"><span style="font-size: 14px; font-weight: 650; color: #c2c8db;">Dia</span><span style="font-size: 12px; color: #98a0bb;">4 shops</span></span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-height: 44px; padding: 9px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.35); background: #0a0c14;"><span style="font-size: 14px; font-weight: 650; color: #c2c8db;">Carrefour</span><span style="font-size: 12px; color: #98a0bb;">1 shop</span></span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-height: 44px; padding: 9px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.35); background: #0a0c14;"><span style="font-size: 14px; font-weight: 650; color: #c2c8db;">Other</span><span style="font-size: 12px; color: #98a0bb;">2 shops</span></span>
+        </div>
+        <div style="flex: none; font-size: 16px; font-weight: 650; margin: 0 0 10px;">Mercadona</div>
+        <div style="flex: none; display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;"><span>HOME</span><span style="font-weight: 500; letter-spacing: 0;">14001</span></div>
+        <div style="flex: none; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 13px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Calle Mayor 3</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Calle Mayor 3, C&oacute;rdoba</span>
+            </span>
+            
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 13px 6px 13px;">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Ronda de los Tejares</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Ronda de los Tejares 12, C&oacute;rdoba</span>
+            </span>
+            
+          </div>
+        </div>
+        <div style="flex: none; display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;"><span>PARENTS</span><span style="font-weight: 500; letter-spacing: 0;">14010</span></div>
+        <div style="flex: none; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 13px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Sierra de Segura</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Calle Sierra de Segura 2, C&oacute;rdoba</span>
+            </span>
+            
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 13px 6px 13px;">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Carlos III</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Av. de Carlos III 18, C&oacute;rdoba</span>
+            </span>
+            
+          </div>
+        </div>
+        <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 90px; background: linear-gradient(180deg, rgba(22,26,40,0), #161a28 75%);"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PICKER, NO RECENT ============ -->
+  <div style="width: 390px; display: flex; flex-direction: column; gap: 12px;">
+    <span style="min-height: 34px; font-size: 13px; line-height: 1.3; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">NO RECENT SECTION &middot; a guest, or nobody bought at a chosen shop in 60 days; Near me stays</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
+
+      <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; top: 44px; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42); display: flex; flex-direction: column; overflow: hidden;">
+        <div style="flex: none; width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+        <div style="flex: none; display: flex; align-items: center; gap: 8px; margin-bottom: 14px;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          <div style="flex: 1; font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">Buying at</div>
+          <span style="flex: none; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(255,180,84,0.55); color: #ffb454; font-size: 14px; font-weight: 600;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="1.9" fill="#ffb454"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>Near me</span>
+        </div>
+        <div style="flex: none; height: 44px; border-radius: 12px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; gap: 8px; padding: 0 12px; margin-bottom: 14px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+          <span style="flex: 1; font-size: 16px; color: #6f7899;">Shop, chain or street</span>
+        </div>
+        <div style="flex: none; display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;">
+          <span style="display: flex; flex-direction: column; gap: 3px; min-height: 44px; padding: 9px 14px; border-radius: 14px; border: 1px solid #ffb454; box-shadow: inset 0 0 0 1px #ffb454; background: #0a0c14;"><span style="font-size: 14px; font-weight: 650;">Mercadona</span><span style="font-size: 12px; color: #98a0bb;">10 shops</span></span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-height: 44px; padding: 9px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.35); background: #0a0c14;"><span style="font-size: 14px; font-weight: 650; color: #c2c8db;">Lidl</span><span style="font-size: 12px; color: #98a0bb;">3 shops</span></span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-height: 44px; padding: 9px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.35); background: #0a0c14;"><span style="font-size: 14px; font-weight: 650; color: #c2c8db;">Dia</span><span style="font-size: 12px; color: #98a0bb;">4 shops</span></span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-height: 44px; padding: 9px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.35); background: #0a0c14;"><span style="font-size: 14px; font-weight: 650; color: #c2c8db;">Carrefour</span><span style="font-size: 12px; color: #98a0bb;">1 shop</span></span>
+          <span style="display: flex; flex-direction: column; gap: 3px; min-height: 44px; padding: 9px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.35); background: #0a0c14;"><span style="font-size: 14px; font-weight: 650; color: #c2c8db;">Other</span><span style="font-size: 12px; color: #98a0bb;">2 shops</span></span>
+        </div>
+        <div style="flex: none; font-size: 16px; font-weight: 650; margin: 0 0 10px;">Mercadona</div>
+        <div style="flex: none; display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;"><span>HOME</span><span style="font-weight: 500; letter-spacing: 0;">14001</span></div>
+        <div style="flex: none; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 13px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Calle Mayor 3</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Calle Mayor 3, C&oacute;rdoba</span>
+            </span>
+            
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 13px 6px 13px;">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Ronda de los Tejares</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Ronda de los Tejares 12, C&oacute;rdoba</span>
+            </span>
+            
+          </div>
+        </div>
+        <div style="flex: none; display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;"><span>PARENTS</span><span style="font-weight: 500; letter-spacing: 0;">14010</span></div>
+        <div style="flex: none; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 13px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Sierra de Segura</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Calle Sierra de Segura 2, C&oacute;rdoba</span>
+            </span>
+            
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 13px 6px 13px;">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Carlos III</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Av. de Carlos III 18, C&oacute;rdoba</span>
+            </span>
+            
+          </div>
+        </div>
+        <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 90px; background: linear-gradient(180deg, rgba(22,26,40,0), #161a28 75%);"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ AFTER A PICK ============ -->
+  <div style="width: 390px; display: flex; flex-direction: column; gap: 12px;">
+    <span style="min-height: 34px; font-size: 13px; line-height: 1.3; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">AN AUTOMATIC PICK &middot; the picker closes, the shop is set, and the message stays until dismissed</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
+
+      <div style="position: absolute; inset: 0; background: #161a28; opacity: 0.4;"></div>
+      <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.74);"></div>
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-top-left-radius: 22px; border-top-right-radius: 22px; padding: 10px 20px 28px; box-shadow: 0 -18px 40px rgba(0,0,0,0.42); display: flex; flex-direction: column; overflow: hidden;">
+        <div style="flex: none; width: 38px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.18); margin: 0 auto 18px;"></div>
+
+        <div style="flex: none; display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px;">
+          <div style="font-size: 21px; font-weight: 650; letter-spacing: -0.01em;">Filter and order</div>
+          <span style="flex: none; font-size: 13px; font-weight: 600; color: #ffb454;">Reset</span>
+        </div>
+        <div style="flex: none; display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;"><span>ORDER</span></div>
+        <div style="flex: none; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 13px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #f7f8fc;">The way you shop</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Calculated from your last trips</span>
+            </span>
+            
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 44px; padding: 6px 13px 6px 13px;">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">A to Z</span>
+            </span>
+            
+          </div>
+        </div>
+        <div style="flex: none; display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;"><span>GROUP BY</span></div>
+        <div style="flex: none; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 44px; padding: 6px 13px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #f7f8fc;">Nothing</span>
+            </span>
+            
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 44px; padding: 6px 13px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Category</span>
+            </span>
+            
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 44px; padding: 6px 4px 6px 13px;">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">List</span>
+            </span>
+            <span style="flex: none; padding-right: 9px; font-size: 12px; color: #6f7899;">each list&rsquo;s own amounts</span>
+          </div>
+        </div>
+        <div style="flex: none; display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;"><span>BUYING AT</span></div>
+        <div role="status" style="flex: none; display: flex; align-items: flex-start; gap: 10px; padding: 10px 2px 10px 12px; margin-bottom: 8px; border-radius: 14px; background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.35);">
+          <span style="flex: none; margin-top: 12px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="1.9" fill="#60a5fa"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg></span>
+          <span style="flex: 1; padding-top: 9px; font-size: 13.5px; line-height: 1.45; color: #f7f8fc;">Buying at Mercadona, Calle Mayor 3 (120&nbsp;m). <span style="font-weight: 650; color: #ffb454; text-decoration: underline; text-underline-offset: 2px;">Change</span></span>
+          <span style="flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;" aria-label="Dismiss"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#98a0bb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></span>
+        </div>
+        <div style="flex: none; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 44px; padding: 6px 4px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid #4d5470;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #c2c8db;">Any of your shops</span>
+            </span>
+            <span style="flex: none; padding-right: 9px; font-size: 12px; color: #6f7899;">the cheapest</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 4px 6px 13px;">
+            <span style="flex: none; width: 18px; height: 18px; border-radius: 999px; border: 5px solid #ffb454; background: #0a0c14;"></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #f7f8fc;">Mercadona</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Calle Mayor 3</span>
+            </span>
+            <span style="flex: none; height: 44px; padding: 0 12px; display: flex; align-items: center; font-size: 13px; font-weight: 600; color: #ffb454;">Change</span>
+          </div>
+        </div>
+        <div style="flex: none; display: flex; align-items: baseline; gap: 8px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899; margin: 0 0 6px;"><span>LISTS</span></div>
+        <div style="flex: none; border: 1px solid rgba(255,255,255,0.10); border-radius: 14px; overflow: hidden; margin-bottom: 18px;">
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 4px 6px 13px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+            <span style="flex: none; width: 20px; height: 20px; border-radius: 6px; background: #ffb454; display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #f7f8fc;">Weekly shop</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Flat 3B</span>
+            </span>
+            <span style="flex: none; padding-right: 9px; font-size: 12px; color: #6f7899;">6</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 6px 4px 6px 13px;">
+            <span style="flex: none; width: 20px; height: 20px; border-radius: 6px; background: #ffb454; display: flex; align-items: center; justify-content: center;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"/></svg></span>
+            <span style="flex: 1; min-width: 0;">
+              <span style="display: block; font-size: 14.5px; font-weight: 600; color: #f7f8fc;">Groceries</span>
+              <span style="display: block; margin-top: 1px; font-size: 12px; color: #6f7899;">Parents&rsquo; house</span>
+            </span>
+            <span style="flex: none; padding-right: 9px; font-size: 12px; color: #6f7899;">6</span>
+          </div>
+        </div>
+        <button type="button" style="flex: none; width: 100%; height: 52px; margin-top: 0px; border: 0; border-radius: 14px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650;">Show 12 lines</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>
