@@ -948,16 +948,12 @@ export const AppShellRoutes: Route[] = [
           },
           {
             /**
-             * The second tab, which has no screen yet (velista `0097`, section 10).
-             *
-             * The tab ships with the bar, so the route has to exist from the same day:
-             * a bar with a tab that leads to this app's 404 is worse than no bar, and
-             * the honest thing for a screen that is coming is to say so. `0100` fills
-             * it, and the URL it fills is this one.
+             * The second tab: every product from every supermarket (velista `0100`),
+             * at the URL `0097` gave it.
              *
              * `authenticatedGuard` because every catalog read the app makes is refused
              * without an account, which is also why the bar is absent on the four
-             * screens of section 4.
+             * screens of `0097` section 4.
              */
             path: 'catalog',
             canActivate: [authenticatedGuard, setupGuard],
@@ -965,6 +961,19 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-catalog').then(
                 (m) => m.CatalogPage
               ),
+            children: [
+              sheet({
+                // One product and every shop's price for it (section 5). A child
+                // route under rule E1, so the list keeps its scroll underneath and
+                // back dismisses it. `products/:itemId`: a sheet is addressed by
+                // what it is about.
+                path: 'products/:itemId',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-catalog').then(
+                    (m) => m.ProductSheet
+                  ),
+              }),
+            ],
           },
           {
             /**

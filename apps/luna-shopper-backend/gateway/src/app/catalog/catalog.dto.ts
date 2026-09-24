@@ -1104,7 +1104,9 @@ export class SearchItemsQueryDto extends PriceScopedQueryDto {
   @Transform(asArray)
   @IsArray()
   @ArrayMaxSize(MAX_SELECTORS)
-  @IsUUID('4', { each: true })
+  // Any version, like the two selectors above: seeded chains carry version 5
+  // ids, and a version 4 check refused every chain but one (velista 0100).
+  @IsUUID(undefined, { each: true })
   soldBy?: string[];
 }
 

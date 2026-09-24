@@ -1207,7 +1207,7 @@ export function toProfileGenerationScope(
 }
 
 /** From `PostalCodeCoverageView`. */
-function toPostalCodeCoverage(raw: unknown): PostalCodeCoverage | null {
+export function toPostalCodeCoverage(raw: unknown): PostalCodeCoverage | null {
   if (!isRecord(raw)) {
     return null;
   }

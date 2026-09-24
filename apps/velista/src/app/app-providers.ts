@@ -23,8 +23,10 @@ import {
   AuthApi,
   BASKET_SERVICE,
   BasketApi,
+  CATALOG_BROWSE_SERVICE,
   CATALOG_SERVICE,
   CatalogApi,
+  CatalogBrowseApi,
   COMMENT_SERVICE,
   CommentApi,
   ConnectionRecovery,
@@ -247,6 +249,10 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // they fail apart, and this one fails softly by design — a search that does not
   // answer must never be able to stop a line being added.
   provideService(CATALOG_SERVICE, CatalogApi),
+
+  // The catalog tab (velista 0100): browsing rather than suggesting, so its own
+  // service, bound apart from the one above for the reason given there.
+  provideService(CATALOG_BROWSE_SERVICE, CatalogBrowseApi),
 
   // Generated shopping lists (plan 0045). The note worth making is
   // what is **not** on this service: it carries the owner's two calls, listing their
