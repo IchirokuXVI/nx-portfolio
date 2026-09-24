@@ -1,3 +1,5 @@
+> **PR:** [#485](https://github.com/IchirokuXVI/nx-portfolio/pull/485)
+
 # 0107: the product sheet over the list
 
 The "Details" link on a suggestion card in the composer's typeahead opens
