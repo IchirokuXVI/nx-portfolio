@@ -154,6 +154,16 @@ export class HarvestApi implements HarvestServiceI {
     });
   }
 
+  /** A POST to a verb, like import and reject beside it (backend plan 0152). */
+  linkPlace(
+    id: string,
+    input: Wire.LinkDiscoveredPlaceDto
+  ): Promise<Wire.HarvestDiscoveredPlaceView> {
+    return this._send('post', `${ROOT}/places/${segment(id)}/link`, {
+      body: input,
+    });
+  }
+
   /**
    * The one queue, over one flat collection (backend plan 0086, section 10).
    *

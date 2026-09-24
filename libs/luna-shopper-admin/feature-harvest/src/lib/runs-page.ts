@@ -37,6 +37,26 @@ const REVERTED_OPTIONS = ['any', 'reverted', 'standing'] as const;
 type RevertedFilter = (typeof REVERTED_OPTIONS)[number];
 
 /**
+ * The run modes the list can be narrowed to (admin plan 0034, section 4).
+ *
+ * A record keyed on the wire union, as the sources page keeps its adapters, so
+ * a mode the document adds is a compile error here rather than a filter that
+ * silently cannot ask for it.
+ */
+const MODE_ORDER: Record<Wire.EnumsHarvestRunMode, number> = {
+  STORE_DISCOVERY: 1,
+  CATALOG_DISCOVERY: 2,
+  FILE_IMPORT: 3,
+};
+
+const MODES: readonly Wire.EnumsHarvestRunMode[] = (
+  Object.keys(MODE_ORDER) as Wire.EnumsHarvestRunMode[]
+).sort((a, b) => MODE_ORDER[a] - MODE_ORDER[b]);
+
+/** The mode filter. `''` sends none. */
+type ModeFilter = Wire.EnumsHarvestRunMode | '';
+
+/**
  * How many pages of presets the screen reads for names and the filter.
  *
  * A preset is a run somebody saves by hand, so there are a few per chain. The
@@ -192,6 +212,22 @@ type RunPreset =
     }
 
     <section class="filters">
+      <!-- By mode (admin plan 0034, section 4). One way, for the reason the
+           reverted filter below gives. -->
+      <label>
+        <span>{{ 'harvest.runs.modeFilter.label' | rokuT }}</span>
+        <select
+          (ngModelChange)="onModeChange($event)"
+          [ngModel]="modeFilter()"
+          name="modeFilter"
+        >
+          <option value="">{{ 'harvest.runs.modeFilter.any' | rokuT }}</option>
+          @for (mode of modes; track mode) {
+            <option [value]="mode">{{ 'harvest.mode.' + mode | rokuT }}</option>
+          }
+        </select>
+      </label>
+
       <label>
         <span>{{ 'harvest.runs.filter.reverted' | rokuT }}</span>
         <!-- One way, with the handler setting the signal itself. A banana box
@@ -437,6 +473,8 @@ export class RunsPage {
   readonly reverted = signal<RevertedFilter>('any');
   /** The preset filter. `''` sends none. */
   readonly presetFilter = signal('');
+  readonly modes = MODES;
+  readonly modeFilter = signal<ModeFilter>('');
 
   readonly starting = signal(false);
   readonly loading = signal(true);
@@ -593,6 +631,11 @@ export class RunsPage {
     void this.load();
   }
 
+  onModeChange(mode: ModeFilter): void {
+    this.modeFilter.set(mode);
+    void this.load();
+  }
+
   /**
    * The preset a run came from, as its row says it.
    *
@@ -621,10 +664,12 @@ export class RunsPage {
     try {
       const filter = this.reverted();
       const presetId = this.presetFilter();
+      const mode = this.modeFilter();
       const page = await this._service.listRuns({
         limit: 20,
         ...(filter === 'any' ? {} : { reverted: filter === 'reverted' }),
         ...(presetId === '' ? {} : { presetId }),
+        ...(mode === '' ? {} : { mode }),
       });
       this.runs.set(page.items);
       this.shell.observeReachable();

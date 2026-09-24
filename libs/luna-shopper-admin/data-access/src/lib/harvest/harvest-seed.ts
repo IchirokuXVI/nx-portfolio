@@ -403,7 +403,101 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       firstSeenAt: '2026-09-01T08:03:00.000Z',
       lastSeenAt: '2026-09-01T08:03:00.000Z',
     },
+    {
+      // The shop the catalog already holds (backend plan 0152). The run that
+      // found it declared warehouse 4661, and an import answers 409
+      // `place_matches_location` with the seeded shop as a candidate, so the
+      // link path is reachable with nothing listening. Near
+      // `loc_cordoba_centro` in the catalog seed, and carrying Mercadona's
+      // brand key, so the duplicates panel finds that shop too.
+      id: 'place-mercadona-libertador',
+      runId: 'run-store-aborted',
+      provider: 'mercadona',
+      externalRef: 'mercadona/3014',
+      brandKey: 'Q1888874',
+      brandName: 'Mercadona',
+      name: 'Mercadona Libertador',
+      latitude: 37.8884,
+      longitude: -4.7792,
+      street: 'Avenida del Gran Capitán 12',
+      city: 'Córdoba',
+      postalCode: '14001',
+      postalCodeSource: 'SOURCE',
+      country: 'ES',
+      website: null,
+      openingHours: null,
+      tags: { 'mercadona:warehouse': '4661' },
+      scopeKey: '4661',
+      status: 'NEW',
+      supermarketLocationId: null,
+      firstSeenAt: '2026-09-01T08:04:00.000Z',
+      lastSeenAt: '2026-09-01T08:04:00.000Z',
+    },
+    {
+      // An OpenStreetMap place with no brand key, whose chain the catalog does
+      // not hold (backend plan 0153). OpenStreetMap prints no language, so an
+      // import names the chain with `newChain` or is refused.
+      id: 'place-osm-unbranded',
+      runId: 'run-store-aborted',
+      provider: 'osm',
+      externalRef: 'node/5550001',
+      brandKey: null,
+      brandName: 'Deza',
+      name: 'Supermercado Deza',
+      latitude: 37.8791,
+      longitude: -4.7646,
+      street: 'Calle Isla de Fuerteventura 48',
+      city: 'Córdoba',
+      postalCode: '14011',
+      postalCodeSource: 'DERIVED',
+      country: 'ES',
+      website: null,
+      openingHours: null,
+      tags: { shop: 'supermarket', brand: 'Deza' },
+      scopeKey: null,
+      status: 'NEW',
+      supermarketLocationId: null,
+      firstSeenAt: '2026-09-01T08:05:00.000Z',
+      lastSeenAt: '2026-09-01T08:05:00.000Z',
+    },
   ];
+
+/**
+ * One catalog shop a place may be, as the 409 `place_matches_location` lists
+ * it under `details.candidates` (backend plan 0152, section 2).
+ *
+ * Not a generated type: the candidates travel in the error envelope's
+ * `details`, which the document describes as an open object. The memory
+ * harvester throws exactly this shape so the screen's mapper reads it the way
+ * it reads the server's.
+ */
+export interface SeededPlaceCandidate {
+  readonly supermarketLocationId: string;
+  readonly label: Readonly<Record<string, string>> | null;
+  readonly address: string | null;
+  readonly postalCode: string | null;
+  readonly rung: 'EXTERNAL_REF' | 'NEARBY' | 'ADDRESS';
+}
+
+/**
+ * What an import of each seeded place would find in the catalog, by place id.
+ *
+ * A place absent here matches nothing and imports. The ids are shops of the
+ * catalog seed, so a link names a shop the locations screen can open.
+ */
+export const PLACE_CANDIDATE_SEED: Readonly<
+  Record<string, readonly SeededPlaceCandidate[]>
+> = {
+  'place-mercadona-libertador': [
+    {
+      supermarketLocationId: 'loc_cordoba_centro',
+      label: null,
+      address: 'Avenida del Gran Capitán 12',
+      postalCode: '14001',
+      rung: 'NEARBY',
+    },
+  ],
+};
 
 /**
  * The one queue, in every shape it draws (backend plan 0086, section 3; admin
@@ -732,7 +826,27 @@ export const SOURCE_LOCATION_SEED: readonly Wire.HarvestSourceLocationView[] = [
     lastSeenAt: NOW,
     firstRunId: 'run-store-aborted',
     lastRunId: 'run-catalog-running',
-    candidates: [],
+    // Two candidates, listed weakest first on purpose so the screen's own
+    // ordering is what a spec proves (backend plan 0154, section 1). Only the
+    // one carrying every printed token is strong.
+    candidates: [
+      {
+        supermarketLocationId: 'loc_cordoba_oeste',
+        label: null,
+        address: 'Calle Historiador Domínguez Ortiz 4',
+        postalCode: '14005',
+        score: 0.5,
+        strong: false,
+      },
+      {
+        supermarketLocationId: 'loc_cordoba_centro',
+        label: { en: 'Marrubial', es: 'Marrubial' },
+        address: 'Ronda del Marrubial 2',
+        postalCode: '14001',
+        score: 1,
+        strong: true,
+      },
+    ],
   },
   {
     id: 'shop-t2',

@@ -1,4 +1,7 @@
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import {
+  localizedTextValue,
+  type Wire,
+} from '@portfolio/luna-shopper-admin/models';
 import { formatInstant } from './format-instant';
 
 /** One row of `source_locations`, as the gateway sends it. */
@@ -32,6 +35,60 @@ export interface ShopRow {
   readonly canUnmap: boolean;
   readonly canIgnore: boolean;
   readonly canUnignore: boolean;
+  /**
+   * The shops of ours this one may be, best first (backend plan 0154). Empty
+   * unless the row can be mapped: a suggestion for a row already mapped would
+   * be an offer to map it twice.
+   */
+  readonly candidates: readonly ShopCandidate[];
+}
+
+/**
+ * One shop of ours a source shop may be, as the harvester ranked it on the
+ * printed name's tokens (backend plan 0154, section 1).
+ */
+export interface ShopCandidate {
+  readonly supermarketLocationId: string;
+  /** The label, or the address, or the id: never blank. */
+  readonly title: string;
+  /** The address, when the title is not already it. */
+  readonly address: string;
+  readonly postalCode: string;
+  /** The share of printed tokens found, from 0.5 to 1. */
+  readonly score: number;
+  /** Every printed token was found. */
+  readonly strong: boolean;
+}
+
+/**
+ * The candidates, best first: strong ones before the rest, then by score.
+ *
+ * Sorted here rather than trusted in the order they arrived, because "best
+ * first" is what the screen promises and the wire order is the server's
+ * business.
+ */
+export function shopCandidates(
+  shop: Shop,
+  locales: readonly string[]
+): readonly ShopCandidate[] {
+  return (shop.candidates ?? [])
+    .filter((candidate) => candidate.supermarketLocationId !== '')
+    .map((candidate): ShopCandidate => {
+      const address = candidate.address ?? '';
+      const title =
+        localizedTextValue(candidate.label, locales) ||
+        address ||
+        candidate.supermarketLocationId;
+      return {
+        supermarketLocationId: candidate.supermarketLocationId,
+        title,
+        address: title === address ? '' : address,
+        postalCode: candidate.postalCode ?? '',
+        score: candidate.score,
+        strong: candidate.strong,
+      };
+    })
+    .sort((a, b) => Number(b.strong) - Number(a.strong) || b.score - a.score);
 }
 
 /**
@@ -48,7 +105,8 @@ export interface ShopRow {
  */
 export function toShopRow(
   shop: Shop,
-  names: ReadonlyMap<string, string>
+  names: ReadonlyMap<string, string>,
+  locales: readonly string[] = []
 ): ShopRow {
   const id = shop.supermarketLocationId;
 
@@ -66,5 +124,6 @@ export function toShopRow(
     canUnmap: shop.status === 'ACTIVE',
     canIgnore: shop.status !== 'IGNORED',
     canUnignore: shop.status === 'IGNORED',
+    candidates: shop.status === 'UNMAPPED' ? shopCandidates(shop, locales) : [],
   };
 }

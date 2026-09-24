@@ -7,6 +7,7 @@ import {
   validateDraft,
   type ResourceDraft,
 } from './resource-draft';
+import { isEditable } from './resource-field';
 
 interface Product {
   id: string;
@@ -563,5 +564,33 @@ describe('a references field', () => {
 
     const empty = draftFor(shops, null, 'create');
     expect(toInput(shops, empty, 'create', empty)).toEqual({});
+  });
+});
+
+/**
+ * Admin plan 0034, section 2: `'edit'` is the mirror of `'create'`, fixed at
+ * creation and settable afterwards, which is a chain's default price scope.
+ */
+describe('isEditable', () => {
+  const field = (editable?: boolean | 'create' | 'edit') => ({
+    kind: 'text' as const,
+    name: 'x',
+    label: 'x',
+    editable,
+  });
+
+  it('answers each setting in each mode', () => {
+    expect(
+      [undefined, true, false, 'create', 'edit'].map((editable) => [
+        isEditable(field(editable as never), 'create'),
+        isEditable(field(editable as never), 'edit'),
+      ])
+    ).toEqual([
+      [true, true],
+      [true, true],
+      [false, false],
+      [true, false],
+      [false, true],
+    ]);
   });
 });

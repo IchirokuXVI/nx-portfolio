@@ -3,6 +3,7 @@ import type { ShellLink } from '@portfolio/luna-shopper-admin/ui';
 import { EntriesQueuePage } from './entries-queue-page';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { ImportUploadPage } from './import-upload-page';
+import { PlaceGroupsPage } from './place-groups-page';
 import { PlacesQueuePage } from './places-queue-page';
 import { PresetsPage } from './presets-page';
 import { RunPage } from './run-page';
@@ -55,6 +56,8 @@ export function harvestRoutes(): Route[] {
     // Saved run requests, started, edited and deleted (admin plan 0030).
     { path: 'presets', component: PresetsPage },
     { path: 'places', component: PlacesQueuePage },
+    // The same queue, read by chain rather than by place (admin plan 0034).
+    { path: 'places/groups', component: PlaceGroupsPage },
     { path: 'entries', component: EntriesQueuePage },
     // The two halves of a file (admin plan 0014, section 2): the document
     // goes in at the first and everything it named that nobody has decided
