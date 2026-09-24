@@ -18,6 +18,8 @@ import { EffectivePriceSweep } from './effective-price.sweep';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
 import { LocationScopeService } from './location-scopes';
+import { NearbyShopsController } from './nearby-shops.controller';
+import { NearbyShopsService } from './nearby-shops.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PricePolicyService } from './price-policy.service';
@@ -58,7 +60,8 @@ import { SupermarketService } from './supermarket.service';
       },
     ]),
   ],
-  controllers: [CatalogController],
+  // Plan 0164: the shops near a point, and the shops by id.
+  controllers: [CatalogController, NearbyShopsController],
   providers: [
     CatalogEventsPublisher,
     PlatformAdminService,
@@ -88,6 +91,7 @@ import { SupermarketService } from './supermarket.service';
     SupermarketLocationItemService,
     // The dashboard's catalog block (plan 0088), behind the same gate.
     CatalogDashboardService,
+    NearbyShopsService,
   ],
 })
 export class CatalogModule {}

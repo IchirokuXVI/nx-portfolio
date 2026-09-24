@@ -1,5 +1,6 @@
 import type { SettlementOutcome, TripKind } from '../enums/list.enums';
 import type { Paginated } from '../pagination';
+import type { BasketShopView } from './basket.messages';
 
 /**
  * What one person bought, with or without a basket (plan 0142).
@@ -49,7 +50,20 @@ export const PURCHASE_PATTERNS = {
   listSessions: 'purchase.listSessions',
   /** The rows of one entry, in the order they were bought (section 4). */
   listSessionRows: 'purchase.listSessionRows',
+  /**
+   * The shops the caller bought at in the last {@link RECENT_SHOP_DAYS} days,
+   * newest first (plan 0164, section 4). Ids and dates only: the gateway names
+   * the shops through catalog.
+   */
+  recentShops: 'purchase.recentShops',
 } as const;
+
+/**
+ * How far back a shop counts as recent (plan 0164, section 4). A shop is recent
+ * when the person marked something bought there within this many days, and
+ * that is the only rule: no ranking by frequency and no minimum count.
+ */
+export const RECENT_SHOP_DAYS = 60;
 
 /**
  * One entry of a person's history: a basket of theirs, or a session.
@@ -181,4 +195,40 @@ export interface ListPurchaseSessionRowsRequest {
   entryId: string;
   cursor?: string;
   limit?: number;
+}
+
+/** The caller's recent shops. The account comes from the token. */
+export interface ListRecentShopsRequest {
+  userId: string;
+}
+
+/** One shop the caller bought at recently, as core knows it: an id and a date. */
+export interface RecentShopIdView {
+  /** The `supermarket_locations` id, opaque to core. */
+  supermarketLocationId: string;
+  /** The latest `settledAt` of a standing `BOUGHT` settle at the shop. */
+  lastBoughtAt: string;
+}
+
+/** Core's answer, newest first. */
+export interface RecentShopIdsView {
+  shops: RecentShopIdView[];
+}
+
+/** One recent shop, named (plan 0164, section 4). */
+export interface RecentShopView {
+  /**
+   * The shop view of plan 0163. `inProfile` is against the caller's default
+   * pricing profile, and false for every shop when they have none.
+   */
+  shop: BasketShopView;
+  lastBoughtAt: string;
+}
+
+/**
+ * `GET /v1/account/recent-shops` (plan 0164, section 4): newest first, and a
+ * shop that no longer exists is left out. Per person, never per household.
+ */
+export interface RecentShopsView {
+  shops: RecentShopView[];
 }

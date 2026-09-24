@@ -7,6 +7,7 @@ import type {
   ShopAvailabilityView,
   SupermarketLocationView,
 } from '@portfolio/luna-shopper/contracts';
+import { isInProfile } from '@portfolio/luna-shopper/contracts';
 
 /**
  * A shop, as a basket read at it composes it (plan 0163).
@@ -17,25 +18,11 @@ import type {
  */
 
 /**
- * Whether a shop is in a pricing profile (plan 0163, section 3): its postal
- * code is one of the profile's postal codes.
- *
- * A fact for the client to warn about ("this shop is outside your areas"), and
- * nothing on the server changes with it. A shop with no postal code is in no
- * profile, because there is nothing to compare. The codes are compared as they
- * are stored, trimmed: a profile's codes are the national table's, and so are a
- * shop's.
+ * Whether a shop is in a pricing profile (plan 0163, section 3). The rule lives
+ * in the contracts library since plan 0164, because catalog names the shops
+ * near a point with it too, and it is re-exported here for the basket read.
  */
-export function isInProfile(
-  postalCode: string | null,
-  profilePostalCodes: readonly string[]
-): boolean {
-  const code = postalCode?.trim();
-  if (!code) {
-    return false;
-  }
-  return profilePostalCodes.some((candidate) => candidate.trim() === code);
-}
+export { isInProfile };
 
 /**
  * A shop named for a person, with whether it is in the profile the basket is

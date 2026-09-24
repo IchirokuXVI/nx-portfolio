@@ -190,3 +190,20 @@ export enum BrandBatchOutcome {
   /** The name was refused, and the reason says why. Nothing was written. */
   REFUSED = 'REFUSED',
 }
+
+/**
+ * Why nothing was picked (plan 0164, section 3).
+ *
+ * - `NONE_NEARBY`: no shop with coordinates is within 750 m.
+ * - `LOW_ACCURACY`: the device is not sure of the point to within 150 m.
+ * - `AMBIGUOUS`: no shop is clearly nearer than the rest, or the one that
+ *   would be picked is refused by the profile.
+ * - `OUTSIDE_PROFILE`: the shop that would be picked is not in the profile's
+ *   postal codes.
+ */
+export enum NearbyShopNoPick {
+  NONE_NEARBY = 'NONE_NEARBY',
+  LOW_ACCURACY = 'LOW_ACCURACY',
+  AMBIGUOUS = 'AMBIGUOUS',
+  OUTSIDE_PROFILE = 'OUTSIDE_PROFILE',
+}

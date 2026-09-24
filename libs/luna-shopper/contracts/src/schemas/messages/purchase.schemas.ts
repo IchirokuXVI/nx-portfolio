@@ -1,5 +1,6 @@
 import { PURCHASE_PATTERNS } from '../../lib/messages/purchase.messages';
 import {
+  array,
   boolean,
   integer,
   JsonSchema,
@@ -36,6 +37,12 @@ export const PURCHASE_SCHEMA_IDS = {
   rowPage: schemaId('purchase/PurchaseRowPage'),
   listSessionsRequest: schemaId('msg/purchase.listSessions/request'),
   listSessionRowsRequest: schemaId('msg/purchase.listSessionRows/request'),
+  // The caller's recent shops (plan 0164, section 4).
+  recentShopsRequest: schemaId('msg/purchase.recentShops/request'),
+  recentShopIdView: schemaId('purchase/RecentShopIdView'),
+  recentShopIdsView: schemaId('purchase/RecentShopIdsView'),
+  recentShopView: schemaId('purchase/RecentShopView'),
+  recentShopsView: schemaId('purchase/RecentShopsView'),
 } as const;
 
 // An amount of money and the currency it is in. Nullable wherever it appears,
@@ -174,6 +181,47 @@ const listSessionRowsRequest = object(
   ['userId', 'kind', 'entryId']
 );
 
+const recentShopsRequest = object(
+  PURCHASE_SCHEMA_IDS.recentShopsRequest,
+  { userId: nonEmptyString() },
+  ['userId']
+);
+
+const recentShopIdView = object(
+  PURCHASE_SCHEMA_IDS.recentShopIdView,
+  {
+    supermarketLocationId: nonEmptyString(),
+    lastBoughtAt: string({ format: 'date-time' }),
+  },
+  ['supermarketLocationId', 'lastBoughtAt']
+);
+
+const recentShopIdsView = object(
+  PURCHASE_SCHEMA_IDS.recentShopIdsView,
+  { shops: array(ref(PURCHASE_SCHEMA_IDS.recentShopIdView)) },
+  ['shops']
+);
+
+/**
+ * The gateway's answer, which names each shop with the shop view of plan
+ * 0163. Referenced by id rather than imported, because basket.schemas is not
+ * this file's to depend on.
+ */
+const recentShopView = object(
+  PURCHASE_SCHEMA_IDS.recentShopView,
+  {
+    shop: ref(schemaId('basket/BasketShopView')),
+    lastBoughtAt: string({ format: 'date-time' }),
+  },
+  ['shop', 'lastBoughtAt']
+);
+
+const recentShopsView = object(
+  PURCHASE_SCHEMA_IDS.recentShopsView,
+  { shops: array(ref(PURCHASE_SCHEMA_IDS.recentShopView)) },
+  ['shops']
+);
+
 export const purchaseSchemas: JsonSchema[] = [
   moneyView,
   entryView,
@@ -182,6 +230,11 @@ export const purchaseSchemas: JsonSchema[] = [
   rowPage,
   listSessionsRequest,
   listSessionRowsRequest,
+  recentShopsRequest,
+  recentShopIdView,
+  recentShopIdsView,
+  recentShopView,
+  recentShopsView,
 ];
 
 export const purchaseMessageContracts: Record<
@@ -195,5 +248,9 @@ export const purchaseMessageContracts: Record<
   [PURCHASE_PATTERNS.listSessionRows]: {
     request: PURCHASE_SCHEMA_IDS.listSessionRowsRequest,
     response: PURCHASE_SCHEMA_IDS.rowPage,
+  },
+  [PURCHASE_PATTERNS.recentShops]: {
+    request: PURCHASE_SCHEMA_IDS.recentShopsRequest,
+    response: PURCHASE_SCHEMA_IDS.recentShopIdsView,
   },
 };

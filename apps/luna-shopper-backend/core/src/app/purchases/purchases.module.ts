@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { PurchasesController } from './purchases.controller';
 import { PurchasesService } from './purchases.service';
+import { RecentShopsController } from './recent-shops.controller';
+import { RecentShopsService } from './recent-shops.service';
 
 /**
  * One person's history of purchases (plan 0142).
@@ -16,7 +18,8 @@ import { PurchasesService } from './purchases.service';
  * so there is no access service to reach for.
  */
 @Module({
-  controllers: [PurchasesController],
-  providers: [PurchasesService],
+  // Plan 0164: the shops the caller bought at recently, over the same union.
+  controllers: [PurchasesController, RecentShopsController],
+  providers: [PurchasesService, RecentShopsService],
 })
 export class PurchasesModule {}

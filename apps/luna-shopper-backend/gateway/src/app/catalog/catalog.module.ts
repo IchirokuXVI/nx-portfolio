@@ -1,4 +1,9 @@
-import { Module } from '@nestjs/common';
+import {
+  Module,
+  type MiddlewareConsumer,
+  type NestModule,
+} from '@nestjs/common';
+import { WithholdBodyMiddleware } from '@portfolio/luna-shopper/platform';
 import { MessagingModule } from '../messaging/messaging.module';
 import {
   AdminCatalogBrandSuggestionsController,
@@ -26,6 +31,7 @@ import {
   CatalogSupermarketItemsController,
   CatalogSupermarketsController,
 } from './catalog.controller';
+import { CatalogNearbyShopsController } from './nearby-shops.controller';
 import { ScopeResolutionService } from './scope-resolution.service';
 
 /**
@@ -49,6 +55,9 @@ import { ScopeResolutionService } from './scope-resolution.service';
     CatalogProductGroupsController,
     CatalogScopeController,
     CatalogShopsController,
+    // Plan 0164: the shops near a point. A POST, so it cannot be swallowed by
+    // the GET routes of the controller above.
+    CatalogNearbyShopsController,
     CatalogSuggestController,
     CatalogItemsController,
     CatalogSupermarketItemsController,
@@ -86,4 +95,15 @@ import { ScopeResolutionService } from './scope-resolution.service';
   // basket and the dropdown name a scope through one helper (plan 0161).
   exports: [ScopeResolutionService, CatalogSuggestService],
 })
-export class GatewayCatalogModule {}
+export class GatewayCatalogModule implements NestModule {
+  /**
+   * The body of `POST /v1/catalog/shops/nearby` is a point a device reported,
+   * and it never reaches a log line (plan 0164). A middleware, so the request
+   * is marked before any guard can fail it.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(WithholdBodyMiddleware)
+      .forRoutes(CatalogNearbyShopsController);
+  }
+}

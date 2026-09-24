@@ -172,6 +172,15 @@ export type BasketAllocationDto = {
 };
 
 /**
+ * `BasketNearbyShopsDto` in the gateway's OpenAPI document.
+ */
+export type BasketNearbyShopsDto = {
+  latitude: number;
+  longitude: number;
+  accuracyMetres: number;
+};
+
+/**
  * `BasketSourceDto` in the gateway's OpenAPI document.
  */
 export type BasketSourceDto = {
@@ -472,6 +481,16 @@ export type LookupItemsDto = {
  */
 export type MapSourceLocationDto = {
   supermarketLocationId: string;
+};
+
+/**
+ * `NearbyShopsDto` in the gateway's OpenAPI document.
+ */
+export type NearbyShopsDto = {
+  latitude: number;
+  longitude: number;
+  accuracyMetres: number;
+  profileId?: string;
 };
 
 /**
@@ -2403,6 +2422,39 @@ export type CatalogNearbyPostalCodesView = {
 };
 
 /**
+ * `catalog.NearbyShopPickView` in the gateway's OpenAPI document.
+ */
+export type CatalogNearbyShopPickView = {
+  locationId: string;
+  distanceMetres: number;
+};
+
+/**
+ * `catalog.NearbyShopView` in the gateway's OpenAPI document.
+ */
+export type CatalogNearbyShopView = {
+  id: string;
+  supermarketId: string;
+  supermarketName: CatalogLocalizedText;
+  label: CatalogLocalizedText | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+  inProfile: boolean;
+  distanceMetres: number;
+  excluded: boolean;
+};
+
+/**
+ * `catalog.NearbyShopsView` in the gateway's OpenAPI document.
+ */
+export type CatalogNearbyShopsView = {
+  candidates: CatalogNearbyShopView[];
+  pick: CatalogNearbyShopPickView | null;
+  noPick: EnumsNearbyShopNoPick | null;
+};
+
+/**
  * `catalog.PostalCodeCoverageView` in the gateway's OpenAPI document.
  */
 export type CatalogPostalCodeCoverageView = {
@@ -3007,6 +3059,15 @@ export type EnumsMergeRequestStatus =
   | 'APPROVED'
   | 'REJECTED'
   | 'CANCELLED';
+
+/**
+ * `enums.NearbyShopNoPick` in the gateway's OpenAPI document.
+ */
+export type EnumsNearbyShopNoPick =
+  | 'NONE_NEARBY'
+  | 'LOW_ACCURACY'
+  | 'AMBIGUOUS'
+  | 'OUTSIDE_PROFILE';
 
 /**
  * `enums.ParticipantKind` in the gateway's OpenAPI document.
@@ -4201,6 +4262,21 @@ export type PurchasePurchaseRowView = {
   listName: string | null;
   zoneId: string | null;
   content: string | null;
+};
+
+/**
+ * `purchase.RecentShopView` in the gateway's OpenAPI document.
+ */
+export type PurchaseRecentShopView = {
+  shop: BasketBasketShopView;
+  lastBoughtAt: string;
+};
+
+/**
+ * `purchase.RecentShopsView` in the gateway's OpenAPI document.
+ */
+export type PurchaseRecentShopsView = {
+  shops: PurchaseRecentShopView[];
 };
 
 /**

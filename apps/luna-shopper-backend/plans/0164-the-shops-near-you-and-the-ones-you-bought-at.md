@@ -1,3 +1,5 @@
+> **PR:** [#481](https://github.com/IchirokuXVI/nx-portfolio/pull/481)
+
 # 0164: the shops near you and the ones you bought at
 
 > Frontend half: velista `0103`, the shop picker that finds you. Needs `0163` first: the

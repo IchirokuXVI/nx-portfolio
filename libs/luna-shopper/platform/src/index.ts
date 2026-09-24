@@ -9,6 +9,7 @@ export * from './lib/platform.module';
 // Logging
 export * from './lib/logging/logger.options';
 export * from './lib/logging/redaction';
+export * from './lib/logging/withheld-body';
 
 // Request context / correlation
 export * from './lib/context/correlation.constants';
