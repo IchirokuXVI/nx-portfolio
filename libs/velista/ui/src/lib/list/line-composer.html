@@ -90,10 +90,10 @@
       already adds the typed words.
     -->
     <lib-suggestion-list
-      (chose)="choose($event)"
+      (chose)="choose($event.suggestion, $event.anchor)"
       (holdingChanged)="holdingChanged.emit($event)"
       [emptyFor]="emptyFor()"
-      [freeText]="canSubmit() && !locked()"
+      [freeText]="canSubmit()"
       [holdingsOf]="holdingsOf()"
       [loading]="suggesting()"
       [panelId]="panelId"
@@ -114,22 +114,13 @@
         The combobox that owns the panel's grid (rule 8 of velista 0101): a card
         holds several controls, which a listbox option may not.
       -->
-      <!--
-        Locked (velista 0110): aria-disabled and read only rather than disabled, so a
-        tap or the keyboard still reaches it and the container can say why.
-      -->
       <input
-        (click)="onFieldTouched()"
-        (focus)="onFieldTouched()"
         (input)="onInput($event)"
         [attr.aria-controls]="panelOpen() ? panelId : null"
-        [attr.aria-describedby]="lockReasonId()"
-        [attr.aria-disabled]="locked() ? 'true' : null"
         [attr.aria-expanded]="panelOpen()"
         [attr.aria-label]="'list.add.placeholder' | rokuT"
         [attr.maxlength]="maxLength"
         [placeholder]="'list.add.placeholder' | rokuT"
-        [readOnly]="locked()"
         [value]="content()"
         #field
         aria-autocomplete="list"
@@ -170,12 +161,18 @@
     With `voice` off there is no second job, so `button()` answers `add` whatever
     the field holds and this is the plus, disabled until something is typed
     (velista plan 0053, section 3). The basket is the one screen that does that.
+
+    Where a send is held for a question (velista 0116), the press does not take
+    focus: the picker opens over a keyboard that stays up, and the field keeps the
+    words until a list is picked.
   -->
     <button
       (click)="press()"
+      (mousedown)="holdFocusOnHold($event)"
       [attr.aria-label]="buttonLabel() | rokuT"
-      [disabled]="busy() || locked() || (button() === 'add' && !canSubmit())"
+      [disabled]="busy() || (button() === 'add' && !canSubmit())"
       [type]="button() === 'add' ? 'submit' : 'button'"
+      #sendButton
       class="send"
     >
       @if (button() === 'add') {

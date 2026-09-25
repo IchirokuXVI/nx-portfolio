@@ -74,6 +74,12 @@ export interface SuggestionHoldingChange {
   readonly to: number;
 }
 
+/** A suggestion chosen, and the button it was chosen with. */
+export interface SuggestionChoice {
+  readonly suggestion: CatalogSuggestion;
+  readonly anchor: HTMLElement;
+}
+
 const NO_HOLDINGS: readonly SuggestionHolding[] = [];
 
 /**
@@ -283,7 +289,11 @@ export class SuggestionList {
     return this.placement() === 'above' ? [...offered].reverse() : offered;
   });
 
-  readonly chose = output<CatalogSuggestion>();
+  /**
+   * A suggestion was chosen, with the button that chose it. The basket holds its
+   * list picker against that button (velista `0116`), and the list page ignores it.
+   */
+  readonly chose = output<SuggestionChoice>();
 
   /** A line holding the product was stepped up or down from a card. */
   readonly holdingChanged = output<SuggestionHoldingChange>();
@@ -438,6 +448,13 @@ export class SuggestionList {
    * the card itself. Not `pointerdown` and not `touchstart`: those carry the
    * panel's own scroll, and cancelling them would take it away.
    */
+  protected choose(suggestion: CatalogSuggestion, event: Event): void {
+    this.chose.emit({
+      suggestion,
+      anchor: event.currentTarget as HTMLElement,
+    });
+  }
+
   protected holdFocus(event: MouseEvent): void {
     event.preventDefault();
   }

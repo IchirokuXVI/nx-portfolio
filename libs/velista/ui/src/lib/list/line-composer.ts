@@ -42,6 +42,18 @@ let composerCount = 0;
 /** What the one button at the end of the row is for. */
 export type LineComposerButton = 'add' | 'record';
 
+/** One line sent from the composer. */
+export interface LineComposerSubmit {
+  readonly content: string;
+  readonly quantity: number;
+  readonly itemIds?: readonly string[];
+  /**
+   * The button that sent it, the plus or a card's add button. Only a composer with
+   * `holdOnSend` on names it, for the container to hold a picker against.
+   */
+  readonly anchor?: HTMLElement;
+}
+
 /**
  * The field at the bottom of the list, and the reason this screen has no floating
  * action button.
@@ -53,17 +65,16 @@ export type LineComposerButton = 'add' | 'record';
  * resets to one so the seventh item does not silently inherit the sixth one's count.
  * A FAB would put a dialog between every pair of those six.
  *
- * ## It is absent without `WRITE`, and locked only with a reason and a way out
+ * ## It is absent without `WRITE`, and never locked
  *
  * That decision belongs to the container, which knows whether the caller may write.
  * This component is simply not rendered in that case, because a disabled text field at
  * the bottom of a screen is an invitation that does not work and costs a tap to find
  * out (section 3.2).
  *
- * The one disabled state it has is {@link lockReasonId} (velista `0110`), and it is not
- * the case that sentence argues against: the container sets it only while one step is
- * missing that the person can take from where they stand, names that step in words the
- * field is described by, and answers a tap on the field with {@link lockedPressed}.
+ * The basket used to lock it until a list was chosen (velista `0110`). It asks which
+ * list at the moment of adding instead (velista `0116`), which is what
+ * {@link holdOnSend} is for, so the field always takes words.
  *
  * It is drawn from certainty since velista plan 0030: `myPermissions` arrives with the
  * list, so the composer is absent from the first frame for somebody who may not add,
@@ -161,34 +172,20 @@ export class LineComposer {
   readonly busy = input(false);
 
   /**
-   * The id of the element that says why the composer is closed, or null while it is
-   * open (velista `0110`).
+   * Whether a send waits for the container before the field clears (velista `0116`).
    *
-   * One input and no knowledge of why. The basket's composer sets it while no
-   * target list has been chosen, because every line added there names a list; the
-   * list page's never sets it, because a line added on a list is already on one. A
-   * composer that knew which of those it was would be a component that knows about
-   * baskets.
+   * Off everywhere but the basket. There, a send is a question first: the plus or a
+   * card's add button opens a picker of lists, held against the button that was
+   * pressed, and only a pick adds the line. So with this on, {@link submitted}
+   * carries that button as `anchor`, and the words, the quantity and the
+   * suggestions stay as they are. The container calls {@link sent} once the line
+   * has somewhere to go, and nothing at all if the picker is waved away, which
+   * leaves the words in the field for another try.
    *
-   * **The field and the button are both held**, and the suggestions with them.
-   * Plans `0091` and `0092` kept the field usable so that somebody could type first
-   * and choose the list second, and in practice the typed words then went nowhere:
-   * the typeahead ran, a suggestion was chosen, and nothing happened. So nothing can
-   * be typed until the step the container is waiting for has been taken.
-   *
-   * The field is `aria-disabled` and read only rather than `disabled`, so it stays
-   * focusable: a tap or a focus from the keyboard emits {@link lockedPressed}, which
-   * is how the container shows the reason and the way to take that step. The id is
-   * what the field names in `aria-describedby`, so a screen reader hears the reason
-   * with the field.
+   * One input and no knowledge of why: a composer that knew about lists would be a
+   * component that knows about baskets.
    */
-  readonly lockReasonId = input<string | null>(null);
-
-  /** Whether the composer is closed. See {@link lockReasonId}. */
-  readonly locked = computed(() => this.lockReasonId() !== null);
-
-  /** The closed field was tapped or focused. The container says why, and how to open it. */
-  readonly lockedPressed = output<void>();
+  readonly holdOnSend = input(false);
 
   /**
    * Whether to take focus on creation.
@@ -320,11 +317,7 @@ export class LineComposer {
    */
   readonly queryChanged = output<string>();
 
-  readonly submitted = output<{
-    content: string;
-    quantity: number;
-    itemIds?: readonly string[];
-  }>();
+  readonly submitted = output<LineComposerSubmit>();
 
   /**
    * Something somebody said, for the page to post to the list scoped assistant.
@@ -350,6 +343,8 @@ export class LineComposer {
   readonly canSubmit = computed(() => this.content().trim() !== '');
 
   private readonly _field = viewChild<ElementRef<HTMLInputElement>>('field');
+  private readonly _sendButton =
+    viewChild<ElementRef<HTMLButtonElement>>('sendButton');
 
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
@@ -477,11 +472,6 @@ export class LineComposer {
   }
 
   onInput(event: Event): void {
-    // The field is read only while locked, so this is the belt: nothing typed may
-    // reach the container, which would ask the catalog for it.
-    if (this.locked()) {
-      return;
-    }
     const typed = (event.target as HTMLInputElement).value;
     this.content.set(typed);
     // Typing is asking again. See `_dismissed`.
@@ -519,11 +509,11 @@ export class LineComposer {
    * the ranking exists to express: somebody typing "milk" wants milk, and the household
    * decides which brand later, on the line page, by trimming a set it already has.
    */
-  choose(suggestion: CatalogSuggestion): void {
-    // Held like the button while a submit is out, and while the composer is
-    // locked: choosing **is** the submit, so the two have to be held by the same
-    // conditions or one way in would work and the other would not.
-    if (this.busy() || this.locked()) {
+  choose(suggestion: CatalogSuggestion, anchor?: HTMLElement): void {
+    // Held like the button while a submit is out: choosing **is** the submit, so
+    // the two have to be held by the same conditions or one way in would work and
+    // the other would not.
+    if (this.busy()) {
       return;
     }
 
@@ -534,13 +524,16 @@ export class LineComposer {
     const itemIds =
       suggestion.kind === 'group' ? suggestion.itemIds : [suggestion.item.id];
 
-    this._send(content, itemIds);
+    this._send(content, itemIds, anchor);
   }
 
   /** The one button, pressed. */
   press(): void {
     if (this.button() === 'add') {
-      this.submit();
+      // The plus is the form's submit button, so the click also submits the form,
+      // and `onSubmit` sends. Sending here as well sent twice. An ordinary send
+      // hid that, because the field was already empty the second time, but a send
+      // held for a question (velista `0116`) keeps its words and would ask twice.
       return;
     }
 
@@ -691,21 +684,22 @@ export class LineComposer {
   }
 
   /**
-   * The locked field was tapped or focused (velista `0110`). An open field says
-   * nothing: this is only the container's cue to explain the lock.
+   * The line a held send was for has somewhere to go (velista `0116`): clear the
+   * field, reset the quantity, drop the suggestions and keep focus, exactly as an
+   * unheld send does at once. See {@link holdOnSend}.
    */
-  protected onFieldTouched(): void {
-    if (this.locked()) {
-      this.lockedPressed.emit();
-    }
+  sent(): void {
+    this._clear();
   }
 
   /**
-   * Put focus back on the field without anything else happening, for a container
-   * that moved it away and is handing it back (velista `0110`).
+   * With {@link holdOnSend} on, a press on the plus leaves focus in the field, so
+   * the keyboard stays up under the picker (rule T2 of velista `0101`).
    */
-  focusField(): void {
-    this._field()?.nativeElement.focus();
+  protected holdFocusOnHold(event: MouseEvent): void {
+    if (this.holdOnSend()) {
+      event.preventDefault();
+    }
   }
 
   /**
@@ -737,7 +731,7 @@ export class LineComposer {
   submit(): void {
     // Enter reaches this through the form's submit, which a disabled button does not
     // stop, so the hold has to be here as well as on the button. See `busy`.
-    if (this.busy() || this.locked() || !this.canSubmit()) {
+    if (this.busy() || !this.canSubmit()) {
       return;
     }
 
@@ -745,7 +739,14 @@ export class LineComposer {
     // warning and no nagging. "Something for dinner" is a legitimate line, and the
     // moment the composer starts insisting on a match, adding things becomes a fight
     // (section 6).
-    this._send(this.content().trim(), undefined);
+    //
+    // The plus is the anchor whether it was pressed or Enter was, because the plus
+    // is where the send lives on screen.
+    this._send(
+      this.content().trim(),
+      undefined,
+      this._sendButton()?.nativeElement
+    );
   }
 
   /**
@@ -759,14 +760,29 @@ export class LineComposer {
    * Focus is taken back explicitly. Clearing an input does not move focus, but the
    * button or the suggestion that was tapped has it, and on a phone that is enough to
    * drop the keyboard between two adds.
+   *
+   * With {@link holdOnSend} on, only the emit happens here, and the rest waits for
+   * {@link sent}.
    */
-  private _send(content: string, itemIds: readonly string[] | undefined): void {
+  private _send(
+    content: string,
+    itemIds: readonly string[] | undefined,
+    anchor: HTMLElement | undefined
+  ): void {
+    const hold = this.holdOnSend();
     this.submitted.emit({
       content,
       quantity: this.quantity(),
       ...(itemIds === undefined || itemIds.length === 0 ? {} : { itemIds }),
+      ...(hold && anchor !== undefined ? { anchor } : {}),
     });
 
+    if (!hold) {
+      this._clear();
+    }
+  }
+
+  private _clear(): void {
     this.content.set('');
     this.quantity.set(1);
     // The dropdown goes with the words that produced it. Leaving it up over an empty

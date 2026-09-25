@@ -109,32 +109,10 @@ export function basketSessionKey(basketId: string): string {
 }
 
 /**
- * Which list this basket's composer adds to (velista `0092`, section 7.2).
- *
- * A function rather than a member of {@link StorageKeys}, following
- * {@link basketSessionKey}, because there is one per basket rather than one per
- * app — and here that is the substance rather than the filing. A list belongs to
- * a **basket's coverage**, so a target remembered from one basket is meaningless
- * on another, and one record for the device would silently choose the wrong
- * household's list.
- *
- * That is exactly where it differs from `StorageKeys.basketView`, which is one
- * record for the device on purpose: the order and the grouping are the shopper's
- * own preference and travel with them from one trip to the next.
- *
- * It holds a list id and nothing else, it never expires, and the chip above the
- * field shows its value before every add. Nothing is acted on without being read
- * first, so there is no stale value to guard against with a lifetime.
- */
-export function basketTargetKey(basketId: string): string {
-  return `basket-target:${APP_KEY}:${basketId}`;
-}
-
-/**
  * That this device has already read the notice saying when a visit ends
  * (velista `0094`, section 5).
  *
- * One per basket, following {@link basketTargetKey}, because a visit is per
+ * One per basket, following {@link basketSessionKey}, because a visit is per
  * basket: somebody shopping two shared lists in a week has two of them, and
  * dismissing one says nothing about the other.
  *

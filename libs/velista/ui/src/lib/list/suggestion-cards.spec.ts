@@ -134,7 +134,9 @@ async function render(
 
   const chose: CatalogSuggestion[] = [];
   const changed: SuggestionHoldingChange[] = [];
-  fixture.componentInstance.chose.subscribe((one) => chose.push(one));
+  fixture.componentInstance.chose.subscribe((one) =>
+    chose.push(one.suggestion)
+  );
   fixture.componentInstance.holdingChanged.subscribe((one) =>
     changed.push(one)
   );

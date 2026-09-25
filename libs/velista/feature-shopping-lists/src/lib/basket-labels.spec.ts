@@ -6,6 +6,7 @@ import type {
   BasketRowEntry,
 } from '@portfolio/velista/models';
 import {
+  listPickerRows,
   originsCaption,
   participantInitials,
   participantName,
@@ -615,5 +616,49 @@ describe('skipCaption', () => {
     );
 
     expect(said).toContain('2026-09-01');
+  });
+});
+
+/**
+ * The basket list picker's rows (velista `0116`): a join of the lists the reader
+ * may write with the rows this page already holds.
+ */
+describe('listPickerRows', () => {
+  const ref = (listId: string, zoneId: string): BasketListRef => ({
+    listId,
+    name: `name ${listId}`,
+    zoneId,
+    zoneName: `zone ${zoneId}`,
+  });
+
+  it('keeps each household together, in the order the server first names it', () => {
+    const rows = listPickerRows(
+      [ref('a', 'z1'), ref('b', 'z2'), ref('c', 'z1')],
+      []
+    );
+
+    expect(rows.map((one) => one.listId)).toEqual(['a', 'c', 'b']);
+    expect(rows[0]).toEqual({
+      listId: 'a',
+      name: 'name a',
+      zoneName: 'zone z1',
+      pending: 0,
+    });
+  });
+
+  it('counts each list’s lines still to buy, and nothing bought or missing', () => {
+    const rows = listPickerRows(
+      [ref('a', 'z1'), ref('b', 'z1')],
+      [
+        row({ entries: [entry('a'), entry('b', { state: 'PARTLY' })] }),
+        row({ entries: [entry('a', { state: 'SKIPPED' })] }),
+        row({ entries: [entry('a', { state: 'DONE' })] }),
+        row({ entries: [entry('b', { state: 'NOT_AVAILABLE' })] }),
+        row({ entries: [entry('b', { state: 'REMOVED' })] }),
+        row({ entries: [entry(null)] }),
+      ]
+    );
+
+    expect(rows.map((one) => one.pending)).toEqual([2, 1]);
   });
 });

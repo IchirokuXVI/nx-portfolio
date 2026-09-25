@@ -231,7 +231,10 @@ describe('LineComposer, one slot and the empty field decides', () => {
         ?.dispatchEvent(new Event('submit'));
       fixture.debugElement
         .query(By.directive(SuggestionList))
-        .componentInstance.chose.emit(OAT);
+        .componentInstance.chose.emit({
+          suggestion: OAT,
+          anchor: document.createElement('button'),
+        });
       fixture.detectChanges();
 
       expect(added).toEqual([]);
@@ -259,10 +262,11 @@ describe('LineComposer, one slot and the empty field decides', () => {
   });
 
   /**
-   * Velista `0110`. The basket's composer while no list is chosen: the field and the
-   * button are held, and the field stays focusable so a tap can ask why.
+   * Velista `0116`. The basket's composer asks which list before it adds, so a send
+   * names the button it came from and leaves the words until the page says the line
+   * has somewhere to go.
    */
-  describe('while locked', () => {
+  describe('holding a send for a question', () => {
     const OAT: CatalogSuggestion = {
       kind: 'item',
       item: {
@@ -290,75 +294,92 @@ describe('LineComposer, one slot and the empty field decides', () => {
       return found;
     }
 
-    async function locked() {
+    async function held() {
       const rendered = await render(fakeCapture(), { voice: false });
-      rendered.fixture.componentRef.setInput('lockReasonId', 'why-locked');
+      rendered.fixture.componentRef.setInput('holdOnSend', true);
       rendered.fixture.detectChanges();
       return rendered;
     }
 
-    it('holds the field and the button, and says why through the field', async () => {
-      const { fixture } = await locked();
-
-      expect(field(fixture).readOnly).toBe(true);
-      expect(field(fixture).getAttribute('aria-disabled')).toBe('true');
-      expect(field(fixture).getAttribute('aria-describedby')).toBe(
-        'why-locked'
-      );
-      // Focusable, so the keyboard can reach it and ask: `disabled` would not be.
-      expect(field(fixture).disabled).toBe(false);
-      expect(button(fixture).disabled).toBe(true);
-    });
-
-    it('lets nothing typed through, and sends nothing on Enter or on a suggestion', async () => {
-      const { fixture } = await locked();
-      const queries: string[] = [];
-      const added: unknown[] = [];
-      fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
-      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
-      fixture.componentRef.setInput('suggestions', [OAT]);
-
+    it('is never locked: the field takes words and the plus sends them', async () => {
+      const { fixture } = await held();
       type(fixture, 'oat');
-      host(fixture)
-        .querySelector('form.composer')
-        ?.dispatchEvent(new Event('submit'));
-      fixture.componentInstance.choose(OAT);
 
-      expect(queries).toEqual([]);
-      expect(added).toEqual([]);
-    });
-
-    it('asks for the reason when the field is tapped or focused', async () => {
-      const { fixture } = await locked();
-      let pressed = 0;
-      fixture.componentInstance.lockedPressed.subscribe(() => (pressed += 1));
-
-      field(fixture).dispatchEvent(new Event('focus'));
-      field(fixture).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-      expect(pressed).toBe(2);
-    });
-
-    it('works as before once unlocked, and asks for nothing', async () => {
-      const { fixture } = await locked();
-      let pressed = 0;
-      const added: unknown[] = [];
-      fixture.componentInstance.lockedPressed.subscribe(() => (pressed += 1));
-      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
-
-      fixture.componentRef.setInput('lockReasonId', null);
-      fixture.detectChanges();
-      field(fixture).dispatchEvent(new Event('focus'));
-      type(fixture, 'oat');
-      host(fixture)
-        .querySelector('form.composer')
-        ?.dispatchEvent(new Event('submit'));
-
-      expect(pressed).toBe(0);
       expect(field(fixture).readOnly).toBe(false);
       expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
-      expect(field(fixture).hasAttribute('aria-describedby')).toBe(false);
+      expect(button(fixture).disabled).toBe(false);
+    });
+
+    it('names the plus as the anchor and keeps the words and the quantity', async () => {
+      const { fixture } = await held();
+      const added: { anchor?: HTMLElement }[] = [];
+      const queries: string[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
+      type(fixture, 'oat');
+      fixture.componentInstance.quantity.set(3);
+
+      button(fixture).click();
+      fixture.detectChanges();
+
+      expect(added).toEqual([
+        { content: 'oat', quantity: 3, anchor: button(fixture) },
+      ]);
+      expect(field(fixture).value).toBe('oat');
+      expect(fixture.componentInstance.quantity()).toBe(3);
+      expect(queries).toEqual(['oat']);
+    });
+
+    it('names the card button a suggestion was chosen with', async () => {
+      const { fixture } = await held();
+      const added: { anchor?: HTMLElement; itemIds?: readonly string[] }[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      const card = document.createElement('button');
+
+      fixture.componentInstance.choose(OAT, card);
+
+      expect(added[0]?.anchor).toBe(card);
+      expect(added[0]?.itemIds).toEqual(['item-oat']);
+    });
+
+    it('clears, resets and keeps focus once the page says the line was placed', async () => {
+      const { fixture } = await held();
+      const queries: string[] = [];
+      fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
+      type(fixture, 'oat');
+      fixture.componentInstance.quantity.set(2);
+      button(fixture).click();
+
+      fixture.componentInstance.sent();
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('');
+      expect(fixture.componentInstance.quantity()).toBe(1);
+      expect(queries).toEqual(['oat', '']);
+      expect(document.activeElement).toBe(field(fixture));
+    });
+
+    it('keeps focus in the field when the plus is pressed', async () => {
+      const { fixture } = await held();
+      type(fixture, 'oat');
+      const press = new MouseEvent('mousedown', { cancelable: true });
+
+      button(fixture).dispatchEvent(press);
+
+      expect(press.defaultPrevented).toBe(true);
+    });
+
+    it('names no anchor and clears at once without the hold', async () => {
+      const { fixture } = await render(fakeCapture(), { voice: false });
+      const added: unknown[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      type(fixture, 'oat');
+
+      button(fixture).click();
+      fixture.detectChanges();
+
       expect(added).toEqual([{ content: 'oat', quantity: 1 }]);
+      expect(field(fixture).value).toBe('');
     });
   });
 
@@ -763,15 +784,6 @@ describe('LineComposer, the field and its cards', () => {
 
       expect(host(fixture).querySelector('.none')).toBeNull();
       expect(host(fixture).querySelectorAll('.sug')).toHaveLength(1);
-    });
-
-    it('does not offer to add the words while the composer is locked', async () => {
-      const { fixture } = await render(fakeCapture(), { voice: false });
-      fixture.componentRef.setInput('lockReasonId', 'why');
-      type(fixture, 'zzzz');
-      answered(fixture, 'zzzz');
-
-      expect(host(fixture).querySelector('.none-p')).toBeNull();
     });
   });
 

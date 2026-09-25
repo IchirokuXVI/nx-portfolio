@@ -1163,7 +1163,6 @@
     "live": {
       "title": "Everything to buy",
       "titleOf": "{{name}}: everything to buy",
-      "hint": "Every list you can add to, in one place.",
       "left": "{{pending}} to buy",
       "leftAndGot": "{{pending}} to buy, {{done}} got this trip",
       "allGot": "Nothing left, {{done}} got this trip",
@@ -1561,10 +1560,8 @@
       "refused": "Only somebody who approves lines on that list can change it."
     },
     "add": {
-      "to": "To: {{list}}",
-      "choose": "Choose a list",
       "sheetTitle": "Which list is this for?",
-      "needsList": "Choose a list first. The new product goes into the list you pick."
+      "listCaption": "{{zone}} · {{count}} to buy"
     },
     "added": {
       "announced": "{{content}} added"

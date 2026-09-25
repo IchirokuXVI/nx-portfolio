@@ -290,7 +290,7 @@
           -->
           <div class="pick-cell" role="gridcell">
             <button
-              (click)="chose.emit(card.suggestion)"
+              (click)="choose(card.suggestion, $event)"
               [attr.aria-label]="card.pickLabel"
               class="pick"
               type="button"
@@ -345,7 +345,7 @@
           list of options with no way to say which one it is on.
         -->
         <button
-          (click)="chose.emit(suggestion)"
+          (click)="choose(suggestion, $event)"
           [class.group]="suggestion.kind === 'group'"
           aria-selected="false"
           class="suggestion"

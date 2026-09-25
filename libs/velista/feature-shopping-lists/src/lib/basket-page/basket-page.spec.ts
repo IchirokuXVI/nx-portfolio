@@ -18,7 +18,6 @@ import {
   BasketChangeStore,
   BasketListStore,
   BasketStore,
-  BasketTargetStore,
   BasketViewStore,
   fakeGroupMembers,
   GatewayError,
@@ -44,13 +43,12 @@ import { SUGGEST_DEBOUNCE_MS } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
-  SheetNavigation,
 } from '@portfolio/velista/platform';
+import { LineComposer } from '@portfolio/velista/ui';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject, of } from 'rxjs';
 import { BasketRow as BasketRowComponent } from '../basket-row/basket-row';
-import { TargetListSheet } from '../target-list-sheet/target-list-sheet';
 import { BasketPage } from './basket-page';
 
 /**
@@ -659,12 +657,7 @@ async function render(options: Options = {}): Promise<{
       // needs nothing this harness does not already stand in for, since everything
       // it reads comes off `BasketStore` and the locale store above.
       BasketViewStore,
-      // The real one, beside `BasketViewStore`: the route provides both, it
-      // reads the faked `BasketStore` above and a `BrowserFacade`
-      // `provideVelistaTesting` already supplies, and its whole job is to answer
-      // where the composer's next line goes (velista `0092`, section 7.2).
-      BasketTargetStore,
-      // The fourth store the route provides (velista `0093`). The page never
+      // The third store the route provides (velista `0093`). The page never
       // draws an entry from it and still lets it go on the way out, so the
       // instance has to exist; the banner's count comes off the basket read.
       BasketChangeStore,
@@ -2608,10 +2601,10 @@ describe('the basket that is always there', () => {
     expect(query(fixture, '.share')).not.toBeNull();
   });
 
-  it('says what it is, once, under the heading', async () => {
+  it('draws no sentence under the heading (velista 0116)', async () => {
     const { fixture } = await render({ kind: 'LIVE', lines: someLines });
 
-    expect(text(fixture)).toContain('basket.live.hint');
+    expect(query(fixture, '.hint')).toBeNull();
   });
 
   it('says what is left rather than counting a trip', async () => {
@@ -2829,9 +2822,6 @@ describe('the composer and the list it adds to', () => {
   const dock = (fixture: ComponentFixture<BasketPage>) =>
     (fixture.nativeElement as HTMLElement).querySelector('.composer-dock');
 
-  const chip = (fixture: ComponentFixture<BasketPage>) =>
-    (fixture.nativeElement as HTMLElement).querySelector('.target');
-
   describe('who gets one', () => {
     it('draws it for the owner with a list to write', async () => {
       const { fixture } = await render({ served: [served[0]] });
@@ -2882,116 +2872,121 @@ describe('the composer and the list it adds to', () => {
     });
   });
 
-  describe('the target', () => {
-    it('is text when the basket covers one list this reader writes', async () => {
-      // Nothing to pick between, so nobody is asked a question with one answer.
-      const { fixture } = await render({ served: [served[0]] });
-
-      expect(chip(fixture)?.tagName.toLowerCase()).toBe('p');
-      expect(chip(fixture)?.textContent).toContain('basket.add.to');
-    });
-
-    it('is a button when there is more than one', async () => {
-      const { fixture } = await render({ served });
-
-      expect(chip(fixture)?.tagName.toLowerCase()).toBe('button');
-      expect(chip(fixture)?.textContent).toContain('basket.add.choose');
-    });
-  });
-
   /**
-   * Velista `0110`, which reverses `0091` and `0092`: with no list chosen the field
-   * is locked rather than usable, because the words typed into it went nowhere.
+   * Velista `0116`, which reverses `0110` and `0113`: no chip, no remembered list and
+   * no lock. The field always takes words, and the plus or a card's add button asks
+   * which list, every time. The pick is the add.
    */
-  describe('with no list chosen', () => {
-    const popover = () => document.querySelector<HTMLElement>('.pop');
+  describe('the list picker', () => {
+    const options = () => [
+      ...document.querySelectorAll<HTMLButtonElement>('.pop .option'),
+    ];
+    const composer = (fixture: ComponentFixture<BasketPage>) =>
+      fixture.debugElement.query(By.directive(LineComposer))
+        .componentInstance as LineComposer;
+    const plus = (fixture: ComponentFixture<BasketPage>) =>
+      query(fixture, 'lib-line-composer .send') as HTMLButtonElement;
 
     afterEach(() => {
-      // The popover lives in the top layer, next to the dock, and a fixture that
+      // The picker lives in the top layer, next to its anchor, and a fixture that
       // is torn down with it open would leave it for the next test to find.
       TestBed.resetTestingModule();
     });
 
-    it('locks the field and the button, and says why', async () => {
+    it('draws no chip and no lock: the field takes words with no list chosen', async () => {
       const { fixture } = await render({ served });
-      const input = field(fixture);
 
-      expect(input.readOnly).toBe(true);
-      expect(input.getAttribute('aria-disabled')).toBe('true');
-      const reason = document.getElementById(
-        input.getAttribute('aria-describedby') ?? ''
-      );
-      expect(reason?.textContent).toContain('basket.add.needsList');
-      expect(
-        query(fixture, 'lib-line-composer .send') as HTMLButtonElement
-      ).toHaveProperty('disabled', true);
-      // The chip stays a working button, marked as the next step.
-      expect(chip(fixture)).toHaveProperty('disabled', false);
-      expect(chip(fixture)?.classList).toContain('is-next');
+      expect(query(fixture, '.target')).toBeNull();
+      expect(field(fixture).readOnly).toBe(false);
+      expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
+      expect(field(fixture).hasAttribute('aria-describedby')).toBe(false);
     });
 
-    it('asks the catalog nothing', async () => {
+    it('asks the catalog with no list chosen', async () => {
       const { fixture } = await render({ served });
       const suggest = jest.spyOn(TestBed.inject(BasketStore), 'suggest');
 
-      // Past the field's own hold, which is the composer's to test: this is the
-      // page's guard, reached as the composer's query would reach it.
-      const page = fixture.componentInstance as unknown as {
-        onComposerQuery(query: string): void;
-      };
-      page.onComposerQuery('milk');
-      fixture.detectChanges();
+      typeInto(fixture, 'milk');
       await new Promise((done) => setTimeout(done, SUGGEST_DEBOUNCE_MS + 50));
 
-      expect(suggest).not.toHaveBeenCalled();
+      expect(suggest).toHaveBeenCalledWith('milk');
     });
 
-    it('opens the popover when the field is tapped', async () => {
-      const { fixture } = await render({ served });
-      expect(popover()).toBeNull();
-
-      field(fixture).dispatchEvent(new Event('focus'));
-      fixture.detectChanges();
-
-      expect(popover()?.textContent).toContain('basket.add.needsList');
-    });
-
-    it('holds the sentence and no button (velista 0113)', async () => {
-      // The chip that chooses a list sits right under the popover, so a button
-      // in it that did the same thing was a second copy of the chip.
-      const { fixture } = await render({ served });
-      field(fixture).dispatchEvent(new Event('focus'));
-      fixture.detectChanges();
-
-      expect(popover()?.textContent?.trim()).toBe('basket.add.needsList');
-      expect(popover()?.querySelector('button, a, [tabindex]')).toBeNull();
-      expect(popover()?.getAttribute('aria-labelledby')).toBe(
-        'basket-add-needs-list-text'
-      );
-    });
-
-    it('closes the popover when the chip opens the sheet', async () => {
-      // A press on the chip is not a press outside the popover, because the
-      // overlay counts the dock as its own, so without this it stays drawn above
-      // the sheet.
+    it('opens on the plus with every list this reader can add to, in order', async () => {
       const { fixture, store } = await render({ served });
-      field(fixture).dispatchEvent(new Event('focus'));
-      fixture.detectChanges();
-      expect(popover()).not.toBeNull();
+      typeInto(fixture, 'Batteries');
 
-      (chip(fixture) as HTMLButtonElement).click();
+      plus(fixture).click();
       fixture.detectChanges();
 
-      expect(store.navigate).toHaveBeenCalledWith(
-        ['sheet', 'add', 'list'],
-        expect.anything()
-      );
-      expect(popover()).toBeNull();
+      expect(
+        options().map((one) => one.querySelector('.name')?.textContent)
+      ).toEqual(['Weekly shop', 'Groceries']);
+      // Asking adds nothing, and the words wait in the field for the answer.
+      expect(store.addLine).not.toHaveBeenCalled();
+      expect(field(fixture).value).toBe('Batteries');
     });
 
-    it('closes the popover on Escape', async () => {
-      const { fixture } = await render({ served });
-      field(fixture).dispatchEvent(new Event('focus'));
+    it('opens for a single list too', async () => {
+      const { fixture } = await render({ served: [served[0]] });
+      typeInto(fixture, 'Batteries');
+
+      plus(fixture).click();
+      fixture.detectChanges();
+
+      expect(options()).toHaveLength(1);
+    });
+
+    it('adds to the picked list, then clears the field and keeps focus in it', async () => {
+      const { fixture, store } = await render({ served });
+      typeInto(fixture, 'Batteries');
+      composer(fixture).quantity.set(2);
+      plus(fixture).click();
+      fixture.detectChanges();
+
+      options()[1]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(store.addLine).toHaveBeenCalledWith({
+        targetListId: 'l-parents',
+        content: 'Batteries',
+        quantity: 2,
+      });
+      expect(field(fixture).value).toBe('');
+      expect(composer(fixture).quantity()).toBe(1);
+      expect(document.activeElement).toBe(field(fixture));
+      expect(options()).toHaveLength(0);
+    });
+
+    it('sends a card’s product set as itemIds', async () => {
+      const { fixture, store } = await render({ served });
+      const card = document.createElement('button');
+      document.body.append(card);
+      composer(fixture).submitted.emit({
+        content: 'Milk',
+        quantity: 1,
+        itemIds: ['i-1', 'i-2'],
+        anchor: card,
+      });
+      fixture.detectChanges();
+
+      options()[0]?.click();
+      await fixture.whenStable();
+
+      expect(store.addLine).toHaveBeenCalledWith({
+        targetListId: 'l-weekly',
+        content: 'Milk',
+        quantity: 1,
+        itemIds: ['i-1', 'i-2'],
+      });
+      card.remove();
+    });
+
+    it('closes on Escape, hands focus back to the plus and keeps the words', async () => {
+      const { fixture, store } = await render({ served });
+      typeInto(fixture, 'Batteries');
+      plus(fixture).click();
       fixture.detectChanges();
 
       document.body.dispatchEvent(
@@ -2999,218 +2994,53 @@ describe('the composer and the list it adds to', () => {
       );
       fixture.detectChanges();
 
-      expect(popover()).toBeNull();
-    });
-
-    it('unlocks the composer, and closes the popover, once a list is chosen', async () => {
-      const { fixture } = await render({ served });
-      field(fixture).dispatchEvent(new Event('focus'));
-      fixture.detectChanges();
-
-      TestBed.inject(BasketTargetStore).choose(served[1]);
-      fixture.detectChanges();
-
-      expect(popover()).toBeNull();
-      expect(field(fixture).readOnly).toBe(false);
-      expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
-      expect(chip(fixture)?.classList).not.toContain('is-next');
-      expect(chip(fixture)?.textContent).toContain('basket.add.to');
-    });
-
-    /**
-     * Velista `0113`: once a list is chosen the next thing is to type, so focus
-     * goes to the field as the sheet's route goes. The router outlet is not
-     * driven here, so its `deactivate` is stood in for by the handler it calls.
-     */
-    describe('focus once a list is chosen', () => {
-      const onSheetGone = (
-        fixture: ComponentFixture<BasketPage>,
-        sheet: unknown
-      ) =>
-        (
-          fixture.componentInstance as unknown as {
-            onSheetDeactivated(sheet: unknown): void;
-          }
-        ).onSheetDeactivated(sheet);
-
-      /** A target sheet as the outlet hands it over, after a choice or none. */
-      const sheet = (chose: boolean): TargetListSheet => {
-        const made = TestBed.runInInjectionContext(() => new TargetListSheet());
-        jest
-          .spyOn(TestBed.inject(SheetNavigation), 'dismiss')
-          .mockResolvedValue(undefined as never);
-        if (chose) {
-          (
-            made as unknown as { choose(list: (typeof served)[number]): void }
-          ).choose(served[1]);
-        }
-        return made;
-      };
-
-      it('lands on the field after a choice, when the chip opened the sheet', async () => {
-        const { fixture } = await render({ served });
-        (chip(fixture) as HTMLButtonElement).focus();
-        (chip(fixture) as HTMLButtonElement).click();
-        fixture.detectChanges();
-
-        const chosen = sheet(true);
-        fixture.detectChanges();
-        onSheetGone(fixture, chosen);
-        fixture.detectChanges();
-
-        expect(document.activeElement).toBe(field(fixture));
-        expect(field(fixture).readOnly).toBe(false);
-        expect(popover()).toBeNull();
-      });
-
-      it('lands on the field after a choice, when a tap on the locked field led there', async () => {
-        const { fixture } = await render({ served });
-        field(fixture).focus();
-        field(fixture).dispatchEvent(new Event('focus'));
-        fixture.detectChanges();
-        expect(popover()).not.toBeNull();
-        (chip(fixture) as HTMLButtonElement).click();
-        fixture.detectChanges();
-
-        const chosen = sheet(true);
-        fixture.detectChanges();
-        onSheetGone(fixture, chosen);
-        fixture.detectChanges();
-
-        expect(document.activeElement).toBe(field(fixture));
-        // The focus it moves is not read as a tap on a locked field.
-        expect(popover()).toBeNull();
-      });
-
-      it('moves nothing when the sheet was dismissed without a choice', async () => {
-        const { fixture } = await render({ served });
-        const button = chip(fixture) as HTMLButtonElement;
-        button.focus();
-
-        onSheetGone(fixture, sheet(false));
-        fixture.detectChanges();
-
-        expect(document.activeElement).toBe(button);
-      });
-
-      it('moves nothing for a sheet that is not the target sheet', async () => {
-        const { fixture } = await render({ served });
-        const button = chip(fixture) as HTMLButtonElement;
-        button.focus();
-
-        onSheetGone(fixture, { chose: true });
-        fixture.detectChanges();
-
-        expect(document.activeElement).toBe(button);
-      });
-
-      it('moves nothing for the target a single list sets on arrival', async () => {
-        // `restore` chooses the only list itself, on every read, and that is not
-        // somebody choosing: the page opens with focus where it was.
-        const { fixture } = await render({ served: [served[0]] });
-
-        expect(field(fixture).readOnly).toBe(false);
-        expect(document.activeElement).not.toBe(field(fixture));
-      });
-    });
-
-    it('changes nothing on a basket with one list, which chooses itself', async () => {
-      const { fixture } = await render({ served: [served[0]] });
-      const suggest = jest.spyOn(TestBed.inject(BasketStore), 'suggest');
-
-      expect(field(fixture).readOnly).toBe(false);
-      expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
-
-      field(fixture).dispatchEvent(new Event('focus'));
-      typeInto(fixture, 'milk');
-      await new Promise((done) => setTimeout(done, SUGGEST_DEBOUNCE_MS + 50));
-
-      expect(popover()).toBeNull();
-      expect(suggest).toHaveBeenCalledWith('milk');
-    });
-  });
-
-  describe('adding a line', () => {
-    it('names the list, and sends the words and the amount', async () => {
-      const { fixture, store } = await render({ served: [served[0]] });
-
-      const page = fixture.componentInstance as unknown as {
-        add(entry: { content: string; quantity: number }): Promise<void>;
-      };
-      await page.add({ content: 'Batteries', quantity: 2 });
-
-      expect(store.addLine).toHaveBeenCalledWith({
-        targetListId: 'l-weekly',
-        content: 'Batteries',
-        quantity: 2,
-      });
-    });
-
-    it('sends a suggestion’s product set as itemIds', async () => {
-      const { fixture, store } = await render({ served: [served[0]] });
-
-      const page = fixture.componentInstance as unknown as {
-        add(entry: {
-          content: string;
-          quantity: number;
-          itemIds?: readonly string[];
-        }): Promise<void>;
-      };
-      await page.add({
-        content: 'Milk',
-        quantity: 1,
-        itemIds: ['i-1', 'i-2'],
-      });
-
-      expect(store.addLine).toHaveBeenCalledWith(
-        expect.objectContaining({ itemIds: ['i-1', 'i-2'] })
-      );
-    });
-
-    it('sends nothing without a target', async () => {
-      // The submit is disabled without one, so this is the belt: an add with no
-      // list is a line with nowhere to be.
-      const { fixture, store } = await render({ served });
-
-      const page = fixture.componentInstance as unknown as {
-        add(entry: { content: string; quantity: number }): Promise<void>;
-      };
-      await page.add({ content: 'Batteries', quantity: 1 });
-
+      expect(options()).toHaveLength(0);
+      expect(document.activeElement).toBe(plus(fixture));
+      expect(field(fixture).value).toBe('Batteries');
       expect(store.addLine).not.toHaveBeenCalled();
     });
 
-    it('says what arrived, once, in the screen’s own region', async () => {
-      const { fixture } = await render({ served: [served[0]] });
-
-      const page = fixture.componentInstance as unknown as {
-        add(entry: { content: string; quantity: number }): Promise<void>;
-      };
-      await page.add({ content: 'Batteries', quantity: 1 });
+    it('closes when the words change, so a pick never adds the old ones', async () => {
+      const { fixture } = await render({ served });
+      typeInto(fixture, 'Batteries');
+      plus(fixture).click();
       fixture.detectChanges();
 
-      expect(
-        (fixture.nativeElement as HTMLElement).querySelector('.said')
-          ?.textContent
-      ).toContain('basket.added.announced');
+      typeInto(fixture, 'Batteries AA');
+
+      expect(options()).toHaveLength(0);
     });
 
-    it('says what went wrong, and keeps the words', async () => {
-      const { fixture, store } = await render({ served: [served[0]] });
-      store.addLine.mockResolvedValueOnce(null);
+    it('says what arrived, once, in the screen’s own region', async () => {
+      const { fixture } = await render({ served });
+      typeInto(fixture, 'Batteries');
+      plus(fixture).click();
+      fixture.detectChanges();
 
-      const page = fixture.componentInstance as unknown as {
-        add(entry: { content: string; quantity: number }): Promise<void>;
-      };
-      await page.add({ content: 'Batteries', quantity: 1 });
+      options()[0]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(query(fixture, '.said')?.textContent).toContain(
+        'basket.added.announced'
+      );
+    });
+
+    it('says what went wrong, and puts the words back', async () => {
+      const { fixture, store } = await render({ served });
+      store.addLine.mockResolvedValueOnce(null);
+      typeInto(fixture, 'Batteries');
+      plus(fixture).click();
+      fixture.detectChanges();
+
+      options()[0]?.click();
+      await fixture.whenStable();
       fixture.detectChanges();
 
       // Losing six characters is nothing; losing the item somebody just
       // remembered in an aisle is the failure this screen cannot afford.
-      expect(
-        (fixture.nativeElement as HTMLElement).querySelector('.said')
-          ?.textContent
-      ).toContain('basket.error');
+      expect(query(fixture, '.said')?.textContent).toContain('basket.error');
+      expect(field(fixture).value).toBe('Batteries');
     });
   });
 
