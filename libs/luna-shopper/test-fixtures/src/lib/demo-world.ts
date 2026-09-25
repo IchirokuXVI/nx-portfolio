@@ -491,6 +491,12 @@ const core: CoreSeed = {
       status: MergeRequestStatus.PENDING,
     }),
   ],
+  // Not the guest: the setup never asks one (velista `0098`, section 3).
+  appStates: [ALICE_ID, BOB_ID, CAROL_ID, DANA_ID].map((userId) => ({
+    userId,
+    setupCompletedAt: new Date('2026-01-01T10:00:00.000Z'),
+    tourSeenAt: new Date('2026-01-01T10:00:00.000Z'),
+  })),
 };
 
 // --- Catalog half ------------------------------------------------------------
