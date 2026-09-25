@@ -145,8 +145,11 @@ lunaShopperBackend:
   referenceSeed:
     enabled: false
 
-  # No backups in staging. It is disposable by design, and a restore drill is
-  # rehearsed here by restoring a PRODUCTION dump into it (plan 0005, section 6),
-  # which needs no CronJob of its own.
+  # No nightly backups in staging: it is disposable by design. The CronJobs render
+  # suspended, because a release task (`k8s/release-tasks`) dumps every database
+  # it touches before it runs, and it starts that dump from them. That needs
+  # luna-shopper-backend-backup-secret here too, pointing at a bucket of its own:
+  # never production's, whose `latest` would then pick up a staging dump.
   backups:
-    enabled: false
+    enabled: true
+    suspend: true

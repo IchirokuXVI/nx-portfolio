@@ -605,25 +605,25 @@ apply_secret "$APP_SECRET" \
   --from-literal=SMTP_PASS="$SMTP_PASS" \
   --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY"
 
-# The backup credentials (plan 0005). Only production renders the CronJobs, but
-# creating an empty placeholder in staging would be worse than nothing: --check
-# would pass against a Secret whose values cannot write to any bucket. So this is
-# provisioned only where it is used, and only from values the operator supplies.
-if [ "$ENVIRONMENT" = "production" ]; then
-  S3_ENDPOINT="$(existing "$BACKUP_SECRET" S3_ENDPOINT)"
-  if [ -z "$S3_ENDPOINT" ]; then
-    echo
-    echo "  No $BACKUP_SECRET yet. Backups (plan 0005) need one holding"
-    echo "  S3_ENDPOINT, S3_BUCKET, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
-    echo "  Use a bucket scoped, ideally write only key: a backup credential that"
-    echo "  can delete its own bucket turns a compromised cluster into a"
-    echo "  compromised backup. Create it with:"
-    echo
-    echo "    kubectl -n $NAMESPACE create secret generic $BACKUP_SECRET \\"
-    echo "      --from-literal=S3_ENDPOINT=... --from-literal=S3_BUCKET=... \\"
-    echo "      --from-literal=AWS_ACCESS_KEY_ID=... \\"
-    echo "      --from-literal=AWS_SECRET_ACCESS_KEY=..."
-  fi
+# The backup credentials (plan 0005). Both environments render the CronJobs:
+# production runs them nightly, and staging keeps them suspended for the release
+# tasks' dumps (k8s/release-tasks). An empty placeholder would be worse than
+# nothing, since --check would pass against a Secret whose values cannot write to
+# any bucket, so this comes only from values the operator supplies. Staging and
+# production each need a bucket of their own.
+S3_ENDPOINT="$(existing "$BACKUP_SECRET" S3_ENDPOINT)"
+if [ -z "$S3_ENDPOINT" ]; then
+  echo
+  echo "  No $BACKUP_SECRET yet. Backups (plan 0005) need one holding"
+  echo "  S3_ENDPOINT, S3_BUCKET, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
+  echo "  Use a bucket scoped, ideally write only key: a backup credential that"
+  echo "  can delete its own bucket turns a compromised cluster into a"
+  echo "  compromised backup. Create it with:"
+  echo
+  echo "    kubectl -n $NAMESPACE create secret generic $BACKUP_SECRET \\"
+  echo "      --from-literal=S3_ENDPOINT=... --from-literal=S3_BUCKET=... \\"
+  echo "      --from-literal=AWS_ACCESS_KEY_ID=... \\"
+  echo "      --from-literal=AWS_SECRET_ACCESS_KEY=..."
 fi
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,13 @@
 # Resetting the catalog and harvester databases
 
 This procedure empties the catalog and harvester databases of one cluster. The
-auth and core databases, which hold the users' data, stay as they are. Run it
-on the VPS as `deploy`, in a checkout of the chart.
+auth and core databases, which hold the users' data, stay as they are.
+
+**It runs by itself** as release task
+`k8s/release-tasks/tasks/0001-reset-catalog-and-harvester`, once in staging and
+once in production, at the first deploy that carries it. The steps below are
+what that task does, and they are the way to run it by hand, on the VPS as
+`deploy`.
 
 ## What changes
 
@@ -82,3 +87,18 @@ on the VPS as `deploy`, in a checkout of the chart.
 6. In the back office, create the `supermarket_sources` rows again. Every chain
    starts off. Core announces a postal code only on a profile change, so the
    postal code discovery queue does not refill for existing users.
+
+## How it was tested
+
+On 2026-09-25, the task ran against Luna slot 4, which held a copy of the
+volumes of slot 3. Slot 3 was only read. The steps were the same as on a
+deploy: dumps in the format of the backup CronJob, then `pre.sh`, then the
+migrations with the seed off, then the cleanup.
+
+| Step         | Result                                                                                                   |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| Before       | catalog 2,290 products, 13 shops, 2,409 prices. Core 21 lists, 71 lines, 16 line products, 11 purchases. |
+| After        | catalog empty but migrated. Core 21 lists, 71 lines, 0 line products, 11 purchases with no catalog ids.  |
+| Gateway      | `/health/ready` answered 200 before and after.                                                           |
+| Second run   | `pre.sh` left both databases alone, and the cleanup changed 0 rows.                                      |
+| Dump restore | The restored catalog, harvester and core counts were equal to the counts before.                          |
