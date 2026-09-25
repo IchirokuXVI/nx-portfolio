@@ -4,11 +4,14 @@ import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   fakeBasketListStore,
+  fakeLiveBasketStore,
   fakeSharedListStore,
   GatewayError,
   provideFakeBasketListStore,
+  provideFakeLiveBasketStore,
   provideFakeSharedListStore,
   type FakeBasketListStore,
+  type FakeLiveBasketStore,
   type FakeSharedListStore,
 } from '@portfolio/velista/data-access';
 import {
@@ -54,7 +57,8 @@ async function render(
   store: FakeBasketListStore = fakeBasketListStore(),
   shared: FakeSharedListStore = fakeSharedListStore(),
   /** The URL the page is opened at, which is where the tab is read from. */
-  url = '/'
+  url = '/',
+  live: FakeLiveBasketStore = fakeLiveBasketStore()
 ): Promise<ComponentFixture<ShoppingListsPage>> {
   TestBed.resetTestingModule();
 
@@ -66,6 +70,7 @@ async function render(
       provideFakeBrowserFacade(),
       provideFakeBasketListStore(store),
       provideFakeSharedListStore(shared),
+      provideFakeLiveBasketStore(live),
     ],
   }).compileComponents();
 
@@ -696,5 +701,114 @@ describe('ShoppingListsPage: the basket that is always there', () => {
     // about a person rather than about the basket.
     expect(text(fixture)).toContain('history.shared.byOn');
     expect(text(fixture)).not.toContain('21 August');
+  });
+});
+
+/**
+ * The live basket leads My lists (velista `0111`): always first, above the generated
+ * baskets and outside their date order and paging, and drawn when there is no
+ * generated basket at all.
+ */
+describe('ShoppingListsPage: the live basket first', () => {
+  const live = (pending: number) =>
+    fakeLiveBasketStore({
+      id: 'basket-live',
+      progress: { done: 0, unavailable: 0, total: pending },
+      pending,
+    });
+
+  /** Every row the tab draws, in document order, by what kind of row it is. */
+  const order = (fixture: ComponentFixture<ShoppingListsPage>) =>
+    Array.from(all(fixture, 'lib-live-basket-row, lib-shopping-list-row')).map(
+      (element) => element.tagName.toLowerCase()
+    );
+
+  it('comes before every generated basket', async () => {
+    const fixture = await render(
+      fakeBasketListStore([basket({ id: 'gl1' }), basket({ id: 'gl2' })]),
+      undefined,
+      '/',
+      live(5)
+    );
+
+    expect(order(fixture)).toEqual([
+      'lib-live-basket-row',
+      'lib-shopping-list-row',
+      'lib-shopping-list-row',
+    ]);
+    const row = query(fixture, 'lib-live-basket-row');
+    expect(row?.textContent).toContain('basket.live.title');
+    expect(row?.textContent).toContain('basket.live.left');
+  });
+
+  it('is there with no generated basket, above the empty message', async () => {
+    const fixture = await render(
+      fakeBasketListStore(),
+      undefined,
+      '/',
+      live(2)
+    );
+
+    expect(order(fixture)).toEqual(['lib-live-basket-row']);
+    const content = query(fixture, '.content') as HTMLElement;
+    expect(content.textContent?.indexOf('basket.live.title')).toBeLessThan(
+      content.textContent?.indexOf('history.empty.title') ?? -1
+    );
+  });
+
+  it('is there while the listing is on its way', async () => {
+    const fixture = await render(
+      fakeBasketListStore([], { state: 'loading' }),
+      undefined,
+      '/',
+      live(2)
+    );
+
+    expect(query(fixture, 'lib-live-basket-row')).not.toBeNull();
+  });
+
+  it('reads the live summary with the tab', async () => {
+    const summary = live(1);
+    await render(fakeBasketListStore(), undefined, '/', summary);
+
+    expect(summary.calls).toContain('load');
+  });
+
+  it('opens the live basket', async () => {
+    const fixture = await render(
+      fakeBasketListStore(),
+      undefined,
+      '/',
+      live(1)
+    );
+    const navigate = jest
+      .spyOn(TestBed.inject(Router), 'navigate')
+      .mockResolvedValue(true);
+
+    (query(fixture, 'lib-live-basket-row button') as HTMLElement).click();
+
+    expect(navigate).toHaveBeenCalledWith(
+      ['..', 'shopping-lists', 'live'],
+      expect.anything()
+    );
+  });
+
+  it('is its title alone before its summary arrives', async () => {
+    const fixture = await render(
+      fakeBasketListStore(),
+      undefined,
+      '/',
+      fakeLiveBasketStore(null)
+    );
+
+    const row = query(fixture, 'lib-live-basket-row');
+    expect(row?.textContent).toContain('basket.live.title');
+    expect(row?.textContent).not.toContain('basket.live.left');
+  });
+
+  it('is not on the shared tab', async () => {
+    const fixture = await render(undefined, undefined, '/?tab=shared', live(1));
+
+    expect(query(fixture, 'lib-live-basket-row')).toBeNull();
   });
 });

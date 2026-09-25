@@ -106,7 +106,7 @@ export class AppNav {
   readonly url = input.required<string>();
 
   /**
-   * How many lines the live basket still needs, or null for no badge.
+   * How many lines the basket this tab opens still needs, or null for no badge.
    *
    * From `LiveBasketBadge`, which `data-access` writes: a `ui` component may not read a
    * store (rule D1), and this is the inversion that resolves it.
@@ -124,9 +124,10 @@ export class AppNav {
   );
 
   /**
-   * The third tab opens the basket being shopped, through the screen that finds it
-   * (section 7). `current` is a word rather than an id, and the route table declares it
-   * before `:basketId` so it is never read as one.
+   * The third tab always opens a basket, through the screen that finds it: the newest
+   * open generated basket, or the live basket when there is none (velista `0111`).
+   * `current` is a word rather than an id, and the route table declares it before
+   * `:basketId` so it is never read as one.
    */
   readonly basketUrl = computed(() =>
     appPath(this._locale(), this._basePath, 'shopping-lists', 'current')

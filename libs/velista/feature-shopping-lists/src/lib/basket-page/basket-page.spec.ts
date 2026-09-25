@@ -38,7 +38,6 @@ import type {
 } from '@portfolio/velista/models';
 import { SUGGEST_DEBOUNCE_MS } from '@portfolio/velista/models';
 import {
-  PageNavigation,
   provideFakeBrowserFacade,
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
@@ -167,12 +166,6 @@ interface Options {
   readonly finished?: boolean;
   /** Which basket this is (velista `0091`). `LIVE` draws the other surface. */
   readonly kind?: 'GENERATED' | 'LIVE' | 'UNKNOWN';
-  /**
-   * The ids of the reader's baskets being shopped, newest first, which is where the
-   * basket tab sends them (velista `0105`). Empty by default, so this basket is an
-   * older one and keeps its way back.
-   */
-  readonly activeBasketIds?: readonly string[];
   /**
    * How many rows are still to do, **by the server**.
    *
@@ -628,7 +621,6 @@ async function render(options: Options = {}): Promise<{
         provide: BasketListStore,
         useValue: {
           setStatus: store.setStatus,
-          active: signal((options.activeBasketIds ?? []).map((id) => ({ id }))),
         },
       },
       // Listed after the testing module's own, which is what makes it win: a
@@ -864,7 +856,11 @@ describe('the basket header, live', () => {
     });
   });
 
-  describe('the way back', () => {
+  /**
+   * No basket page has a back chevron (velista `0111`). The history button takes its
+   * place for every reader with an account, on the live basket and on a generated one.
+   */
+  describe('the history in the header', () => {
     const registered = (): BasketParticipant =>
       participant({
         ...guest('p-me', 1),
@@ -873,67 +869,62 @@ describe('the basket header, live', () => {
         userId: 'u-2',
       });
 
-    async function pressBack(
-      me: BasketParticipant,
-      options: Options = {}
-    ): Promise<jest.SpyInstance | null> {
-      const { fixture } = await render({ ...options, me });
-      const back = query(fixture, 'button.back');
-      if (back === null) {
-        return null;
-      }
-      const spy = jest
-        .spyOn(TestBed.inject(PageNavigation), 'back')
-        .mockResolvedValue(undefined);
-      back.click();
-      return spy;
-    }
+    it('draws no chevron on a generated basket', async () => {
+      const { fixture } = await render({ me: participant(owner()) });
 
-    it('takes the owner back, falling back to the history', async () => {
-      const spy = await pressBack(participant(owner()));
-
-      expect(spy).not.toBeNull();
-      expect(spy?.mock.calls[0]?.[0]).toMatch(/shopping-lists$/);
+      expect(query(fixture, '.bar lib-chevron-left-icon')).toBeNull();
+      expect(query(fixture, 'button.back')).toBeNull();
     });
 
-    it('takes a registered participant back, falling back to the dashboard', async () => {
-      const spy = await pressBack(registered());
+    it('draws no chevron on the live basket', async () => {
+      const { fixture } = await render({
+        me: participant(owner()),
+        kind: 'LIVE',
+      });
 
-      expect(spy).not.toBeNull();
-      expect(spy?.mock.calls[0]?.[0]).toMatch(/home$/);
+      expect(query(fixture, '.bar lib-chevron-left-icon')).toBeNull();
+      expect(query(fixture, 'button.back')).toBeNull();
     });
 
-    it('offers a guest no way back', async () => {
-      expect(await pressBack(participant(guest('p-9', 1)))).toBeNull();
+    it('offers the owner the history, named for a screen reader', async () => {
+      const { fixture } = await render({ me: participant(owner()) });
+      const history = query(fixture, '.bar button.history');
+
+      expect(history).not.toBeNull();
+      expect(history?.getAttribute('aria-label')).toBe('basket.openHistory');
     });
 
-    /**
-     * The basket tab's own baskets (velista `0105`). The bottom bar is on screen
-     * with that tab lit, so the bar is the way out and a chevron would be a second.
-     */
-    describe('on the basket the tab opens', () => {
-      it('draws no chevron on the permanent basket', async () => {
-        expect(
-          await pressBack(participant(owner()), { kind: 'LIVE' })
-        ).toBeNull();
+    it('offers it on the live basket too', async () => {
+      const { fixture } = await render({
+        me: participant(owner()),
+        kind: 'LIVE',
       });
 
-      it('draws no chevron on the newest basket being shopped', async () => {
-        expect(
-          await pressBack(participant(owner()), {
-            activeBasketIds: ['basket-saturday', 'basket-older'],
-          })
-        ).toBeNull();
-      });
+      expect(query(fixture, '.bar button.history')).not.toBeNull();
+    });
 
-      it('keeps the chevron on an older basket opened from the history', async () => {
-        const spy = await pressBack(participant(owner()), {
-          activeBasketIds: ['basket-newer', 'basket-saturday'],
-        });
+    it('offers a registered participant the history', async () => {
+      const { fixture } = await render({ me: registered() });
 
-        expect(spy).not.toBeNull();
-        expect(spy?.mock.calls[0]?.[0]).toMatch(/shopping-lists$/);
-      });
+      expect(query(fixture, '.bar button.history')).not.toBeNull();
+    });
+
+    it('offers a guest no history, because it needs an account', async () => {
+      const { fixture } = await render({ me: participant(guest('p-9', 1)) });
+
+      expect(query(fixture, '.bar button.history')).toBeNull();
+    });
+
+    it('pushes the history', async () => {
+      const { fixture } = await render({ me: participant(owner()) });
+      const go = TestBed.inject(Router).navigateByUrl as jest.Mock;
+      go.mockClear();
+
+      query(fixture, '.bar button.history')?.click();
+
+      expect(go).toHaveBeenCalledWith('/en/shopping-lists');
+      // A push: back from the history comes back to this basket.
+      expect(go.mock.calls[0]?.[1]).toBeUndefined();
     });
   });
 

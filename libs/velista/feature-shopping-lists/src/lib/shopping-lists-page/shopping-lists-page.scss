@@ -98,6 +98,13 @@
   overscroll-behavior: contain;
 }
 
+// The live basket's row over a state that is not a list of rows (velista 0111): the
+// skeleton, the error or the empty message. The gap is the one `.rows` puts between
+// two rows, so the row sits where it sits over a populated history.
+.live {
+  padding-block-end: var(--app-space-3);
+}
+
 .rows {
   display: flex;
   flex-direction: column;

@@ -1,0 +1,17 @@
+@let count = pending();
+
+<button (click)="open.emit()" class="row" type="button">
+  <span class="text">
+    <span class="head">
+      <span class="name">{{ 'basket.live.title' | rokuT }}</span>
+    </span>
+
+    @if (count !== null) {
+      <span class="meta">
+        {{ 'basket.live.left' | rokuT: { pending: count } }}
+      </span>
+    }
+  </span>
+
+  <lib-chevron-right-icon class="chevron" />
+</button>

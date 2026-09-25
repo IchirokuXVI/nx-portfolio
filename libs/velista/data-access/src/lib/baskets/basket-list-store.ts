@@ -25,6 +25,7 @@ import {
   BASKET_LIST_SERVICE,
   type BasketListServiceI,
 } from './basket-list-service';
+import { LiveBasketStore } from './live-basket-store';
 
 /**
  * How long a burst of settles is allowed to gather before the listing is read again.
@@ -78,6 +79,8 @@ export class BasketListStore {
   private readonly _service = inject<BasketListServiceI>(BASKET_LIST_SERVICE);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _badge = inject(LiveBasketBadge);
+  /** The live basket's summary, which the badge counts when no generated one is open. */
+  private readonly _liveBasket = inject(LiveBasketStore);
 
   private readonly _lists = signal<readonly BasketSummary[]>([]);
   private readonly _state = signal<ShoppingListsLoad>('idle');
@@ -171,11 +174,32 @@ export class BasketListStore {
     // the same trip the dashboard card shows: somebody who composed a second run before
     // finishing the first has two, and adding them up would put a number on the tab that
     // matches neither screen.
+    //
+    // **The basket the tab opens, and nothing else** (velista `0111`). The tab opens the
+    // newest open generated basket, or the live basket when there is none, so with no
+    // open generated basket the number is the live basket's pending count, read from
+    // `LiveBasketStore`. Until the listing has answered nothing is known about which
+    // basket that is, so there is no badge; a failed listing sends the tab to the live
+    // basket, so it counts the live one.
     effect(() => {
       const newest = this.active()[0];
-      this._badge.set(
-        newest === undefined ? null : newest.lineCount - newest.settledLineCount
-      );
+      if (newest !== undefined) {
+        this._badge.set(newest.lineCount - newest.settledLineCount);
+        return;
+      }
+
+      const load = this._state();
+      if (load === 'idle' || load === 'loading') {
+        this._badge.set(null);
+        return;
+      }
+
+      // Asked for here the first time it is needed, and never again from here: the
+      // live store keeps itself current on resume and on every basket header event.
+      if (this._liveBasket.state() === 'idle') {
+        untracked(() => void this._liveBasket.load());
+      }
+      this._badge.set(this._liveBasket.summary()?.pending ?? null);
     });
 
     // By hand, not `takeUntilDestroyed`: `@angular/core/rxjs-interop` is a secondary

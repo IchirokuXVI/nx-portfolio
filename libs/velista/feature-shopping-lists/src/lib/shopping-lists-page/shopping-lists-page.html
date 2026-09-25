@@ -40,15 +40,32 @@
     role="tabpanel"
   >
     @if (tab() === 'mine') {
+      <!--
+        The live basket's row (velista 0111) leads My lists in every state: above the
+        generated baskets, outside their date order and their paging, and drawn even
+        when there is no generated basket at all, because it is always there.
+      -->
       @switch (page.kind) {
         @case ('loading') {
           <div class="content">
+            <div class="live">
+              <lib-live-basket-row
+                (open)="openLive()"
+                [pending]="livePending()"
+              />
+            </div>
             <lib-row-skeleton [count]="4" labelKey="history.row.loading" />
           </div>
         }
 
         @case ('error') {
           <div class="content">
+            <div class="live">
+              <lib-live-basket-row
+                (open)="openLive()"
+                [pending]="livePending()"
+              />
+            </div>
             <lib-error-state
               (copyReference)="copyReference($event)"
               (retry)="retry()"
@@ -66,6 +83,12 @@
             rather than in a bottom bar because there is nothing to scroll past it.
           -->
           <div class="content">
+            <div class="live">
+              <lib-live-basket-row
+                (open)="openLive()"
+                [pending]="livePending()"
+              />
+            </div>
             <lib-empty-state
               [body]="'history.empty.body' | rokuT"
               [title]="'history.empty.title' | rokuT"
@@ -95,6 +118,10 @@
             </p>
 
             <div class="rows">
+              <lib-live-basket-row
+                (open)="openLive()"
+                [pending]="livePending()"
+              />
               @for (row of page.rows; track row.id) {
                 <lib-shopping-list-row
                   (open)="open($event)"
