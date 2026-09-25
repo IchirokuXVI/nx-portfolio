@@ -159,7 +159,9 @@ export async function chooseProduct(
   if (await option.isChecked()) {
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   } else {
-    await option.check();
+    // A click, not `check()`: choosing closes the pane, and `check()` then
+    // waits to confirm a radio that is gone.
+    await option.click();
   }
   await expect(dialog.getByRole('radio')).toHaveCount(0);
 }
@@ -208,7 +210,9 @@ export async function addInTheAisle(
 ): Promise<void> {
   await page.locator('.composer-dock button.target').click();
   const target = sheet(page, 'Which list is this for?');
-  await target.getByRole('radio', { name: list, exact: true }).check();
+  // A click, not `check()`: choosing closes the sheet, and `check()` then
+  // waits to confirm a radio that is gone. The chip below is the confirmation.
+  await target.getByRole('radio', { name: list, exact: true }).click();
   await expectBasketUrl(page, basketId);
   await expect(page.locator('.composer-dock .target')).toHaveText(
     `To: ${list}`
