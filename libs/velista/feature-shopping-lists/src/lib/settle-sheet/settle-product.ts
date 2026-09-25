@@ -31,12 +31,15 @@ export interface SettleProductView {
  * card is not a button: the only thing to do with it is to pick another of the
  * row's products, and that is the "Change" control, drawn only when the row has
  * more than one.
+ *
+ * The product pane draws one per option, inside the radio's label, so an option
+ * looks the same before and after somebody picks it.
  */
 @Component({
   selector: 'lib-settle-product',
   imports: [ProductIcon, RokuTranslatorPipe],
   template: `
-    <div class="card">
+    <div [class.is-chosen]="chosen()" class="card">
       <span aria-hidden="true" class="image-box">
         @if (image(); as src) {
           <img
@@ -88,6 +91,12 @@ export class SettleProduct {
 
   /** Whether the row has other products to pick, which draws "Change". */
   readonly canChange = input(false);
+
+  /**
+   * Whether this is the product somebody said they got, on the product pane's
+   * list of options. A stronger border, beside the radio that says it in words.
+   */
+  readonly chosen = input(false);
 
   /** Whether a write on the row is out, so "Change" waits. */
   readonly busy = input(false);

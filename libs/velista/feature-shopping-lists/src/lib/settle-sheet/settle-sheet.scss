@@ -267,25 +267,23 @@
 .options {
   display: flex;
   flex-direction: column;
-  gap: var(--app-space-1);
+  gap: var(--app-space-3);
   margin: 0 0 var(--app-space-4);
   padding: 0;
   border: none;
 }
 
+// The radio, then the product's card. The card draws its own box, so the row
+// adds none: the whole label is the target, and the radio says which is chosen
+// in a way that is not colour alone.
 .option {
   @include shared.tap-target;
 
   display: flex;
   align-items: center;
   gap: var(--app-space-3);
-  padding: var(--app-space-2) var(--app-space-3);
   border-radius: var(--app-card-radius);
   cursor: pointer;
-
-  &:hover {
-    background: var(--app-surface-sunken);
-  }
 
   // The focus ring lands on the row and not on the native control, which is a
   // 13px square somewhere inside it.
@@ -295,35 +293,12 @@
   }
 }
 
-.option-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-1);
+.option-card {
+  flex: 1;
   min-inline-size: 0;
-}
-
-.option-name {
-  font-size: var(--app-text-sm);
-  color: var(--app-text-primary);
-  overflow-wrap: anywhere;
-}
-
-// The price and where it is from, on one line under the name. The place is server
-// data joined by the separator the app already uses, so it carries no key.
-.option-price {
-  font-size: var(--app-text-xs);
-  color: var(--app-text-secondary);
-}
-
-.option-place {
-  color: var(--app-text-muted);
-}
-
-// This shop does not list it. A fact about the shop rather than about the
-// product, which is still a product to buy, so it is a shade of the caption and
-// not a state.
-.option-price.is-missing {
-  color: var(--app-text-muted);
+  // The card's own gap under it is for the settle pane; in the list the
+  // fieldset's gap spaces the rows.
+  margin-block-end: 0;
 }
 
 .actions {
@@ -372,150 +347,6 @@
   &:hover {
     color: var(--app-text-secondary);
   }
-}
-
-// --- The options ------------------------------------------------------------
-
-.options {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-// A list item since velista 0069 rather than a button: the row is no longer one
-// tap that chooses a product, it holds a stepper of its own. Nothing about it is
-// clickable, so it takes no tap target and no pointer.
-.option {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--app-space-1);
-  inline-size: 100%;
-  padding: var(--app-space-3);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-card-radius);
-  background: var(--app-surface-raised);
-  font-family: inherit;
-  text-align: start;
-
-  // The row that keeps the balance, marked with a border as well as the words
-  // beside its number, never with colour alone (section 7).
-  &.is-rest {
-    border-color: var(--app-action-bg);
-  }
-}
-
-// One line of an option: the name and the price on the first, the place and the
-// unit price on the second (velista 0062, section 5.1). The trailing figure is
-// right aligned and never shrinks, so eleven prices line up down the pane, and
-// the leading text wraps under it rather than pushing it off the row.
-.option-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--app-space-3);
-  inline-size: 100%;
-}
-
-.option-name {
-  font-size: var(--app-text-sm);
-  color: var(--app-text-primary);
-  min-inline-size: 0;
-  overflow-wrap: anywhere;
-}
-
-// The same weight as the name: it is the other half of what is being decided.
-// Tabular numerals so 0.95 and 10.95 share their decimal point down the list.
-.option-price {
-  flex: none;
-  font-size: var(--app-text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--app-text-primary);
-}
-
-// Drawn only in a mix of priced and unpriced options (section 5.3), muted and
-// in the price's place so the blank reads as unknown rather than as free.
-.option-price.is-unknown {
-  font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
-  font-style: italic;
-}
-
-.option-brand {
-  font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
-  min-inline-size: 0;
-  overflow-wrap: anywhere;
-}
-
-// The comparison figure, muted, under the price it belongs to. This is the one
-// pane in the app that puts two comparable products next to each other.
-.option-unit-price {
-  flex: none;
-  font-size: var(--app-text-xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--app-text-muted);
-}
-
-// The row's last line: the cheapest mark on the leading edge, and the control
-// or the balance on the trailing one. Pushed apart rather than stacked, so the
-// steppers line up down the pane whether or not a row carries a mark.
-.option-foot {
-  justify-content: space-between;
-  align-items: center;
-  margin-block-start: var(--app-space-1);
-}
-
-// The cheapest carries a word beside it (velista 0062, section 5.2), never a
-// colour alone (section 7). It sits on the same line as the stepper because
-// both are about the same row and a line of its own would double its height.
-.option-cheapest {
-  font-size: var(--app-text-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--app-text-secondary);
-}
-
-// What the line's own product keeps: the words and the number together, so the
-// number is never read on its own as a price.
-.option-rest {
-  display: flex;
-  align-items: baseline;
-  gap: var(--app-space-2);
-  margin-inline-start: auto;
-}
-
-.option-rest-label {
-  font-size: var(--app-text-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--app-action-quiet-fg);
-}
-
-// The balance, which moves as the steppers move. Tabular numerals so it does
-// not jog sideways between 9 and 10 under a thumb that is still moving.
-.option-balance {
-  font-size: var(--app-text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--app-text-primary);
-}
-
-// One reel per product (velista 0069, section 2), its minus and plus kept: the
-// control they replaced was a stepper, the amounts here are small, and the pane
-// is read at a shelf with one hand. The reel brings the drag and the tap with it.
-.share-reel {
-  margin-inline-start: auto;
-}
-
-// How old the prices are, once under the pane (section 5.4). A sentence and not
-// a timestamp, in the hint's own treatment.
-.prices-as-of {
-  margin: 0;
-  font-size: var(--app-text-xs);
-  color: var(--app-text-muted);
 }
 
 // --- The allocation ---------------------------------------------------------

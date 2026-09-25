@@ -105,14 +105,13 @@ type Pane = 'settle' | 'product' | 'history' | 'merge';
  * Composed rather than drawn from the product, because two of the three are
  * decided outside it: the price depends on which shop the screen is pricing at,
  * and the tick depends on a choice held for this visit and never stored.
+ *
+ * Drawn as the same card as the chosen product above the settle actions, so an
+ * option looks the same before and after somebody picks it.
  */
 interface ProductOption {
   readonly itemId: string;
-  readonly name: string;
-  /** The chosen shop's price, or null where there is none to quote. */
-  readonly price: string | null;
-  /** Where that price is from, or null when prices come from anywhere. */
-  readonly place: string | null;
+  readonly card: SettleProductView;
   readonly chosen: boolean;
 }
 
@@ -497,11 +496,21 @@ export class SettleSheet {
    */
   protected readonly productCard = computed<SettleProductView | null>(() => {
     const product = this._product();
-    if (product === null) {
-      return null;
-    }
+    return product === null ? null : this._cardOf(product);
+  });
 
+  /**
+   * One product as a card, for the chosen product and for every option on the
+   * product pane alike.
+   *
+   * Reads the locale, the shop the screen is pricing at and the basket's scopes,
+   * so a `computed` calling it follows all three.
+   */
+  private _cardOf(product: BasketProduct): SettleProductView {
     const locale = this._locale();
+    // The chosen shop's price when the rows are priced there, which the server
+    // decided (velista `0102`), and the cheapest anywhere otherwise: exactly what
+    // the row underneath quotes (velista `0078`, section 5).
     const offer = shownOffer(product, this._view.pricedAtShop());
     const size = this._sizeText(product, locale);
     const detail = [product.brand, size]
@@ -524,7 +533,7 @@ export class SettleSheet {
               locale
             ),
     };
-  });
+  }
 
   /**
    * The size the way the composer's suggestions say it (`list.add.size.*`), or
@@ -584,10 +593,7 @@ export class SettleSheet {
       return [];
     }
 
-    const locale = this._locale();
     const products = this._store.products();
-    const atShop = this._view.pricedAtShop();
-    const scopes = this._store.basket()?.scopes;
     const chosen = this._store.itemIdFor(row.rowKey);
 
     const drawn: ProductOption[] = [];
@@ -596,22 +602,9 @@ export class SettleSheet {
       if (product === undefined) {
         continue;
       }
-
-      // The chosen shop's price when the rows are priced there, which the server
-      // decided (velista `0102`), and the cheapest anywhere otherwise: exactly what
-      // the row above quotes (velista `0078`, section 5).
-      const offer = shownOffer(product, atShop);
       drawn.push({
         itemId,
-        name: inLocale(product.name, locale),
-        price:
-          offer === null
-            ? null
-            : formatMoney(offer.price, offer.currency, locale),
-        place:
-          offer === null
-            ? null
-            : placeOf(scopes?.get(offer.priceScopeId), locale),
+        card: this._cardOf(product),
         chosen: itemId === chosen,
       });
     }

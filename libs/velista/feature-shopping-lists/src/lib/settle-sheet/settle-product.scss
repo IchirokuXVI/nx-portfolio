@@ -16,6 +16,11 @@
   border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-card-radius);
   background: var(--app-surface-raised);
+
+  // The picked option on the product pane.
+  &.is-chosen {
+    border-color: var(--app-action-bg);
+  }
 }
 
 // Square, and the carton sits in the middle when there is no picture. The ground

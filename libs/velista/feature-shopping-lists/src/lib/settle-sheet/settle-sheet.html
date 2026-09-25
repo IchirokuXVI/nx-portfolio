@@ -298,28 +298,17 @@
               name="settle-product"
               type="radio"
             />
-            <span class="option-body">
-              <span class="option-name">{{ option.name }}</span>
-              <!--
-                The price, and where it is from. Both are absent where the shop
-                this screen is pricing at does not list the product, which is the
-                same blank the row above leaves: there is no way to say "listed,
-                price unknown" in the space, and a placeholder would be a number
-                shaped hole.
-              -->
-              @if (option.price; as price) {
-                <span class="option-price">
-                  {{ price }}
-                  @if (option.place; as place) {
-                    <span class="option-place">· {{ place }}</span>
-                  }
-                </span>
-              } @else {
-                <span class="option-price is-missing">
-                  {{ 'basket.product.noPrice' | rokuT }}
-                </span>
-              }
-            </span>
+            <!--
+              The same card as the chosen product on the settle pane: picture,
+              name, brand and size, and the price with where it is from. The
+              price says "No price" where the shop this screen is pricing at
+              does not list the product.
+            -->
+            <lib-settle-product
+              [chosen]="option.chosen"
+              [product]="option.card"
+              class="option-card"
+            />
           </label>
         }
       </fieldset>
