@@ -1,3 +1,5 @@
+> **PR:** [#511](https://github.com/IchirokuXVI/nx-portfolio/pull/511)
+
 # 0116: the basket plus asks which list
 
 On the basket, a new line goes to the list chosen next to the composer ("Choose a list", plan
