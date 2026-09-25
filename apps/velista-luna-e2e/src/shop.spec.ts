@@ -14,10 +14,14 @@ import {
   type Session,
 } from './support/api';
 import {
+  addInTheAisle,
   chip,
+  chooseProduct,
+  closeSettleSheet,
   expectBasketUrl,
   filterTool,
   generateBasket,
+  gotReel,
   nudge,
   openFilterSheet,
   openSettleSheet,
@@ -35,8 +39,9 @@ import {
  * would meet them on a single shop: generate (0045), search (0074), filter and
  * group (0075, 0077), prices from one shop (0078), the row's status control
  * (0052), the settle sheet (0044), the reel that settles and then reverts
- * (0073 test 13), the split by product (0069 test 9), the composer in the aisle
- * (0053), finishing (0057), and what the next basket remembers (0076).
+ * (0073 test 13), two products bought as two settles (0092, which replaced the
+ * split of 0069 test 9), the composer in the aisle (0053, 0110), finishing
+ * (0057), and what the next basket remembers (0076).
  *
  * The world is set up through the API as absolute values, so the trip starts
  * from the same place on a fresh database and on the run after it. Everything
@@ -144,15 +149,15 @@ test.describe('one trip, by the owner', () => {
       ).toBeVisible();
     });
 
-    await test.step('4. prices from one shop: Mercadona Colón', async () => {
+    await test.step('4. buying at one shop: Mercadona Colón', async () => {
       const dialog = await openFilterSheet(page);
       await dialog
-        .getByRole('button', { name: /Choose the shop prices are from/ })
+        .getByRole('button', { name: /Choose the shop you are buying at/ })
         .click();
       await expect(page).toHaveURL(/\/sheet\/filter\/shop$/);
 
       // The shops of a chain are drawn once its button is pressed.
-      const picker = sheet(page, 'Prices from');
+      const picker = sheet(page, 'Buying at');
       await picker
         .locator('lib-franchise-buttons button', { hasText: 'Mercadona' })
         .click();
@@ -166,11 +171,15 @@ test.describe('one trip, by the owner', () => {
       await expectBasketUrl(page, basketId);
 
       await expect(chip(page, 'Mercadona')).toBeVisible();
-      await expect(row(page, 'Milk').locator('.product')).toContainText(
-        '€1.15'
-      );
+      // Bread names one product, so the row prices it at the shop. Milk names
+      // two and nobody has said which was got, so it quotes no price at all
+      // (velista `0092`, section 5): the first option's number would name a
+      // product nobody picked up.
       await expect(row(page, 'Bread').locator('.product')).toContainText(
         '€0.95'
+      );
+      await expect(row(page, 'Milk').locator('.product')).toHaveText(
+        'No product chosen'
       );
     });
 
@@ -187,20 +196,24 @@ test.describe('one trip, by the owner', () => {
       );
     });
 
-    await test.step('6. open the settle sheet on Milk and record some', async () => {
+    await test.step('6. on the settle sheet, say Milk was the Milk product and buy one for Groceries', async () => {
       const dialog = await openSettleSheet(page, 'Milk');
       await expect(dialog.locator('.outstanding')).toHaveText(/2 outstanding/);
 
-      await dialog.getByRole('button', { name: 'Got some' }).click();
-      await expect(dialog.locator('.pane-title')).toHaveText(
-        'How many did you get?'
-      );
-      await expect(reel(dialog, 'How many')).toHaveAttribute(
+      // The choice prices the product at the shop, as the row in step 4 could
+      // not, on the card that stands for it on the sheet.
+      await chooseProduct(dialog, 'Milk');
+      await expect(dialog.locator('lib-settle-product')).toContainText('€1.15');
+
+      // "Got some" is gone (velista `0092`). Part of a row is bought on the
+      // lists behind it, one household at a time, and the sheet stays open.
+      await nudge(gotReel(dialog, 'Groceries'), 1);
+      await expect(gotReel(dialog, 'Groceries')).toHaveAttribute(
         'aria-valuenow',
         '1'
       );
-      await dialog.getByRole('button', { name: 'Record it' }).click();
-      await expectBasketUrl(page, basketId);
+      await expect(dialog.locator('.outstanding')).toHaveText(/1 outstanding/);
+      await closeSettleSheet(page, dialog, basketId);
 
       await expect(
         reel(row(page, 'Milk'), 'Milk, still to get')
@@ -243,38 +256,29 @@ test.describe('one trip, by the owner', () => {
         .toBe(0);
     });
 
-    await test.step('8. split Milk into two products, settle each, and the zone line names both', async () => {
+    await test.step('8. buy Milk as two products, one settle each, and the zone line names both', async () => {
+      // Two products on one row are two settles, which is what replaced the
+      // split (velista `0092`, section 5): one unit as the Milk product, then
+      // the other as Bread, each from the sheet that holds the choice.
       const dialog = await openSettleSheet(page, 'Milk');
-      await dialog.getByRole('button', { name: 'Change', exact: true }).click();
-      await expect(dialog.locator('.pane-title')).toHaveText(
-        'Which did you get?'
+      await chooseProduct(dialog, 'Milk');
+      await nudge(gotReel(dialog, 'Groceries'), 1);
+      await expect(dialog.locator('.outstanding')).toHaveText(/1 outstanding/);
+
+      await chooseProduct(dialog, 'Bread');
+      await nudge(gotReel(dialog, 'Groceries'), 1);
+      await expect(gotReel(dialog, 'Groceries')).toHaveAttribute(
+        'aria-valuenow',
+        '2'
       );
+      await closeSettleSheet(page, dialog, basketId);
 
-      // Milk keeps the rest; one unit moves to Bread.
-      await nudge(reel(dialog, 'Bread, units'), 1);
-      await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
-      await expectBasketUrl(page, basketId);
+      await expect(
+        row(page, 'Milk').getByRole('button', { name: 'Milk is got. Undo it' })
+      ).toBeVisible();
 
-      // Two rows now carry the line's name, one per product, each asking for
-      // one. Settle each from its own status control.
-      const milkRows = row(page, 'Milk');
-      await expect(milkRows).toHaveCount(2);
-      await expect(milkRows.filter({ hasText: 'Milk · ' })).toHaveCount(1);
-      await expect(milkRows.filter({ hasText: 'Bread · ' })).toHaveCount(1);
-      for (const product of ['Milk · ', 'Bread · ']) {
-        const split = milkRows.filter({ hasText: product });
-        await expect(reel(split, 'Milk, still to get')).toHaveAttribute(
-          'aria-valuenow',
-          '1'
-        );
-        await split.getByRole('button', { name: 'Mark Milk as got' }).click();
-        await expect(
-          split.getByRole('button', { name: 'Milk is got. Undo it' })
-        ).toBeVisible();
-      }
-
-      // Plan 0069 test 9: two settlements on the one zone line, naming two
-      // different products.
+      // Plan 0069 test 9, still true of the new shape: two settlements on the
+      // one zone line, naming two different products.
       await expect
         .poll(async () =>
           (await liveSettlementsOfThisTrip()).map((s) => s.itemId).sort()
@@ -283,13 +287,7 @@ test.describe('one trip, by the owner', () => {
     });
 
     await test.step('9. add a line in the aisle with the composer', async () => {
-      const composer = page.locator('lib-line-composer');
-      await composer
-        .getByRole('textbox', { name: 'Add something' })
-        .fill('Batteries');
-      await composer.getByRole('button', { name: 'Add', exact: true }).click();
-
-      await expect(row(page, 'Batteries')).toBeVisible();
+      await addInTheAisle(page, basketId, 'Hardware', 'Batteries');
       await expect(
         row(page, 'Batteries').getByRole('button', {
           name: 'Mark Batteries as got',
@@ -322,7 +320,7 @@ test.describe('one trip, by the owner', () => {
         .getByRole('button', { name: 'Finish shopping' })
         .first()
         .click();
-      await expect(page).toHaveURL(/\/sheet\/finish$/);
+      await expect(page).toHaveURL(/\/sheet\/finish(\?.*)?$/);
       const finish = sheet(page, 'Finish shopping?');
       await finish.getByRole('button', { name: 'Finish shopping' }).click();
       await expectBasketUrl(page, basketId);

@@ -202,6 +202,7 @@ export async function ensurePostalCode(
 
 export interface BasketSummary {
   id: string;
+  kind: 'LIVE' | 'GENERATED';
   name: string | null;
   status: 'OPEN' | 'FINISHED' | 'ARCHIVED';
 }
@@ -215,16 +216,17 @@ export async function listBaskets(s: Session): Promise<BasketSummary[]> {
 }
 
 /**
- * `PATCH /v1/baskets/:id` to FINISHED on every open basket.
+ * `PATCH /v1/baskets/:id` to FINISHED on every open generated basket.
  *
- * An open basket claims the zone lines it carries, so a spec that reads a claim
- * needs every earlier basket out of the way first. It no longer clears the way
- * for a **run**: backend `0133` section 7 deleted the rule that refused a line
- * another basket of the owner's was holding.
+ * An open generated basket claims its lines and draws a card of its own, so a
+ * spec that reads either needs every earlier one out of the way first. The
+ * live basket is left alone: it is always open, by definition (velista `0091`).
+ * It no longer clears the way for a **run**: backend `0133` section 7 deleted
+ * the rule that refused a line another basket of the owner's was holding.
  */
 export async function finishOpenBaskets(s: Session): Promise<void> {
   for (const basket of await listBaskets(s)) {
-    if (basket.status === 'OPEN') {
+    if (basket.status === 'OPEN' && basket.kind !== 'LIVE') {
       await s.patch(`/v1/baskets/${basket.id}`, {
         status: 'FINISHED',
       });
@@ -232,31 +234,27 @@ export async function finishOpenBaskets(s: Session): Promise<void> {
   }
 }
 
-export interface BasketLineView {
-  id: string;
+/**
+ * A basket row as the wire names it, as narrow as the assertions need. A row
+ * is the list lines of one merge key, read at request time (backend `0136`).
+ */
+export interface BasketRowView {
+  rowKey: string;
   content: string;
-  quantity: number;
-  settledQuantity: number;
+  left: number;
+  bought: number;
+  state: string;
 }
 
-/**
- * `GET /v1/baskets/:id/basket`: the basket as a participant reads it.
- *
- * **This route does not exist.** Plan 0136 replaced it with
- * `GET /v1/baskets/:id`, which answers rows rather than lines, and velista
- * `0096` is the plan that moves this suite onto it. Plan 0144 renamed the path
- * it names and changed nothing else, because a rename may not fix behaviour;
- * the helper was already calling a deleted route before that rename and still
- * is after it.
- */
-export async function readBasketLines(
+/** `GET /v1/baskets/:id`: the basket as a participant reads it, as rows. */
+export async function readBasketRows(
   s: Session,
   basketId: string
-): Promise<BasketLineView[]> {
-  const body = await s.get<{ lines: BasketLineView[] }>(
-    `/v1/baskets/${basketId}/basket`
+): Promise<BasketRowView[]> {
+  const body = await s.get<{ rows: BasketRowView[] }>(
+    `/v1/baskets/${basketId}`
   );
-  return body.lines;
+  return body.rows;
 }
 
 /** `GET /v1/baskets/:id/share-link`: the link, if one exists. */

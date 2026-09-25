@@ -89,7 +89,7 @@ export async function generateBasket(
 
 /** The basket rows on screen, and the one for a named line. */
 export function rows(page: Page): Locator {
-  return page.locator('lib-basket-line-row');
+  return page.locator('lib-basket-row');
 }
 
 export function row(page: Page, name: string): Locator {
@@ -130,18 +130,107 @@ export async function openSettleSheet(
   name: string
 ): Promise<Locator> {
   await row(page, name).locator('button.body').click();
-  await expect(page).toHaveURL(/\/sheet\/lines\/[0-9a-f-]{36}\/settle$/);
+  await expect(page).toHaveURL(/\/sheet\/rows\/[0-9a-f-]{36}\/settle$/);
   const dialog = sheet(page, name);
   await expect(dialog).toBeVisible();
   return dialog;
 }
 
-/** Wait for a sheet to be gone, by the URL it leaves behind. */
+/**
+ * On an open settle sheet, say which product of a row of several was got
+ * (velista `0092`, section 5).
+ *
+ * Change opens "Which did you get?", a radio group, and choosing closes that
+ * pane back onto the settle pane. Nothing is written: the choice rides on the
+ * next purchase made **from this sheet**. The row's own glyph and reel do not
+ * carry it (the page binds the row to `insteadOf`, velista `0102`), so a spec
+ * that means to buy a named product buys it here.
+ */
+export async function chooseProduct(
+  dialog: Locator,
+  product: string
+): Promise<void> {
+  await dialog.getByRole('button', { name: 'Change', exact: true }).click();
+  const option = dialog.getByRole('radio', {
+    name: new RegExp(`^\\s*${product}\\b`),
+  });
+  // The choice lasts the visit, so it may already be this one, and checking a
+  // checked radio fires nothing. The pane's Cancel is then the way back.
+  if (await option.isChecked()) {
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  } else {
+    await option.check();
+  }
+  await expect(dialog.getByRole('radio')).toHaveCount(0);
+}
+
+/**
+ * The "got" reel of one list on an open settle sheet (velista `0090`, 9.2).
+ * Raising it buys that many for that household alone, as the product chosen
+ * on the sheet, and leaves the sheet open.
+ */
+export function gotReel(dialog: Locator, list: string): Locator {
+  return reel(
+    dialog.locator('lib-row-entries'),
+    new RegExp(`^${list}.*, got$`)
+  );
+}
+
+/**
+ * Close a settle sheet by Escape, and wait for the basket's URL.
+ *
+ * The key goes to the sheet's own title (it takes focus, `tabindex="-1"`),
+ * because a pane that held focus may be gone and Escape pressed on the page
+ * body reaches no sheet.
+ */
+export async function closeSettleSheet(
+  page: Page,
+  dialog: Locator,
+  basketId: string
+): Promise<void> {
+  await dialog.locator('#settle-title').press('Escape');
+  await expectBasketUrl(page, basketId);
+}
+
+/**
+ * Add a line from the basket's composer, to the named list (velista `0092`
+ * section 7, `0110`).
+ *
+ * A basket over more than one list adds to the list chosen beside the field,
+ * and the field is locked until one is. The chip names the list once one is
+ * chosen, so it is pressed whatever it says.
+ */
+export async function addInTheAisle(
+  page: Page,
+  basketId: string,
+  list: string,
+  content: string
+): Promise<void> {
+  await page.locator('.composer-dock button.target').click();
+  const target = sheet(page, 'Which list is this for?');
+  await target.getByRole('radio', { name: list, exact: true }).check();
+  await expectBasketUrl(page, basketId);
+  await expect(page.locator('.composer-dock .target')).toHaveText(
+    `To: ${list}`
+  );
+
+  const composer = page.locator('lib-line-composer');
+  await composer.getByRole('combobox', { name: 'Add something' }).fill(content);
+  await composer.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(row(page, content)).toBeVisible();
+}
+
+/**
+ * Wait for a sheet to be gone, by the URL it leaves behind. An open search
+ * keeps itself in the query (`?search=1`), so a query is allowed.
+ */
 export async function expectBasketUrl(
   page: Page,
   basketId: string
 ): Promise<void> {
-  await expect(page).toHaveURL(new RegExp(`/en/shopping-lists/${basketId}$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/en/shopping-lists/${basketId}(\\?.*)?$`)
+  );
 }
 
 /** The tools row's filter control, whatever its count. */
@@ -177,7 +266,12 @@ export async function newVisitor(browser: Browser): Promise<Page> {
   return context.newPage();
 }
 
-/** Open the share sheet as the owner, read the link it shows, and close it. */
+/**
+ * Open the share sheet as the owner, make a link, read it, and close the sheet.
+ *
+ * A basket has no link until somebody asks for one (velista `0094`): the sheet
+ * opens on "This list has no link right now" and a Make a link button.
+ */
 export async function readShareLinkFromSheet(
   page: Page,
   basketId: string
@@ -185,6 +279,9 @@ export async function readShareLinkFromSheet(
   await page.getByRole('button', { name: 'Share this list' }).click();
   await expect(page).toHaveURL(/\/sheet\/share$/);
   const dialog = sheet(page, 'Share this list');
+  await dialog
+    .getByRole('button', { name: 'Make a link', exact: true })
+    .click();
   const link = dialog.locator('code.link-url');
   await expect(link).toHaveText(/\/s\/[A-Za-z0-9_-]+/);
   const url = (await link.textContent())?.trim() ?? '';
