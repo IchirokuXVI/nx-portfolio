@@ -1,3 +1,5 @@
+> **PR:** [#512](https://github.com/IchirokuXVI/nx-portfolio/pull/512) (the zone list), [#513](https://github.com/IchirokuXVI/nx-portfolio/pull/513) (the basket)
+
 # 0117: one field finds and adds
 
 A zone list and the basket each have two ways to type: a search field in the tools row that
