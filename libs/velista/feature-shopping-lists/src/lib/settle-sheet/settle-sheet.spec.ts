@@ -1877,6 +1877,40 @@ describe('SettleSheet: the product somebody got', () => {
       expect(card(fixture)?.textContent).toContain('basket.product.noPrice');
     });
 
+    it('draws every option on the product pane as the same card, the chosen one marked', async () => {
+      const PICTURED: BasketProduct = { ...CARD, id: 'i-pictured' };
+      const { fixture } = await render({
+        lines: [line({ optionIds: [MILK.id, PICTURED.id] })],
+        products: new Map([
+          [MILK.id, MILK],
+          [PICTURED.id, PICTURED],
+        ]),
+        chosen: new Map([[LINE_ID, PICTURED.id]]),
+      });
+
+      card(fixture)?.querySelector<HTMLButtonElement>('.change')?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const cards = options(fixture).map((option) =>
+        option.querySelector('lib-settle-product')
+      );
+      expect(cards).toHaveLength(2);
+      // The row without a picture draws the carton; the one with, its image.
+      expect(cards[0]?.querySelector('lib-product-icon')).not.toBeNull();
+      expect(cards[1]?.querySelector('img')?.getAttribute('src')).toBe(
+        CARD.imageUrl
+      );
+      expect(cards[1]?.querySelector('.amount')?.textContent).toContain('0.95');
+      // No "Change" inside the list: the radio is the choice.
+      expect(cards[1]?.querySelector('.change')).toBeNull();
+      expect(cards[0]?.querySelector('.card.is-chosen')).toBeNull();
+      expect(cards[1]?.querySelector('.card.is-chosen')).not.toBeNull();
+      expect(
+        options(fixture)[1].querySelector<HTMLInputElement>('input')?.checked
+      ).toBe(true);
+    });
+
     it('offers "Change" on the card once a product of several is chosen', async () => {
       const { fixture } = await render({
         lines: [twoOptions()],
