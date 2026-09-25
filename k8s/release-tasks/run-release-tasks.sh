@@ -111,14 +111,20 @@ run_hook() {
 
 # Dump one database through its backup CronJob and print the uploaded key. The
 # CronJob prints `uploaded s3://...` last, and that line is what is read here.
+cronjob_of() { printf 'luna-shopper-backend-%s-db-backup' "$1"; }
+
+# The databases of a task whose backup CronJob does not exist, one per line.
+missing_cronjobs() {
+  local db
+  for db in $(task_field "$1" DATABASES); do
+    kubectl -n "$NAMESPACE" get cronjob "$(cronjob_of "$db")" > /dev/null 2>&1 || echo "$db"
+  done
+}
+
 dump() {
   local task="$1" db="$2" cronjob job key conditions waited=0
-  cronjob="luna-shopper-backend-${db}-db-backup"
+  cronjob="$(cronjob_of "$db")"
   job="rt-${task%%-*}-${db}-$(date -u +%Y%m%d%H%M%S)"
-  if ! kubectl -n "$NAMESPACE" get cronjob "$cronjob" > /dev/null 2>&1; then
-    echo "  no cronjob/$cronjob, so $db cannot be dumped and $task is not reversible" >&2
-    return 1
-  fi
   kubectl -n "$NAMESPACE" create job "$job" --from="cronjob/$cronjob" > /dev/null
   # Polled rather than `kubectl wait`, which watches one condition and would sit
   # out the whole timeout on a Job that has already failed.
@@ -183,6 +189,17 @@ for dir in "${TASKS[@]}"; do
       if [ "$FRESH" = true ]; then
         echo "$task: skipped, first install"
         ledger_set "$task" "skipped $(now) first-install"
+        continue
+      fi
+      missing="$(missing_cronjobs "$dir")"
+      if [ -n "$missing" ]; then
+        # The CronJobs come from the chart, and the upgrade that renders them
+        # runs after this phase. The first deploy that enables backups in a
+        # cluster therefore finds none. Failing here would stop that upgrade
+        # too, and every deploy after it, so the task waits for the next deploy.
+        # Nothing has changed, so it is still reversible.
+        echo "$task: DEFERRED, no backup CronJob yet for: $(echo $missing)." >&2
+        echo "  It runs at the next deploy, once this upgrade has created them." >&2
         continue
       fi
       echo "$task: due"

@@ -31,6 +31,11 @@ database that this cluster does not run.
 3. `run-release-tasks.sh --env <env> --phase post`, after the rollout. For each
    task that finished its pre phase, it runs its `post.sh` and marks it done.
 
+If a backup CronJob that a task needs does not exist yet, the runner defers the
+task to the next deploy and changes nothing. This happens on the first deploy
+that turns backups on in a cluster, because the upgrade that creates the
+CronJobs runs after the pre phase. A dump that fails still stops the deploy.
+
 If a deploy fails between the two phases, the next deploy runs the post phase.
 It does not take the dumps again or run `pre.sh` again. On a first install, the
 runner marks every task as skipped, because a new cluster has no data to change.
