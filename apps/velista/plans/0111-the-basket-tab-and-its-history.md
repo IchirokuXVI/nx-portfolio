@@ -1,3 +1,5 @@
+> **PR:** [#491](https://github.com/IchirokuXVI/nx-portfolio/pull/491)
+
 # 0111: the basket tab and its history
 
 The bottom bar's basket tab opens `shopping-lists/current`, which goes to the newest open
