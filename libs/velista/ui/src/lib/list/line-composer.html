@@ -67,98 +67,34 @@
   </div>
 } @else {
   <!--
-    The suggestions, above the field and below nothing (plan 0043, section 6).
-
-    Above, because the keyboard is under the field and a list drawn beneath it would be
-    behind the keys on every phone. Nearest the field first would be the reverse of the
-    server's ranking, so the order is kept and the whole block sits above: a group is
-    the top row and it is the row closest to what somebody typed.
-
-    **A finished search that found nothing says so**, in one row (velista 0108, target
-    1): an empty answer used to draw nothing, and read as a search that never ran. The
-    row quotes the words and says they can still be added as written, which the button
-    beside the field does, so there is always something to press.
-  -->
-  <!--
-    Waved away by a click anywhere on the page that is not this row and not the panel
-    itself, and back on the next keystroke. A dropdown pinned over somebody's list
-    with no way to put it down is a screen you have to type your way out of.
-  -->
-  @if (suggestionsShown() && resultsId() === null) {
-    <!--
-      Cards since velista 0101, and no free text row: the button beside the field
-      already adds the typed words. Not drawn when the page draws the results
-      (velista 0117).
-    -->
-    <lib-suggestion-list
-      (chose)="choose($event.suggestion, $event.anchor)"
-      (holdingChanged)="holdingChanged.emit($event)"
-      [emptyFor]="emptyFor()"
-      [freeText]="canSubmit()"
-      [holdingsOf]="holdingsOf()"
-      [loading]="suggesting()"
-      [panelId]="panelId"
-      [placement]="'above'"
-      [productLink]="productLink()"
-      [query]="suggestedFor()"
-      [suggestions]="suggestions()"
-    />
-  }
-
-  <!--
   A form, so Enter on the field submits without a keydown handler and the phone's
   keyboard offers a Go key rather than a newline.
 -->
   <form (submit)="onSubmit($event)" class="composer">
     <div class="field-wrap">
       <!--
-        The combobox that owns the panel's grid (rule 8 of velista 0101): a card
-        holds several controls, which a listbox option may not.
-
-        Where the page draws the results (velista 0117) it is a search box that
-        controls that region instead, with no popup of its own.
+        The page's one search (velista 0117): a search box that controls the region
+        the page draws its results in. It used to be the combobox of a panel of
+        suggestions above it.
       -->
-      @if (resultsId(); as region) {
-        <input
-          (blur)="fieldFocused.emit(false)"
-          (focus)="fieldFocused.emit(true)"
-          (input)="onInput($event)"
-          (keydown.escape)="onEscape($event)"
-          [attr.aria-controls]="region"
-          [attr.aria-label]="'list.add.placeholder' | rokuT"
-          [attr.maxlength]="maxLength"
-          [placeholder]="'list.add.placeholder' | rokuT"
-          [value]="content()"
-          #field
-          autocomplete="off"
-          class="field"
-          enterkeyhint="send"
-          name="content"
-          role="searchbox"
-          type="text"
-        />
-      } @else {
-        <input
-          (blur)="fieldFocused.emit(false)"
-          (focus)="fieldFocused.emit(true)"
-          (input)="onInput($event)"
-          [attr.aria-controls]="panelOpen() ? panelId : null"
-          [attr.aria-expanded]="panelOpen()"
-          [attr.aria-label]="'list.add.placeholder' | rokuT"
-          [attr.maxlength]="maxLength"
-          [placeholder]="'list.add.placeholder' | rokuT"
-          [value]="content()"
-          #field
-          aria-autocomplete="list"
-          aria-haspopup="grid"
-          autocomplete="off"
-          class="field"
-          enterkeyhint="send"
-          name="content"
-          role="combobox"
-          type="text"
-        />
-      }
+      <input
+        (blur)="fieldFocused.emit(false)"
+        (focus)="fieldFocused.emit(true)"
+        (input)="onInput($event)"
+        (keydown.escape)="onEscape($event)"
+        [attr.aria-controls]="resultsId()"
+        [attr.aria-label]="'list.add.placeholder' | rokuT"
+        [attr.maxlength]="maxLength"
+        [placeholder]="'list.add.placeholder' | rokuT"
+        [value]="content()"
+        #field
+        autocomplete="off"
+        class="field"
+        enterkeyhint="send"
+        name="content"
+        role="searchbox"
+        type="text"
+      />
 
       <!--
       Only past 350. A live region so the number is announced as it approaches, and

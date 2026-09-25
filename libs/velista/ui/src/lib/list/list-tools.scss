@@ -1,4 +1,4 @@
-// The tools row, closed or searching, and whatever the page projects under it, held
+// The tools row, and whatever the page projects under it, held
 // at the top of the scroll (velista 0079, section 2). Moved here from the basket page
 // by velista 0082, unchanged.
 //
@@ -11,29 +11,13 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
-  // 8px rather than 4px: at 4px an open search field sat almost against the chips
-  // under it. The same gap closed and open, so opening the search moves nothing.
+  // 8px rather than 4px, which sat the chips almost against the row.
   gap: var(--app-space-3);
   background: var(--app-surface-ground);
 }
 
-// The search's label and count, heard and not seen (velista 0079, section 3). Here and
-// not global: velista has no global utility class, and the basket page's own rule
-// does not reach inside this component.
-.visually-hidden {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-// The leading edge and the controls at the trailing one. At least one control tall,
-// which is the height the open search keeps too, so opening and closing it leaves the
-// lines where they are (velista 0079, section 3).
+// The leading edge and the control at the trailing one. At least one control tall
+// (velista 0079, section 3).
 .tools {
   display: flex;
   align-items: center;
@@ -43,7 +27,7 @@
 }
 
 // Whatever the page put at the leading edge, or nothing. It takes the room either way,
-// so the two controls stay at the trailing edge.
+// so the control stays at the trailing edge.
 .lead {
   display: flex;
   align-items: center;
@@ -110,125 +94,4 @@
   font-size: var(--app-text-2xs);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-}
-
-// The field that replaces the row, written the way the supermarkets page writes its
-// own, down to the ring being drawn by the wrapper rather than by the input.
-//
-// One row, and the same height as the closed one: the field, Cancel and the filter
-// side by side, with no visible label and no visible count.
-.search {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  min-block-size: var(--app-control-height);
-  padding-inline: var(--app-space-4) var(--app-space-2);
-}
-
-// Exactly one control tall, border included. `border-box` is set here rather than
-// trusted to a global reset, because the shell mounts these pages under stylesheets
-// that are not velista's.
-.search-field {
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-3);
-  flex: 1;
-  min-inline-size: 0;
-  block-size: var(--app-control-height);
-  padding-inline: var(--app-space-4) var(--app-space-2);
-  border: 1px solid var(--app-border-strong);
-  border-radius: var(--app-field-radius);
-  background: var(--app-surface-raised);
-
-  &:has(.search-input:focus-visible) {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-}
-
-.search-glyph {
-  flex: none;
-  font-size: var(--app-icon-md);
-  color: var(--app-text-muted);
-}
-
-// The whole height of the field it sits in, which keeps the tap target the full control
-// height without adding to it.
-.search-input {
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  align-self: stretch;
-  block-size: auto;
-  min-block-size: 0;
-  border: none;
-  background: transparent;
-  color: var(--app-text-primary);
-  font: inherit;
-  // Rule T3: anything under 16px makes iOS Safari zoom the viewport on focus.
-  font-size: var(--app-field-font-size);
-
-  &::placeholder {
-    color: var(--app-text-muted);
-  }
-
-  // The ring is drawn by the wrapper, which is the thing that looks like the field.
-  &:focus-visible {
-    outline: none;
-  }
-
-  // The browser's own clear control, which two of them would be.
-  &::-webkit-search-cancel-button {
-    display: none;
-  }
-}
-
-// Inside the field and smaller than 44, which is allowed here only: it sits inside a
-// target that is already tall enough.
-.search-clear {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  inline-size: var(--app-space-7);
-  block-size: var(--app-space-7);
-  border: none;
-  border-radius: var(--app-radius-full);
-  background: var(--app-surface-sunken);
-  color: var(--app-text-secondary);
-  cursor: pointer;
-
-  &:hover {
-    color: var(--app-text-primary);
-  }
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-}
-
-.search-clear-glyph {
-  font-size: var(--app-icon-sm);
-}
-
-// Text and not a glyph, because it undoes a mode rather than performing an act, and an
-// X beside the X inside the field would be two controls that look alike.
-.search-cancel {
-  flex: none;
-  min-block-size: var(--app-touch-target);
-  min-inline-size: var(--app-touch-target);
-  padding-inline: var(--app-space-2);
-  border: none;
-  background: transparent;
-  font-family: inherit;
-  font-size: var(--app-text-sm);
-  font-weight: 500;
-  color: var(--app-action-quiet-fg);
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
 }

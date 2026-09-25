@@ -1,9 +1,11 @@
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
   DestroyRef,
   effect,
+  type ElementRef,
   inject,
   signal,
   untracked,
@@ -48,6 +50,7 @@ import {
   appPath,
   BrowserFacade,
   ListSearchNavigation,
+  NavChrome,
   searchOpenOf,
   sheetSegments,
   visitNoticeKey,
@@ -66,8 +69,10 @@ import {
   OfflineIcon,
   PersonIcon,
   ShareIcon,
+  type SuggestionChoice,
   type SuggestionHolding,
   type SuggestionHoldingChange,
+  SuggestionList,
   VisitNotice,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
@@ -165,6 +170,7 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
     RokuTranslatorPipe,
     RouterOutlet,
     ShareIcon,
+    SuggestionList,
     VisitNotice,
   ],
   templateUrl: './basket-page.html',
@@ -871,6 +877,8 @@ export class BasketPage {
     });
 
     inject(DestroyRef).onDestroy(() => {
+      // The bar comes back with whatever screen is next (velista `0117`).
+      this._chrome.setComposing(false);
       // The one timer this page owns. A route provider's `DestroyRef` never
       // fires in this app, so a timer set in the store would outlive the screen
       // and flip a signal for a basket nobody is looking at.
@@ -1334,54 +1342,181 @@ export class BasketPage {
    */
   protected readonly visibleLines = this._view.visibleRows;
 
-  /** What is in the search field, for the count and for the no match sentence. */
-  protected readonly searchQuery = this._view.query;
-
-  /**
-   * Whether anything is being searched for, which decides **which** empty state is
-   * drawn: the search's, quoting what was typed, or the filter's (`0075`).
-   */
-  protected readonly searching = this._view.searching;
-
   /** The query folded once, handed to every row to draw its `<mark>` from. */
   protected readonly highlight = this._view.folded;
 
-  /** What was typed, or the empty string from Clear. */
-  protected search(query: string): void {
-    this._view.search(query);
-  }
+  // --- One field finds and adds (velista 0117) -------------------------------
 
   private readonly _search = inject(ListSearchNavigation);
+  private readonly _chrome = inject(NavChrome);
 
   /**
-   * Whether the search field is open, which is `?search=1` (velista `0109`).
+   * Whether `?search=1` is on the URL (velista `0109`).
    *
-   * In the URL so the phone's back button closes the search rather than leaving the
-   * basket: opening pushes the parameter, and back pops it.
+   * Since `0117` it means that the composer's field holds words (rule F2). The first
+   * character pushes it, so the phone's back button has an entry to take off, and
+   * taking it off empties the field. Only the open state is in the URL, never the
+   * words.
    */
   protected readonly searchOpen = searchOpenOf(this._route);
 
-  /** The search button opens, and Cancel and Escape go back. */
-  protected setSearchOpen(open: boolean): void {
-    void (open
-      ? this._search.open(this._route)
-      : this._search.close(this._route));
+  /** The words in the field, trimmed, for the headings and the nothing sentence. */
+  protected readonly typed = computed(() => this._query().trim());
+
+  /**
+   * Whether the field holds words, which is when the results replace the basket's
+   * body: the rows that match, then the catalog's cards (rule F1).
+   */
+  protected readonly typing = computed(() => this.typed() !== '');
+
+  /** The catalog is asked from the third character, so its section starts there. */
+  protected readonly catalogShown = computed(
+    () => this.typed().length >= SUGGEST_MIN_CHARS
+  );
+
+  /**
+   * The words a finished catalog search answered with nothing, while they are still
+   * the words in the field, or null (velista `0108`, target 1).
+   */
+  protected readonly catalogEmptyFor = computed(() => {
+    const words = this.suggestedFor();
+    return words !== null &&
+      !this.suggesting() &&
+      this.suggestions().length === 0 &&
+      words === this.typed()
+      ? words
+      : null;
+  });
+
+  /**
+   * The rows that match, once each and in the order the basket draws them, for the
+   * results. The same rows the sections hold, so a row a search finds is the row
+   * the basket draws, with its controls.
+   */
+  protected readonly resultRows = computed(() =>
+    this.sections().flatMap((section) => section.rows)
+  );
+
+  /** The id of the results region, which the field names in `aria-controls`. */
+  protected readonly resultsId = 'basket-results';
+
+  /** Whether the composer's field has focus. */
+  private readonly _fieldFocused = signal(false);
+
+  /** The composer's field gained or lost focus. */
+  protected onFieldFocused(focused: boolean): void {
+    this._fieldFocused.set(focused);
   }
 
   /**
-   * The query goes when the field does, whichever way it closed, so the row that
-   * comes back is over the whole basket.
+   * The bar gives the page its room while the field has focus or holds words (rule
+   * F3), so the results reach from the basket's bar to the composer.
    */
-  private _searchWasOpen = false;
-
-  private readonly _clearClosedSearch = effect(() => {
-    const open = this.searchOpen();
-    const was = this._searchWasOpen;
-    this._searchWasOpen = open;
-    if (was && !open) {
-      untracked(() => this._view.search(''));
-    }
+  private readonly _hideChrome = effect(() => {
+    const composing = this._fieldFocused() || this.typing();
+    untracked(() => this._chrome.setComposing(composing));
   });
+
+  private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
+
+  /** Whether the results were already on screen at the last render. */
+  private _resultsDrawn = false;
+
+  /**
+   * When the results first appear, the column goes back to its top, so they sit
+   * under the basket's bar however far down the basket somebody was.
+   *
+   * Not further, unlike the zone list: the basket's bar is inside this column
+   * rather than above it, so scrolling the heading to the top would take the bar
+   * off the screen, and the bar stays while typing.
+   */
+  private readonly _scrollToResults = afterRenderEffect(() => {
+    const shown = this.typing();
+    const column = this._column()?.nativeElement;
+    if (!shown || column === undefined) {
+      this._resultsDrawn = false;
+      return;
+    }
+    if (this._resultsDrawn) {
+      return;
+    }
+    this._resultsDrawn = true;
+    column.scrollTo?.({ top: 0, behavior: 'auto' });
+  });
+
+  /** Whether an open of the search entry was asked for and has not landed yet. */
+  private _opening = false;
+
+  /** Whether a close of the search entry was asked for and has not landed yet. */
+  private _closing = false;
+
+  /** Whether the entry was on the URL the last time the effect below ran. */
+  private _wasOpen = false;
+
+  /**
+   * Keeps the history entry and the field saying the same thing (rule F2), as the
+   * zone list page does.
+   *
+   * - The first character pushes `search=1`.
+   * - An empty field with `search=1` on the URL goes back through
+   *   `ListSearchNavigation.close`, which is `PageNavigation.back` with the basket as
+   *   the fallback. The field is emptied by hand, by Escape and by an add, and a cold
+   *   load of `?search=1` arrives empty: all of them take the entry off the same way.
+   * - The entry going while the field still holds words is the phone's back button,
+   *   so the field is emptied to match.
+   *
+   * A close still in flight is not mistaken for back: words typed while it lands
+   * push a new entry rather than being emptied.
+   */
+  private readonly _followEntry = effect(() => {
+    const open = this.searchOpen();
+    const words = this.typing();
+    untracked(() => {
+      const was = this._wasOpen;
+      this._wasOpen = open;
+
+      if (open) {
+        this._opening = false;
+        if (!words && !this._closing) {
+          this._closing = true;
+          void this._search.close(this._route);
+        }
+        return;
+      }
+
+      const closing = this._closing;
+      this._closing = false;
+      if (!words) {
+        return;
+      }
+      if (was && !closing) {
+        this._composer()?.clear();
+        return;
+      }
+      if (!this._opening) {
+        this._opening = true;
+        void this._search.open(this._route);
+      }
+    });
+  });
+
+  /**
+   * A card's add button, in the results. It goes through the composer, which names
+   * the words and the products and, holding the send, hands them back with the
+   * button for the list picker (velista `0116`).
+   */
+  protected chooseCard(choice: SuggestionChoice): void {
+    this._composer()?.choose(choice.suggestion, choice.anchor);
+  }
+
+  /**
+   * Nothing in the results may take focus from the field, so the keyboard stays up
+   * whatever was pressed (rule T2 of velista `0101`). `mousedown` and never
+   * `pointerdown` or `touchstart`, which carry the page's own scroll.
+   */
+  protected holdFocus(event: MouseEvent): void {
+    event.preventDefault();
+  }
 
   // --- The filter sheet and its chips (plan 0075) ----------------------------
 
@@ -1776,6 +1911,9 @@ export class BasketPage {
 
   protected onComposerQuery(query: string): void {
     this._query.set(query);
+    // The rows are searched from the first character, the catalog from the third
+    // (velista `0117`).
+    this._view.search(query);
     // New words are a new line: the open picker was asking about the old ones.
     if (this._waiting !== null && query.trim() !== this._waiting.content) {
       this._closePicker();

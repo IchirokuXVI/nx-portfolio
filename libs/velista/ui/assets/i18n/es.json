@@ -1222,16 +1222,6 @@
       "two": "de {{first}} y {{second}}",
       "more": "de {{first}} y {{count}} más"
     },
-    "search": {
-      "open": "Buscar en esta lista",
-      "label": "Buscar en esta lista",
-      "placeholder": "Línea o producto",
-      "clear": "Borrar",
-      "cancel": "Cancelar",
-      "count": "{{shown}} de {{total}} líneas",
-      "none": "Ninguna línea coincide con «{{query}}»",
-      "noneHint": "Añádela abajo y se pone en esta lista."
-    },
     "view": {
       "open": "Filtrar y ordenar",
       "openCount": "Filtrar y ordenar, {{count}} activos",
@@ -1564,7 +1554,9 @@
     },
     "add": {
       "sheetTitle": "¿Para qué lista es?",
-      "listCaption": "{{zone}} · {{count}} por comprar"
+      "listCaption": "{{zone}} · {{count}} por comprar",
+      "resultsOnLists": "En tus listas",
+      "resultsNone": "Nada en tus listas dice “{{query}}”"
     },
     "added": {
       "announced": "{{content}} añadido"

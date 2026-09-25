@@ -1391,7 +1391,7 @@ describe('ListPage: searching and viewing one category', () => {
     it('draws no search of its own in the tools row', async () => {
       const { fixture } = await render({ lines: LINES, items: ITEMS });
 
-      expect(tools(fixture)?.searchable()).toBe(false);
+      expect(tools(fixture)).not.toBeNull();
       expect(
         query(fixture, 'lib-list-tools [aria-label="basket.search.open"]')
       ).toBeNull();

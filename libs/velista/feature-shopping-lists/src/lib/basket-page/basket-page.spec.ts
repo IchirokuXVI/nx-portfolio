@@ -41,6 +41,7 @@ import type {
 } from '@portfolio/velista/models';
 import { SUGGEST_DEBOUNCE_MS } from '@portfolio/velista/models';
 import {
+  NavChrome,
   provideFakeBrowserFacade,
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
@@ -390,11 +391,15 @@ function queryOnRoute(initial: Params) {
   };
 }
 
+/** What the page told the bottom bar, per render (velista `0117`). */
+const navChrome = { setComposing: jest.fn() };
+
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<BasketPage>;
   store: FakeStore;
 }> {
   TestBed.resetTestingModule();
+  navChrome.setComposing.mockClear();
 
   const me = options.me === undefined ? participant(owner()) : options.me;
   // The device's shop (velista `0102`), read at once by this double.
@@ -480,6 +485,9 @@ async function render(options: Options = {}): Promise<{
     providers: [
       provideVelistaTesting({ basePath: '' }),
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      // The bottom bar's owner, as a double (velista `0117`): the router here is a
+      // fake with no state to read, and what matters is what the page tells it.
+      { provide: NavChrome, useValue: navChrome },
       {
         provide: Router,
         useValue: {
@@ -1503,15 +1511,10 @@ describe('searching the basket', () => {
     ['item-milk', pick('item-milk', 'Whole milk', 'Leche entera', 'Hacendado')],
   ]);
 
-  function tools(fixture: ComponentFixture<BasketPage>): HTMLElement | null {
-    return query(fixture, '.tools');
-  }
-
-  function searchField(
-    fixture: ComponentFixture<BasketPage>
-  ): HTMLInputElement | null {
-    return query(fixture, 'input.search-input') as HTMLInputElement | null;
-  }
+  /** One list to add to, so the composer, which is the search, is drawn. */
+  const served = [
+    { listId: 'l-weekly', name: 'Weekly shop', zoneId: 'z1', zoneName: 'Flat' },
+  ];
 
   function rows(fixture: ComponentFixture<BasketPage>): HTMLElement[] {
     return Array.from(
@@ -1521,29 +1524,19 @@ describe('searching the basket', () => {
     );
   }
 
-  /** Open the search the way a thumb does, and let the field appear. */
-  function openSearch(fixture: ComponentFixture<BasketPage>): void {
-    const button = query(fixture, '.tool');
-    if (button === null) {
-      throw new Error('there is no search control to press');
-    }
-    button.click();
+  /** The URL the page is on, as the phone's back button or a push would leave it. */
+  async function at(
+    fixture: ComponentFixture<BasketPage>,
+    url: string
+  ): Promise<void> {
+    await TestBed.inject(Router).navigateByUrl(url);
     fixture.detectChanges();
-  }
-
-  /** Type into the search field, which is not the composer's. */
-  function search(fixture: ComponentFixture<BasketPage>, typed: string): void {
-    const input = searchField(fixture);
-    if (input === null) {
-      throw new Error('the search field is not open');
-    }
-    input.value = typed;
-    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
     fixture.detectChanges();
   }
 
   describe('the tools row', () => {
-    it('holds the count and the search control, for every reader', async () => {
+    it('holds the count and the filter, for every reader', async () => {
       // A guest, who is very often the person looking: they arrived on a link and
       // have never seen this app. Nothing in the row names a household.
       const { fixture } = await render({
@@ -1551,13 +1544,13 @@ describe('searching the basket', () => {
         me: participant(guest('p-9', 1)),
       });
 
-      const row = tools(fixture);
+      const row = query(fixture, '.tools');
       expect(row).not.toBeNull();
       expect(row?.querySelector('.progress')).not.toBeNull();
-      expect(row?.querySelector('.tool')).not.toBeNull();
+      expect(row?.querySelectorAll('.tool')).toHaveLength(1);
     });
 
-    it('keeps the row and the chips in one bar, closed and while searching', async () => {
+    it('keeps the row and the chips in one bar', async () => {
       // Velista `0079`, section 2: one sticky bar, so both stay on screen down a long
       // basket. The lines are not in it; they scroll under it.
       const { fixture } = await render({ lines: threeLines });
@@ -1565,11 +1558,6 @@ describe('searching the basket', () => {
       fixture.detectChanges();
 
       expect(query(fixture, '.tools-bar .tools')).not.toBeNull();
-      expect(query(fixture, '.tools-bar lib-chip-row')).not.toBeNull();
-
-      openSearch(fixture);
-
-      expect(query(fixture, '.tools-bar .search')).not.toBeNull();
       expect(query(fixture, '.tools-bar lib-chip-row')).not.toBeNull();
       expect(query(fixture, '.tools-bar lib-basket-row')).toBeNull();
     });
@@ -1590,54 +1578,19 @@ describe('searching the basket', () => {
     });
   });
 
-  describe('opening and closing it', () => {
-    it('replaces the row with a focused field', async () => {
-      const { fixture } = await render({ lines: threeLines });
-      openSearch(fixture);
+  /**
+   * Velista `0117`: the composer's field is the basket's only search. Typing draws the
+   * rows that match, then from the third character the catalog, in place of the
+   * basket's body, and the phone's back button empties the field through the entry
+   * the first character pushed (rule F2).
+   */
+  describe('one field finds and adds (velista 0117)', () => {
+    it('sets the store’s query and pushes search=1 on the first keystroke', async () => {
+      const { fixture, store } = await render({ lines: threeLines, served });
 
-      const input = searchField(fixture);
-      expect(input).not.toBeNull();
-      // The count and the control are gone with the row, so there is no button
-      // that toggles and changes its name (section 6).
-      expect(tools(fixture)).toBeNull();
-      expect(document.activeElement).toBe(input);
-    });
+      typeInto(fixture, 'm');
 
-    it('restores the row on Cancel, clears the query, and takes the focus back', async () => {
-      const { fixture } = await render({ lines: threeLines });
-      openSearch(fixture);
-      search(fixture, 'milk');
-      expect(rows(fixture)).toHaveLength(1);
-
-      const cancel = query(fixture, '.search-cancel');
-      cancel?.click();
-      fixture.detectChanges();
-
-      expect(searchField(fixture)).toBeNull();
-      expect(rows(fixture)).toHaveLength(3);
-      // Never the page body, which is where a naive close drops somebody reading
-      // by keyboard.
-      expect(document.activeElement).toBe(query(fixture, '.tool'));
-    });
-
-    it('does the same on Escape, from inside the field', async () => {
-      const { fixture } = await render({ lines: threeLines });
-      openSearch(fixture);
-      search(fixture, 'milk');
-
-      searchField(fixture)?.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Escape' })
-      );
-      fixture.detectChanges();
-
-      expect(searchField(fixture)).toBeNull();
-      expect(rows(fixture)).toHaveLength(3);
-    });
-
-    it('opens by pushing search=1, merged into the query', async () => {
-      const { fixture, store } = await render({ lines: threeLines });
-      openSearch(fixture);
-
+      expect(TestBed.inject(BasketViewStore).query()).toBe('m');
       expect(store.navigate).toHaveBeenCalledWith([], {
         relativeTo: TestBed.inject(ActivatedRoute),
         queryParams: { search: '1' },
@@ -1646,70 +1599,160 @@ describe('searching the basket', () => {
       expect(store.navigate.mock.calls[0][1]).not.toHaveProperty('replaceUrl');
     });
 
-    it('closes and clears the query when back takes search=1 off (velista 0109)', async () => {
-      const { fixture } = await render({ lines: threeLines });
-      openSearch(fixture);
-      search(fixture, 'milk');
-      expect(rows(fixture)).toHaveLength(1);
+    it('draws the rows and no catalog for two characters, and both from three, rows first', async () => {
+      const { fixture } = await render({ lines: threeLines, served });
 
-      // The phone's back button: the entry opening pushed is popped, which the page
-      // hears as the route's query losing the parameter.
-      await TestBed.inject(Router).navigateByUrl(
-        '/shopping-lists/basket-saturday'
+      typeInto(fixture, 'mi');
+
+      expect(query(fixture, '.results-heading')?.textContent).toContain(
+        'basket.add.resultsOnLists'
       );
-      fixture.detectChanges();
-      await fixture.whenStable();
-      fixture.detectChanges();
+      expect(rows(fixture)).toHaveLength(1);
+      expect(query(fixture, '.catalog')).toBeNull();
 
-      expect(searchField(fixture)).toBeNull();
+      typeInto(fixture, 'mil');
+
+      const headings = Array.from(
+        query(fixture, '.results')?.querySelectorAll('.results-heading') ?? []
+      ).map((one) => one.textContent?.trim() ?? '');
+      expect(headings[0]).toContain('basket.add.resultsOnLists');
+      expect(headings[1]).toBe('list.add.resultsCatalog');
+    });
+
+    it('says so when nothing on the lists matches', async () => {
+      const { fixture } = await render({
+        lines: threeLines,
+        served,
+        echoValues: true,
+      });
+
+      typeInto(fixture, 'yogurt');
+
+      expect(rows(fixture)).toHaveLength(0);
+      expect(text(fixture)).toContain(
+        'basket.add.resultsNone:{"query":"yogurt"}'
+      );
+    });
+
+    it('hides the tools row while the results show', async () => {
+      const { fixture } = await render({ lines: threeLines, served });
+
+      typeInto(fixture, 'milk');
+      expect(query(fixture, 'lib-list-tools')).toBeNull();
+
+      typeInto(fixture, '');
+      expect(query(fixture, 'lib-list-tools')).not.toBeNull();
+    });
+
+    it('empties the field and shows the basket when back takes search=1 off', async () => {
+      const { fixture } = await render({ lines: threeLines, served });
+      typeInto(fixture, 'milk');
+      await at(fixture, '/shopping-lists/basket-saturday?search=1');
+
+      // The phone's back button: the entry the first character pushed is popped.
+      await at(fixture, '/shopping-lists/basket-saturday');
+
+      expect(field(fixture).value).toBe('');
       expect(TestBed.inject(BasketViewStore).query()).toBe('');
       expect(rows(fixture)).toHaveLength(3);
     });
 
-    it('closes from Cancel through PageNavigation.back, to the basket without search', async () => {
-      const { fixture } = await render({ lines: threeLines, search: true });
+    it('takes search=1 off through PageNavigation.back when the field is emptied', async () => {
+      const { fixture } = await render({ lines: threeLines, served });
+      typeInto(fixture, 'milk');
+      await at(fixture, '/shopping-lists/basket-saturday?search=1');
+      const router = TestBed.inject(Router);
+      (router.navigateByUrl as jest.Mock).mockClear();
 
-      query(fixture, '.search-cancel')?.click();
+      typeInto(fixture, '');
+      await fixture.whenStable();
 
-      // Nothing of this app is behind a spec's first entry, which is the cold load of
-      // a URL with search=1: the fallback replaces and never leaves the app.
+      // Nothing of this app is behind a spec's first entry: the fallback replaces
+      // and never leaves the app.
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        '/shopping-lists/basket-saturday',
+        { replaceUrl: true }
+      );
+    });
+
+    it('replaces search=1 away on a cold load with an empty field', async () => {
+      await render({ lines: threeLines, served, search: true });
+
       expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
         '/shopping-lists/basket-saturday',
         { replaceUrl: true }
       );
     });
 
-    it('keeps search=1 on the filter sheet, so closing it comes back to the search', async () => {
-      const { fixture, store } = await render({
-        lines: threeLines,
-        search: true,
-      });
+    it('empties the field on Escape', async () => {
+      const { fixture } = await render({ lines: threeLines, served });
+      typeInto(fixture, 'milk');
 
-      query(fixture, '.search .tool')?.click();
-
-      expect(store.navigate).toHaveBeenCalledWith(['sheet', 'filter'], {
-        relativeTo: TestBed.inject(ActivatedRoute),
-        queryParams: { search: '1' },
-      });
-    });
-
-    it('draws the field open and empty on a cold load with search=1', async () => {
-      const { fixture } = await render({ lines: threeLines, search: true });
-
-      expect(searchField(fixture)?.value).toBe('');
-      expect(rows(fixture)).toHaveLength(3);
-    });
-
-    it('empties the field without closing it, from the control inside it', async () => {
-      const { fixture } = await render({ lines: threeLines });
-      openSearch(fixture);
-      search(fixture, 'milk');
-
-      query(fixture, '.search-clear')?.click();
+      field(fixture).dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape' })
+      );
       fixture.detectChanges();
 
-      expect(searchField(fixture)).not.toBeNull();
+      expect(field(fixture).value).toBe('');
       expect(rows(fixture)).toHaveLength(3);
+    });
+
+    it('closes the list picker on Escape and keeps the words (velista 0116)', async () => {
+      const { fixture } = await render({ lines: threeLines, served });
+      typeInto(fixture, 'Batteries');
+      (query(fixture, 'lib-line-composer .send') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(document.querySelectorAll('.pop .option')).toHaveLength(1);
+
+      const escape = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+      });
+      field(fixture).dispatchEvent(escape);
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('Batteries');
+      expect(document.querySelectorAll('.pop .option')).toHaveLength(0);
+      TestBed.resetTestingModule();
+    });
+
+    it('gives the bar’s room to the page while the field has focus or holds words', async () => {
+      const { fixture } = await render({ lines: threeLines, served });
+      const last = () => navChrome.setComposing.mock.calls.at(-1)?.[0];
+
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(last()).toBe(true);
+
+      field(fixture).dispatchEvent(new Event('blur'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(last()).toBe(false);
+    });
+
+    it('makes the field a search box that controls the results', async () => {
+      const { fixture } = await render({ lines: threeLines, served });
+
+      expect(field(fixture).getAttribute('role')).toBe('searchbox');
+      expect(field(fixture).getAttribute('aria-controls')).toBe(
+        'basket-results'
+      );
+      typeInto(fixture, 'milk');
+      expect(query(fixture, '#basket-results')).not.toBeNull();
+    });
+
+    it('keeps the keyboard up: a press in the results does not take focus', async () => {
+      const { fixture } = await render({ lines: threeLines, served });
+      typeInto(fixture, 'milk');
+      const press = new MouseEvent('mousedown', {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      query(fixture, '.results lib-basket-row')?.dispatchEvent(press);
+
+      expect(press.defaultPrevented).toBe(true);
     });
   });
 
@@ -1717,145 +1760,68 @@ describe('searching the basket', () => {
     it('narrows the rows and leaves the progress count alone', async () => {
       const { fixture } = await render({
         lines: threeLines,
+        served,
         products,
         progress: { done: 1, unavailable: 0, total: 3 },
         echoValues: true,
       });
-      openSearch(fixture);
-      search(fixture, 'milk');
+      typeInto(fixture, 'milk');
 
       // One row: the line whose words are "Milk", and nothing else.
       expect(rows(fixture)).toHaveLength(1);
 
-      query(fixture, '.search-cancel')?.click();
-      fixture.detectChanges();
+      typeInto(fixture, '');
 
       // Still one of three. "4 of 12 got" is about the trip, and a search that hid
-      // eight rows bought nothing, so the sentence is drawn from
-      // `BasketStore.progress` and never from what was left standing.
+      // rows bought nothing, so the sentence is drawn from `BasketStore.progress`
+      // and never from what was left standing.
       expect(query(fixture, '.progress')?.textContent).toContain(
         'basket.progress:{"done":1,"total":3}'
       );
     });
 
     it('folds case and accents, so a hurried keyboard still finds the line', async () => {
-      const { fixture } = await render({ lines: threeLines });
-      openSearch(fixture);
-      search(fixture, 'PLATANO');
+      const { fixture } = await render({ lines: threeLines, served });
+      typeInto(fixture, 'PLATANO');
 
       expect(rows(fixture)).toHaveLength(1);
     });
 
     it("matches a line by its pick's brand, which is what the own brand shelf is", async () => {
-      const { fixture } = await render({ lines: threeLines, products });
-      openSearch(fixture);
-      search(fixture, 'hacendado');
-
-      expect(rows(fixture)).toHaveLength(1);
-    });
-
-    it('draws the whole basket while the field is open and empty', async () => {
-      const { fixture } = await render({ lines: threeLines });
-      openSearch(fixture);
-
-      expect(rows(fixture)).toHaveLength(3);
-    });
-  });
-
-  describe('the count under the field', () => {
-    it('says how many are left, of how many there are', async () => {
       const { fixture } = await render({
         lines: threeLines,
-        echoValues: true,
+        served,
+        products,
       });
-      openSearch(fixture);
-      search(fixture, 'milk');
+      typeInto(fixture, 'hacendado');
 
-      const count = query(fixture, '.search-count');
-      expect(count?.textContent?.trim()).toBe(
-        'basket.search.count:{"shown":1,"total":3}'
-      );
-      // Polite and announced, because a search that silently empties the screen is
-      // indistinguishable from one that broke.
-      expect(count?.getAttribute('aria-live')).toBe('polite');
-      expect(count?.getAttribute('role')).toBe('status');
-    });
-
-    it('is drawn only while the field is open', async () => {
-      const { fixture } = await render({ lines: threeLines });
-
-      expect(query(fixture, '.search-count')).toBeNull();
-      openSearch(fixture);
-      expect(query(fixture, '.search-count')).not.toBeNull();
-    });
-
-    it('is heard and not seen, beside a field named by a label nobody sees', async () => {
-      // Velista `0079`, section 3: the open search keeps the closed row's height, so
-      // neither sentence is drawn, and both are still there for a screen reader.
-      const { fixture } = await render({ lines: threeLines });
-      openSearch(fixture);
-      search(fixture, 'milk');
-
-      expect(query(fixture, '.search-count')?.classList).toContain(
-        'visually-hidden'
-      );
-
-      const input = searchField(fixture);
-      const label = query(fixture, `label[for="${input?.id}"]`);
-      expect(label?.textContent?.trim()).toBe('basket.search.label');
-      expect(label?.classList).toContain('visually-hidden');
-
-      const drawn = Array.from(
-        query(fixture, '.tools-bar')?.querySelectorAll('label, p') ?? []
-      ).filter((element) => !element.classList.contains('visually-hidden'));
-      expect(drawn).toEqual([]);
+      expect(rows(fixture)).toHaveLength(1);
     });
   });
 
   describe('nothing matches', () => {
-    it('says so with the words that were typed, and keeps the composer', async () => {
-      const { fixture } = await render({
-        lines: threeLines,
-        echoValues: true,
-      });
-      openSearch(fixture);
-      search(fixture, 'yogurt');
-
-      expect(rows(fixture)).toHaveLength(0);
-      expect(text(fixture)).toContain('basket.search.none:{"query":"yogurt"}');
-      // The thing somebody searched for and did not find is very often the next
-      // line, so the field to add it stays.
-    });
-
     /**
-     * The search used to clear itself when this reader's own line landed, because
-     * the thing somebody searched for and did not find is very often the next
-     * thing they add. The composer is velista `0092`'s, with a list to add to, and
-     * that rule comes back with it.
-     *
-     * What holds in the meantime is that the search survives the basket moving
-     * underneath it: it is a string somebody is typing, and nothing but leaving
-     * the screen takes it away (`0076`).
+     * What holds is that the search survives the basket moving underneath it: it is
+     * a string somebody is typing, and nothing but leaving the screen, an add or the
+     * back button takes it away.
      */
     it('keeps what was typed while the basket moves underneath it', async () => {
-      const { fixture, store } = await render({ lines: threeLines });
-      openSearch(fixture);
-      search(fixture, 'yogurt');
+      const { fixture, store } = await render({ lines: threeLines, served });
+      typeInto(fixture, 'yogurt');
       expect(rows(fixture)).toHaveLength(0);
 
       store.rows.set([...threeLines, line('Yogurt', { rowKey: 'l-4' })]);
       fixture.detectChanges();
 
-      expect(searchField(fixture)?.value).toBe('yogurt');
+      expect(field(fixture).value).toBe('yogurt');
       expect(rows(fixture)).toHaveLength(1);
     });
   });
 
   describe('leaving the basket', () => {
     it('gives the view store back as well as the basket', async () => {
-      const { fixture } = await render({ lines: threeLines });
-      openSearch(fixture);
-      search(fixture, 'milk');
+      const { fixture } = await render({ lines: threeLines, served });
+      typeInto(fixture, 'milk');
 
       const view = TestBed.inject(BasketViewStore);
       fixture.destroy();
@@ -1863,6 +1829,7 @@ describe('searching the basket', () => {
       // Nothing about the search survives leaving: it is the one thing on this
       // screen that is never remembered (section 4.7).
       expect(view.query()).toBe('');
+      expect(navChrome.setComposing).toHaveBeenLastCalledWith(false);
     });
   });
 
@@ -1905,7 +1872,7 @@ describe('searching the basket', () => {
           (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
             '.tools .tool'
           )
-        )[1] ?? null
+        )[0] ?? null
       );
     }
 
@@ -1925,34 +1892,11 @@ describe('searching the basket', () => {
       ).map((node) => node.textContent?.trim() ?? '');
     }
 
-    it('draws the filter control beside the search, for every reader', async () => {
+    it('draws the filter control, for every reader', async () => {
       const { fixture } = await render({ lines: threeLines });
 
       expect(filterButton(fixture)).not.toBeNull();
       expect(query(fixture, 'lib-filter-icon')).not.toBeNull();
-    });
-
-    /**
-     * The field replaces the count and the search control, which the field is. It
-     * must not take the filter with it: somebody searching a grouped basket would
-     * have to cancel the search to change what it is grouped by.
-     */
-    it('stays beside the open search field', async () => {
-      const { fixture, store } = await render({ lines: threeLines });
-      // The first tool in the row is the search control.
-      query(fixture, '.tools .tool')?.click();
-      fixture.detectChanges();
-      expect(query(fixture, '.search')).not.toBeNull();
-
-      const tool = query(fixture, '.search .tool');
-      expect(tool).not.toBeNull();
-      expect(tool?.querySelector('lib-filter-icon')).not.toBeNull();
-
-      tool?.click();
-      expect(store.navigate).toHaveBeenCalledWith(
-        ['sheet', 'filter'],
-        expect.anything()
-      );
     });
 
     it('opens the sheet at the basket’s own sheet URL', async () => {
@@ -2720,31 +2664,31 @@ describe('what changed on the lists', () => {
     expect(banner(fixture)).toBeNull();
   });
 
-  it('leaves a REMOVED row out of the tools bar’s two numbers', async () => {
+  it('leaves a REMOVED row out of the results’ count', async () => {
     const { fixture } = await render({
       lines: [
         line('zl-1'),
         { ...line('zl-2'), state: 'REMOVED', entries: [] },
         line('zl-3'),
       ],
-      echoValues: true,
+      served: [
+        { listId: 'l-weekly', name: 'Weekly', zoneId: 'z1', zoneName: 'Flat' },
+      ],
     });
 
-    // The bar draws its pair only while the field is open, which is where the
-    // numbers can be read at all.
-    const tool = (
-      fixture.nativeElement as HTMLElement
-    ).querySelector<HTMLElement>('.tool');
-    tool?.click();
-    fixture.detectChanges();
+    typeInto(fixture, 'zl');
 
-    // Two countable rows of three drawn: a row somebody took off the basket is
-    // information about it rather than a thing to buy, and counting it on one
-    // side alone is what produces "3 of 2".
+    // Two countable rows of the three drawn: a row somebody took off the basket is
+    // information about it rather than a thing to buy.
     expect(
-      (fixture.nativeElement as HTMLElement).querySelector('.search-count')
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        '.results lib-basket-row'
+      )
+    ).toHaveLength(3);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.results-count')
         ?.textContent
-    ).toContain('{"shown":2,"total":2}');
+    ).toContain('2');
   });
 
   it('still draws the removed row, so nobody wonders where the line went', async () => {

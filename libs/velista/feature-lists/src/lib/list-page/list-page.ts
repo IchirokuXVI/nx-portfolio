@@ -600,27 +600,6 @@ export class ListPage {
   readonly tripsLoadingMore = this._trips.loadingMore;
 
   /**
-   * How many distinct lines the page draws, for the tools row's count: To buy, and the
-   * rows of every trip whose rows have arrived.
-   */
-  readonly shownCount = computed(() => {
-    const shown = this.groups();
-    if (shown === null) {
-      return 0;
-    }
-    if (shown.kind === 'flat') {
-      return shown.lines.length;
-    }
-    const ids = new Set(shown.toBuy.map((line) => line.id));
-    for (const group of shown.trips) {
-      for (const joined of group.rows ?? []) {
-        ids.add(joined.line.id);
-      }
-    }
-    return ids.size;
-  });
-
-  /**
    * Whether nothing at all is left to draw under the current search or view, which
    * draws the no match sentence (velista `0082`, section 5).
    */

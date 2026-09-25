@@ -4,12 +4,12 @@ import {
   Component,
   computed,
   DestroyRef,
-  ElementRef,
   inject,
   input,
   output,
   signal,
   viewChild,
+  type ElementRef,
 } from '@angular/core';
 import {
   RokuLocaleStore,
@@ -30,14 +30,6 @@ import {
 } from '@portfolio/velista/platform';
 import { MicIcon, PlusIcon, StopIcon, TrashIcon } from '../icons/icons';
 import { QuantityStepper } from './quantity-stepper';
-import {
-  SuggestionList,
-  type SuggestionHolding,
-  type SuggestionHoldingChange,
-} from './suggestion-list';
-
-/** Numbers each composer's panel id, so the field's `aria-controls` is unique. */
-let composerCount = 0;
 
 /** What the one button at the end of the row is for. */
 export type LineComposerButton = 'add' | 'record';
@@ -142,23 +134,10 @@ export interface LineComposerSubmit {
     StopIcon,
     TrashIcon,
     QuantityStepper,
-    SuggestionList,
   ],
   templateUrl: './line-composer.html',
   styleUrl: './line-composer.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    // Dismissal, the shape `AppBar`, `LineRow` and `ListViewers` already use: a
-    // document listener that closes when the click landed outside this host.
-    //
-    // **The host is the exception list**, and it is the right one by construction:
-    // the panel, the field, the stepper and the send button are all inside it, so a
-    // click on the row the person is typing into cannot take away the list they are
-    // typing to fill, and a click on a suggestion is not dismissal racing the choice.
-    // Everything else on the page, which is the lines the panel is covering, closes
-    // it.
-    '(document:click)': 'closeOnOutsideClick($event.target)',
-  },
 })
 export class LineComposer {
   /**
@@ -229,100 +208,35 @@ export class LineComposer {
    *
    * ## An input and not a second component
    *
-   * The field, the run behaviour across a submit, the counter, the quantity stepper
-   * and the suggestion list are all the same on both screens, and a copy of this
-   * component would be a second place for those five to drift.
+   * The field, the run behaviour across a submit, the counter and the quantity
+   * stepper are all the same on both screens, and a copy of this component would be
+   * a second place for those four to drift.
    */
   readonly voice = input(true);
 
   /**
-   * What the composer offers under the field, in the **server's** order.
+   * The id of the region the page draws this field's results in (velista `0117`).
    *
-   * Handed down rather than fetched here, which is rule D1: this component knows what
-   * a suggestion looks like and nothing about where it came from, and the container
-   * owns the debounce, the scope and the request. It is also what keeps the ordering
-   * honest, since a component that fetched would eventually be tempted to re-rank.
-   *
-   * Empty after a **finished** search for the words still in the field draws one row
-   * saying nothing matched, and that the words can still be added as they are
-   * (velista `0108`, target 1). It used to draw nothing, so that "no matches" would
-   * not read as the shopping list being wrong; on a phone the silence read as a
-   * search that never ran. Free text is still first class, and the row says so.
-   */
-  readonly suggestions = input<readonly CatalogSuggestion[]>([]);
-
-  /** The catalog is being asked, for the panel's skeleton cards (velista `0101`). */
-  readonly suggesting = input(false);
-
-  /**
-   * The words {@link suggestions} answer, trimmed, or null when nothing has been
-   * asked (velista `0108`). The container sets it when an answer lands, so the
-   * composer can tell an empty answer to **these** words from an empty list that is
-   * still waiting for them.
-   */
-  readonly suggestedFor = input<string | null>(null);
-
-  /**
-   * The lines already holding what a card offers, by the page that holds them
-   * (velista `0101`, section 4). Handed straight to the panel.
-   */
-  readonly holdingsOf = input<
-    (suggestion: CatalogSuggestion) => readonly SuggestionHolding[]
-  >(() => []);
-
-  /** Where a card's "Details" goes for one product, or null for no link. */
-  readonly productLink = input<((itemId: string) => string) | null>(null);
-
-  /** A card's stepper moved a line that already holds the product. */
-  readonly holdingChanged = output<SuggestionHoldingChange>();
-
-  /**
-   * The id of the region the page draws this field's results in, or null while the
-   * composer draws its own panel above the field (velista `0117`).
-   *
-   * With an id, the field is the page's one search: it is a search box that controls
-   * that region, it draws no panel, and Escape empties it. The page asks the catalog,
-   * draws the lines and the cards, and hands a chosen card back through
-   * {@link choose}, so a card still adds exactly as it did from the panel.
+   * The field is the page's one search: a search box that controls that region. It
+   * used to draw a panel of suggestions above itself; the page draws the lines that
+   * match and the catalog's cards in its own results now, and hands a chosen card back
+   * through {@link choose}, so a card still adds exactly as it did from the panel.
    */
   readonly resultsId = input<string | null>(null);
+
+  /**
+   * Whether Escape in the field empties it (velista `0117`, rule F2).
+   *
+   * The basket turns it off while its list picker is open, so that Escape closes the
+   * picker and leaves the words for another try (velista `0116`).
+   */
+  readonly escapeClears = input(true);
 
   /**
    * The field gained or lost focus. The page hides the bottom bar while it has focus
    * (velista `0117`, rule F3), so the results get the room.
    */
   readonly fieldFocused = output<boolean>();
-
-  /**
-   * The panel's id, which the field names in `aria-controls`. One per composer, so
-   * two on a page could not point at each other's panel.
-   */
-  protected readonly panelId = `line-composer-panel-${++composerCount}`;
-
-  /**
-   * Whether the field's popup is on screen, for `aria-expanded`: the panel is drawn,
-   * and it has cards or skeletons in it.
-   */
-  /**
-   * The words the no results row quotes, or null when there is no row: the search
-   * finished, found nothing, and was for exactly what is in the field now. A keystroke
-   * takes the row away at once, rather than leaving it quoting words nobody is typing.
-   */
-  protected readonly emptyFor = computed(() => {
-    const words = this.suggestedFor();
-    return words !== null &&
-      !this.suggesting() &&
-      this.suggestions().length === 0 &&
-      words === this.content().trim()
-      ? words
-      : null;
-  });
-
-  protected readonly panelOpen = computed(
-    () =>
-      this.suggestionsShown() &&
-      (this.suggestions().length > 0 || this.suggesting())
-  );
 
   /**
    * What has been typed, raw and on every keystroke.
@@ -362,33 +276,6 @@ export class LineComposer {
   private readonly _field = viewChild<ElementRef<HTMLInputElement>>('field');
   private readonly _sendButton =
     viewChild<ElementRef<HTMLButtonElement>>('sendButton');
-
-  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
-
-  /**
-   * Whether the panel has been waved away for the words currently in the field.
-   *
-   * Presentation state and this component's own, exactly as `AppBar`'s menu is: the
-   * container still holds the suggestions it fetched, and asking it to forget them
-   * because somebody tapped a line would be a page rewriting its own data to change
-   * what a panel looks like.
-   *
-   * It is cleared by the next keystroke, in {@link onInput}. Dismissal is about the
-   * offer that is up, not about the field: somebody who taps away and then types
-   * another letter is asking again, and a panel that stayed shut until the field was
-   * emptied would be a dropdown that can be broken for the rest of a sentence.
-   */
-  private readonly _dismissed = signal(false);
-
-  /**
-   * Whether the panel is drawn.
-   *
-   * The list decides on its own whether it has anything to draw, so this is only the
-   * dismissal. Two separate questions, kept separate: "there is nothing to offer" and
-   * "the offer was declined" look the same on screen and are not the same state, and
-   * collapsing them is how a dismissal ends up surviving the next query.
-   */
-  protected readonly suggestionsShown = computed(() => !this._dismissed());
 
   /**
    * The reader's language, for the catalog's two-language product names.
@@ -491,28 +378,7 @@ export class LineComposer {
   onInput(event: Event): void {
     const typed = (event.target as HTMLInputElement).value;
     this.content.set(typed);
-    // Typing is asking again. See `_dismissed`.
-    this._dismissed.set(false);
     this.queryChanged.emit(typed);
-  }
-
-  /**
-   * A click landed somewhere on the page. Close the panel unless it was ours.
-   *
-   * `click` and not `pointerdown`, which is what every other dismissal in this app
-   * listens for and matters more here than elsewhere: a suggestion is chosen on
-   * click, and closing on the press that precedes it would be a panel racing the row
-   * somebody is pressing.
-   */
-  protected closeOnOutsideClick(target: EventTarget | null): void {
-    if (this._dismissed()) {
-      return;
-    }
-
-    const host = this._host.nativeElement;
-    if (target === null || !host.contains(target as Node)) {
-      this._dismissed.set(true);
-    }
   }
 
   /**
@@ -720,11 +586,11 @@ export class LineComposer {
   }
 
   /**
-   * Escape in a field whose results are on the page empties it, which closes them
-   * (velista `0117`, rule F2). A field with nothing in it lets the key go on.
+   * Escape empties the field, which closes the results (velista `0117`, rule F2). A
+   * field with nothing in it, or one whose page said not to, lets the key go on.
    */
   protected onEscape(event: Event): void {
-    if (this.resultsId() === null || this.content() === '') {
+    if (!this.escapeClears() || this.content() === '') {
       return;
     }
     event.preventDefault();
@@ -822,8 +688,7 @@ export class LineComposer {
   }
 
   private _clear(): void {
-    // The dropdown goes with the words that produced it. Leaving it up over an empty
-    // field would offer matches for something nobody is typing any more.
+    // The results go with the words that produced them.
     this.clear();
     this._field()?.nativeElement.focus();
   }
