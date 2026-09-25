@@ -1,3 +1,5 @@
+> **PR:** [#494](https://github.com/IchirokuXVI/nx-portfolio/pull/494)
+
 # 0112: the catalog scroll and the tour
 
 Three small fixes found on a phone after plan `0106` made the app frame a non scrolling column:
