@@ -1,8 +1,24 @@
-// The catalog tab (velista 0100), drawn as the mock draws it. Not a scroll container:
-// scrolling is page level in this app (AppLayout, section 8), so the tools stick to
-// the top of the document rather than of a box.
+// The catalog tab (velista 0100), drawn as the mock draws it.
+//
+// **The page is its own scroller, and it draws no scrollbar** (velista 0112). Since
+// 0106 the document never scrolls: the frame's page slot does, for every page without
+// a scroller of its own. The catalog takes one so that its scrollbar can be hidden
+// while every other page keeps the slot's. It is exactly as tall as the slot, so the slot
+// never overflows, and the tools stick to the top of this box, which is where they
+// stuck before.
+//
+// Hidden and not removed: the page still scrolls by touch, by wheel, and by the
+// keyboard from anything focused inside it, and a screen reader still moves through
+// it. The pattern is the one `chain-chips` and `suggestion-list` already use.
 :host {
   display: block;
+  block-size: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .page {

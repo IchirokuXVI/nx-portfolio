@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   input,
   signal,
   viewChild,
@@ -35,27 +36,47 @@ export type TourSlot =
   | { readonly top: null; readonly bottom: number };
 
 /**
- * Where a card of `cardHeight` goes beside `ring` on a screen `viewport` tall.
+ * The heights the spotlight works in, in CSS pixels.
+ *
+ * `visible` is what the person can see. `frame` is the box a fixed element is placed
+ * in, which is what a `bottom` offset counts from. They are one number on a desktop and
+ * in a phone's browser tab. They can part in an installed app on Android, where the
+ * dynamic viewport grows under the system navigation bar while the visible screen does
+ * not (see `AppLayout`), and a card placed by `bottom` against the wrong one of them
+ * lands that strip lower than the ring it points at.
+ */
+export interface TourScreen {
+  readonly visible: number;
+  readonly frame: number;
+}
+
+/**
+ * Where a card of `cardHeight` goes beside `ring` on `screen`.
  *
  * The preferred side first. **Then the other side**, because a card cut off at the
  * screen's edge hides its own buttons: the groups section on a new account is most of
  * the screen tall, and a card placed below it ended under the bottom edge. With room
  * on neither side the card is kept on screen over part of the control, which still
  * shows round it. A height of zero (not measured yet) fits anywhere.
+ *
+ * The card is never taller than the screen less both edges: past that it scrolls
+ * inside itself (velista `0112`), so the last case always fits.
  */
 export function placeCard(
   ring: Box,
   preferred: TourSpotlightPlacement,
   cardHeight: number,
-  viewport: number
+  screen: number | TourScreen
 ): TourSlot {
+  const { visible, frame } =
+    typeof screen === 'number' ? { visible: screen, frame: screen } : screen;
   const below = ring.top + ring.height + CARD_GAP;
-  const fitsBelow = below + cardHeight <= viewport - SCREEN_EDGE;
+  const fitsBelow = below + cardHeight <= visible - SCREEN_EDGE;
   const fitsAbove = ring.top - CARD_GAP - cardHeight >= SCREEN_EDGE;
   const asBelow: TourSlot = { top: below, bottom: null };
   const asAbove: TourSlot = {
     top: null,
-    bottom: viewport - ring.top + CARD_GAP,
+    bottom: frame - ring.top + CARD_GAP,
   };
 
   if (preferred === 'below' && fitsBelow) {
@@ -71,8 +92,40 @@ export function placeCard(
     return asAbove;
   }
 
-  return { top: null, bottom: SCREEN_EDGE };
+  return { top: null, bottom: frame - visible + SCREEN_EDGE };
 }
+
+/**
+ * The ring round `box`, kept inside a screen `width` wide and `visible` tall
+ * (velista `0112`).
+ *
+ * The ring stands off its control on every side, so round a control that reaches the
+ * screen's edges it went past them. The first stop lights the bar, which spans the
+ * screen and ends at its foot, and its ring lost its bottom edge and both lower
+ * corners under the edge of the screen. Clamped, the ring meets the edge instead.
+ */
+export function ringOnScreen(box: Box, width: number, visible: number): Box {
+  const top = Math.max(box.top - RING_GAP, 0);
+  const left = Math.max(box.left - RING_GAP, 0);
+  const right = Math.min(box.left + box.width + RING_GAP, width);
+  const bottom = Math.min(box.top + box.height + RING_GAP, visible);
+  return {
+    top,
+    left,
+    width: Math.max(right - left, 0),
+    height: Math.max(bottom - top, 0),
+  };
+}
+
+/** How tall the card may be on a screen `visible` tall before it scrolls inside itself. */
+export function cardMaxHeight(visible: number): number {
+  return Math.max(visible - SCREEN_EDGE * 2, 0);
+}
+
+/** A screen, and how wide it is. */
+type Screen = TourScreen & { readonly width: number };
+
+const NO_SCREEN: Screen = { visible: 0, frame: 0, width: 0 };
 
 /**
  * The dimming, the ring round the lit control, and the place the card goes (velista
@@ -102,7 +155,6 @@ export function placeCard(
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(window:resize)': 'measure()',
-    '(window:scroll)': 'measure()',
   },
 })
 export class TourSpotlight {
@@ -113,6 +165,9 @@ export class TourSpotlight {
   readonly placement = input<TourSpotlightPlacement>('below');
 
   private readonly _slot = viewChild<ElementRef<HTMLElement>>('cardSlot');
+
+  /** The layer that takes every press: fixed to the screen, so it is the frame. */
+  private readonly _layer = viewChild<ElementRef<HTMLElement>>('layer');
 
   /** How tall the card is, measured after it is drawn. Zero until then. */
   private readonly _cardHeight = signal(0);
@@ -133,22 +188,21 @@ export class TourSpotlight {
     return target === null ? null : boxOf(target);
   });
 
-  private readonly _viewport = computed(() => {
+  private readonly _screen = computed<Screen>(() => {
     this._tick();
-    return this.target()?.ownerDocument.documentElement.clientHeight ?? 0;
+    const target = this.target();
+    return target === null
+      ? NO_SCREEN
+      : screenOf(target, this._layer()?.nativeElement);
   });
 
   /** The ring, or null for none. */
   protected readonly ring = computed(() => {
     const box = this._box();
-    return box === null || this.target() === null
+    const screen = this._screen();
+    return box === null
       ? null
-      : {
-          top: box.top - RING_GAP,
-          left: box.left - RING_GAP,
-          width: box.width + RING_GAP * 2,
-          height: box.height + RING_GAP * 2,
-        };
+      : ringOnScreen(box, screen.width, screen.visible);
   });
 
   /** Where the card goes. See {@link placeCard}. */
@@ -156,7 +210,42 @@ export class TourSpotlight {
     const ring = this.ring();
     return ring === null
       ? null
-      : placeCard(ring, this.placement(), this._cardHeight(), this._viewport());
+      : placeCard(ring, this.placement(), this._cardHeight(), this._screen());
+  });
+
+  /** How tall the card may be before it scrolls inside itself, as a CSS length. */
+  protected readonly cardMax = computed(
+    () => `${cardMaxHeight(this._screen().visible)}px`
+  );
+
+  /**
+   * Measure again whenever anything scrolls, heard in the capture phase (velista
+   * `0112`).
+   *
+   * Since `0106` the document never scrolls: the page slot does, or a page's own
+   * column. A scroll event does not bubble, so a listener on the window heard none of
+   * them, and a lit control carried along by its page left the ring where it had been.
+   * In the capture phase the document hears the scroll of every box inside it. The
+   * visual viewport is heard as well, because on a phone it changes height without the
+   * window resizing.
+   */
+  private readonly _scrollWatch = effect((onCleanup) => {
+    const target = this.target();
+    if (target === null) {
+      return;
+    }
+    const document = target.ownerDocument;
+    const visual = document.defaultView?.visualViewport ?? null;
+    const listener = (): void => this.measure();
+    document.addEventListener('scroll', listener, {
+      capture: true,
+      passive: true,
+    });
+    visual?.addEventListener('resize', listener);
+    onCleanup(() => {
+      document.removeEventListener('scroll', listener, { capture: true });
+      visual?.removeEventListener('resize', listener);
+    });
   });
 
   constructor() {
@@ -182,16 +271,50 @@ export class TourSpotlight {
     }
 
     const now = boxOf(target);
+    const screen = screenOf(target, this._layer()?.nativeElement);
+    const held = this._screen();
     if (
       now.top !== drawn.top ||
       now.left !== drawn.left ||
       now.width !== drawn.width ||
       now.height !== drawn.height ||
-      target.ownerDocument.documentElement.clientHeight !== this._viewport()
+      screen.visible !== held.visible ||
+      screen.frame !== held.frame ||
+      screen.width !== held.width
     ) {
       this._tick.update((tick) => tick + 1);
     }
   }
+}
+
+/**
+ * The screen the tour is drawn on, read from the document `target` is in.
+ *
+ * The visible height is the least of what the document, the window and the visual
+ * viewport report, because each of them can be the one that counts a strip the person
+ * cannot see. The frame is the height of the fixed layer itself, which is the box a
+ * `bottom` offset counts from; before the layer is drawn it is the visible height.
+ */
+function screenOf(target: HTMLElement, layer: HTMLElement | undefined): Screen {
+  const document = target.ownerDocument;
+  const view = document.defaultView;
+  const heights = [document.documentElement.clientHeight];
+  if (view !== null && view.innerHeight > 0) {
+    heights.push(view.innerHeight);
+  }
+  const visual = view?.visualViewport ?? null;
+  if (visual !== null && visual.height > 0) {
+    heights.push(Math.round(visual.offsetTop + visual.height));
+  }
+  const visible = Math.min(...heights.filter((each) => each > 0), Infinity);
+  const frame = Math.round(layer?.getBoundingClientRect().height ?? 0);
+  const safeVisible = Number.isFinite(visible) ? visible : 0;
+  const width = document.documentElement.clientWidth;
+  return {
+    visible: safeVisible,
+    frame: frame > 0 ? frame : safeVisible,
+    width: width > 0 ? width : (view?.innerWidth ?? 0),
+  };
 }
 
 /**
