@@ -17,11 +17,11 @@ import { RowEntries } from './row-entries';
  * What each household asked for, got, and may still be asked to buy (velista
  * `0090` section 9.2, and `0092` section 6).
  *
- * The pane holds **two reels on one row** now, and they mean opposite things:
- * "got" records a purchase, and "asks for" rewrites a household's list for
- * everybody. So what is asserted here is mostly the difference between them —
- * one commits on release and the other does not — and the three conditions that
- * decide whether the second is drawn at all.
+ * The pane holds **two reels on one row**: "got" records a purchase, and
+ * "asks for" rewrites a household's list for everybody. Both commit on
+ * release, with no confirmation. What is asserted here is which output each
+ * one sends, and the three conditions that decide whether the second is drawn
+ * at all.
  *
  * Assertions are on translation keys rather than on rendered English, because the
  * testing translator echoes keys: the question is which sentence was chosen,
@@ -109,9 +109,6 @@ const html = (fixture: Fixture) => fixture.nativeElement as HTMLElement;
 const askReels = (fixture: Fixture) => [
   ...html(fixture).querySelectorAll<HTMLElement>('.ask-reel'),
 ];
-
-const applyButton = (fixture: Fixture) =>
-  html(fixture).querySelector<HTMLButtonElement>('.apply');
 
 /**
  * The keyboard half of the reel, which is a real path and the one a spec can
@@ -205,63 +202,48 @@ describe('RowEntries: who may change what a list asks for', () => {
   });
 });
 
-describe('RowEntries: the demand control does not commit on release', () => {
+describe('RowEntries: the demand control commits on release', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('writes nothing when the reel is let go', async () => {
-    const fixture = await render(row([entry()]));
-    const demanded = jest.fn();
-    fixture.componentInstance.demanded.subscribe(demanded);
-
-    key(askReels(fixture)[0], fixture, 'ArrowUp');
-    letGo(fixture);
-
-    // This rewrites a household's list for everybody, the gesture is rare, and a
-    // number that a thumb brushed is not a decision.
-    expect(demanded).not.toHaveBeenCalled();
-  });
-
-  it('offers the button only once the reel has moved', async () => {
-    const fixture = await render(row([entry()]));
-    expect(applyButton(fixture)).toBeNull();
-
-    key(askReels(fixture)[0], fixture, 'ArrowUp');
-    letGo(fixture);
-
-    expect(applyButton(fixture)).not.toBeNull();
-  });
-
-  it('says what the change costs, tied to the button', async () => {
-    const fixture = await render(row([entry()]));
-    key(askReels(fixture)[0], fixture, 'ArrowUp');
-    letGo(fixture);
-
-    expect(html(fixture).textContent ?? '').toContain(
-      'basket.demand.everybody'
-    );
-    // Read when the button is **reached** rather than only when it is seen.
-    const described = applyButton(fixture)?.getAttribute('aria-describedby');
-    expect(described).toBe('demand-zl-1');
-    expect(html(fixture).querySelector(`#${described}`)).not.toBeNull();
-  });
-
-  it('sends the line, the new number and the one it started from', async () => {
+  it('sends the line, the new number and the one it started from when let go', async () => {
     const fixture = await render(row([entry({ left: 2 })]));
     const demanded = jest.fn();
     fixture.componentInstance.demanded.subscribe(demanded);
 
     key(askReels(fixture)[0], fixture, 'ArrowUp');
     letGo(fixture);
-    applyButton(fixture)?.click();
 
-    // `from` is velista `0054`'s bargain: a write whose starting number has moved
-    // is refused rather than applied to a number that moved underneath it.
+    // No button to press first. `from` is velista `0054`'s bargain: a write whose
+    // starting number has moved is refused rather than applied to a number that
+    // moved underneath it.
     expect(demanded).toHaveBeenCalledWith({
       lineId: 'zl-1',
       from: 2,
       to: 3,
     });
+  });
+
+  it('writes nothing while the reel is still moving', async () => {
+    const fixture = await render(row([entry()]));
+    const demanded = jest.fn();
+    fixture.componentInstance.demanded.subscribe(demanded);
+
+    key(askReels(fixture)[0], fixture, 'ArrowUp');
+
+    expect(demanded).not.toHaveBeenCalled();
+    letGo(fixture);
+  });
+
+  it('draws no button and no warning', async () => {
+    const fixture = await render(row([entry()]));
+    key(askReels(fixture)[0], fixture, 'ArrowUp');
+    letGo(fixture);
+
+    expect(html(fixture).querySelector('button')).toBeNull();
+    expect(html(fixture).textContent ?? '').not.toContain(
+      'basket.demand.everybody'
+    );
   });
 
   it('names the list on the reel, so two reels are told apart by ear', async () => {
@@ -291,11 +273,11 @@ describe('RowEntries: the demand control does not commit on release', () => {
   });
 });
 
-describe('RowEntries: the two reels are different controls', () => {
+describe('RowEntries: each reel sends its own output', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('commits the got reel on release and the ask reel on a button', async () => {
+  it('sends the got reel as an allocation and never as a demand', async () => {
     const fixture = await render(row([entry()]));
     const allocated = jest.fn();
     const demanded = jest.fn();
@@ -306,9 +288,7 @@ describe('RowEntries: the two reels are different controls', () => {
     key(got as HTMLElement, fixture, 'ArrowUp');
     letGo(fixture);
 
-    // A shopper moves this one a dozen times a trip, and a confirmation on each
-    // would be the dialog `0043` took off the list page.
-    expect(allocated).toHaveBeenCalled();
+    expect(allocated).toHaveBeenCalledWith({ lineId: 'zl-1', from: 1, to: 2 });
     expect(demanded).not.toHaveBeenCalled();
   });
 });

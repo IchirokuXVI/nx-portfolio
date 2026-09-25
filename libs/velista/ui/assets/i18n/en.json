@@ -1332,14 +1332,8 @@
     },
     "settle": {
       "title": "{{name}}",
-      "all_one": "Got it",
-      "all_other": "Got all {{count}}",
-      "some": "Got some",
-      "someTitle": "How many did you get?",
       "none": "They had none",
       "cancel": "Cancel",
-      "submit": "Record it",
-      "quantity": "How many",
       "more": "One more",
       "fewer": "One fewer",
       "failed": "That did not save. Try again.",
@@ -1556,8 +1550,6 @@
     "demand": {
       "label": "The list asks for",
       "askLabel": "{{name}}, asks for",
-      "apply": "Change the list",
-      "everybody": "This changes the list for everybody.",
       "nothingLeft": "{{name}} is no longer asked for.",
       "refused": "Only somebody who approves lines on that list can change it."
     },

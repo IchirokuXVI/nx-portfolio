@@ -325,6 +325,11 @@ export interface BasketProduct {
    */
   name: LocalizedName;
   brand: string | null;
+  /**
+   * The catalog's picture of the product, or null for one it has none of. Drawn
+   * on the line sheet's product card, where the carton glyph takes its place.
+   */
+  readonly imageUrl: string | null;
   /** e.g. `1` with {@link BasketProduct.unit} `LITER`. Null when catalog does not know. */
   size: number | null;
   unit: string | null;

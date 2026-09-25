@@ -61,8 +61,7 @@
   }
 }
 
-// The quiet accent and not `.primary`: the solid amber stays on "Got all", and two
-// solid buttons on one sheet compete for the thumb (the line detail sheet's rule).
+// The quiet accent and not `.primary`, as the line detail sheet draws its Save.
 .save {
   @include shared.tap-target;
 
@@ -373,17 +372,6 @@
   &:hover {
     color: var(--app-text-secondary);
   }
-}
-
-// --- How many ---------------------------------------------------------------
-
-// The reel draws itself, so this only puts it where the stepper used to sit:
-// centred, with the same air above and below, so the pane does not jump for
-// somebody who knew where the number was.
-.quantity-control {
-  display: flex;
-  justify-content: center;
-  margin-block: var(--app-space-5);
 }
 
 // --- The options ------------------------------------------------------------

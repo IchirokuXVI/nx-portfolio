@@ -46,12 +46,7 @@ import {
   rowKeyOf,
   SheetNavigation,
 } from '@portfolio/velista/platform';
-import {
-  CheckIcon,
-  QuantityReel,
-  SheetShell,
-  SpinnerIcon,
-} from '@portfolio/velista/ui';
+import { CheckIcon, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import {
   basketErrorArgs,
   basketErrorKey,
@@ -61,6 +56,7 @@ import {
 import { participantName, touchedCaption } from '../basket-labels';
 import { basketPath, settleSheetPath } from '../basket-paths';
 import { RowEntries } from '../row-entries/row-entries';
+import { SettleProduct, type SettleProductView } from './settle-product';
 
 /**
  * Where a price is from, as one line under the option's name (velista `0062`,
@@ -100,7 +96,7 @@ function placeOf(
  * make the precise ones two taps and a navigation away from the number they were
  * about to type.
  */
-type Pane = 'settle' | 'quantity' | 'product' | 'history' | 'merge';
+type Pane = 'settle' | 'product' | 'history' | 'merge';
 
 /**
  * One option on the product pane: what it is, what it costs here, and whether it
@@ -144,16 +140,15 @@ interface MergeQuestion {
 type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
 
 /**
- * Settling one line: the whole amount, a number, or per household (plan 0044,
- * section 4.2).
+ * One line of the basket: its product, what each household asked for and got, and
+ * the ways to close it without buying (plan 0044, section 4.2).
  *
- * ## The two buttons, and why the first is one tap
+ * ## No "Got all" and no "Got some"
  *
- * **Settle closes the whole outstanding amount** and is the common case, so it is
- * the largest control and takes one tap. **Partial submit asks for a number** and
- * is available to everybody, guests included, because it asks nothing about
- * zones. Neither mentions a list: a guest is never asked which household a tin of
- * tomatoes belongs to, and the system allocates oldest origin first.
+ * The sheet had both, and they are gone. Buying the whole row is the row's own
+ * control on the basket page, and buying part of it is the "got" reel below. Both
+ * reels commit on release and **leave the sheet open**, because somebody moving
+ * a number wants to see where it landed.
  *
  * ## What every list asked for and got, under the product (velista `0073`)
  *
@@ -164,18 +159,12 @@ type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
  *
  * What replaced them is `RowEntries`, drawn under the product entry for a
  * reader who passes the all or nothing rule: one row per list, both numbers, both
- * controls. A guest sees the sheet without it and settles the whole line or part of
- * it through the buttons exactly as before.
- *
- * **The settle buttons never wait for it** (section 3.4). It owns its own read and
- * draws its own loading and failure states, so a shopper who opened the sheet to
- * press "Got all" is not held up by a question about lists.
+ * controls.
  *
  * ## Not available is here, and it is not a quantity
  *
- * It closes the outstanding amount without claiming anything was bought, which is
- * why it sits beside the two settle buttons and ignores whatever number is in the
- * stepper.
+ * It closes the outstanding amount without claiming anything was bought, and it
+ * closes the sheet with it.
  *
  * ## What a settle can leave behind
  *
@@ -214,8 +203,8 @@ type HistoryLoad = 'idle' | 'loading' | 'loaded' | 'failed';
   imports: [
     CheckIcon,
     RowEntries,
-    QuantityReel,
     RokuTranslatorPipe,
+    SettleProduct,
     SheetShell,
     SpinnerIcon,
   ],
@@ -480,43 +469,6 @@ export class SettleSheet {
   });
 
   /**
-   * What the reel holds, for the partial submit.
-   *
-   * Starts at one rather than at the outstanding amount: somebody who wanted the
-   * whole amount pressed the other button, so the number they are about to give is
-   * by definition a smaller one.
-   *
-   * It follows the reel's `preview` as well as its commit, so "Record it" reads the
-   * number under the thumb straight away rather than after the reel's idle beat. A
-   * button whose label disagreed with the number above it for a second would be
-   * asking somebody in a shop to wait and find out.
-   */
-  protected readonly typed = signal(1);
-
-  /**
-   * The reel's ceiling: what is outstanding, and never less than its floor.
-   *
-   * A finished line has nothing outstanding, and the settle pane draws no way into
-   * this one for exactly that reason (`finished`), so the floor here is a guard
-   * against an impossible range rather than a case somebody can reach.
-   */
-  protected readonly quantityMax = computed(() =>
-    Math.max(1, this.outstanding())
-  );
-
-  /**
-   * The number under the thumb, while it is down.
-   *
-   * Null means the overlay closed, and the reel is showing {@link typed} again, so
-   * there is nothing to copy across.
-   */
-  protected onQuantityPreview(next: number | null): void {
-    if (next !== null) {
-      this.typed.set(next);
-    }
-  }
-
-  /**
    * The product somebody said they got, or null (velista `0092`, section 5).
    *
    * The same three answers the row underneath draws, from the same store: a
@@ -536,11 +488,71 @@ export class SettleSheet {
       : (this._store.products().get(chosen) ?? null);
   });
 
-  /** The product's name, for the line under the title. */
-  protected readonly productName = computed<string | null>(() => {
+  /**
+   * The product card under the title: the picture, the name, `brand · size`, and
+   * the price the row underneath quotes, with where it is from.
+   *
+   * The price is {@link shownOffer}'s, the one rule the row and the product pane
+   * already read, so the card cannot quote a number the row does not.
+   */
+  protected readonly productCard = computed<SettleProductView | null>(() => {
     const product = this._product();
-    return product === null ? null : inLocale(product.name, this._locale());
+    if (product === null) {
+      return null;
+    }
+
+    const locale = this._locale();
+    const offer = shownOffer(product, this._view.pricedAtShop());
+    const size = this._sizeText(product, locale);
+    const detail = [product.brand, size]
+      .filter((part): part is string => part !== null && part !== '')
+      .join(' · ');
+
+    return {
+      name: inLocale(product.name, locale),
+      detail: detail === '' ? null : detail,
+      imageUrl: product.imageUrl,
+      price:
+        offer === null
+          ? null
+          : formatMoney(offer.price, offer.currency, locale),
+      place:
+        offer === null
+          ? null
+          : placeOf(
+              this._store.basket()?.scopes.get(offer.priceScopeId),
+              locale
+            ),
+    };
   });
+
+  /**
+   * The size the way the composer's suggestions say it (`list.add.size.*`), or
+   * null. A count of one unit or one pack says nothing, so it is left out.
+   */
+  private _sizeText(product: BasketProduct, locale: string): string | null {
+    const { size, unit } = product;
+    if (size === null || size <= 0 || unit === null) {
+      return null;
+    }
+    if ((unit === 'UNIT' || unit === 'PACK') && size < 2) {
+      return null;
+    }
+
+    let number: string;
+    try {
+      number = new Intl.NumberFormat(locale, {
+        maximumFractionDigits: 3,
+      }).format(size);
+    } catch {
+      number = String(size);
+    }
+    const key = `list.add.size.${unit}`;
+    const text = this._translator.t(key, undefined, locale, { size: number });
+    // A unit this build has no words for comes back as its own key. Nothing
+    // rather than a key on screen.
+    return text === key ? null : text;
+  }
 
   /**
    * Whether the way into the product pane is drawn at all.
@@ -962,34 +974,6 @@ export class SettleSheet {
   protected readonly lists = this._store.lists;
 
   /**
-   * Everything this row still asks for, in one tap. The common case.
-   *
-   * **With an explicit quantity**, which is what backend `0136` requires: the server
-   * no longer caps an absent one at what the row asks for, because buying three of a
-   * row that says two records three. `from` beside it is what makes the second tap
-   * of a double tap safe (velista `0054`).
-   */
-  protected async settleAll(): Promise<void> {
-    const from = this.outstanding();
-    await this._send({
-      outcome: 'BOUGHT',
-      quantity: from,
-      from,
-      ...this._got(),
-    });
-  }
-
-  /** A number the person chose. Asks nothing about lists, so guests may use it. */
-  protected async settleSome(): Promise<void> {
-    await this._send({
-      outcome: 'BOUGHT',
-      quantity: this.typed(),
-      from: this.outstanding(),
-      ...this._got(),
-    });
-  }
-
-  /**
    * The product this settle names, as a body fragment to spread (velista `0092`,
    * section 5).
    *
@@ -1101,7 +1085,9 @@ export class SettleSheet {
    * is the number it takes from.
    *
    * Both go through the same busy state and the same failure reporting as the
-   * targets above, because they are the same act aimed more precisely.
+   * targets above, because they are the same act aimed more precisely. Unlike
+   * them, a write that lands **leaves the sheet open**: the reel is a number
+   * somebody is adjusting, and they want to see where it landed.
    */
   protected async allocate(change: {
     lineId: string;
@@ -1113,23 +1099,31 @@ export class SettleSheet {
     }
 
     if (change.to > change.from) {
-      await this._send({
-        outcome: 'BOUGHT',
-        quantity: change.to - change.from,
-        from: this.outstanding(),
-        allocations: [
-          { lineId: change.lineId, quantity: change.to - change.from },
-        ],
-        ...this._got(),
-      });
+      await this._run(
+        () =>
+          this._store.settle(this._rowKey, {
+            outcome: 'BOUGHT',
+            quantity: change.to - change.from,
+            from: this.outstanding(),
+            allocations: [
+              { lineId: change.lineId, quantity: change.to - change.from },
+            ],
+            ...this._got(),
+          }),
+        { stayOpen: true }
+      );
       return;
     }
 
-    await this._revert({
-      target: 'UNITS',
-      units: change.from - change.to,
-      from: this.row()?.bought ?? 0,
-    });
+    await this._run(
+      () =>
+        this._store.revert(this._rowKey, {
+          target: 'UNITS',
+          units: change.from - change.to,
+          from: this.row()?.bought ?? 0,
+        }),
+      { stayOpen: true }
+    );
   }
 
   /**
@@ -1142,7 +1136,9 @@ export class SettleSheet {
    *
    * Three endings:
    *
-   * - the row came back, and the sheet closes like any write that landed;
+   * - the row came back, and the sheet **stays open** on it, as it does for the
+   *   "got" reel beside it: the reel commits on release with no confirmation,
+   *   and the person moving it wants to see where it landed;
    * - the row is **gone**, which is a demand taken to zero on a row nothing was
    *   bought of. The list now asks for nothing, which is what was asked for, so
    *   the page is handed a sentence and the sheet closes over a row that is no
@@ -1189,10 +1185,8 @@ export class SettleSheet {
           }
         )
       );
-      this._left = true;
+      this.close();
     }
-
-    this.close();
   }
 
   protected openPane(pane: Pane): void {
@@ -1433,22 +1427,19 @@ export class SettleSheet {
     await this._run(() => this._store.settle(this._rowKey, body));
   }
 
-  /** The other direction of the same gesture (backend `0136`, section 5.2). */
-  private async _revert(
-    body: Parameters<BasketStore['revert']>[1]
-  ): Promise<void> {
-    await this._run(() => this._store.revert(this._rowKey, body));
-  }
-
   /**
    * One write on this row, with the busy state and the failure reporting around it.
    *
    * Shared by the settle targets, the entries pane and the revert, because all of
    * them do the same three things: mark the sheet busy, fold or report, and get out
    * of the way when there is nothing to say.
+   *
+   * `stayOpen` is the entries pane's reels, which keep the sheet up after a write
+   * that landed. The buttons close it.
    */
   private async _run(
-    send: () => Promise<BasketRowResult | null>
+    send: () => Promise<BasketRowResult | null>,
+    { stayOpen = false }: { readonly stayOpen?: boolean } = {}
   ): Promise<void> {
     this._settling.set(true);
     this._failedOp.set(null);
@@ -1465,7 +1456,7 @@ export class SettleSheet {
     }
 
     this._result.set(result);
-    if (result.skippedCount === 0) {
+    if (result.skippedCount === 0 && !stayOpen) {
       // Nothing to report, so the sheet gets out of the way: the person is in a
       // shop and the next row is what they want to see.
       this.close();

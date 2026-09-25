@@ -456,6 +456,44 @@ async function openHistory(fixture: ComponentFixture<SettleSheet>) {
   fixture.detectChanges();
 }
 
+/**
+ * Let one of the entries pane's reels settle at a new number, as a thumb letting
+ * go of it does. `which` is the reel's class: `got-reel` or `ask-reel`.
+ *
+ * Through the reel's own output rather than keys and timers, so the spec says
+ * what the sheet does with a commit and leaves the reel's gesture to its spec.
+ */
+async function commitReel(
+  fixture: ComponentFixture<SettleSheet>,
+  which: 'got-reel' | 'ask-reel',
+  change: { from: number; to: number },
+  index = 0
+) {
+  const reels = fixture.debugElement.queryAll(
+    By.css(`lib-quantity-reel.${which}`)
+  );
+  (reels[index].componentInstance as QuantityReel).committedTo.emit(change);
+  await fixture.whenStable();
+  fixture.detectChanges();
+}
+
+/** One more on the first household's "got" reel: a purchase of one. */
+const gotOne = (fixture: ComponentFixture<SettleSheet>) =>
+  commitReel(fixture, 'got-reel', { from: 0, to: 1 });
+
+/** Press "They had none", which every reader who may settle is offered. */
+async function pressNone(fixture: ComponentFixture<SettleSheet>) {
+  [
+    ...(
+      fixture.nativeElement as HTMLElement
+    ).querySelectorAll<HTMLButtonElement>('.actions button'),
+  ]
+    .find((button) => (button.textContent ?? '').includes('basket.settle.none'))
+    ?.click();
+  await fixture.whenStable();
+  fixture.detectChanges();
+}
+
 describe('SettleSheet: what happened to this line', () => {
   describe('who is offered it', () => {
     it('offers it to the owner', async () => {
@@ -689,11 +727,7 @@ describe('SettleSheet: what a write could not reach', () => {
     const { fixture, store } = await render(world);
     store.settle.mockResolvedValue(result);
 
-    (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.primary')
-      ?.click();
-    await fixture.whenStable();
-    fixture.detectChanges();
+    await pressNone(fixture);
 
     return fixture;
   }
@@ -739,6 +773,17 @@ describe('SettleSheet: what a write could not reach', () => {
     const fixture = await settleWith(result(0));
 
     expect(missed(fixture)).toBe('');
+    expect(dismissedTo()).toHaveLength(1);
+  });
+
+  /** The reel keeps the sheet up, but a missed entry is still told. */
+  it('says it after a "got" reel too', async () => {
+    const { fixture, store } = await render();
+    store.settle.mockResolvedValue(result(1));
+
+    await gotOne(fixture);
+
+    expect(missed(fixture)).toContain('basket.settle.missed');
   });
 });
 
@@ -804,7 +849,9 @@ describe('SettleSheet: a line with nothing left to settle', () => {
       lines: [line({ bought: 1, left: 3, asked: 4, state: 'PARTLY' })],
     });
 
-    expect(control(fixture, '.primary')).not.toBeNull();
+    expect(control(fixture, '.actions')?.textContent).toContain(
+      'basket.settle.none'
+    );
   });
 });
 
@@ -867,8 +914,8 @@ describe('SettleSheet: the trip is finished', () => {
       basketFinished: true,
     });
 
-    expect(control(fixture, '.product-name')).not.toBeNull();
-    expect(control(fixture, '.product-change')).toBeNull();
+    expect(control(fixture, 'lib-settle-product .name')).not.toBeNull();
+    expect(control(fixture, 'lib-settle-product .change')).toBeNull();
   });
 
   it('keeps the entries pane and takes its reels off', async () => {
@@ -908,11 +955,7 @@ describe('SettleSheet: what a failure says', () => {
     store.error.set(error);
     store.settle.mockResolvedValue(null);
 
-    (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.primary')
-      ?.click();
-    await fixture.whenStable();
-    fixture.detectChanges();
+    await pressNone(fixture);
 
     return fixture;
   }
@@ -1034,114 +1077,111 @@ describe('SettleSheet: a settlement that was taken back', () => {
 });
 
 /**
- * The quantity pane, which is now the same control as the row (plan 0054, section 6).
+ * The two reels on the entries pane, and the sheet around them.
  *
- * It drew its own spinbutton with a copy of `QuantityReel`'s key table beside a
- * comment saying it matched. There is one number control in this product and one
- * keyboard path through it, and a copy that no longer exists cannot drift.
- *
- * The three buttons are untouched and are asserted elsewhere. "They had none" in
- * particular has no representation on a reel at all: it is an outcome and not a
- * quantity, and a number dragged to zero must never be able to mean the shop had
- * none.
+ * There is no "Got all" and no "Got some" on this sheet. The row on the basket
+ * page buys the whole line, and the "got" reel buys part of it. Both reels commit
+ * on release with no confirmation, and a write from either **leaves the sheet
+ * open**, because somebody adjusting a number wants to see where it landed. The
+ * buttons that close the line ("They had none") still close the sheet.
  */
-describe('SettleSheet: how many did you get', () => {
-  /** Open the pane the way the settle pane's own control does. */
-  function openQuantity(fixture: ComponentFixture<SettleSheet>): void {
-    const buttons = Array.from(
-      (fixture.nativeElement as HTMLElement).querySelectorAll('button')
-    );
-    const some = buttons.find((button) =>
-      (button.textContent ?? '').includes('basket.settle.some')
-    );
-    if (some === undefined) {
-      throw new Error('the settle pane offers no way to give a number');
-    }
-    some.click();
-    fixture.detectChanges();
+describe('SettleSheet: the reels on the entries pane', () => {
+  function landed(): BasketRowResult {
+    return {
+      row: line(),
+      progress: { done: 0, unavailable: 0, total: 1 },
+      pending: 1,
+      replacedRowKey: null,
+      skippedCount: 0,
+    };
   }
 
-  function reel(fixture: ComponentFixture<SettleSheet>): QuantityReel {
-    return fixture.debugElement.query(By.directive(QuantityReel))
-      .componentInstance as QuantityReel;
-  }
-
-  function reelEl(fixture: ComponentFixture<SettleSheet>): HTMLElement {
-    return (fixture.nativeElement as HTMLElement).querySelector(
-      'lib-quantity-reel'
-    ) as HTMLElement;
-  }
-
-  /**
-   * Move the reel, and put it away afterwards.
-   *
-   * The close is what stops the idle timer, which would otherwise outlive the spec
-   * and commit into a component that is no longer there.
-   */
-  function move(fixture: ComponentFixture<SettleSheet>, by: number): void {
-    const key = by > 0 ? 'ArrowUp' : 'ArrowDown';
-    for (let step = 0; step < Math.abs(by); step += 1) {
-      reelEl(fixture).dispatchEvent(
-        new KeyboardEvent('keydown', { key, bubbles: true })
-      );
-    }
-    fixture.detectChanges();
-  }
-
-  it('draws the reel, bounded by what is outstanding', async () => {
-    // One at the bottom because zero is "they had none", which is the button below
-    // and an outcome rather than a quantity.
+  it('offers no "Got all" and no "Got some"', async () => {
     const { fixture } = await render();
-    openQuantity(fixture);
 
-    expect(reelEl(fixture)).not.toBeNull();
-    expect(reelEl(fixture).getAttribute('aria-valuemin')).toBe('1');
-    expect(reelEl(fixture).getAttribute('aria-valuemax')).toBe('4');
-    expect(reelEl(fixture).getAttribute('aria-valuenow')).toBe('1');
+    expect(text(fixture)).not.toContain('basket.settle.all');
+    expect(text(fixture)).not.toContain('basket.settle.some');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.primary')
+    ).toBeNull();
   });
 
-  it('names the number the same way the pane always did', async () => {
-    const { fixture } = await render();
-    openQuantity(fixture);
-
-    expect(reelEl(fixture).getAttribute('aria-label')).toContain(
-      'basket.settle.quantity'
-    );
-  });
-
-  it('records the number under the thumb, without waiting for the idle beat', async () => {
-    // "Record it" has to agree with the number above it the moment somebody reads
-    // both. A button whose label lagged the control by a second would be asking
-    // somebody in a shop to wait and find out.
+  it('settles against one household when "got" goes up, and stays open', async () => {
     const { fixture, store } = await render();
-    openQuantity(fixture);
+    store.settle.mockResolvedValue(landed());
 
-    move(fixture, 2);
+    await commitReel(fixture, 'got-reel', { from: 0, to: 2 });
 
-    const submit = (fixture.nativeElement as HTMLElement).querySelector(
-      '.primary'
-    ) as HTMLButtonElement;
-    submit.click();
-    reel(fixture).close();
-    await fixture.whenStable();
-
-    // The number under the thumb, with the `from` every write on a row carries.
-    expect(store.settle).toHaveBeenCalledWith(LINE_ID, {
-      outcome: 'BOUGHT',
-      quantity: 3,
-      from: 4,
-    });
+    expect(store.settle).toHaveBeenCalledWith(
+      LINE_ID,
+      expect.objectContaining({
+        outcome: 'BOUGHT',
+        quantity: 2,
+        from: 4,
+        allocations: [{ lineId: 'zl1', quantity: 2 }],
+      })
+    );
+    expect(dismissedTo()).toEqual([]);
   });
 
-  it('follows the reel when it is let go, too', async () => {
-    const { fixture } = await render();
-    openQuantity(fixture);
+  it('takes units back when "got" goes down, and stays open', async () => {
+    const { fixture, store } = await render({
+      lines: [
+        line({
+          bought: 2,
+          left: 2,
+          state: 'PARTLY',
+          entries: [
+            entry('l1', 'zl1', 1, { bought: 2, asked: 3 }),
+            entry('l2', 'zl2', 1),
+          ],
+        }),
+      ],
+    });
+    store.revert.mockResolvedValue(landed());
 
-    move(fixture, 1);
-    reel(fixture).close();
-    fixture.detectChanges();
+    await commitReel(fixture, 'got-reel', { from: 2, to: 1 });
 
-    expect(reelEl(fixture).getAttribute('aria-valuenow')).toBe('2');
+    expect(store.revert).toHaveBeenCalledWith(LINE_ID, {
+      target: 'UNITS',
+      units: 1,
+      from: 2,
+    });
+    expect(dismissedTo()).toEqual([]);
+  });
+
+  it('still closes on "They had none"', async () => {
+    const { fixture, store } = await render();
+    store.settle.mockResolvedValue(landed());
+
+    await pressNone(fixture);
+
+    expect(dismissedTo()).toHaveLength(1);
+  });
+
+  it('changes what a list asks for when "asked for" settles, with no button', async () => {
+    const { fixture, store } = await render();
+    store.setDemand.mockResolvedValue({ row: line() });
+
+    await commitReel(fixture, 'ask-reel', { from: 3, to: 5 });
+
+    expect(store.setDemand).toHaveBeenCalledWith(LINE_ID, {
+      lineId: 'zl1',
+      quantity: 5,
+      from: 3,
+    });
+    expect(text(fixture)).not.toContain('basket.demand.apply');
+    expect(dismissedTo()).toEqual([]);
+  });
+
+  it('closes after "asked for" only when the row left the basket', async () => {
+    const { fixture, store } = await render();
+    store.setDemand.mockResolvedValue({ row: null });
+
+    await commitReel(fixture, 'ask-reel', { from: 3, to: 0 });
+
+    expect(store.handOver).toHaveBeenCalledWith('basket.demand.nothingLeft');
+    expect(dismissedTo()).toHaveLength(1);
   });
 });
 
@@ -1687,9 +1727,9 @@ describe('SettleSheet: putting a row off for now', () => {
 
     const labels = buttons(fixture).map((button) => button.textContent ?? '');
     expect(labels[0]).toContain('basket.skip.undo');
-    // A person who skipped the bread and then found it buys it, so the three
-    // stay under it rather than being replaced by the undo.
-    expect(labels.join(' ')).toContain('basket.settle.all');
+    // A person who skipped the bread and then found it buys it, so the other
+    // actions stay under it rather than being replaced by the undo.
+    expect(labels.join(' ')).toContain('basket.settle.none');
   });
 
   it('does not offer the skip again on a row that is already skipped', async () => {
@@ -1783,6 +1823,75 @@ describe('SettleSheet: the product somebody got', () => {
     expect(text(one.fixture)).toContain('Whole milk 1 L');
   });
 
+  describe('the product card', () => {
+    const CARD: BasketProduct = {
+      ...MILK,
+      id: 'i-card',
+      brand: 'Hacendado',
+      imageUrl: 'https://img.example/milk.png',
+      offer: {
+        price: 0.95,
+        currency: 'EUR',
+        unitPrice: null,
+        unitPriceLabel: null,
+        observedAt: null,
+        sourceKind: 'OFFICIAL_WEB',
+        stale: false,
+        priceScopeId: 's-dia',
+      },
+    };
+
+    const card = (fixture: ComponentFixture<SettleSheet>) =>
+      (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-settle-product'
+      );
+
+    it('draws the picture, the name over the brand, and the price', async () => {
+      const { fixture } = await render({
+        lines: [line({ optionIds: [CARD.id] })],
+        products: new Map([[CARD.id, CARD]]),
+      });
+
+      expect(card(fixture)?.querySelector('img')?.getAttribute('src')).toBe(
+        CARD.imageUrl
+      );
+      expect(card(fixture)?.querySelector('.name')?.textContent).toContain(
+        'Whole milk 1 L'
+      );
+      expect(card(fixture)?.querySelector('.detail')?.textContent).toContain(
+        'Hacendado'
+      );
+      expect(card(fixture)?.querySelector('.amount')?.textContent).toContain(
+        '0.95'
+      );
+    });
+
+    it('draws the carton for a product with no picture, and says no price', async () => {
+      const { fixture } = await render({
+        lines: [line({ optionIds: [MILK.id] })],
+        products,
+      });
+
+      expect(card(fixture)?.querySelector('img')).toBeNull();
+      expect(card(fixture)?.querySelector('lib-product-icon')).not.toBeNull();
+      expect(card(fixture)?.textContent).toContain('basket.product.noPrice');
+    });
+
+    it('offers "Change" on the card once a product of several is chosen', async () => {
+      const { fixture } = await render({
+        lines: [twoOptions()],
+        products,
+        chosen: new Map([[LINE_ID, SKIMMED.id]]),
+      });
+
+      card(fixture)?.querySelector<HTMLButtonElement>('.change')?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(options(fixture)).toHaveLength(2);
+    });
+  });
+
   it('lists the options in the server’s order', async () => {
     const { fixture } = await render({ lines: [twoOptions()], products });
     await openProducts(fixture);
@@ -1807,7 +1916,8 @@ describe('SettleSheet: the product somebody got', () => {
     // Closing the pane on the choice is the whole gesture: somebody who has
     // answered must not be left looking at their own answer with a second
     // button still to press.
-    expect(text(fixture)).toContain('basket.settle.all');
+    expect(options(fixture)).toHaveLength(0);
+    expect(text(fixture)).toContain('basket.settle.none');
   });
 
   it('writes nothing to the server when somebody chooses', async () => {
@@ -1832,10 +1942,7 @@ describe('SettleSheet: the product somebody got', () => {
       chosen: new Map([[LINE_ID, SKIMMED.id]]),
     });
 
-    (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.actions .primary')
-      ?.click();
-    await fixture.whenStable();
+    await gotOne(fixture);
 
     expect(store.settle).toHaveBeenCalledWith(
       LINE_ID,
@@ -1849,10 +1956,7 @@ describe('SettleSheet: the product somebody got', () => {
       products,
     });
 
-    (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.actions .primary')
-      ?.click();
-    await fixture.whenStable();
+    await gotOne(fixture);
 
     expect(store.settle).toHaveBeenCalledWith(
       LINE_ID,
@@ -1866,10 +1970,7 @@ describe('SettleSheet: the product somebody got', () => {
       products,
     });
 
-    (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.actions .primary')
-      ?.click();
-    await fixture.whenStable();
+    await gotOne(fixture);
 
     // The honest record: nobody said which. An `itemId` here would name the
     // first option, which is a product nobody picked up.
@@ -1918,27 +2019,29 @@ describe('SettleSheet: the product somebody got', () => {
     const priced = new Map([[PRICED.id, PRICED]]);
 
     async function press(
-      selector: (button: HTMLButtonElement) => boolean
+      selector: 'got' | ((button: HTMLButtonElement) => boolean)
     ): Promise<Record<string, unknown>> {
       const { fixture, store } = await render({
         lines: [line({ optionIds: [PRICED.id] })],
         products: priced,
       });
-      [
-        ...(
-          fixture.nativeElement as HTMLElement
-        ).querySelectorAll<HTMLButtonElement>('.actions button'),
-      ]
-        .find(selector)
-        ?.click();
-      await fixture.whenStable();
+      if (selector === 'got') {
+        await gotOne(fixture);
+      } else {
+        [
+          ...(
+            fixture.nativeElement as HTMLElement
+          ).querySelectorAll<HTMLButtonElement>('.actions button'),
+        ]
+          .find(selector)
+          ?.click();
+        await fixture.whenStable();
+      }
       return (store.settle as unknown as jest.Mock).mock.calls[0][1];
     }
 
     it('names the scope of the price the row draws, and never an amount', async () => {
-      const body = await press((button) =>
-        button.classList.contains('primary')
-      );
+      const body = await press('got');
 
       expect(body['priceScopeId']).toBe('s-dia');
       expect(
@@ -2006,7 +2109,7 @@ describe('SettleSheet: the product somebody got', () => {
 
     async function press(
       readAt: string | undefined,
-      selector: (button: HTMLButtonElement) => boolean
+      selector: 'got' | ((button: HTMLButtonElement) => boolean)
     ): Promise<Record<string, unknown>> {
       const { fixture, store } = await render({
         lines: [line({ optionIds: [AT_SHOP.id] })],
@@ -2014,29 +2117,30 @@ describe('SettleSheet: the product somebody got', () => {
         scopes: SCOPES,
         ...(readAt === undefined ? {} : { readAt }),
       });
-      [
-        ...(
-          fixture.nativeElement as HTMLElement
-        ).querySelectorAll<HTMLButtonElement>('.actions button'),
-      ]
-        .find(selector)
-        ?.click();
-      await fixture.whenStable();
+      if (selector === 'got') {
+        await gotOne(fixture);
+      } else {
+        [
+          ...(
+            fixture.nativeElement as HTMLElement
+          ).querySelectorAll<HTMLButtonElement>('.actions button'),
+        ]
+          .find(selector)
+          ?.click();
+        await fixture.whenStable();
+      }
       return (store.settle as unknown as jest.Mock).mock.calls[0][1];
     }
 
-    const primary = (button: HTMLButtonElement) =>
-      button.classList.contains('primary');
-
     it('carries the shop and the scope of the price bought there', async () => {
-      const body = await press('loc-merca', primary);
+      const body = await press('loc-merca', 'got');
 
       expect(body['supermarketLocationId']).toBe('loc-merca');
       expect(body['priceScopeId']).toBe('s-merca-store');
     });
 
     it('carries no shop in "any of your shops" mode', async () => {
-      const body = await press(undefined, primary);
+      const body = await press(undefined, 'got');
 
       expect(body).not.toHaveProperty('supermarketLocationId');
       expect(body['priceScopeId']).toBe('s-dia');
