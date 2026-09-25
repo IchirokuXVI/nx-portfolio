@@ -24,6 +24,11 @@
   Retention is deliberately NOT here. An object storage lifecycle rule expresses
   "expire after N days" declaratively, runs whether or not the cluster is
   healthy, and cannot be broken by a bug in a shell script.
+
+  The release tasks (`k8s/release-tasks`) start a Job from these CronJobs before
+  a task changes anything, and read the uploaded key from its log. So the
+  `uploaded s3://...` line below is an interface, and a suspended CronJob still
+  serves them: `kubectl create job --from=cronjob/...` ignores `suspend`.
 */}}
 {{- range $pg := $ls.postgres.instances }}
 {{- if not (include "lunaShopperBackend.entryEnabled" (dict "entry" $pg "ls" $ls)) }}{{- continue }}{{- end }}
@@ -40,6 +45,8 @@ spec:
   # Staggered across the instances (17, 37 and 57 past 02:00, then 7 past 03:00
   # for the harvester) so no two dumps contend for the single node at once.
   schedule: {{ $pg.backupSchedule | quote }}
+  # True where only the release tasks take dumps (staging).
+  suspend: {{ $backups.suspend | default false }}
   # A dump that is still running when the next window opens means something is
   # wrong; starting a second one alongside it makes it worse.
   concurrencyPolicy: Forbid
