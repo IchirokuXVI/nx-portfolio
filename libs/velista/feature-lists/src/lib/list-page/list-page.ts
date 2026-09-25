@@ -66,6 +66,7 @@ import {
   lineQueryOf,
   listIdOf,
   ListSearchNavigation,
+  NavChrome,
   NOTIFICATION_TONE,
   PageNavigation,
   RECORDING_LIMITS,
@@ -90,8 +91,10 @@ import {
   ListTools,
   RowSkeleton,
   SpinnerIcon,
+  type SuggestionChoice,
   type SuggestionHolding,
   type SuggestionHoldingChange,
+  SuggestionList,
   ToBuyHeading,
   TripGroup,
 } from '@portfolio/velista/ui';
@@ -162,6 +165,7 @@ import { voiceFailureCopy } from '../voice-error-copy';
     ListTools,
     RowSkeleton,
     SpinnerIcon,
+    SuggestionList,
     ToBuyHeading,
     TourAnchor,
     TripGroup,
@@ -680,13 +684,8 @@ export class ListPage {
       );
   }
 
-  /** What is in the search field, for the tools row and the no match sentence. */
-  readonly searchQuery = this._view.query;
-
   /** The query folded once, for the rows' `<mark>`. */
   readonly highlight = this._view.folded;
-
-  readonly searching = this._view.searching;
 
   /** How many settings are on, for the filter button's badge (section 2). */
   readonly activeCount = this._view.activeCount;
@@ -705,42 +704,172 @@ export class ListPage {
       : `basket.category.${category}`;
   });
 
-  search(query: string): void {
-    this._view.search(query);
-  }
+  // --- One field finds and adds (velista 0117) -------------------------------
 
   private readonly _search = inject(ListSearchNavigation);
+  private readonly _chrome = inject(NavChrome);
+  private readonly _composer = viewChild(LineComposer);
 
   /**
-   * Whether the search field is open, which is `?search=1` (velista `0109`).
+   * Whether `?search=1` is on the URL (velista `0109`).
    *
-   * In the URL so the phone's back button closes the search rather than leaving the
-   * list: opening pushes the parameter, and back pops it.
+   * Since `0117` it means that the composer's field holds words (rule F2). The first
+   * character pushes it, so the phone's back button has an entry to take off, and
+   * taking it off empties the field. Only the open state is in the URL, never the
+   * words.
    */
   readonly searchOpen = searchOpenOf(this._route);
 
-  /** The search button opens, and Cancel and Escape go back. */
-  setSearchOpen(open: boolean): void {
-    void (open
-      ? this._search.open(this._route)
-      : this._search.close(this._route));
+  /** The words in the field, trimmed, for the headings and the nothing sentence. */
+  readonly typed = computed(() => this._query().trim());
+
+  /**
+   * Whether the field holds words, which is when the results replace the list: the
+   * lines that match, then the catalog's cards (rule F1).
+   */
+  readonly typing = computed(() => this.typed() !== '');
+
+  /** The catalog is asked from the third character, so its section starts there. */
+  readonly catalogShown = computed(
+    () => this.typed().length >= SUGGEST_MIN_CHARS
+  );
+
+  /**
+   * The words a finished catalog search answered with nothing, while they are still
+   * the words in the field, or null (velista `0108`, target 1).
+   */
+  readonly catalogEmptyFor = computed(() => {
+    const words = this.suggestedFor();
+    return words !== null &&
+      !this.suggesting() &&
+      this.suggestions().length === 0 &&
+      words === this.typed()
+      ? words
+      : null;
+  });
+
+  /** The id of the results region, which the field names in `aria-controls`. */
+  readonly resultsId = 'list-results';
+
+  /** Whether the composer's field has focus. */
+  private readonly _fieldFocused = signal(false);
+
+  /** The composer's field gained or lost focus. */
+  onFieldFocused(focused: boolean): void {
+    this._fieldFocused.set(focused);
   }
 
   /**
-   * The query goes when the field does, whichever way it closed: Cancel, Escape or the
-   * phone's back button. A search left running behind a closed field is a list missing
-   * lines for a reason nothing on it says.
+   * The bar gives the page its room while the field has focus or holds words (rule
+   * F3), so the results reach from the app bar to the composer.
    */
-  private _searchWasOpen = false;
-
-  private readonly _clearClosedSearch = effect(() => {
-    const open = this.searchOpen();
-    const was = this._searchWasOpen;
-    this._searchWasOpen = open;
-    if (was && !open) {
-      untracked(() => this._view.search(''));
-    }
+  private readonly _hideChrome = effect(() => {
+    const composing = this._fieldFocused() || this.typing();
+    untracked(() => this._chrome.setComposing(composing));
   });
+
+  /** The results heading, which the page scrolls to when the results first show. */
+  private readonly _resultsHeading =
+    viewChild<ElementRef<HTMLElement>>('resultsHeading');
+
+  /** Whether the results were already on screen at the last render. */
+  private _resultsDrawn = false;
+
+  /**
+   * When the results first appear, the column scrolls so their heading sits under
+   * the app bar. The page head goes above the fold while typing and comes back with
+   * the list.
+   */
+  private readonly _scrollToResults = afterRenderEffect(() => {
+    const heading = this._resultsHeading()?.nativeElement;
+    const column = this._column()?.nativeElement;
+    if (heading === undefined || column === undefined) {
+      this._resultsDrawn = false;
+      return;
+    }
+    if (this._resultsDrawn) {
+      return;
+    }
+    this._resultsDrawn = true;
+    const top =
+      column.scrollTop +
+      heading.getBoundingClientRect().top -
+      column.getBoundingClientRect().top;
+    column.scrollTo?.({ top, behavior: 'auto' });
+  });
+
+  /** Whether an open of the search entry was asked for and has not landed yet. */
+  private _opening = false;
+
+  /** Whether a close of the search entry was asked for and has not landed yet. */
+  private _closing = false;
+
+  /** Whether the entry was on the URL the last time the effect below ran. */
+  private _wasOpen = false;
+
+  /**
+   * Keeps the history entry and the field saying the same thing (rule F2).
+   *
+   * - The first character pushes `search=1`.
+   * - An empty field with `search=1` on the URL goes back through
+   *   `ListSearchNavigation.close`, which is `PageNavigation.back` with the page as
+   *   the fallback. The field is emptied by hand, by Escape and by an add, and a cold
+   *   load of `?search=1` arrives empty: all of them take the entry off the same way.
+   * - The entry going while the field still holds words is the phone's back button,
+   *   so the field is emptied to match.
+   *
+   * A close still in flight is not mistaken for back: words typed while it lands
+   * push a new entry rather than being emptied.
+   */
+  private readonly _followEntry = effect(() => {
+    const open = this.searchOpen();
+    const words = this.typing();
+    untracked(() => {
+      const was = this._wasOpen;
+      this._wasOpen = open;
+
+      if (open) {
+        this._opening = false;
+        if (!words && !this._closing) {
+          this._closing = true;
+          void this._search.close(this._route);
+        }
+        return;
+      }
+
+      const closing = this._closing;
+      this._closing = false;
+      if (!words) {
+        return;
+      }
+      if (was && !closing) {
+        this._composer()?.clear();
+        return;
+      }
+      if (!this._opening) {
+        this._opening = true;
+        void this._search.open(this._route);
+      }
+    });
+  });
+
+  /**
+   * A card's add button, in the results. It adds exactly as it did from the panel:
+   * through the composer, which names the words and the products and then empties
+   * the field and keeps focus in it.
+   */
+  chooseCard(choice: SuggestionChoice): void {
+    this._composer()?.choose(choice.suggestion, choice.anchor);
+  }
+
+  /**
+   * Nothing in the results may take focus from the field, so the keyboard stays up
+   * whatever was pressed (rule T2 of velista `0101`). `mousedown` and never
+   * `pointerdown` or `touchstart`, which carry the page's own scroll.
+   */
+  holdFocus(event: MouseEvent): void {
+    event.preventDefault();
+  }
 
   openFilter(): void {
     void this._openSheet(['filter']);
@@ -986,6 +1115,8 @@ export class ListPage {
     });
 
     inject(DestroyRef).onDestroy(() => {
+      // The bar comes back with whatever screen is next (velista `0117`).
+      this._chrome.setComposing(false);
       // The view store is provided on the route and is never destroyed, so it is
       // given back here, as the basket page gives back `BasketViewStore`.
       this._view.leave();
@@ -1251,7 +1382,7 @@ export class ListPage {
 
     // The list the suggestions were for has been added. Clearing here rather than in
     // the composer keeps the two from disagreeing about whether a dropdown is open.
-    this._suggestQuery.set('');
+    this._query.set('');
     this._typedBusy.set(false);
 
     if (outcome.state === 'failed') {
@@ -1446,11 +1577,16 @@ export class ListPage {
     });
   }
 
-  /** The last thing typed, which the effect below watches. */
-  private readonly _suggestQuery = signal('');
+  /**
+   * The last thing typed, which the catalog's effect, the list's search and the
+   * results all watch (velista `0117`).
+   */
+  private readonly _query = signal('');
 
   onComposerQuery(query: string): void {
-    this._suggestQuery.set(query);
+    this._query.set(query);
+    // The lines are searched from the first character, the catalog from the third.
+    this._view.search(query);
 
     // The profiles, read once and only when somebody actually starts typing a product.
     // Not in the constructor: this page is opened far more often than the catalog is
@@ -1477,7 +1613,7 @@ export class ListPage {
   private _suggestSeq = 0;
 
   private readonly _suggestEffect = effect((onCleanup) => {
-    const query = this._suggestQuery().trim();
+    const query = this._query().trim();
 
     if (query.length < SUGGEST_MIN_CHARS) {
       // Cleared synchronously rather than after the debounce: a dropdown that lingered

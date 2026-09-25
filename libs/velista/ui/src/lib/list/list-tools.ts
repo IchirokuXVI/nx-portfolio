@@ -77,6 +77,12 @@ export class ListTools {
   readonly fieldId = input('list-search');
 
   /**
+   * Whether the row offers its own search at all. The zone list's composer is its
+   * search now (velista `0117`), so that page draws the count and the filter only.
+   */
+  readonly searchable = input(true);
+
+  /**
    * Whether the field has replaced the row, which is not the same as searching.
    *
    * A field that is open and empty draws every line, and the count says so. The page

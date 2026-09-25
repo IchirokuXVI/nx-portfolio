@@ -725,6 +725,86 @@ describe('LineComposer, the field and its cards', () => {
     return found;
   }
 
+  /**
+   * Velista `0117`: where the page draws the results, the field is a search box that
+   * controls them, the composer draws no panel of its own, and Escape empties it.
+   */
+  describe('with the results on the page', () => {
+    async function onPage() {
+      const rendered = await render();
+      rendered.fixture.componentRef.setInput('resultsId', 'page-results');
+      rendered.fixture.componentRef.setInput('suggestions', [OAT]);
+      rendered.fixture.detectChanges();
+      return rendered;
+    }
+
+    it('is a search box controlling the page’s region, with no panel of its own', async () => {
+      const { fixture } = await onPage();
+      type(fixture, 'oat');
+
+      expect(field(fixture).getAttribute('role')).toBe('searchbox');
+      expect(field(fixture).getAttribute('aria-controls')).toBe('page-results');
+      expect(field(fixture).hasAttribute('aria-haspopup')).toBe(false);
+      expect(host(fixture).querySelector('lib-suggestion-list')).toBeNull();
+    });
+
+    it('empties the field on Escape, and says so', async () => {
+      const { fixture } = await onPage();
+      const queries: string[] = [];
+      fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
+      type(fixture, 'oat');
+
+      const escape = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        cancelable: true,
+      });
+      field(fixture).dispatchEvent(escape);
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('');
+      expect(queries).toEqual(['oat', '']);
+      expect(escape.defaultPrevented).toBe(true);
+    });
+
+    it('lets Escape go on from an empty field', async () => {
+      const { fixture } = await onPage();
+      const escape = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        cancelable: true,
+      });
+
+      field(fixture).dispatchEvent(escape);
+
+      expect(escape.defaultPrevented).toBe(false);
+    });
+
+    it('says when the field gains and loses focus', async () => {
+      const { fixture } = await onPage();
+      const focused: boolean[] = [];
+      fixture.componentInstance.fieldFocused.subscribe((one) =>
+        focused.push(one)
+      );
+
+      field(fixture).dispatchEvent(new Event('focus'));
+      field(fixture).dispatchEvent(new Event('blur'));
+
+      expect(focused).toEqual([true, false]);
+    });
+
+    it('empties the field on clear() without taking focus', async () => {
+      const { fixture } = await onPage();
+      type(fixture, 'oat');
+      fixture.componentInstance.quantity.set(3);
+
+      fixture.componentInstance.clear();
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('');
+      expect(fixture.componentInstance.quantity()).toBe(1);
+      expect(document.activeElement).not.toBe(field(fixture));
+    });
+  });
+
   it('names the panel it controls while it is open, and nothing while it is not', async () => {
     const { fixture } = await render();
 

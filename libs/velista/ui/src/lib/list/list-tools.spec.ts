@@ -19,6 +19,7 @@ import { ListTools } from './list-tools';
       [activeCount]="active()"
       [open]="open()"
       [query]="query()"
+      [searchable]="searchable()"
       [shown]="1"
       [total]="3"
     >
@@ -31,6 +32,7 @@ class Host {
   readonly query = signal('');
   readonly active = signal(0);
   readonly open = signal(false);
+  readonly searchable = signal(true);
   readonly asked: boolean[] = [];
   filters = 0;
 
@@ -70,6 +72,18 @@ describe('ListTools', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelectorAll('.tools .tool')
     ).toHaveLength(2);
+  });
+
+  it('draws the filter alone where the page has its own search (velista 0117)', async () => {
+    const fixture = await render();
+    fixture.componentInstance.searchable.set(false);
+    fixture.detectChanges();
+
+    const tools = (fixture.nativeElement as HTMLElement).querySelectorAll(
+      '.tools .tool'
+    );
+    expect(tools).toHaveLength(1);
+    expect(tools[0]?.getAttribute('aria-label')).toBe('basket.view.open');
   });
 
   it('opens the field in place of the row, focused, and keeps what goes below', async () => {

@@ -64,15 +64,17 @@
   <div class="tools">
     <div class="lead"><ng-content /></div>
 
-    <button
-      (click)="openSearch()"
-      [attr.aria-label]="'basket.search.open' | rokuT"
-      #searchButton
-      class="tool"
-      type="button"
-    >
-      <lib-search-icon class="tool-glyph" />
-    </button>
+    @if (searchable()) {
+      <button
+        (click)="openSearch()"
+        [attr.aria-label]="'basket.search.open' | rokuT"
+        #searchButton
+        class="tool"
+        type="button"
+      >
+        <lib-search-icon class="tool-glyph" />
+      </button>
+    }
 
     <ng-container [ngTemplateOutlet]="filterTool" />
   </div>

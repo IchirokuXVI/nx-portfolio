@@ -277,6 +277,23 @@ export class LineComposer {
   readonly holdingChanged = output<SuggestionHoldingChange>();
 
   /**
+   * The id of the region the page draws this field's results in, or null while the
+   * composer draws its own panel above the field (velista `0117`).
+   *
+   * With an id, the field is the page's one search: it is a search box that controls
+   * that region, it draws no panel, and Escape empties it. The page asks the catalog,
+   * draws the lines and the cards, and hands a chosen card back through
+   * {@link choose}, so a card still adds exactly as it did from the panel.
+   */
+  readonly resultsId = input<string | null>(null);
+
+  /**
+   * The field gained or lost focus. The page hides the bottom bar while it has focus
+   * (velista `0117`, rule F3), so the results get the room.
+   */
+  readonly fieldFocused = output<boolean>();
+
+  /**
    * The panel's id, which the field names in `aria-controls`. One per composer, so
    * two on a page could not point at each other's panel.
    */
@@ -693,6 +710,28 @@ export class LineComposer {
   }
 
   /**
+   * Empty the field and say so, without taking focus (velista `0117`): the page
+   * calls it when the phone's back button closed the search the words opened.
+   */
+  clear(): void {
+    this.content.set('');
+    this.quantity.set(1);
+    this.queryChanged.emit('');
+  }
+
+  /**
+   * Escape in a field whose results are on the page empties it, which closes them
+   * (velista `0117`, rule F2). A field with nothing in it lets the key go on.
+   */
+  protected onEscape(event: Event): void {
+    if (this.resultsId() === null || this.content() === '') {
+      return;
+    }
+    event.preventDefault();
+    this.clear();
+  }
+
+  /**
    * With {@link holdOnSend} on, a press on the plus leaves focus in the field, so
    * the keyboard stays up under the picker (rule T2 of velista `0101`).
    */
@@ -783,11 +822,9 @@ export class LineComposer {
   }
 
   private _clear(): void {
-    this.content.set('');
-    this.quantity.set(1);
     // The dropdown goes with the words that produced it. Leaving it up over an empty
     // field would offer matches for something nobody is typing any more.
-    this.queryChanged.emit('');
+    this.clear();
     this._field()?.nativeElement.focus();
   }
 }

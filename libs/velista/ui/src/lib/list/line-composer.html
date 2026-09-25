@@ -84,10 +84,11 @@
     itself, and back on the next keystroke. A dropdown pinned over somebody's list
     with no way to put it down is a screen you have to type your way out of.
   -->
-  @if (suggestionsShown()) {
+  @if (suggestionsShown() && resultsId() === null) {
     <!--
       Cards since velista 0101, and no free text row: the button beside the field
-      already adds the typed words.
+      already adds the typed words. Not drawn when the page draws the results
+      (velista 0117).
     -->
     <lib-suggestion-list
       (chose)="choose($event.suggestion, $event.anchor)"
@@ -113,25 +114,51 @@
       <!--
         The combobox that owns the panel's grid (rule 8 of velista 0101): a card
         holds several controls, which a listbox option may not.
+
+        Where the page draws the results (velista 0117) it is a search box that
+        controls that region instead, with no popup of its own.
       -->
-      <input
-        (input)="onInput($event)"
-        [attr.aria-controls]="panelOpen() ? panelId : null"
-        [attr.aria-expanded]="panelOpen()"
-        [attr.aria-label]="'list.add.placeholder' | rokuT"
-        [attr.maxlength]="maxLength"
-        [placeholder]="'list.add.placeholder' | rokuT"
-        [value]="content()"
-        #field
-        aria-autocomplete="list"
-        aria-haspopup="grid"
-        autocomplete="off"
-        class="field"
-        enterkeyhint="send"
-        name="content"
-        role="combobox"
-        type="text"
-      />
+      @if (resultsId(); as region) {
+        <input
+          (blur)="fieldFocused.emit(false)"
+          (focus)="fieldFocused.emit(true)"
+          (input)="onInput($event)"
+          (keydown.escape)="onEscape($event)"
+          [attr.aria-controls]="region"
+          [attr.aria-label]="'list.add.placeholder' | rokuT"
+          [attr.maxlength]="maxLength"
+          [placeholder]="'list.add.placeholder' | rokuT"
+          [value]="content()"
+          #field
+          autocomplete="off"
+          class="field"
+          enterkeyhint="send"
+          name="content"
+          role="searchbox"
+          type="text"
+        />
+      } @else {
+        <input
+          (blur)="fieldFocused.emit(false)"
+          (focus)="fieldFocused.emit(true)"
+          (input)="onInput($event)"
+          [attr.aria-controls]="panelOpen() ? panelId : null"
+          [attr.aria-expanded]="panelOpen()"
+          [attr.aria-label]="'list.add.placeholder' | rokuT"
+          [attr.maxlength]="maxLength"
+          [placeholder]="'list.add.placeholder' | rokuT"
+          [value]="content()"
+          #field
+          aria-autocomplete="list"
+          aria-haspopup="grid"
+          autocomplete="off"
+          class="field"
+          enterkeyhint="send"
+          name="content"
+          role="combobox"
+          type="text"
+        />
+      }
 
       <!--
       Only past 350. A live region so the number is announced as it approaches, and

@@ -261,8 +261,13 @@ export class SuggestionList {
    *   of a scrolling list hid it behind cards the catalog ranked lower.
    * - **It is read bottom to top**, so the ranking is drawn that way round. See
    *   {@link rows}.
+   *
+   * `'page'` is the cards drawn in a page's own results (velista `0117`): the same
+   * cards as `'above'`, in the server's order from the top, with no panel around
+   * them. The page scrolls them with everything else, so there is no cap, no
+   * opaque surface and nothing anchored to the bottom.
    */
-  readonly placement = input<'below' | 'above'>('below');
+  readonly placement = input<'below' | 'above' | 'page'>('below');
 
   /**
    * The suggestions in the order they are **drawn** in, which is not always the order
@@ -316,11 +321,11 @@ export class SuggestionList {
   private readonly _injector = inject(Injector);
 
   /**
-   * What each card says, in the order it is drawn. The composer's placement only;
-   * the line page keeps its one line rows.
+   * What each card says, in the order it is drawn. The composer's and a page's
+   * results; the line page keeps its one line rows.
    */
   protected readonly cards = computed<readonly SuggestionCardView[]>(() => {
-    if (this.placement() !== 'above') {
+    if (this.placement() === 'below') {
       return [];
     }
     const locale = this._locale();

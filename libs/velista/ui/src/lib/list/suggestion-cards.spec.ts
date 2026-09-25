@@ -107,6 +107,7 @@ async function render(
     query?: string | null;
     emptyFor?: string | null;
     freeText?: boolean;
+    placement?: 'above' | 'page';
   } = {}
 ): Promise<Rendered> {
   TestBed.resetTestingModule();
@@ -116,7 +117,7 @@ async function render(
   }).compileComponents();
 
   const fixture = TestBed.createComponent(SuggestionList);
-  fixture.componentRef.setInput('placement', 'above');
+  fixture.componentRef.setInput('placement', inputs.placement ?? 'above');
   fixture.componentRef.setInput('suggestions', offered);
   fixture.componentRef.setInput('loading', inputs.loading ?? false);
   const holdings = inputs.holdings ?? [];
@@ -590,5 +591,40 @@ describe('SuggestionList, the panel height follows the visual viewport', () => {
     await fixture.whenStable();
 
     expect(panel?.style.getPropertyValue('--app-viewport')).toBe('331px');
+  });
+});
+
+/**
+ * The same cards in a page's own results (velista `0117`): the server's order from
+ * the top, and no panel around them, because the page scrolls them with everything
+ * else.
+ */
+describe('SuggestionList, in a page’s results', () => {
+  it('draws the cards in the server’s order, with no panel around them', async () => {
+    const { fixture } = await render([item('first'), item('second')], {
+      placement: 'page',
+    });
+
+    const grid = root(fixture).querySelector('[role="grid"]');
+    expect(grid).not.toBeNull();
+    expect(grid?.classList).not.toContain('panel');
+    expect(
+      [...root(fixture).querySelectorAll('[data-card]')].map((card) =>
+        card.getAttribute('data-card')
+      )
+    ).toEqual([
+      expect.stringContaining('first'),
+      expect.stringContaining('second'),
+    ]);
+  });
+
+  it('says so when the catalog found nothing for the words', async () => {
+    const { fixture } = await render([], {
+      placement: 'page',
+      emptyFor: 'zzzz',
+      freeText: true,
+    });
+
+    expect(root(fixture).textContent).toContain('list.add.card.noMatch');
   });
 });

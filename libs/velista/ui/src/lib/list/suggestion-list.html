@@ -5,7 +5,7 @@
   running, or once the words in the field have changed. The line page's rows keep
   drawing nothing when there is nothing to offer.
 -->
-@if (placement() === 'above') {
+@if (placement() !== 'below') {
   <!--
     The composer's panel: product cards (velista 0101). Opaque, bottom anchored and
     scrolling, never growing past three cards or what the keyboard leaves, and no
@@ -25,10 +25,10 @@
     <div
       (mousedown)="holdFocus($event)"
       [attr.aria-label]="label() | rokuT"
+      [class.panel]="placement() === 'above'"
       [id]="panelId()"
       [style.--app-viewport]="viewportHeight()"
       #panel
-      class="panel"
       role="grid"
     >
       @for (card of cards(); track card.key) {
@@ -305,9 +305,9 @@
     <div
       (mousedown)="holdFocus($event)"
       [attr.aria-label]="'list.add.card.loading' | rokuT"
+      [class.panel]="placement() === 'above'"
       [style.--app-viewport]="viewportHeight()"
       aria-busy="true"
-      class="panel"
       role="status"
     >
       @for (bars of skeleton; track $index) {

@@ -266,3 +266,64 @@ lib-line-composer {
 
   align-self: stretch;
 }
+
+// What the composer's field found (velista 0117, rule F1), in place of the list. It
+// scrolls with the page from the top, and it is at least as tall as the column, so
+// the column can always scroll its heading up under the app bar however few lines
+// matched: the page head goes above the fold while somebody types.
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  min-block-size: 100%;
+}
+
+// A section's name, small and quiet over what it names, as the mock draws it. The
+// count is a step brighter than the words, because it is the part that changes.
+.results-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin: 0;
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: var(--app-leading-heading);
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.results-count {
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+// Nothing matched: a sentence in the heading's place, so it reads as one.
+.results-heading.is-none {
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--app-text-secondary);
+}
+
+// The catalog, under a rule and on the raised surface, stretched over the column's
+// own padding so it reads as a second region rather than more of the list, and down
+// to the composer, so the surface does not stop halfway down an empty page.
+.catalog {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin-block: var(--app-space-3) calc(var(--app-space-5) * -1);
+  margin-inline: calc(var(--app-space-5) * -1);
+  padding: var(--app-space-3) var(--app-space-4);
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+}
+
+// The catalog's cards sit on its own narrower padding, the panel's, so its heading
+// steps in to line up with the list's heading above it.
+.catalog > .results-heading {
+  padding-inline: var(--app-space-2);
+}

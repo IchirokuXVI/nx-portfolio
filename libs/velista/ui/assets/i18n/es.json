@@ -496,7 +496,10 @@
       "hereNow": "aquí ahora"
     },
     "add": {
-      "placeholder": "Añade algo",
+      "placeholder": "Añade o busca algo",
+      "resultsOnList": "En tu lista",
+      "resultsNone": "Nada en tu lista dice “{{query}}”",
+      "resultsCatalog": "Del catálogo",
       "action": "Añadir",
       "quantity": "Cuántos",
       "more": "Uno más",

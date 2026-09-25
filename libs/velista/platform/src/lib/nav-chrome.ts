@@ -50,6 +50,9 @@ export const NO_NAV_CHROME = 'none';
  *    nobody can press (section 5). A sheet is a child route under the `sheet` segment,
  *    so this is a test on the URL rather than a flag anybody has to remember to set.
  * 3. **The session cannot use the tabs**, which is {@link usable} below.
+ * 4. **Somebody is typing into a list's field** (velista `0117`, rule F3), which is
+ *    {@link composing}. The results of what they type take the page, and the bar would
+ *    sit between them and the keyboard.
  *
  * ## Under-showing is the safe way to be wrong
  *
@@ -77,6 +80,8 @@ export class NavChrome {
 
   private readonly _usable = signal(false);
 
+  private readonly _composing = signal(false);
+
   /** Where the app is, for the tab that lights up. See `AppNav`. */
   readonly url: Signal<string> = this._url.asReadonly();
 
@@ -99,8 +104,17 @@ export class NavChrome {
    * scroller growing and shrinking under a scrim for no reason anybody asked for.
    */
   readonly reserved: Signal<boolean> = computed(
-    () => this._usable() && !this._chromeless()
+    () => this._usable() && !this._chromeless() && !this._composing()
   );
+
+  /**
+   * Whether a list's field has focus or holds words (velista `0117`, rule F3).
+   *
+   * Unlike a sheet this takes the bar out of {@link reserved} too, so the page
+   * **does** reflow into its room: the reflow is the point, because the results of
+   * what is being typed are what the room is for.
+   */
+  readonly composing: Signal<boolean> = this._composing.asReadonly();
 
   /**
    * Whether the URL addresses a sheet, whatever the bar is doing.
@@ -127,6 +141,14 @@ export class NavChrome {
           readsNoChrome(this._router.routerState.snapshot.root)
         );
       });
+  }
+
+  /**
+   * Say whether a list's field has focus or holds words. The page that owns the
+   * field calls it, and says false again when it goes.
+   */
+  setComposing(composing: boolean): void {
+    this._composing.set(composing);
   }
 
   /** Say whether this session may use the tabs. Called from the app layer only. */
