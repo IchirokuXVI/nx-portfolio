@@ -12,6 +12,7 @@ import {
   ListLineItem,
   MergeRequest,
   ShoppingList,
+  UserAppState,
   Zone,
   ZoneMembership,
 } from '../../entities';
@@ -45,7 +46,9 @@ const core = demoWorld.core;
 export const CORE_INSERT_ORDER: {
   name: string;
   entity: EntityTarget<ObjectLiteral>;
-  rows: { id: string }[];
+  rows: ObjectLiteral[];
+  /** The primary key column the rows are deleted by, when it is not `id`. */
+  key?: string;
 }[] = [
   { name: 'Zone', entity: Zone, rows: core.zones },
   { name: 'ZoneMembership', entity: ZoneMembership, rows: core.memberships },
@@ -57,6 +60,13 @@ export const CORE_INSERT_ORDER: {
   { name: 'ListLineItem', entity: ListLineItem, rows: core.lineItems },
   { name: 'LineComment', entity: LineComment, rows: core.comments },
   { name: 'MergeRequest', entity: MergeRequest, rows: core.mergeRequests },
+  // Keyed by the account and referencing nothing, so its place is arbitrary.
+  {
+    name: 'UserAppState',
+    entity: UserAppState,
+    rows: core.appStates,
+    key: 'userId',
+  },
 ];
 
 export async function seedCore(dataSource: DataSource): Promise<void> {
@@ -65,14 +75,14 @@ export async function seedCore(dataSource: DataSource): Promise<void> {
   }
   await dataSource.transaction(async (m: EntityManager) => {
     for (const step of [...CORE_INSERT_ORDER].reverse()) {
-      const ids = step.rows.map((r) => r.id);
+      const ids = step.rows.map((r) => r[step.key ?? 'id'] as string);
       if (ids.length) {
         await m.getRepository(step.entity).delete(ids);
       }
     }
     for (const step of CORE_INSERT_ORDER) {
       if (step.rows.length) {
-        await m.getRepository(step.entity).insert(step.rows as ObjectLiteral[]);
+        await m.getRepository(step.entity).insert(step.rows);
       }
     }
   });

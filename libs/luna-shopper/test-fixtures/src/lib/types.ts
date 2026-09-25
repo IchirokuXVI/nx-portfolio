@@ -168,6 +168,16 @@ export interface SeedMergeRequest {
   resolvedByUserId: string | null;
 }
 
+/**
+ * What one account has been shown (core plan 0145). Keyed by the account, so it
+ * has no `id` of its own.
+ */
+export interface SeedAppState {
+  userId: string;
+  setupCompletedAt: Date | null;
+  tourSeenAt: Date | null;
+}
+
 export interface CoreSeed {
   zones: SeedZone[];
   memberships: SeedMembership[];
@@ -178,6 +188,12 @@ export interface CoreSeed {
   lineItems: SeedLineItem[];
   comments: SeedComment[];
   mergeRequests: SeedMergeRequest[];
+  /**
+   * The registered accounts, marked as past the setup and the tour (velista
+   * `0098` and `0099`). A seeded account is an account in use, not a new one;
+   * without these rows every cold start sends it to the setup's welcome.
+   */
+  appStates: SeedAppState[];
 }
 
 // --- Catalog half ------------------------------------------------------------
