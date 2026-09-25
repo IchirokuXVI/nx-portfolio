@@ -569,6 +569,7 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         id,
         name: toLocalizedName(raw['name']),
         brand: nullableStr(raw['brand']),
+        imageUrl: nullableStr(raw['imageUrl']),
         size: typeof raw['unitSize'] === 'number' ? raw['unitSize'] : null,
         unit: nullableStr(raw['defaultUnit']),
         offer: toProductOffer(raw['bestOffer']),

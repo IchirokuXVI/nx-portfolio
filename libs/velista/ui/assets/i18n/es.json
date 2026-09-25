@@ -1332,14 +1332,8 @@
     },
     "settle": {
       "title": "{{name}}",
-      "all_one": "Conseguido",
-      "all_other": "Conseguidos los {{count}}",
-      "some": "Conseguí algunos",
-      "someTitle": "¿Cuántos has conseguido?",
       "none": "No había",
       "cancel": "Cancelar",
-      "submit": "Registrarlo",
-      "quantity": "Cuántos",
       "more": "Uno más",
       "fewer": "Uno menos",
       "failed": "No se ha guardado. Inténtalo de nuevo.",
@@ -1556,8 +1550,6 @@
     "demand": {
       "label": "La lista pide",
       "askLabel": "{{name}}, pide",
-      "apply": "Cambiar la lista",
-      "everybody": "Esto cambia la lista para todos.",
       "nothingLeft": "Ya no se pide {{name}}.",
       "refused": "Solo quien aprueba líneas en esa lista puede cambiarlo."
     },

@@ -5,7 +5,6 @@ import {
   inject,
   input,
   output,
-  signal,
 } from '@angular/core';
 import {
   RokuLocaleStore,
@@ -38,8 +37,7 @@ interface DrawnEntry {
    */
   readonly editable: boolean;
   /**
-   * Whether "asks for" is a reel and a button rather than text (velista `0092`,
-   * section 6.2).
+   * Whether "asks for" is a reel rather than text (velista `0092`, section 6.2).
    *
    * Three conditions, all of them the server's or the row's, and none of them a
    * rule this client could write:
@@ -85,21 +83,11 @@ interface DrawnEntry {
  * units against that household alone and lowering it takes them back, which is the
  * per household half of the shopping somebody does at a shelf.
  *
- * "Asks for" is a **reel and an explicit button** since velista `0092`, and only
- * where the server says it may be (`BasketRowEntry.demandEditable`). It is not the
- * same kind of control as the one beside it, and the difference is deliberate
- * rather than decorative:
- *
- * - "Got" **commits on release**, because a shopper at a shelf moves it a dozen
- *   times a trip and a confirmation on each would be the dialog `0043` took off
- *   the list page.
- * - "Asks for" **does not**. It rewrites a household's list for everybody, on
- *   every screen the list appears on. The gesture is rare, and a number that a
- *   thumb brushed is not a decision.
- *
- * That is what keeps `0073`'s rule alive in a pane that now has two reels on one
- * row: they no longer look alike, because one of them is followed by a button and
- * a sentence saying what pressing it does.
+ * "Asks for" is a **reel** too, and only where the server says it may be
+ * (`BasketRowEntry.demandEditable`). Both reels **commit on release**. "Asks for"
+ * used to wait for an explicit button under a warning that the list changes for
+ * everybody, and that confirmation was taken off: the reel's own idle beat is the
+ * decision, as it is on "Got" beside it.
  */
 @Component({
   selector: 'lib-row-entries',
@@ -139,11 +127,10 @@ export class RowEntries {
   /**
    * What one household asks for was changed (velista `0092`, section 6.2).
    *
-   * Emitted by the **button** and never by the reel, which is the whole of the
-   * difference from {@link allocated}: this rewrites a list for everybody, and a
-   * number that a thumb brushed is not a decision.
+   * Emitted when the demand reel settles, as {@link allocated} is for the one
+   * beside it. No confirmation comes first.
    *
-   * `from` is the `left` the person was looking at, which is velista `0054`'s
+   * `from` is the `left` the reel was picked up at, which is velista `0054`'s
    * bargain: a write whose starting number has moved is refused rather than
    * applied to a number that moved underneath it.
    */
@@ -243,44 +230,13 @@ export class RowEntries {
     this.allocated.emit({ lineId, from: change.from, to: change.to });
   }
 
-  /**
-   * Where each demand reel has been moved to, before anybody pressed the button.
-   *
-   * **The reel's value is held here and committed nowhere**, which is the whole
-   * of section 6.2's second paragraph: this control rewrites a household's list
-   * for everybody, and a number a thumb brushed on the way past is not a
-   * decision. Cleared per line once the write has gone out, so the reel goes back
-   * to reading the row.
-   */
-  private readonly _asking = signal<ReadonlyMap<string, number>>(new Map());
-
-  /** What this entry's demand reel shows: the moved value, or the list's own. */
-  protected asking(entry: DrawnEntry): number {
-    return this._asking().get(entry.lineId) ?? entry.left;
-  }
-
-  /** Whether the button has anything to send, which is whether the reel moved. */
-  protected moved(entry: DrawnEntry): boolean {
-    const held = this._asking().get(entry.lineId);
-    return held !== undefined && held !== entry.left;
-  }
-
-  protected onAsked(lineId: string, change: { to: number }): void {
-    const next = new Map(this._asking());
-    next.set(lineId, change.to);
-    this._asking.set(next);
-  }
-
-  /** The button. The reel does not commit; this does. */
-  protected applyDemand(entry: DrawnEntry): void {
-    const to = this._asking().get(entry.lineId);
-    if (to === undefined || to === entry.left) {
-      return;
+  /** The demand reel settled, which is the commit: there is no button to press. */
+  protected onAsked(
+    lineId: string,
+    change: { from: number; to: number }
+  ): void {
+    if (change.to !== change.from) {
+      this.demanded.emit({ lineId, from: change.from, to: change.to });
     }
-
-    const next = new Map(this._asking());
-    next.delete(entry.lineId);
-    this._asking.set(next);
-    this.demanded.emit({ lineId: entry.lineId, from: entry.left, to });
   }
 }

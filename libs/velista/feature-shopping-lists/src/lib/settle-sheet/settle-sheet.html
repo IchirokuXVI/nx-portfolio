@@ -52,8 +52,8 @@
 
           <!--
             The quiet accent, as the line detail sheet draws its Save (velista
-            0083): the solid amber stays on "Got all". After a save the button says
-            so, and is the polite live region, so it is announced once.
+            0083). After a save the button says so, and is the polite live
+            region, so it is announced once.
           -->
           <button
             (click)="save()"
@@ -119,24 +119,18 @@
         purchase it was bought as.
 
         Three shapes, and they are the three answers. A chosen product, or a row
-        with one option, is its name; either way, a row of several options offers
-        the way in. A row of several with nothing chosen says so and offers no
-        price, because quoting the first would name a product nobody picked up.
+        with one option, is a card with its picture, name and price; either way, a
+        row of several options offers the way in. A row of several with nothing
+        chosen says so and offers no price, because quoting the first would name a
+        product nobody picked up.
       -->
-      @if (productName(); as product) {
-        <div class="product">
-          <span class="product-name">{{ product }}</span>
-          @if (canChooseProduct()) {
-            <button
-              (click)="openPane('product')"
-              [disabled]="busy()"
-              class="product-change"
-              type="button"
-            >
-              {{ 'basket.product.change' | rokuT }}
-            </button>
-          }
-        </div>
+      @if (productCard(); as product) {
+        <lib-settle-product
+          (changeRequested)="openPane('product')"
+          [busy]="busy()"
+          [canChange]="canChooseProduct()"
+          [product]="product"
+        />
       } @else if (canChooseProduct()) {
         <div class="product">
           <span class="product-name is-missing">
@@ -218,32 +212,15 @@
         </div>
       }
 
+      <!--
+        No "Got all" and no "Got some" here. The row on the basket page buys the
+        whole line, and the "got" reel above buys part of it.
+      -->
       @if (canSettle()) {
         <div class="actions">
-          <button
-            (click)="settleAll()"
-            [disabled]="busy()"
-            class="primary"
-            type="button"
-          >
-            {{ 'basket.settle.all' | rokuT: { count: outstanding() } }}
-          </button>
-
-          @if (outstanding() > 1) {
-            <button
-              (click)="openPane('quantity')"
-              [disabled]="busy()"
-              class="secondary"
-              type="button"
-            >
-              {{ 'basket.settle.some' | rokuT }}
-            </button>
-          }
-
           <!--
-            Deliberately last and visually apart from the settle targets, which are
-            the ones a thumb reaches for: this closes the line without claiming
-            anything was bought (section 7).
+            Quiet, because this closes the line without claiming anything was
+            bought (section 7).
           -->
           <button
             (click)="settleNone()"
@@ -294,46 +271,6 @@
           {{ 'basket.history.open' | rokuT }}
         </button>
       }
-    }
-
-    <!-- A number, and nothing about zones. -->
-    @case ('quantity') {
-      <p class="pane-title">{{ 'basket.settle.someTitle' | rokuT }}</p>
-
-      <!--
-        **The same reel the row uses** (plan 0054, section 6), where this drew its
-        own spinbutton with a copy of `QuantityReel`'s key table beside a comment
-        saying it matched. There is one number control in this product and one
-        keyboard path through it, and a copy that no longer exists cannot drift.
-
-        Bounded at one and at what is outstanding, because this asks how many of
-        the line were bought: zero is "they had none", which is the button below
-        and an outcome rather than a quantity.
-      -->
-      <div class="quantity-control">
-        <lib-quantity-reel
-          (committedTo)="typed.set($event.to)"
-          (preview)="onQuantityPreview($event)"
-          [label]="'basket.settle.quantity' | rokuT"
-          [max]="quantityMax()"
-          [min]="1"
-          [value]="typed()"
-        />
-      </div>
-
-      <div class="actions">
-        <button
-          (click)="settleSome()"
-          [disabled]="busy()"
-          class="primary"
-          type="button"
-        >
-          {{ 'basket.settle.submit' | rokuT }}
-        </button>
-        <button (click)="openPane('settle')" class="quiet" type="button">
-          {{ 'basket.settle.cancel' | rokuT }}
-        </button>
-      </div>
     }
 
     <!--

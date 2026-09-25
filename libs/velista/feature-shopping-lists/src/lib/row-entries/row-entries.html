@@ -34,12 +34,8 @@
         <!--
           What this household asks for (velista 0092, section 6).
 
-          A reel **and an explicit button**, where the one beside it commits on
-          release. That is not a decoration on the same control: this one
-          rewrites a household's list for everybody, on every screen the list
-          appears on, and a number a thumb brushed on the way past is not a
-          decision. It is also what keeps `0073`'s rule alive in a pane with two
-          reels on one row — they no longer look alike.
+          A reel that commits on release, like the one beside it. No button and
+          no confirmation: the list changes when the reel settles.
 
           Only where the server says it may be, which is `demandEditable` and the
           two conditions beside it. An entry that fails any of them keeps the
@@ -51,7 +47,7 @@
             [label]="entry.askLabel"
             [min]="0"
             [readonly]="busy()"
-            [value]="asking(entry)"
+            [value]="entry.left"
             class="ask-reel"
           />
         } @else {
@@ -93,33 +89,6 @@
             <span class="visually-hidden">{{ entry.label }}</span>
             {{ entry.bought }}
           </span>
-        }
-
-        <!--
-          The commit, and what it costs (velista 0092, section 6.2).
-
-          Under the row rather than beside the reel, because it spans both
-          columns and because the sentence has to fit on a phone. Drawn only once
-          the reel has moved: a button that did nothing would be there on every
-          row of every sheet, offering an act nobody had started.
-
-          `aria-describedby` ties the sentence to the button, so the warning is
-          read when the button is **reached** rather than only when it is seen
-          (section 11).
-        -->
-        @if (entry.demandEditable && moved(entry)) {
-          <p [attr.id]="'demand-' + entry.lineId" class="everybody">
-            {{ 'basket.demand.everybody' | rokuT }}
-          </p>
-          <button
-            (click)="applyDemand(entry)"
-            [attr.aria-describedby]="'demand-' + entry.lineId"
-            [disabled]="busy()"
-            class="apply"
-            type="button"
-          >
-            {{ 'basket.demand.apply' | rokuT }}
-          </button>
         }
       </li>
     }

@@ -98,46 +98,6 @@
   grid-column: 2;
 }
 
-// What changing the ask costs, and the button that does it (velista 0092,
-// section 6.2).
-//
-// Both span the whole row rather than sitting in the number's column: the
-// sentence has to fit on a phone, and a button under the reel it commits is
-// clearer than one beside it competing with the reel next door.
-.everybody {
-  grid-column: 1 / -1;
-  margin: var(--app-space-2) 0 0;
-  font-size: var(--app-text-xs);
-  line-height: var(--app-leading-body);
-  color: var(--app-text-secondary);
-  text-wrap: pretty;
-}
-
-// The quiet accent, as the sheet's own Save is: the solid button on this screen
-// is "Got all", and a second one competing with it would send a thumb travelling
-// to the wrong place. This is rare and deliberate, which is the opposite of the
-// one a shopper reaches for a dozen times a trip.
-.apply {
-  @include shared.tap-target;
-
-  grid-column: 1 / -1;
-  justify-self: start;
-  margin-block-start: var(--app-space-2);
-  padding: var(--app-space-2) var(--app-space-3);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-button-radius);
-  background: transparent;
-  font-family: inherit;
-  font-size: var(--app-text-sm);
-  color: var(--app-action-quiet-fg);
-  cursor: pointer;
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.6;
-  }
-}
-
 .row-label {
   display: flex;
   flex-direction: column;

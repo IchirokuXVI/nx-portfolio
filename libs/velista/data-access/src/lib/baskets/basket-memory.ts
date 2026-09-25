@@ -152,6 +152,7 @@ const PRODUCTS: readonly BasketProduct[] = [
       offer(1.05, 1.05, 'EUR/L', SCOPE_DIA)
     ),
     atShop: null,
+    imageUrl: null,
     categories: ['DAIRY'],
   },
   {
@@ -166,6 +167,7 @@ const PRODUCTS: readonly BasketProduct[] = [
       offer(0.79, 0.79, 'EUR/L', SCOPE_DIA)
     ),
     atShop: null,
+    imageUrl: null,
     categories: ['DAIRY'],
   },
   {
@@ -180,6 +182,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     // Priced nowhere, which is `0062` section 5.3's unpriced option among priced ones.
     ...priced(),
     atShop: null,
+    imageUrl: null,
     categories: ['DAIRY'],
   },
   {
@@ -191,6 +194,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     // Mercadona alone, so the Dia view sinks this row and says where it is sold.
     ...priced(offer(2.85, 0.24, 'EUR/ud')),
     atShop: null,
+    imageUrl: null,
     categories: ['DAIRY'],
   },
 ];
