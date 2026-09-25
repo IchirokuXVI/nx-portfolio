@@ -28,4 +28,5 @@ export * from './lib/share-sheet/share-sheet';
 export * from './lib/shop-picker-sheet/shop-picker-sheet';
 export * from './lib/shopping-list-row/shopping-list-row';
 export * from './lib/shopping-lists-page/shopping-lists-page';
+export * from './lib/swap-sheet/swap-sheet';
 export * from './lib/target-list-sheet/target-list-sheet';

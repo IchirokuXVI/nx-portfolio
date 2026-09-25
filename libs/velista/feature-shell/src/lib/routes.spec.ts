@@ -476,8 +476,10 @@ describe('AppShellRoutes', () => {
       it('confirms a delete over itself rather than over the list', () => {
         // Deleting is the one thing on either screen that discards a history, so it is
         // confirmed from here too, and its URL sits under this page's own.
+        // A similar product opens over it too, for a reader who cannot change the
+        // line's product and so is offered the product rather than the change.
         expect(routeAt(linePath)?.children?.map((route) => route.path)).toEqual(
-          ['sheet/confirm/delete']
+          ['sheet/confirm/delete', 'sheet/products/:itemId']
         );
       });
     });
@@ -756,7 +758,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the nine sheets over the basket, and no units sheet', () => {
+    it('offers the ten sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -770,6 +772,8 @@ describe('AppShellRoutes', () => {
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
         [
           'sheet/rows/:rowKey/settle',
+          // Change a row's product for another of its product group.
+          'sheet/rows/:rowKey/swap',
           // What changed on the covered lists while somebody was shopping
           // (velista `0093`, section 6). Over both basket routes, because a
           // basket follows its lists whichever way it was opened.
@@ -906,7 +910,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(9);
+      expect(sheets).toHaveLength(10);
       for (const entry of sheets) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -1060,7 +1064,10 @@ describe('the sheets and their exit animation', () => {
     //
     // `0107` declared that sheet over three more pages, the zone list and both
     // baskets, so a suggestion's Details covers the page it was pressed on.
-    expect(sheets).toHaveLength(42);
+    //
+    // Similar products added three: the product sheet over the line page, and the
+    // change sheet over both baskets.
+    expect(sheets).toHaveLength(45);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

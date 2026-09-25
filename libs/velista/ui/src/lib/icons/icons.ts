@@ -1023,3 +1023,18 @@ export class LocateIcon {
       import('./locate-icon.svg?raw')
   );
 }
+
+/** Two arrows passing each other: take one product instead of another. */
+@Component({
+  selector: 'lib-swap-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class SwapIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./swap-icon.svg?raw')
+  );
+}

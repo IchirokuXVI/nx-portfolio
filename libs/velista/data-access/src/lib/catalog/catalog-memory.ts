@@ -142,6 +142,13 @@ export class CatalogMemory implements CatalogServiceI {
     const wanted = new Set(groupIds);
     return GROUPS.filter((row) => wanted.has(row.id));
   }
+
+  /** The fixture's members of one group, unpriced like every row here. */
+  async groupMembers(
+    groupId: string
+  ): Promise<readonly CatalogItem[] | null> {
+    return ITEMS.filter((row) => row.productGroupId === groupId);
+  }
 }
 
 /** The products of one group, for a composer choosing it whole. */

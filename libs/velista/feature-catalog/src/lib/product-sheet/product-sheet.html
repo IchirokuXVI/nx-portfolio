@@ -63,6 +63,17 @@
       } @else {
         <p class="note">{{ 'catalog.product.noShops' | rokuT }}</p>
       }
+
+      @if (similar(); as group) {
+        <lib-similar-products
+          (picked)="openSimilar($event)"
+          [excludeIds]="[itemId()]"
+          [failed]="group.failed"
+          [loading]="group.loading"
+          [members]="group.members"
+          class="similar"
+        />
+      }
     }
   }
 

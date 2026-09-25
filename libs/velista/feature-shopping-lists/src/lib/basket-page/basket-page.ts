@@ -22,25 +22,29 @@ import {
   BasketStore,
   BasketTargetStore,
   BasketViewStore,
+  GroupMembers,
   SessionStore,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  type BasketParticipant,
+  type BasketProduct,
+  type BasketProgressSentence,
+  type BasketRow as BasketRowModel,
   basketRowProduct,
   basketShelfMark,
+  type BasketViewRow,
+  type BasketViewSection,
+  type CatalogSuggestion,
+  cheaperInGroup,
   countableBasketRows,
   isLinkVisitor,
   LINK_VISIT_HOURS,
+  productSuggestions,
   selectBasketSurface,
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_MIN_CHARS,
   VISIT_WARNING_MINUTES,
-  type BasketParticipant,
-  type BasketProgressSentence,
-  type BasketRow as BasketRowModel,
-  type BasketViewRow,
-  type BasketViewSection,
-  type CatalogSuggestion,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -52,8 +56,10 @@ import {
 } from '@portfolio/velista/platform';
 import {
   AnchoredPopover,
+  type AnchoredPopoverClose,
   ChangesBanner,
   ChipRow,
+  type ChipRowItem,
   ClockIcon,
   FlagIcon,
   LineComposer,
@@ -61,11 +67,9 @@ import {
   OfflineIcon,
   PersonIcon,
   ShareIcon,
-  VisitNotice,
-  type AnchoredPopoverClose,
-  type ChipRowItem,
   type SuggestionHolding,
   type SuggestionHoldingChange,
+  VisitNotice,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
 import {
@@ -75,6 +79,7 @@ import {
 } from '../basket-labels';
 import { BASKET_PATHS, basketPath } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
+import { basketGroupScope } from '../swap-sheet/swap';
 import { TargetListSheet } from '../target-list-sheet/target-list-sheet';
 import { ChangeAcknowledger } from './change-acknowledger';
 import { SeenTarget } from './seen-target';
@@ -180,6 +185,7 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 })
 export class BasketPage {
   private readonly _store = inject(BasketStore);
+  private readonly _groupMembers = inject(GroupMembers);
   /**
    * What this screen is showing of the basket, as opposed to what is in it.
    *
@@ -910,6 +916,94 @@ export class BasketPage {
 
   protected isBusy(row: BasketRowModel): boolean {
     return this.busyRows().has(row.rowKey);
+  }
+
+  /**
+   * Where this basket prices a group's members: its own scopes, so a row's price
+   * and its siblings' prices are read at the same shops.
+   */
+  private readonly _groupScope = computed(
+    () => basketGroupScope(this._store.basket()?.scopes),
+    {
+      equal: (a, b) =>
+        (a.priceScopeIds ?? []).join(',') === (b.priceScopeIds ?? []).join(','),
+    }
+  );
+
+  /** The product a row draws: its choice, its one option, or none. */
+  private _rowProduct(row: BasketRowModel): BasketProduct | null {
+    return basketRowProduct(row, this.products(), this.insteadOf(row));
+  }
+
+  /** Every product group a row's product belongs to, once each. */
+  private readonly _rowGroupIds = computed<readonly string[]>(
+    () => [
+      ...new Set(
+        this._store
+          .rows()
+          .map((row) => this._rowProduct(row)?.productGroupId ?? null)
+          .filter((groupId): groupId is string => groupId !== null)
+      ),
+    ],
+    {
+      equal: (a, b) =>
+        a.length === b.length && a.every((groupId, i) => groupId === b[i]),
+    }
+  );
+
+  /**
+   * The members of those groups, for the change button's sheet and the best
+   * price mark. Not for a guest: every catalog read needs an account.
+   */
+  private readonly _loadGroupMembers = effect(() => {
+    const groupIds = this._rowGroupIds();
+    const scope = this._groupScope();
+    if (groupIds.length > 0 && this._store.me()?.kind !== 'GUEST') {
+      untracked(() => void this._groupMembers.ensure(groupIds, scope));
+    }
+  });
+
+  /**
+   * Whether a row offers "change product": its product has a group, the basket
+   * is open, and the reader may write **every** list the row stands for. All of
+   * them, because the change is made on each line, and changing some would split
+   * the row in two.
+   */
+  protected canSwap(row: BasketRowModel): boolean {
+    if (
+      this.finished() ||
+      row.state === 'REMOVED' ||
+      row.entries.length === 0 ||
+      this._store.me()?.kind === 'GUEST' ||
+      (this._rowProduct(row)?.productGroupId ?? null) === null
+    ) {
+      return false;
+    }
+    const lists = this.lists();
+    return row.entries.every(
+      (entry) => entry.listId !== null && lists.has(entry.listId)
+    );
+  }
+
+  /** Whether another product of the row's group is cheaper at this basket's scopes. */
+  protected groupCheaper(row: BasketRowModel): boolean {
+    const product = this._rowProduct(row);
+    const groupId = product?.productGroupId ?? null;
+    if (product === null || groupId === null) {
+      return false;
+    }
+    const members = this._groupMembers.membersOf(groupId, this._groupScope());
+    return (
+      members !== null && cheaperInGroup(product.id, product.offer, members)
+    );
+  }
+
+  /** Open the change sheet over this basket, as a row opens the settle sheet. */
+  protected openSwap(row: BasketRowModel): void {
+    void this._router.navigate(sheetSegments('rows', row.rowKey, 'swap'), {
+      relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
+    });
   }
 
   protected openRow(row: BasketRowModel): void {
@@ -1785,7 +1879,7 @@ export class BasketPage {
       this.suggesting.set(true);
       void this._store.suggest(query).then((found) => {
         if (seq === this._suggestSeq) {
-          this.suggestions.set(found);
+          this.suggestions.set(productSuggestions(found));
           this.suggestedFor.set(query);
           this.suggesting.set(false);
         }

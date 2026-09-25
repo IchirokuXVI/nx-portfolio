@@ -92,6 +92,7 @@ const MILK: BasketProduct = {
     currency: 'EUR',
     available: null,
   },
+  productGroupId: null,
   categories: ['DAIRY'],
 };
 

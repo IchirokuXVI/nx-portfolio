@@ -20,8 +20,11 @@ import {
   BasketStore,
   BasketTargetStore,
   BasketViewStore,
+  fakeGroupMembers,
   GatewayError,
+  provideFakeGroupMembers,
   SessionStore,
+  type FakeGroupMembers,
 } from '@portfolio/velista/data-access';
 import type {
   BasketAccessEnded,
@@ -33,6 +36,7 @@ import type {
   BasketRowEntry,
   BasketRowResult,
   BasketShop,
+  CatalogItem,
   CatalogSuggestion,
   ErrorCode,
 } from '@portfolio/velista/models';
@@ -206,6 +210,8 @@ interface Options {
    * found nothing apart from one that broke (`0059` section 7).
    */
   readonly echoValues?: boolean;
+  /** What the catalog says each product group holds. */
+  readonly groupMembers?: FakeGroupMembers;
   /**
    * How many changes are new to this viewer (velista `0093`, section 5).
    *
@@ -677,6 +683,7 @@ async function render(options: Options = {}): Promise<{
       // `localStorage`, so a test that chose an order would hand it to the next
       // page to open, through the restore the page now runs on load.
       provideFakeBrowserFacade(options.storage ?? new Map()),
+      provideFakeGroupMembers(options.groupMembers ?? fakeGroupMembers()),
     ],
   }).compileComponents();
 
@@ -1039,6 +1046,7 @@ describe('the number on a row', () => {
           },
           offers: [],
           atShop: null,
+          productGroupId: null,
           categories: ['DAIRY'],
         },
       ],
@@ -1487,6 +1495,7 @@ describe('searching the basket', () => {
       unit: null,
       offer: null,
       offers: [],
+      productGroupId: null,
       categories: ['OTHER'],
     };
   }
@@ -2109,6 +2118,7 @@ describe('searching the basket', () => {
       unit: null,
       offer: null,
       offers: [],
+      productGroupId: null,
       categories: ['DAIRY'],
       ...over,
     });
@@ -3459,5 +3469,132 @@ describe('BasketPage: what you usually buy here', () => {
 
     expect(view.usual()).toBe(false);
     expect(drawnRows(fixture)).toHaveLength(2);
+  });
+});
+
+describe('similar products on the basket', () => {
+  const OFFER = {
+    price: 1.2,
+    currency: 'EUR',
+    unitPrice: 1.2,
+    unitPriceLabel: 'EUR/L',
+    observedAt: null,
+    sourceKind: 'OFFICIAL_WEB' as const,
+    stale: false,
+    priceScopeId: 's1',
+  };
+
+  const GROUPED: BasketProduct = {
+    id: 'i-milk',
+    name: { en: 'Milk', es: 'Leche' },
+    brand: null,
+    imageUrl: null,
+    size: 1,
+    unit: 'LITER',
+    offer: OFFER,
+    offers: [],
+    atShop: null,
+    productGroupId: 'g-milk',
+    categories: ['DAIRY'],
+  };
+
+  const member = (id: string, unitPrice: number): CatalogItem => ({
+    id,
+    name: { en: id, es: id },
+    brand: null,
+    size: 1,
+    unit: 'LITER',
+    productGroupId: 'g-milk',
+    category: 'DAIRY',
+    offer: { ...OFFER, price: unitPrice, unitPrice },
+    chainPrices: [],
+    imageUrl: null,
+    packCount: null,
+    unitBasis: null,
+  });
+
+  const milkRow = (listId: string | null) =>
+    line('Milk', {
+      optionIds: ['i-milk'],
+      entries: [entry(listId, 'zl-Milk')],
+    });
+
+  function drawn(fixture: ComponentFixture<BasketPage>): BasketRowComponent {
+    return fixture.debugElement.query(By.directive(BasketRowComponent))
+      .componentInstance as BasketRowComponent;
+  }
+
+  it('offers the change on a row whose product has a group, on a list the reader writes', async () => {
+    const groupMembers = fakeGroupMembers();
+    const { fixture, store } = await render({
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+      groupMembers,
+    });
+
+    expect(drawn(fixture).canSwap()).toBe(true);
+    expect(groupMembers.asked.map((read) => read.groupIds)).toEqual([
+      ['g-milk'],
+    ]);
+
+    drawn(fixture).swap.emit();
+
+    expect(store.navigate).toHaveBeenCalledWith(
+      ['sheet', 'rows', 'row-Milk', 'swap'],
+      expect.anything()
+    );
+  });
+
+  it('offers no change on a list the reader may not write, or with no group', async () => {
+    const unserved = await render({
+      lines: [milkRow(null)],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+    });
+    expect(drawn(unserved.fixture).canSwap()).toBe(false);
+
+    const ungrouped = await render({
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', { ...GROUPED, productGroupId: null }]]),
+    });
+    expect(drawn(ungrouped.fixture).canSwap()).toBe(false);
+  });
+
+  it('offers a guest no change and reads no group for one', async () => {
+    const groupMembers = fakeGroupMembers();
+    const { fixture } = await render({
+      me: participant(guest('p-9', 1)),
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+      groupMembers,
+    });
+
+    expect(drawn(fixture).canSwap()).toBe(false);
+    expect(groupMembers.asked).toEqual([]);
+  });
+
+  it('marks a product another member of its group beats on price', async () => {
+    const cheaper = await render({
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+      groupMembers: fakeGroupMembers({
+        members: { 'g-milk': [member('i-milk', 1.2), member('i-oat', 0.9)] },
+      }),
+    });
+    expect(drawn(cheaper.fixture).groupCheaper()).toBe(true);
+
+    const best = await render({
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+      groupMembers: fakeGroupMembers({
+        members: { 'g-milk': [member('i-milk', 1.2), member('i-oat', 1.5)] },
+      }),
+    });
+    expect(drawn(best.fixture).groupCheaper()).toBe(false);
   });
 });

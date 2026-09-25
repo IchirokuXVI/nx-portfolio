@@ -104,6 +104,22 @@
   color: var(--app-text-muted);
 }
 
+// What pressing the row does, when it does more than open the product.
+.verb {
+  flex: none;
+  padding: var(--app-space-2) var(--app-space-4);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+
+.row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 // The skeleton: the same box, with bones where the text goes.
 .skeleton {
   cursor: default;

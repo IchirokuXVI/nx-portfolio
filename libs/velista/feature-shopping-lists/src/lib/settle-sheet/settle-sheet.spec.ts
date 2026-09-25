@@ -894,6 +894,7 @@ describe('SettleSheet: the trip is finished', () => {
             unit: null,
             offer: null,
             offers: [],
+            productGroupId: null,
             categories: ['OTHER' as const],
           },
         ],
@@ -907,6 +908,7 @@ describe('SettleSheet: the trip is finished', () => {
             unit: null,
             offer: null,
             offers: [],
+            productGroupId: null,
             categories: ['OTHER' as const],
           },
         ],
@@ -1765,6 +1767,7 @@ describe('SettleSheet: the product somebody got', () => {
     imageUrl: null,
     offer: null,
     offers: [],
+    productGroupId: null,
     categories: [],
   };
   const SKIMMED: BasketProduct = { ...MILK, id: 'i-skimmed' };

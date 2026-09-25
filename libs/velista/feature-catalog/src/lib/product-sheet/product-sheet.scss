@@ -1,4 +1,8 @@
 // One product's prices (velista 0100, section 5), as the mock's sheet draws them.
+.similar {
+  margin-block-start: var(--app-space-6);
+}
+
 .title {
   margin: 0;
   font-size: var(--app-text-lg);

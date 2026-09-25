@@ -36,6 +36,7 @@ function product(
     offer: offers[0] ?? null,
     offers,
     atShop,
+    productGroupId: null,
     categories: ['DAIRY'],
   };
 }

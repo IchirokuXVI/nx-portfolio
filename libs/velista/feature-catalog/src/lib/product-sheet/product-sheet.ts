@@ -2,10 +2,16 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
-import { ActivatedRoute, type ActivatedRouteSnapshot } from '@angular/router';
+import {
+  ActivatedRoute,
+  Router,
+  type ActivatedRouteSnapshot,
+} from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -14,6 +20,7 @@ import {
 import {
   CATALOG_BROWSE_SERVICE,
   CATALOG_SERVICE,
+  GroupMembers,
   type CatalogBrowseServiceI,
   type CatalogServiceI,
 } from '@portfolio/velista/data-access';
@@ -25,8 +32,16 @@ import {
   type CatalogItem,
   type ProductShopPrice,
 } from '@portfolio/velista/models';
-import { formatMoney, SheetNavigation } from '@portfolio/velista/platform';
-import { productRowView, SheetShell } from '@portfolio/velista/ui';
+import {
+  formatMoney,
+  SheetNavigation,
+  sheetSegments,
+} from '@portfolio/velista/platform';
+import {
+  productRowView,
+  SheetShell,
+  SimilarProducts,
+} from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
 
 /** One line of the sheet, every string already chosen. */
@@ -58,6 +73,12 @@ type SheetStatus = 'loading' | 'ready' | 'failed';
  * line per chain at its cheapest scope. The chains near the person with no row
  * are listed last, saying `not sold here`.
  *
+ * ## Similar products
+ *
+ * Under the prices, the other products of its group: the same product under
+ * other labels, cheapest first. Pressing one opens it in this sheet, replacing
+ * the history entry, so closing still lands on the page underneath.
+ *
  * ## It adds nothing to a list
  *
  * Adding from the catalog has to choose a list, a group and a quantity, and none
@@ -66,7 +87,7 @@ type SheetStatus = 'loading' | 'ready' | 'failed';
  */
 @Component({
   selector: 'lib-product-sheet',
-  imports: [RokuTranslatorPipe, SheetShell],
+  imports: [RokuTranslatorPipe, SheetShell, SimilarProducts],
   templateUrl: './product-sheet.html',
   styleUrl: './product-sheet.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -81,9 +102,17 @@ export class ProductSheet {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _route = inject(ActivatedRoute);
+  private readonly _router = inject(Router);
+  private readonly _groupMembers = inject(GroupMembers);
+  private readonly _shell = viewChild.required(SheetShell);
 
-  /** Read once: a sheet covers the list, so no second product opens under it. */
-  protected readonly itemId = this._route.snapshot.paramMap.get('itemId') ?? '';
+  /**
+   * The product on show. It follows the route, because a similar product opens
+   * in this same sheet and the router reuses the component for it.
+   */
+  protected readonly itemId = signal(
+    this._route.snapshot.paramMap.get('itemId') ?? ''
+  );
 
   protected readonly status = signal<SheetStatus>('loading');
   private readonly _item = signal<CatalogItem | null>(null);
@@ -130,6 +159,20 @@ export class ProductSheet {
     }));
   });
 
+  /** The group's members, or null while they load or with no group. */
+  protected readonly similar = computed(() => {
+    const groupId = this._item()?.productGroupId ?? null;
+    if (groupId === null) {
+      return null;
+    }
+    const entry = this._groupMembers.entry(groupId);
+    return {
+      members: entry?.status === 'ready' ? entry.members : null,
+      loading: entry === null || entry.status === 'loading',
+      failed: entry?.status === 'failed',
+    };
+  });
+
   /** "two days ago", in the reader's language, or null with no price seen. */
   protected readonly seen = computed(() => {
     const at = productPricesSeenAt(this._prices());
@@ -137,7 +180,30 @@ export class ProductSheet {
   });
 
   constructor() {
+    const params = this._route.paramMap.subscribe((map) => {
+      const itemId = map.get('itemId') ?? '';
+      if (itemId !== this.itemId()) {
+        this.itemId.set(itemId);
+        void this._load();
+      }
+    });
+    inject(DestroyRef).onDestroy(() => params.unsubscribe());
     void this._load();
+  }
+
+  /**
+   * Open a similar product in this sheet, in place of this one.
+   *
+   * Focus goes to the panel first: the row that was pressed is redrawn with the
+   * new product's list, and focus left on it would fall out of the sheet.
+   */
+  async openSimilar(itemId: string): Promise<void> {
+    this._shell().focusPanel();
+    const covered = coveredPageUrl(this._route.snapshot);
+    const segments = sheetSegments('products', itemId).map(encodeURIComponent);
+    await this._router.navigateByUrl(`${covered}/${segments.join('/')}`, {
+      replaceUrl: true,
+    });
   }
 
   /**
@@ -149,16 +215,27 @@ export class ProductSheet {
   }
 
   private async _load(): Promise<void> {
+    const itemId = this.itemId();
+    this.status.set('loading');
     const [items, context, rows] = await Promise.all([
-      this._catalog.itemsByIds([this.itemId]),
+      this._catalog.itemsByIds([itemId]),
       this._context?.load() ?? this._browse.context(),
-      this._browse.scopeOffers(this.itemId),
+      this._browse.scopeOffers(itemId),
     ]);
+
+    // Another product was opened while this one loaded; its own load owns the sheet.
+    if (itemId !== this.itemId()) {
+      return;
+    }
 
     const item = items?.[0] ?? null;
     if (item === null || context === null || rows === null) {
       this.status.set('failed');
       return;
+    }
+
+    if (item.productGroupId !== null) {
+      void this._groupMembers.ensure([item.productGroupId]);
     }
 
     this._item.set(item);

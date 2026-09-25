@@ -6,12 +6,12 @@ import {
   computed,
   DestroyRef,
   effect,
+  type ElementRef,
   inject,
   Injector,
   signal,
   untracked,
   viewChild,
-  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -21,7 +21,9 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   ASSISTANT_SERVICE,
+  type AssistantServiceI,
   CATALOG_SERVICE,
+  type CatalogServiceI,
   DueLineStore,
   ItemNames,
   LineStore,
@@ -32,31 +34,30 @@ import {
   presencePeople,
   PresenceStore,
   REALTIME_CLIENT,
+  type RealtimeClientI,
   SessionStore,
   ShoppingProfileStore,
   TripStore,
   ZoneStore,
-  type AssistantServiceI,
-  type CatalogServiceI,
-  type RealtimeClientI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
-  DUE_LINE_ADDS_ON_STEP,
-  LINE_VOICE_MAX_SECONDS,
-  NO_CATEGORY,
-  reorderWithinSlots,
-  SUGGEST_DEBOUNCE_MS,
-  SUGGEST_MIN_CHARS,
-  tripKey,
   type CatalogSuggestion,
+  DUE_LINE_ADDS_ON_STEP,
   type Line,
+  LINE_VOICE_MAX_SECONDS,
   type LineRowVm,
   type ListGoneReason,
   type ListPageState,
   type ListViewerVm,
+  NO_CATEGORY,
   type PresenceUser,
+  productSuggestions,
   type RecordedAudio,
+  reorderWithinSlots,
+  SUGGEST_DEBOUNCE_MS,
+  SUGGEST_MIN_CHARS,
+  tripKey,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -68,12 +69,12 @@ import {
   NOTIFICATION_TONE,
   PageNavigation,
   RECORDING_LIMITS,
+  type RecordingLimits,
   searchOpenOf,
   sheetSegments,
   StorageKeys,
   TourAnchor,
   zoneIdOf,
-  type RecordingLimits,
 } from '@portfolio/velista/platform';
 import {
   AppBar,
@@ -83,16 +84,16 @@ import {
   ErrorState,
   LineComposer,
   LineList,
+  type LineRowAction,
   ListHeader,
   ListNotice,
   ListTools,
   RowSkeleton,
   SpinnerIcon,
-  ToBuyHeading,
-  TripGroup,
-  type LineRowAction,
   type SuggestionHolding,
   type SuggestionHoldingChange,
+  ToBuyHeading,
+  TripGroup,
 } from '@portfolio/velista/ui';
 import {
   correlationIdOf,
@@ -1505,7 +1506,7 @@ export class ListPage {
         .suggest(query, profileId === undefined ? undefined : { profileId })
         .then((found) => {
           if (seq === this._suggestSeq) {
-            this.suggestions.set(found);
+            this.suggestions.set(productSuggestions(found));
             this.suggestedFor.set(query);
             this.suggesting.set(false);
           }
