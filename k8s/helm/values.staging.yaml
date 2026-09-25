@@ -136,18 +136,14 @@ lunaShopperBackend:
     enabled: true
     harvestEnabled: true
 
-  # The reference catalog, on (plan 0067). This is what staging is for: a
-  # deployed environment with real products and real prices to click through, and
-  # the normalized groups are what search and the basket composer are exercised
-  # against.
+  # The reference catalog, off (2026-09-25), matching production.
   #
-  # The harvester above runs store discovery only, so it contributes no products
-  # and the seed does not need one. The seed creates the 239 products the receipts
-  # name, across all three chains, priced from the receipts. Should a Mercadona
-  # harvest ever run here, the same seed adopts those rows by barcode instead of
-  # creating a second copy.
+  # Staging starts from an empty catalog, as production does after the reset in
+  # `k8s/catalog-reset/README.md`, so what is clicked through here is what
+  # production holds. The Job runs on `pre-upgrade`, so leaving it on would plant
+  # the 239 receipt products again on every deploy.
   referenceSeed:
-    enabled: true
+    enabled: false
 
   # No backups in staging. It is disposable by design, and a restore drill is
   # rehearsed here by restoring a PRODUCTION dump into it (plan 0005, section 6),

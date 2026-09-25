@@ -193,33 +193,19 @@ lunaShopperBackend:
     # carries this, which is what asserts the key is actually in the cluster.
     harvestEnabled: true
 
-  # The reference catalog, on, matching staging.
+  # The reference catalog, off (2026-09-25), and off in staging too.
   #
-  # It was off, and the note here said to turn it on once, deploy, then turn it
-  # off again, because the Job runs on `pre-upgrade` and so fires on every
-  # deploy. That reasoning held while the seed was only a way to plant a
-  # starting catalog. It stopped holding once the seed became the place these
-  # 239 products are **edited**: the rows are already in production and in use,
-  # every id derives from a slug that does not change, and `writeItems` upserts
-  # by primary key and never deletes. A rerun is therefore how a corrected name
-  # reaches production without a restore, and switching this off again would
-  # mean the next correction needs a hand written UPDATE against a live
-  # database instead.
+  # The catalog and harvester databases are being reset to start clean, and the
+  # clean start is an empty catalog: no reference chains, shops, groups or the
+  # 239 receipt products. The Job runs on `pre-upgrade`, so leaving it on would
+  # plant them again on the next deploy. `k8s/catalog-reset/README.md` is the
+  # procedure, and its cleanup clears the references core holds to them.
   #
-  # A standing rerun costs one Job per deploy writing 239 rows it usually does
-  # not change. What it buys is that this file is the truth about those rows
-  # rather than a snapshot of it.
-  #
-  # **It overwrites whatever the seed states.** `imageUrl` and `sku` are written
-  # as null, and `category`, `defaultUnit`, `ean` and `productGroupId` go back to
-  # the authored values, so an edit made through the back office to one of those
-  # on a seeded product does not survive a deploy. Prices are safe:
-  # `writeItemPrices` inserts on change, and an owner's ADMIN row is untouched.
-  #
-  # If the full Mercadona assortment is ever restored here, restore the dump
-  # BEFORE the seed, never after: `uq_items_ean` refuses the second writer.
+  # Turning it back on is safe: it upserts by derived id and never deletes. It
+  # overwrites what it states on the rows it writes, so a back office edit to
+  # one of those products does not survive a deploy while it is on.
   referenceSeed:
-    enabled: true
+    enabled: false
 
   # Nightly pg_dump off the node (plan 0005). Production only: staging holds
   # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.
