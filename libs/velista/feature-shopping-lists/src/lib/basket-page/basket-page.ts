@@ -76,6 +76,7 @@ import {
 } from '../basket-labels';
 import { BASKET_PATHS, basketPath } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
+import { TargetListSheet } from '../target-list-sheet/target-list-sheet';
 import { ChangeAcknowledger } from './change-acknowledger';
 import { SeenTarget } from './seen-target';
 
@@ -1531,6 +1532,11 @@ export class BasketPage {
   protected readonly canRetarget = computed(() => this._store.lists().size > 1);
 
   protected openTarget(): void {
+    // The chip is the popover's way out now that the popover holds no button of
+    // its own (velista 0113), and a press on the chip is not a press outside: the
+    // overlay counts its origin, the dock, as part of itself. So it is closed
+    // here, or it would stay drawn above the sheet's scrim.
+    this.needsListOpen.set(false);
     void this._router.navigate(sheetSegments('add', 'list'), {
       relativeTo: this._route,
       queryParams: this._search.kept(this._route),
@@ -1574,16 +1580,25 @@ export class BasketPage {
   }
 
   /**
-   * The popover's own button: the chip's sheet, from where the person is looking.
+   * A sheet's route went (velista `0113`). When it was the target sheet and a
+   * list was chosen on it, the next thing to do is type, so focus goes to the
+   * composer's field.
    *
-   * Focus is put back on the field before the sheet opens, because the sheet hands
-   * focus back on its way out to whatever held it when it opened, and the popover's
-   * button is gone by then.
+   * Here and not in the sheet, because this is the moment the sheet is gone: its
+   * fall has finished and nothing of it is left to hold focus. The sheet hands
+   * focus back only on Escape and the scrim, to whatever opened it, which is the
+   * chip and not the field. A dismissal without a choice is left to that.
+   *
+   * Quietly, so the focus is not read as a tap on a locked field. The target was
+   * set before the sheet closed, so the popover has nothing to say by now anyway.
+   * A target set by `restore` on arrival never passes through here, and moves no
+   * focus.
    */
-  protected chooseFromNeedsList(): void {
-    this.needsListOpen.set(false);
-    this._refocusField();
-    this.openTarget();
+  protected onSheetDeactivated(sheet: unknown): void {
+    if (sheet instanceof TargetListSheet && sheet.chose) {
+      this.needsListOpen.set(false);
+      this._refocusField();
+    }
   }
 
   private _refocusField(): void {

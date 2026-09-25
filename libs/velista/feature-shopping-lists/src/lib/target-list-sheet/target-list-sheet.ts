@@ -105,9 +105,24 @@ export class TargetListSheet {
     return groups;
   });
 
+  /**
+   * Whether a list was chosen here, rather than the sheet being dismissed
+   * without an answer (velista `0113`).
+   *
+   * Read by the basket page as the sheet's route goes, because that is the one
+   * moment focus can be handed to the composer's field: the sheet hands focus back
+   * only on Escape and the scrim, and a choice is neither.
+   */
+  get chose(): boolean {
+    return this._chose;
+  }
+
+  private _chose = false;
+
   /** Say where the next add goes, and get out of the way. */
   protected choose(list: BasketListRef): void {
     this._target.choose(list);
+    this._chose = true;
     this.close();
   }
 

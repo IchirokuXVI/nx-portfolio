@@ -1566,8 +1566,7 @@
       "to": "Para: {{list}}",
       "choose": "Elige una lista",
       "sheetTitle": "¿Para qué lista es?",
-      "needsList": "Primero elige una lista. El producto nuevo se añade a la lista que elijas.",
-      "needsListAction": "Elegir lista"
+      "needsList": "Primero elige una lista. El producto nuevo se añade a la lista que elijas."
     },
     "added": {
       "announced": "{{content}} añadido"

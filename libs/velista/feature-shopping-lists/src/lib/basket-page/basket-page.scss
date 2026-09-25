@@ -583,15 +583,8 @@ lib-line-composer {
 }
 
 // Inside the popover the locked field opens. The sentence is the reason, in the
-// primary text; the one control is the primary action, because it is the only
-// thing the popover is for.
+// primary text, and the whole of what the popover holds (velista 0113).
 .needs-list-text {
   margin: 0;
   color: var(--app-text-primary);
-}
-
-.needs-list-action {
-  @include shared.primary-button;
-
-  font-size: var(--app-text-sm);
 }

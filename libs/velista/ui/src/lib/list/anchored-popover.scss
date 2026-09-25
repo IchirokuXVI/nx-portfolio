@@ -1,7 +1,7 @@
 // The group help popover's surface (`suggestion-list.scss`), so the two popovers in
 // the app read as the same thing: raised, a hairline, the medium radius and the second
-// elevation. Wide enough for two short sentences and a button, and never wider than
-// the screen less its margins.
+// elevation. Wide enough for two short sentences, and never wider than the screen
+// less its margins.
 .pop {
   display: flex;
   flex-direction: column;
