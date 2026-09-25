@@ -1,0 +1,43 @@
+<lib-sheet-shell (dismiss)="close()" #shell labelledBy="basket-swap-title">
+  <h2 class="title" id="basket-swap-title">
+    {{ 'basket.swap.title' | rokuT }}
+  </h2>
+  @if (product() !== null) {
+    <p class="instead">{{ 'basket.swap.instead' | rokuT: { name: name() } }}</p>
+  }
+
+  @if (group(); as similar) {
+    <lib-similar-products
+      (picked)="choose($event)"
+      [busy]="busy()"
+      [excludeIds]="row()?.optionIds ?? []"
+      [failed]="similar.failed"
+      [loading]="similar.loading"
+      [members]="similar.members"
+      class="similar"
+      headingKey="catalog.similar.title"
+      verb="catalog.similar.change"
+      verbLabel="catalog.similar.changeLabel"
+    />
+
+    <!--
+      Said only once the list has answered, so an empty group never reads as a
+      failure and a loading one never reads as empty.
+    -->
+    @if (similar.none) {
+      <p class="note">{{ 'basket.swap.none' | rokuT }}</p>
+    }
+  } @else {
+    <p class="note">{{ 'basket.swap.none' | rokuT }}</p>
+  }
+
+  @if (failed()) {
+    <p class="note is-failed" role="alert">
+      {{ 'basket.swap.failed' | rokuT }}
+    </p>
+  }
+
+  <button (click)="shell.requestDismiss()" class="close" type="button">
+    {{ 'basket.swap.cancel' | rokuT }}
+  </button>
+</lib-sheet-shell>

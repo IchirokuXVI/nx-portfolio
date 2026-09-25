@@ -330,6 +330,12 @@ export interface BasketProduct {
    * on the line sheet's product card, where the carton glyph takes its place.
    */
   readonly imageUrl: string | null;
+  /**
+   * The group this product belongs to, or null. A group is one product sold under
+   * several labels, so its other members are what "change product" offers, and the
+   * row marks a product that is not the cheapest of them.
+   */
+  readonly productGroupId: string | null;
   /** e.g. `1` with {@link BasketProduct.unit} `LITER`. Null when catalog does not know. */
   size: number | null;
   unit: string | null;

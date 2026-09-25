@@ -52,7 +52,12 @@ export interface ProductRowView {
   template: `
     <button
       (click)="opened.emit(row().id)"
-      [attr.aria-label]="row().label"
+      [attr.aria-label]="
+        verb() === null
+          ? row().label
+          : (verbLabel() ?? '' | rokuT: { label: row().label })
+      "
+      [disabled]="disabled()"
       class="row"
       type="button"
     >
@@ -88,6 +93,10 @@ export interface ProductRowView {
       } @else {
         <span class="no-price">{{ 'catalog.row.noPrice' | rokuT }}</span>
       }
+
+      @if (verb(); as key) {
+        <span aria-hidden="true" class="verb">{{ key | rokuT }}</span>
+      }
     </button>
   `,
   styleUrl: './product-row.scss',
@@ -95,6 +104,20 @@ export interface ProductRowView {
 })
 export class ProductRow {
   readonly row = input.required<ProductRowView>();
+
+  /**
+   * What pressing the row does, as a translation key drawn as a pill at the
+   * trailing edge ("Change"), or null for a row that opens the product.
+   *
+   * The row stays one button with one name: a second button inside it would be
+   * a button in a button. {@link verbLabel} is that name, with `{{label}}`
+   * standing for the row's own.
+   */
+  readonly verb = input<string | null>(null);
+  readonly verbLabel = input<string | null>(null);
+
+  /** While the row's action is in flight. */
+  readonly disabled = input(false);
 
   /** The product's id, when the row is pressed. */
   readonly opened = output<string>();

@@ -263,6 +263,16 @@ export class SheetShell implements FallingSheet {
   }
 
   /**
+   * Put focus on the panel again, for a sheet that redraws the control that had it.
+   *
+   * Escape and the focus trap listen on the panel, so focus left on a removed
+   * control falls to the page and the sheet stops hearing Escape.
+   */
+  focusPanel(): void {
+    this._panel()?.focus();
+  }
+
+  /**
    * Escape, and a tap on the scrim. Both are the same gesture as the back button.
    *
    * Guarded on `closing` as well as on `dismissible`, so a second gesture during the

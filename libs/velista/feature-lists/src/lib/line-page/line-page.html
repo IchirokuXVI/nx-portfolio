@@ -211,6 +211,28 @@
         }
       </section>
 
+      <!--
+        The other products of each product's group. A group is one product sold
+        under several labels, so every row is a product this line could hold
+        instead: a writer changes to it with one tap, anybody else opens it.
+      -->
+      @for (group of similar(); track group.groupId) {
+        <section class="section">
+          <lib-similar-products
+            (picked)="pickSimilar(group.replaces, $event)"
+            [busy]="busy()"
+            [excludeIds]="group.excludeIds"
+            [failed]="group.failed"
+            [headingArgs]="group.headingArgs"
+            [headingKey]="group.headingKey"
+            [loading]="group.loading"
+            [members]="group.members"
+            [verbLabel]="line.canEdit ? 'catalog.similar.changeLabel' : null"
+            [verb]="line.canEdit ? 'catalog.similar.change' : null"
+          />
+        </section>
+      }
+
       <!-- On this list: one household's consumption. -->
       <section class="section">
         <h2 class="section-title">{{ 'list.page.thisList' | rokuT }}</h2>
@@ -404,6 +426,9 @@
     }
   </main>
 }
+
+<!-- The sheets over this page: the delete confirmation and a product. -->
+<router-outlet />
 
 <!--
   One chip, drawn identically inside a cluster and outside one.

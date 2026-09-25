@@ -144,6 +144,7 @@ const PRODUCTS: readonly BasketProduct[] = [
       es: 'Leche entera Hacendado, 1 L',
     },
     brand: 'Hacendado',
+    productGroupId: 'group-milk',
     size: 1,
     unit: 'LITER',
     // Dearer at Dia, so the Mercadona view draws no mark and the Dia view does.
@@ -159,6 +160,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     id: 'item-milk-pascual',
     name: { en: 'Pascual whole milk, 1 L', es: 'Leche entera Pascual, 1 L' },
     brand: 'Pascual',
+    productGroupId: 'group-milk',
     size: 1,
     unit: 'LITER',
     // Cheaper at Dia, which is the "cheaper elsewhere" mark on the Mercadona view.
@@ -177,6 +179,7 @@ const PRODUCTS: readonly BasketProduct[] = [
       es: 'Leche entera Central Lechera, 1 L',
     },
     brand: 'Central Lechera Asturiana',
+    productGroupId: 'group-milk',
     size: 1,
     unit: 'LITER',
     // Priced nowhere, which is `0062` section 5.3's unpriced option among priced ones.
@@ -189,6 +192,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     id: 'item-eggs',
     name: { en: 'Free range eggs, 12', es: 'Huevos camperos, 12' },
     brand: 'Hacendado',
+    productGroupId: 'group-eggs',
     size: 12,
     unit: 'UNIT',
     // Mercadona alone, so the Dia view sinks this row and says where it is sold.

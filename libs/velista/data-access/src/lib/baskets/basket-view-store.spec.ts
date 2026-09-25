@@ -85,6 +85,7 @@ function product(
     offer: null,
     offers: [],
     atShop: null,
+    productGroupId: null,
     categories: ['OTHER'],
   };
 }

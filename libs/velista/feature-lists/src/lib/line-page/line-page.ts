@@ -8,7 +8,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -16,28 +16,32 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   CATALOG_SERVICE,
+  type CatalogServiceI,
+  GroupMembers,
   GroupNames,
   ItemNames,
   LINE_SERVICE,
+  type LineServiceI,
   LineStore,
   ListStore,
   MemberNames,
   SessionStore,
   ShoppingProfileStore,
   ZoneStore,
-  type CatalogServiceI,
-  type LineServiceI,
 } from '@portfolio/velista/data-access';
 import {
-  APP_BASE_PATH,
-  inLocale,
-  LINE_ITEM_SET_MAX,
-  SUGGEST_DEBOUNCE_MS,
-  SUGGEST_MIN_CHARS,
   type AlsoOnPlaceVm,
   type AlsoOnVm,
+  APP_BASE_PATH,
+  type CatalogItem,
+  catalogName,
   type CatalogSuggestion,
+  inLocale,
+  LINE_ITEM_SET_MAX,
   type LineProductsFullVm,
+  productSuggestions,
+  SUGGEST_DEBOUNCE_MS,
+  SUGGEST_MIN_CHARS,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -45,9 +49,14 @@ import {
   listIdOf,
   PageNavigation,
   SHEET_SEGMENT,
+  sheetSegments,
   zoneIdOf,
 } from '@portfolio/velista/platform';
-import { ChevronLeftIcon, SuggestionList } from '@portfolio/velista/ui';
+import {
+  ChevronLeftIcon,
+  SimilarProducts,
+  SuggestionList,
+} from '@portfolio/velista/ui';
 import { selectLinePage } from './select-line-page';
 
 /**
@@ -83,8 +92,10 @@ import { selectLinePage } from './select-line-page';
   selector: 'lib-line-page',
   imports: [
     NgTemplateOutlet,
+    RouterOutlet,
     RokuTranslatorPipe,
     ChevronLeftIcon,
+    SimilarProducts,
     SuggestionList,
   ],
   templateUrl: './line-page.html',
@@ -98,6 +109,7 @@ export class LinePage {
   private readonly _names = inject(MemberNames);
   private readonly _itemNames = inject(ItemNames);
   private readonly _groupNames = inject(GroupNames);
+  private readonly _groupMembers = inject(GroupMembers);
   private readonly _catalog = inject<CatalogServiceI>(CATALOG_SERVICE);
   /**
    * The transport, for the one read that is this page's alone.
@@ -176,6 +188,69 @@ export class LinePage {
   private readonly _line = computed(() =>
     this._lines.linesIn(this.listId()).find((line) => line.id === this.lineId())
   );
+
+  /**
+   * The line's products that belong to a product group, gathered by group.
+   *
+   * Read off the catalog items `ItemNames` already holds for the chips, so it
+   * costs no request of its own and fills in as the names land. Gathered by
+   * group because two products of one group have one set of siblings, and
+   * changing to one of them replaces both.
+   */
+  private readonly _grouped = computed<readonly LineProductGroup[]>(
+    () => {
+      const byGroup = new Map<string, string[]>();
+      for (const itemId of this._itemIds()) {
+        const groupId = this._itemNames.nameOf(itemId)?.productGroupId ?? null;
+        if (groupId !== null) {
+          byGroup.set(groupId, [...(byGroup.get(groupId) ?? []), itemId]);
+        }
+      }
+      return [...byGroup].map(([groupId, itemIds]) => ({ groupId, itemIds }));
+    },
+    { equal: sameGroups }
+  );
+
+  /**
+   * The members of those groups, priced where the reader shops. The server
+   * resolves the caller's own profile, so nothing is passed.
+   */
+  private readonly _loadGroupMembers = effect(() => {
+    const groupIds = this._grouped().map((group) => group.groupId);
+    if (groupIds.length > 0) {
+      untracked(() => void this._groupMembers.ensure(groupIds));
+    }
+  });
+
+  /**
+   * "Similar products": one list per group the line's products belong to.
+   *
+   * A group is one product sold under several labels, so each row is a product
+   * the line could hold instead. Headed by the product's name only when there
+   * is more than one list, where "similar to what" needs an answer.
+   */
+  readonly similar = computed<readonly LineSimilarVm[]>(() => {
+    const grouped = this._grouped();
+    const locale = this._localeStore.locale();
+    const many = grouped.length > 1;
+
+    return grouped.map(({ groupId, itemIds }) => {
+      const entry = this._groupMembers.entry(groupId);
+      const first = this._itemNames.nameOf(itemIds[0]);
+      return {
+        groupId,
+        replaces: itemIds,
+        excludeIds: this._itemIds(),
+        members: entry?.status === 'ready' ? entry.members : null,
+        loading: entry === null || entry.status === 'loading',
+        failed: entry?.status === 'failed',
+        headingKey: many ? 'catalog.similar.titleFor' : 'catalog.similar.title',
+        headingArgs: many
+          ? { name: first === null ? '' : catalogName(first.name, locale) }
+          : undefined,
+      };
+    });
+  });
 
   /**
    * The line's product set, compared by value.
@@ -493,7 +568,7 @@ export class LinePage {
         .suggest(query, profileId === undefined ? undefined : { profileId })
         .then((found) => {
           if (seq === this._seq) {
-            this.suggestions.set(found.filter((row) => row.kind === 'item'));
+            this.suggestions.set(productSuggestions(found));
           }
         });
     }, SUGGEST_DEBOUNCE_MS);
@@ -671,6 +746,58 @@ export class LinePage {
   }
 
   /**
+   * A similar product was pressed: take it instead, or look at it.
+   *
+   * With the right to edit the line, the products of that group on the line
+   * are **replaced** by the one chosen, in place, so the line keeps its words,
+   * its quantity and its history. The set never grows, so the cap cannot refuse
+   * it. Without that right the row opens the product over this page instead.
+   */
+  async pickSimilar(
+    replaces: readonly string[],
+    itemId: string
+  ): Promise<void> {
+    const line = this._line();
+    if (line === undefined || this.busy()) {
+      return;
+    }
+
+    if (!this._canEdit()) {
+      await this._router.navigateByUrl(
+        appPath(
+          this._localeStore.locale(),
+          this._basePath,
+          'zones',
+          this.zoneId(),
+          'lists',
+          this.listId(),
+          'lines',
+          this.lineId(),
+          ...sheetSegments('products', itemId)
+        )
+      );
+      return;
+    }
+
+    const next = [
+      ...new Set(
+        line.itemIds.map((id) => (replaces.includes(id) ? itemId : id))
+      ),
+    ];
+    if (
+      next.length === line.itemIds.length &&
+      next.every((id, i) => id === line.itemIds[i])
+    ) {
+      return;
+    }
+
+    this.productsFull.set(null);
+    this.busy.set(true);
+    await this._lines.updateLine(line.id, { itemIds: next });
+    this.busy.set(false);
+  }
+
+  /**
    * Delete, behind a confirmation, which is the only thing that discards a history.
    *
    * The confirm is a sheet over **this** page, so the marker goes after this page's
@@ -711,4 +838,39 @@ export class LinePage {
       )
     );
   }
+}
+
+/** Products of one line that share a product group. */
+interface LineProductGroup {
+  readonly groupId: string;
+  readonly itemIds: readonly string[];
+}
+
+/** One "similar products" list on the page. */
+export interface LineSimilarVm {
+  readonly groupId: string;
+  /** The line's products this list offers to replace. */
+  readonly replaces: readonly string[];
+  /** Every product on the line, none of which is offered again. */
+  readonly excludeIds: readonly string[];
+  readonly members: readonly CatalogItem[] | null;
+  readonly loading: boolean;
+  readonly failed: boolean;
+  readonly headingKey: string;
+  readonly headingArgs: Record<string, unknown> | undefined;
+}
+
+function sameGroups(
+  a: readonly LineProductGroup[],
+  b: readonly LineProductGroup[]
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (group, i) =>
+        group.groupId === b[i].groupId &&
+        group.itemIds.length === b[i].itemIds.length &&
+        group.itemIds.every((itemId, j) => itemId === b[i].itemIds[j])
+    )
+  );
 }

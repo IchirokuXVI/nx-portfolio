@@ -175,10 +175,12 @@ describe('composeListView', () => {
     const table = {
       l1: { categories: ['PRODUCE'] as ListCategoryPick[] },
       l3: {
+        productGroupId: null,
         categories: ['PANTRY'] as ListCategoryPick[],
         products: ['Copos de avena Hacendado'],
       },
       l4: {
+        productGroupId: null,
         categories: ['HOUSEHOLD'] as ListCategoryPick[],
         products: ['Bolsas autocierre'],
       },

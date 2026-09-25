@@ -1,6 +1,11 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, UrlSegment } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  Router,
+  UrlSegment,
+} from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
@@ -9,6 +14,8 @@ import {
   CATALOG_BROWSE_SERVICE,
   CATALOG_SERVICE,
   CatalogBrowseMemory,
+  GroupMembers,
+  ItemNames,
 } from '@portfolio/velista/data-access';
 import type {
   CatalogItem,
@@ -19,6 +26,7 @@ import {
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
+import { of } from 'rxjs';
 import { ProductSheet } from './product-sheet';
 
 const OIL: CatalogItem = {
@@ -42,6 +50,8 @@ interface Options {
    * hand it over. The catalog under the portfolio's mount unless a test says otherwise.
    */
   readonly covered?: readonly (readonly string[])[];
+  /** What the catalog answers for the product's group. */
+  readonly similar?: readonly CatalogItem[];
 }
 
 /** A route snapshot's chain from the root, reduced to what the sheet reads. */
@@ -77,16 +87,20 @@ async function render(options: Options = {}): Promise<{
     imports: [ProductSheet, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
+      GroupMembers,
+      ItemNames,
       { provide: CATALOG_BROWSE_SERVICE, useValue: memory },
       {
         provide: CATALOG_SERVICE,
         useValue: {
           itemsByIds: async () => (item === null ? [] : [item]),
+          groupMembers: async () => options.similar ?? [],
         },
       },
       {
         provide: ActivatedRoute,
         useValue: {
+          paramMap: of(convertToParamMap({ itemId: 'item-oil' })),
           snapshot: {
             paramMap: convertToParamMap({ itemId: 'item-oil' }),
             parent: routeChain(
@@ -232,5 +246,58 @@ describe('ProductSheet', () => {
     await fixture.componentInstance.dismiss();
 
     expect(sheets.dismiss).toHaveBeenCalledWith('/en/shopping-lists/live');
+  });
+});
+
+describe('ProductSheet similar products', () => {
+  const OTHER: CatalogItem = {
+    ...OIL,
+    id: 'item-oil-other',
+    name: { es: 'Aceite de oliva Carbonell', en: 'Carbonell olive oil' },
+    brand: 'Carbonell',
+    productGroupId: 'group-oil',
+    chainPrices: [],
+    imageUrl: null,
+    packCount: null,
+    unitBasis: null,
+  };
+
+  it('lists the other products of the group and opens one in the sheet', async () => {
+    const { fixture } = await render({
+      item: { ...OIL, productGroupId: 'group-oil' },
+      similar: [{ ...OIL, productGroupId: 'group-oil' }, OTHER],
+    });
+    for (let tick = 0; tick < 10; tick++) {
+      await Promise.resolve();
+    }
+    fixture.detectChanges();
+
+    const rows = (fixture.nativeElement as HTMLElement).querySelectorAll(
+      'lib-similar-products .row'
+    );
+    // The product itself is never its own sibling.
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('Carbonell olive oil');
+
+    const router = TestBed.inject(Router);
+    const navigate = jest
+      .spyOn(router, 'navigateByUrl')
+      .mockResolvedValue(true);
+    (rows[0] as HTMLButtonElement).click();
+
+    expect(navigate).toHaveBeenCalledWith(
+      '/velista/en/catalog/sheet/products/item-oil-other',
+      { replaceUrl: true }
+    );
+  });
+
+  it('draws nothing for a product with no group', async () => {
+    const { fixture } = await render();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-similar-products'
+      )
+    ).toBeNull();
   });
 });

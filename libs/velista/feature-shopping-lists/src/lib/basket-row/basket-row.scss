@@ -239,6 +239,44 @@
   color: var(--app-status-attention-fg);
 }
 
+// "Change product", beside the body: the status control's target and treatment,
+// so the row's two small controls read as one family.
+.swap {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-block-start: calc(var(--app-space-1) * -1);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-surface-raised);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.swap-glyph {
+  font-size: var(--app-icon-md);
+}
+
 // This shop does not stock it. A fact about the shop rather than about the line,
 // which is still a line to buy, so it is a shade of the caption and not a state.
 .is-unlisted {

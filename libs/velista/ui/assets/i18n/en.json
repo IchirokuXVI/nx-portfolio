@@ -363,6 +363,13 @@
       "failed": "The prices did not load. Close this and try again.",
       "noShops": "We do not know where you shop, so there are no prices to show.",
       "close": "Close"
+    },
+    "similar": {
+      "title": "Similar products",
+      "titleFor": "Similar to {{name}}",
+      "failed": "Similar products did not load.",
+      "change": "Change",
+      "changeLabel": "Change to {{label}}"
     }
   },
   "home": {
@@ -1597,6 +1604,16 @@
     "shelf": {
       "unavailable": "Not available at this shop",
       "instead": "Instead of {{name}}, not available at this shop"
+    },
+    "swap": {
+      "open": "Change product",
+      "openLabel": "Change {{name}} for a similar product",
+      "title": "Change product",
+      "instead": "Instead of {{name}}",
+      "none": "There are no similar products.",
+      "failed": "The change did not save. Try again.",
+      "cancel": "Cancel",
+      "cheaper": "cheaper option"
     }
   },
   "getList": {

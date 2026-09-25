@@ -14,6 +14,7 @@ import { BasketSessionStore } from './baskets/basket-session-store';
 import { BasketStore } from './baskets/basket-store';
 import { LiveBasketStore } from './baskets/live-basket-store';
 import { SharedListStore } from './baskets/shared-list-store';
+import { GroupMembers } from './catalog/group-members';
 import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
 import { CommentMemory } from './comments/comment-memory';
@@ -148,6 +149,8 @@ import { ZoneStore } from './zones/zone-store';
  * question about the same products, and the second is usually opened from the first.
  * `GroupNames` (plan 0065) joins beside it for every one of those reasons, being the
  * same resolver for the group a line follows rather than for the products on it.
+ * `GroupMembers` joins for the same reasons: the line page, the product sheet and the
+ * basket ask for the same group's members, and it primes `ItemNames` as they arrive.
  *
  * `AssistantMemory` (plan 0032) joins for `CommentMemory`'s reason and no stronger one:
  * it injects nothing, so root scope would work for it, and it is listed here anyway so
@@ -197,6 +200,7 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   LineMemory,
   LineStore,
   CommentMemory,
+  GroupMembers,
   GroupNames,
   ItemNames,
   MemberNames,

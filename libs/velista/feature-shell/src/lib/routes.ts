@@ -226,6 +226,15 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
           (m) => m.SettleSheet
         ),
     }),
+    // Change a row's product for another of its group. The page offers it only
+    // to a reader who may write every list the row stands for.
+    sheet({
+      path: 'rows/:rowKey/swap',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-shopping-lists').then(
+          (m) => m.SwapSheet
+        ),
+    }),
     // There were three sheets about one line here and now there is one.
     // `lines/:lineId/list` went in velista `0068`, which folded the send
     // sheet into the units sheet, and `lines/:lineId/units` went in `0073`,
@@ -735,6 +744,8 @@ export const AppShellRoutes: Route[] = [
                     (m) => m.DeleteLineSheet
                   ),
               }),
+              // A similar product, opened by a reader who cannot change the line.
+              ...productSheetRoutes(),
             ],
           },
           {

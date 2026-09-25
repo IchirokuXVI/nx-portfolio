@@ -363,6 +363,13 @@
       "failed": "No se han cargado los precios. Cierra y vuelve a intentarlo.",
       "noShops": "No sabemos dónde compras, así que no hay precios que mostrar.",
       "close": "Cerrar"
+    },
+    "similar": {
+      "title": "Productos similares",
+      "titleFor": "Similares a {{name}}",
+      "failed": "No se han podido cargar los productos similares.",
+      "change": "Cambiar",
+      "changeLabel": "Cambiar por {{label}}"
     }
   },
   "home": {
@@ -1597,6 +1604,16 @@
     "shelf": {
       "unavailable": "No disponible en esta tienda",
       "instead": "En lugar de {{name}}, que no está disponible en esta tienda"
+    },
+    "swap": {
+      "open": "Cambiar producto",
+      "openLabel": "Cambiar {{name}} por un producto similar",
+      "title": "Cambiar producto",
+      "instead": "En lugar de {{name}}",
+      "none": "No hay productos similares.",
+      "failed": "El cambio no se ha guardado. Inténtalo de nuevo.",
+      "cancel": "Cancelar",
+      "cheaper": "otro más barato"
     }
   },
   "getList": {

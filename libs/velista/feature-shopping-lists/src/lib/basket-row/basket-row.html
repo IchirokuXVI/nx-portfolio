@@ -181,6 +181,14 @@
               · {{ mark }}</span
             >
           }
+          <!--
+            Another product of the same group is cheaper. On the same caption
+            line as the other marks, so a marked row and an unmarked one are the
+            same height, and in words, in the attention role a decision takes.
+          -->
+          @if (groupCaption(); as cheaper) {
+            <span class="is-cheaper"> · {{ cheaper }}</span>
+          }
         </span>
       } @else if (productAbsence(); as absent) {
         <!--
@@ -269,6 +277,23 @@
         <span class="skipped">{{ said }}</span>
       }
     </button>
+
+    <!--
+      Change the product for a similar one: another product of its group. A
+      control of its own beside the body, because a button cannot hold a button,
+      and only on a row whose product has a group the reader may change.
+    -->
+    @if (canSwap()) {
+      <button
+        (click)="swap.emit()"
+        [attr.aria-label]="swapLabel()"
+        [disabled]="busy()"
+        class="swap"
+        type="button"
+      >
+        <lib-swap-icon class="swap-glyph" />
+      </button>
+    }
 
     <!--
       **The number, and the control** (plan 0054, section 1).

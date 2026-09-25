@@ -24,6 +24,7 @@ export * from './lib/catalog/chain-chips';
 export * from './lib/catalog/order-pills';
 export * from './lib/catalog/product-row';
 export * from './lib/catalog/product-row-view';
+export * from './lib/catalog/similar-products';
 export * from './lib/entry/account-lost-panel';
 export * from './lib/entry/asked-notice';
 export * from './lib/entry/invite-card';

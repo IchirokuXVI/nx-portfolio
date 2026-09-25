@@ -44,6 +44,11 @@ import { SessionStore } from '../auth/session-store';
 import { BasketListStore } from '../baskets/basket-list-store';
 import { LiveBasketStore } from '../baskets/live-basket-store';
 import { SharedListStore } from '../baskets/shared-list-store';
+import {
+  GroupMembers,
+  type GroupMembersEntry,
+  type GroupMembersScope,
+} from '../catalog/group-members';
 import { GroupNames } from '../catalog/group-names';
 import { ItemNames } from '../catalog/item-names';
 import { LineStore, type LineLoadState } from '../lines/line-store';
@@ -1359,6 +1364,50 @@ export function provideFakeGroupNames(
   store: FakeGroupNames = fakeGroupNames()
 ): Provider {
   return { provide: GroupNames, useValue: store };
+}
+
+/** What a fake catalog says a product group holds. */
+export interface FakeGroupMembersOptions {
+  /** Group id to its members. A group not in here has not answered yet. */
+  readonly members?: Readonly<Record<string, readonly CatalogItem[]>>;
+  /** Groups whose read failed. */
+  readonly failed?: readonly string[];
+}
+
+/** A `GroupMembers` that knows what you told it, at every scope alike. */
+export function fakeGroupMembers(options: FakeGroupMembersOptions = {}) {
+  const members = options.members ?? {};
+  const failed = new Set(options.failed ?? []);
+  const asked: { groupIds: string[]; scope?: GroupMembersScope }[] = [];
+
+  const entry = (groupId: string): GroupMembersEntry | null => {
+    if (failed.has(groupId)) {
+      return { status: 'failed' };
+    }
+    const found = members[groupId];
+    return found === undefined ? null : { status: 'ready', members: found };
+  };
+
+  return {
+    entry: (groupId: string, _scope?: GroupMembersScope) => entry(groupId),
+    membersOf: (groupId: string, _scope?: GroupMembersScope) => {
+      const found = entry(groupId);
+      return found?.status === 'ready' ? found.members : null;
+    },
+    ensure: async (groupIds: readonly string[], scope?: GroupMembersScope) => {
+      asked.push({ groupIds: [...groupIds], scope });
+    },
+    /** Every read that was asked for, in order, with its scope. */
+    asked,
+  };
+}
+
+export type FakeGroupMembers = ReturnType<typeof fakeGroupMembers>;
+
+export function provideFakeGroupMembers(
+  store: FakeGroupMembers = fakeGroupMembers()
+): Provider {
+  return { provide: GroupMembers, useValue: store };
 }
 
 /** Who a fake says is present, per zone and per list (plan 0017). */

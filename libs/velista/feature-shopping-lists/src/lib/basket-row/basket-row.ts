@@ -37,6 +37,7 @@ import {
   HalfCircleIcon,
   QuantityReel,
   SlashCircleIcon,
+  SwapIcon,
 } from '@portfolio/velista/ui';
 import {
   originsCaption,
@@ -173,6 +174,7 @@ const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
     QuantityReel,
     RokuTranslatorPipe,
     SlashCircleIcon,
+    SwapIcon,
   ],
   templateUrl: './basket-row.html',
   styleUrl: './basket-row.scss',
@@ -378,6 +380,36 @@ export class BasketRow {
   });
 
   readonly open = output<void>();
+
+  /**
+   * Whether the row offers "change product": its product belongs to a product
+   * group and the reader may write every list the row stands for. The page
+   * decides, because it holds the lists and the groups.
+   */
+  readonly canSwap = input(false);
+
+  /**
+   * Another product of this product's group is cheaper, by the price per litre
+   * or kilo at the basket's scopes. Words beside the price, never colour alone.
+   */
+  readonly groupCheaper = input(false);
+
+  /** "Change product" was pressed. */
+  readonly swap = output<void>();
+
+  /** The change button's accessible name, which names the product. */
+  protected readonly swapLabel = computed(() =>
+    this._translator.t('basket.swap.openLabel', undefined, this._locale(), {
+      name: this.productName() ?? this.row().content,
+    })
+  );
+
+  /** The group mark's words, or null. */
+  protected readonly groupCaption = computed(() =>
+    this.groupCheaper() && this._product() !== null
+      ? this._translator.t('basket.swap.cheaper', undefined, this._locale())
+      : null
+  );
 
   /**
    * Settle this line's whole outstanding amount as bought.
@@ -984,6 +1016,8 @@ export class BasketRow {
       this.productName() ?? '',
       this.productPrice() ?? '',
       this.markCaption() ?? '',
+      // A cheaper product of the same group, said as it is drawn.
+      this.groupCaption() ?? '',
       // What the shop is known not to have, said as it is drawn (velista `0102`).
       this._shelfLabel(),
       this.touched() ?? '',

@@ -36,6 +36,7 @@ export * from './lib/catalog/catalog-browse-memory';
 export * from './lib/catalog/catalog-browse-service';
 export * from './lib/catalog/catalog-memory';
 export * from './lib/catalog/catalog-service';
+export * from './lib/catalog/group-members';
 export * from './lib/catalog/group-names';
 export * from './lib/catalog/item-names';
 export * from './lib/comments/comment-api';
