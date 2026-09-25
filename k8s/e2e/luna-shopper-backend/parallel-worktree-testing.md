@@ -247,25 +247,66 @@ still applies to an ephemeral run, and the keys the slot decides win over it.
 
 Four things follow, and none of them is a detail:
 
-- **The slot number is required on every verb.** Nothing records it, so a
-  `--down` with no number would have nothing to read back, and the slot it would
-  reach for instead is the one this checkout claims.
+- **The slot number is required on every verb.** Nothing in the checkout records
+  it, so a `--down` with no number would have nothing to read back, and the slot it
+  would reach for instead is the one this checkout claims.
 - **Slot 0 is refused.** It is the developer's own, and an ephemeral run of it
   would be invisible to `--list`, which reads claims.
 - **The rendered files, the logs and the pid files live outside the repository**,
   under `$TMPDIR/luna-slot-ephemeral/slot<n>`, so an `--up` in one terminal and a
   `--down` in another still find each other. A releasing `--down` removes the
   directory.
-- **`--list` still sees it**, through the port probe rather than a claim: an open
-  port with no claim is already how `--list` and `--auto` describe a slot that is
-  somebody else's. So an ephemeral slot cannot be handed to another worktree
-  while it is running, and leaves nothing behind once it is not.
+- **A record holds the number while it runs**, as the next section describes. So
+  `--list` and `--auto` see the slot from the moment it is taken, and not only once
+  a port opens.
 
 Two files under the checkout are still written, and both are shared by every
 slot: the throwaway dev JWT keypairs in `apps/luna-shopper-backend/secrets/`,
 which are generated only when they are absent because no service can boot without
 them, and a `--keep-data` lock, which is in the main `.git` directory and is the
 only thing that stops `--auto` handing away databases somebody kept on purpose.
+
+#### An ephemeral slot holds its number (`tools/dev/plans/0004`)
+
+An ephemeral slot used to be held by nothing but its open ports. A tool that chose
+a number and then ran `--ephemeral --up` was invisible until the first port opened,
+so a second tool that chose at the same moment took the same number. An
+`--ephemeral --up` also did not look at claims or locks, so it was able to take a
+number that a worktree claimed.
+
+Now a slot has three kinds of holder, and `--ephemeral --up <n>` refuses a slot
+that has any of them:
+
+| Holder | Belongs to                              | Lives in                              | Ends with                |
+| ------ | --------------------------------------- | ------------------------------------- | ------------------------ |
+| claim  | a worktree configured for the slot      | the worktree's `.env.slot`            | `--down`                 |
+| lock   | databases kept on purpose               | `<main .git>/luna-slot-locks/<n>`     | `--up <n>` or `--unlock` |
+| record | the process that ran `--ephemeral --up` | `<main .git>/luna-slot-ephemeral/<n>` | `--ephemeral --down <n>` |
+
+The record is a directory, made with `mkdir` before anything starts. If the
+directory exists, `mkdir` fails, in Git Bash and on Linux alike. So of two racing
+callers, the first one wins. The second one is refused with the name of the owner.
+The directory holds one file, `owner`, with the pid of the caller, the time and the
+worktree.
+
+On Windows the pid is a Windows pid, the one Task Manager shows. If node calls the
+script, Git Bash cannot see its parent, so the script asks Windows for it.
+
+A **stale** record is a record whose pid is gone and whose ports are all closed.
+Both conditions are necessary. A caller that ran the script from a short lived
+shell is gone as soon as the script returns, but the slot is still up. The next
+`--ephemeral --up` of that number takes a stale record over. A second `mkdir`,
+`<n>.takeover`, makes sure that only one caller does so. That caller then judges
+the record again.
+
+`--list` prints a record in the `CLAIMED BY` column as `ephemeral (pid N)`, and a
+stale record has `STALE` after it. `--auto` skips a live record and ignores a stale
+one. The curation cli skips every slot that `--list` prints. `--ephemeral --down <n>`
+removes the record after it stops everything. With `--keep-data`, the lock that
+`--down` writes holds the slot from then on.
+
+If a record stays live after its slot is gone, run `--ephemeral --down <n>`. The
+cause is a Windows pid that a new process received after the caller died.
 
 The curation toolchain (`libs/luna-shopper/tools/curation/cli`) takes its rehearsal slot
 this way, which is why a rehearsal no longer disturbs the stack you are serving.
@@ -293,6 +334,19 @@ absent takes the template default.
 first time a preserved value is the thing that broke the stack.
 `--reset-env --keep-env GEMINI_API_KEY` spares the named ones. `--keep-env` on its
 own is an error rather than a silent no-op.
+
+**A key that is renamed is a key that is preserved stale.** Plan 0144 renamed
+four of them, `GENERATED_LIST_CLAIM_WINDOW`, `GENERATED_LIST_SWEEP_ENABLED`,
+`GENERATED_LIST_SWEEP_INTERVAL` and `GENERATED_LIST_SWEEP_BATCH`, to
+`BASKET_*`. They are plain defaults rather than `DERIVED_KEYS`, so a slot whose
+`.env` predates that plan keeps the old four, where nothing reads them any more,
+and the new four take their template defaults. That is harmless for three of
+them and **wrong for `GENERATED_LIST_SWEEP_ENABLED=false`** on a slot somebody
+switched off on purpose: the sweep comes back on. Run this once after pulling:
+
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --reset-env --keep-env <the keys you pasted>
+```
 
 **A new slot dependent key belongs in `DERIVED_KEYS`.** The list is inclusive, so
 a key nobody classified is preserved rather than recomputed, and it would keep a

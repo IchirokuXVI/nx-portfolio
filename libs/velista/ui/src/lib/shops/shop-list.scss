@@ -109,6 +109,22 @@
   color: var(--app-text-muted);
 }
 
+// The fact at the end of a pick row (velista `0103`). A distance is what a
+// candidate is chosen by, so it is as strong as the name; a day is quiet context.
+.aside {
+  flex: none;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  &.is-distance {
+    font-size: var(--app-text-sm);
+    font-weight: 600;
+    color: var(--app-text-secondary);
+  }
+}
+
 .mark {
   flex: none;
   font-size: var(--app-text-2xs);

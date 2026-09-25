@@ -131,6 +131,138 @@
   @include focus-ring;
 }
 
+// "Buying at" (velista `0102`): the same gap above as the sources, so the choices
+// read as sections of one form.
+.shop-label {
+  margin-block-start: var(--app-space-4);
+}
+
+// One card, the height of a field, in the tree's own border and radius. "Any" is a
+// single button that opens the picker; a chosen shop is a card holding its name,
+// Change and the x that puts it back to any.
+// What "Near me" picked (velista `0103`), above the row it explains.
+.shop-pick-message {
+  display: block;
+  margin-block-end: var(--app-space-3);
+}
+
+.shop-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+  min-block-size: var(--app-button-height);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  text-align: start;
+}
+
+.is-any {
+  cursor: pointer;
+
+  @include focus-ring;
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+// A chosen shop is the answer rather than a place to tap, so it keeps its own
+// padding for the text and gives the controls at its end their own targets.
+.is-chosen {
+  padding-block: var(--app-space-2);
+  padding-inline-end: 0;
+}
+
+.shop-pin {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+// Chosen, the pin takes the accent: this is where the list will be bought.
+.is-chosen .shop-pin {
+  color: var(--app-action-quiet-fg);
+}
+
+.shop-any {
+  flex: 1;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+
+.shop-go {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+.shop-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+}
+
+.shop-chain {
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.shop-where {
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.shop-outside {
+  margin-block-start: var(--app-space-2);
+}
+
+// Change: a text button in the quiet action role, as it is on the filter sheet.
+.shop-change {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-3);
+  border: none;
+  background: none;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+// The x, behind a hairline, so it reads as its own control and not part of Change.
+.shop-clear {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-inline-size: var(--app-touch-target);
+  border: none;
+  border-inline-start: 1px solid var(--app-border-subtle);
+  background: none;
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+.shop-clear-glyph {
+  font-size: var(--app-icon-sm);
+}
+
 .sources-label {
   margin-block-start: var(--app-space-4);
 }

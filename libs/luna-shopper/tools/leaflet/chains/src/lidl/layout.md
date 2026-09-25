@@ -66,10 +66,7 @@ Plus`. **The logo is what tells them apart, and reading the struck number as
   discount tile alike. One printed figure always belongs to the big number.
 - The leaflet abbreviates the basis (`€/kg`, `€/l`) where Deza spells it out
   (`KILO`, `LITRO`). The shared `PER_WORDS` table in `build-document.mjs`
-  reads the spelled out word and has no entry for `kg` or `l`, so this chain's
-  prompt asks for the word as a prefix and the printed text after it:
-  `KILO 5,70 €/kg`. Drop the prefix as soon as that table learns the
-  abbreviations.
+  reads both, so the prompt asks for the figure verbatim: `5,70 €/kg`.
 - The leaflet misprints one of its own: page 12 of the September 2026 leaflet
   reads `13,99 €/g` for a 350 g pack priced at 4.90. Copy what is printed and
   do not correct it.
@@ -96,16 +93,12 @@ Plus`. **The logo is what tells them apart, and reading the struck number as
   runs along the foot of most odd numbered pages and offers points, not a
   price.
 
-**A conditional tile reaches the document with no price today, and that is the
-builder rather than the leaflet.** `build-document.mjs` carries only a
-promotion's `type` and `rawText` into the offer it assembles, so the
-`singleUnitPrice` the reading captured never reaches
-`to-harvest-document.mjs`, and its rule 2 records "no single unit price" for a
-tile that printed one plainly. Deza prints almost no promotions and never hit
-it. LIDL prints a handful a leaflet, so expect one warning and one missing
-price per second unit or multibuy tile until the builder forwards the field.
-The reading stays truthful either way: it states the conditional type and the
-single unit price, and a missing price is the safe direction.
+**A conditional tile's till price is its single unit price.** `build-document.mjs`
+forwards the promotion's `singleUnitPrice`, `totalPrice` and
+`requiredQuantity` to `to-harvest-document.mjs`, which takes the till price of
+a second unit or multibuy tile from `singleUnitPrice` and keeps the second
+unit's own number in `extra`. A conditional tile that read no single unit price
+still states no price, which is the safe direction.
 
 ## The heading banner
 

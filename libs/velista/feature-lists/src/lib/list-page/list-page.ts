@@ -6,12 +6,12 @@ import {
   computed,
   DestroyRef,
   effect,
+  type ElementRef,
   inject,
   Injector,
   signal,
   untracked,
   viewChild,
-  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -21,7 +21,9 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   ASSISTANT_SERVICE,
+  type AssistantServiceI,
   CATALOG_SERVICE,
+  type CatalogServiceI,
   DueLineStore,
   ItemNames,
   LineStore,
@@ -32,31 +34,30 @@ import {
   presencePeople,
   PresenceStore,
   REALTIME_CLIENT,
+  type RealtimeClientI,
   SessionStore,
   ShoppingProfileStore,
   TripStore,
   ZoneStore,
-  type AssistantServiceI,
-  type CatalogServiceI,
-  type RealtimeClientI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
-  DUE_LINE_ADDS_ON_STEP,
-  LINE_VOICE_MAX_SECONDS,
-  NO_CATEGORY,
-  reorderWithinSlots,
-  SUGGEST_DEBOUNCE_MS,
-  SUGGEST_MIN_CHARS,
-  tripKey,
   type CatalogSuggestion,
+  DUE_LINE_ADDS_ON_STEP,
   type Line,
+  LINE_VOICE_MAX_SECONDS,
   type LineRowVm,
   type ListGoneReason,
   type ListPageState,
   type ListViewerVm,
+  NO_CATEGORY,
   type PresenceUser,
+  productSuggestions,
   type RecordedAudio,
+  reorderWithinSlots,
+  SUGGEST_DEBOUNCE_MS,
+  SUGGEST_MIN_CHARS,
+  tripKey,
 } from '@portfolio/velista/models';
 import {
   appPath,
@@ -64,13 +65,16 @@ import {
   BrowserFacade,
   lineQueryOf,
   listIdOf,
+  ListSearchNavigation,
   NOTIFICATION_TONE,
   PageNavigation,
   RECORDING_LIMITS,
+  type RecordingLimits,
+  searchOpenOf,
   sheetSegments,
   StorageKeys,
+  TourAnchor,
   zoneIdOf,
-  type RecordingLimits,
 } from '@portfolio/velista/platform';
 import {
   AppBar,
@@ -80,14 +84,16 @@ import {
   ErrorState,
   LineComposer,
   LineList,
+  type LineRowAction,
   ListHeader,
   ListNotice,
   ListTools,
   RowSkeleton,
   SpinnerIcon,
+  type SuggestionHolding,
+  type SuggestionHoldingChange,
   ToBuyHeading,
   TripGroup,
-  type LineRowAction,
 } from '@portfolio/velista/ui';
 import {
   correlationIdOf,
@@ -157,15 +163,12 @@ import { voiceFailureCopy } from '../voice-error-copy';
     RowSkeleton,
     SpinnerIcon,
     ToBuyHeading,
+    TourAnchor,
     TripGroup,
   ],
   templateUrl: './list-page.html',
   styleUrl: './list-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    // Which element scrolls, for the sticky tools row: see `standalone`.
-    '[class.standalone]': 'standalone',
-  },
   // The composer's microphone, with this page's cap on it (plan 0038, section 4).
   //
   // Here rather than in `root`, so leaving the page releases the microphone: a
@@ -216,15 +219,6 @@ export class ListPage {
 
   /** The products on the lines, for their categories and names (section 3). */
   private readonly _itemNames = inject(ItemNames);
-
-  /**
-   * Whether this is the standalone build, where the document scrolls and not `.page`.
-   *
-   * The sticky tools row needs to know, for the reason `BasketPage.standalone` gives
-   * (velista `0079`, section 2): `overflow-y: auto` makes `.page` a scroll container
-   * whether or not it overflows, and standalone it never does.
-   */
-  protected readonly standalone = this._basePath === '';
 
   /** Both from the URL, and both signals: the router reuses this component. */
   readonly zoneId = zoneIdOf(this._route);
@@ -510,6 +504,11 @@ export class ListPage {
       live: this._trips.live(),
       past: this._trips.past(),
       rowsOf: (key) => this._trips.rows().get(key),
+      // Only a heads read about this list that succeeded. Until then, and after one
+      // failed, a line at zero with purchases stays in To buy (velista `0095`, section 5).
+      tripsReady:
+        this._trips.listId() === this.listId() &&
+        this._trips.state() === 'loaded',
       reordering: this.reordering(),
       // Only an answer about this list: the store may still hold the list somebody
       // came from for the frame before it opens this one.
@@ -709,6 +708,39 @@ export class ListPage {
   search(query: string): void {
     this._view.search(query);
   }
+
+  private readonly _search = inject(ListSearchNavigation);
+
+  /**
+   * Whether the search field is open, which is `?search=1` (velista `0109`).
+   *
+   * In the URL so the phone's back button closes the search rather than leaving the
+   * list: opening pushes the parameter, and back pops it.
+   */
+  readonly searchOpen = searchOpenOf(this._route);
+
+  /** The search button opens, and Cancel and Escape go back. */
+  setSearchOpen(open: boolean): void {
+    void (open
+      ? this._search.open(this._route)
+      : this._search.close(this._route));
+  }
+
+  /**
+   * The query goes when the field does, whichever way it closed: Cancel, Escape or the
+   * phone's back button. A search left running behind a closed field is a list missing
+   * lines for a reason nothing on it says.
+   */
+  private _searchWasOpen = false;
+
+  private readonly _clearClosedSearch = effect(() => {
+    const open = this.searchOpen();
+    const was = this._searchWasOpen;
+    this._searchWasOpen = open;
+    if (was && !open) {
+      untracked(() => this._view.search(''));
+    }
+  });
 
   openFilter(): void {
     void this._openSheet(['filter']);
@@ -970,25 +1002,17 @@ export class ListPage {
   /**
    * Put the end of the list on screen.
    *
-   * Which element scrolls depends on where the app is running, and the page cannot
-   * assume: mounted in the portfolio shell the column has a definite height and is the
-   * scroll container, standalone nothing above it sets one and the document scrolls
-   * instead (`list-page.scss` says why). So ask the column whether it overflows and fall
-   * back to the document, rather than picking one and being wrong in half the builds.
+   * The column is the one scroll container on this screen in both run modes, because
+   * the app is a frame that never scrolls (velista 0106), so it is the column that is
+   * asked to move.
    *
-   * Scrolling to the very end rather than bringing the row into view: at the end of the
-   * scroll the sticky composer has settled into its own place in the flow, so the newest
-   * line is directly above it. Anywhere short of that the composer floats over the last
-   * few pixels of the column and the row it was asked to reveal is the row behind it.
+   * Scrolling to the very end rather than bringing the row into view: the composer is
+   * the next item after the column, so at the end of the scroll the newest line is
+   * directly above the field.
    */
   private _scrollToNewest(column: HTMLElement): void {
-    const scroller =
-      column.scrollHeight > column.clientHeight
-        ? column
-        : this._browser.document.scrollingElement;
-
-    scroller?.scrollTo({
-      top: scroller.scrollHeight,
+    column.scrollTo?.({
+      top: column.scrollHeight,
       // Instant. The row appeared on the same frame and it is one row away, so an
       // animation here is a delay before somebody can type the next item, and this
       // field is built for entering six things in a row.
@@ -1345,6 +1369,83 @@ export class ListPage {
    */
   readonly suggestions = signal<readonly CatalogSuggestion[]>([]);
 
+  /**
+   * The catalog is being asked, from the moment the debounce fires until the answer
+   * that is still wanted lands. The composer draws skeleton cards for it while it has
+   * no cards to show (velista `0101`).
+   */
+  readonly suggesting = signal(false);
+
+  /**
+   * The words {@link suggestions} answer, or null when nothing has been asked, so the
+   * composer can say that a finished search for what is in its field found nothing
+   * (velista `0108`, target 1) and a group card can name the synonym it matched.
+   */
+  readonly suggestedFor = signal<string | null>(null);
+
+  /**
+   * The lines on this list already holding what a card offers (velista `0101`,
+   * section 4), a join over lines this page already holds rather than a field to
+   * ask for.
+   *
+   * A product is held by a line whose products name it. A group is held by a line
+   * that follows it, because choosing a group again would make a second line for
+   * the same kind of thing. The stepper moves only for somebody who may decide
+   * quantities here, the rule the rows' own reel follows.
+   */
+  readonly holdingsOf = computed(() => {
+    const lines = this._lines.linesIn(this.listId());
+    const editable = this.loaded()?.abilities.canDecide ?? false;
+    return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] =>
+      lines
+        .filter((line) =>
+          suggestion.kind === 'group'
+            ? line.productGroupId === suggestion.group.id
+            : line.itemIds.includes(suggestion.item.id)
+        )
+        .map((line) => ({
+          key: line.id,
+          lineId: line.id,
+          text: line.content,
+          listName: null,
+          quantity: line.quantity,
+          editable,
+        }));
+  });
+
+  /**
+   * Where a card's "Details" opens a product: the product sheet, over this list
+   * (velista `0107`), so the list stays underneath, its tab stays lit and closing
+   * the sheet lands back here.
+   */
+  readonly productLink = computed(() => {
+    const locale = this._locale();
+    const zoneId = this.zoneId();
+    const listId = this.listId();
+    return (itemId: string): string =>
+      appPath(
+        locale,
+        this._basePath,
+        'zones',
+        zoneId,
+        'lists',
+        listId,
+        ...sheetSegments('products', itemId)
+      );
+  });
+
+  /**
+   * A card's stepper moved a line that already holds the product. The same write as
+   * the row's own reel, so the same guard, the same failure copy and the same
+   * sentence afterwards.
+   */
+  async changeHolding(change: SuggestionHoldingChange): Promise<void> {
+    await this.changeQuantity({
+      lineId: change.holding.lineId,
+      delta: change.to - change.from,
+    });
+  }
+
   /** The last thing typed, which the effect below watches. */
   private readonly _suggestQuery = signal('');
 
@@ -1381,12 +1482,17 @@ export class ListPage {
     if (query.length < SUGGEST_MIN_CHARS) {
       // Cleared synchronously rather than after the debounce: a dropdown that lingered
       // over a field somebody has just emptied is offering matches for nothing.
-      untracked(() => this.suggestions.set([]));
+      untracked(() => {
+        this.suggestions.set([]);
+        this.suggesting.set(false);
+        this.suggestedFor.set(null);
+      });
       return;
     }
 
     const timer = setTimeout(() => {
       const seq = (this._suggestSeq += 1);
+      this.suggesting.set(true);
       // **Scoped to where you shop** (velista plan 0047, section 3). The rule was
       // documented on `CatalogServiceI.suggest` and in plan 0043 section 6, implemented
       // in `CatalogApi`, and passed by nobody, which is the worst of the three states
@@ -1400,7 +1506,9 @@ export class ListPage {
         .suggest(query, profileId === undefined ? undefined : { profileId })
         .then((found) => {
           if (seq === this._suggestSeq) {
-            this.suggestions.set(found);
+            this.suggestions.set(productSuggestions(found));
+            this.suggestedFor.set(query);
+            this.suggesting.set(false);
           }
         });
     }, SUGGEST_DEBOUNCE_MS);
@@ -1721,6 +1829,9 @@ export class ListPage {
   private _openSheet(path: readonly string[]): Promise<boolean> {
     return this._router.navigate(sheetSegments(...path), {
       relativeTo: this._route,
+      // An open search stays open under the sheet, so closing the sheet comes back
+      // to it (velista `0109`).
+      queryParams: this._search.kept(this._route),
     });
   }
 }

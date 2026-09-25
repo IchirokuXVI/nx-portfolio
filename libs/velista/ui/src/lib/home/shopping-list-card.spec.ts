@@ -104,7 +104,24 @@ describe('ShoppingListCard', () => {
     expect(fixture.componentInstance.outstanding()).toBe(8);
     expect(
       element(fixture).querySelector('.card')?.getAttribute('aria-label')
-    ).toBe('home.shoppingList.open');
+    ).toBe('home.shoppingList.label: home.shoppingList.open');
+  });
+
+  // Velista `0105`: the title is usually a date, which does not say what the row is.
+  it('labels the trip above its title, inside the card', async () => {
+    const fixture = await render();
+
+    const label = element(fixture).querySelector('.card .titles > .label');
+    expect(label?.textContent?.trim()).toBe('home.shoppingList.label');
+    expect(label?.nextElementSibling?.classList).toContain('list-name');
+  });
+
+  it('starts its accessible name with that label', async () => {
+    const fixture = await render();
+
+    expect(
+      element(fixture).querySelector('.card')?.getAttribute('aria-label')
+    ).toMatch(/^home\.shoppingList\.label/);
   });
 
   // The bar would otherwise make the card announce its fraction a third time, after

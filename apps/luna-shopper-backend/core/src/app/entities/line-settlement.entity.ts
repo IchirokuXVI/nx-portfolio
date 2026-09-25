@@ -36,6 +36,17 @@ import { ListLine } from './list-line.entity';
 @Index('ix_settlements_item', ['itemId', 'settledAt'])
 // A list scoped read needs no join, which is what `listId` is denormalized for.
 @Index('ix_settlements_list', ['listId', 'settledAt'])
+// One basket and one zone line, which is what every read of a basket's purchases
+// asks for (plan 0134, section 6): the `bought` half of the trips, the `EXISTS`
+// of the walk order, and the revert walk.
+@Index('ix_settlements_basket_live', ['basketId', 'lineId', 'settledAt'], {
+  where: '"revertedAt" IS NULL AND "basketId" IS NOT NULL',
+})
+// One person's purchases, newest first. It has no reader until plan 0142, and it
+// is declared here so that the largest table in core is reshaped once.
+@Index('ix_settlements_user', ['settledByUserId', 'settledAt'], {
+  where: '"settledByUserId" IS NOT NULL',
+})
 export class LineSettlement {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -44,38 +55,30 @@ export class LineSettlement {
   createdAt!: Date;
 
   /**
-   * The zone line this purchase is a fact about, or null while it waits for one
-   * (plan 0093, section 2).
+   * The zone line this purchase is a fact about (plan 0047, section 3).
    *
-   * A row with both this and {@link listId} null is a **waiting settlement**: a
-   * purchase made on a basket line before that line reached any list. It belongs
-   * to the basket line through {@link generatedListLineId} and to no household
-   * yet, and it comes home the moment the line reaches a list.
-   *
-   * Nullable since plan 0093, which reversed plan 0058 section 4.1. Before it, a
-   * settle on a line with no origins wrote no row at all, so a shopper who
-   * bought four batteries and then sent the line to the flat's list gave the flat
-   * a line asking for nothing and a history saying batteries were never bought.
-   *
-   * The two columns are null **together**, which is `ck_line_settlements_home`
-   * rather than a service rule: a row naming a line and no list, or a list and no
-   * line, would be a purchase nobody could read by either key.
+   * **Not nullable again since plan 0136.** Plan 0093 made it nullable for the
+   * waiting settlement: a purchase made on a basket line before that line
+   * reached any list, belonging to the basket line and to no household yet. A
+   * basket holds no lines now, so there is nowhere for such a purchase to wait
+   * and nothing for it to belong to. The migration deletes the rows that were
+   * waiting and says why.
    */
-  @Column({ type: 'uuid', nullable: true })
-  lineId!: string | null;
+  @Column({ type: 'uuid' })
+  lineId!: string;
 
-  @ManyToOne(() => ListLine, { onDelete: 'CASCADE', nullable: true })
+  @ManyToOne(() => ListLine, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'lineId' })
-  line!: ListLine | null;
+  line!: ListLine;
 
   /**
    * The line's list, copied so a list scoped read needs no join (section 3).
    *
    * A line never moves between lists, so this cannot drift from what the join
-   * would say. Null exactly when {@link lineId} is, and for the same reason.
+   * would say. Not nullable again since plan 0136, with {@link lineId}.
    */
-  @Column({ type: 'uuid', nullable: true })
-  listId!: string | null;
+  @Column({ type: 'uuid' })
+  listId!: string;
 
   /**
    * **The exact product that was bought**, copied at settle time (section 3.2).
@@ -171,27 +174,94 @@ export class LineSettlement {
   revertedByParticipantId!: string | null;
 
   /**
-   * The basket line this came off, when it came off one (plan 0051).
+   * The basket this purchase was made through, or null when it was made on the
+   * list page (plan 0134).
    *
-   * Written by nothing in plan 0047, where every settle comes straight from the
-   * list page and this is null. It is stored and **never served**: the basket is
-   * private and the purchase is not, so a reader learns that something was bought
-   * and never which basket it came out of (section 3.1).
+   * The basket and not a line of it, because an open basket stores no lines
+   * (plan 0130, section 2). Stored and **never served**: the purchase is a zone
+   * fact and the basket is private, so a reader learns that something was bought
+   * and never which basket it came out of (plan 0051, section 3.1).
+   *
+   * No foreign key, for the reason {@link settledByParticipantId} gives. A
+   * settlement outlives the basket it came off, and a basket id that names no row
+   * is how a read learns the basket was deleted.
+   *
+   * Null on every purchase made from the list page, which is what tells the
+   * trips read that it belongs to a session rather than to a trip.
    */
   @Column({ type: 'uuid', nullable: true })
-  generatedListLineId!: string | null;
+  basketId!: string | null;
 
   /**
-   * What was actually paid, and where (section 3.4).
+   * What one unit cost when this was settled, in the minor unit of
+   * {@link pricePaidCurrency} (plan 0143, section 2).
    *
-   * Declared and written by nothing here. They are what "the price you actually
-   * paid" and "where you got it" will fill in once backlog 0004 exists, and both
-   * are cheap to declare now and a migration each to add later on a table that
-   * will by then be the largest in core.
+   * **One unit, never the row.** It is catalog's `price` of {@link itemId} at
+   * {@link priceScopeId}, read by the gateway as the basket's owner at the
+   * moment of the settle. It is not catalog's `unitPrice`, which is a per
+   * kilogram number this product never derives. A row's cost is this times
+   * {@link quantity}.
+   *
+   * It is a price per unit and not a total for two reasons the structure gives.
+   * A settle writes one row per entry of the row it settled, so a total would
+   * have to be divided between them; and a revert smaller than the row it lands
+   * in splits that row (plan 0104, section 3.2), which a per unit price survives
+   * by being copied and a total does not.
+   *
+   * Null whenever nobody knew: free text, no scope named, a product that scope
+   * does not price, a catalog that did not answer in time, every settlement
+   * written before plan 0143, and every `NOT_AVAILABLE`
+   * (`ck_line_settlements_price_bought`).
    */
   @Column({ type: 'int', nullable: true })
   pricePaidCents!: number | null;
 
+  /**
+   * ISO 4217, null exactly when {@link pricePaidCents} is
+   * (`ck_line_settlements_price`).
+   *
+   * An amount of money with no currency is a number, and every sum over it
+   * (plan 0142) is only honest while every row happens to be in euros.
+   */
+  @Column({ type: 'varchar', length: 3, nullable: true })
+  pricePaidCurrency!: string | null;
+
+  /**
+   * The price scope the shopper was looking at, which is a chain's catchment
+   * and not a shop. Opaque: a catalog id with no foreign key, like
+   * {@link itemId}.
+   *
+   * Recorded for `NOT_AVAILABLE` too, because "which chain had none" is the
+   * half of that outcome worth keeping.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  priceScopeId!: string | null;
+
+  /**
+   * The one shop, when the shopper chose one (plan 0163, section 5). A settle
+   * made in "any shop" mode records none, even though it records the scope of
+   * the price shown: the scope of the cheapest price is not where the person
+   * stood.
+   *
+   * Never stored without a scope (`ck_line_settlements_location_scope`). It is
+   * served back in two places only: a person's own history (plan 0143, section
+   * 6) and the item history of plan 0151. Plan 0165 reads it only as counts. A
+   * shop and a time say where a named member of the household was standing at
+   * 18:40, which is not a fact about the milk.
+   */
   @Column({ type: 'uuid', nullable: true })
   supermarketLocationId!: string | null;
+
+  /**
+   * The chain of {@link supermarketLocationId}, copied at settle time (plan
+   * 0163, section 5).
+   *
+   * Core cannot join catalog, and plan 0165 counts purchases by chain, so the
+   * chain is written onto the row. It is written together with the shop and
+   * never without it (`ck_line_settlements_location_scope`). Opaque, with no
+   * foreign key. Settlements written before plan 0163 are null and are not
+   * backfilled: no client sent a shop before it.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  supermarketId!: string | null;
 }

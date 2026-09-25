@@ -15,10 +15,10 @@ import { CatalogApi } from './catalog-api';
  * service with its own database, and a line write must not be able to fail because a
  * product search was unavailable.
  *
- * There is deliberately **no list method here and never will be**. The catalog cannot
- * be listed whole (backend plan 0049): it is hundreds of thousands of products, it is
- * reachable only by search, and an interface offering `list()` would be an invitation
- * to page through it.
+ * There is deliberately **no list method here**. The composer never pages through the
+ * catalog, and an interface offering `list()` would be an invitation to. The one screen
+ * that does browse it, the catalog tab (velista `0100`), has its own service,
+ * `CatalogBrowseServiceI`, always narrowed and always one cursor page at a time.
  */
 export interface CatalogServiceI {
   /**
@@ -102,6 +102,28 @@ export interface CatalogServiceI {
   productGroupsByIds(
     groupIds: readonly string[]
   ): Promise<readonly ProductGroup[] | null>;
+
+  /**
+   * Every product of one group, each priced at the reader's scopes.
+   *
+   * The read behind "similar products": a product's siblings are the other members
+   * of its group, and the basket marks a product that is not the cheapest of them.
+   * `GET /v1/catalog/product-groups/:id/items`, so each member's `offer` is its
+   * cheapest price at the scopes the read resolved to, or null.
+   *
+   * - `profileId` scopes it to where that profile shops, as {@link suggest} does.
+   * - `priceScopeIds` names the scopes outright, which is what a basket passes so the
+   *   members are priced where its own rows are.
+   * - Neither: the server resolves the caller's own profile.
+   *
+   * The same three answers as {@link itemsByIds}: the members, an empty array for a
+   * group that is gone or has none, and `null` for a read that did not answer. Needs
+   * an account: a guest on a shared basket cannot make it.
+   */
+  groupMembers(
+    groupId: string,
+    options?: { profileId?: string; priceScopeIds?: readonly string[] }
+  ): Promise<readonly CatalogItem[] | null>;
 }
 
 /**

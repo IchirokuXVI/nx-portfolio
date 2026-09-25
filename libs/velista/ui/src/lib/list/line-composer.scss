@@ -45,6 +45,15 @@
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
     outline-offset: var(--app-focus-ring-offset);
   }
+
+  // Locked (velista 0110): read as unavailable, and still answer a tap, which is
+  // what opens the container's explanation. So the pointer is the ordinary one and
+  // not `not-allowed`, and the focus ring stays.
+  &[aria-disabled='true'] {
+    border-style: dashed;
+    background: transparent;
+    cursor: default;
+  }
 }
 
 .counter {

@@ -66,6 +66,16 @@ describeIntegration('catalog search (real Postgres)', () => {
     bread: '',
     scopeA: '',
     scopeB: '',
+    // Plan 0146: two chains, and four products arranged so that every way a
+    // chain can relate to a product is represented exactly once.
+    chainA: '',
+    chainB: '',
+    scopeC: '',
+    kumquatGroup: '',
+    jam: '',
+    juice: '',
+    sorbet: '',
+    tea: '',
   };
 
   beforeAll(async () => {
@@ -273,6 +283,107 @@ describeIntegration('catalog search (real Postgres)', () => {
         available: true,
       }),
     ]);
+
+    await seedTwoChains(chain.id, scopeA.id);
+  }
+
+  /**
+   * A second chain, and the four ways a product can relate to one (plan 0146).
+   *
+   * |        | Testcadona (A)     | Testdeza (B)      |
+   * | ------ | ------------------ | ----------------- |
+   * | jam    | available, priced  | no row at all     |
+   * | juice  | no row at all      | available, priced |
+   * | sorbet | row, not available | available, priced |
+   * | tea    | available, no price| available, priced |
+   *
+   * So A sells the jam and the tea, B sells the juice, the sorbet and the tea,
+   * and every claim the plan makes about the filter is a row in that table.
+   *
+   * They share a group named for the fruit, which is what lets one word reach
+   * all four: the trigger copies a group's words into its members' documents, so
+   * the ranked branch and the listing branch can be asked the same question.
+   */
+  async function seedTwoChains(chainA: string, scopeA: string): Promise<void> {
+    ids.chainA = chainA;
+
+    const supermarkets = dataSource.getRepository(Supermarket);
+    const chainB = await supermarkets.save(
+      supermarkets.create({
+        name: { en: 'Testdeza', es: 'Testdeza' },
+        logoUrl: null,
+        websiteUrl: null,
+        externalBrandKey: null,
+      })
+    );
+    ids.chainB = chainB.id;
+
+    const scopes = dataSource.getRepository(PriceScope);
+    const scopeC = await scopes.save(
+      scopes.create({
+        supermarketId: chainB.id,
+        kind: PriceScopeKind.REGION,
+        externalKey: 'c',
+        label: null,
+      })
+    );
+    ids.scopeC = scopeC.id;
+
+    const group = await groups.create({
+      userId: OWNER,
+      name: { en: 'Kumquat', es: 'Kumquat' },
+      slug: 'kumquat',
+      referenceUnit: UnitOfMeasure.UNIT,
+    });
+    ids.kumquatGroup = group.id;
+
+    const make = async (en: string, es: string) =>
+      (
+        await items.create({
+          userId: OWNER,
+          name: { en, es },
+          category: ItemCategory.OTHER,
+          defaultUnit: UnitOfMeasure.UNIT,
+          productGroupId: group.id,
+        })
+      ).id;
+
+    ids.jam = await make('Kumquat Jam', 'Mermelada de kumquat');
+    ids.juice = await make('Kumquat Juice', 'Zumo de kumquat');
+    ids.sorbet = await make('Kumquat Sorbet', 'Sorbete de kumquat');
+    ids.tea = await make('Kumquat Tea', 'Te de kumquat');
+
+    const prices = dataSource.getRepository(SupermarketItem);
+    const row = (
+      itemId: string,
+      priceScopeId: string,
+      price: number | null,
+      available: boolean
+    ) =>
+      prices.create({
+        itemId,
+        priceScopeId,
+        price,
+        currency: price === null ? null : 'EUR',
+        unitPrice: price,
+        unitPriceLabel: price === null ? null : 'ud',
+        priceObservedAt:
+          price === null ? null : new Date('2026-09-01T10:00:00.000Z'),
+        priceSourceKind: price === null ? null : PriceSourceKind.OFFICIAL_API,
+        available,
+      });
+
+    await prices.save([
+      row(ids.jam, scopeA, 3.2, true),
+      // The row that must not list the sorbet under A. It is the whole reason
+      // `available` is part of the filter's meaning rather than a refinement.
+      row(ids.sorbet, scopeA, 2.5, false),
+      // Sold by A and priced by nobody: listed, with every price field null.
+      row(ids.tea, scopeA, null, true),
+      row(ids.juice, scopeC, 1.9, true),
+      row(ids.sorbet, scopeC, 2.5, true),
+      row(ids.tea, scopeC, 2.1, true),
+    ]);
   }
 
   describe('item.search (plan 0048, sections 2 and 3)', () => {
@@ -395,6 +506,174 @@ describeIntegration('catalog search (real Postgres)', () => {
       expect(page.items.map((i) => i.id).sort()).toEqual(
         [ids.pascualMilk, ids.hacendadoMilk].sort()
       );
+    });
+  });
+
+  /**
+   * The chain filter (plan 0146), against the tables it is a claim about.
+   *
+   * Every case here is a `WHERE` clause being right or wrong, which is exactly
+   * what a fake repository cannot tell you: `item-search.spec.ts` beside this
+   * file proves both branches carry the same clause, and this proves the clause
+   * selects what the plan says it selects.
+   *
+   * Each case is asked twice, once of each branch. A query with the default
+   * order takes the ranked branch; the same query with `order: 'name'` takes the
+   * listing branch, keyset paged, with the same text filter applied. The two
+   * differ in their ordering and must not differ in their membership.
+   */
+  describe('item.search, filtered by chain (plan 0146)', () => {
+    /** Both branches, asked the same question, answered as sorted id sets. */
+    async function bothBranches(soldBy?: string[]): Promise<string[][]> {
+      const ranked = await items.search({
+        userId: SHOPPER,
+        query: 'kumquat',
+        soldBy,
+      });
+      const listed = await items.search({
+        userId: SHOPPER,
+        query: 'kumquat',
+        order: 'name',
+        soldBy,
+      });
+      return [
+        ranked.items.map((i) => i.id).sort(),
+        listed.items.map((i) => i.id).sort(),
+      ];
+    }
+
+    it('lists every chain when the filter is absent or empty', async () => {
+      const all = [ids.jam, ids.juice, ids.sorbet, ids.tea].sort();
+
+      for (const soldBy of [undefined, []]) {
+        const [ranked, listed] = await bothBranches(soldBy);
+        // Empty is not an empty page. Somebody who cleared the chain chips is
+        // asking for the catalog, the same way an empty scope set asks for it
+        // unpriced (plan 0069, section 2).
+        expect(ranked).toEqual(all);
+        expect(listed).toEqual(all);
+      }
+    });
+
+    it('drops a product the chain does not sell at all', async () => {
+      const [ranked, listed] = await bothBranches([ids.chainA]);
+
+      // The jam is A's alone and the juice is B's alone, so each filter has
+      // something to include and something to leave out.
+      expect(ranked).toContain(ids.jam);
+      expect(ranked).not.toContain(ids.juice);
+      expect(listed).toEqual(ranked);
+    });
+
+    it('drops a product whose only row at that chain says it is not stocked', async () => {
+      const [rankedA, listedA] = await bothBranches([ids.chainA]);
+      const [rankedB, listedB] = await bothBranches([ids.chainB]);
+
+      // The sorbet has a row at A. It says the shop does not stock it, which is
+      // exactly the row that must not put it in A's catalog, and B carries the
+      // same product available, so its absence is about the flag and not about
+      // the product.
+      expect(rankedA).not.toContain(ids.sorbet);
+      expect(listedA).not.toContain(ids.sorbet);
+      expect(rankedB).toContain(ids.sorbet);
+      expect(listedB).toEqual(rankedB);
+    });
+
+    it('keeps a product the chain sells at no price, with its price fields null', async () => {
+      const page = await items.search({
+        userId: SHOPPER,
+        query: 'kumquat',
+        soldBy: [ids.chainA],
+        priceScopeIds: [ids.scopeA],
+      });
+
+      // The filter is about the assortment. Having no price says nothing about
+      // whether the shop sells the thing, which is plan 0069's rule read at the
+      // level of one product rather than one catalog.
+      const tea = page.items.find((i) => i.id === ids.tea);
+      expect(tea).toBeDefined();
+      // The offer is the source row itself, which exists and is available, so
+      // what is null is every price field on it and not the row. That is the
+      // shape a shopper sees: the chain stocks it and nobody has read a price.
+      expect(tea?.bestOffer?.priceScopeId).toBe(ids.scopeA);
+      expect(tea?.bestOffer?.price ?? null).toBeNull();
+      expect(tea?.bestOffer?.unitPrice ?? null).toBeNull();
+      expect(tea?.bestOffer?.sourceKind ?? null).toBeNull();
+    });
+
+    it('lists what either chain sells when two are named', async () => {
+      const [ranked, listed] = await bothBranches([ids.chainA, ids.chainB]);
+
+      // A union and never an intersection: the tea is the only product both
+      // chains carry, and all four come back.
+      expect(ranked).toEqual([ids.jam, ids.juice, ids.sorbet, ids.tea].sort());
+      expect(listed).toEqual(ranked);
+    });
+
+    it('answers an empty page for a chain nobody knows, rather than an error', async () => {
+      const [ranked, listed] = await bothBranches([
+        'cf000000-0000-4000-a000-0000000000ff',
+      ]);
+      expect(ranked).toEqual([]);
+      expect(listed).toEqual([]);
+    });
+
+    it('prices a filtered page from the scopes the caller named, as before', async () => {
+      // The two supermarket parameters are independent: the filter says which
+      // products, the scopes say where the price comes from. Asked for what A
+      // sells and priced at A, the jam quotes A's price.
+      const priced = await items.search({
+        userId: SHOPPER,
+        query: 'kumquat',
+        soldBy: [ids.chainA],
+        priceScopeIds: [ids.scopeA],
+      });
+      expect(priced.items.find((i) => i.id === ids.jam)?.bestOffer?.price).toBe(
+        3.2
+      );
+
+      // The same products, priced from a scope belonging to the other chain:
+      // nothing is quoted, and nothing is dropped either.
+      const elsewhere = await items.search({
+        userId: SHOPPER,
+        query: 'kumquat',
+        soldBy: [ids.chainA],
+        priceScopeIds: [ids.scopeC],
+      });
+      expect(elsewhere.items.map((i) => i.id).sort()).toEqual(
+        [ids.jam, ids.tea].sort()
+      );
+      expect(
+        elsewhere.items.find((i) => i.id === ids.jam)?.bestOffer ?? null
+      ).toBeNull();
+    });
+
+    it('pages a filtered set without repeating or skipping a row', async () => {
+      // Four rows and a limit of two, on both branches: the keyset cursor the
+      // listing branch cuts and the offset the ranked branch counts both have to
+      // stay right while a filter narrows the set underneath them.
+      for (const order of ['relevance', 'name']) {
+        const seen: string[] = [];
+        let cursor: string | undefined = undefined;
+
+        do {
+          const page = await items.search({
+            userId: SHOPPER,
+            query: 'kumquat',
+            order,
+            soldBy: [ids.chainA, ids.chainB],
+            limit: 2,
+            cursor,
+          });
+          expect(page.items.length).toBeLessThanOrEqual(2);
+          seen.push(...page.items.map((i) => i.id));
+          cursor = page.nextCursor ?? undefined;
+        } while (cursor);
+
+        expect(seen.sort()).toEqual(
+          [ids.jam, ids.juice, ids.sorbet, ids.tea].sort()
+        );
+      }
     });
   });
 
@@ -715,6 +994,119 @@ describeIntegration('catalog search (real Postgres)', () => {
     it('still reaches a misspelling long enough to be one', async () => {
       const page = await items.search({ userId: SHOPPER, query: 'pasqual' });
       expect(page.items.map((i) => i.id)).toContain(ids.pascualMilk);
+    });
+  });
+
+  /**
+   * What a shopper typed on a phone and did not find (plan 0156). One case per
+   * row of the plan's table, each with the product that used to come first
+   * beside the one that was wanted.
+   */
+  describe('search finds what a shopper types (plan 0156)', () => {
+    const typed = {
+      bleach: '',
+      pineapple: '',
+      piadina: '',
+      rusticBaguette: '',
+      burgerBuns: '',
+      evooGroup: '',
+      seagrams: '',
+      blackElephant: '',
+      cruzcampo: '',
+      steinburg: '',
+      vinegar: '',
+      coarseSalt: '',
+    };
+
+    beforeAll(async () => {
+      const make = (es: string, brand?: string, productGroupId?: string) =>
+        items
+          .create({
+            userId: OWNER,
+            name: { en: es, es },
+            brand,
+            category: ItemCategory.OTHER,
+            defaultUnit: UnitOfMeasure.UNIT,
+            productGroupId,
+          })
+          .then((item) => item.id);
+
+      const evoo = await groups.create({
+        userId: OWNER,
+        name: {
+          en: 'Extra Virgin Olive Oil',
+          es: 'Aceite de oliva virgen extra',
+        },
+        slug: 'extra-virgin-olive-oil',
+        referenceUnit: UnitOfMeasure.LITER,
+        synonyms: { en: ['evoo'], es: ['aove'] },
+      });
+      typed.evooGroup = evoo.id;
+
+      typed.bleach = await make('Lejía normal', 'Bosque Verde');
+      typed.pineapple = await make('Zumo de piña', 'Hacendado');
+      typed.piadina = await make('Piadina', 'Hacendado');
+      typed.rusticBaguette = await make('Barra de pan rústica');
+      typed.burgerBuns = await make('Pan de burger Rústico', 'Hacendado');
+      typed.seagrams = await make('Ginebra', "Seagram's");
+      typed.blackElephant = await make('Ginebra', 'Black Elephant');
+      typed.cruzcampo = await make('Cerveza Pilsen', 'Cruzcampo');
+      typed.steinburg = await make('Cerveza clásica en lata', 'Steinburg');
+      typed.vinegar = await make('Vinagre de manzana');
+      typed.coarseSalt = await make('Sal gruesa');
+      await make('Aceite de oliva virgen extra', 'Hacendado', evoo.id);
+    });
+
+    const idsFor = async (query: string) =>
+      (await items.search({ userId: SHOPPER, query })).items.map((i) => i.id);
+
+    it('finds "lejía" typed as "lejia"', async () => {
+      // The stemmer made `lej` of one and `leji` of the other. Both sides now
+      // go through `catalog_norm` before it, so both are `leji`.
+      expect(await idsFor('lejia')).toContain(typed.bleach);
+    });
+
+    it('finds "piña" typed as "pina", above what only looks like it', async () => {
+      // The stemmer keeps `ñ`, so `pin:*` never reached `piñ`. Piadina came in
+      // through trigram and was the only answer.
+      const order = await idsFor('pina');
+      expect(order[0]).toBe(typed.pineapple);
+    });
+
+    it('accepts the other gender of a typed word ("pan rustico")', async () => {
+      const order = await idsFor('pan rustico');
+      expect(order).toContain(typed.burgerBuns);
+      expect(order[0]).toBe(typed.rusticBaguette);
+    });
+
+    it('finds extra virgin olive oil by "aove", through its group', async () => {
+      // A synonym reaches the group and never the members' documents, so the
+      // answer is the group the suggest endpoint lists first.
+      const page = await items.searchOffers({ userId: SHOPPER, query: 'aove' });
+      expect(page.items[0]?.group.id).toBe(typed.evooGroup);
+    });
+
+    it('reads "seagrams" as the brand "Seagram\'s", and ranks it first', async () => {
+      const order = await idsFor('ginebra seagrams');
+      expect(order[0]).toBe(typed.seagrams);
+    });
+
+    it('ranks a typed brand above a product that only shares the category', async () => {
+      // Both enter through trigram, since neither name holds every word. The
+      // Steinburg name says "cerveza" and "lata" and won on `ts_rank`.
+      const order = await idsFor('cerveza cruzcampo lata');
+      expect(order).toContain(typed.steinburg);
+      expect(order.indexOf(typed.cruzcampo)).toBeLessThan(
+        order.indexOf(typed.steinburg)
+      );
+    });
+
+    it('does not let a cut word reach what the stemmer conflates with it', async () => {
+      // "vinos" is cut to "vin" only for a whole word with one of the four
+      // endings. As a prefix, `vin` would take the stemmer's "vinagre".
+      expect(await idsFor('vinos')).not.toContain(typed.vinegar);
+      // Plan 0156, section 1: "salado" cut to "salad" does not reach "sal".
+      expect(await idsFor('salado')).not.toContain(typed.coarseSalt);
     });
   });
 });

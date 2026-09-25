@@ -214,7 +214,7 @@ export class AdminZoneService {
       .select('l.id', 'id')
       .addSelect('l.name', 'name')
       .addSelect(
-        '(SELECT COUNT(*) FROM list_lines n WHERE n."listId" = l.id)',
+        '(SELECT COUNT(*) FROM list_lines n WHERE n."listId" = l.id AND n."deletedAt" IS NULL)',
         'lineCount'
       )
       .where('l."zoneId" = :zoneId', { zoneId: zone.id })

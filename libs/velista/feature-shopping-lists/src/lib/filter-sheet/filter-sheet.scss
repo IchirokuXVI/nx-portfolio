@@ -53,6 +53,24 @@
   text-transform: uppercase;
 }
 
+// "Buying at" draws its card on the options rather than on the fieldset (velista
+// `0103`), so the message after "Near me" picked a shop sits between the legend
+// and the card instead of inside it.
+.shops {
+  border: none;
+}
+
+.shop-options {
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  overflow: hidden;
+}
+
+.pick-message {
+  display: block;
+  margin-block-end: var(--app-space-3);
+}
+
 // The whole label is the target, so the tap area is the option and not the dot.
 .choice {
   display: flex;
@@ -167,4 +185,118 @@
   @include shared.primary-button;
 
   flex: 1;
+}
+
+// A basket started at a shop (velista `0102`). The fieldset is disabled, so the
+// radios are too; the rows go quiet with them and keep their shape, because the
+// shop is still the answer and it is still worth reading.
+.is-locked {
+  cursor: default;
+
+  .choice-pick {
+    cursor: default;
+  }
+
+  .choice-title {
+    color: var(--app-text-muted);
+  }
+}
+
+// The chosen shop keeps its name in the primary colour when locked: it is the
+// fact the row states, and the muted "any" beside it is the option that is gone.
+.is-locked.picked .choice-title {
+  color: var(--app-text-primary);
+}
+
+// A tint says "chosen" and the lock says "cannot change", and a locked row is
+// both, so the tint is dropped: it would read as a live choice.
+.shops.has-note .picked.is-locked {
+  background: none;
+}
+
+// The padlock at the row's trailing edge, where Change sits on an open basket. The
+// icon is sized by its font size, and the margin centres it in the width Change
+// takes, so the row keeps its shape between an open basket and a locked one.
+.lock {
+  flex: none;
+  margin-inline: calc((var(--app-touch-target) - var(--app-icon-sm)) / 2);
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+.shops.has-note {
+  margin-block-end: var(--app-space-2);
+}
+
+// The one line under a locked fieldset that says why nothing in it moves.
+.locked-note {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin: 0 0 var(--app-space-4) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
+.locked-glyph {
+  flex: none;
+  font-size: var(--app-icon-sm);
+}
+
+.choice-outside {
+  margin-block-start: var(--app-space-2);
+}
+
+// The usual filter's own card, under BUYING AT and about it, so it has no legend of
+// its own (velista 0104).
+.usual .choice {
+  min-block-size: var(--app-space-10);
+}
+
+// A switch drawn over the native checkbox, which stays the control: it keeps the
+// switch role, the keyboard and the label's tap. The track is the size the mock
+// draws, off in the sunken surface with a strong border, on in the action colour,
+// and the knob travels so the state never rests on colour alone.
+.switch {
+  position: relative;
+  flex: none;
+  inline-size: calc(var(--app-space-10) - var(--app-space-2));
+  block-size: calc(var(--app-space-7) + var(--app-space-2));
+  margin: 0 var(--app-space-2) 0 0;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  appearance: none;
+  cursor: pointer;
+  transition: background-color var(--app-motion-fast) var(--app-motion-ease);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block-start: var(--app-space-hair);
+    inset-inline-start: var(--app-space-hair);
+    inline-size: var(--app-space-6);
+    block-size: var(--app-space-6);
+    border-radius: var(--app-radius-full);
+    background: var(--app-text-muted);
+    transition:
+      transform var(--app-motion-fast) var(--app-motion-ease),
+      background-color var(--app-motion-fast) var(--app-motion-ease);
+  }
+
+  &:checked {
+    border-color: var(--app-action-bg);
+    background: var(--app-action-bg);
+
+    &::before {
+      background: var(--app-text-on-action);
+      transform: translateX(var(--app-space-5));
+    }
+  }
+
+  // Right to left, the knob starts at the other end and travels the other way.
+  &:dir(rtl):checked::before {
+    transform: translateX(calc(-1 * var(--app-space-5)));
+  }
 }

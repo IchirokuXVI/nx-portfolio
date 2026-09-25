@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  MAX_SEARCH_LENGTH,
   buildDecisionSchema,
   buildSystemPrompt,
   canonicalSlug,
+  capSearchText,
   deriveUnitFamilies,
   groupWords,
   isValidSlug,
   itemLabel,
   itemSearchKey,
+  itemSearchKeys,
   loadUnits,
   normalizeName,
   proposedWords,
@@ -75,6 +78,26 @@ test('a proposal answers to the same kinds of word', () => {
     [...words].sort(),
     ['leche semi', 'leche semidesnatada', 'semi skimmed milk'].sort()
   );
+});
+
+test('a product is searched for by its whole name, then by shorter keys', () => {
+  assert.deepEqual(
+    itemSearchKeys({
+      name: { es: 'Champú Liss Frizz Control para cabello rebelde' },
+    }),
+    [
+      'champu liss frizz control para cabello rebelde',
+      'champu liss frizz',
+      'champu liss',
+      'champu',
+    ]
+  );
+  assert.deepEqual(itemSearchKeys({ name: { es: 'Huevos grandes' } }), [
+    'huevos grandes',
+    'huevos',
+  ]);
+  assert.deepEqual(itemSearchKeys({ name: { es: 'Naranjas' } }), ['naranjas']);
+  assert.deepEqual(itemSearchKeys({ name: {} }), []);
 });
 
 test('a product is searched for by its Spanish name, else its English one', () => {
@@ -153,7 +176,6 @@ test('the decision schema takes its enum from the same unit vocabulary', () => {
   assert.deepEqual(schema.properties.group.properties.referenceUnit.enum, [
     'LITER',
     'UNIT',
-    null,
   ]);
   assert.deepEqual(schema.properties.group.properties.synonyms.properties.es, {
     type: 'array',
@@ -167,4 +189,69 @@ test('the decision schema takes its enum from the same unit vocabulary', () => {
     'issues',
     'reasoning',
   ]);
+});
+
+test('the decision schema makes an ASSIGN name its group', () => {
+  const schema = buildDecisionSchema({ units: ['LITER', 'UNIT'] });
+  const shapes = schema.anyOf.map((shape) => [
+    shape.properties.decision.const,
+    shape.required.filter((field) =>
+      ['groupId', 'groupRef', 'group'].includes(field)
+    ),
+  ]);
+
+  assert.deepEqual(shapes, [
+    ['ASSIGN', ['groupId']],
+    ['ASSIGN', ['groupRef']],
+    ['CREATE_GROUP', ['group']],
+    ['REVIEW', []],
+  ]);
+  // A group that is present has every field the shape check refuses it
+  // without, none of them nullable.
+  assert.deepEqual(schema.properties.group.required, [
+    'nameEs',
+    'nameEn',
+    'slug',
+    'referenceUnit',
+  ]);
+  assert.deepEqual(schema.properties.group.properties.slug, { type: 'string' });
+});
+
+// ---------------------------------------------------------------------------
+// The search cap (plan 0002)
+// ---------------------------------------------------------------------------
+
+test('capSearchText leaves a text within the cap alone', () => {
+  assert.equal(capSearchText('huevos frescos'), 'huevos frescos');
+  assert.equal(capSearchText('a'.repeat(120)), 'a'.repeat(120));
+  assert.equal(capSearchText(null), '');
+});
+
+test('capSearchText cuts a long text at the last word that fits', () => {
+  const words = Array.from({ length: 40 }, (_, i) => `palabra${i}`).join(' ');
+  const capped = capSearchText(words);
+
+  assert.ok(capped.length <= MAX_SEARCH_LENGTH);
+  assert.ok(words.startsWith(capped));
+  // The cut falls between two words, never inside one.
+  assert.equal(words[capped.length], ' ');
+  assert.equal(capped, capped.trim());
+});
+
+test('capSearchText keeps the whole last word when the cap lands on a space', () => {
+  const text = `${'a'.repeat(120)} tail`;
+  assert.equal(capSearchText(text), 'a'.repeat(120));
+});
+
+test('capSearchText cuts a single word longer than the cap where the cap is', () => {
+  assert.equal(capSearchText('x'.repeat(300)), 'x'.repeat(120));
+});
+
+test('itemSearchKey is capped for a product with a very long name', () => {
+  const long = `Atún claro en aceite de oliva ${'pack ahorro familiar '.repeat(10)}Hacendado`;
+  const key = itemSearchKey({ name: { es: long, en: null } });
+
+  assert.ok(key.length <= MAX_SEARCH_LENGTH);
+  assert.ok(key.startsWith('atun claro en aceite de oliva'));
+  assert.ok(!key.endsWith(' '));
 });

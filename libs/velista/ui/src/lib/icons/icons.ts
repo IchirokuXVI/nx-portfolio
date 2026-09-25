@@ -874,7 +874,7 @@ export class TrashIcon {
  * appears: the dashboard's primary action, the card above it, the history page's empty
  * state. `ListLinesIcon` is the *zone* list's glyph and stays that, because the two are
  * different objects and drawing them alike is exactly the confusion the naming note in
- * `generated-list-view` is about: a zone list is a standing collection, a basket is one
+ * `basket-summary` is about: a zone list is a standing collection, a basket is one
  * trip composed out of several of them.
  *
  * One component for both, because it is one picture of one idea. Splitting it would
@@ -934,5 +934,107 @@ export class FlagIcon {
     () =>
       // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
       import('./flag-icon.svg?raw')
+  );
+}
+
+/**
+ * The first tab of the bottom bar (velista `0097`, section 2).
+ *
+ * `@portfolio/shared/ui` has a `home-icon` already, and this is deliberately not it,
+ * for `TrashIcon`'s reason one file down: that one is the older four file pattern with
+ * an `@Input` for its colour, and velista imports none of the shared icons. Reaching
+ * for it would add this library's first cross library icon dependency and put two icon
+ * languages in one row, where the other two glyphs are this library's own. The note at
+ * the top of this file says when that changes: all of them move together, or none does.
+ */
+@Component({
+  selector: 'lib-home-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class HomeIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./home-icon.svg?raw')
+  );
+}
+
+/**
+ * A closed padlock: the shop a basket was started at (velista `0102`).
+ *
+ * On the shop chip in place of the x, because an x that does nothing is a broken
+ * promise, and beside the one line under the "Buying at" fieldset that says why the
+ * choice cannot change. Never a control on its own: the chip and the line carry the
+ * words.
+ */
+@Component({
+  selector: 'lib-lock-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class LockIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./lock-icon.svg?raw')
+  );
+}
+
+/**
+ * A map pin: where a shop is (velista `0102`).
+ *
+ * Beside "Outside your areas" wherever a shop outside the owner's postal codes is
+ * named, and at the leading edge of the get a list sheet's "Buying at" row. The words
+ * always travel with it, so the pin never has to say anything alone.
+ */
+@Component({
+  selector: 'lib-pin-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class PinIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./pin-icon.svg?raw')
+  );
+}
+
+/**
+ * A crosshair: find where I am (velista `0103`).
+ *
+ * On "Near me" in the shop picker and at the leading edge of the message after it
+ * picked a shop. Always beside its words, so it never has to say anything alone.
+ */
+@Component({
+  selector: 'lib-locate-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class LocateIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./locate-icon.svg?raw')
+  );
+}
+
+/** Two arrows passing each other: take one product instead of another. */
+@Component({
+  selector: 'lib-swap-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class SwapIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./swap-icon.svg?raw')
   );
 }

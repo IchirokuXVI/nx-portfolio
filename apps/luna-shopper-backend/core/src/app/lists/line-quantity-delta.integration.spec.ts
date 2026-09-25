@@ -11,6 +11,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   CORE_ENTITIES,
   LineSettlement,
@@ -22,11 +23,19 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { LineChangeRecorder } from './changes/line-change.recorder';
 import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * The two claims of plan 0040 that only Postgres can settle.
@@ -87,7 +96,12 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
       fakeLineClaims().service,
       { emit: jest.fn() } as never,
       new CoreAuditService(dataSource),
-      new LineMergeService()
+      new LineMergeService(new LineChangeRecorder()),
+      // The **real** recorder, because this suite has a database: a delta writes
+      // its change row through the manager of the transaction that moved the
+      // quantity (plan 0138, section 4).
+      new LineChangeRecorder(),
+      announcer
     );
 
     const zone = await dataSource.getRepository(Zone).save(

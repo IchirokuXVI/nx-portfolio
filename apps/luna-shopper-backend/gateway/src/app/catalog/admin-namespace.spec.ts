@@ -238,7 +238,12 @@ describe('the admin API is its own namespace', () => {
           : []
       );
 
-      expect(strays).toEqual(['POST /v1/catalog/items/lookup']);
+      // Both are reads that take a body: a list of ids, and a point a device
+      // reported, which a query string would put in an access log (plan 0164).
+      expect(strays.sort()).toEqual([
+        'POST /v1/catalog/items/lookup',
+        'POST /v1/catalog/shops/nearby',
+      ]);
     });
   });
 

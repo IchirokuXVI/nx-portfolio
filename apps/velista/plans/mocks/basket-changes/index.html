@@ -1,0 +1,419 @@
+<title>Velista: what changed while you were not looking</title>
+
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Marks * { box-sizing: border-box; }
+#ab-ChangesSheet * { box-sizing: border-box; }
+</style>
+
+<header>
+  <h1>Velista: what changed while you were not looking</h1>
+  <p class="lede">The design for plan <code>0093</code>: a basket follows its lists now, so a line can appear, ask for a different amount, take another name or leave while somebody is halfway down an aisle. A mark on the row, a disabled row where a line left, a banner that counts what is new, and a sheet that tells each change in words. Phone only, 390 by 844, Night only: every colour role here is already proven on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 1330px; height: 3590px;">
+      <figure class="board" style="left: 0px; top: 900px; width: 900px;">
+        <figcaption>The marks on the rows, the banner, and a line that left</figcaption>
+        <div class="frame" id="ab-Marks" style="width: 900px; height: 1010px;">
+          <div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ SOMETHING CHANGED WHILE YOU WERE SHOPPING ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THREE CHANGES &middot; the banner, two marked rows, and a line that left</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
+                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </div>
+                  <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Your basket</div>
+                  <div style="display: flex; align-items: center; padding: 0 6px;">
+                    <span style="width: 26px; height: 26px; border-radius: 999px; background: #7c3aed; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
+                    <span style="width: 26px; height: 26px; border-radius: 999px; background: #2563eb; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">D</span>
+                  </div>
+                </div>
+
+                <p style="flex: 0 0 auto; margin: 0; padding: 0 20px 8px; font-size: 13px; color: #98a0bb;">Every list you can add to, in one place</p>
+
+                <!-- The sticky tools bar. Exactly the height it has with no banner. -->
+                <div style="flex: 0 0 auto; padding: 0 8px 0 20px; display: flex; align-items: center;">
+                  <span style="flex: 1 1 auto; font-size: 13px; color: #98a0bb; font-variant-numeric: tabular-nums;">8 left of 12</span>
+                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                  </div>
+                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"/><circle cx="14.5" cy="7" r="2.3"/><circle cx="9.5" cy="17" r="2.3"/></svg>
+                  </div>
+                </div>
+
+                <!-- THE BANNER. Under the bar, inside the scroll, outside the sticky box. -->
+                <div style="flex: 0 0 auto; padding: 12px 20px 0;">
+                  <div style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border: 1px solid rgba(255,180,84,0.4); border-radius: 16px; background: rgba(255,180,84,0.08);">
+                    <span style="flex: 0 0 auto; width: 8px; height: 8px; border-radius: 999px; background: #ffb454;"></span>
+                    <span style="flex: 1 1 auto; font-size: 14px; color: #f7f8fc;">3 changes on your lists</span>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5l7 7-7 7" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </div>
+                </div>
+
+                <div style="flex: 1 1 auto; margin-top: 12px; background: #161a28; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden;">
+
+                  <!-- ADDED: a tag at the trailing end of the name line, in the accent role -->
+                  <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: flex-start; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+                    <div style="flex: 1 1 auto; min-width: 0;">
+                      <div style="font-size: 16px; line-height: 1.3;">Sourdough loaf<span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: rgba(255,180,84,0.08); font-size: 11px; color: #ffb454; vertical-align: middle;"><span style="width: 4px; height: 4px; border-radius: 999px; background: currentColor;"></span>New</span></div>
+                      <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">from Weekly shop</div>
+                    </div>
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">1</span>
+                  </div>
+
+                  <!-- CHANGED: the same tag with the other word. Nothing else about the row moves. -->
+                  <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: flex-start; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #ffb454; background: linear-gradient(90deg, #ffb454 50%, transparent 50%);"></span></span>
+                    <div style="flex: 1 1 auto; min-width: 0;">
+                      <div style="font-size: 16px; line-height: 1.3;">Eggs<span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: rgba(255,180,84,0.08); font-size: 11px; color: #ffb454; vertical-align: middle;"><span style="width: 4px; height: 4px; border-radius: 999px; background: currentColor;"></span>Changed</span></div>
+                      <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Huevos L, 12 &middot; 1.99&nbsp;&euro;</div>
+                      <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">Marc got 2 &middot; from Weekly shop</div>
+                    </div>
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">8</span>
+                  </div>
+
+                  <!-- A LINE THAT LEFT. No glyph, no reel, no chevron. Struck through AND said. -->
+                  <div style="min-height: 64px; padding: 8px 12px 8px 20px; display: flex; flex-direction: column; justify-content: center; gap: 2px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <div style="font-size: 16px; line-height: 1.3; color: #98a0bb; text-decoration: line-through;">Olive oil</div>
+                    <div style="font-size: 12px; color: #c2c8db;">No longer on the list</div>
+                  </div>
+
+                  <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+                    <div style="flex: 1 1 auto; min-width: 0;">
+                      <div style="font-size: 16px; line-height: 1.3;">Milk</div>
+                      <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">from Weekly shop and Groceries</div>
+                    </div>
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">3</span>
+                  </div>
+
+                  <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; background: #34d399; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+                    <div style="flex: 1 1 auto; min-width: 0;">
+                      <div style="font-size: 16px; line-height: 1.3; color: #98a0bb;">Tomatoes</div>
+                      <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Ana got 6 &middot; from Groceries</div>
+                    </div>
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: #6f7899;">0</span>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+            <!-- ============ THE SAME BASKET, ACKNOWLEDGED ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ONCE THE SERVER SAYS SO &middot; the banner has gone and the bar is the height it always was</span>
+              <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
+
+                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
+                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </div>
+                  <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Your basket</div>
+                  <div style="display: flex; align-items: center; padding: 0 6px;">
+                    <span style="width: 26px; height: 26px; border-radius: 999px; background: #7c3aed; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
+                    <span style="width: 26px; height: 26px; border-radius: 999px; background: #2563eb; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">D</span>
+                  </div>
+                </div>
+
+                <p style="flex: 0 0 auto; margin: 0; padding: 0 20px 8px; font-size: 13px; color: #98a0bb;">Every list you can add to, in one place</p>
+
+                <div style="flex: 0 0 auto; padding: 0 8px 0 20px; display: flex; align-items: center;">
+                  <span style="flex: 1 1 auto; font-size: 13px; color: #98a0bb; font-variant-numeric: tabular-nums;">8 left of 12</span>
+                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
+                  </div>
+                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"/><circle cx="14.5" cy="7" r="2.3"/><circle cx="9.5" cy="17" r="2.3"/></svg>
+                  </div>
+                </div>
+
+                <div style="flex: 1 1 auto; margin-top: 12px; background: #161a28; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden;">
+
+                  <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+                    <div style="flex: 1 1 auto; min-width: 0;">
+                      <div style="font-size: 16px; line-height: 1.3;">Sourdough loaf</div>
+                      <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">from Weekly shop</div>
+                    </div>
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">1</span>
+                  </div>
+
+                  <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: flex-start; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #ffb454; background: linear-gradient(90deg, #ffb454 50%, transparent 50%);"></span></span>
+                    <div style="flex: 1 1 auto; min-width: 0;">
+                      <div style="font-size: 16px; line-height: 1.3;">Eggs</div>
+                      <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Huevos L, 12 &middot; 1.99&nbsp;&euro;</div>
+                      <div style="margin-top: 2px; font-size: 12px; color: #6f7899;">Marc got 2 &middot; from Weekly shop</div>
+                    </div>
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">8</span>
+                  </div>
+
+                  <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; border: 1.5px solid #98a0bb;"></span></span>
+                    <div style="flex: 1 1 auto; min-width: 0;">
+                      <div style="font-size: 16px; line-height: 1.3;">Milk</div>
+                      <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">from Weekly shop and Groceries</div>
+                    </div>
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; border-radius: 12px; background: rgba(255,255,255,0.04);">3</span>
+                  </div>
+
+                  <div style="min-height: 64px; padding: 8px 12px 8px 8px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;"><span style="width: 26px; height: 26px; border-radius: 999px; background: #34d399; display: flex; align-items: center; justify-content: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7" stroke="#0a0c14" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></span>
+                    <div style="flex: 1 1 auto; min-width: 0;">
+                      <div style="font-size: 16px; line-height: 1.3; color: #98a0bb;">Tomatoes</div>
+                      <div style="margin-top: 3px; font-size: 12px; color: #6f7899;">Ana got 6 &middot; from Groceries</div>
+                    </div>
+                    <span style="flex: 0 0 auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: #6f7899;">0</span>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 2580px; width: 1330px;">
+        <figcaption>The changes sheet: full, redacted for a guest, and its three other states</figcaption>
+        <div class="frame" id="ab-ChangesSheet" style="width: 1330px; height: 1010px;">
+          <div style="width: 1330px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+            <!-- ============ THE SHEET, FULL ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">WHAT CHANGED &middot; one sentence per change, newest first</span>
+              <div style="position: relative; width: 390px; height: 844px; background: #0a0c14; overflow: hidden; border-radius: 4px;">
+
+                <!-- The page underneath, dimmed by the scrim -->
+                <div style="position: absolute; inset: 0; background: #0a0c14;"></div>
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.62);"></div>
+
+                <!-- The panel -->
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-radius: 28px 28px 0 0; box-shadow: 0 -12px 40px rgba(6,8,14,0.55); padding: 8px 20px 24px; color: #f7f8fc;">
+                  <div style="width: 36px; height: 4px; margin: 0 auto 14px; border-radius: 999px; background: rgba(255,255,255,0.18);"></div>
+
+                  <h2 style="margin: 0 0 16px; font-family: Marcellus, Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 22px; line-height: 1.25;">What changed</h2>
+
+                  <!-- One entry: sentence, then who / which list / when -->
+                  <div style="padding: 12px 0;">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">&ldquo;Sourdough loaf&rdquo; was added, asking for 1<span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: rgba(255,180,84,0.08); font-size: 11px; color: #ffb454; vertical-align: middle;"><span style="width: 4px; height: 4px; border-radius: 999px; background: currentColor;"></span>New</span></p>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #6f7899;">Marc &middot; in Weekly shop &middot; Today, 09:40</p>
+                  </div>
+
+                  <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">&ldquo;Eggs&rdquo; asks for 10 instead of 6<span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: rgba(255,180,84,0.08); font-size: 11px; color: #ffb454; vertical-align: middle;"><span style="width: 4px; height: 4px; border-radius: 999px; background: currentColor;"></span>New</span></p>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #6f7899;">You &middot; in Weekly shop &middot; Today, 09:30</p>
+                  </div>
+
+                  <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">&ldquo;Olive oil&rdquo; was removed<span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: rgba(255,180,84,0.08); font-size: 11px; color: #ffb454; vertical-align: middle;"><span style="width: 4px; height: 4px; border-radius: 999px; background: currentColor;"></span>New</span></p>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #6f7899;">Marc &middot; in Weekly shop &middot; Today, 09:20</p>
+                  </div>
+
+                  <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">&ldquo;Leche&rdquo; is now called &ldquo;Milk&rdquo;</p>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #6f7899;">Someone &middot; Today, 09:10</p>
+                  </div>
+
+                  <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">&ldquo;Leche&rdquo; is waiting for approval again</p>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #6f7899;">Ana &middot; in Groceries &middot; Today, 09:00</p>
+                  </div>
+
+                  <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">&ldquo;Leche&rdquo; was merged into &ldquo;Milk&rdquo;</p>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #6f7899;">Ana &middot; in Groceries &middot; Yesterday, 18:04</p>
+                  </div>
+
+                  <button style="display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; margin-top: 12px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: #1d2234; font-family: inherit; font-size: 14px; color: #c2c8db;">Show more</button>
+
+                  <button style="display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; margin-top: 12px; padding: 8px; border: none; background: transparent; font-family: inherit; font-size: 14px; color: #98a0bb;">Close</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ============ A GUEST READS THE SAME SHEET ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A GUEST &middot; the same sentences, no list named and nobody they may not know</span>
+              <div style="position: relative; width: 390px; height: 844px; background: #0a0c14; overflow: hidden; border-radius: 4px;">
+                <div style="position: absolute; inset: 0; background: rgba(6, 8, 14, 0.62);"></div>
+
+                <div style="position: absolute; left: 0; right: 0; bottom: 0; background: #161a28; border-radius: 28px 28px 0 0; box-shadow: 0 -12px 40px rgba(6,8,14,0.55); padding: 8px 20px 24px; color: #f7f8fc;">
+                  <div style="width: 36px; height: 4px; margin: 0 auto 14px; border-radius: 999px; background: rgba(255,255,255,0.18);"></div>
+
+                  <h2 style="margin: 0 0 16px; font-family: Marcellus, Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 22px; line-height: 1.25;">What changed</h2>
+
+                  <div style="padding: 12px 0;">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">&ldquo;Sourdough loaf&rdquo; was added, asking for 1<span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: rgba(255,180,84,0.08); font-size: 11px; color: #ffb454; vertical-align: middle;"><span style="width: 4px; height: 4px; border-radius: 999px; background: currentColor;"></span>New</span></p>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #6f7899;">Marc &middot; Today, 09:40</p>
+                  </div>
+
+                  <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">&ldquo;Eggs&rdquo; asks for 10 instead of 6<span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: rgba(255,180,84,0.08); font-size: 11px; color: #ffb454; vertical-align: middle;"><span style="width: 4px; height: 4px; border-radius: 999px; background: currentColor;"></span>New</span></p>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #6f7899;">Ana &middot; Today, 09:30</p>
+                  </div>
+
+                  <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">&ldquo;Olive oil&rdquo; was removed<span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: rgba(255,180,84,0.08); font-size: 11px; color: #ffb454; vertical-align: middle;"><span style="width: 4px; height: 4px; border-radius: 999px; background: currentColor;"></span>New</span></p>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #6f7899;">Someone &middot; Today, 09:20</p>
+                  </div>
+
+                  <div style="padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.08);">
+                    <p style="margin: 0; font-size: 14px; line-height: 1.5;">&ldquo;Milk&rdquo; is no longer needed</p>
+                    <p style="margin: 6px 0 0; font-size: 12px; color: #6f7899;">Today, 09:05</p>
+                  </div>
+
+                  <button style="display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; margin-top: 12px; padding: 8px; border: none; background: transparent; font-family: inherit; font-size: 14px; color: #98a0bb;">Close</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ============ THE THREE OTHER STATES ============ -->
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">LOADING, NOTHING, AND A READ THAT DID NOT ARRIVE</span>
+              <div style="width: 390px; height: 844px; display: flex; flex-direction: column; gap: 14px;">
+
+                <!-- Loading: three skeletons at the entry's height -->
+                <div style="flex: 1 1 0; background: #161a28; border-radius: 20px; padding: 18px 20px; color: #f7f8fc;">
+                  <h2 style="margin: 0 0 16px; font-family: Marcellus, Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 22px;">What changed</h2>
+                  <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <span style="display: block; height: 40px; border-radius: 8px; background: #11141f;"></span>
+                    <span style="display: block; height: 40px; border-radius: 8px; background: #11141f;"></span>
+                    <span style="display: block; height: 40px; border-radius: 8px; background: #11141f;"></span>
+                  </div>
+                  <p style="margin: 14px 0 0; font-size: 12px; color: #6f7899;">Announced as &ldquo;Loading what changed&rdquo;, and drawn at the entry&rsquo;s own height so the sheet does not resize when they land.</p>
+                </div>
+
+                <!-- Nothing changed -->
+                <div style="flex: 0 0 auto; background: #161a28; border-radius: 20px; padding: 18px 20px; color: #f7f8fc;">
+                  <h2 style="margin: 0 0 12px; font-family: Marcellus, Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 22px;">What changed</h2>
+                  <p style="margin: 0; font-size: 14px; color: #98a0bb;">Nothing changed on your lists lately</p>
+                </div>
+
+                <!-- Failed -->
+                <div style="flex: 0 0 auto; background: #161a28; border-radius: 20px; padding: 18px 20px; color: #f7f8fc;">
+                  <h2 style="margin: 0 0 12px; font-family: Marcellus, Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 22px;">What changed</h2>
+                  <p style="margin: 0 0 12px; font-size: 14px; color: #f87171;">That would not load</p>
+                  <button style="display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: #1d2234; font-family: inherit; font-size: 14px; color: #c2c8db;">Try again</button>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 420px;"><p>THE PROBLEM. The basket used to be a snapshot somebody generated. It follows its lists now, so what is on the screen in a shop can change under the person holding the phone: a flatmate adds bread, somebody doubles the eggs, a line is deleted.</p><p>None of that can be silent. A shopper who walks past the dairy aisle because the milk was not on the list, and finds out at the till that it was added twenty minutes ago, has been failed by the screen rather than by the flatmate.</p></aside>
+      <aside class="note" style="left: 460px; top: 0px; width: 420px;"><p>THE WINDOW BELONGS TO EACH VIEWER, AND TO THE SERVER'S CLOCK. What is new is not "changed in the last hour": it is "changed since this person last looked". The server keeps that cursor per participant, so a phone that spent the change in a pocket still shows it, and a phone with a wrong clock shows it for the right length of time.</p><p>THE CLIENT HOLDS NO CLOCK. It draws what the read says. It never starts a timer that ends a mark, never stores "last seen", and never compares a change's time to anything. A mark appears and disappears because a read said so.</p></aside>
+      <aside class="note" style="left: 920px; top: 0px; width: 410px;"><p>A MARK IS A SHAPE AND A WORD. "New" and "Changed", a dot and a tag, at the trailing end of the name line, in the accent role. Never the warning colour: amber is this app's accent, and a line a flatmate added is not a fault.</p><p>NOTHING MOVES. A marked row is drawn where the server's order put it, never lifted to the top: a list that rearranges under a thumb is the thing 0053 refused. The tag sits inside the name, so a marked row and an ordinary one are the same height.</p><p>IT IS PART OF THE ROW'S ONE NAME, not a second thing to hear: "Milk, new on the list".</p></aside>
+      <aside class="note" style="left: 0px; top: 430px; width: 410px;"><p>A LINE THAT LEFT STAYS ON SCREEN, DISABLED. Every entry of the row left the coverage and this viewer has not seen it go, so the server keeps sending the row and the screen keeps drawing it. Somebody standing in front of the shelf has to be told, and a row that simply vanished is a row they will look for.</p><p>NOTHING ON IT IS A CONTROL: no glyph, no reel, no price, no chevron, and it opens no sheet. The Tab key passes it by, and a screen reader still reads it in order.</p><p>THE STRIKE IS NEVER ALONE. "No longer on the list" is under the name, because a line through text is shape and colour with no words in it.</p><p>IT COUNTS TOWARD NO NUMBER. The progress sentence is the server's, and the tools bar's pair and the chip row's pair all leave it out.</p></aside>
+      <aside class="note" style="left: 460px; top: 430px; width: 420px;"><p>THE BANNER IS UNDER THE TOOLS BAR AND OUTSIDE IT. The bar stays exactly as tall as it was (0079): a banner inside it would push the search and the chips down a phone every time a line moved on somebody else's list.</p><p>ONE ROW, ONE BUTTON: a dot, the count in a sentence, and a chevron. It is announced politely when the number appears or moves, and not on every redraw.</p><p>IT IS THE SERVER'S COUNT. It goes when a read says zero, never because somebody tapped it. It is drawn on a finished basket too, because what changed is still worth reading.</p><p>NO ANIMATION. An announcement and a layout shift at once is two interruptions, on a screen somebody is reading in an aisle.</p></aside>
+      <aside class="note" style="left: 0px; top: 2080px; width: 410px;"><p>THE SHEET IS THE ONE LAYOUT NOT SEEN BEFORE. Title, then one entry per change, newest first. An entry is two lines: the sentence, and a muted line with who, which list and when, each part present only when the reader is entitled to it. A guest is served no list and often no person, and then there is simply no second line rather than an empty one.</p><p>AN ENTRY IS NOT A BUTTON and opens nothing. A change is a fact, and the row it is about is one dismiss away.</p><p>THE "NEW" TAG IS THE SAME TAG A ROW WEARS, and it is the server's flag, not a comparison of the date beside it.</p><p>SHOW MORE KEEPS FOCUS on the button and announces how many arrived, which is the pattern 0088 already uses for older trips.</p></aside>
+      <aside class="note" style="left: 460px; top: 2080px; width: 420px;"><p>WHAT COUNTS AS HAVING SEEN IT. The client tells the server "I have read everything through this change" only when the tab is visible AND either a marked row is half on screen or the sheet is drawing entries, AND both have been true for a second and a half.</p><p>IT SENDS AN ID, NEVER A TIME, so a change that arrives between the render and the request stays new.</p><p>EVERY WAY OF BEING WRONG IS THE QUIET ONE. Offline: the marks stay. Tab hidden the whole time: nothing is sent. Marked rows below the fold: nothing is sent for them, and the banner still counts them. Sheet opened and shut in a second: nothing. A background refetch acknowledges nothing at all, ever.</p><p>TWO DEVICES ARE ONE VIEWER. Reading it on the phone clears it on the tablet at its next read. Accepted.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 1330;
+    var h = 3590;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

@@ -11,6 +11,9 @@ import {
 import { AdminJwtGuard } from './admin-jwt.guard';
 import { AdminUserNamesService } from './admin-user-names.service';
 
+/** A queue row's id, which the routes refuse unless it is a uuid (plan 0158). */
+const QUEUE_ROW = '4d1f2a3b-5c6d-4e7f-8a9b-0c1d2e3f4a5b';
+
 /**
  * The postal code queue's routes over real HTTP (plan 0097).
  *
@@ -158,7 +161,7 @@ describe('GET /v1/admin/harvest/postal-codes', () => {
 
 describe('POST /v1/admin/harvest/postal-codes', () => {
   it('sends the code and the operator’s choice of whether to run it', async () => {
-    const { nest, sent, origin } = await boot({ id: 'q-1' });
+    const { nest, sent, origin } = await boot({ id: QUEUE_ROW });
     try {
       const res = await fetch(`${origin}/v1/admin/harvest/postal-codes`, {
         method: 'POST',
@@ -201,30 +204,33 @@ describe('POST /v1/admin/harvest/postal-codes', () => {
 
 describe('the two writes on one queue row', () => {
   it('requeues by id', async () => {
-    const { nest, sent, origin } = await boot({ id: 'q-1' });
+    const { nest, sent, origin } = await boot({ id: QUEUE_ROW });
     try {
       const res = await fetch(
-        `${origin}/v1/admin/harvest/postal-codes/q-1/requeue`,
+        `${origin}/v1/admin/harvest/postal-codes/${QUEUE_ROW}/requeue`,
         { method: 'POST' }
       );
 
       expect(res.status).toBe(201);
       expect(sent[0].subject).toBe('postalCodeDiscovery.requeue');
-      expect(sent[0].payload['requestId']).toBe('q-1');
+      expect(sent[0].payload['requestId']).toBe(QUEUE_ROW);
     } finally {
       await nest.close();
     }
   });
 
   it('dismisses by id', async () => {
-    const { nest, sent, origin } = await boot({ id: 'q-1' });
+    const { nest, sent, origin } = await boot({ id: QUEUE_ROW });
     try {
-      await fetch(`${origin}/v1/admin/harvest/postal-codes/q-1/dismiss`, {
-        method: 'POST',
-      });
+      await fetch(
+        `${origin}/v1/admin/harvest/postal-codes/${QUEUE_ROW}/dismiss`,
+        {
+          method: 'POST',
+        }
+      );
 
       expect(sent[0].subject).toBe('postalCodeDiscovery.dismiss');
-      expect(sent[0].payload['requestId']).toBe('q-1');
+      expect(sent[0].payload['requestId']).toBe(QUEUE_ROW);
     } finally {
       await nest.close();
     }

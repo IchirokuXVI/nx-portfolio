@@ -318,6 +318,21 @@
     </section>
   }
 
+  <!--
+    The tour, played again (velista `0099`, section 7). For every account, a guest's as
+    readily as a registered one's, in the accent and never disabled. It closes the
+    account's own rows, and Delete stays last below it as the way out.
+  -->
+  <section class="group">
+    <lib-account-row
+      (activate)="showAround()"
+      [accent]="true"
+      [divided]="false"
+      [hasAction]="true"
+      [value]="'account.tour.again' | rokuT"
+    />
+  </section>
+
   @if (failure(); as problem) {
     <p class="error" role="alert">
       <span>{{ problem.key | rokuT: { wait: problem.wait } }}</span>

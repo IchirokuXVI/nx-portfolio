@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  DEFAULT_SCOPE_PRIORITY,
+  PriceScopeKind,
   type CreateSupermarketRequest,
   type ListSupermarketsRequest,
   type SupermarketIdRequest,
@@ -15,10 +17,11 @@ import {
   encodeCursor,
   getRequestContext,
   NotFoundException,
+  ValidationException,
   type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
 import { Repository, type SelectQueryBuilder } from 'typeorm';
-import { Supermarket } from '../entities';
+import { PriceScope, Supermarket } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
   decodeCursorForLocale,
@@ -55,15 +58,34 @@ export class SupermarketService {
       logoUrl: req.logoUrl ?? null,
       websiteUrl: req.websiteUrl ?? null,
       externalBrandKey: req.externalBrandKey ?? null,
-      // Never set on creation, and not because it was forgotten: a scope
-      // belongs to a chain, so a chain that does not exist yet has none to
-      // point at. It is set by `update`, after the scopes are (plan 0049,
-      // section 3.1).
+      // Null only until the national scope below exists: a scope belongs to a
+      // chain, so the chain is saved first and pointed at its scope after.
       defaultPriceScopeId: null,
     });
-    const saved = await this.audit.write(actor, (tx) =>
-      tx.create(Supermarket, draft)
-    );
+    // A chain starts with a NATIONAL scope as its default (plan 0153). Without
+    // one, "show me this chain" with no place named had no answer until an
+    // operator made a scope and nothing could set it as the default. The chain,
+    // the scope and the default are one transaction, so a failure leaves none
+    // of them behind.
+    //
+    // No inheritance runs for the scope, unlike `PriceScopeService.create`:
+    // nothing is less specific than NATIONAL, and a new chain has no prices.
+    const saved = await this.audit.write(actor, async (tx) => {
+      const chain = await tx.create(Supermarket, draft);
+      const national = await tx.create(
+        PriceScope,
+        tx.manager.create(PriceScope, {
+          supermarketId: chain.id,
+          kind: PriceScopeKind.NATIONAL,
+          externalKey: null,
+          label: chain.name,
+          priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.NATIONAL],
+        })
+      );
+      const before = { ...chain };
+      chain.defaultPriceScopeId = national.id;
+      return tx.update(Supermarket, before, chain);
+    });
     return toSupermarketView(saved);
   }
 
@@ -89,16 +111,19 @@ export class SupermarketService {
     // The last rung of the scope ladder (plan 0049, section 3.1). Checked to
     // belong to this chain, because a default pointing at another chain's
     // warehouse would quote a competitor's prices under this brand's name.
+    // A 400 rather than the 409 `requireScopeOf` answers (plan 0153): nothing
+    // about the chain's state conflicts, the request names the wrong thing.
     if (req.defaultPriceScopeId !== undefined) {
-      row.defaultPriceScopeId =
-        req.defaultPriceScopeId === null
-          ? null
-          : (
-              await this.priceScopes.requireScopeOf(
-                req.defaultPriceScopeId,
-                row.id
-              )
-            ).id;
+      if (req.defaultPriceScopeId !== null) {
+        const scope = await this.priceScopes.load(req.defaultPriceScopeId);
+        if (scope.supermarketId !== row.id) {
+          throw new ValidationException(
+            'defaultPriceScopeId names a price scope of another chain. A ' +
+              "chain's default scope is one of its own scopes."
+          );
+        }
+      }
+      row.defaultPriceScopeId = req.defaultPriceScopeId;
     }
     return toSupermarketView(
       await this.audit.write(actor, (tx) => tx.update(Supermarket, before, row))

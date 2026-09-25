@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  BrandBatchOutcome,
   brandKey,
   type BrandIdRequest,
   type BrandKeysRequest,
@@ -12,6 +13,9 @@ import {
   type DeleteBrandRequest,
   type DeleteBrandResult,
   type ListBrandsRequest,
+  type RegisterBrandsOutcome,
+  type RegisterBrandsRequest,
+  type RegisterBrandsResult,
   type RegisterBrandSuggestionRequest,
   type RegisterBrandSuggestionResult,
   type UpdateBrandRequest,
@@ -29,7 +33,9 @@ import {
   BrandNotLinkedException,
   clampPageSize,
   decodeCursor,
+  DomainException,
   encodeCursor,
+  ERROR_CODES,
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, Repository, type EntityManager } from 'typeorm';
@@ -39,9 +45,13 @@ import {
   type AuditedWrite,
 } from './catalog-audit.service';
 import { toBrandView, type BrandCounts } from './catalog.mappers';
-import { PlatformAdminService } from './platform-admin.service';
+import {
+  PlatformAdminService,
+  type CatalogActor,
+} from './platform-admin.service';
 
 const PG_UNIQUE_VIOLATION = '23505';
+const PG_FOREIGN_KEY_VIOLATION = '23503';
 
 /** A brand row with the page's counts and its canonical brand's label attached. */
 interface BrandRow {
@@ -129,6 +139,97 @@ export class BrandService {
    */
   async create(req: CreateBrandRequest): Promise<CreateBrandResult> {
     const actor = await this.admin.requireAdmin(req);
+    return this.createAs(actor, req);
+  }
+
+  /**
+   * Register many brands, one outcome per name (plan 0160).
+   *
+   * **Each name is the single create, in its own transaction**, so a name that
+   * is refused rolls back only itself and the batch goes on. That is also what
+   * keeps a name's claim of its products exactly what `POST brands` would have
+   * claimed: the same code, the same lock, the same answer.
+   *
+   * A name whose key a brand already holds answers `EXISTS` with that brand's
+   * id, and writes nothing. It is read before the insert, so an ordinary
+   * duplicate costs no aborted transaction, and the unique index still answers
+   * the race between two batches the same way. Two names in one batch that key
+   * the same are the same case: the second finds the first.
+   *
+   * A refusal is any domain error the single create would have answered with,
+   * plus a chain that does not exist, which the single create answers 500 for
+   * because it only ever meets it through a foreign key. Anything else is not a
+   * fact about one name, so it fails the request, and the names before it stay
+   * registered: each was its own decision.
+   */
+  async registerMany(
+    req: RegisterBrandsRequest
+  ): Promise<RegisterBrandsResult> {
+    const actor = await this.admin.requireAdmin(req);
+    const results: RegisterBrandsOutcome[] = [];
+    for (const entry of req.brands) {
+      results.push(await this.registerOne(actor, req, entry));
+    }
+    return { results };
+  }
+
+  private async registerOne(
+    actor: CatalogActor,
+    req: RegisterBrandsRequest,
+    entry: RegisterBrandsRequest['brands'][number]
+  ): Promise<RegisterBrandsOutcome> {
+    const label = entry.label;
+    const key = brandKey((label ?? '').trim());
+    if (key !== null) {
+      const holder = await this.brands.findOne({ where: { key } });
+      if (holder) {
+        return exists(label, holder.id);
+      }
+    }
+    try {
+      const created = await this.createAs(actor, {
+        userId: req.userId,
+        adminToken: req.adminToken,
+        label,
+        privateLabelSupermarketId: entry.privateLabelSupermarketId ?? null,
+      });
+      return {
+        label,
+        outcome: BrandBatchOutcome.CREATED,
+        brandId: created.id,
+        linkedItems: created.linkedItems,
+        reason: null,
+      };
+    } catch (error) {
+      if (error instanceof BrandKeyTakenException) {
+        const holderId = error.details?.[BRAND_KEY_HOLDER_DETAIL];
+        return typeof holderId === 'string'
+          ? exists(label, holderId)
+          : refused(label, error.code, error.message);
+      }
+      if (error instanceof DomainException) {
+        return refused(label, error.code, error.message);
+      }
+      if (
+        error instanceof QueryFailedError &&
+        (error as { driverError?: { code?: string } }).driverError?.code ===
+          PG_FOREIGN_KEY_VIOLATION
+      ) {
+        return refused(
+          label,
+          ERROR_CODES.NOT_FOUND,
+          'The private label chain does not exist.'
+        );
+      }
+      throw error;
+    }
+  }
+
+  /** {@link create} once the gate has let the caller through. */
+  private async createAs(
+    actor: CatalogActor,
+    req: CreateBrandRequest
+  ): Promise<CreateBrandResult> {
     const label = (req.label ?? '').trim();
     const key = this.requireKey(label);
     const canonicalBrandId = req.canonicalBrandId ?? null;
@@ -913,4 +1014,30 @@ export class BrandService {
       details: holder ? { [BRAND_KEY_HOLDER_DETAIL]: holder.id } : undefined,
     });
   }
+}
+
+/** A batch name whose key a brand already holds. */
+function exists(label: string, brandId: string): RegisterBrandsOutcome {
+  return {
+    label,
+    outcome: BrandBatchOutcome.EXISTS,
+    brandId,
+    linkedItems: null,
+    reason: null,
+  };
+}
+
+/** A batch name the single create would have refused, with its reason. */
+function refused(
+  label: string,
+  code: string,
+  detail: string
+): RegisterBrandsOutcome {
+  return {
+    label,
+    outcome: BrandBatchOutcome.REFUSED,
+    brandId: null,
+    linkedItems: null,
+    reason: { code, detail },
+  };
 }

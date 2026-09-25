@@ -60,9 +60,11 @@
           />
         }
 
+        <!-- Where a new account's groups will be, for the tour (velista `0099`). -->
         <lib-empty-state
           [body]="'home.empty.body' | rokuT"
           [title]="'home.empty.title' | rokuT"
+          libTourAnchor="groups"
         >
           <button (click)="createZone()" class="empty-primary" type="button">
             {{ 'home.action.createZone' | rokuT }}
@@ -123,7 +125,7 @@
           />
         }
 
-        <section class="zones">
+        <section class="zones" libTourAnchor="groups">
           <!--
             Both ways into a group sit here, side by side, because they are the same
             kind of act: one makes a group, the other asks to be let into one. Joining
@@ -147,6 +149,9 @@
               (open)="openZone($event)"
               (openList)="openList($event)"
               (reviewRequests)="reviewRequests($event)"
+              [listsAnchor]="
+                zone.id === listsAnchorZoneId() ? 'group-lists' : null
+              "
               [zone]="zone"
             />
           }
@@ -154,20 +159,15 @@
       </div>
 
       <!--
-        The dock: the basket being shopped now, sitting directly on top of the button
-        that composes another, as one surface.
+        The dock, which is now the card sitting on the app's bottom bar rather than on a
+        button row of this page's own (velista `0097`, section 6). Both halves of that
+        row moved into the third tab: the button is what the empty tab offers and the
+        clock is in that tab's header, so home is a card, a bar, and no third layer.
 
-        Two siblings rather than one wrapper, and rather than content projected into the
-        bar. `.page` is already a flex column whose `.content` takes the spare height,
-        so anything after it is pinned to the bottom by the layout that is there: a
-        wrapper would add an element and buy nothing. Projection would be worse than
-        nothing, because `BottomActionBar`'s action row is `ng-content` **fallback**
-        content, and fallback renders only while its slot is empty.
-
-        Each half draws the rule above itself, which is what keeps the seam right in
-        both states. With a basket: the strip's rule caps the dock and the bar's becomes
-        the divider under the strip. With none, the strip is absent entirely, no header
-        and no empty card and no gap, and the bar's rule caps the dock on its own.
+        Pinned to the bottom by the layout that is already here: `.page` is a flex column
+        whose `.content` takes the spare height, so anything after it goes to the foot.
+        The card draws the rule above itself, and the bar under it draws its own, so the
+        seam is right whether or not there is a basket to show.
       -->
       @if (page.shoppingList; as shoppingList) {
         <lib-shopping-list-card
@@ -178,11 +178,6 @@
           [list]="shoppingList"
         />
       }
-
-      <lib-bottom-action-bar
-        (getList)="getShoppingList()"
-        (openHistory)="openShoppingLists()"
-      />
     }
   }
 </div>

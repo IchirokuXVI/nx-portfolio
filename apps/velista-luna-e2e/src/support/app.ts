@@ -26,17 +26,23 @@ export async function signIn(page: Page, email: string): Promise<void> {
 }
 
 /**
- * From the dashboard, open the get list sheet, draw from exactly the named
+ * From the history, open the get list sheet, draw from exactly the named
  * lists, generate, and return the basket id from the URL it opens on.
+ *
+ * The history and not the dashboard, since velista `0097`: home's button row was
+ * replaced by the app's own bottom bar, so the two screens that offer this now are
+ * the history and the third tab. The history is the one a spec can always use, because
+ * the tab redirects to whatever basket is already being shopped and a spec that
+ * generates a second one would find no button there.
  */
 export async function generateBasket(
   page: Page,
   lists: string[],
   name?: string
 ): Promise<string> {
-  await page.goto('/en/home');
+  await page.goto('/en/shopping-lists');
   await page.getByRole('button', { name: 'Get shopping list' }).click();
-  await expect(page).toHaveURL(/\/home\/sheet\/get$/);
+  await expect(page).toHaveURL(/\/shopping-lists\/sheet\/get$/);
 
   const dialog = page.getByRole('dialog');
   await expect(

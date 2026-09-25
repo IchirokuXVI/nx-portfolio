@@ -1,4 +1,8 @@
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import type { GatewayError } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  localizedTextValue,
+  type Wire,
+} from '@portfolio/luna-shopper-admin/models';
 
 type Place = Wire.HarvestDiscoveredPlaceView;
 
@@ -73,7 +77,10 @@ export function nearby(
  * longitude degree shrinks with latitude, and ignoring that would make two
  * places in Madrid look a third further apart than they are.
  */
-export function metresBetween(a: Place, b: Place): number {
+export function metresBetween(
+  a: Pick<Place, 'latitude' | 'longitude'>,
+  b: Pick<Place, 'latitude' | 'longitude'>
+): number {
   const latitudeMetres = (a.latitude - b.latitude) * METRES_PER_DEGREE;
   const longitudeMetres =
     (a.longitude - b.longitude) *
@@ -85,4 +92,176 @@ export function metresBetween(a: Place, b: Place): number {
 
 function coordinates(place: Place): string {
   return `${place.latitude.toFixed(5)}, ${place.longitude.toFixed(5)}`;
+}
+
+/**
+ * Which rule found a catalog shop a place may be (backend plan 0152, section
+ * 2), in the order the harvester tries them.
+ *
+ * `UNKNOWN` is this app's own member, for a rung a later backend adds: the
+ * candidate is still drawn and still linkable, and only the sentence saying why
+ * it was offered is the generic one.
+ */
+export type PlaceMatchRung = 'EXTERNAL_REF' | 'NEARBY' | 'ADDRESS' | 'UNKNOWN';
+
+const RUNGS: readonly PlaceMatchRung[] = ['EXTERNAL_REF', 'NEARBY', 'ADDRESS'];
+
+/**
+ * One shop the catalog already holds that a place may be.
+ *
+ * This app's own shape. The candidates arrive in the details of a 409, an
+ * error body that the document describes as an open object, so there is no
+ * generated type to borrow and rule D4 applies with most force.
+ */
+export interface PlaceCandidate {
+  readonly supermarketLocationId: string;
+  /** The shop's label, or its address, or its id: never blank. */
+  readonly title: string;
+  readonly address: string;
+  readonly postalCode: string;
+  readonly rung: PlaceMatchRung;
+}
+
+/**
+ * The candidates a `place_matches_location` refusal named, read from its
+ * `details`.
+ *
+ * Takes `unknown` and drops anything without a shop id, because a candidate
+ * that cannot be linked is not an answer the panel can offer. Never throws.
+ */
+export function placeCandidates(
+  details: Readonly<Record<string, unknown>>,
+  locales: readonly string[]
+): readonly PlaceCandidate[] {
+  const listed = details['candidates'];
+  if (!Array.isArray(listed)) {
+    return [];
+  }
+
+  const candidates: PlaceCandidate[] = [];
+  for (const entry of listed as unknown[]) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const row = entry as Record<string, unknown>;
+    const id = row['supermarketLocationId'];
+    if (typeof id !== 'string' || id === '') {
+      continue;
+    }
+    const address = textOf(row['address']);
+    const rung = row['rung'];
+    candidates.push({
+      supermarketLocationId: id,
+      title: localizedTextValue(row['label'], locales) || address || id,
+      address,
+      postalCode: textOf(row['postalCode']),
+      rung: RUNGS.find((known) => known === rung) ?? 'UNKNOWN',
+    });
+  }
+  return candidates;
+}
+
+/** A catalog shop near the place, for the duplicates panel. */
+export interface NearbyShop {
+  readonly id: string;
+  readonly title: string;
+  readonly address: string;
+  readonly postalCode: string;
+  /** Rounded metres, or null for a shop the catalog holds no position for. */
+  readonly metres: number | null;
+}
+
+/**
+ * The catalog shops of the place's chain that might be the same shop
+ * (admin plan 0034, section 1).
+ *
+ * Within {@link NEAR_METRES} when the shop has a position, and at the same
+ * postal code when it has none. The second half is the case that matters:
+ * seeded shops carry no coordinates, and those are the duplicates backend plan
+ * 0150 found. Nearest first, the unplaced ones last.
+ */
+export function nearbyShops(
+  place: Place,
+  rows: readonly unknown[],
+  locales: readonly string[]
+): readonly NearbyShop[] {
+  const shops: NearbyShop[] = [];
+  for (const entry of rows) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const row = entry as Record<string, unknown>;
+    const id = row['id'];
+    if (typeof id !== 'string' || id === '') {
+      continue;
+    }
+    const latitude = row['latitude'];
+    const longitude = row['longitude'];
+    const placed =
+      typeof latitude === 'number' &&
+      Number.isFinite(latitude) &&
+      typeof longitude === 'number' &&
+      Number.isFinite(longitude);
+    const postalCode = textOf(row['postalCode']);
+
+    let metres: number | null = null;
+    if (placed) {
+      metres = Math.round(metresBetween(place, { latitude, longitude }));
+      if (metres > NEAR_METRES) {
+        continue;
+      }
+    } else if (postalCode === '' || postalCode !== (place.postalCode ?? '')) {
+      continue;
+    }
+
+    const address = textOf(row['address']);
+    shops.push({
+      id,
+      title: localizedTextValue(row['label'], locales) || address || id,
+      address,
+      postalCode,
+      metres,
+    });
+  }
+
+  return shops.sort(
+    (a, b) =>
+      (a.metres ?? Number.POSITIVE_INFINITY) -
+      (b.metres ?? Number.POSITIVE_INFINITY)
+  );
+}
+
+/**
+ * Whether the place came from OpenStreetMap, which names things in no stated
+ * language and so cannot name a chain by itself (backend plan 0153).
+ *
+ * Compared without case: the harvester writes `OSM`, and older rows and the
+ * memory seed write `osm`.
+ */
+export function fromOpenStreetMap(place: Place): boolean {
+  return place.provider.toLowerCase() === 'osm';
+}
+
+/**
+ * The sentence for a refusal of a place decision, where the places queue has
+ * one of its own, and `null` where the generic sentence is the right one.
+ *
+ * The three codes backend plan 0152 added. `place_matches_location` is here
+ * for the bulk report: the single decision draws the candidates instead.
+ */
+export function placeRefusalKey(error: GatewayError | null): string | null {
+  switch (error?.code) {
+    case 'place_matches_location':
+      return 'harvest.places.error.matchesLocation';
+    case 'place_already_imported':
+      return 'harvest.places.error.alreadyImported';
+    case 'scope_not_found':
+      return 'harvest.places.error.scopeNotFound';
+    default:
+      return null;
+  }
+}
+
+function textOf(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }

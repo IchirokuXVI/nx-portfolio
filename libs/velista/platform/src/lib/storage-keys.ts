@@ -60,6 +60,16 @@ export const StorageKeys = {
    */
   listView: `list-view:${APP_KEY}`,
   /**
+   * The shop the last "I bought this" on a zone list named (velista `0114`), so
+   * the next one starts on it.
+   *
+   * One record for the device, like `basketView`, and with the basket shop's
+   * lifetime for the basket shop's reason: a shop is true for the trip and not for
+   * the month. It holds the shop as the picker named it, so the step can print it
+   * without asking anybody, and clearing the choice deletes it.
+   */
+  boughtShop: `bought-shop:${APP_KEY}`,
+  /**
    * That this document already spent its one reload on a build the server refuses
    * (plan 0072 D4).
    *
@@ -94,6 +104,47 @@ export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];
  * way: it is scoped to one basket, it expires with the trip, and the owner can
  * revoke the participant it names at any time.
  */
-export function basketSessionKey(generatedListId: string): string {
-  return `basket-session:${APP_KEY}:${generatedListId}`;
+export function basketSessionKey(basketId: string): string {
+  return `basket-session:${APP_KEY}:${basketId}`;
+}
+
+/**
+ * Which list this basket's composer adds to (velista `0092`, section 7.2).
+ *
+ * A function rather than a member of {@link StorageKeys}, following
+ * {@link basketSessionKey}, because there is one per basket rather than one per
+ * app — and here that is the substance rather than the filing. A list belongs to
+ * a **basket's coverage**, so a target remembered from one basket is meaningless
+ * on another, and one record for the device would silently choose the wrong
+ * household's list.
+ *
+ * That is exactly where it differs from `StorageKeys.basketView`, which is one
+ * record for the device on purpose: the order and the grouping are the shopper's
+ * own preference and travel with them from one trip to the next.
+ *
+ * It holds a list id and nothing else, it never expires, and the chip above the
+ * field shows its value before every add. Nothing is acted on without being read
+ * first, so there is no stale value to guard against with a lifetime.
+ */
+export function basketTargetKey(basketId: string): string {
+  return `basket-target:${APP_KEY}:${basketId}`;
+}
+
+/**
+ * That this device has already read the notice saying when a visit ends
+ * (velista `0094`, section 5).
+ *
+ * One per basket, following {@link basketTargetKey}, because a visit is per
+ * basket: somebody shopping two shared lists in a week has two of them, and
+ * dismissing one says nothing about the other.
+ *
+ * In **`sessionStorage`**, where `updateAttempt` is and for a related reason,
+ * though the balance is the other way round. It is a convenience and never a
+ * rule: nothing is granted or refused by it, so losing it costs a sentence
+ * somebody has already read, and a tab that outlives the twelve hours it is
+ * about is not the case worth optimizing for. `localStorage` would keep it for
+ * the next visit too, where the sentence is new again.
+ */
+export function visitNoticeKey(basketId: string): string {
+  return `visit-notice:${APP_KEY}:${basketId}`;
 }

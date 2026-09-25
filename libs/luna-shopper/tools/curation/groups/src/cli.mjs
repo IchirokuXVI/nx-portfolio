@@ -11,7 +11,7 @@
  *
  *   node .../cli.mjs start --main-url <u> --rehearsal-url <u> --run-dir <dir>
  *   node .../cli.mjs next --run-dir <dir>
- *   node .../cli.mjs decide --run-dir <dir> --item <id>   # decision on stdin
+ *   node .../cli.mjs decide --run-dir <dir> --row <id>    # decision on stdin
  *   node .../cli.mjs end --run-dir <dir>
  *   node .../cli.mjs apply --main-url <u> --file <decisions.jsonl>
  *   node .../cli.mjs serve                                # one process, many steps
@@ -33,6 +33,11 @@ const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply|serve> [options]
 
   start   --main-url <u> --rehearsal-url <u> --run-dir <dir>
           [--main-user <name>] [--main-password <p>] [--model <name>] [--limit <n>]
+          [--local]
+          --local says the model answering this run is on this machine. It is
+          recorded in the run directory and the report.
+          --chain is refused: a product group spans every chain, so the walk
+          is every ungrouped product whichever chain sells it.
           Verifies both admin logins, counts the ungrouped products, and
           answers { runId, remaining, ungrouped, prompt }.
 
@@ -40,7 +45,8 @@ const USAGE = `Usage: node cli.mjs <start|next|decide|end|apply|serve> [options]
           Answers one product: { item, candidates, remaining },
           or { done: true }.
 
-  decide  --run-dir <dir> --item <id> [--final] [--main-password <p>]
+  decide  --run-dir <dir> --row <id> [--final] [--main-password <p>]
+          --item <id> is the same flag under its older name.
           The model's JSON on stdin. Answers
           { accepted, retryable, decision, issues, remaining }.
           Without --final a reply that breaks the schema answers
@@ -101,6 +107,17 @@ function optionalCount(flags, name) {
   return value;
 }
 
+/**
+ * Which flag names the row (curation cli plan 0005).
+ *
+ * `--row` is what the orchestrator sends to both deciders, and `--item` is
+ * this decider's older name for it, kept for anyone driving it by hand. A
+ * missing row is reported as `--row`, the name to use from now on.
+ */
+function rowFlag(flags, alias) {
+  return flags.row === undefined && flags[alias] !== undefined ? alias : 'row';
+}
+
 function readStdin(fd = 0) {
   return readFileSync(fd, 'utf8');
 }
@@ -125,6 +142,10 @@ export async function run(argv, { stdin = readStdin } = {}) {
           : undefined,
       model: typeof flags.model === 'string' ? flags.model : null,
       limit: optionalCount(flags, 'limit'),
+      local: flags.local === true,
+      // Passed through as given, a bare flag included, so `start` refuses any
+      // spelling of it rather than this file dropping one without a word.
+      chain: flags.chain ?? null,
     });
   }
 
@@ -148,7 +169,7 @@ export async function run(argv, { stdin = readStdin } = {}) {
     }
     return decide({
       runDir: required(flags, 'run-dir'),
-      itemId: required(flags, 'item'),
+      itemId: required(flags, rowFlag(flags, 'item')),
       input,
       final: flags.final === true,
       mainPassword:

@@ -39,6 +39,10 @@ function participant(
     joinedAt: null,
     lastSeenAt: null,
     shareLinkId: 'sl1',
+    // Nobody expires unless a test says so (velista `0094`). A `null` and not an
+    // absent field: `isLinkVisitor` reads the one field, and a fixture leaving it
+    // undefined would make every guest in this file a visitor with no end date.
+    expiresAt: null,
     // Present, which is what makes the detail pane reachable at all: only a reader who
     // passes the all or nothing rule is sent a device.
     device: null,
@@ -46,11 +50,24 @@ function participant(
   };
 }
 
+/** Somebody a link let in, whose time on the basket runs out. */
+function visitor(
+  overrides: Partial<BasketParticipant> = {}
+): BasketParticipant {
+  return participant({
+    shareLinkId: 'sl1',
+    expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000),
+    ...overrides,
+  });
+}
+
 async function render(
   person: BasketParticipant,
   inspect = true,
   reader: Partial<BasketParticipant> = {},
-  leaves = true
+  leaves = true,
+  /** Whether keeping somebody lands. False is what puts the sentence up. */
+  keeps = true
 ) {
   TestBed.resetTestingModule();
 
@@ -68,8 +85,9 @@ async function render(
     leaveTo: jest.fn().mockResolvedValue(undefined),
   };
   const leaveBasket = jest.fn().mockResolvedValue(leaves);
+  const addParticipant = jest.fn().mockResolvedValue(keeps);
 
-  const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const paramMap = convertToParamMap({ basketId: BASKET_ID });
 
   await TestBed.configureTestingModule({
     imports: [PeopleSheet, RokuTranslatorTestingModule.forTesting()],
@@ -91,6 +109,7 @@ async function render(
           present: signal([]),
           seesZoneData: signal(true),
           removeParticipant: jest.fn().mockResolvedValue(undefined),
+          addParticipant,
           leaveBasket,
         },
       },
@@ -129,7 +148,7 @@ async function render(
     fixture.detectChanges();
   }
 
-  return Object.assign(fixture, { me, sheet, leaveBasket });
+  return Object.assign(fixture, { me, sheet, leaveBasket, addParticipant });
 }
 
 /** The `<dd>` beside each `<dt>`, in the order the definition list states them. */
@@ -204,6 +223,130 @@ describe('PeopleSheet: naming the reader', () => {
     const [mine, other] = names(fixture);
     expect(other.guest).toBe('basket.people.guest');
     expect(mine.guest).toBeNull();
+  });
+});
+
+/**
+ * Velista `0094`, section 6: who is here on a link, and keeping them.
+ *
+ * The reader throughout is the owner, which is who the pane offers anything to:
+ * keeping somebody is adding them by name, and nobody else may.
+ */
+describe('PeopleSheet: a visitor, and keeping them', () => {
+  const pane = (fixture: Awaited<ReturnType<typeof render>>, css: string) =>
+    (fixture.nativeElement as HTMLElement)
+      .querySelector(css)
+      ?.textContent?.trim() ?? null;
+
+  const keepButton = (fixture: Awaited<ReturnType<typeof render>>) =>
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button.keep'
+    );
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('says until when somebody is here with the link', async () => {
+    const fixture = await render(
+      visitor({ kind: 'REGISTERED', userId: 'u-leo', username: 'Leo' })
+    );
+
+    expect(pane(fixture, '.until')).toBe('basket.people.until');
+  });
+
+  it('says nothing of the sort about a named person', async () => {
+    const fixture = await render(
+      participant({
+        kind: 'REGISTERED',
+        userId: 'u-leo',
+        username: 'Leo',
+        shareLinkId: null,
+      })
+    );
+
+    expect(pane(fixture, '.until')).toBeNull();
+  });
+
+  it('offers Keep over a visitor who has an account', async () => {
+    const fixture = await render(
+      visitor({ kind: 'REGISTERED', userId: 'u-leo', username: 'Leo' })
+    );
+
+    expect(keepButton(fixture)?.textContent?.trim()).toBe('basket.people.keep');
+
+    keepButton(fixture)?.click();
+    await fixture.whenStable();
+
+    expect(fixture.addParticipant).toHaveBeenCalledWith('u-leo');
+  });
+
+  it('offers a guest no Keep, and says why, to the owner', async () => {
+    // A guest has no account to be added by name, and rule C2 forbids telling
+    // them that an account would fix it. The owner is the one who is told.
+    const fixture = await render(visitor({ kind: 'GUEST', userId: null }));
+
+    expect(keepButton(fixture)).toBeNull();
+    expect(pane(fixture, '.cannot-stay')).toBe('basket.people.guestCannotStay');
+  });
+
+  it('says nothing about keeping to anybody but the owner', async () => {
+    const fixture = await render(
+      visitor({ kind: 'GUEST', userId: null }),
+      true,
+      { kind: 'REGISTERED', userId: 'u-ana' }
+    );
+
+    expect(keepButton(fixture)).toBeNull();
+    expect(pane(fixture, '.cannot-stay')).toBeNull();
+  });
+
+  it('stays, and says so, when a keep does not go through', async () => {
+    const fixture = await render(
+      visitor({ kind: 'REGISTERED', userId: 'u-leo', username: 'Leo' }),
+      true,
+      {},
+      true,
+      false
+    );
+
+    keepButton(fixture)?.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(pane(fixture, '.keep-error')).toBe('basket.people.keepFailed');
+    // The person is still on the basket and still visiting, so the control that
+    // was pressed is still there to press again.
+    expect(keepButton(fixture)).not.toBeNull();
+  });
+
+  it('asks a visitor a different leave question', async () => {
+    // They can come back while the link works. A named person cannot.
+    const fixture = await render(participant(), false, {
+      kind: 'REGISTERED',
+      userId: 'u-ana',
+      shareLinkId: 'sl1',
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      device: undefined,
+    });
+
+    fixture.componentInstance['inspect'](fixture.me);
+    fixture.detectChanges();
+    (
+      [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll('button'),
+      ].find(
+        (button) => button.textContent?.trim() === 'basket.people.leave'
+      ) as HTMLButtonElement
+    ).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('h2')
+        ?.textContent?.trim()
+    ).toBe('basket.people.leaveVisitor');
   });
 });
 
@@ -292,7 +435,9 @@ describe('PeopleSheet: leaving', () => {
     const question = (fixture.nativeElement as HTMLElement).querySelector(
       'h2'
     ) as HTMLElement;
-    expect(question.textContent?.trim()).toBe('basket.people.leaveQuestion');
+    // The named person's question: this reader was added by name, so only the
+    // owner can put them back (velista `0094`, section 6).
+    expect(question.textContent?.trim()).toBe('basket.people.leaveNamed');
     expect(document.activeElement).toBe(question);
     expect(fixture.leaveBasket).not.toHaveBeenCalled();
   });

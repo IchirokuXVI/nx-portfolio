@@ -14,7 +14,7 @@ every element MUST have exactly these keys:
   "sizeFormat": "kg" | "g" | "l" | "ml" | "ud" | "m" | null,
   "price": 0.00,
   "unitPrice": 0.00,
-  "unitPriceLabel": "the comparison figure, transcribed by rule 4, or null",
+  "unitPriceLabel": "the comparison figure, verbatim by rule 4, or null",
   "category": "PRODUCE",
   "categoryPath": [],
   "leaflet": {
@@ -22,6 +22,8 @@ every element MUST have exactly these keys:
     "basis": "unit" | "pack" | "kg" | "l",
     "wasPrice": 0.00,
     "loyalty": false,
+    "validUntil": "the offer's own last day as YYYY-MM-DD, or null",
+    "validityText": "the offer's own date wording, verbatim, or null",
     "promotion": null
   }
 }
@@ -50,7 +52,7 @@ only when none of the twelve fits.
 }
 
 "rawText" is required whenever "type" is set. A promotion with no wording is
-dropped from the offer and recorded as a warning instead.
+kept, and the builder records a warning so a person reads it off the page.
 
 HOW THIS LEAFLET IS LAID OUT
 
@@ -88,21 +90,13 @@ Rules, in order of importance:
    price, the one inside the badge otherwise. Put it in "unitPrice". A
    comparison figure is never the product price.
 
-4. "unitPriceLabel" IS THE COMPARISON FIGURE WITH ITS UNIT WRITTEN OUT.
-   Dia prints the unit as an abbreviation, and the shared builder reads the
-   basis out of a word, so transcribe the unit and keep the number exactly as
-   printed, comma and all:
-     "1,23 €/kg"     -> "KILO 1,23"
-     "0,46 €/l"      -> "LITRO 0,46"
-     "1,06 €/ud."    -> "UNIDAD 1,06"
-     "0,23 €/lavado" -> "LAVADO 0,23"
-     "3,63 €/100 ml" -> "100 ml 3,63"
+4. "unitPriceLabel" IS THE COMPARISON FIGURE EXACTLY AS PRINTED. Copy the
+   number, the euro sign and the unit, comma and abbreviation and all:
+     "1,23 €/kg", "0,46 €/l", "1,06 €/ud.", "0,23 €/lavado", "3,63 €/100 ml".
+   Never spell the unit out and never convert it.
    When the unit beside the big number carries no number of its own, it names
    the basis of the badge price rather than a comparison. Then leave
-   "unitPrice" null and write the basis on its own:
-     "€/kg" alone    -> "EUR/KILO"
-     "€/l" alone     -> "EUR/LITRO"
-     "€/ud." alone   -> "EUR/UNIDAD"
+   "unitPrice" null and copy the unit on its own: "€/kg", "€/l", "€/ud.".
    A tile can print both: "0,35" with "/ud." beside it and "1,06 €/l" under
    that means the badge price buys one unit and 1.06 is the comparison figure.
 
@@ -153,23 +147,26 @@ Rules, in order of importance:
    does "PRODUCTOS combinables entre sí", which only says which tiles a mix
    and match offer covers. Leave "promotion" null for all of them.
 
-10. PROMOTION WORDING MAPS LIKE THIS, AND FOUR TYPES ARE FORBIDDEN HERE.
-    Record the mechanic only with these three types:
+10. PROMOTION WORDING MAPS LIKE THIS. Copy the flash's own words into
+    "rawText" every time.
       - "¡SUPER PRECIO!" or "Ahora -20%" with a struck old price under the
         badge                                 -> "price_drop", the struck
                                                  price in "wasPrice"
       - "3x2", "2x1€", "3x1€", "2 X 1"        -> "n_for_m", the first digit in
                                                  "requiredQuantity"
       - "Pack-3+1 GRATIS", "+50% GRATIS"      -> "pack_bonus"
-    NEVER use "second_unit_discount", "multibuy_unit_price", "multibuy_total"
-    or "buy_n_get_free" on a tile that prints a "Llevando 1 ud." price. The
-    shared builder treats those four as a price it cannot state on its own, and
-    it is handed no single unit price, so naming one would throw away the price
-    the tile actually printed. A "LA 2ª UD. -50%" tile with a "Llevando 1 ud."
-    strip therefore takes the single unit price by rule 2 and leaves
-    "promotion" null. Use one of the four only when a conditional tile prints
-    no single unit price at all: then put the conditional number in "price",
-    name the type, and the document will refuse the tile, which is correct.
+      - "LA 2ª UD. -50%", "LA 2ª UD. -70%"    -> "second_unit_discount",
+                                                 "requiredQuantity" 2
+      - "Llevando 3 la ud. te sale a:"        -> "multibuy_unit_price", the
+                                                 quantity in "requiredQuantity"
+    On a second unit or bulk tile the "Llevando 1 ud." number goes in both
+    "price", by rule 2, and "singleUnitPrice", and the badge number goes in
+    "effectiveUnitPrice". The shared builder takes the till price of a second
+    unit or bulk offer from "singleUnitPrice", so a tile that names one of
+    those types and leaves it null states no price. That is correct only when
+    the tile prints no "Llevando 1 ud." price at all: then put the badge number
+    in "price", leave "singleUnitPrice" null, and the document will refuse the
+    tile.
     Text such as "tu precio" or "Más de 100 productos a 1€" with no old price
     and no quantity is a slogan, not a promotion. Leave "promotion" null.
     Never divide the total by the quantity to invent a single unit price.
@@ -197,9 +194,86 @@ Rules, in order of importance:
     photograph is not the product name; use the caption set in the leaflet's
     own dark text.
 
-14. Use null for anything the page does not state. Do not invent values and do
+14. AN OFFER'S OWN END DATE. Some tiles print a window of their own, shorter
+    than the leaflet's, such as "OFERTA VÁLIDA HASTA EL 14-9-2026". Copy that
+    wording verbatim into "leaflet.validityText" and write the last day it
+    names into "leaflet.validUntil" as YYYY-MM-DD: "2026-09-14". When the
+    wording prints no year, leave "validUntil" null and still copy the
+    wording. The leaflet's own window on the cover is not a tile's date: leave
+    both null on every tile that prints no date of its own.
+
+15. Use null for anything the page does not state. Do not invent values and do
     not compute a value the page does not print. Never divide one printed
     number by another to produce a price.
+
+EXAMPLE OF A WHOLE ANSWER
+
+These tiles are invented, and come from more than one page, to show the shape
+and every field in use. Never copy them into an answer: read the page in front
+of you.
+
+[
+  {
+    "name": "Yogur natural",
+    "brand": "Danone",
+    "unitSize": 500,
+    "sizeFormat": "g",
+    "price": 1.99,
+    "unitPrice": 3.98,
+    "unitPriceLabel": "3,98 €/kg",
+    "category": "DAIRY",
+    "categoryPath": [],
+    "leaflet": {
+      "format": "pack-4 x 125 g",
+      "basis": "pack",
+      "wasPrice": null,
+      "loyalty": true,
+      "validUntil": null,
+      "validityText": null,
+      "promotion": null
+    }
+  },
+  {
+    "name": "Detergente líquido",
+    "brand": "Ariel",
+    "unitSize": 40,
+    "sizeFormat": "ud",
+    "price": 12.99,
+    "unitPrice": 0.32,
+    "unitPriceLabel": "0,32 €/lavado",
+    "category": "HOUSEHOLD",
+    "categoryPath": [],
+    "leaflet": {
+      "format": "40 lavados",
+      "basis": "unit",
+      "wasPrice": null,
+      "loyalty": false,
+      "validUntil": "2026-09-14",
+      "validityText": "Oferta válida hasta el 14/09/2026",
+      "promotion": { "type": "second_unit_discount", "rawText": "LA 2ª UD. -50%", "requiredQuantity": 2, "effectiveUnitPrice": 6.49, "totalPrice": null, "singleUnitPrice": 12.99 }
+    }
+  },
+  {
+    "name": "Plátano de Canarias",
+    "brand": null,
+    "unitSize": null,
+    "sizeFormat": null,
+    "price": 2.49,
+    "unitPrice": null,
+    "unitPriceLabel": "€/kg",
+    "category": "PRODUCE",
+    "categoryPath": [],
+    "leaflet": {
+      "format": null,
+      "basis": "kg",
+      "wasPrice": 2.99,
+      "loyalty": false,
+      "validUntil": null,
+      "validityText": null,
+      "promotion": { "type": "price_drop", "rawText": "¡SUPER PRECIO!", "requiredQuantity": null, "effectiveUnitPrice": null, "totalPrice": null, "singleUnitPrice": null }
+    }
+  }
+]
 
 WHY THREE OF THESE FIELDS MATTER MORE THAN THE REST
 
@@ -211,9 +285,10 @@ and it reads exactly three things to decide:
 - "leaflet.loyalty". True means the tile states no price at all, because a card
   price is not the price a non member pays. On this chain that is rare, because
   a Club Dia tile almost always prints its "PVP NO SOCIO" price as well.
-- "leaflet.promotion.type". The four conditional types make the script look for
-  a single unit price it is never handed, so a tile that names one states no
-  price. Rule 10 says when that is the honest answer and when it is not.
+- "leaflet.promotion.type" and "leaflet.promotion.singleUnitPrice". For a second
+  unit or a bulk offer the badge number is not what one unit costs. The single
+  unit price is, and without it the tile states no price. Rule 10 says when
+  that is the honest answer and when it is not.
 - "leaflet.basis". A "kg" or "l" basis is a price per weight or volume, so it
   becomes a unit price and the product gets no till price.
 

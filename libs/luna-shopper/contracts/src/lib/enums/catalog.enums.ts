@@ -146,3 +146,64 @@ export enum BulkOperationErrorCode {
   /** Another row already holds the identifier this one would take. */
   ALREADY_TAKEN = 'ALREADY_TAKEN',
 }
+
+/**
+ * What a harvest run did to a price row, on the run's price read (plan 0160).
+ *
+ * A row the run wrote carries the run in `sourceRunId`. A row it only repeated
+ * carries it in `lastObservedRunId` and nothing else, because a repeat moves
+ * `lastObservedAt` and inserts nothing (plan 0080, section 2.1).
+ */
+export enum ItemPriceWrittenBy {
+  /** The run inserted this row. */
+  INSERTED = 'INSERTED',
+  /** The run stated the same number again and moved `lastObservedAt`. */
+  CONFIRMED = 'CONFIRMED',
+}
+
+/**
+ * Why the price decision chose the row it chose (plan 0160).
+ *
+ * Returned by `resolveEffectivePrice` beside its answer, so the explanation and
+ * the decision are one function and cannot disagree.
+ */
+export enum PriceShownBecause {
+  /** An `ADMIN` row inside its seven day protection, and no source disputes it. */
+  PROTECTED_ADMIN = 'PROTECTED_ADMIN',
+  /** Several rows were eligible and this kind has the best policy priority. */
+  POLICY_PRIORITY = 'POLICY_PRIORITY',
+  /** No other row was a candidate. */
+  ONLY_ROW = 'ONLY_ROW',
+  /**
+   * The newest row won: two eligible rows tied on priority, or nothing was
+   * eligible and the newest enabled row is shown stale.
+   */
+  NEWEST = 'NEWEST',
+}
+
+/** What happened to one name of a brand batch (plan 0160). */
+export enum BrandBatchOutcome {
+  /** A new brand was registered under this name. */
+  CREATED = 'CREATED',
+  /** A brand already holds this name's key. Nothing was written. */
+  EXISTS = 'EXISTS',
+  /** The name was refused, and the reason says why. Nothing was written. */
+  REFUSED = 'REFUSED',
+}
+
+/**
+ * Why nothing was picked (plan 0164, section 3).
+ *
+ * - `NONE_NEARBY`: no shop with coordinates is within 750 m.
+ * - `LOW_ACCURACY`: the device is not sure of the point to within 150 m.
+ * - `AMBIGUOUS`: no shop is clearly nearer than the rest, or the one that
+ *   would be picked is refused by the profile.
+ * - `OUTSIDE_PROFILE`: the shop that would be picked is not in the profile's
+ *   postal codes.
+ */
+export enum NearbyShopNoPick {
+  NONE_NEARBY = 'NONE_NEARBY',
+  LOW_ACCURACY = 'LOW_ACCURACY',
+  AMBIGUOUS = 'AMBIGUOUS',
+  OUTSIDE_PROFILE = 'OUTSIDE_PROFILE',
+}

@@ -134,11 +134,18 @@ export function toLineView(
 /**
  * A settlement on the wire (plan 0047, section 3).
  *
- * Three stored columns do not appear, and their absence is the point.
- * `generatedListLineId` is the basket the purchase came out of, which is private
- * where the purchase itself is a zone fact (section 3.1); `pricePaidCents` and
- * `supermarketLocationId` are declared for backlog 0004 and written by nothing
- * yet, so serving them would promise a number this plan never fills in.
+ * Two stored columns do not appear, and their absence is the point.
+ *
+ * `basketId` is the basket the purchase came out of, which is private where the
+ * purchase itself is a zone fact (section 3.1).
+ *
+ * `supermarketLocationId` is the shop (plan 0143, section 6). A reader of a
+ * list is served what one unit cost and the chain catchment it was read at,
+ * because plan 0066 section 5 already calls a chain's price a product fact and
+ * it is the fact a household asks about. **A shop is different**: a shop and a
+ * time say where a named member of the household was standing at 18:40, which
+ * is not a fact about the milk. It is served in one place only, a person's own
+ * history, where the reader is the person it is about.
  */
 export function toLineSettlementView(
   settlement: LineSettlement
@@ -161,12 +168,18 @@ export function toLineSettlementView(
     outcome: settlement.outcome,
     quantity: settlement.quantity,
     settledByUserId: settlement.settledByUserId,
+    // Who settled a basket row, where `settledByUserId` is null by the actor
+    // check (plan 0151, section 5).
+    settledByParticipantId: settlement.settledByParticipantId,
     settledAt: settlement.settledAt.toISOString(),
     // Served, and marked, rather than filtered out (plan 0054, section 3.3):
     // somebody said they got this and then took it back, which is a truer
-    // history than a gap. `revertedByParticipantId` stays unserved for the
-    // reason the three columns above it are, being meaningless to a zone reader.
+    // history than a gap. `revertedByParticipantId` stays unserved.
     revertedAt: settlement.revertedAt?.toISOString() ?? null,
+    pricePaidCents: settlement.pricePaidCents,
+    pricePaidCurrency: settlement.pricePaidCurrency,
+    priceScopeId: settlement.priceScopeId,
+    supermarketLocationId: settlement.supermarketLocationId,
   };
 }
 

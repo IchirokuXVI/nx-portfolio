@@ -1,3 +1,6 @@
+import type { BasketKind } from '../enums/basket.enums';
+import type { BasketStatus } from '../enums/basket.enums';
+
 /**
  * Domain events core publishes for the realtime fan out (plan 0006, section 9;
  * plan 0007, section 5), wired to sockets in plan 0009. One enum names every
@@ -119,7 +122,7 @@ export enum RealtimeEvent {
   /**
    * Who is on a shared basket right now (plan 0051, section 7).
    *
-   * The room is `generated:{id}:presence`, following plan 0032's rule that the
+   * The room is `basket:{id}:presence`, following plan 0032's rule that the
    * room **is** the access control rather than a filter applied to a broadcast.
    *
    * Its entries are deliberately not `PresenceUser`, which is
@@ -130,7 +133,7 @@ export enum RealtimeEvent {
    * and deduplicating by typed name would be exactly the mistake section 3.5
    * warns about.
    */
-  PresenceGeneratedListUpdated = 'presence.generatedListUpdated',
+  PresenceBasketUpdated = 'presence.basketUpdated',
 
   /**
    * A user's global username changed (plan 0030, section 4.3), addressed to that
@@ -163,7 +166,7 @@ export enum RealtimeEvent {
   ProfilesChanged = 'profiles.changed',
 
   /**
-   * A generated list changed (plan 0050, section 9), addressed to its owner's own
+   * A basket changed (plan 0050, section 9), addressed to its owner's own
    * sessions and to nothing else.
    *
    * A basket is private (section 8), so the owner's room is the only audience it
@@ -177,53 +180,14 @@ export enum RealtimeEvent {
    * visible to everybody else without telling any of them which basket it came
    * from.
    */
-  GeneratedListCreated = 'generatedList.created',
-  GeneratedListUpdated = 'generatedList.updated',
-  /** One line of a basket moved: an edit, a pick switch, or a settle. */
-  GeneratedListLineUpdated = 'generatedList.lineUpdated',
-  /**
-   * A line was **added** to a shared basket (plan 0055, section 8), on the
-   * basket's own room.
-   *
-   * Its own name rather than a second {@link GeneratedListLineUpdated}, because
-   * a client receiving that one has to decide whether to replace a row or append
-   * one, and that decision is exactly what an event name is for.
-   *
-   * **No zone event goes with it.** An `ADDED` line names no zone and claims no
-   * zone line, which is the whole reason plan 0055 section 3.1 can hand this
-   * write to a guest.
-   */
-  GeneratedListLineAdded = 'generatedList.lineAdded',
-  /**
-   * A line left a basket because a rename merged it into another line of the
-   * same basket (plan 0113, section 6), on the basket's own room and to the
-   * owner's own sessions.
-   *
-   * Its own name rather than a whole `generatedList.updated`, because the basket
-   * room holds guests and a basket view names zone data. The payload is the
-   * basket and the id of the line that went away, and nothing else.
-   */
-  GeneratedListLineRemoved = 'generatedList.lineRemoved',
+  BasketCreated = 'basket.created',
   /**
    * A basket was deleted. Addressed to the owner's own sessions **and** to the
    * basket's room since plan 0114 (section 10), so every participant hears it
    * rather than nobody, and realtime has a basket on the envelope to sweep both
    * basket rooms by. The payload is `{ id }`.
    */
-  GeneratedListDeleted = 'generatedList.deleted',
-
-  /**
-   * A basket line was settled (plan 0051, section 6), on the basket's own room so
-   * that four people working through one list in a shop agree without a refetch.
-   *
-   * Distinct from plan 0047's `line.settled`, which carries the **zone** line and
-   * goes to the list room. One settling act emits both: this one tells the people
-   * holding the basket that the bread is done, and that one tells the household
-   * that the bread was got. Neither payload tells the zone which basket it came
-   * from, which is the disclosure plan 0050 section 8 refused and this plan still
-   * refuses.
-   */
-  GeneratedListLineSettled = 'generatedList.lineSettled',
+  BasketDeleted = 'basket.deleted',
 
   /**
    * Somebody joined or left a shared basket (plan 0051, section 3), on the
@@ -235,8 +199,8 @@ export enum RealtimeEvent {
    * their browser emits neither. Since plan 0114 `participantLeft` also asks
    * realtime to sweep both basket rooms, so the socket goes at once.
    */
-  GeneratedListParticipantJoined = 'generatedList.participantJoined',
-  GeneratedListParticipantLeft = 'generatedList.participantLeft',
+  BasketParticipantJoined = 'basket.participantJoined',
+  BasketParticipantLeft = 'basket.participantLeft',
 
   /**
    * A basket is now shared with this person (plan 0114, section 10), addressed
@@ -244,23 +208,23 @@ export enum RealtimeEvent {
    *
    * Sent when a registered person's row becomes live: the owner adding them, or
    * the link letting them in or back. The payload is
-   * {@link GeneratedListAccessEvent}, ids only, because the person is in no room
+   * {@link BasketAccessEvent}, ids only, because the person is in no room
    * that may read more, and the shared baskets read is where the rest comes from.
    */
-  GeneratedListShared = 'generatedList.shared',
+  BasketShared = 'basket.shared',
   /**
-   * The mirror of {@link GeneratedListShared}: this person is no longer on the
+   * The mirror of {@link BasketShared}: this person is no longer on the
    * basket, because the owner removed them, the link they came by was revoked
    * with its people, they left, or the basket was deleted. Ids only, to their
    * own sessions.
    */
-  GeneratedListUnshared = 'generatedList.unshared',
+  BasketUnshared = 'basket.unshared',
 
   /**
    * A zone line is, or is no longer, in somebody's active basket (plan 0051,
    * section 5.3), on the **zone** room.
    *
-   * Plan 0050 section 8 said generated lists never emit zone events. They emit
+   * Plan 0050 section 8 said baskets never emit zone events. They emit
    * exactly this one, so that a zone line can show that somebody is out buying
    * it, which is the third indicator plan 0047 section 5 lists and explicitly
    * hands to this plan to decide.
@@ -272,6 +236,93 @@ export enum RealtimeEvent {
    * bought but not what basket it came from.
    */
   LineClaimChanged = 'line.claimChanged',
+
+  /**
+   * Rows of a basket moved, because somebody settled, reverted, changed a
+   * demand, added a line, renamed a row or skipped one (plan 0136, section 8;
+   * plan 0139, section 3).
+   *
+   * One event for every one of those writes, and since plan 0139 for every write
+   * to a **list** line as well. A client that receives it reads the basket again,
+   * debounced, rather than patching a row out of the payload.
+   *
+   * ## Why a list write reaches a basket at all
+   *
+   * Since plan 0136 a basket stores no lines. It reads the lines of the lists it
+   * covers, so a line added at home is a row in the basket of whoever is in the
+   * shop, and until plan 0139 no basket heard about it. Core works out which
+   * baskets cover the list a write touched and names them all on one envelope.
+   *
+   * ## Why it carries line ids and nothing else
+   *
+   * A basket room holds guests, and a basket row names how much each household
+   * asks for. A broadcast cannot be projected per socket, so it carries the
+   * least privileged view there is (plan 0130, section 6): the ids of the list
+   * lines that moved, which name no household and no quantity.
+   *
+   * ## Why the basket is on the envelope and not in the payload
+   *
+   * One envelope addresses several rooms, and a `basketId` in the payload could
+   * name only one of them. The list is absent for the same reason the quantities
+   * are: a guest is in the room, and plan 0130 section 6 lets a guest know how
+   * much moved and never where.
+   */
+  BasketLinesChanged = 'basket.linesChanged',
+
+  /**
+   * A basket's own header moved: a rename, a finish, a reopen, or the sweep
+   * finishing it for its owner (plan 0139, section 4).
+   *
+   * It replaces `basket.updated`, which went to the owner's own sessions
+   * alone and carried a whole `BasketHeaderView`. Two things were wrong with
+   * that. A guest in the shop never heard their basket being renamed or
+   * finished, and the view named the basket's sources, which a guest must not
+   * see. This one is addressed to the owner **and** to the basket's room, and
+   * carries the four fields a guest already reads on the basket itself.
+   *
+   * The owner who is in both hears it twice, on two sockets, and the client
+   * merges by id.
+   */
+  BasketUpdated = 'basket.updated',
+}
+
+/**
+ * What {@link RealtimeEvent.BasketLinesChanged} carries (plan 0136, section 8).
+ *
+ * Ids only, on purpose. See the event's own comment for why a basket room may
+ * not be told more than this.
+ */
+export interface BasketLinesChangedEvent {
+  /**
+   * The list lines that moved.
+   *
+   * Empty means the **coverage** moved rather than a line (plan 0139, section
+   * 5): a list was created, deleted or had its access changed, or somebody's
+   * standing in the zone did. Which lists a basket reads is a rule evaluated on
+   * every read, so the client's answer is the same either way, which is to read
+   * the basket again.
+   */
+  lineIds: string[];
+}
+
+/**
+ * What {@link RealtimeEvent.BasketUpdated} carries (plan 0139, section 4).
+ *
+ * The four fields a guest already reads on the basket itself, and not the
+ * `BasketHeaderView` its predecessor carried: that view names the basket's
+ * sources, and since plan 0136 it carries no lines anyway.
+ */
+export interface BasketUpdatedEvent {
+  basketId: string;
+  kind: BasketKind;
+  name: string | null;
+  /**
+   * The plan writes this field's type as `BasketStatus`. The enum is called
+   * {@link BasketStatus} today and renaming it is plan 0144's, along with
+   * the rooms and the remaining `basket.*` names, so this is the one name
+   * it has rather than a second one.
+   */
+  status: BasketStatus;
 }
 
 /**
@@ -314,18 +365,15 @@ export const DOMAIN_EVENT_SUBJECTS: readonly RealtimeEvent[] = [
   RealtimeEvent.MergeRejected,
   RealtimeEvent.UserUsernameChanged,
   RealtimeEvent.ProfilesChanged,
-  RealtimeEvent.GeneratedListCreated,
-  RealtimeEvent.GeneratedListUpdated,
-  RealtimeEvent.GeneratedListLineUpdated,
-  RealtimeEvent.GeneratedListLineAdded,
-  RealtimeEvent.GeneratedListLineRemoved,
-  RealtimeEvent.GeneratedListDeleted,
-  RealtimeEvent.GeneratedListLineSettled,
-  RealtimeEvent.GeneratedListParticipantJoined,
-  RealtimeEvent.GeneratedListParticipantLeft,
-  RealtimeEvent.GeneratedListShared,
-  RealtimeEvent.GeneratedListUnshared,
+  RealtimeEvent.BasketCreated,
+  RealtimeEvent.BasketDeleted,
+  RealtimeEvent.BasketParticipantJoined,
+  RealtimeEvent.BasketParticipantLeft,
+  RealtimeEvent.BasketShared,
+  RealtimeEvent.BasketUnshared,
   RealtimeEvent.LineClaimChanged,
+  RealtimeEvent.BasketLinesChanged,
+  RealtimeEvent.BasketUpdated,
 ] as const;
 
 /**
@@ -379,8 +427,7 @@ export interface DomainEvent<T = unknown> {
    */
   userIds?: readonly string[];
   /**
-   * The `generated:{id}` room, when the event belongs to a shared basket (plan
-   * 0051, section 7).
+   * The baskets whose rooms hear it (plan 0139, section 1).
    *
    * The fourth audience, and the first whose members are **participants** rather
    * than users. It exists because a guest has no user id: plan 0050 addressed
@@ -388,10 +435,26 @@ export interface DomainEvent<T = unknown> {
    * person who may read an unshared basket and cannot reach anybody who arrived
    * by a link.
    *
-   * An event about a shared basket names this and not `userIds`. The owner is a
-   * participant too (section 3.2), so they are in the room like everybody else
-   * and do not need addressing twice.
+   * It names **several** baskets rather than one, because since plan 0136 a
+   * basket stores no lines: it reads the lines of the lists it covers, so one
+   * write to a list line is a write to every basket that covers the list. One
+   * envelope addresses all of them, and socket.io resolves the rooms of one emit
+   * to the union of their sockets, so a socket in two of them receives the event
+   * once.
+   *
+   * At most {@link BASKET_FAN_OUT_MAX} ids, which is the publisher's business
+   * rather than a consumer's: a larger audience arrives as several envelopes,
+   * each with its own `eventId`.
    */
-  generatedListId?: string;
+  basketIds?: readonly string[];
   payload: T;
 }
+
+/**
+ * How many baskets one envelope may name (plan 0139, section 1).
+ *
+ * Past this the publisher sends several envelopes of this size, each with its own
+ * `eventId`, and logs a warning: a list with this many open baskets over it is a
+ * number somebody wants to know about.
+ */
+export const BASKET_FAN_OUT_MAX = 200;

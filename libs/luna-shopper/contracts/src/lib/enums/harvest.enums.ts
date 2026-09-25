@@ -178,6 +178,16 @@ export enum ItemSourceMatch {
    */
   NAME_SIZE = 'NAME_SIZE',
   MANUAL = 'MANUAL',
+  /**
+   * The source's EAN equals a catalog item's, and another row of the same chain
+   * carries that EAN too (plan 0155).
+   *
+   * Mercadona gives one EAN to five cuts of one fish, so an EAN that several
+   * rows of one chain share does not say which product a row is. The rung that
+   * would have bound the row proposes the item instead. Produces a CANDIDATE,
+   * never an ACTIVE, and writes no price until a person accepts the row.
+   */
+  SHARED_EAN = 'SHARED_EAN',
 }
 
 /**
@@ -289,6 +299,20 @@ export enum DiscoveredPlaceStatus {
   NEW = 'NEW',
   IMPORTED = 'IMPORTED',
   REJECTED = 'REJECTED',
+}
+
+/**
+ * Which rung found a catalog shop a discovered place may be (plan 0152,
+ * section 2). The rungs are tried in this order, and the first that finds
+ * anything answers.
+ */
+export enum PlaceMatchRung {
+  /** The shop carries the place's own `externalRef`. */
+  EXTERNAL_REF = 'EXTERNAL_REF',
+  /** A shop of the same chain within 50 metres. */
+  NEARBY = 'NEARBY',
+  /** A shop with no coordinates, at the same postal code and address. */
+  ADDRESS = 'ADDRESS',
 }
 
 /**

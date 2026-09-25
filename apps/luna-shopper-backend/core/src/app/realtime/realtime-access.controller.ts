@@ -11,7 +11,7 @@ import {
   DomainException,
   ForbiddenException,
 } from '@portfolio/luna-shopper/platform';
-import { GeneratedListSharingService } from '../generated-lists/generated-list-sharing.service';
+import { BasketSharingService } from '../baskets/basket-sharing.service';
 import { ListAccessService } from '../lists/list-access.service';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { managesZone } from '../zones/zone.mappers';
@@ -31,7 +31,7 @@ export class RealtimeAccessController {
   constructor(
     private readonly zoneAuthz: ZoneAuthzService,
     private readonly listAccess: ListAccessService,
-    private readonly sharing: GeneratedListSharingService
+    private readonly sharing: BasketSharingService
   ) {}
 
   /**
@@ -90,7 +90,7 @@ export class RealtimeAccessController {
   }
 
   /**
-   * Gates the two `generated:{id}` rooms (plan 0051, section 7).
+   * Gates the two `basket:{id}` rooms (plan 0051, section 7).
    *
    * The one check here that names a participant rather than a user, because a
    * guest has no user id and none of the three above could be asked about them.
@@ -102,14 +102,23 @@ export class RealtimeAccessController {
   async checkParticipant(
     @Payload() req: CheckParticipantAccessRequest
   ): Promise<AccessCheckResult> {
-    const participant = await this.sharing.livePresenceEntry(
+    const admission = await this.sharing.livePresenceEntry(
       req.participantId,
-      req.generatedListId
+      req.basketId
     );
     // The entry rides back with the answer so the realtime service can seed
     // presence without a second call, and without the display name having been
     // baked into a token minted before the guest renamed themselves.
-    return participant ? { allowed: true, participant } : { allowed: false };
+    //
+    // The basket's kind rides with it since plan 0139 section 6: a `LIVE` basket
+    // has a room and no presence, and only core can say which kind this is.
+    return admission
+      ? {
+          allowed: true,
+          participant: admission.entry,
+          basketKind: admission.basketKind,
+        }
+      : { allowed: false };
   }
 
   private async check(fn: () => Promise<unknown>): Promise<AccessCheckResult> {

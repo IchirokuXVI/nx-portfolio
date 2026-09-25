@@ -1,0 +1,61 @@
+:host {
+  display: block;
+}
+
+.pills {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+// A legend is laid out outside the flex box unless it floats, which is the one
+// way to put it on the same line as the pills.
+.legend {
+  float: inline-start;
+  padding: 0;
+  margin-inline-end: var(--app-space-2);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.pill {
+  box-sizing: border-box;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--app-control-height);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-chip-radius);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:has(.radio:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The chosen order in the quiet action colour, and the checked radio says so too.
+.pill.is-on {
+  border-color: var(--app-action-quiet-border);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  font-weight: 650;
+}
+
+// The radio itself is not drawn: the pill is its picture. Still in the tree and
+// still focusable, which is what makes this a radio group and not three buttons.
+.radio {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}

@@ -37,7 +37,7 @@ export enum RealtimeRoom {
    * socket is admitted to it by presenting a live participant credential, and
    * everything published there is a thing every participant may see.
    */
-  GeneratedList = 'generated',
+  Basket = 'basket',
 }
 
 /**

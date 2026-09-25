@@ -16,8 +16,8 @@ import {
 import {
   AccountNotice,
   AUTH_SERVICE,
+  BasketListStore,
   GatewayError,
-  GeneratedListStore,
   hasOthers,
   MemberNames,
   NetworkError,
@@ -45,11 +45,11 @@ import {
   BrowserFacade,
   shareUrl,
   sheetSegments,
+  TourAnchor,
 } from '@portfolio/velista/platform';
 import {
   AppBar,
   AskedNotice,
-  BottomActionBar,
   ConfirmEmailNudge,
   EmptyState,
   ErrorState,
@@ -89,7 +89,6 @@ import { selectHomeState } from './select-home-state';
     RouterOutlet,
     AppBar,
     AskedNotice,
-    BottomActionBar,
     ConfirmEmailNudge,
     EmptyState,
     ErrorState,
@@ -97,6 +96,7 @@ import { selectHomeState } from './select-home-state';
     InviteCard,
     ShoppingListCard,
     SuccessNote,
+    TourAnchor,
     ZoneCard,
     ZoneSkeleton,
   ],
@@ -106,7 +106,7 @@ import { selectHomeState } from './select-home-state';
 })
 export class HomePage {
   private readonly _zoneStore = inject(ZoneStore);
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
   private readonly _presence = inject(PresenceStore);
   private readonly _names = inject(MemberNames);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
@@ -146,7 +146,7 @@ export class HomePage {
   /**
    * The caller's `ACTIVE` baskets, newest first, and their resolved display names.
    *
-   * Both come off `GeneratedListStore`, which is app scoped, so moving between the
+   * Both come off `BasketListStore`, which is app scoped, so moving between the
    * dashboard and the history does not refetch the listing.
    *
    * The names are built here rather than in `selectHomeState` because naming an unnamed
@@ -236,6 +236,17 @@ export class HomePage {
       listViewers: (listId) => this._presenceNames().lists.get(listId) ?? [],
       guestBannerDismissed: this._guestBannerDismissed(),
     });
+  });
+
+  /**
+   * The one group card whose list rows the tour lights, which is the first with any
+   * (velista `0099`, section 2). Only one card may declare the anchor.
+   */
+  readonly listsAnchorZoneId = computed(() => {
+    const page = this.state();
+    return page.kind === 'populated'
+      ? (page.zones.find((zone) => zone.lists.length > 0)?.id ?? null)
+      : null;
   });
 
   /**
@@ -391,10 +402,10 @@ export class HomePage {
     // after them, so the card renders with the zone skeletons instead of appearing a
     // beat later and pushing the groups down as somebody is reaching for one.
     //
-    // No room is subscribed to for it. `generatedList.created` and `.updated` are
+    // No room is subscribed to for it. `basket.created` and `.updated` are
     // addressed to the owner's own sessions, which this client already holds, so unlike
     // the resume card this needs no `subscribeList` at all. The one thing that does not
-    // arrive is a settle, which core publishes to the basket's room; `GeneratedListStore`
+    // arrive is a settle, which core publishes to the basket's room; `BasketListStore`
     // documents that gap where it applies the events.
     void this._generated.load();
 
@@ -676,8 +687,8 @@ export class HomePage {
    * One id and not two, unlike `openList`: a basket is addressed on its own, because
    * unlike a zone list it belongs to the caller rather than to a group.
    */
-  openShoppingList(generatedListId: string): void {
-    void this._router.navigate(['..', BASKET_PATHS.list, generatedListId], {
+  openShoppingList(basketId: string): void {
+    void this._router.navigate(['..', BASKET_PATHS.list, basketId], {
       relativeTo: this._route,
     });
   }
@@ -685,19 +696,6 @@ export class HomePage {
   /** The history (plan 0045, section 3.3). A sibling for `openShoppingList`'s reason. */
   openShoppingLists(): void {
     void this._router.navigate(['..', BASKET_PATHS.list], {
-      relativeTo: this._route,
-    });
-  }
-
-  /**
-   * The generation sheet (plan 0045, section 3.4).
-   *
-   * A **child** route and so a bare relative path, exactly as the two entry sheets are:
-   * it covers this page without losing it, and Android's back button dismisses it
-   * rather than closing the app (rule E1, plan 0008).
-   */
-  getShoppingList(): void {
-    void this._router.navigate(sheetSegments('get'), {
       relativeTo: this._route,
     });
   }

@@ -14,56 +14,22 @@
  * the run owes the operator is a list of places to look. The drift check in step
  * 7 is the one that refuses.
  *
- * **A reading comes in two shapes and both are read.** El Jamon's prompt asks
- * for a flat row with snake_case keys, and Deza, Dia and LIDL ask for camelCase
- * with the leaflet only fields nested under `leaflet`. Neither shape is more
- * correct and both are committed, so `readRow` takes either rather than a check
- * quietly passing a whole chain because it was reading a key that is not there.
+ * **Every row is read through `readRow`** (`reading.mjs`), the same function
+ * the builder reads it with. Every chain prompt asks for one shape now, and the
+ * readings El Jamon's prompt produced in the older flat shape still read, so a
+ * check never passes a whole chain because it was reading a key that is not
+ * there.
  *
  * Zero npm dependencies, Node built ins only. Not browser reachable.
  */
 
 import { warning } from './read-pages.mjs';
+import { readRow } from './reading.mjs';
+
+export { readRow };
 
 /** Two prices are the same number when they are this close. */
 const CENT = 0.005;
-
-const num = (value) =>
-  typeof value === 'number' && Number.isFinite(value) ? value : null;
-const first = (...values) => values.find((value) => value != null) ?? null;
-
-/** One row of a reading, in the fields the checks ask about, from either of
- * the two shapes a chain prompt asks for. */
-export function readRow(row) {
-  const leaflet = row?.leaflet ?? {};
-  const promotion = first(leaflet.promotion, row?.promotion) ?? null;
-  return {
-    name: typeof row?.name === 'string' ? row.name : null,
-    price: num(row?.price),
-    wasPrice: num(first(leaflet.wasPrice, row?.was_price, row?.wasPrice)),
-    unitPrice: num(first(row?.unitPrice, row?.unit_price)),
-    unitPriceBasis: first(
-      row?.unit_price_per,
-      row?.unitPricePer,
-      row?.unitPriceLabel,
-      row?.unit_price_label
-    ),
-    loyalty: first(leaflet.loyalty, row?.loyalty) === true,
-    basis: first(leaflet.basis, row?.basis),
-    promotion: promotion
-      ? {
-          type: typeof promotion.type === 'string' ? promotion.type : null,
-          requiredQuantity: num(
-            first(promotion.requiredQuantity, promotion.required_quantity)
-          ),
-          singleUnitPrice: num(
-            first(promotion.singleUnitPrice, promotion.single_unit_price)
-          ),
-          totalPrice: num(first(promotion.totalPrice, promotion.total_price)),
-        }
-      : null,
-  };
-}
 
 /** How a row is named in a warning. */
 const label = (read, index) => read.name ?? `row ${index + 1}`;

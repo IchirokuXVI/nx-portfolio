@@ -3,7 +3,6 @@ import {
   Controller,
   Get,
   HttpStatus,
-  Param,
   Post,
   Query,
   UseGuards,
@@ -39,6 +38,7 @@ import {
   type SupermarketPage,
   type SupermarketView,
 } from '@portfolio/luna-shopper/contracts';
+import { UuidParam } from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
@@ -49,6 +49,7 @@ import {
   hoistContractSchema,
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
+import { CatalogSuggestService } from './catalog-suggest.service';
 import {
   CatalogListQueryDto,
   ListPriceScopesQueryDto,
@@ -154,7 +155,7 @@ export class CatalogSupermarketsController {
   @ApiContractResponse(SUPERMARKET_PATTERNS.get)
   get(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<SupermarketView> {
     return this.nats.send<SupermarketView>(SUPERMARKET_PATTERNS.get, {
       userId: user.userId,
@@ -178,7 +179,7 @@ export class CatalogSupermarketsController {
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.list)
   listLocations(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: CatalogListQueryDto
   ): Promise<SupermarketLocationPage> {
     return this.nats.send<SupermarketLocationPage>(
@@ -205,7 +206,7 @@ export class CatalogLocationsController {
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.get)
   get(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<SupermarketLocationView> {
     return this.nats.send<SupermarketLocationView>(
       SUPERMARKET_LOCATION_PATTERNS.get,
@@ -217,7 +218,7 @@ export class CatalogLocationsController {
   @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.listByLocation)
   offers(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: CatalogListQueryDto
   ): Promise<SupermarketItemPage> {
     return this.nats.send<SupermarketItemPage>(
@@ -372,6 +373,10 @@ export class CatalogItemsController {
         user.userId,
         toScopeQuery(query)
       ),
+      // Plan 0146: which chains sell the products, passed through untouched. It
+      // is deliberately not resolved through `toScopeQuery` above: that answers
+      // where a price comes from, and this answers what is listed.
+      soldBy: query.soldBy,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
@@ -458,7 +463,7 @@ export class CatalogItemsController {
   @ApiContractResponse(ITEM_PATTERNS.get)
   get(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ItemView> {
     return this.nats.send<ItemView>(ITEM_PATTERNS.get, {
       userId: user.userId,
@@ -478,7 +483,7 @@ export class CatalogItemsController {
   @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.listByItem)
   offers(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: CatalogListQueryDto
   ): Promise<SupermarketItemPage> {
     return this.nats.send<SupermarketItemPage>(
@@ -531,7 +536,7 @@ export class CatalogProductGroupsController {
   @ApiContractResponse(PRODUCT_GROUP_PATTERNS.get)
   get(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ProductGroupView> {
     return this.nats.send<ProductGroupView>(PRODUCT_GROUP_PATTERNS.get, {
       userId: user.userId,
@@ -547,7 +552,7 @@ export class CatalogProductGroupsController {
   @ApiContractResponse(ITEM_PATTERNS.search)
   async items(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: PriceScopedQueryDto
   ): Promise<ItemPage> {
     return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
@@ -586,7 +591,7 @@ export class CatalogProductGroupsController {
 @Controller({ path: 'catalog/suggest', version: '1' })
 export class CatalogSuggestController {
   constructor(
-    private readonly nats: NatsClient,
+    private readonly suggestions: CatalogSuggestService,
     private readonly scopes: ScopeResolutionService
   ) {}
 
@@ -602,41 +607,15 @@ export class CatalogSuggestController {
   ): Promise<CatalogSuggestResponse> {
     // Resolved once and passed to both halves, so the two reads cannot quote
     // prices from different places, and so a caller with no scopes gets one
-    // priceless dropdown rather than half a priced one.
-    const common = {
+    // priceless dropdown rather than half a priced one. `describe` rather than
+    // `forRead`, which is the same call with the chains thrown away, because
+    // the response names them (plan 0161, section 3).
+    return this.suggestions.suggest({
       userId: user.userId,
       query: query.q,
-      priceScopeIds: await this.scopes.forRead(
-        user.userId,
-        toScopeQuery(query)
-      ),
       limit: query.limit,
-    };
-    const [groups, items] = await Promise.all([
-      this.nats
-        .send<ProductGroupOfferPage>(ITEM_PATTERNS.searchOffers, common)
-        .catch(
-          () => ({ items: [], nextCursor: null }) as ProductGroupOfferPage
-        ),
-      this.nats
-        .send<ItemPage>(ITEM_PATTERNS.search, common)
-        .catch(() => ({ items: [], nextCursor: null }) as ItemPage),
-    ]);
-
-    return {
-      suggestions: [
-        ...groups.items.map((group) => ({
-          kind: 'group' as const,
-          group,
-          item: null,
-        })),
-        ...items.items.map((item) => ({
-          kind: 'item' as const,
-          group: null,
-          item,
-        })),
-      ],
-    };
+      resolved: await this.scopes.describe(user.userId, toScopeQuery(query)),
+    });
   }
 }
 
@@ -757,7 +736,7 @@ export class CatalogPriceScopesController {
   @ApiContractResponse(SUPERMARKET_ITEM_PATTERNS.listByScope)
   offers(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: CatalogListQueryDto
   ): Promise<SupermarketItemPage> {
     return this.nats.send<SupermarketItemPage>(

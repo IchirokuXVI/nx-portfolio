@@ -195,7 +195,25 @@ export interface SettleLineRequest {
    * can change afterwards and what somebody carried home cannot.
    */
   readonly itemId?: string;
+  /**
+   * The shop it was bought at, a `supermarket_locations` id (velista `0114`).
+   *
+   * Optional, and only ever a place: the server works out the price scope and the
+   * price from the shop itself, and records no shop when it cannot, so naming one
+   * never makes a purchase fail.
+   */
+  readonly supermarketLocationId?: string;
 }
+
+/**
+ * What a zone list settle may say beside its outcome (velista `0114`).
+ *
+ * The request's optional fields as the line service and store take them.
+ */
+export type SettleLineOptions = Pick<
+  SettleLineRequest,
+  'quantity' | 'itemId' | 'supermarketLocationId'
+>;
 
 /**
  * Deciding a suggested line.

@@ -1,5 +1,14 @@
+import { GatewayError } from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
-import { metresBetween, nearby, placeLines } from './place-view';
+import {
+  fromOpenStreetMap,
+  metresBetween,
+  nearby,
+  nearbyShops,
+  placeCandidates,
+  placeLines,
+  placeRefusalKey,
+} from './place-view';
 
 type Place = Wire.HarvestDiscoveredPlaceView;
 
@@ -126,5 +135,139 @@ describe('placeLines', () => {
     expect(lines.find((line) => line.key === 'coordinates')?.value).toBe(
       '40.41680, -3.70380'
     );
+  });
+});
+
+/** Admin plan 0034, section 1: the candidates a 409 carries, read as ours. */
+describe('placeCandidates', () => {
+  it('reads each candidate with the rung that found it', () => {
+    const found = placeCandidates(
+      {
+        candidates: [
+          {
+            supermarketLocationId: 'loc-1',
+            label: { en: 'Libertador', es: 'Libertador' },
+            address: 'Avenida del Gran Capitán 12',
+            postalCode: '14001',
+            rung: 'EXTERNAL_REF',
+          },
+        ],
+      },
+      ['en', 'es']
+    );
+
+    expect(found).toEqual([
+      {
+        supermarketLocationId: 'loc-1',
+        title: 'Libertador',
+        address: 'Avenida del Gran Capitán 12',
+        postalCode: '14001',
+        rung: 'EXTERNAL_REF',
+      },
+    ]);
+  });
+
+  it('names an unlabelled shop by its address, then its id', () => {
+    const found = placeCandidates(
+      {
+        candidates: [
+          { supermarketLocationId: 'loc-1', address: 'Calle Mayor 1' },
+          { supermarketLocationId: 'loc-2' },
+        ],
+      },
+      ['en']
+    );
+
+    expect(found.map((candidate) => candidate.title)).toEqual([
+      'Calle Mayor 1',
+      'loc-2',
+    ]);
+  });
+
+  /** Rule D4: an error body is the least trustworthy thing on the wire. */
+  it('drops what cannot be linked and survives a malformed body', () => {
+    expect(placeCandidates({}, ['en'])).toEqual([]);
+    expect(placeCandidates({ candidates: 'nope' }, ['en'])).toEqual([]);
+    expect(
+      placeCandidates({ candidates: [null, 3, { address: 'x' }] }, ['en'])
+    ).toEqual([]);
+  });
+
+  it('keeps a rung it does not know, under its own name for one', () => {
+    const [found] = placeCandidates(
+      { candidates: [{ supermarketLocationId: 'loc-1', rung: 'PHONE' }] },
+      ['en']
+    );
+
+    expect(found.rung).toBe('UNKNOWN');
+  });
+});
+
+describe('nearbyShops', () => {
+  it('keeps shops within reach, nearest first', () => {
+    const shops = nearbyShops(
+      place(),
+      [
+        { id: 'far', latitude: 40.43, longitude: -3.7038 },
+        { id: 'next', latitude: 40.4169, longitude: -3.7038, address: 'x' },
+        { id: 'here', latitude: 40.4168, longitude: -3.7038 },
+      ],
+      ['en']
+    );
+
+    expect(shops.map((shop) => shop.id)).toEqual(['here', 'next']);
+    expect(shops[1].metres).toBe(11);
+  });
+
+  /** The seeded shops of backend plan 0150 had no coordinates at all. */
+  it('keeps a shop with no position at the same postal code', () => {
+    const shops = nearbyShops(
+      place(),
+      [
+        { id: 'same', latitude: null, longitude: null, postalCode: '28013' },
+        { id: 'other', latitude: null, longitude: null, postalCode: '28001' },
+      ],
+      ['en']
+    );
+
+    expect(shops).toEqual([
+      {
+        id: 'same',
+        title: 'same',
+        address: '',
+        postalCode: '28013',
+        metres: null,
+      },
+    ]);
+  });
+});
+
+describe('fromOpenStreetMap', () => {
+  it('reads the provider without case', () => {
+    expect(fromOpenStreetMap(place({ provider: 'OSM' }))).toBe(true);
+    expect(fromOpenStreetMap(place({ provider: 'osm' }))).toBe(true);
+    expect(fromOpenStreetMap(place({ provider: 'lidl' }))).toBe(false);
+  });
+});
+
+describe('placeRefusalKey', () => {
+  const refusal = (code: string) =>
+    new GatewayError({ code, status: 409, correlationId: '' });
+
+  it('names the three refusals backend plan 0152 added', () => {
+    expect(placeRefusalKey(refusal('place_matches_location'))).toBe(
+      'harvest.places.error.matchesLocation'
+    );
+    expect(placeRefusalKey(refusal('place_already_imported'))).toBe(
+      'harvest.places.error.alreadyImported'
+    );
+    expect(placeRefusalKey(refusal('scope_not_found'))).toBe(
+      'harvest.places.error.scopeNotFound'
+    );
+  });
+
+  it('leaves every other refusal to the generic sentence', () => {
+    expect(placeRefusalKey(refusal('conflict'))).toBeNull();
+    expect(placeRefusalKey(null)).toBeNull();
   });
 });

@@ -4,20 +4,13 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import {
-  BasketStore,
-  GeneratedListStore,
-} from '@portfolio/velista/data-access';
+import { BasketListStore, BasketStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import {
-  generatedListIdOf,
-  SheetNavigation,
-} from '@portfolio/velista/platform';
+import { SheetNavigation } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
 import { basketPath } from '../basket-paths';
 
@@ -48,11 +41,11 @@ import { basketPath } from '../basket-paths';
  * It also does not revoke the link, evict a guest or drop anybody's socket
  * (section 6.1). Somebody in the shop when this lands keeps the basket open and keeps
  * their name on the rows they settled; their screen redraws in place from
- * `generatedList.updated`.
+ * `basket.updated`.
  *
  * ## Two stores, and why
  *
- * The **write** is on `GeneratedListStore`, whose every method is the owner's and
+ * The **write** is on `BasketListStore`, whose every method is the owner's and
  * whose transport is account authenticated: a guest holding a participant session
  * cannot reach that route with any token they have, which is what makes section 2's
  * "the owner and nobody else" a fact about the server rather than about this
@@ -73,14 +66,21 @@ import { basketPath } from '../basket-paths';
 })
 export class FinishSheet {
   private readonly _basket = inject(BasketStore);
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
   private readonly _sheet = inject(SheetNavigation);
-  private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _locale = inject(RokuLocaleStore).locale;
 
-  /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _generatedListId = generatedListIdOf(this._route);
+  /**
+   * The basket underneath, which is where closing this sheet goes.
+   *
+   * From the **store** and not from `paramMap` since velista `0091`, which is the
+   * house rule for every sheet over this page: the same page is routed at
+   * `shopping-lists/live`, where the URL holds no id at all. This sheet is not a
+   * child of that route, because a `LIVE` basket is never finished, and it reads
+   * the address the same way regardless: one rule, no exception to remember.
+   */
+  private readonly _address = this._basket.address;
 
   private readonly _busy = signal(false);
   private readonly _failed = signal(false);
@@ -96,7 +96,7 @@ export class FinishSheet {
    * substituted into it, and a test that read the sentence would be testing the
    * translator (the house rule for every interpolated string in this app).
    */
-  protected readonly unsettled = this._basket.unsettled;
+  protected readonly unsettled = this._basket.pending;
 
   /**
    * End the trip.
@@ -110,10 +110,10 @@ export class FinishSheet {
     this._busy.set(true);
     this._failed.set(false);
 
-    const landed = await this._generated.setStatus(
-      this._generatedListId(),
-      'COMPLETED'
-    );
+    // The id off the basket itself, which is the same id the URL carries and the
+    // one thing that is true on both routes.
+    const basketId = this._basket.basket()?.id ?? '';
+    const landed = await this._generated.setStatus(basketId, 'FINISHED');
 
     if (!landed) {
       this._busy.set(false);
@@ -139,7 +139,7 @@ export class FinishSheet {
    */
   protected close(): void {
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._generatedListId())
+      basketPath(this._locale(), this._basePath, this._address())
     );
   }
 }

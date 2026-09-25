@@ -1,6 +1,6 @@
 import {
-  generatedListPresenceRoom,
-  generatedListRoom,
+  basketPresenceRoom,
+  basketRoom,
   RealtimeEvent,
   type DomainEvent,
 } from '@portfolio/luna-shopper/contracts';
@@ -20,16 +20,16 @@ const BASKET = 'gl-1';
 const BOTH_BASKET_ROOMS = [
   {
     direction: 'evict',
-    rooms: [generatedListRoom(BASKET), generatedListPresenceRoom(BASKET)],
+    rooms: [basketRoom(BASKET), basketPresenceRoom(BASKET)],
   },
 ];
 
 describe('sweepsFor, on a shared basket', () => {
   it('evicts both basket rooms when a participant is removed, revoked or leaves', () => {
     const event: DomainEvent = {
-      event: RealtimeEvent.GeneratedListParticipantLeft,
+      event: RealtimeEvent.BasketParticipantLeft,
       eventId: 'e1',
-      generatedListId: BASKET,
+      basketIds: [BASKET],
       payload: { id: 'p1', kind: 'REGISTERED' },
     };
 
@@ -40,10 +40,10 @@ describe('sweepsFor, on a shared basket', () => {
     // The owner's own sessions hear it too, and the basket room is what the
     // envelope names for the sweep, not the user.
     const event: DomainEvent = {
-      event: RealtimeEvent.GeneratedListDeleted,
+      event: RealtimeEvent.BasketDeleted,
       eventId: 'e2',
       userIds: ['u-owner'],
-      generatedListId: BASKET,
+      basketIds: [BASKET],
       payload: { id: BASKET },
     };
 
@@ -52,8 +52,8 @@ describe('sweepsFor, on a shared basket', () => {
 
   it('evicts nothing for either event when the envelope names no basket', () => {
     for (const event of [
-      RealtimeEvent.GeneratedListParticipantLeft,
-      RealtimeEvent.GeneratedListDeleted,
+      RealtimeEvent.BasketParticipantLeft,
+      RealtimeEvent.BasketDeleted,
     ]) {
       expect(
         sweepsFor({
@@ -69,9 +69,9 @@ describe('sweepsFor, on a shared basket', () => {
   it('evicts nothing when somebody joins', () => {
     expect(
       sweepsFor({
-        event: RealtimeEvent.GeneratedListParticipantJoined,
+        event: RealtimeEvent.BasketParticipantJoined,
         eventId: 'e4',
-        generatedListId: BASKET,
+        basketIds: [BASKET],
         payload: { id: 'p1' },
       })
     ).toEqual([]);
@@ -79,17 +79,84 @@ describe('sweepsFor, on a shared basket', () => {
 
   it("evicts nothing for the invitee's own two events, which reach a user room", () => {
     for (const event of [
-      RealtimeEvent.GeneratedListShared,
-      RealtimeEvent.GeneratedListUnshared,
+      RealtimeEvent.BasketShared,
+      RealtimeEvent.BasketUnshared,
     ]) {
       expect(
         sweepsFor({
           event,
           eventId: 'e5',
           userIds: ['u-invitee'],
-          payload: { generatedListId: BASKET },
+          payload: { basketId: BASKET },
         })
       ).toEqual([]);
     }
+  });
+});
+
+/**
+ * The same table, read off the field core writes now (plan 0139, section 1).
+ *
+ * Both of these events still name exactly one basket. What changed is the
+ * envelope: the audience is a list, and the consumer has to read either name for
+ * one release, because a replayed envelope carries the old one.
+ */
+describe('sweepsFor, reading the basket audience either way', () => {
+  it('sweeps both rooms of a basket named on basketIds', () => {
+    for (const event of [
+      RealtimeEvent.BasketParticipantLeft,
+      RealtimeEvent.BasketDeleted,
+    ]) {
+      expect(
+        sweepsFor({
+          event,
+          eventId: 'e6',
+          basketIds: [BASKET],
+          payload: { id: BASKET },
+        })
+      ).toEqual(BOTH_BASKET_ROOMS);
+    }
+  });
+
+  it('sweeps both rooms of every basket named, if an event ever names two', () => {
+    expect(
+      sweepsFor({
+        event: RealtimeEvent.BasketDeleted,
+        eventId: 'e7',
+        basketIds: [BASKET, 'gl-2'],
+        payload: { id: BASKET },
+      })
+    ).toEqual([
+      ...BOTH_BASKET_ROOMS,
+      {
+        direction: 'evict',
+        rooms: [basketRoom('gl-2'), basketPresenceRoom('gl-2')],
+      },
+    ]);
+  });
+
+  it('sweeps nothing for an empty basketIds', () => {
+    expect(
+      sweepsFor({
+        event: RealtimeEvent.BasketDeleted,
+        eventId: 'e8',
+        basketIds: [],
+        payload: { id: BASKET },
+      })
+    ).toEqual([]);
+  });
+
+  it('asks for no sweep at all on a lines changed event', () => {
+    // Section 5: a socket is in a basket room because its participant is live on
+    // the basket, and that does not change when the rows move or when the owner
+    // loses a list. The room stays and the next read is smaller.
+    expect(
+      sweepsFor({
+        event: RealtimeEvent.BasketLinesChanged,
+        eventId: 'e9',
+        basketIds: [BASKET],
+        payload: { lineIds: [] },
+      })
+    ).toEqual([]);
   });
 });

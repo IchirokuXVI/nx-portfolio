@@ -10,7 +10,7 @@ import {
 import {
   OriginUnavailableReason,
   ParticipantKind,
-} from '../lib/enums/generated-list.enums';
+} from '../lib/enums/basket.enums';
 import {
   CommentTranscription,
   LineApprovalStatus,

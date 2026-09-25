@@ -5,6 +5,7 @@ import {
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   ListLine,
   ListLineGroupRemoval,
@@ -12,10 +13,17 @@ import {
   type ShoppingList,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { itemSetHash } from './item-set-hash';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { ProductGroupSyncService } from './product-group-sync.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * A line stays subscribed to its product group (plan 0070, sections 6 and 11).
@@ -26,7 +34,7 @@ import { ProductGroupSyncService } from './product-group-sync.service';
  * decides; there is no SQL here worth pinning.
  *
  * One thing is asserted negatively and deliberately (section 8, and case 13): the
- * sync must never write into a basket. A `GeneratedListLine` is a snapshot taken
+ * sync must never write into a basket. A `BasketLine` is a snapshot taken
  * at generation time, a shopping list that rewrites itself while you are in the
  * shop is hostile, and the requirement is that a path into those tables does not
  * exist. Nothing else would catch its violation, so the manager itself refuses
@@ -148,7 +156,8 @@ function build(seeds: LineSeed[], options: { firstSeen?: boolean } = {}) {
     } as never,
     fakeLineClaims().service,
     publisher,
-    store as never
+    store as never,
+    announcer
   );
 
   return { service, items, removals, saved, events, store, lines };

@@ -15,17 +15,18 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BasketListStore,
   GatewayError,
-  GeneratedListStore,
+  LiveBasketStore,
   NetworkError,
   SharedListStore,
 } from '@portfolio/velista/data-access';
 import {
   displayNames,
   formatGeneratedDate,
-  isLiveGeneratedList,
+  isOpenBasket,
   outcomeBreakdown,
-  type GeneratedListSummary,
+  type BasketSummary,
   type SharedListRowVm,
   type ShoppingListRowVm,
   type ShoppingListsState,
@@ -48,6 +49,7 @@ import {
   type TabItem,
 } from '@portfolio/velista/ui';
 import { BASKET_PATHS } from '../basket-paths';
+import { LiveBasketRow } from '../live-basket-row/live-basket-row';
 import { ShoppingListRow } from '../shopping-list-row/shopping-list-row';
 
 /** The two tabs of the history (velista `0085`, section 5). */
@@ -76,7 +78,7 @@ export type SharedListsState =
  *
  * The container, and the only thing here that touches a store (rule D1). Its one piece
  * of presentation logic is choosing which state to render, and that is a `computed`
- * over `GeneratedListStore` rather than a pure function of its own: unlike the
+ * over `BasketListStore` rather than a pure function of its own: unlike the
  * dashboard, this page has exactly one source and four states, so a separate selector
  * would be a function that forwards four signals and tests nothing that the store's own
  * spec does not already cover.
@@ -113,6 +115,7 @@ export type SharedListsState =
     ChevronLeftIcon,
     EmptyState,
     ErrorState,
+    LiveBasketRow,
     RouterOutlet,
     RowSkeleton,
     ShoppingListRow,
@@ -123,8 +126,9 @@ export type SharedListsState =
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ShoppingListsPage {
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
   private readonly _shared = inject(SharedListStore);
+  private readonly _liveBasket = inject(LiveBasketStore);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
@@ -158,6 +162,18 @@ export class ShoppingListsPage {
     return tabPanelId(TABS_ID, id);
   }
 
+  /**
+   * The live basket's pending count for its row at the top of My lists (velista
+   * `0111`), or null while its summary is on its way or would not load.
+   *
+   * The row is drawn in every state of the tab, above the generated baskets and
+   * outside their date order and their paging: it is the basket that is always there,
+   * so it is the one row that never depends on the listing having answered.
+   */
+  readonly livePending = computed(
+    () => this._liveBasket.summary()?.pending ?? null
+  );
+
   private readonly _names = computed(() => {
     const locale = this._locale();
     return displayNames(this._generated.lists(), (date) =>
@@ -180,7 +196,13 @@ export class ShoppingListsPage {
       return { kind: 'loading' };
     }
 
-    const lists = this._generated.lists();
+    // The permanent basket is never a row here (velista `0091`, section 6). The
+    // server already leaves it out of "mine", and this drops it anyway, in one
+    // place, because of what a row **is**: a date, a Finished badge and a delete,
+    // over the one basket that has no date, is never finished and cannot go away.
+    const lists = this._generated
+      .lists()
+      .filter((list) => list.kind !== 'LIVE');
     if (lists.length === 0) {
       return { kind: 'empty' };
     }
@@ -231,6 +253,20 @@ export class ShoppingListsPage {
       kind: 'populated',
       rows: lists.map((list) => ({
         ...rowOf(list, names),
+        // Whose everything to buy this is (velista `0091`, section 6). A shared
+        // permanent basket has no name and no date, so the owner's name is the
+        // only thing that tells two of them apart, and `displayNames` would have
+        // titled it by the day the server made it.
+        ...(list.kind === 'LIVE'
+          ? {
+              name: this._translator.t(
+                'basket.live.titleOf',
+                undefined,
+                locale,
+                { name: list.owner.name }
+              ),
+            }
+          : {}),
         ownerName: list.owner.name,
         sharedAt: list.sharedAt,
         sharedOn: formatGeneratedDate(list.sharedAt, locale),
@@ -276,7 +312,14 @@ export class ShoppingListsPage {
         return;
       }
       shown.add(tab);
-      void (tab === 'shared' ? this._shared.load() : this._generated.load());
+      if (tab === 'shared') {
+        void this._shared.load();
+        return;
+      }
+      void this._generated.load();
+      // Its own read, from its own route: the server leaves the live basket out of
+      // the listing above (velista `0091`, section 6).
+      void this._liveBasket.load();
     });
 
     // An effect rather than a `computed`, because this is an announcement and not a
@@ -307,7 +350,7 @@ export class ShoppingListsPage {
   /**
    * Say how many there now are, once per page of results.
    *
-   * The read of {@link GeneratedListStore.pagesLoaded} is what makes this fire, and the
+   * The read of {@link BasketListStore.pagesLoaded} is what makes this fire, and the
    * count is read **untracked** so that a settle moving `settledLineCount`, or a
    * basket appearing on the quiet refresh, cannot re-trigger it. That asymmetry is the
    * whole behaviour: pages speak, everything else is silent.
@@ -370,8 +413,15 @@ export class ShoppingListsPage {
     void this._pages.back(this._router.serializeUrl(dashboard));
   }
 
-  open(generatedListId: string): void {
-    void this._router.navigate(['..', BASKET_PATHS.list, generatedListId], {
+  open(basketId: string): void {
+    void this._router.navigate(['..', BASKET_PATHS.list, basketId], {
+      relativeTo: this._route,
+    });
+  }
+
+  /** The live basket, at the one address that is the same for everybody. */
+  openLive(): void {
+    void this._router.navigate(['..', ...BASKET_PATHS.live.split('/')], {
       relativeTo: this._route,
     });
   }
@@ -417,7 +467,7 @@ function correlationIdOf(error: unknown): string | null {
 
 /** What every history row draws, the reader's own lists and shared ones alike. */
 function rowOf(
-  list: GeneratedListSummary,
+  list: BasketSummary,
   names: ReadonlyMap<string, string>
 ): ShoppingListRowVm {
   return {
@@ -430,12 +480,13 @@ function rowOf(
     // The live pair, not `ACTIVE` alone: the server composes a run as `DRAFT` and
     // never promotes it, so the Shopping now badge asked a question nothing could
     // answer yes to. Same one line and same reason as the dashboard card's, which
-    // is why both now read `isLiveGeneratedList` rather than each naming a status.
-    active: isLiveGeneratedList(list.status),
+    // is why both now read `isOpenBasket` rather than each naming a status.
+    active: isOpenBasket(list.status),
     // The one status this app can now write, and the one the sweep in luna
     // `0059` section 4 eventually writes for a trip nobody finished. Nothing
     // here tells those two apart and nothing should: the row says the trip is
     // over, which is true either way (velista `0057`, section 9).
-    finished: list.status === 'COMPLETED',
+    finished: list.status === 'FINISHED',
+    live: list.kind === 'LIVE',
   };
 }

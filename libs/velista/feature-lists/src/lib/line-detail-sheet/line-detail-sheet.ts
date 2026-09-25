@@ -18,6 +18,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BoughtShopMemory,
   GatewayError,
   ItemNames,
   LineStore,
@@ -29,8 +30,10 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  catalogName,
   LINE_CONTENT_MAX_LENGTH,
   LINE_QUANTITY_MAX,
+  type BasketShop,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import {
@@ -43,6 +46,8 @@ import {
 } from '@portfolio/velista/platform';
 import {
   CheckIcon,
+  ChevronRightIcon,
+  CloseIcon,
   CommentIcon,
   QuantityReel,
   QuantityStepper,
@@ -57,10 +62,14 @@ import {
   indicatorsFor,
   selectAbilities,
 } from '../select-list-state';
+import { BoughtShopPane } from './bought-shop-pane';
 import { selectLineDetail } from './select-line-detail';
 
-/** Which of the sheet's two faces is showing. */
-type Step = 'summary' | 'howMany';
+/**
+ * Which of the sheet's faces is showing. `shop` is the how many step's own picker
+ * (velista `0114`), a pane in its place rather than a sheet over it.
+ */
+type Step = 'summary' | 'howMany' | 'shop';
 
 /**
  * The merge question, as the refusal stated it (velista plan 0083, section 5).
@@ -129,8 +138,11 @@ export interface MergeQuestion {
     QuantityReel,
     SpinnerIcon,
     CheckIcon,
+    ChevronRightIcon,
+    CloseIcon,
     CommentIcon,
     LineGoneNotice,
+    BoughtShopPane,
   ],
   templateUrl: './line-detail-sheet.html',
   styleUrl: './line-detail-sheet.scss',
@@ -149,6 +161,7 @@ export class LineDetailSheet {
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _injector = inject(Injector);
+  private readonly _boughtShop = inject(BoughtShopMemory);
 
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);
@@ -231,6 +244,39 @@ export class LineDetailSheet {
   readonly max = LINE_QUANTITY_MAX;
 
   /**
+   * Where it was bought, or null for not saying (velista `0114`).
+   *
+   * Optional in every sense: the step starts on the last shop this device named and
+   * on nothing when there is none, it can be cleared, and a purchase with no shop is
+   * recorded exactly as it was before the question existed.
+   */
+  readonly chosenShop = signal<BasketShop | null>(null);
+
+  /** The chosen shop as the step's row prints it: the chain, then its own name. */
+  readonly chosenShopName = computed(() => {
+    const shop = this.chosenShop();
+    if (shop === null) {
+      return null;
+    }
+    const locale = this._localeStore.locale();
+    const chain = catalogName(shop.chain, locale);
+    const label = shop.label === null ? '' : catalogName(shop.label, locale);
+    return label === '' || label === chain ? chain : `${chain} ${label}`;
+  });
+
+  /** The chosen shop's street and town, under its name, when the catalog has them. */
+  readonly chosenShopWhere = computed(() => {
+    const shop = this.chosenShop();
+    const where = [shop?.address ?? null, shop?.city ?? null]
+      .filter((part): part is string => part !== null && part.trim() !== '')
+      .join(', ');
+    return where === '' ? null : where;
+  });
+
+  private readonly _shopRow =
+    viewChild<ElementRef<HTMLButtonElement>>('shopRow');
+
+  /**
    * The history, fetched once when the sheet opens.
    *
    * Not in a resolver, because the sheet is useful before it arrives: the quantity, the
@@ -271,8 +317,15 @@ export class LineDetailSheet {
     selectAbilities(this._list()?.myPermissions ?? [])
   );
 
-  /** `DECIDE`, the same permission the reel follows: both say what the household has. */
-  private readonly _canSettle = computed(() => this._abilities().canDecide);
+  /**
+   * `WRITE`, since backend plan 0131: the list page and the basket now ask one
+   * rule who may record a purchase, and a `WRITE` holder already settled the same
+   * line from the basket. Approving, and moving an approved quantity, keep
+   * `DECIDE`, which is why the reel does not follow this.
+   */
+  private readonly _canSettle = computed(
+    () => this._abilities().canWrite || this._abilities().canManage
+  );
 
   /**
    * Which fields this reader may change on this line, or null for none.
@@ -422,6 +475,8 @@ export class LineDetailSheet {
 
     this.howMany.set(Math.max(1, detail.quantity));
     this.chosenItemId.set(detail.preselectedItemId);
+    // The shop this device named last, while it is still the same trip.
+    this.chosenShop.set(this._boughtShop.read());
     this._clearError();
     this.step.set('howMany');
   }
@@ -429,6 +484,43 @@ export class LineDetailSheet {
   /** Which of the line's products was bought, when it carries more than one. */
   chooseItem(itemId: string): void {
     this.chosenItemId.set(itemId);
+  }
+
+  /** Open the shop picker in place of the step. */
+  openShop(): void {
+    if (this.submitting()) {
+      return;
+    }
+    this.step.set('shop');
+  }
+
+  /** A shop was chosen: keep it, remember it for next time, and go back to the step. */
+  onShopPicked(shop: BasketShop): void {
+    this.chosenShop.set(shop);
+    this._boughtShop.remember(shop);
+    this._backToStep();
+  }
+
+  /** Back from the picker with the choice as it was. */
+  closeShop(): void {
+    this._backToStep();
+  }
+
+  /** Say no shop, and stop offering the last one. */
+  clearShop(): void {
+    this.chosenShop.set(null);
+    this._boughtShop.forget();
+    afterNextRender(() => this._shopRow()?.nativeElement.focus(), {
+      injector: this._injector,
+    });
+  }
+
+  private _backToStep(): void {
+    this.step.set('howMany');
+    // The row that opened the picker, so the next Tab reaches Record it.
+    afterNextRender(() => this._shopRow()?.nativeElement.focus(), {
+      injector: this._injector,
+    });
   }
 
   /** Record the purchase. */
@@ -460,8 +552,12 @@ export class LineDetailSheet {
     this._clearError();
 
     const chosen = this.chosenItemId();
+    const shop = outcome === 'BOUGHT' ? this.chosenShop() : null;
     const result = await this._lines.settle(this.lineId(), outcome, {
       ...(quantity === undefined ? {} : { quantity }),
+      // Only a place (velista `0114`). The server works out the price scope and
+      // the price from it, and records no shop when it cannot.
+      ...(shop === null ? {} : { supermarketLocationId: shop.id }),
       // Only when the line carries a choice to make. With one product the server
       // copies it itself, and with none there is nothing to name.
       ...(chosen === null || this.detail()?.choices.length === 0

@@ -9,6 +9,7 @@ export * from './lib/platform.module';
 // Logging
 export * from './lib/logging/logger.options';
 export * from './lib/logging/redaction';
+export * from './lib/logging/withheld-body';
 
 // Request context / correlation
 export * from './lib/context/correlation.constants';
@@ -17,6 +18,7 @@ export * from './lib/context/request-context';
 export * from './lib/context/rpc-correlation.interceptor';
 
 // Errors
+export * from './lib/errors/describe-error';
 export * from './lib/errors/domain-exception';
 export * from './lib/errors/error-catalog';
 export * from './lib/errors/error-codes';
@@ -38,6 +40,7 @@ export * from './lib/auth/admin-token';
 
 // Validation
 export * from './lib/validation/username';
+export * from './lib/validation/uuid';
 export * from './lib/validation/validation-pipe';
 
 // Health

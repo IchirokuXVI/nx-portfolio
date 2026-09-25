@@ -1,5 +1,6 @@
 import {
   LineApprovalStatus,
+  LineItemSource,
   ListPermission,
   MembershipStatus,
   RealtimeEvent,
@@ -8,8 +9,10 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import { fakeAudit, type RecordedChange } from '../audit/core-audit.testing';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListAccess } from '../entities';
 import {
+  LineComment,
   LineSettlement,
   ListLine,
   ListLineGroupRemoval,
@@ -17,13 +20,21 @@ import {
   ShoppingList,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { fakeLineChanges } from './changes/line-change.fake';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * An operator's edit of a line, and the two questions a caller with no
@@ -54,6 +65,9 @@ interface Harness {
   service: LineService;
   saved: Partial<ListLine>[];
   deleted: unknown[];
+  softDeleted: unknown[];
+  commentDeletes: unknown[];
+  updated: { criteria: unknown; values: Partial<ListLine> }[];
   events: { event: RealtimeEvent; line: LineView }[];
   recorded: RecordedChange[];
   items: ReturnType<typeof fakeLineItems>;
@@ -96,6 +110,9 @@ function build(
 
   const saved: Partial<ListLine>[] = [];
   const deleted: unknown[] = [];
+  const softDeleted: unknown[] = [];
+  const commentDeletes: unknown[] = [];
+  const updated: { criteria: unknown; values: Partial<ListLine> }[] = [];
   const events: { event: RealtimeEvent; line: LineView }[] = [];
 
   const lineRepo = {
@@ -111,6 +128,26 @@ function build(
     },
     delete: async (criteria: unknown) => {
       deleted.push(criteria);
+      return { affected: 1 };
+    },
+    // The two halves of plan 0132's delete: what the row is left saying, and the
+    // one call that marks it. Kept apart here exactly as the service keeps them
+    // apart, so a spec can assert that `deletedAt` was written by `softDelete`
+    // and by nothing else.
+    update: async (criteria: unknown, values: Partial<ListLine>) => {
+      updated.push({ criteria, values });
+      return { affected: 1 };
+    },
+    softDelete: async (criteria: unknown) => {
+      softDeleted.push(criteria);
+      return { affected: 1 };
+    },
+  };
+
+  /** A deleted line's conversation goes with it (plan 0132, section 2). */
+  const commentRepo = {
+    delete: async (criteria: unknown) => {
+      commentDeletes.push(criteria);
       return { affected: 1 };
     },
   };
@@ -157,6 +194,9 @@ function build(
   const settlements = fakeLineSettlements();
 
   const repositoryFor = (entity: unknown) => {
+    if (entity === LineComment) {
+      return commentRepo;
+    }
     if (entity === ListLineGroupRemoval) {
       return groupRemovals.repo;
     }
@@ -204,8 +244,11 @@ function build(
     ],
     // Read, never written: a rename locks the list's row (plan 0112).
     [ShoppingList, { name: 'shopping_lists', repository: listRepo as never }],
+    // A deleted line's comments go in the same transaction (plan 0132).
+    [LineComment, { name: 'line_comments', repository: commentRepo as never }],
   ]);
 
+  const changes = fakeLineChanges();
   return {
     service: new LineService(
       dataSource,
@@ -217,10 +260,19 @@ function build(
       fakeLineClaims().service,
       publisher,
       audit.service,
-      new LineMergeService()
+      new LineMergeService(changes.recorder),
+      // An operator's write records a change as well as its audit row (plan
+      // 0138, section 9). A stand in here, so the assertions below stay about the
+      // trail; that both rows are written is proven against Postgres.
+      changes.recorder,
+      announcer
     ),
+    recorded: changes.recorded,
     saved,
     deleted,
+    softDeleted,
+    commentDeletes,
+    updated,
     events,
     recorded: audit.recorded,
     items,
@@ -484,17 +536,47 @@ describe('an operator delete of a line', () => {
   it('removes an approved line and announces it', async () => {
     // No approval branch: an operator edits with `MANAGE`, which is exactly the
     // permission the member facing asymmetry exists to admit here.
-    const { service, deleted, events } = build();
+    const { service, deleted, softDeleted, events } = build();
 
     await expect(
       service.deleteAsOperator(LIST_ID, 'li1', ACTOR)
     ).resolves.toEqual({ id: 'li1' });
 
-    expect(deleted).toEqual([{ id: 'li1' }]);
+    // Soft since plan 0132, so the row is marked rather than removed, and the
+    // event a client acts on says exactly what it always said.
+    expect(softDeleted).toEqual([{ id: 'li1' }]);
+    expect(deleted).toEqual([]);
     expect(events).toEqual([
       {
         event: RealtimeEvent.LineDeleted,
         line: { id: 'li1', listId: LIST_ID },
+      },
+    ]);
+  });
+
+  it('empties what the line owned, and never writes deletedByUserId', async () => {
+    const { service, commentDeletes, updated, items } = build();
+    items.rows.push({
+      lineId: 'li1',
+      itemId: 'item-1',
+      position: 0,
+      source: LineItemSource.USER,
+    });
+
+    await service.deleteAsOperator(LIST_ID, 'li1', ACTOR);
+
+    expect(commentDeletes).toEqual([{ lineId: 'li1' }]);
+    expect(items.rows).toEqual([]);
+    // Null on this path, and not merely absent: the column names a member, and
+    // an operator's name belongs in the trail (plan 0132, section 6).
+    expect(updated).toEqual([
+      {
+        criteria: { id: 'li1' },
+        values: {
+          itemSetHash: null,
+          productGroupId: null,
+          deletedByUserId: null,
+        },
       },
     ]);
   });

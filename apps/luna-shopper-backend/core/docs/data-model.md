@@ -14,7 +14,7 @@ relation decorator), the migration is the schema of record. Update this file whe
 - Most tables extend `BaseEntity`: a `uuid` primary key `id` plus `createdAt` and `updatedAt`
   (`timestamptz`). The diagrams list those three columns only where a table does not extend it.
   Tables that are written once and never edited (`list_line_items`, `list_line_group_removals`,
-  `line_settlements`, `generated_list_line_origins`, `generated_list_line_options`, `core_audit`)
+  `line_settlements`, `basket_line_origins`, `basket_line_options`, `core_audit`)
   have no `updatedAt`. `comment_audio` and `processed_events` have no surrogate id.
 - **Cross service ids are references, not foreign keys.** User ids (`userId`, `ownerUserId`,
   `createdByUserId` and the rest) come from auth. `core_audit.actorId` is an auth
@@ -22,7 +22,7 @@ relation decorator), the migration is the schema of record. Update this file whe
   catalog. Application code checks their shape. No database constraint can reach another
   service's database.
 - A relationship drawn in a diagram is a real foreign key. Every one of them is `ON DELETE
-  CASCADE`, except `generated_list_participants.shareLinkId`, which is `ON DELETE SET NULL`.
+  CASCADE`, except `basket_participants.shareLinkId`, which is `ON DELETE SET NULL`.
   A column the notes call a reference without a foreign key has no line in any diagram.
 - Enum columns show the TypeScript enum name as their type. The values are in the
   [enum table](#enums). All of them live in `@portfolio/luna-shopper/contracts`, except the two
@@ -203,7 +203,7 @@ erDiagram
         timestamptz settledAt
         timestamptz revertedAt "nullable"
         uuid revertedByParticipantId "nullable, no FK"
-        uuid generatedListLineId "nullable, no FK, stored and never served"
+        uuid basketLineId "nullable, no FK, stored and never served"
         int pricePaidCents "nullable, written by nothing yet"
         uuid supermarketLocationId "catalog location ref, nullable, written by nothing yet"
     }
@@ -218,39 +218,39 @@ erDiagram
   - `ck_line_settlements_revert`: `revertedAt` and `revertedByParticipantId` are both null or both
     set.
   - `ck_line_settlements_home`: `lineId` and `listId` are both null or both set.
-  - `ck_line_settlements_waiting_basket`: `lineId` or `generatedListLineId` is set.
+  - `ck_line_settlements_waiting_basket`: `lineId` or `basketLineId` is set.
 - **A row with a null `lineId` is a waiting settlement** (plan 0093): a purchase on a basket line
-  that has not reached a list yet. It belongs to the basket line through `generatedListLineId` and
+  that has not reached a list yet. It belongs to the basket line through `basketLineId` and
   moves home when the line reaches a list.
 - The participant ids carry no foreign key on purpose. A settlement is a zone fact, and deleting a
   basket or its participants leaves the purchase standing.
 - Indexes: (`lineId`, `settledAt`), (`itemId`, `settledAt`), (`listId`, `settledAt`), and the
-  partial `ix_settlements_waiting` on (`generatedListLineId`, `settledAt`) where `lineId` is null.
+  partial `ix_settlements_waiting` on (`basketLineId`, `settledAt`) where `lineId` is null.
 
 ## Generated baskets and sharing
 
 ```mermaid
 erDiagram
-    generated_lists ||--o{ generated_list_lines : "has"
-    generated_list_lines ||--o{ generated_list_line_origins : "fed by"
-    generated_list_lines ||--o{ generated_list_line_options : "can pick"
-    generated_lists ||--o{ generated_list_share_links : "shared by"
-    generated_lists ||--o{ generated_list_participants : "acted on by"
-    generated_list_share_links |o--o{ generated_list_participants : "admitted"
+    baskets ||--o{ basket_lines : "has"
+    basket_lines ||--o{ basket_line_origins : "fed by"
+    basket_lines ||--o{ basket_line_options : "can pick"
+    baskets ||--o{ basket_share_links : "shared by"
+    baskets ||--o{ basket_participants : "acted on by"
+    basket_share_links |o--o{ basket_participants : "admitted"
 
-    generated_lists {
+    baskets {
         uuid id PK
         uuid ownerUserId "auth user ref"
         varchar name "nullable, null renders the generation date"
-        GeneratedListStatus status "default DRAFT"
+        BasketStatus status "default DRAFT"
         timestamptz generatedAt
         jsonb sourceSnapshot "zones, lists and profile the run used"
         uuid defaultTargetListId "nullable, no FK"
         varchar idempotencyKey "nullable"
     }
-    generated_list_lines {
+    basket_lines {
         uuid id PK
-        uuid generatedListId FK
+        uuid basketId FK
         varchar content "copied at generation"
         int quantity "default 1, summed across origins"
         int settledQuantity "default 0"
@@ -262,34 +262,34 @@ erDiagram
         uuid lastEditedByParticipantId "nullable, no FK"
         timestamptz lastEditedAt "nullable"
     }
-    generated_list_line_origins {
+    basket_line_origins {
         uuid id PK
         timestamptz createdAt
-        uuid generatedListLineId FK
+        uuid basketLineId FK
         uuid zoneId "no FK"
         uuid listId "no FK"
         uuid lineId "zone line, no FK"
         int quantity "default 1"
         int lineVersion "default 1"
     }
-    generated_list_line_options {
+    basket_line_options {
         uuid id PK
         timestamptz createdAt
-        uuid generatedListLineId FK
+        uuid basketLineId FK
         uuid itemId "catalog item ref"
         int position "default 0"
     }
-    generated_list_share_links {
+    basket_share_links {
         uuid id PK
-        uuid generatedListId FK
+        uuid basketId FK
         varchar secret UK "not hashed"
         uuid createdByParticipantId "no FK"
         timestamptz expiresAt "nullable"
         timestamptz revokedAt "nullable"
     }
-    generated_list_participants {
+    basket_participants {
         uuid id PK
-        uuid generatedListId FK
+        uuid basketId FK
         uuid shareLinkId FK "nullable, SET NULL"
         ParticipantKind kind
         uuid userId "auth user ref, null for a GUEST"
@@ -310,27 +310,27 @@ erDiagram
 - **A basket is not a shopping list** (plan 0050). It draws from several zones at once, so it has
   no `zoneId`. Only its owner reads it, plus the participants that plan 0051 admits.
 - A basket line copies text and quantity at generation time. It is not a live view of the zone
-  lines. `generated_list_line_origins` (unique on `generatedListLineId`, `lineId`) records which
+  lines. `basket_line_origins` (unique on `basketLineId`, `lineId`) records which
   zone lines fed it, what each contributed and the origin's `version` at the time. The zone ids in
   an origin carry no foreign key, so deleting a zone line never blocks on a basket.
-- `generated_list_line_options` (unique on `generatedListLineId`, `itemId`) is the union of the
+- `basket_line_options` (unique on `basketLineId`, `itemId`) is the union of the
   origins' product sets, copied at generation. `itemId` on the line is the pick among them, and it
   is null for a free text line. Outstanding is `quantity - settledQuantity`.
 - `idempotencyKey` has a partial unique index on (`ownerUserId`, `idempotencyKey`) where the key is
   not null, so a double tap returns the first basket instead of making two. Baskets are also
   indexed on (`ownerUserId`, `generatedAt`).
 - **A link is an invitation, a participant is an identity** (plan 0051). A basket has zero live
-  links or one: `uq_generated_list_share_links_live` is a partial unique index on
-  `generatedListId` where `revokedAt` is null. Revoked links stay, so participants keep pointing at
+  links or one: `uq_basket_share_links_live` is a partial unique index on
+  `basketId` where `revokedAt` is null. Revoked links stay, so participants keep pointing at
   them. The link `secret` is stored in plain text so the owner can copy it again, and a guest's
   `sessionSecretHash` is hashed because it is a credential.
 - Every actor on a basket is a participant, the owner included. Participant indexes: a partial
-  unique index on (`generatedListId`, `userId`) where `userId` is not null, a partial unique index
-  on `sessionSecretHash`, (`generatedListId`, `joinedAt`), `shareLinkId`, and
+  unique index on (`basketId`, `userId`) where `userId` is not null, a partial unique index
+  on `sessionSecretHash`, (`basketId`, `joinedAt`), `shareLinkId`, and
   (`userId`) where `userId` is not null and `revokedAt` is null for the shared baskets read
   (plan 0114).
-- `endedReason` is set exactly when `revokedAt` is (`ck_generated_list_participants_ended`), and
-  holds `REMOVED`, `LINK_REVOKED` or `LEFT` (`ck_generated_list_participants_ended_reason`).
+- `endedReason` is set exactly when `revokedAt` is (`ck_basket_participants_ended`), and
+  holds `REMOVED`, `LINK_REVOKED` or `LEFT` (`ck_basket_participants_ended_reason`).
   A live row with `invitedAt` set and a null `shareLinkId` is a member the owner added from their
   groups, and revoking a link does not reach it.
 
@@ -442,7 +442,7 @@ erDiagram
 | `LineItemSource`          | `GROUP`, `USER`                                |
 | `CommentTranscription`    | `PENDING`, `READY`, `FAILED`, `UNAVAILABLE`    |
 | `SettlementOutcome`       | `BOUGHT`, `NOT_AVAILABLE`                      |
-| `GeneratedListStatus`     | `DRAFT`, `ACTIVE`, `COMPLETED`, `ARCHIVED`     |
+| `BasketStatus`     | `DRAFT`, `ACTIVE`, `COMPLETED`, `ARCHIVED`     |
 | `GeneratedLineOrigin`     | `DERIVED`, `ADDED`                             |
 | `ParticipantKind`         | `OWNER`, `REGISTERED`, `GUEST`                 |
 | `ParticipantEndedReason`  | `REMOVED`, `LINK_REVOKED`, `LEFT`              |

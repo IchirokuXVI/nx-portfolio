@@ -10,6 +10,8 @@ import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
 import { LessThan, Repository } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
+import type { CoveringBasket } from '../baskets/basket-coverage.sql';
 import type { CoreConfig } from '../config/app-config';
 import { Zone, ZoneMembership } from '../entities';
 import {
@@ -44,6 +46,9 @@ export class ZoneReaperService
     // Only the operator path writes to it. A scheduled run has no actor to
     // record (plan 0077, section 8), which is why the two paths are two methods.
     private readonly audit: CoreAuditService,
+    // Deleting a zone takes every list in it off the household's open baskets
+    // (plan 0139, section 5).
+    private readonly baskets: BasketAnnouncer,
     configService: ConfigService
   ) {
     this.cfg = configService.getOrThrow<CoreConfig>('core').reaper;
@@ -126,8 +131,9 @@ export class ZoneReaperService
    */
   async deleteZone(zoneId: string): Promise<{ id: string }> {
     const audience = await zoneDeletionAudience(this.memberships, zoneId);
+    const baskets = await this.baskets.openBaskets(zoneId);
     await this.zones.delete({ id: zoneId });
-    return this.announceDeletion(zoneId, audience);
+    return this.announceDeletion(zoneId, audience, baskets);
   }
 
   /**
@@ -156,8 +162,9 @@ export class ZoneReaperService
       throw new NotFoundException('Zone not found');
     }
     const audience = await zoneDeletionAudience(this.memberships, zoneId);
+    const baskets = await this.baskets.openBaskets(zoneId);
     await this.audit.write(actorId, (tx) => tx.delete(Zone, zone));
-    return this.announceDeletion(zoneId, audience);
+    return this.announceDeletion(zoneId, audience, baskets);
   }
 
   /**
@@ -168,12 +175,18 @@ export class ZoneReaperService
    * hand, is read **before** the write: the memberships that name the pending
    * applicants cascade with the zone, and an applicant is in no room that would
    * otherwise carry the news.
+   *
+   * The open baskets are read before the write for the same reason and told
+   * after it (plan 0139, section 5): every list in the zone has just left them,
+   * and afterwards nothing can say whose baskets those were.
    */
   private announceDeletion(
     zoneId: string,
-    audience: EventAudience
+    audience: EventAudience,
+    baskets: readonly CoveringBasket[]
   ): { id: string } {
     this.events.emitTo(RealtimeEvent.ZoneDeleted, audience, { id: zoneId });
+    this.baskets.coverageMovedTo(baskets);
     return { id: zoneId };
   }
 }

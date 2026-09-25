@@ -1,0 +1,148 @@
+{
+  "title": "Velista: buying at one shop",
+  "lede": "The design for plans <code>0102</code> (buying at one shop), <code>0103</code> (the shop picker that finds you) and <code>0104</code> (what you usually buy here), with backend <code>0163</code> to <code>0165</code> behind them. Prices from becomes Buying at; a list can be started at a shop and is then locked to it; the picker offers your recent shops and Near me; and, with a shop chosen, a switch shows only what you usually buy there. The open questions are top right, and they need answers before any code. Phone only, 390 by 844, Night only: the one new colour use, violet for a shop outside your areas, is a role 0002 already proves on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    {
+      "file": "BuyingAt.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1760,
+      "h": 1010,
+      "title": "Buying at: any shop, one shop, outside your areas, locked (0102)"
+    },
+    {
+      "file": "Rows.dc.html",
+      "x": 0,
+      "y": 1160,
+      "w": 900,
+      "h": 1010,
+      "title": "The rows at a shop (0102)"
+    },
+    {
+      "file": "GetSheet.dc.html",
+      "x": 0,
+      "y": 2320,
+      "w": 1330,
+      "h": 1010,
+      "title": "Starting a list at a shop (0102)"
+    },
+    {
+      "file": "Picker.dc.html",
+      "x": 0,
+      "y": 3480,
+      "w": 1330,
+      "h": 1010,
+      "title": "The picker: recent shops, Near me, and a pick (0103)"
+    },
+    {
+      "file": "NoPick.dc.html",
+      "x": 0,
+      "y": 4640,
+      "w": 1330,
+      "h": 1010,
+      "title": "No pick: the candidates, and why (0103)"
+    },
+    {
+      "file": "NoPickEmpty.dc.html",
+      "x": 0,
+      "y": 5800,
+      "w": 1330,
+      "h": 1010,
+      "title": "Locating, nothing near, and a refusal (0103)"
+    },
+    {
+      "file": "Usual.dc.html",
+      "x": 0,
+      "y": 6960,
+      "w": 1760,
+      "h": 1010,
+      "title": "Only what I usually buy here (0104)"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -640,
+      "w": 420,
+      "text": "THE PROBLEM. Prices from asked which prices to show. The person standing in a Mercadona was answering a different question: where am I. So the fieldset becomes BUYING AT, and the answer does three jobs. It prices every row at that shop, it marks what the shop is known not to have, and it records the shop on every purchase made while it is chosen.\nTHERE IS NO TRIP AND NO START BUTTON. On the LIVE basket, Buying at is a choice of this device, as 0091 section 7 decided, because two people in one household stand in two shops. Starting a trip at a shop means choosing the shop in the get a list sheet: that basket then carries it, for everybody in it."
+    },
+    {
+      "id": "lock",
+      "x": 460,
+      "y": -640,
+      "w": 420,
+      "text": "THE LOCK IS THE SERVER'S FACT. A basket created with a shop reads it back as BasketView.shop, and the fieldset draws the lock from that and from nothing stored on the phone. Disabled for everybody, the owner included, with one line under it: Set when this list was started. The LIVE basket is never locked.\nTHE CHIP carries a lock instead of an x, because an x that does nothing is a broken promise. Tapping it opens the sheet, where the line says why.\nA different shop sent to a locked basket answers 409 BASKET_SHOP_LOCKED. The page never sends one, so that error is a bug to fix, not a state to draw."
+    },
+    {
+      "id": "any",
+      "x": 920,
+      "y": -640,
+      "w": 420,
+      "text": "ANY SHOP RECORDS NO SHOP. With Any of your shops chosen, a settle sends neither a shop nor a chain, although it still records the scope of the price it showed. The scope of the cheapest price is not where the person stood, and 0104 counts where things were bought, so a guess here would poison it.\nWITH ONE SHOP CHOSEN, every settle sends the shop and the scope of the price it bought at, and the server copies the chain beside them.\nTHE SERVER DECIDES THE PRICE AT A SHOP, from that shop's own stack of scopes. The phone reads atShop and never chooses between scopes itself."
+    },
+    {
+      "id": "questions",
+      "x": 1380,
+      "y": -640,
+      "w": 420,
+      "text": "OPEN QUESTIONS, TO ANSWER BEFORE ANY CODE.\n1. GUESTS. A guest sees the same shops as the owner and gets Near me through the basket's route, so a guest can pick a nearby shop the owner never listed. A guest never gets recent shops. Assumption, to confirm.\n2. EXCLUDED SHOPS. A shop the profile excludes (0064) is still a candidate near you, but never picked automatically: it answers AMBIGUOUS. Assumption, to confirm.\n3. UNAVAILABLE AND UNLISTED. A row the shop has no price for sinks (0078); a row marked unavailable does not move (0102). A row that is both is drawn sinking, because the price rule came first. Confirm.\n4. THE PICK MESSAGE is drawn in the filter sheet. Should it follow onto the page when the sheet closes, until dismissed?\n5. HIDDEN COUNT. With the usual switch on, should the page say how many rows it hides? Not drawn, because no plan asks for it.\n6. NEW COPY, not in the plans: both hints of the get a list row, the switch's hint, the chip Usually bought here, the empty state, and the refusal, timeout and error lines.\n7. COLOUR. Outside your areas is violet, the attention role, because 0002 has no warning token on purpose. The shop chip names only the chain, so it carries no warning. Confirm both."
+    },
+    {
+      "id": "mark",
+      "x": 960,
+      "y": 1160,
+      "w": 420,
+      "text": "A MARK, NOT A MOVE. A row is marked Not available at this shop when every product it offers is known unavailable there (atShop.available false). Unknown is never marked: availability is read, never inferred, and most shops have no record at all yet. The row keeps its place, its settle controls and its amount, because the shelf may be restocked and the person is the one looking at it.\nWHEN ONLY THE DEFAULT IS MISSING, the row shows the option that is not known missing, and says what it replaced: Instead of Danone griego, not available at this shop. A settle then buys that option.\nThe mark is coral, the danger role 0002 gives NOT_AVAILABLE, and it is text with an icon so it never depends on colour alone."
+    },
+    {
+      "id": "sink",
+      "x": 1420,
+      "y": 1160,
+      "w": 420,
+      "text": "EVERYTHING ELSE IS 0078. A row the chosen shop does not list still sinks to the end under its heading, and cheaper elsewhere still compares, now against the price at this shop. The order is still the way you shop.\nA SHOP OUTSIDE YOUR AREAS has real prices: the server adds that shop's scopes to the ones it prices at. The warning only says the shop is outside the postal codes of your profile, and it changes nothing on the server. It is shown wherever the shop is named: the fieldset, the get a list row, recent shops and a candidate near you."
+    },
+    {
+      "id": "start",
+      "x": 1390,
+      "y": 2320,
+      "w": 420,
+      "text": "STARTING A LIST AT A SHOP. The get a list sheet gains one row, Buying at, Any of your shops by default, under the name and above Draw from. It opens the same picker the filter sheet opens, moved into ui so both sheets share it.\nThe shop can be changed as often as the person likes until Generate, and the x puts it back to any. Generate sends it, and from then on it is the basket's, fixed for everybody.\nThe line under the row says so before it happens, because afterwards there is no way back: Everybody in this list buys here, and it cannot be changed after Generate. New copy, to review."
+    },
+    {
+      "id": "picker",
+      "x": 1390,
+      "y": 3480,
+      "w": 420,
+      "text": "THE PICKER THAT FINDS YOU. Searching is slow when you are standing in the shop. Two things make it fast: the shops you bought at, first, and Near me.\nRECENT is the first section, newest first: the shops where this person marked something bought in the last 60 days. Nothing else, no ranking by how often. It is per person, never per household. Not drawn when it is empty, and never for a guest.\nNEAR ME sits in the title row, reachable without scrolling. The position is asked for only after the press, even when permission was already granted.\nA PICK closes the picker and says what it chose, with the distance and a way to change it, because a wrong automatic choice has to be easy to see and undo. The message stays until dismissed or until the shop changes."
+    },
+    {
+      "id": "nopick",
+      "x": 1390,
+      "y": 4640,
+      "w": 420,
+      "text": "THE CLIENT NEVER DECIDES THE PICK. The server answers pick or noPick, and the phone draws what it was told. For the record, the rule: accuracy worse than 150 m, no pick. One shop under 500 m, picked. Several, picked only when the nearest is under 250 m and every other is 500 m or more. A pick outside your areas becomes a candidate instead.\nNO PICK draws every candidate at the top, nearest first, each with its distance, under one line of copy for the reason. A candidate is chosen like any other shop row, and one outside your areas carries the same warning as everywhere else.\nAn excluded shop is a candidate but never the pick: assumption to confirm."
+    },
+    {
+      "id": "failure",
+      "x": 1390,
+      "y": 5800,
+      "w": 420,
+      "text": "FAILURE IS ONE LINE. A refused permission, a timeout or any other error draws a single line where the candidates would be, and the rest of the picker works as it did before this plan. No dialog and no retry loop: pressing Near me again is the retry.\nNONE NEARBY is one line too: No shop within 750 m. No empty box is drawn around nothing.\nA COORDINATE IS NEVER KEPT. It travels in one request body, and neither side stores, caches or logs it.\nA GUEST gets Near me through the basket's own route, answered against the owner's profile. Assumption to confirm, together with a guest never seeing recent shops."
+    },
+    {
+      "id": "usual",
+      "x": 1820,
+      "y": 6960,
+      "w": 420,
+      "text": "ONLY WHAT I USUALLY BUY HERE. In the user's words: the shop filter to hide products is optional. On first launch, all rows are hidden when it is enabled, and that is not a problem because it is NOT enabled by default. When it is not enabled, the rows it would hide are shown, as they are today. You choose a shop, and then a switch shows only what you usually buy at that shop.\nSo the switch does not exist until a shop is chosen, a list's own locked shop included. It is OFF every time the sheet opens and never remembered, like the Lists filter. With it off, no row carries a message and nothing about today's page changes.\nIT HIDES, AND NOTHING ELSE. It never reorders, groups or sinks: the rows it keeps are in the order they had with it off."
+    },
+    {
+      "id": "weeks",
+      "x": 1820,
+      "y": 7480,
+      "w": 420,
+      "text": "WHY IT STARTS OFF. No purchase before these plans recorded a shop, and a purchase made in Any of your shops mode still records none. So on the day this ships, every line ever bought is NO_SHOP_KNOWN and hidden, and only lines never bought stay. A line heals after one purchase with a shop chosen. The empty state says exactly that, and its button turns the switch off.\nHERE MEANS THE CHAIN. A purchase at any Mercadona counts, so the copy says here and never names the street. The message shows only when a row was bought here fewer than 5 times in its last six purchases. The numbers are the server's and never recounted, and NO_SHOP_KNOWN stays apart from ELSEWHERE so reversing the rule for the first weeks is one line."
+    }
+  ]
+}

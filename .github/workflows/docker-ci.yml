@@ -866,6 +866,13 @@ jobs:
 
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
+            # Release tasks (k8s/release-tasks): the pre phase dumps what each
+            # due task touches and runs its pre.sh, before the upgrade's
+            # migrations. A failure stops the deploy here, with nothing upgraded.
+            # If the upgrade below fails and --atomic rolls it back, the ledger
+            # remembers the pre phase and the next deploy finishes the task.
+            bash $HOME/k8s/release-tasks/run-release-tasks.sh --env staging --phase pre
+
             echo "Applying chart (staging)..."
 
             # --atomic implies --wait and rolls back on failure, which is exactly
@@ -951,6 +958,10 @@ jobs:
             for dep in $DEPLOYED; do
               kubectl rollout status "deployment/$dep" -n nx-portfolio --timeout=5m
             done
+
+            # The post phase finishes each task the pre phase started, against
+            # the new pods.
+            bash $HOME/k8s/release-tasks/run-release-tasks.sh --env staging --phase post
 
             echo "Staging deployment complete."
           EOF

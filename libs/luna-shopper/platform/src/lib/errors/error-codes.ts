@@ -23,6 +23,21 @@ export const ERROR_CODES = {
    * refused again, and signed the person out of the whole app.
    */
   NOT_A_PARTICIPANT: 'not_a_participant',
+  /**
+   * The credential named a participant of this basket whose twelve hours ran
+   * out (plan 0140, section 8).
+   *
+   * The same 401 as {@link NOT_A_PARTICIPANT} and a code of its own, because the
+   * two ask the client for different sentences: "you were removed" against "your
+   * access has ended, ask to be added". It is not a leak, because the caller
+   * presented a credential that **was** valid for this basket, so being told it
+   * ran out tells them nothing they did not already hold. The preview and the
+   * join take no credential and stay silent as ever.
+   *
+   * Like its neighbour it says nothing about the account, so a client must not
+   * answer it by refreshing or ending the session.
+   */
+  PARTICIPANT_EXPIRED: 'participant_expired',
   FORBIDDEN: 'forbidden',
   NOT_FOUND: 'not_found',
   CONFLICT: 'conflict',
@@ -55,7 +70,17 @@ export const ERROR_CODES = {
    * it cannot will show the wrong sentence for both. Nothing about the request
    * was malformed, and no field of it is at fault; the trip is over.
    */
-  GENERATED_LIST_FINISHED: 'generated_list_finished',
+  BASKET_FINISHED: 'basket_finished',
+  /**
+   * The basket was started at a shop, and the request named another one (plan
+   * 0163).
+   *
+   * A basket created with a shop keeps it for life and for everybody in it, so a
+   * read or a settle that names a different shop is refused rather than quietly
+   * answered at the basket's own. Its own code, because the client's reaction is
+   * particular: redraw the basket at its own shop and stop offering the choice.
+   */
+  BASKET_SHOP_LOCKED: 'basket_shop_locked',
   /**
    * The number this write was moving is not where the caller believed it started
    * (plan 0057, section 5; plan 0056, section 3.2).
@@ -67,17 +92,6 @@ export const ERROR_CODES = {
    * it started must be refused rather than reinterpreted.
    */
   STALE_QUANTITY: 'stale_quantity',
-  /**
-   * A contribution was set below what this basket has already bought against it
-   * (plan 0057, section 5.2).
-   *
-   * The message names the floor, so the client can say the number rather than
-   * only that it failed. Distinct from {@link STALE_QUANTITY} because nothing
-   * moved underneath the caller: the number they sent is simply lower than a
-   * purchase that has already happened, and two units of the flat's milk having
-   * been bought means the flat cannot retroactively have wanted one.
-   */
-  BELOW_SETTLED: 'below_settled',
   /**
    * The account itself is refusing attempts, having failed too many times in a
    * row (plan 0071, section 7; `apps/luna-shopper-admin/plans/0002`, section 2).
@@ -208,6 +222,29 @@ export const ERROR_CODES = {
    * section 9 of plan 0115: there is nowhere for its products to go.
    */
   BRAND_NOT_LINKED: 'brand_not_linked',
+  /**
+   * A discovered place is already imported, and the write asked to import it
+   * again or to reject it (plan 0152, section 5).
+   *
+   * Removing an imported shop is a catalog act on the location, not a queue
+   * act on the place, so reject refuses it rather than leaving a rejected row
+   * that still points at a live shop.
+   */
+  PLACE_ALREADY_IMPORTED: 'place_already_imported',
+  /**
+   * The catalog already holds a shop this place may be (plan 0152, section 2).
+   *
+   * Nothing was written. The candidates travel in the envelope's `details` as
+   * `candidates`, each with the rung that found it, so the back office can
+   * offer to link one or to create a new shop anyway.
+   */
+  PLACE_MATCHES_LOCATION: 'place_matches_location',
+  /**
+   * The run declared a price scope the chain does not hold (plan 0152,
+   * section 1). The key travels in `details` as `scopeKey`, so the operator
+   * can create that scope first.
+   */
+  SCOPE_NOT_FOUND: 'scope_not_found',
   INTERNAL: 'internal',
 } as const;
 
@@ -238,6 +275,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 401 and not 403, so a client that has read "refused" from a 401 since plan
   // 0051 keeps reading it. The code is what tells it the account is not at fault.
   [ERROR_CODES.NOT_A_PARTICIPANT]: HttpStatus.UNAUTHORIZED,
+  // The same status as the code above it, on the same reasoning: the account is
+  // not at fault, so a client must not sign anybody out over it (plan 0140).
+  [ERROR_CODES.PARTICIPANT_EXPIRED]: HttpStatus.UNAUTHORIZED,
   [ERROR_CODES.FORBIDDEN]: HttpStatus.FORBIDDEN,
   [ERROR_CODES.NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ERROR_CODES.CONFLICT]: HttpStatus.CONFLICT,
@@ -255,12 +295,13 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // to make it; what refuses it is the state of the basket, which is what a
   // conflict is. It stays distinguishable from a plain `conflict` by its code,
   // which is what lets velista say "this basket is finished".
-  [ERROR_CODES.GENERATED_LIST_FINISHED]: HttpStatus.CONFLICT,
-  // Both are 409 for the same reason and stay apart from it, and from each
-  // other, by code: the request was well formed, and what it conflicts with is
-  // state that moved or state that has already happened.
+  [ERROR_CODES.BASKET_FINISHED]: HttpStatus.CONFLICT,
+  // 409 for the same reason: the request was well formed, and what refuses it
+  // is the basket's own shop, which was fixed when the basket was made.
+  [ERROR_CODES.BASKET_SHOP_LOCKED]: HttpStatus.CONFLICT,
+  // 409 for the same reason and apart from it by code: the request was well
+  // formed, and what it conflicts with is state that moved underneath it.
   [ERROR_CODES.STALE_QUANTITY]: HttpStatus.CONFLICT,
-  [ERROR_CODES.BELOW_SETTLED]: HttpStatus.CONFLICT,
   // 423 rather than 429. A 429 is a statement about how fast the caller is
   // going, and slowing down fixes it; this one is a statement about the state
   // the account is in, which no amount of waiting between requests changes. It
@@ -300,5 +341,11 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409 again: the request is well formed and the caller may make it, and what
   // refuses it is that this brand is not a spelling of anything.
   [ERROR_CODES.BRAND_NOT_LINKED]: HttpStatus.CONFLICT,
+  // All three 409: the request is well formed, and what refuses it is the
+  // state of the place, of the catalog's shops, or of the chain's scopes
+  // (plan 0152).
+  [ERROR_CODES.PLACE_ALREADY_IMPORTED]: HttpStatus.CONFLICT,
+  [ERROR_CODES.PLACE_MATCHES_LOCATION]: HttpStatus.CONFLICT,
+  [ERROR_CODES.SCOPE_NOT_FOUND]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

@@ -7,6 +7,8 @@
  * only which paths, which query parameters and how a page is walked.
  */
 
+import { capSearchText } from './rules.mjs';
+
 /** The gateway's own cap. Asking for more is a 400. */
 const PAGE_SIZE = 100;
 
@@ -66,25 +68,41 @@ export function makeGateway(session) {
       });
     },
 
-    /** GET /v1/admin/catalog/items, ranked. */
+    /**
+     * GET /v1/admin/catalog/items, ranked.
+     *
+     * The text is cut to the gateway's own cap first (plan 0006), here rather
+     * than at each caller, so no search this library makes can be the 400 a
+     * long printed name used to be.
+     */
     async searchItems(query, limit = CANDIDATE_LIMIT) {
-      if (!query) {
+      const text = capSearchText(query);
+      if (!text) {
         return [];
       }
       const answer = await session.fetch('/v1/admin/catalog/items', {
-        query: { query, order: 'relevance', limit },
+        query: { query: text, order: 'relevance', limit },
       });
       return answer?.items ?? [];
     },
 
-    /** GET /v1/admin/catalog/items/{id}, or null when catalog holds no such id. */
+    /**
+     * GET /v1/admin/catalog/items/{id}, or null when catalog holds no such id.
+     *
+     * Only a 404 is an answer of null (plan 0006). Any other failure is thrown,
+     * because a timeout or a 500 says nothing about whether the product exists,
+     * and reading it as missing used to drop a real candidate without a word.
+     */
     async getItem(id) {
       try {
         return await session.fetch(
           `/v1/admin/catalog/items/${encodeURIComponent(id)}`
         );
-      } catch {
-        return null;
+      } catch (error) {
+        if (error?.status === 404) {
+          return null;
+        }
+        throw error;
       }
     },
 

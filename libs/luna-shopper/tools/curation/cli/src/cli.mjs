@@ -12,7 +12,11 @@
  * whatever slot you are serving here keeps running throughout. See `slots.mjs`.
  *
  *   npx nx run luna-shopper/curation-cli:curate -- --implementation suggestions
+ *   npx nx run luna-shopper/curation-cli:curate -- --resume .curation-runs/<id>
  *   npx nx run luna-shopper/curation-cli:curate -- --apply .curation-runs/<id>/decisions.jsonl
+ *
+ * `README.md` beside `src` walks the whole flow, from the first run to the
+ * apply, with one example per decider.
  *
  * Keep the `--`. Nx reads the flags in front of it as its own, and `--verbose`
  * is one of them, so a flag typed without the `--` is dropped in silence.
@@ -34,8 +38,9 @@
  *      Watch stderr: it names the slot, then the run id and the row count, then
  *      one `n/total - name` line per row. Stop it with Ctrl+C after a handful:
  *      the row in flight is dropped, the report is written over the rows that
- *      were decided, and the slot comes down. A second Ctrl+C stops the process
- *      at once and names the slot it is leaving up.
+ *      were decided, the summary names the command that resumes the run, and
+ *      the slot comes down. A second Ctrl+C stops the process at once and
+ *      names the slot it is leaving up.
  *   4. bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
  *      The rehearsal slot is gone, and slot 0 is exactly as step 1 left it. A
  *      slot left behind by the second Ctrl+C is taken down with
@@ -48,7 +53,8 @@
  */
 
 import { spawn as spawnProcess } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
@@ -59,8 +65,16 @@ import {
   engineEntry,
   stripFence,
 } from '../../../../../shared/model-engines/src/index.mjs';
+import { applyDecisions } from './apply.mjs';
 import { IMPLEMENTATION_NAMES, deciderPath, makeDecider } from './decider.mjs';
 import { runCuration } from './orchestrator.mjs';
+import {
+  RUN_FILE,
+  readRunFile,
+  recordRowFailure,
+  replayCreations,
+  writeRunFile,
+} from './run-files.mjs';
 import { REHEARSAL_SERVICES, makeSlots, waitForGateway } from './slots.mjs';
 
 /** The workspace root, six directories above this file. */
@@ -127,8 +141,14 @@ ${line('--limit <n>', 'stop handing rows to the model after n')}
 ${indent}of them, then end the run normally
 ${line('--services <a,b>', 'rehearsal services, default')}
 ${indent}${REHEARSAL_SERVICES.join(',')}
+${line('--resume <run-dir>', 'continue a stopped run on a new slot;')}
+${indent}its decider, chain and main url are the
+${indent}ones it was started with
 ${line('--apply <decisions.jsonl>', 'replay a decisions file into the main')}
-${indent}gateway: no slot, no model
+${indent}gateway: no slot, no model. Reads the
+${indent}decider from the run directory and the
+${indent}main url from the file, and splits a
+${indent}file over the route's cap by itself
 
   The ollama engine reads five environment variables: OLLAMA_HOST,
   OLLAMA_NUM_CTX, OLLAMA_NUM_PREDICT, OLLAMA_BATCH (how many requests are held
@@ -379,8 +399,20 @@ function askLine() {
   });
 }
 
+/** The signals that stop a run: Ctrl+C, a `kill`, and a terminal that closed. */
+export const STOP_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+
+/** The exit code a shell reads as "ended by this signal". */
+const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };
+
 /**
  * Ctrl+C once stops the run, twice stops the process.
+ *
+ * SIGTERM and SIGHUP are the same request from somewhere else (plan 0005): a
+ * `kill`, or the terminal window closing. Each of them used to end the process
+ * where it stood, with the slot up and nothing recording its number. Now any
+ * of the three stops the run, and a second one of any kind is the escape
+ * hatch.
  *
  * The first one aborts the signal every step of the run holds: the model call
  * in flight is killed, the walk stops at that row, the decider writes the
@@ -405,13 +437,13 @@ export function installInterrupt({
   slotOf = () => null,
 }) {
   let asked = false;
-  const handler = () => {
+  const handler = (signal = 'SIGINT') => {
     if (!asked) {
       asked = true;
       stderr.write(
-        '\nstopping: the row in flight is dropped, the report is written over the rows already decided, and the rehearsal slot comes down. Press Ctrl+C again to stop now.\n'
+        `\n${signal}: stopping. The row in flight is dropped, the report is written over the rows already decided, and the rehearsal slot comes down. Press Ctrl+C again to stop now.\n`
       );
-      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      controller.abort(new Error(`the run was stopped with ${signal}`));
       return;
     }
     const slot = slotOf();
@@ -421,10 +453,46 @@ export function installInterrupt({
         `take it down with: bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --down ${slot}\n`
       );
     }
-    exit(130);
+    exit(SIGNAL_EXIT[signal] ?? 130);
   };
-  on('SIGINT', handler);
-  return () => off('SIGINT', handler);
+  for (const signal of STOP_SIGNALS) {
+    on(signal, handler);
+  }
+  return () => {
+    for (const signal of STOP_SIGNALS) {
+      off(signal, handler);
+    }
+  };
+}
+
+/**
+ * What a resumed run starts from (plan 0005).
+ *
+ * `curation-run.json` is written when a run opens, so a directory without one
+ * was never opened by this orchestrator, or was opened before resuming existed.
+ * Either way there is no prompt to walk the rest of it with.
+ */
+export function loadResume(runDir) {
+  if (typeof runDir !== 'string' || runDir === '') {
+    throw new Error('--resume takes the run directory of the run to continue.');
+  }
+  const stored = readRunFile(runDir);
+  if (!stored) {
+    throw new Error(
+      `${join(runDir, RUN_FILE)} does not exist, so ${runDir} cannot be resumed. It is written when a run opens, and a run started before resuming existed has none. Start a new run.`
+    );
+  }
+  if (!existsSync(join(runDir, 'state.json'))) {
+    throw new Error(
+      `${runDir} holds no state.json, so the run never opened. Start a new run.`
+    );
+  }
+  return stored;
+}
+
+/** A flag's string value, or null when it was not given as one. */
+function stringFlag(flags, name) {
+  return typeof flags[name] === 'string' ? flags[name] : null;
 }
 
 export async function main(
@@ -448,29 +516,90 @@ export async function main(
     return 0;
   }
 
+  const mainUser = stringFlag(flags, 'main-user');
+  const mainPassword = stringFlag(flags, 'main-password');
+
+  // `--apply` skips all of it: no slot, no model, one request per part. The
+  // implementation is read from the run directory and the main url from the
+  // file's header (plan 0005), so neither flag is needed. `apply` closes each
+  // decider itself, so there is nothing to tear down here.
+  if (flags.apply !== undefined) {
+    if (typeof flags.apply !== 'string') {
+      throw new Error('--apply takes the decisions file to replay.');
+    }
+    const named = stringFlag(flags, 'implementation');
+    if (named !== null) {
+      deciderPath(named, repoRoot);
+    }
+    await applyDecisions({
+      file: flags.apply,
+      implementation: named,
+      mainUrl: stringFlag(flags, 'main-url'),
+      mainUser,
+      passwordGiven: mainPassword !== null,
+      makeDeciderFor: (implementation) =>
+        makeDecider({
+          startChild,
+          cliPath: deciderPath(implementation, repoRoot),
+          runDir: null,
+          mainPassword,
+        }),
+      stdout,
+      stderr,
+    });
+    return 0;
+  }
+
+  // A resumed run is the run it was, so everything it was started with comes
+  // from its own file, and a flag only overrides what may differ between two
+  // sittings: the engine, the model, the effort and the limit.
+  const resumed = flags.resume === undefined ? null : loadResume(flags.resume);
+  if (resumed && flags['run-dir'] !== undefined) {
+    throw new Error(
+      '--resume names the run directory already. Leave out --run-dir.'
+    );
+  }
+  const refuseChange = (name, given, stored) => {
+    if (resumed && given !== null && given !== (stored ?? null)) {
+      throw new Error(
+        `${flags.resume} was started with --${name} ${stored ?? '(none)'}, and a resumed run keeps it. Leave out --${name}.`
+      );
+    }
+  };
+  refuseChange(
+    'implementation',
+    stringFlag(flags, 'implementation'),
+    resumed?.implementation
+  );
+  refuseChange('main-url', stringFlag(flags, 'main-url'), resumed?.mainUrl);
+  refuseChange('chain', stringFlag(flags, 'chain'), resumed?.chain);
+
   const mainUrl =
-    typeof flags['main-url'] === 'string'
-      ? flags['main-url']
-      : DEFAULT_MAIN_URL;
-  const mainUser =
-    typeof flags['main-user'] === 'string' ? flags['main-user'] : null;
-  const mainPassword =
-    typeof flags['main-password'] === 'string' ? flags['main-password'] : null;
+    resumed?.mainUrl ?? stringFlag(flags, 'main-url') ?? DEFAULT_MAIN_URL;
+  const runUser = mainUser ?? resumed?.mainUser ?? null;
+
   // A misspelled engine is refused before a slot is taken or a directory made,
   // and the entry it resolves to is what answers for the model and the effort.
   // Nothing here asks which engine it got.
   const engineName =
-    typeof flags.engine === 'string' ? flags.engine : DEFAULT_ENGINE;
+    stringFlag(flags, 'engine') ?? resumed?.engine ?? DEFAULT_ENGINE;
   const entry = engineEntry(engineName);
+  // What the resumed run was started with belongs to the engine it was
+  // started on, so another engine takes its own defaults.
+  const sameEngine = resumed?.engine === entry.name;
 
   const model =
-    typeof flags.model === 'string' ? flags.model : entry.defaultModel;
+    stringFlag(flags, 'model') ??
+    (sameEngine ? resumed.model : null) ??
+    entry.defaultModel;
 
   // Refused here rather than by the CLI three layers down, where it would cost
   // a slot, a login and a rehearsal catalog before it said so. The levels are
   // the resolved entry's own: a provider with none refuses the flag outright.
   const effort =
-    typeof flags.effort === 'string' ? flags.effort : entry.defaultEffort;
+    stringFlag(flags, 'effort') ??
+    (sameEngine ? resumed.effort : null) ??
+    entry.defaultEffort;
   if (effort !== null && !entry.effortLevels.includes(effort)) {
     throw new Error(
       entry.effortLevels.length > 0
@@ -482,36 +611,33 @@ export async function main(
   // Refused here, before a slot is taken and a rehearsal catalog is built, for
   // the same reason a misspelled engine is: a flag that cannot be read is a run
   // that was never going to do what was asked of it.
-  const limit = parseLimit(flags.limit);
+  const limit =
+    flags.limit === undefined
+      ? (resumed?.limit ?? null)
+      : parseLimit(flags.limit);
 
-  const implementation = await resolveImplementation({
-    flag: flags.implementation,
-    isTty,
-    askLine: ask,
-    stdout,
-  });
+  const implementation =
+    resumed?.implementation ??
+    (await resolveImplementation({
+      flag: flags.implementation,
+      isTty,
+      askLine: ask,
+      stdout,
+    }));
   const cliPath = deciderPath(implementation, repoRoot);
-
-  // `--apply` skips all of it: no slot, no model, one request. `apply` closes
-  // the decider itself, so there is nothing to tear down here.
-  if (typeof flags.apply === 'string') {
-    const decider = makeDecider({
-      startChild,
-      cliPath,
-      runDir: null,
-      mainPassword,
-    });
-    const answer = await decider.apply({
-      mainUrl,
-      file: flags.apply,
-      mainUser,
-    });
-    stdout.write(`${JSON.stringify(answer)}\n`);
-    return 0;
+  const chain = resumed ? (resumed.chain ?? null) : stringFlag(flags, 'chain');
+  // The groups decider refuses --chain itself, because a product group spans
+  // every chain. Refused here as well, before a slot is taken, for the same
+  // reason a misspelled engine is.
+  if (implementation === 'groups' && chain !== null) {
+    throw new Error(
+      '--chain works with the suggestions decider only. A product group spans every chain, so a groups walk is every ungrouped product. Run it without --chain.'
+    );
   }
 
-  const runDir =
-    typeof flags['run-dir'] === 'string' ? flags['run-dir'] : defaultRunDir();
+  const runDir = resumed
+    ? flags.resume
+    : (stringFlag(flags, 'run-dir') ?? defaultRunDir());
   mkdirSync(runDir, { recursive: true });
 
   // One controller for the whole run: the engine, the wait for the gateway and
@@ -583,12 +709,12 @@ export async function main(
       engine,
       runDir,
       mainUrl,
-      mainUser,
+      mainUser: runUser,
       model,
       // The registry is the authority about engines, so the walk asks the entry
       // rather than the name (plan 0003).
       local: entry.local === true,
-      chain: typeof flags.chain === 'string' ? flags.chain : null,
+      chain,
       limit,
       services,
       waitForGateway,
@@ -601,6 +727,31 @@ export async function main(
       onSlot: (taken) => {
         slot = taken;
       },
+      // Everything a resume needs and the decider does not keep: which decider
+      // ran, on what, and what `start` answered. Never the password.
+      onOpened: (opened) =>
+        writeRunFile(runDir, {
+          implementation,
+          engine: entry.name,
+          model,
+          effort,
+          chain,
+          limit,
+          mainUrl,
+          mainUser: runUser,
+          opened,
+        }),
+      resume: resumed
+        ? {
+            opened: resumed.opened,
+            replay: ({ rehearsalUrl }) =>
+              replayCreations({ implementation, runDir, rehearsalUrl }),
+          }
+        : null,
+      recordRowFailure: ({ row, error }) =>
+        recordRowFailure({ implementation, runDir, row, error }),
+      readReport: (path) => JSON.parse(readFileSync(path, 'utf8')),
+      passwordGiven: mainPassword !== null,
     });
   } finally {
     // The listener is what keeps the process alive after the run, so it is

@@ -12,6 +12,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   CORE_ENTITIES,
   ListAccess,
@@ -26,6 +27,13 @@ import { ZoneCountsService } from '../zones/zone-counts.service';
 import { ListAccessService } from './list-access.service';
 import { ListService } from './list.service';
 import { SharedListGrantService } from './shared-list-grant.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * "Which other lists hold this item", against real Postgres (plan 0053,
@@ -153,7 +161,8 @@ describeIntegration('which other lists hold this item (real Postgres)', () => {
       new SharedListGrantService(),
       new ZoneCountsService(memberships, { emit: jest.fn() } as never),
       { emit: jest.fn() } as never,
-      new CoreAuditService(dataSource)
+      new CoreAuditService(dataSource),
+      announcer
     );
 
     ids.homeZone = await seedZone('Home', ids.shopper);

@@ -7,6 +7,7 @@ import type {
   LineOrder,
   LineSettlement,
   Page,
+  SettleLineOptions,
   SettlementOutcome,
 } from '@portfolio/velista/models';
 import { LineApi } from './line-api';
@@ -133,7 +134,7 @@ export interface LineServiceI {
   settle(
     lineId: string,
     outcome: SettlementOutcome,
-    options?: { quantity?: number; itemId?: string }
+    options?: SettleLineOptions
   ): Promise<{ line: Line; settlement: LineSettlement }>;
 
   /**

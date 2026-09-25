@@ -11,6 +11,9 @@ import { AutoImportPlaces1757100000000 } from './1757100000000-AutoImportPlaces'
 import { SourceEntryBrandKey1757200000000 } from './1757200000000-SourceEntryBrandKey';
 import { ScopeCopies1757300000000 } from './1757300000000-ScopeCopies';
 import { RunPresets1757400000000 } from './1757400000000-RunPresets';
+import { DiscoveredPlaceScopeKey1757500000000 } from './1757500000000-DiscoveredPlaceScopeKey';
+import { SharedEan1757600000000 } from './1757600000000-SharedEan';
+import { SourceEntryPackCount1757700000000 } from './1757700000000-SourceEntryPackCount';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -34,4 +37,7 @@ export const HARVESTER_MIGRATIONS = [
   SourceEntryBrandKey1757200000000,
   ScopeCopies1757300000000,
   RunPresets1757400000000,
+  DiscoveredPlaceScopeKey1757500000000,
+  SharedEan1757600000000,
+  SourceEntryPackCount1757700000000,
 ];

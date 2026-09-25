@@ -19,11 +19,17 @@ import { GatewayError } from '@portfolio/velista/data-access';
  *
  * ## What is deliberately absent
  *
- * **`unauthorized` and `not_a_participant` have no row.** Both are 401s, and
- * `BasketStore._fail` already turns a 401 into the `revoked` or `needsJoin`
- * state, which is a whole screen rather than a sentence, and
- * that stays where it is. Reaching a row here for one would mean drawing a sentence
- * over a screen that has already said something better.
+ * **`unauthorized`, `not_a_participant` and `participant_expired` have no row.**
+ * All three are 401s, and `BasketStore._fail` already turns a 401 into the
+ * `revoked` or `needsJoin` state, which is a whole screen rather than a
+ * sentence, and that stays where it is. Reaching a row here for one would mean
+ * drawing a sentence over a screen that has already said something better.
+ *
+ * The third is the newest and the least obviously absent (backend `0140`,
+ * section 8): it says a visit ran out, which is very much a thing to tell
+ * somebody, and the screen that tells them is the ended state of velista `0094`
+ * section 5, reading `BasketStore.accessEnded`. Adding a row here would put a
+ * second, smaller sentence about it over the top.
  */
 export type BasketOperation =
   /** Loading the basket, refreshing it. */
@@ -52,7 +58,29 @@ export type BasketOperation =
    */
   | 'basket.originSettled'
   /** Renaming a line, and the zone lines it came from (velista 0084). */
-  | 'basket.rename';
+  | 'basket.rename'
+  /**
+   * Changing what one list asks for, from the entries pane (velista 0092,
+   * section 6).
+   *
+   * Apart from `basket.origins`, although both are about a household's demand,
+   * because the rule behind this one is the **basket owner's** rather than the
+   * reader's. A 403 here is the owner's standing on that list having moved
+   * between the basket being read and the button being pressed, which is not
+   * something the person holding the phone did or can fix.
+   */
+  | 'basket.demand'
+  /**
+   * Adding a line, onto one of the basket's covered lists (velista 0092,
+   * section 7.4).
+   *
+   * Its own member rather than sharing `basket.origins`, because a refused add
+   * is a different fact: the target list stopped being one this reader may
+   * write between the basket being read and the button being pressed. The chip
+   * above the field is still naming it, so the sentence has to say the list and
+   * not the line.
+   */
+  | 'basket.addLine';
 
 /** The message any failure falls back to, including one with no code at all. */
 const GENERIC = 'basket.error.failed';
@@ -93,7 +121,7 @@ export function basketErrorKey(
       // retroactively have wanted one.
       return 'basket.error.belowSettled';
 
-    case 'generated_list_finished':
+    case 'basket_finished':
       // The trip is over. Its own code on the backend since luna `0055`, and its own
       // member here since velista `0054`, because read as a plain conflict it drew
       // "somebody already finished this line" over a line nobody had finished.
@@ -154,6 +182,17 @@ export function basketErrorKey(
           // Access to one of the lists behind this line moved since the basket was
           // generated. The line is still on the screen and still readable, so this
           // says what changed rather than taking the basket away.
+          return 'basket.error.accessChanged';
+        case 'basket.demand':
+          // Not the sentence above, and that is the point of the separate member:
+          // this is about the **owner's** standing on that list, not the
+          // reader's, so "your access has changed" would be a sentence about the
+          // wrong person. A guest reading it has no access to have changed.
+          return 'basket.demand.refused';
+        case 'basket.addLine':
+          // The target list stopped being one this reader may write. That **is**
+          // their own access, unlike the case above, so it takes the sentence
+          // about access having changed.
           return 'basket.error.accessChanged';
         case 'basket.rename':
           // The server asks who may rename per request, against every list behind the

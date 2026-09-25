@@ -36,7 +36,8 @@
               <span class="choice-body">
                 <span class="name">{{ person.username }}</span>
                 @if (hint) {
-                  <span [id]="hintId" class="hint">{{ hint | rokuT }}</span>
+                  <!-- Already translated by the container (velista 0094). -->
+                  <span [id]="hintId" class="hint">{{ hint }}</span>
                 }
               </span>
             </label>

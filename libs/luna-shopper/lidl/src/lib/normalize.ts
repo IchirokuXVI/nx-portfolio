@@ -10,7 +10,7 @@ import {
   readString,
   type Json,
 } from './json';
-import { parseSize } from './size';
+import { packCountIn, parseSize } from './size';
 import {
   LIDL_BASE_URL,
   type LidlListRow,
@@ -142,6 +142,7 @@ export function normalizeProduct(
     unitSize: size?.unitSize ?? null,
     unit: size?.unit ?? null,
     sizeFormat,
+    packCount: packCountIn(sizeFormat),
     url: path ? `${baseUrl}${path}` : null,
     // Section 5's clean predicate. Both halves are read, because the first is
     // true of every in-store row and it is the second that removes the online

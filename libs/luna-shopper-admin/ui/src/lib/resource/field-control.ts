@@ -97,10 +97,11 @@ import { ReferencesControl } from './references-control';
         <lib-reference-picker
           (valueChange)="valueChange.emit($event)"
           [controlId]="controlId()"
-          [disabled]="disabled()"
+          [disabled]="disabled() || scopeOf() === null"
           [lookup]="lookup()"
           [nullable]="field().nullable === true"
           [resource]="resourceOf()"
+          [scope]="scopeOf() ?? {}"
           [value]="asText()"
         />
       }
@@ -235,7 +236,10 @@ export class FieldControl {
    */
   readonly scopeOf = computed<ReferenceScope | null>(() => {
     const field = this.field();
-    if (field.kind !== 'references' || field.scopeFrom === undefined) {
+    if (
+      (field.kind !== 'references' && field.kind !== 'reference') ||
+      field.scopeFrom === undefined
+    ) {
       return {};
     }
     return field.scopeFrom(this.context());

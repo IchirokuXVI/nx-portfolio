@@ -52,11 +52,12 @@ export function normalizeName(value: string): string {
  * The string a nameless product is identified by: its normalized name, a pipe,
  * then its normalized size text.
  *
- * It is rung 4's key **and**, hashed, the `externalId` of a source that has no
- * product id of its own (plan 0086, D2). Both halves of that sentence are the
- * point: a DEZA listing and a DEZA leaflet printing the same name and size land
- * on one row through rung 1, and a Mercadona product a leaflet named first is
- * proposed to the walk that later finds its id through rung 4.
+ * It is the start of rung 4's key ({@link siblingKey} adds the unit size) **and**,
+ * hashed, the `externalId` of a source that has no product id of its own (plan
+ * 0086, D2). Both halves of that sentence are the point: a DEZA listing and a
+ * DEZA leaflet printing the same name and size land on one row through rung 1,
+ * and a Mercadona product a leaflet named first is proposed to the walk that
+ * later finds its id through rung 4.
  */
 export function entryNameKey(name: string, sizeFormat: string | null): string {
   return `${normalizeName(name)}|${normalizeName(sizeFormat ?? '')}`;
@@ -157,7 +158,31 @@ export interface SiblingProposal {
 }
 
 /**
- * The chain's own rows, keyed by {@link entryNameKey} (plan 0086, section 4,
+ * Rung 4's key: {@link entryNameKey}, a pipe, then the unit size (plan 0155).
+ *
+ * **The size is part of it because the size format alone is not a size.**
+ * Mercadona states only the unit there (`l`), so a key of name and format put a
+ * 0.33 l can and a 1 l bottle under one key, and 260 of 273 Mercadona
+ * candidates pointed at another size of the same product. The number is
+ * normalized, because Postgres answers a `numeric` column as text (`"0.3300"`).
+ *
+ * It is not {@link entryNameKey}, and that one must not change: hashed, it is
+ * also the row identity of a source with no id of its own.
+ */
+export function siblingKey(
+  name: string,
+  sizeFormat: string | null,
+  unitSize: number | string | null | undefined
+): string {
+  const size =
+    unitSize === null || unitSize === undefined ? NaN : Number(unitSize);
+  return `${entryNameKey(name, sizeFormat)}|${
+    Number.isFinite(size) ? String(size) : ''
+  }`;
+}
+
+/**
+ * The chain's own rows, keyed by {@link siblingKey} (plan 0086, section 4,
  * rung 4).
  *
  * This is the rung that makes the one table worth having. The row this chain
@@ -182,7 +207,7 @@ export class SiblingEntryIndex {
 
   /** Rows this run created are siblings too, from the moment they exist. */
   add(row: SourceCatalogEntry): void {
-    const key = entryNameKey(row.name, row.sizeFormat);
+    const key = siblingKey(row.name, row.sizeFormat, row.unitSize);
     const bucket = this.byNameKey.get(key);
     if (bucket) {
       bucket.push(row);
@@ -201,9 +226,13 @@ export class SiblingEntryIndex {
    * resolve. Two siblings disagreeing about the item propose nothing, on the
    * same rule rung 3 uses: the ambiguous case is exactly where guessing harms.
    */
-  match(name: string, sizeFormat: string | null): SiblingProposal | null {
+  match(
+    name: string,
+    sizeFormat: string | null,
+    unitSize: number | string | null
+  ): SiblingProposal | null {
     const siblings = (
-      this.byNameKey.get(entryNameKey(name, sizeFormat)) ?? []
+      this.byNameKey.get(siblingKey(name, sizeFormat, unitSize)) ?? []
     ).filter((row) => row.status !== SourceEntryStatus.REJECTED);
     if (siblings.length === 0) {
       return null;
@@ -226,11 +255,71 @@ export class SiblingEntryIndex {
   }
 }
 
+/**
+ * Which rows of one chain carry each EAN (plan 0155).
+ *
+ * Rung 2 binds by EAN only when exactly one row of the chain carries it.
+ * Mercadona gives one EAN to five cuts of one fish, and binding all five to the
+ * one product that holds the EAN wrote five prices onto it, and a shopper saw
+ * whichever was written last.
+ *
+ * Keyed by `externalId`, the row identity, so a row counts once however often
+ * it is observed. It holds the rows the session loaded, and every chunk
+ * {@link note}s its observations **before** the ladder runs, so the first cut
+ * in a chunk already sees the siblings that come after it in the same chunk.
+ */
+export class ChainEanIndex {
+  private readonly holders = new Map<string, Set<string>>();
+  private readonly eanOf = new Map<string, string>();
+
+  constructor(rows: Iterable<Pick<SourceCatalogEntry, 'externalId' | 'ean'>>) {
+    for (const row of rows) {
+      this.note(row.externalId, row.ean);
+    }
+  }
+
+  /**
+   * The EAN a row carries now. Null takes the row out of the count, which is
+   * what a full observation with no EAN writes onto the row.
+   */
+  note(externalId: string, ean: string | null): void {
+    const previous = this.eanOf.get(externalId) ?? null;
+    if (previous === ean) {
+      return;
+    }
+    if (previous !== null) {
+      this.holders.get(previous)?.delete(externalId);
+      this.eanOf.delete(externalId);
+    }
+    if (ean) {
+      this.eanOf.set(externalId, ean);
+      const bucket = this.holders.get(ean);
+      if (bucket) {
+        bucket.add(externalId);
+      } else {
+        this.holders.set(ean, new Set([externalId]));
+      }
+    }
+  }
+
+  /** True when more than one row of the chain carries this EAN. */
+  shared(ean: string | null): boolean {
+    return ean !== null && (this.holders.get(ean)?.size ?? 0) > 1;
+  }
+
+  /** The external ids of the rows that carry this EAN. */
+  holdersOf(ean: string): string[] {
+    return [...(this.holders.get(ean) ?? [])];
+  }
+}
+
 /** A catalog location, as the default shop match sees it (plan 0084, section 6). */
 export interface LocationCandidate {
   id: string;
   label: LocalizedText | null;
   address: string | null;
+  /** Read by {@link rankLocations} only. The exact match ignores it. */
+  postalCode: string | null;
 }
 
 /**
@@ -278,6 +367,97 @@ export class LocationNameIndex {
     }
     return [...bucket][0];
   }
+}
+
+/** A location {@link rankLocations} proposes, and how well it fits. */
+export interface RankedLocation {
+  location: LocationCandidate;
+  score: number;
+  strong: boolean;
+}
+
+/** The lowest share of printed tokens a proposal may hold. */
+export const LOCATION_CANDIDATE_MIN_SCORE = 0.5;
+
+/** The most proposals one printed shop name gets. */
+export const LOCATION_CANDIDATES_MAX = 3;
+
+/**
+ * Words a street name carries that say nothing about which street it is. A
+ * printed "Avda. de Libia" and an address "Avenida de Libia" differ only in
+ * these.
+ */
+const LOCATION_STOP_WORDS = new Set([
+  'de',
+  'del',
+  'la',
+  'el',
+  'c',
+  'calle',
+  'avda',
+  'avenida',
+]);
+
+/** A street number: "48" in "Isla de Fuerteventura 48". A postal code is not one. */
+const STREET_NUMBER = /^\d{1,4}$/;
+
+/**
+ * The chain's shops a printed shop name may be, best first (plan 0154, section 1).
+ *
+ * **This proposes and never maps.** The exact match in {@link LocationNameIndex}
+ * is the only automated binding, and it is exact because a wrong binding writes
+ * availability onto the wrong shop. What this returns goes into the queue for a
+ * person, on the same rule plan 0081 states for printed product names.
+ *
+ * The score is the share of the printed name's tokens that the location's
+ * label, address or postal code holds, after {@link normalizeName} and after
+ * dropping stop words and street numbers from the printed name. A location
+ * holding every token is `strong`. Anything under
+ * {@link LOCATION_CANDIDATE_MIN_SCORE} is dropped, and ties fall to the
+ * location id, so the same input always gives the same list.
+ */
+export function rankLocations(
+  printedName: string,
+  locations: readonly LocationCandidate[]
+): RankedLocation[] {
+  const wanted = [...new Set(printedTokens(printedName))];
+  if (wanted.length === 0) {
+    return [];
+  }
+
+  const ranked: RankedLocation[] = [];
+  for (const location of locations) {
+    const held = new Set(
+      [...namesOf(location), location.postalCode ?? ''].flatMap(tokensOf)
+    );
+    const found = wanted.filter((token) => held.has(token)).length;
+    const score = found / wanted.length;
+    if (score >= LOCATION_CANDIDATE_MIN_SCORE) {
+      ranked.push({ location, score, strong: found === wanted.length });
+    }
+  }
+
+  return ranked
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        (a.location.id < b.location.id
+          ? -1
+          : a.location.id > b.location.id
+            ? 1
+            : 0)
+    )
+    .slice(0, LOCATION_CANDIDATES_MAX);
+}
+
+function printedTokens(printedName: string): string[] {
+  return tokensOf(printedName).filter(
+    (token) => !LOCATION_STOP_WORDS.has(token) && !STREET_NUMBER.test(token)
+  );
+}
+
+function tokensOf(text: string): string[] {
+  return normalizeName(text).split(' ').filter(Boolean);
 }
 
 function namesOf(location: LocationCandidate): string[] {

@@ -39,22 +39,30 @@ import {
   adminUsersSchemas,
 } from './messages/admin-users.schemas';
 import {
+  appStateMessageContracts,
+  appStateSchemas,
+} from './messages/app-state.schemas';
+import {
   assistantMessageContracts,
   assistantSchemas,
 } from './messages/assistant.schemas';
 import { authMessageContracts, authSchemas } from './messages/auth.schemas';
 import {
+  basketChangeMessageContracts,
+  basketChangeSchemas,
+} from './messages/basket-changes.schemas';
+import {
+  basketMessageContracts,
+  basketSchemas,
+} from './messages/basket.schemas';
+import {
   catalogMessageContracts,
   catalogSchemas,
 } from './messages/catalog.schemas';
 import {
-  generatedListSharingMessageContracts,
-  generatedListSharingSchemas,
-} from './messages/generated-list-sharing.schemas';
-import {
-  generatedListMessageContracts,
-  generatedListSchemas,
-} from './messages/generated-list.schemas';
+  basketSharingMessageContracts,
+  basketSharingSchemas,
+} from './messages/basket-sharing.schemas';
 import {
   harvestMessageContracts,
   harvestSchemas,
@@ -65,6 +73,10 @@ import {
   profileMessageContracts,
   profileSchemas,
 } from './messages/profile.schemas';
+import {
+  purchaseMessageContracts,
+  purchaseSchemas,
+} from './messages/purchase.schemas';
 import {
   realtimeMessageContracts,
   realtimeSchemas,
@@ -85,6 +97,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...adminCoreMessageContracts,
   ...adminDashboardMessageContracts,
   ...accountMessageContracts,
+  ...appStateMessageContracts,
   ...zoneMessageContracts,
   ...listMessageContracts,
   ...mergeMessageContracts,
@@ -94,8 +107,10 @@ export const messageContracts: Record<string, MessageContract> = {
   ...harvestMessageContracts,
   ...statsMessageContracts,
   ...assistantMessageContracts,
-  ...generatedListMessageContracts,
-  ...generatedListSharingMessageContracts,
+  ...basketMessageContracts,
+  ...basketSharingMessageContracts,
+  ...basketChangeMessageContracts,
+  ...purchaseMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -116,6 +131,7 @@ export const allSchemas: JsonSchema[] = [
   ...adminCoreSchemas,
   ...adminDashboardSchemas,
   ...accountSchemas,
+  ...appStateSchemas,
   ...zoneSchemas,
   ...listSchemas,
   ...mergeSchemas,
@@ -125,8 +141,10 @@ export const allSchemas: JsonSchema[] = [
   ...harvestSchemas,
   ...statsSchemas,
   ...assistantSchemas,
-  ...generatedListSchemas,
-  ...generatedListSharingSchemas,
+  ...basketSchemas,
+  ...basketSharingSchemas,
+  ...basketChangeSchemas,
+  ...purchaseSchemas,
   ...identityEventSchemas,
   ...realtimeEventSchemas,
   ...postalCodeEventSchemas,

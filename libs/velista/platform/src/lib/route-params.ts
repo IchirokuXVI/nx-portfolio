@@ -95,14 +95,26 @@ export function profileIdOf(route: ActivatedRoute): Signal<string> {
 }
 
 /**
- * The basket a screen under `shopping-lists/:generatedListId` is about.
+ * The basket row a sheet over the basket page is about (velista `0090`).
+ *
+ * A **row key** and not a line id, which is what backend `0136` addresses a write
+ * with. Its value is an anchor line's id, so it looks like one, and the difference
+ * matters: the anchor can change under an open sheet, and the sheet is what follows
+ * it through `BasketStore.rowFor`.
+ */
+export function rowKeyOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'rowKey');
+}
+
+/**
+ * The basket a screen under `shopping-lists/:basketId` is about.
  *
  * Walked up the tree like the rest, and every reader of it is a sheet rather than the
  * page: the page holds the parameter on its own route, while the sheets that cover it
  * sit one and three levels below it.
  */
-export function generatedListIdOf(route: ActivatedRoute): Signal<string> {
-  return paramSignal(route, 'generatedListId');
+export function basketIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'basketId');
 }
 
 /**

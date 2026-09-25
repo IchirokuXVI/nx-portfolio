@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
-  LIVE_GENERATED_LIST_STATUSES,
+  PURCHASE_SESSION_GAP_MS,
   TripKind,
   type ListTripRowsRequest,
   type ListTripsRequest,
@@ -11,18 +11,18 @@ import {
   clampPageSize,
   decodeCursor,
   encodeCursor,
+  isUuid,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource } from 'typeorm';
-import { LineClaimService } from '../../generated-lists/line-claim.service';
+import { LineClaimService } from '../../baskets/line-claim.service';
 import { ListAccessService } from '../list-access.service';
 import { toTripRowView, toTripView } from './trips.mappers';
 import {
   BASKET_TRIP_ROWS_SQL,
   ENDED_TRIPS_SQL,
   LIVE_TRIPS_SQL,
-  LOOSE_TRIP_GAP_MS,
   LOOSE_TRIP_ROWS_SQL,
   type TripLineRow,
   type TripRow,
@@ -45,10 +45,6 @@ interface TripRowCursor extends Record<string, unknown> {
   id: string;
 }
 
-/** Canonical UUID shape. A trip id reaches a `::uuid` cast, which throws on less. */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * The shopping trips that touched a zone list (plan 0122).
  *
@@ -59,7 +55,7 @@ const UUID_PATTERN =
  *
  * ## Read only, and nothing is copied
  *
- * Every number is derived on read from `generated_list_line_origins` and
+ * Every number is derived on read from `basket_line_origins` and
  * `line_settlements`. Both stop changing when a basket ends, so an old trip's
  * rows freeze by themselves and never follow the line's live quantity.
  *
@@ -102,16 +98,11 @@ export class TripsService {
       cursor &&
       isTripKind(cursor.kind) &&
       typeof cursor.id === 'string' &&
-      UUID_PATTERN.test(cursor.id)
+      isUuid(cursor.id)
         ? cursor
         : null;
 
-    const window = [
-      req.listId,
-      LOOSE_TRIP_GAP_MS,
-      [...LIVE_GENERATED_LIST_STATUSES],
-      this.claims.since(),
-    ];
+    const window = [req.listId, PURCHASE_SESSION_GAP_MS, this.claims.since()];
 
     // One after the other rather than together: each query draws a connection
     // from the pool, and a request holding two at once is how the pool runs dry.
@@ -154,11 +145,11 @@ export class TripsService {
     await this.listAccess.requireRead(req.listId, req.userId);
 
     if (!isTripKind(req.kind)) {
-      throw new ValidationException('kind must be BASKET or LOOSE', {
+      throw new ValidationException('kind must be BASKET or SESSION', {
         messageArgs: { field: 'kind' },
       });
     }
-    if (!UUID_PATTERN.test(req.tripId)) {
+    if (!isUuid(req.tripId)) {
       // Not a validation failure: an id that cannot name a row names no trip.
       throw new NotFoundException('Trip not found');
     }
@@ -166,9 +157,7 @@ export class TripsService {
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor<TripRowCursor>(req.cursor);
     const cursorId =
-      typeof cursor?.id === 'string' && UUID_PATTERN.test(cursor.id)
-        ? cursor.id
-        : null;
+      typeof cursor?.id === 'string' && isUuid(cursor.id) ? cursor.id : null;
 
     const rows =
       req.kind === TripKind.BASKET
@@ -180,7 +169,7 @@ export class TripsService {
           ])
         : await this.dataSource.query<TripLineRow[]>(LOOSE_TRIP_ROWS_SQL, [
             req.listId,
-            LOOSE_TRIP_GAP_MS,
+            PURCHASE_SESSION_GAP_MS,
             req.tripId,
             cursorId,
             limit + 1,
@@ -201,5 +190,5 @@ export class TripsService {
 }
 
 function isTripKind(value: unknown): value is TripKind {
-  return value === TripKind.BASKET || value === TripKind.LOOSE;
+  return value === TripKind.BASKET || value === TripKind.SESSION;
 }

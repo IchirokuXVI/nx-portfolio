@@ -79,6 +79,18 @@ export class NotAParticipantException extends DomainException {
   readonly code = ERROR_CODES.NOT_A_PARTICIPANT;
 }
 
+/**
+ * The credential named a participant of this basket whose access ran out (plan
+ * 0140, section 8).
+ *
+ * Raised only after the ordinary lookup found nothing live, and only for a
+ * caller whose own row ended by the clock. Everybody else keeps
+ * {@link NotAParticipantException}. See `ERROR_CODES.PARTICIPANT_EXPIRED`.
+ */
+export class ParticipantExpiredException extends DomainException {
+  readonly code = ERROR_CODES.PARTICIPANT_EXPIRED;
+}
+
 /** Authenticated, but not allowed to perform this action (or on this zone). */
 export class ForbiddenException extends DomainException {
   readonly code = ERROR_CODES.FORBIDDEN;
@@ -128,8 +140,20 @@ export class ClientTooOldException extends DomainException {
  * bug it cannot will show the wrong sentence for both, and "this basket is
  * finished" is a sentence the shopper can act on.
  */
-export class GeneratedListFinishedException extends DomainException {
-  readonly code = ERROR_CODES.GENERATED_LIST_FINISHED;
+export class BasketFinishedException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_FINISHED;
+}
+
+/**
+ * The basket has its own shop, and the request named a different one (plan
+ * 0163).
+ *
+ * Renders as 409. A basket created with a shop keeps it for life and for every
+ * participant, so a read or a settle at another shop is refused rather than
+ * answered at the basket's own, which the caller did not ask for.
+ */
+export class BasketShopLockedException extends DomainException {
+  readonly code = ERROR_CODES.BASKET_SHOP_LOCKED;
 }
 
 /**
@@ -144,23 +168,6 @@ export class GeneratedListFinishedException extends DomainException {
  */
 export class StaleQuantityException extends DomainException {
   readonly code = ERROR_CODES.STALE_QUANTITY;
-}
-
-/**
- * A contribution was set below what this basket has already bought against it
- * (plan 0057, section 5.2).
- *
- * The floor travels in `messageArgs.floor` and is therefore in the translated
- * message, which is the point: two units of the flat's milk having been bought
- * means the flat cannot retroactively have wanted one, and the client should be
- * able to say so with the number in it.
- *
- * Note the floor is per origin and per basket rather than a comparison against
- * the zone line, which may legitimately be lower already because somebody
- * settled it from the list page.
- */
-export class BelowSettledException extends DomainException {
-  readonly code = ERROR_CODES.BELOW_SETTLED;
 }
 
 /**
@@ -335,6 +342,42 @@ export class BrandLinkKeepsKeyException extends DomainException {
 export class BrandNotLinkedException extends DomainException {
   readonly code = ERROR_CODES.BRAND_NOT_LINKED;
 }
+
+/**
+ * The discovered place is already imported (plan 0152, section 5). No details:
+ * the place is the one the client asked about.
+ */
+export class PlaceAlreadyImportedException extends DomainException {
+  readonly code = ERROR_CODES.PLACE_ALREADY_IMPORTED;
+}
+
+/**
+ * The catalog already holds a shop the place may be (plan 0152, section 2).
+ *
+ * It publishes its details, because the back office cannot offer a link
+ * without them: the candidates travel under {@link PLACE_CANDIDATES_DETAIL}.
+ * Nothing was written when this is thrown.
+ */
+export class PlaceMatchesLocationException extends DomainException {
+  readonly code = ERROR_CODES.PLACE_MATCHES_LOCATION;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link PlaceMatchesLocationException} lists its candidates under. */
+export const PLACE_CANDIDATES_DETAIL = 'candidates';
+
+/**
+ * The run declared a price scope the chain does not hold (plan 0152, section
+ * 1). It publishes the key under {@link SCOPE_KEY_DETAIL}, which is what the
+ * operator types when they create the scope.
+ */
+export class ScopeNotFoundException extends DomainException {
+  readonly code = ERROR_CODES.SCOPE_NOT_FOUND;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link ScopeNotFoundException} names the key under. */
+export const SCOPE_KEY_DETAIL = 'scopeKey';
 
 /**
  * The `details` key a {@link BrandLinkTooDeepException} names the brand that

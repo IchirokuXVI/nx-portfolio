@@ -1,4 +1,9 @@
-import { Module } from '@nestjs/common';
+import {
+  Module,
+  type MiddlewareConsumer,
+  type NestModule,
+} from '@nestjs/common';
+import { WithholdBodyMiddleware } from '@portfolio/luna-shopper/platform';
 import { MessagingModule } from '../messaging/messaging.module';
 import {
   AdminCatalogBrandSuggestionsController,
@@ -13,6 +18,7 @@ import {
   AdminCatalogSupermarketItemsController,
   AdminCatalogSupermarketsController,
 } from './catalog-admin.controller';
+import { CatalogSuggestService } from './catalog-suggest.service';
 import {
   CatalogItemsController,
   CatalogLocationItemsController,
@@ -25,6 +31,7 @@ import {
   CatalogSupermarketItemsController,
   CatalogSupermarketsController,
 } from './catalog.controller';
+import { CatalogNearbyShopsController } from './nearby-shops.controller';
 import { ScopeResolutionService } from './scope-resolution.service';
 
 /**
@@ -48,6 +55,9 @@ import { ScopeResolutionService } from './scope-resolution.service';
     CatalogProductGroupsController,
     CatalogScopeController,
     CatalogShopsController,
+    // Plan 0164: the shops near a point. A POST, so it cannot be swallowed by
+    // the GET routes of the controller above.
+    CatalogNearbyShopsController,
     CatalogSuggestController,
     CatalogItemsController,
     CatalogSupermarketItemsController,
@@ -75,11 +85,25 @@ import { ScopeResolutionService } from './scope-resolution.service';
   ],
   // Plan 0049: every read that returns items or prices resolves where the caller
   // shops first, from an explicit selector or from their profile.
-  providers: [ScopeResolutionService],
+  // Plan 0161: the composer's dropdown and the chains behind its prices, for
+  // both suggest routes.
+  providers: [ScopeResolutionService, CatalogSuggestService],
   // Exported for the basket's own search (plan 0055, section 5.1), which
   // resolves the **run's** profile rather than the caller's and must share this
   // resolver's Redis cache and its invalidation rather than growing a second
-  // answer to the same question.
-  exports: [ScopeResolutionService],
+  // answer to the same question. The suggestion service goes with it, so the
+  // basket and the dropdown name a scope through one helper (plan 0161).
+  exports: [ScopeResolutionService, CatalogSuggestService],
 })
-export class GatewayCatalogModule {}
+export class GatewayCatalogModule implements NestModule {
+  /**
+   * The body of `POST /v1/catalog/shops/nearby` is a point a device reported,
+   * and it never reaches a log line (plan 0164). A middleware, so the request
+   * is marked before any guard can fail it.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(WithholdBodyMiddleware)
+      .forRoutes(CatalogNearbyShopsController);
+  }
+}

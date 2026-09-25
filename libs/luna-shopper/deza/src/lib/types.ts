@@ -44,6 +44,8 @@ export interface DezaProductRow {
   name: string;
   /** The trailing size, **verbatim**, or null when the row states none. */
   sizeFormat: string | null;
+  /** How many units the pack holds, read from the description (plan 0162), or null. */
+  packCount: number | null;
   /** The longest run of capitals in {@link name}, or null (section 8). */
   brand: string | null;
   /** The chain's attribute icons, e.g. `Andaluz`, `Sin gluten` (section 8). */

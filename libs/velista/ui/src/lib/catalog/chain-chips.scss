@@ -1,0 +1,55 @@
+:host {
+  display: block;
+  min-inline-size: 0;
+}
+
+// Sideways, never folded (velista 0100, section 2). The bleed to the screen's edges
+// is the page's; this row only scrolls and hides its bar.
+.chips {
+  display: flex;
+  gap: var(--app-space-3);
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  flex: none;
+  min-block-size: var(--app-control-height);
+  padding-inline: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The chosen chip is the filled one. `aria-pressed` says the same thing, so the
+// colour is never the only carrier.
+.chip.is-on {
+  border-color: var(--app-action-bg);
+  background: var(--app-action-bg);
+  color: var(--app-text-on-action);
+  font-weight: 650;
+}
+
+.clear {
+  font-size: var(--app-icon-sm);
+}

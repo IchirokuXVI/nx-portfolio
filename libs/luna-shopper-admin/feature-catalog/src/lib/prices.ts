@@ -200,7 +200,10 @@ export const PRICES = defineResource<Price>({
       label: 'catalog.prices.observedAt',
       help: 'catalog.prices.observedAtHelp',
       time: true,
-      editable: false,
+      // Typed on the add form only, and optional (admin plan 0033): empty is
+      // now, and a past date may go 30 days back, never forward. Protection
+      // runs from this instant, so a past date protects for less time.
+      editable: 'create',
     },
     {
       kind: 'boolean',

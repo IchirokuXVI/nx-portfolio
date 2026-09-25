@@ -106,7 +106,7 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --unlock 3   # ...and release it 
 
 **A re-run never overwrites what you edited.** Only the keys the slot decides are rewritten (each script's `DERIVED_KEYS` names them), so a pasted `GEMINI_API_KEY`, a `HARVEST_ENABLED` flipped on for a crawl, or a base URL pointed at a local recording all survive a re-run and a slot move, and a key that is blank on purpose stays blank. `--reset-env` puts the rest back to the shipped defaults, and `--reset-env --keep-env A,B` spares the named ones. A new slot dependent key belongs in `DERIVED_KEYS`, or it will be preserved stale; the script warns when a preserved value names a port that is not this slot's.
 
-**One checkout runs one slot, unless the slot is `--ephemeral`.** Everything above is per worktree: eight `.env` files and one claim, so pointing this checkout at another slot rewrites them. `bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up 3` runs a slot without configuring the checkout for it — nothing under the worktree is written and no claim is made, because the slot's values are handed to the processes through their environment, where they outrank a `.env` (Nx and `@nestjs/config` both leave an already set variable alone). So a developer serving slot 0 keeps serving it while a tool drives slot 3 in the same checkout. The slot number is required on `--up`, `--down` and `--restart`, since nothing records it; slot 0 is refused; and the rendered files, logs and pids live in `$TMPDIR/luna-slot-ephemeral/slot<n>`, which `--down` removes. `--list` still shows the slot, through its open ports. This is how `libs/luna-shopper/tools/curation/cli` takes its rehearsal slot.
+**One checkout runs one slot, unless the slot is `--ephemeral`.** Everything above is per worktree: eight `.env` files and one claim, so pointing this checkout at another slot rewrites them. `bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up 3` runs a slot without configuring the checkout for it — nothing under the worktree is written and no claim is made, because the slot's values are handed to the processes through their environment, where they outrank a `.env` (Nx and `@nestjs/config` both leave an already set variable alone). So a developer serving slot 0 keeps serving it while a tool drives slot 3 in the same checkout. The slot number is required on `--up`, `--down` and `--restart`, since nothing records it; slot 0 is refused; and the rendered files, logs and pids live in `$TMPDIR/luna-slot-ephemeral/slot<n>`, which `--down` removes. An ephemeral `--up` refuses a slot that a worktree claims, a lock keeps or another ephemeral run holds. It holds its own number with a record in the main `.git` directory, from before anything starts until `--ephemeral --down` removes it. `--list` prints that record as `ephemeral (pid N)`, and `--auto` skips it. A record whose pid is gone and whose ports are all closed is stale, and the next `--ephemeral --up` of that number takes it over (`tools/dev/plans/0004`). This is how `libs/luna-shopper/tools/curation/cli` takes its rehearsal slot.
 
 There are no `.ps1` twins any more: Git Bash is the supported shell on Windows. Everything the scripts write is git ignored and per worktree. **Do not add a port override to a `project.json` to work around a collision**: use a slot. See `tools/dev/README.md` for why the remote ports cannot come from the project graph, and `k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md` for the backend half.
 
@@ -396,3 +396,27 @@ Two rules follow, and both are easy to break by accident:
   ```
 
 - **Release notes come from `tools/release/release-notes.mjs`**, not from hand. `node tools/release/release-notes.mjs --from v0.3.1 --to v0.3.2 --out notes.md` groups the merged PRs by section, skips the `dev` to `main` rollups so nothing is counted twice, and prints any title it could not read rather than dropping it. Add a new area of the workspace to `SCOPES` in `tools/release/rules.mjs` in the same PR that creates it.
+
+<!-- nx configuration start-->
+<!-- Leave the start & end comments to automatically receive updates. -->
+
+## General Guidelines for working with Nx
+
+- For navigating/exploring the workspace, invoke the `nx-workspace` skill first - it has patterns for querying projects, targets, and dependencies
+- When running tasks (for example build, lint, test, e2e, etc.), always prefer running the task through `nx` (i.e. `nx run`, `nx run-many`, `nx affected`) instead of using the underlying tooling directly
+- Prefix nx commands with the workspace's package manager (e.g., `pnpm nx build`, `npm exec nx test`) - avoids using globally installed CLI
+- You have access to the Nx MCP server and its tools, use them to help the user
+- For Nx plugin best practices, check `node_modules/@nx/<plugin>/PLUGIN.md`. Not all plugins have this file - proceed without it if unavailable.
+- NEVER guess CLI flags - always check nx_docs or `--help` first when unsure
+
+## Scaffolding & Generators
+
+- For scaffolding tasks (creating apps, libs, project structure, setup), ALWAYS invoke the `nx-generate` skill FIRST before exploring or calling MCP tools
+
+## When to use nx_docs
+
+- USE for: advanced config options, unfamiliar flags, migration guides, plugin configuration, edge cases
+- DON'T USE for: basic generator syntax (`nx g @nx/react:app`), standard commands, things you already know
+- The `nx-generate` skill handles generator discovery internally - don't call nx_docs just to look up generator syntax
+
+<!-- nx configuration end-->

@@ -840,8 +840,13 @@ lunaShopperBackend:
     value: 100000
 
   # Nightly pg_dump per Postgres instance, uploaded to object storage off the
-  # node (plan 0005). Off by default and on in production: staging is disposable
-  # by design and gains nothing from backups.
+  # node (plan 0005). Off by default. On in production, and on but suspended in
+  # staging, where the only dumps are the ones a release task takes before it
+  # changes anything (`k8s/release-tasks`).
+  #
+  # Each environment needs its own bucket. The object keys are
+  # `<database>/<stamp>.dump` with no environment in them, so a shared bucket
+  # would mix staging dumps into production's `latest`.
   #
   # Requires a Secret (see `secret` below) holding S3_ENDPOINT, S3_BUCKET,
   # AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, created out of band exactly like
@@ -851,10 +856,14 @@ lunaShopperBackend:
   #
   # Retention is NOT implemented here. An object storage lifecycle rule expresses
   # "expire after N days" declaratively, runs whether or not the cluster is
-  # healthy, and cannot be broken by a bug in a shell script. Configure 30 days
-  # on the prefix and enable object versioning on the bucket.
+  # healthy, and cannot be broken by a bug in a shell script. The rule is 14
+  # days on the whole bucket (2026-09-25), which is also how long a release task
+  # stays reversible.
   backups:
     enabled: false
+    # Renders the CronJobs suspended: no nightly run, but a release task can
+    # still start a Job from one.
+    suspend: false
     secret: luna-shopper-backend-backup-secret
     # The same image the instance runs, which is what guarantees pg_dump matches
     # the server version. The awscli package is added at Job start.

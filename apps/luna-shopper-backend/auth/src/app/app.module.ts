@@ -35,6 +35,7 @@ import { OrphanUserReaperService } from './reaper/orphan-user-reaper.service';
 import { TokenGrantService } from './tokens/token-grant.service';
 import { TokenService } from './tokens/token.service';
 import { UsernameGenerator } from './username/username-generator.service';
+import { UsernameController } from './username/username.controller';
 
 @Module({
   imports: [
@@ -106,7 +107,7 @@ import { UsernameGenerator } from './username/username-generator.service';
       },
     }),
   ],
-  controllers: [IdentityController, AdminController],
+  controllers: [IdentityController, AdminController, UsernameController],
   providers: [
     IdentityService,
     StatsService,

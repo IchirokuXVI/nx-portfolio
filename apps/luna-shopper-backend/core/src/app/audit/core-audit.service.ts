@@ -186,6 +186,36 @@ export class AuditedWrite {
     });
   }
 
+  /**
+   * Soft delete a row, and record what it said (plan 0132, section 6).
+   *
+   * Recorded as {@link CoreAuditAction.DELETE} with `after: null`, exactly as
+   * {@link delete} records a real one: to a reader of the trail the row is gone
+   * either way, and the trail is where an operator's name is kept. The row's own
+   * `deletedByUserId` names a member, so this never writes it.
+   *
+   * It snapshots before it writes, for the reason {@link delete} gives: the
+   * `before` is the whole point, and a soft deleted row is unreadable through
+   * the entity afterwards.
+   */
+  async softDelete<T extends ObjectLiteral>(
+    target: EntityTarget<T>,
+    row: T
+  ): Promise<void> {
+    const entityId = row['id'] as string;
+    const before = this.snapshot(target, row);
+    await this.manager.softDelete(
+      target,
+      // Every core entity keys on `id`, but nothing in `T` says so, so the
+      // criteria cannot be expressed in the generic.
+      { id: entityId } as unknown as FindOptionsWhere<T>
+    );
+    await this.insert(target, entityId, CoreAuditAction.DELETE, {
+      before,
+      after: null,
+    });
+  }
+
   /** Record a creation another call persisted. */
   async recordCreate<T extends ObjectLiteral>(
     target: EntityTarget<T>,

@@ -1,19 +1,23 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BasketCoverageModule } from '../baskets/basket-coverage.module';
 import {
   CommentAudio,
   LineComment,
   LineSettlement,
   ListAccess,
   ListLine,
+  ListLineChange,
   ListLineGroupRemoval,
   ListLineItem,
   ShoppingList,
   ZoneMembership,
 } from '../entities';
 import { IdempotencyModule } from '../events/idempotency.module';
-import { LineClaimModule } from '../generated-lists/line-claim.module';
+import { LineClaimModule } from '../baskets/line-claim.module';
 import { ZonesModule } from '../zones/zones.module';
+import { LineChangeRecorder } from './changes/line-change.recorder';
+import { ListLineChangeSweepService } from './changes/list-line-change-sweep.service';
 import { CommentService } from './comment.service';
 import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
@@ -47,11 +51,19 @@ import { TripsService } from './trips/trips.service';
       LineSettlement,
       CommentAudio,
       ZoneMembership,
+      // What changed on a list (plan 0138). Registered so the sweep has a
+      // repository; the recorder holds none and writes through its caller's
+      // manager, and the two reads are raw statements in `baskets/changes`.
+      ListLineChange,
     ]),
     ZonesModule,
     SharedListGrantModule,
+    // Every write to a list line is a write to every basket that covers the list
+    // (plan 0139, section 3). The coverage module depends on nothing here, which
+    // is why `BasketsModule` and this one can both import it.
+    BasketCoverageModule,
     // The third indicator on a line (plan 0052). A module of its own rather than
-    // `GeneratedListsModule`, which imports this one, on exactly the reasoning
+    // `BasketsModule`, which imports this one, on exactly the reasoning
     // `SharedListGrantModule` above it exists for.
     LineClaimModule,
     // The `processed_events` inbox the catalog event handlers dedupe on (plan
@@ -70,6 +82,14 @@ import { TripsService } from './trips/trips.service';
     // Two lines becoming one on a rename (plan 0112). A provider of its own
     // because a basket rename merges list lines too (plan 0113).
     LineMergeService,
+    // What changed on a list, written in the transaction of the write that
+    // changed it (plan 0138). It holds no repository, so it is a provider here
+    // rather than a module: every insert goes through its caller's manager.
+    LineChangeRecorder,
+    // ...and the sweep that deletes a change nobody may read any more. Here
+    // rather than beside the basket reads, because the record belongs to the
+    // list: a change outlives every basket that covered it.
+    ListLineChangeSweepService,
     CommentService,
     SettlementService,
     // The shopping trips that touched a list, derived on read (plan 0122).

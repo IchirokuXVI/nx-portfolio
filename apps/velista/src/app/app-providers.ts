@@ -4,8 +4,11 @@ import {
   withInterceptors,
 } from '@angular/common/http';
 import {
+  effect,
   inject,
+  Injector,
   provideEnvironmentInitializer,
+  untracked,
   type EnvironmentProviders,
   type Provider,
 } from '@angular/core';
@@ -20,8 +23,10 @@ import {
   AuthApi,
   BASKET_SERVICE,
   BasketApi,
+  CATALOG_BROWSE_SERVICE,
   CATALOG_SERVICE,
   CatalogApi,
+  CatalogBrowseApi,
   COMMENT_SERVICE,
   CommentApi,
   ConnectionRecovery,
@@ -30,19 +35,25 @@ import {
   DUE_LINE_SERVICE,
   DueLineApi,
   gatewayInterceptor,
-  GENERATED_LIST_SERVICE,
-  GeneratedListApi,
+  BASKET_LIST_SERVICE,
+  BasketListApi,
   LINE_SERVICE,
   LineApi,
   LIST_SERVICE,
   ListApi,
   MEMBERSHIP_SERVICE,
   MembershipApi,
+  ProfileStore,
+  PURCHASE_SERVICE,
+  PurchaseApi,
   REALTIME_CLIENT,
   RealtimeSocket,
+  SessionStore,
   SessionValidation,
+  SHOP_FINDER_SERVICE,
   SHOP_SERVICE,
   ShopApi,
+  ShopFinderApi,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileApi,
   StartupProbe,
@@ -51,6 +62,7 @@ import {
   VELISTA_DATA_ACCESS_PROVIDERS,
   ZONE_SERVICE,
   ZoneApi,
+  ZoneStore,
 } from '@portfolio/velista/data-access';
 import {
   APP_API_CONFIG,
@@ -64,6 +76,9 @@ import {
   AppHistory,
   AppUpdates,
   InstallStore,
+  NavChrome,
+  TourStore,
+  tourHoldingsOf,
   VELISTA_PLATFORM_PROVIDERS,
 } from '@portfolio/velista/platform';
 import { environment } from '../environments/environment';
@@ -237,17 +252,27 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // answer must never be able to stop a line being added.
   provideService(CATALOG_SERVICE, CatalogApi),
 
+  // The catalog tab (velista 0100): browsing rather than suggesting, so its own
+  // service, bound apart from the one above for the reason given there.
+  provideService(CATALOG_BROWSE_SERVICE, CatalogBrowseApi),
+
   // Generated shopping lists (plan 0045). The note worth making is
   // what is **not** on this service: it carries the owner's two calls, listing their
   // own baskets and composing one, and nothing a participant does inside a basket.
   // Those are authenticated by a participant session rather than by this account token,
   // so they are a different service on a different credential and not a wider version
   // of this one.
-  provideService(GENERATED_LIST_SERVICE, GeneratedListApi),
+  provideService(BASKET_LIST_SERVICE, BasketListApi),
   provideService(BASKET_SERVICE, BasketApi),
   // The people the reader shares a group with (velista `0085`), for the picker that
   // shares a basket with them.
   provideService(CONTACT_SERVICE, ContactApi),
+  // What the reader bought, with or without a basket (velista `0095`): the history
+  // page's "Bought" tab.
+  provideService(PURCHASE_SERVICE, PurchaseApi),
+  // The shops near you and the ones you bought at (velista 0103), for the shop
+  // picker. Bound apart so a nearby lookup that fails costs one line in the picker.
+  provideService(SHOP_FINDER_SERVICE, ShopFinderApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches
@@ -327,4 +352,61 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // Unstarted it reports no entry behind and each button walks to its own fallback,
   // which is safe but is not the behaviour these screens are written for.
   provideEnvironmentInitializer(() => inject(AppHistory).watch()),
+
+  // Tell the bottom bar whether this session can use its tabs (velista `0097`,
+  // section 3).
+  //
+  // **This file is the only place that may see both sides of it.** `NavChrome` lives in
+  // `platform`, which does not import `data-access`, and `SessionStore` is the answer;
+  // the signal therefore lives there and is written from here, which is the inversion
+  // `ConnectionState` and the gateway interceptor already use.
+  //
+  // An effect rather than a one time read, because the answer changes: signing in has
+  // to raise the bar without a reload, and signing out has to take it away before the
+  // next screen is drawn. `isAuthenticated` and nothing finer: a temporary user has
+  // groups, lists and baskets and all three tabs answer for them, while somebody
+  // holding only a shared basket's participant session is not authenticated at all,
+  // which is the guest case section 4 leaves to this signal rather than to route data.
+  provideEnvironmentInitializer(() => {
+    const session = inject(SessionStore);
+    const chrome = inject(NavChrome);
+
+    effect(() => chrome.setUsable(session.isAuthenticated()));
+  }),
+
+  // Tell the tour what it needs from `data-access`, and send its one write (velista
+  // `0099`, sections 3 and 6). Here for `NavChrome`'s reason: `TourStore` lives in
+  // `platform`, which may not import the stores or reach the API.
+  //
+  // - **What the account holds**, only while a run is going. `ZoneStore` is taken from
+  //   the injector then, rather than injected here, because constructing it at startup
+  //   would open its realtime subscription on the landing page for nobody. The run
+  //   starts on home, which loads the zones; until they arrive the store waits.
+  // - **Whether it was seen**, from `appState.tourSeenAt`.
+  // - **The write**, once per ended run, fire and forget. `ProfileStore` sends at most
+  //   one per document and nothing for an account already stamped.
+  provideEnvironmentInitializer(() => {
+    const injector = inject(Injector);
+    const profile = inject(ProfileStore);
+    const tour = inject(TourStore);
+
+    effect(() => {
+      if (!tour.running()) {
+        return;
+      }
+
+      const zones = untracked(() => injector.get(ZoneStore));
+      tour.setHoldings(
+        zones.state() === 'loaded' ? tourHoldingsOf(zones.myZones()) : null
+      );
+    });
+
+    effect(() => tour.setSeen((profile.appState()?.tourSeenAt ?? null) !== null));
+
+    effect(() => {
+      if (tour.ended() > 0) {
+        untracked(() => profile.markTourSeen());
+      }
+    });
+  }),
 ];

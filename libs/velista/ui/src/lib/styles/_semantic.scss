@@ -188,6 +188,12 @@ $app-content-max: 480px;
   --app-avatar-md: 24px;
   --app-avatar-lg: 30px;
   --app-tile-size: 38px;
+  // A catalog product's picture on its row (velista 0100, section 3): big enough to
+  // tell two cartons apart, and still under the two lines of text beside it.
+  --app-product-thumb-size: 52px;
+  // The same picture on the basket line sheet's product card, larger because the
+  // card is the one product on the sheet and not one row of many.
+  --app-product-card-image-size: 72px;
   // The ring that separates one stacked avatar from the one behind it. Not a
   // hairline: it has to read as a gap at a glance, so it is exempt from nothing.
   --app-avatar-ring: 2px;
@@ -279,6 +285,50 @@ $app-content-max: 480px;
   // top of the screen.
   --app-suggestions-max-height: 240px;
 
+  // The composer's product card (velista 0101, the `Budget` and `Sizes` artboards
+  // of `mocks/typeahead/`). **The keyboard sets these numbers**, so they are written
+  // down rather than chosen: on a 390 by 844 phone the keyboard takes 336px, and what
+  // is left once the header, two list rows and the composer have theirs is 237px.
+  // Three cards fit there, and the third card is what makes the list feel searched.
+  //
+  // A card is three lines of type (59px) and 8px either side, which clears the 48px
+  // photograph by 9px. The button that adds it stretches to the three lines and no
+  // further, so a card that also names the lines it is on keeps a 44 by 59 target
+  // rather than growing a 44 by 137 stripe.
+  //
+  // The card as drawn is 77px with the hairline above it, and the panel's cap is
+  // arithmetic on this number, so it states that height (velista 0113). At 73px the
+  // cap came out 3px short of three cards and the panel scrolled with three in it.
+  --app-suggestion-thumb: 48px;
+  --app-suggestion-card: 77px;
+  --app-suggestion-body: 59px;
+  // A chain's mark on the collapsed row, and the row itself: the pill is 18px and its
+  // target grows to the touch target with a pseudo element, as a chip's does.
+  --app-chain-mark: 18px;
+  --app-chain-mark-radius: 5px;
+  // One product inside an opened group: name, brand and price on a single line.
+  --app-suggestion-inside-row: 22px;
+  // The group popover, wide enough for its two sentences at four lines each.
+  --app-suggestion-popover-width: 248px;
+  // A popover held against a control at the foot of the screen (velista 0110): two
+  // short sentences, at three lines or so on a phone (velista 0113).
+  --app-anchored-popover-width: 280px;
+  // The two bands the composer's panel is measured against. They are the page's
+  // header and the composer row as they are drawn today, stated here because the
+  // panel's height is arithmetic on the screen and these are two of its terms.
+  --app-suggestion-header-band: 52px;
+  --app-suggestion-composer-band: 60px;
+  // Never more than three cards, and 8px of air under the last one.
+  --app-suggestions-card-cap: calc(
+    3 * var(--app-suggestion-card) + var(--app-space-3)
+  );
+  // What the screen spends before the panel gets any: the header, the composer, two
+  // rows of the list so somebody can still see where they are, and the status inset.
+  --app-suggestions-chrome: calc(
+    var(--app-safe-top) + var(--app-suggestion-header-band) +
+      var(--app-suggestion-composer-band) + 2 * var(--app-line-row-height)
+  );
+
   // The progress bar on the resume card.
   --app-progress-height: 6px;
 
@@ -288,6 +338,40 @@ $app-content-max: 480px;
   // The gap between a title and the metadata line directly under it, tighter than
   // the smallest space step because they read as one block.
   --app-space-hair: 3px;
+
+  // The bar at the bottom of the app (velista 0097). Its colours are a theme's job
+  // and come from the quiet action pair; its geometry is not, and is the same in
+  // both themes.
+  //
+  // A tab is 60 tall and a third of the row wide, which clears the 48 minimum on
+  // both axes with room to spare (plan 0002, section 8). The row is that plus 8
+  // above and 20 below, which is the 88 the mock draws, and the 20 gives way to a
+  // larger home indicator where the platform reports one.
+  --app-nav-tab-height: 60px;
+  --app-nav-tab-radius: var(--app-radius-lg);
+  // Between `--app-icon-md` and `--app-icon-lg`, and a knob of its own because it is
+  // the one glyph in the app that carries a tab rather than sitting beside a word.
+  --app-nav-icon: 24px;
+  // **The bar is the only element in the app that may carry the bottom inset**
+  // (section 5). While it is up, `--app-safe-bottom` is zero for everything inside
+  // the page, so a screen that draws its own dock keeps its padding and loses its
+  // inset. This is the value the bar itself reads, and it is never redefined.
+  --app-nav-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-nav-pad-block-end: max(var(--app-space-6), var(--app-nav-safe-bottom));
+  // How tall the bar is, written once so the bar's own height and the room the app
+  // keeps for it while a sheet has put it away cannot drift apart (velista 0106: the
+  // bar is in the app's column, so no page reserves anything for it any more).
+  --app-nav-height: calc(
+    var(--app-nav-tab-height) + var(--app-space-3) +
+      var(--app-nav-pad-block-end)
+  );
+  // Under the sheet, which is 10 (`sheet-shell.scss`), and over a page's own sticky
+  // rows, which are 1 and 2. The two numbers are recorded together on purpose: a
+  // sheet covers the bar, and the bar is not drawn while one is open anyway.
+  --app-nav-z: 5;
+  // The tour (velista 0099): over the bar, whose tab it lights, and under a sheet,
+  // which it never draws over because no card is up while one is open.
+  --app-tour-z: 8;
 
   // The bottom sheet (plan 0008, rule E1). Its colours are a theme's job and live
   // in `_themes.scss`; its geometry is not, and is the same in both.

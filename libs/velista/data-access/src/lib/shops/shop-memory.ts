@@ -152,7 +152,8 @@ export class ShopMemory implements ShopServiceI {
   }
 
   async summarizeChains(
-    profileId: string
+    profileId: string,
+    postalCodes: readonly string[] = []
   ): Promise<readonly ShopChainSummary[]> {
     this.calls.push({ method: 'summarizeChains', profileId });
 
@@ -160,8 +161,15 @@ export class ShopMemory implements ShopServiceI {
     const refusedChains =
       this._excludedChains.get(profileId) ?? new Set<string>();
 
+    // Named codes narrow the sample; none means the profile's own, which this fake
+    // does not track, so it answers every shop it holds.
+    const inCodes =
+      postalCodes.length === 0
+        ? SHOPS
+        : SHOPS.filter((shop) => postalCodes.includes(shop.postalCode));
+
     const byChain = new Map<string, ShopChainSummary>();
-    for (const shop of SHOPS) {
+    for (const shop of inCodes) {
       const held = byChain.get(shop.supermarketId);
       const refused = refusedShops.has(shop.id) ? 1 : 0;
 

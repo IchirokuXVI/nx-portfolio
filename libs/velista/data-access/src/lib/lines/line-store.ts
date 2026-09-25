@@ -15,6 +15,7 @@ import {
   type LineApprovalStatus,
   type LineSettlement,
   type Page,
+  type SettleLineOptions,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
@@ -665,7 +666,7 @@ export class LineStore {
   async settle(
     lineId: string,
     outcome: SettlementOutcome,
-    options?: { quantity?: number; itemId?: string }
+    options?: SettleLineOptions
   ): Promise<
     | { readonly state: 'settled'; readonly line: Line }
     | { readonly state: 'failed'; readonly error: unknown }
@@ -916,7 +917,7 @@ export class LineStore {
    * name is resolved by the page, because this store holds lines and not people.
    *
    * Fed by `line.claimChanged` on the zone room, which is the one zone event a
-   * generated list emits. A line this client has not loaded is skipped rather than
+   * basket emits. A line this client has not loaded is skipped rather than
    * remembered: there is no row to mark, and the read that eventually brings the line
    * in carries the claim with it.
    */

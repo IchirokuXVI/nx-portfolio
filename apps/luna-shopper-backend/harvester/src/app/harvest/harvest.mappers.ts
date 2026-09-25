@@ -8,6 +8,7 @@ import type {
   PostalCodeDiscoveryRequestView,
   SourceCatalogEntryView,
   SourceEntryPriceView,
+  SourceLocationCandidate,
   SourceLocationView,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
@@ -21,6 +22,7 @@ import type {
   SourceLocation,
   SupermarketSource,
 } from '../entities';
+import { declaredScopeKey } from './place-matching';
 
 /**
  * Postgres `numeric` comes back as a **string** through node-postgres, so every
@@ -138,6 +140,8 @@ export function toDiscoveredPlaceView(
     website: row.website,
     openingHours: row.openingHours,
     tags: row.tags,
+    // The column, or the tag on a row written before it (plan 0152).
+    scopeKey: declaredScopeKey(row),
     status: row.status,
     supermarketLocationId: row.supermarketLocationId,
     firstSeenAt: row.firstSeenAt.toISOString(),
@@ -166,6 +170,7 @@ export function toSourceCatalogEntryView(
     ean: row.ean,
     unitSize: toNumber(row.unitSize),
     sizeFormat: row.sizeFormat,
+    packCount: row.packCount ?? null,
     categoryPath: row.categoryPath ?? [],
     url: row.url,
     extra: row.extra ?? null,
@@ -208,9 +213,13 @@ export function toSourceEntryPriceView(
  *
  * `externalId` is the source's own code and `printedName` is what it displayed;
  * the view carries both because the queue is read by a person who recognises the
- * street and acts on the code.
+ * street and acts on the code. `candidates` are the service's to work out,
+ * because they need the chain's locations from catalog (plan 0154).
  */
-export function toSourceLocationView(row: SourceLocation): SourceLocationView {
+export function toSourceLocationView(
+  row: SourceLocation,
+  candidates: SourceLocationCandidate[] = []
+): SourceLocationView {
   return {
     id: row.id,
     supermarketId: row.supermarketId,
@@ -223,6 +232,7 @@ export function toSourceLocationView(row: SourceLocation): SourceLocationView {
     lastSeenAt: row.lastSeenAt.toISOString(),
     firstRunId: row.firstRunId,
     lastRunId: row.lastRunId,
+    candidates,
   };
 }
 

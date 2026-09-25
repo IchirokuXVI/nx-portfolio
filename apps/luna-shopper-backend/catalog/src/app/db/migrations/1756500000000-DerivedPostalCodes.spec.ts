@@ -286,6 +286,9 @@ describe('a backfilled location and the scope ladder', () => {
           ? [{ id: DEFAULT_SCOPE, supermarketId: CHAIN, priority: 300 }]
           : []
       ),
+      // Which scopes hold a price (plan 0157). None here: this file is about
+      // which rung answers, not what the rung holds.
+      query: jest.fn(async () => []),
     } as unknown as Repository<PriceScope>;
 
     const chains = {

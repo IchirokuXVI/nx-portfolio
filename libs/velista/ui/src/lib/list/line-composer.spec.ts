@@ -15,7 +15,7 @@ import {
   type SilenceHandlers,
 } from '@portfolio/velista/platform';
 import { LineComposer } from './line-composer';
-import { SuggestionList } from './suggestion-list';
+import { SKELETON_DELAY_MS, SuggestionList } from './suggestion-list';
 
 /**
  * Plan 0038: the add button records when there is nothing typed.
@@ -209,7 +209,12 @@ describe('LineComposer, one slot and the empty field decides', () => {
         size: null,
         unit: 'UNIT',
         productGroupId: null,
+        category: 'OTHER',
         offer: null,
+        chainPrices: [],
+        imageUrl: null,
+        packCount: null,
+        unitBasis: null,
       },
     };
 
@@ -249,6 +254,110 @@ describe('LineComposer, one slot and the empty field decides', () => {
         .querySelector('form.composer')
         ?.dispatchEvent(new Event('submit'));
 
+      expect(added).toEqual([{ content: 'oat', quantity: 1 }]);
+    });
+  });
+
+  /**
+   * Velista `0110`. The basket's composer while no list is chosen: the field and the
+   * button are held, and the field stays focusable so a tap can ask why.
+   */
+  describe('while locked', () => {
+    const OAT: CatalogSuggestion = {
+      kind: 'item',
+      item: {
+        id: 'item-oat',
+        name: { es: 'Bebida de avena', en: 'Oat drink' },
+        brand: 'Oatly',
+        size: null,
+        unit: 'UNIT',
+        productGroupId: null,
+        category: 'OTHER',
+        offer: null,
+        chainPrices: [],
+        imageUrl: null,
+        packCount: null,
+        unitBasis: null,
+      },
+    };
+
+    function field(fixture: ComponentFixture<LineComposer>): HTMLInputElement {
+      const found =
+        host(fixture).querySelector<HTMLInputElement>('input.field');
+      if (found === null) {
+        throw new Error('there is no field');
+      }
+      return found;
+    }
+
+    async function locked() {
+      const rendered = await render(fakeCapture(), { voice: false });
+      rendered.fixture.componentRef.setInput('lockReasonId', 'why-locked');
+      rendered.fixture.detectChanges();
+      return rendered;
+    }
+
+    it('holds the field and the button, and says why through the field', async () => {
+      const { fixture } = await locked();
+
+      expect(field(fixture).readOnly).toBe(true);
+      expect(field(fixture).getAttribute('aria-disabled')).toBe('true');
+      expect(field(fixture).getAttribute('aria-describedby')).toBe(
+        'why-locked'
+      );
+      // Focusable, so the keyboard can reach it and ask: `disabled` would not be.
+      expect(field(fixture).disabled).toBe(false);
+      expect(button(fixture).disabled).toBe(true);
+    });
+
+    it('lets nothing typed through, and sends nothing on Enter or on a suggestion', async () => {
+      const { fixture } = await locked();
+      const queries: string[] = [];
+      const added: unknown[] = [];
+      fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      fixture.componentRef.setInput('suggestions', [OAT]);
+
+      type(fixture, 'oat');
+      host(fixture)
+        .querySelector('form.composer')
+        ?.dispatchEvent(new Event('submit'));
+      fixture.componentInstance.choose(OAT);
+
+      expect(queries).toEqual([]);
+      expect(added).toEqual([]);
+    });
+
+    it('asks for the reason when the field is tapped or focused', async () => {
+      const { fixture } = await locked();
+      let pressed = 0;
+      fixture.componentInstance.lockedPressed.subscribe(() => (pressed += 1));
+
+      field(fixture).dispatchEvent(new Event('focus'));
+      field(fixture).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(pressed).toBe(2);
+    });
+
+    it('works as before once unlocked, and asks for nothing', async () => {
+      const { fixture } = await locked();
+      let pressed = 0;
+      const added: unknown[] = [];
+      fixture.componentInstance.lockedPressed.subscribe(() => (pressed += 1));
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+
+      fixture.componentRef.setInput('lockReasonId', null);
+      fixture.detectChanges();
+      field(fixture).dispatchEvent(new Event('focus'));
+      type(fixture, 'oat');
+      host(fixture)
+        .querySelector('form.composer')
+        ?.dispatchEvent(new Event('submit'));
+
+      expect(pressed).toBe(0);
+      expect(field(fixture).readOnly).toBe(false);
+      expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
+      expect(field(fixture).hasAttribute('aria-describedby')).toBe(false);
       expect(added).toEqual([{ content: 'oat', quantity: 1 }]);
     });
   });
@@ -473,7 +582,12 @@ describe('LineComposer, putting the suggestions down', () => {
         size: null,
         unit: 'UNIT',
         productGroupId: null,
+        category: 'OTHER',
         offer: null,
+        chainPrices: [],
+        imageUrl: null,
+        packCount: null,
+        unitBasis: null,
       },
     },
   ];
@@ -486,7 +600,7 @@ describe('LineComposer, putting the suggestions down', () => {
   }
 
   function drawn(fixture: ComponentFixture<LineComposer>): boolean {
-    return host(fixture).querySelector('ul.suggestions') !== null;
+    return host(fixture).querySelector('.panel') !== null;
   }
 
   function clickOn(fixture: ComponentFixture<LineComposer>, target: Element) {
@@ -539,7 +653,7 @@ describe('LineComposer, putting the suggestions down', () => {
     const chosen: { content: string }[] = [];
     fixture.componentInstance.submitted.subscribe((one) => chosen.push(one));
 
-    clickOn(fixture, find(fixture, 'button.suggestion'));
+    clickOn(fixture, find(fixture, 'button.pick'));
 
     // The dismissal must not race the choice: were the panel closed by the click
     // that lands on one of its own rows, choosing would be a coin toss.
@@ -556,5 +670,144 @@ describe('LineComposer, putting the suggestions down', () => {
     type(fixture, 'oat m');
 
     expect(drawn(fixture)).toBe(true);
+  });
+});
+
+/**
+ * The field is the combobox that owns the panel's grid (velista `0101`, rule 8),
+ * and the panel's cards reach the page through the composer.
+ */
+describe('LineComposer, the field and its cards', () => {
+  const OAT: CatalogSuggestion = {
+    kind: 'item',
+    item: {
+      id: 'item-oat',
+      name: { es: 'Bebida de avena', en: 'Oat drink' },
+      brand: 'Oatly',
+      size: null,
+      unit: 'UNIT',
+      productGroupId: null,
+      category: 'OTHER',
+      offer: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+      unitBasis: null,
+    },
+  };
+
+  function field(fixture: ComponentFixture<LineComposer>): HTMLInputElement {
+    const found = host(fixture).querySelector<HTMLInputElement>('input.field');
+    if (found === null) {
+      throw new Error('there is no field');
+    }
+    return found;
+  }
+
+  it('names the panel it controls while it is open, and nothing while it is not', async () => {
+    const { fixture } = await render();
+
+    expect(field(fixture).getAttribute('role')).toBe('combobox');
+    expect(field(fixture).getAttribute('aria-expanded')).toBe('false');
+    expect(field(fixture).getAttribute('aria-controls')).toBeNull();
+
+    fixture.componentRef.setInput('suggestions', [OAT]);
+    type(fixture, 'oat');
+
+    const panel = host(fixture).querySelector('.panel');
+    expect(field(fixture).getAttribute('aria-expanded')).toBe('true');
+    expect(field(fixture).getAttribute('aria-controls')).toBe(panel?.id);
+  });
+
+  describe('a search that found nothing (0108, target 1)', () => {
+    function answered(
+      fixture: ComponentFixture<LineComposer>,
+      words: string | null,
+      found: readonly CatalogSuggestion[] = []
+    ): void {
+      fixture.componentRef.setInput('suggestions', found);
+      fixture.componentRef.setInput('suggestedFor', words);
+      fixture.detectChanges();
+    }
+
+    it('says so for the words in the field, and that they can still be added', async () => {
+      const { fixture } = await render();
+      type(fixture, 'zzzz');
+      answered(fixture, 'zzzz');
+
+      expect(host(fixture).querySelector('.none-h')).not.toBeNull();
+      expect(host(fixture).querySelector('.none-p')).not.toBeNull();
+    });
+
+    it('takes the row away on the next keystroke', async () => {
+      const { fixture } = await render();
+      type(fixture, 'zzzz');
+      answered(fixture, 'zzzz');
+      type(fixture, 'zzzzz');
+
+      expect(host(fixture).querySelector('.none')).toBeNull();
+    });
+
+    it('draws no row while the search is still running, or when it found something', async () => {
+      const { fixture } = await render();
+      type(fixture, 'zzzz');
+      answered(fixture, 'zzzz');
+      fixture.componentRef.setInput('suggesting', true);
+      fixture.detectChanges();
+
+      expect(host(fixture).querySelector('.none')).toBeNull();
+
+      fixture.componentRef.setInput('suggesting', false);
+      answered(fixture, 'oat', [OAT]);
+      type(fixture, 'oat');
+
+      expect(host(fixture).querySelector('.none')).toBeNull();
+      expect(host(fixture).querySelectorAll('.sug')).toHaveLength(1);
+    });
+
+    it('does not offer to add the words while the composer is locked', async () => {
+      const { fixture } = await render(fakeCapture(), { voice: false });
+      fixture.componentRef.setInput('lockReasonId', 'why');
+      type(fixture, 'zzzz');
+      answered(fixture, 'zzzz');
+
+      expect(host(fixture).querySelector('.none-p')).toBeNull();
+    });
+  });
+
+  it('draws the skeleton while the page is asking the catalog', async () => {
+    const { fixture } = await render();
+    fixture.componentRef.setInput('suggesting', true);
+    type(fixture, 'oat');
+    await new Promise((resolve) => setTimeout(resolve, SKELETON_DELAY_MS + 30));
+    fixture.detectChanges();
+
+    expect(host(fixture).querySelectorAll('.sk')).toHaveLength(3);
+  });
+
+  it('hands a stepped line from a card to the page', async () => {
+    const { fixture } = await render();
+    const holding = {
+      key: 'l1',
+      lineId: 'l1',
+      text: 'Oat drink',
+      listName: null,
+      quantity: 1,
+      editable: true,
+    };
+    const changed: unknown[] = [];
+    fixture.componentInstance.holdingChanged.subscribe((one) =>
+      changed.push(one)
+    );
+    fixture.componentRef.setInput('suggestions', [OAT]);
+    fixture.componentRef.setInput('holdingsOf', () => [holding]);
+    type(fixture, 'oat');
+
+    host(fixture)
+      .querySelectorAll<HTMLButtonElement>('.already .step')[1]
+      ?.click();
+    fixture.detectChanges();
+
+    expect(changed).toEqual([{ holding, from: 1, to: 2 }]);
   });
 });

@@ -1,6 +1,6 @@
+import { continuesPurchaseSession } from '@portfolio/luna-shopper/contracts';
 import {
   DAY_MS,
-  PURCHASE_MERGE_MS,
   STAPLE_MIN_TRIPS,
   STAPLE_TRIPS,
   SUGGESTION_MIN_PURCHASES,
@@ -16,21 +16,33 @@ import {
  * calendar day, so no server clock or time zone can change an answer.
  */
 
-/** One standing `BOUGHT` settlement of a line: when, and how many units. */
+/** One standing `BOUGHT` settlement of a line: when, how many units, and where. */
 export interface Purchase {
   at: Date;
   quantity: number;
+  /**
+   * The basket it was bought through, or null off the list page.
+   *
+   * Carried for the quantity rule of plan 0142, section 8.2, and read by
+   * nothing else here. Neither rule below looks at it: what a purchase came off
+   * changes neither the period nor whether a line is a staple.
+   */
+  basketId: string | null;
 }
 
 /**
  * Several settlements folded into one purchase.
  *
  * `at` is the earliest of them, the one the rest were folded into. `quantity` is
- * their sum, which is what the trip bought.
+ * their sum, which is what the trip bought. `basketId` is the **newest** folded
+ * row's, because the question it answers is "where did this purchase end up",
+ * and a shopper who started on the list page and finished through a basket
+ * finished through the basket.
  */
 export interface MergedPurchase {
   at: Date;
   quantity: number;
+  basketId: string | null;
 }
 
 /** What the period rule says about one line (section 3). */
@@ -49,27 +61,37 @@ export interface LinePeriod {
 /**
  * Step 1 of section 3: a trip is one purchase however many rows it wrote.
  *
- * Sorted by time, then every purchase closer than {@link PURCHASE_MERGE_MS} to
- * the one before it is folded into that one. "The one before it" is the previous
- * settlement and not the first of the group, so a slow partial settle that writes
- * a row every few hours stays one purchase.
+ * Sorted by time, then every purchase that `continuesPurchaseSession` says is
+ * still the same session as the one before it is folded into that one. "The one
+ * before it" is the previous settlement and not the first of the group, so a slow
+ * partial settle that writes a row every few hours stays one purchase.
+ *
+ * The session is the trips read's own session (plan 0134, section 7), so a line's
+ * estimate counts the trips the list shows and not a different number of them.
+ * Two shops nine hours apart on one day used to fold and now do not, which
+ * shortens that line's median a little, and the floor of
+ * {@link SUGGESTION_MIN_PURCHASES} still refuses a period below three purchases.
  */
 export function mergePurchases(
   purchases: readonly Purchase[]
 ): MergedPurchase[] {
   const sorted = [...purchases].sort((a, b) => a.at.getTime() - b.at.getTime());
   const merged: MergedPurchase[] = [];
-  let previous: number | null = null;
+  let previous: Date | null = null;
 
   for (const purchase of sorted) {
-    const at = purchase.at.getTime();
     const last = merged[merged.length - 1];
-    if (last && previous !== null && at - previous < PURCHASE_MERGE_MS) {
+    if (last && previous && continuesPurchaseSession(previous, purchase.at)) {
       last.quantity += purchase.quantity;
+      last.basketId = purchase.basketId;
     } else {
-      merged.push({ at: new Date(at), quantity: purchase.quantity });
+      merged.push({
+        at: new Date(purchase.at.getTime()),
+        quantity: purchase.quantity,
+        basketId: purchase.basketId,
+      });
     }
-    previous = at;
+    previous = purchase.at;
   }
   return merged;
 }
@@ -100,7 +122,9 @@ export function periodOf(
   now: Date
 ): LinePeriod | null {
   const merged = mergePurchases(
-    purchaseTimes.map((at) => ({ at, quantity: 0 }))
+    // The period is a question about times alone, so the other two fields are
+    // whatever `mergePurchases` needs to accept.
+    purchaseTimes.map((at) => ({ at, quantity: 0, basketId: null }))
   );
   if (merged.length < SUGGESTION_MIN_PURCHASES) {
     return null;
@@ -134,11 +158,15 @@ export function periodOf(
 /**
  * The staple rule (section 4).
  *
- * `presence` is one boolean per ended basket trip of the list, newest first, true
- * where the trip asked for the line. Only the first {@link STAPLE_TRIPS} count.
+ * `presence` is one boolean per ended trip of the list, newest first, true
+ * where the trip wanted the line. Only the first {@link STAPLE_TRIPS} count.
+ *
+ * **It never knew what a trip was**, which is why plan 0142 widened a trip to
+ * include a session without touching a line of this function: it takes a list
+ * of booleans and the statement behind them decides what each one means.
  *
  * A staple is present in at least half of them **and** never absent from two in a
- * row: every basket, or every other basket, and nothing looser. Below
+ * row: every trip, or every other trip, and nothing looser. Below
  * {@link STAPLE_MIN_TRIPS} trips there is too little to say, so nothing is.
  */
 export function isStaple(presence: readonly boolean[]): boolean {

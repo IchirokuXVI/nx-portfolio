@@ -6,8 +6,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { context as otelContext } from '@opentelemetry/api';
 import {
+  basketRoom,
   DOMAIN_EVENT_STREAM_SUBJECTS,
-  generatedListRoom,
   listRoom,
   RealtimeEvent,
   userRoom,
@@ -45,7 +45,7 @@ import {
   EVENT_STREAM_NAME,
 } from '../realtime/constants';
 import { EventRelayService } from '../relay/event-relay.service';
-import { sweepsFor } from './sweeps';
+import { basketsOf, sweepsFor } from './sweeps';
 
 /**
  * The wire shape NestJS's NATS transport puts on an emitted event: the subject as
@@ -384,11 +384,19 @@ export class JetStreamConsumer implements OnModuleInit, OnApplicationShutdown {
     for (const userId of envelope.userIds ?? []) {
       rooms.push(userRoom(userId));
     }
-    // A shared basket (plan 0051, section 7). The fourth audience, and the one
-    // whose members are participants rather than users, which is the only address
-    // that can reach a guest at all.
-    if (envelope.generatedListId) {
-      rooms.push(generatedListRoom(envelope.generatedListId));
+    // The baskets (plan 0139, section 1). The fourth audience, and the one whose
+    // members are participants rather than users, which is the only address that
+    // can reach a guest at all.
+    //
+    // **Both names are read, for one release.** Core writes `basketIds` alone
+    // since plan 0139, and `basketId` is what every envelope written
+    // before that deploy carries. Staging deploys only the affected services and
+    // the durable consumer replays what the stream still holds, so an envelope of
+    // either shape can arrive here at any moment in the window. Reading only the
+    // new name would turn one of them into an envelope addressed to nobody, which
+    // is dropped as a fault. Plan 0144 removes the second branch.
+    for (const basketId of basketsOf(envelope)) {
+      rooms.push(basketRoom(basketId));
     }
     return rooms;
   }

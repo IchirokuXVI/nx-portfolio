@@ -361,11 +361,11 @@ export const TRIP_ROWS_PAGE_SIZE = 100;
 export const TRIPS_REFETCH_QUIET_MS = 400;
 
 /**
- * `CreateGeneratedListDto.name` and `UpdateGeneratedListDto.name`, which is
- * `GENERATED_LIST_LIMITS.nameMaxLength` in the contracts (backend plan 0050).
+ * `CreateBasketDto.name` and `UpdateBasketDto.name`, which is
+ * `BASKET_LIMITS.nameMaxLength` in the contracts (backend plan 0050).
  *
  * The field it guards is optional, unlike every other name in this file: an unnamed
  * basket is displayed as its generation date, so the limit only ever applies to
  * somebody who chose to type one.
  */
-export const GENERATED_LIST_NAME_MAX_LENGTH = 120;
+export const BASKET_NAME_MAX_LENGTH = 120;

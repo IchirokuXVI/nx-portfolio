@@ -1,4 +1,5 @@
 import type { ConfigService } from '@nestjs/config';
+import { splitCardName } from '@portfolio/luna-shopper/carrefour';
 import {
   ItemCategory,
   ItemSourceMatch,
@@ -246,7 +247,9 @@ describe('SourceEntryService', () => {
               priceScopeId: CORDOBA,
               price: 1.09,
               runId: 'run-tuesday',
-              validUntil: new Date('2026-09-24T00:00:00.000Z'),
+              // Open, relative to now: a fixed date made this price expire on
+              // 2026-09-24 and the test fail every day after.
+              validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
             }),
           ],
         }),
@@ -374,6 +377,83 @@ describe('SourceEntryService', () => {
       expect(result.entry.status).toBe(SourceEntryStatus.ACTIVE);
       // D8 again: creating the item does not rewrite the row either.
       expect(saved[0].name).toBe('Leche semidesnatada Hacendado');
+    });
+
+    describe('the pack count (plan 0162)', () => {
+      /** A Carrefour six pack, split by the adapter exactly as a crawl splits it. */
+      const card = splitCardName(
+        'Leche entera CARREFOUR pack de 6 unidades de 1 l.',
+        'l'
+      );
+      const sixPack = () =>
+        entry({
+          supermarketId: 'chain-carrefour',
+          externalId: 'VC4AECOMM-6',
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          name: card.name,
+          brand: 'CARREFOUR',
+          unitSize: card.unitSize,
+          sizeFormat: card.sizeFormat,
+          packCount: card.packCount,
+        });
+
+      it('creates the item with the count the row read', async () => {
+        const { service, createItem } = build({
+          row: sixPack(),
+          source: { adapterKey: 'carrefour-web', enabled: true, config: {} },
+        });
+
+        await service.createItem({ userId: ADMIN, entryId: 'e-1' });
+
+        expect(card.packCount).toBe(6);
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ packCount: 6, unitSize: 6 })
+        );
+      });
+
+      it('takes the count the operator names over the row', async () => {
+        const { service, createItem } = build({
+          row: sixPack(),
+          source: { adapterKey: 'carrefour-web', enabled: true, config: {} },
+        });
+
+        await service.createItem({
+          userId: ADMIN,
+          entryId: 'e-1',
+          packCount: 4,
+        });
+
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ packCount: 4 })
+        );
+      });
+
+      it('creates the item with none when the operator clears it', async () => {
+        const { service, createItem } = build({
+          row: sixPack(),
+          source: { adapterKey: 'carrefour-web', enabled: true, config: {} },
+        });
+
+        await service.createItem({
+          userId: ADMIN,
+          entryId: 'e-1',
+          packCount: null,
+        });
+
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ packCount: null })
+        );
+      });
+
+      it('creates the item with none from a row that is not a pack', async () => {
+        const { service, createItem } = build();
+
+        await service.createItem({ userId: ADMIN, entryId: 'e-1' });
+
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ packCount: null })
+        );
+      });
     });
 
     it('takes the operator overrides over the row defaults', async () => {

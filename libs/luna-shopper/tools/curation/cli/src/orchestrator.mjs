@@ -15,8 +15,12 @@
  * whole of it runs under `node --test` with no network and no Docker.
  */
 
-import { emptyUsage } from '../../../../../shared/model-engines/src/index.mjs';
+import {
+  emptyUsage,
+  handleAbandoned,
+} from '../../../../../shared/model-engines/src/index.mjs';
 import { pickFreeSlot, REHEARSAL_SERVICES, rehearsalUrl } from './slots.mjs';
+import { summaryText } from './summary.mjs';
 
 /** How the second attempt is asked for after a reply that could not be used. */
 const RETRY_INSTRUCTION =
@@ -45,14 +49,27 @@ export function toPacket(row) {
 export function rowIdentity(row) {
   const subject = row?.entry ?? row?.item ?? null;
   const id = subject?.id ?? null;
+  // The groups packet spells the name as two flat fields rather than one
+  // object (plan 0005), so both shapes are read.
   const name =
     subject?.name?.es ??
     subject?.name?.en ??
     (typeof subject?.name === 'string' ? subject.name : null) ??
+    subject?.nameEs ??
+    subject?.nameEn ??
     id ??
     '(unnamed)';
   return { id, name };
 }
+
+/**
+ * How many failed steps in a row stop the walk (plan 0005).
+ *
+ * One row that fails is a row problem, and it becomes a REVIEW. Three in a row
+ * is not: it is a decider, a gateway or an engine that is down, and walking on
+ * would turn the rest of the queue into reviews nobody asked for.
+ */
+export const FAILURES_IN_A_ROW = 3;
 
 /** The model's object, or null when the reply is not one. */
 export function parseDecision(text, { stripFence }) {
@@ -243,7 +260,14 @@ export async function fetchBatch(decider, width) {
  * Steps 1 to 6 of the plan, in that order. The teardown is a `finally`, and on
  * a failure the rehearsal catalog is dumped first, because `--down` removes the
  * slot's volumes and a failed run's rehearsal state is the one thing that
- * cannot be rebuilt afterwards.
+ * cannot be rebuilt afterwards. Bringing the slot up is inside that `finally`
+ * too (plan 0005): a `--up` that fails half way has still started something,
+ * and the teardown is what takes it away.
+ *
+ * **`end` runs however the walk ended** (plan 0005): finished, stopped or
+ * failed. It only reads the decisions file, so it reports over however many
+ * rows the walk reached, and `report.json` is written whenever the run opened
+ * at all. Only a run that never opened has nothing to report.
  *
  * **A stopped run ends the same way a finished one does.** `signal` is aborted
  * by the first Ctrl+C (see `cli.mjs`), and the walk stops at the row it is on
@@ -256,6 +280,14 @@ export async function fetchBatch(decider, width) {
  * reaches the whole terminal, so whichever child was in flight dies of the same
  * keystroke and reports it in its own words; a step that failed while the run
  * was stopping is the stop, and the walk breaks rather than throwing.
+ *
+ * **One row that fails is one REVIEW** (plan 0005). An error from the decider
+ * or the engine while a row is being decided is recorded against that row as a
+ * REVIEW with the issue `ROW_FAILED`, through `recordRowFailure`, and the walk
+ * goes on. A `next` that fails cannot be pinned on a row, because the decider
+ * never said which row it was building, so it is asked again. Either way
+ * `FAILURES_IN_A_ROW` failures with no success between them stop the walk as a
+ * failure, and the report is still written.
  *
  * **The walk asks several rows at a time** (plan 0002), as many as the engine
  * advises and the decider composes. A round is one `askEach` and then one
@@ -283,13 +315,19 @@ export async function fetchBatch(decider, width) {
  * not a transaction and was never going to be one, which is what makes a
  * stopped run resumable.
  *
+ * **`resume` continues a run instead of starting one** (plan 0005). It carries
+ * what `start` answered when the run opened, and a `replay` that writes the
+ * run's creations into the new slot. `start` is not called, because the run
+ * directory already holds a run and the decider refuses to open a second.
+ *
  * **`limit` stops handing rows to the model after that many** (plan 0003), and
- * is the whole of what it does. It is not a stop: the rows already handed out
- * are decided, the report is written over them, and the run ends the way a
- * finished one does, so the exit code is 0 and the decisions file is a file
- * `--apply` takes. It narrows the batch it asks for rather than trimming one it
- * already fetched, because a fetched row carries a handout the decider is
- * holding open and nothing would ever close it.
+ * is the whole of what it does. It counts the rows of the run, so a resumed run
+ * counts the rows it decided before it stopped. It is not a stop: the rows
+ * already handed out are decided, the report is written over them, and the run
+ * ends the way a finished one does, so the exit code is 0 and the decisions
+ * file is a file `--apply` takes. It narrows the batch it asks for rather than
+ * trimming one it already fetched, because a fetched row carries a handout the
+ * decider is holding open and nothing would ever close it.
  */
 export async function runCuration({
   slots,
@@ -311,6 +349,11 @@ export async function runCuration({
   usage = emptyUsage(),
   signal = null,
   onSlot = null,
+  onOpened = null,
+  resume = null,
+  recordRowFailure = null,
+  readReport = null,
+  passwordGiven = false,
 }) {
   const taken = await slots.list();
   const slot = pickFreeSlot(taken);
@@ -324,91 +367,144 @@ export async function runCuration({
     `rehearsing on slot ${slot} (${url}), services ${services.join(', ')}\n`
   );
 
-  await slots.up(slot, services);
-
   let failed = null;
   let stopped = false;
   let runId = null;
+  let brought = false;
+  let decider = null;
   try {
-    await waitForGateway({ url, signal });
+    try {
+      await slots.up(slot, services);
+      brought = true;
+      await waitForGateway({ url, signal });
 
-    const decider = makeDeciderFor({ runDir });
-    // Both admin logins are verified inside `start`. A failure here is a run
-    // that ends before the first model call, which is the point of the gate.
-    const opened = await decider.start({
-      mainUrl,
-      rehearsalUrl: url,
-      mainUser,
-      model,
-      local,
-      chain,
-    });
-
-    runId = opened.runId;
-    const total = opened.remaining ?? 0;
-    stderr.write(`run ${opened.runId}: ${total} rows\n`);
-    // Whatever `start` has to say about what it read, one line each. A decider
-    // that answers none says nothing, which keeps the two independent.
-    for (const note of opened.notes ?? []) {
-      stderr.write(`${note}\n`);
-    }
-    if (limit !== null) {
-      stderr.write(`limit ${limit}: the walk ends after ${limit} rows\n`);
-    }
-
-    const width = roundWidth(engine, opened.batches);
-    const askOptions = {
-      // A decider that answers no schema is driven exactly as before, which is
-      // what keeps the two implementations independent of each other.
-      system: opened.prompt,
-      schema: opened.schema ?? null,
-    };
-
-    /**
-     * The replies to a pass, one promise per prompt, in input order.
-     *
-     * A round wider than one goes through `askEach`, so the caller reads the
-     * answers as they arrive and the engine is still working on the rows behind
-     * the one being decided. A width of one goes through `ask`, which is the
-     * walk plan 0001 shipped: one request, and a failure the engine gave up on
-     * ends the run rather than being recorded as an unusable reply.
-     */
-    const askPass = (texts) =>
-      width > 1
-        ? engine.askEach(texts, askOptions)
-        : texts.map((text) =>
-            engine
-              .ask(text, askOptions)
-              .then((answer) => ({ text: String(answer?.text ?? '') }))
-          );
-
-    let handed = 0;
-
-    walk: for (;;) {
-      if (signal?.aborted) {
-        stopped = true;
-        break;
+      decider = makeDeciderFor({ runDir });
+      let opened;
+      let decidedBefore = 0;
+      if (resume) {
+        opened = resume.opened;
+        const replayed = await resume.replay({ rehearsalUrl: url });
+        decidedBefore = replayed?.decided ?? 0;
+        stderr.write(
+          `resuming run ${opened.runId}: ${decidedBefore} rows already decided, ${replayed?.created ?? 0} creations written again into slot ${slot}\n`
+        );
+      } else {
+        // Both admin logins are verified inside `start`. A failure here is a
+        // run that ends before the first model call, which is the point of
+        // the gate.
+        opened = await decider.start({
+          mainUrl,
+          rehearsalUrl: url,
+          mainUser,
+          model,
+          local,
+          chain,
+        });
+        onOpened?.(opened);
       }
-      if (limit !== null && handed >= limit) {
-        stderr.write(`limit ${limit} reached: ${handed} rows handed out\n`);
-        break;
+
+      runId = opened.runId;
+      const total = opened.remaining ?? 0;
+      stderr.write(`run ${opened.runId}: ${total} rows\n`);
+      // Whatever `start` has to say about what it read, one line each. A
+      // decider that answers none says nothing, which keeps the two
+      // independent. A resumed run said them when it opened.
+      if (!resume) {
+        for (const note of opened.notes ?? []) {
+          stderr.write(`${note}\n`);
+        }
       }
-      try {
+      if (limit !== null) {
+        stderr.write(`limit ${limit}: the walk ends after ${limit} rows\n`);
+      }
+      // What the progress line counts to: the rows the limit allows, when
+      // there is a limit, rather than the whole queue the limit will not reach.
+      const goal = limit === null ? total : Math.min(total, limit);
+
+      const width = roundWidth(engine, opened.batches);
+      const askOptions = {
+        // A decider that answers no schema is driven exactly as before, which
+        // is what keeps the two implementations independent of each other.
+        system: opened.prompt,
+        schema: opened.schema ?? null,
+      };
+
+      /**
+       * The replies to a pass, one promise per prompt, in input order.
+       *
+       * A round wider than one goes through `askEach`, so the caller reads the
+       * answers as they arrive and the engine is still working on the rows
+       * behind the one being decided. A width of one goes through `ask`, which
+       * is the walk plan 0001 shipped. Every promise is marked handled, because
+       * a row that fails or a walk that stops leaves some of them unread.
+       */
+      const askPass = (texts) =>
+        handleAbandoned(
+          width > 1
+            ? engine.askEach(texts, askOptions)
+            : texts.map((text) =>
+                engine
+                  .ask(text, askOptions)
+                  .then((answer) => ({ text: String(answer?.text ?? '') }))
+              )
+        );
+
+      let handed = decidedBefore;
+      let inARow = 0;
+
+      /**
+       * One more failed step. Answers true when that is one too many, and the
+       * walk has to stop.
+       */
+      const failedStep = (what, error) => {
+        inARow += 1;
+        stderr.write(`${what} failed: ${error?.message ?? error}\n`);
+        if (inARow < FAILURES_IN_A_ROW) {
+          return false;
+        }
+        failed = new Error(
+          `${inARow} steps in a row failed, which is not a problem with one row. The last one: ${error?.message ?? error}`
+        );
+        return true;
+      };
+
+      walk: for (;;) {
+        if (signal?.aborted) {
+          stopped = true;
+          break;
+        }
+        if (limit !== null && handed >= limit) {
+          stderr.write(`limit ${limit} reached: ${handed} rows handed out\n`);
+          break;
+        }
+
         // Never wider than the rows the limit has left, so the batch that ends
         // the walk is the exact remainder rather than a batch whose tail would
         // have to be thrown away with its handouts still open.
         const room =
           limit === null ? width : Math.min(width, Math.max(1, limit - handed));
-        const batch = await fetchBatch(decider, room);
+        let batch;
+        try {
+          batch = await fetchBatch(decider, room);
+        } catch (error) {
+          if (signal?.aborted) {
+            stopped = true;
+            break;
+          }
+          if (failedStep('next', error)) {
+            break;
+          }
+          continue;
+        }
         if (batch.rows.length === 0) {
           break;
         }
         handed += batch.rows.length;
 
-        // One call for the whole round, and the whole of the saving. A round is
-        // composed so that no two of its rows can be about the same product, so
-        // asking them together shows each of them what asking them one after
-        // another would have shown it.
+        // One call for the whole round, and the whole of the saving. A round
+        // is composed so that no two of its rows can be about the same
+        // product, so asking them together shows each of them what asking
+        // them one after another would have shown it.
         let attempts = batch.rows.map(rowAttempt);
         let replies = askPass(attempts.map((attempt) => attempt.body));
         let first = true;
@@ -422,10 +518,10 @@ export async function runCuration({
           const again = [];
           const prompts = [];
 
-          // In input order, and one row at a time: row k is recorded before the
-          // reply to row k plus one is even read, which is what makes the round
-          // equivalent to walking its rows one after another. What is not
-          // waited for is the rest of the round, which the engine is still
+          // In input order, and one row at a time: row k is recorded before
+          // the reply to row k plus one is even read, which is what makes the
+          // round equivalent to walking its rows one after another. What is
+          // not waited for is the rest of the round, which the engine is still
           // answering while the decider works.
           for (let index = 0; index < attempts.length; index++) {
             if (signal?.aborted) {
@@ -433,18 +529,43 @@ export async function runCuration({
               break walk;
             }
             const attempt = attempts[index];
+            const { id, name } = rowIdentity(attempt.row);
             if (first) {
-              const { name } = rowIdentity(attempt.row);
               const position = Math.max(1, total - batch.remaining + 1 + index);
-              stderr.write(`${position}/${total} - ${name}\n`);
+              stderr.write(`${position}/${goal} - ${name}\n`);
             }
 
-            const outcome = await stepRow({
-              attempt,
-              reply: await replies[index],
-              decider,
-              stripFence,
-            });
+            let outcome;
+            try {
+              outcome = await stepRow({
+                attempt,
+                reply: await replies[index],
+                decider,
+                stripFence,
+              });
+            } catch (error) {
+              if (signal?.aborted) {
+                stopped = true;
+                break walk;
+              }
+              // With nowhere to record it, a failed row fails the run, which
+              // is what it did before there was anywhere.
+              if (!recordRowFailure) {
+                throw error;
+              }
+              const record = await recordRowFailure({
+                row: attempt.row,
+                error,
+              });
+              stdout.write(
+                `${JSON.stringify({ accepted: false, retryable: false, decision: record, issues: record?.issues ?? [] })}\n`
+              );
+              if (failedStep(`row ${id ?? name}`, error)) {
+                break walk;
+              }
+              continue;
+            }
+            inARow = 0;
             if (outcome.answer) {
               stdout.write(`${JSON.stringify(outcome.answer)}\n`);
               continue;
@@ -464,23 +585,50 @@ export async function runCuration({
             replies = askPass(prompts);
           }
         }
-      } catch (error) {
-        if (!signal?.aborted) {
-          throw error;
-        }
-        stopped = true;
-        break;
       }
+    } catch (error) {
+      if (signal?.aborted) {
+        stopped = true;
+      } else {
+        failed = error;
+      }
+    }
+
+    if (runId === null) {
+      // A run that never opened has no decisions to report. A stop before the
+      // first row (during the wait for the gateway, or while the run was
+      // opening) says so and ends quietly; a failure is thrown below.
+      if (failed) {
+        throw failed;
+      }
+      stderr.write('stopped before the run opened; nothing was decided\n');
+      return { slot, runId, report: null, usage, stopped: true };
     }
 
     if (stopped) {
       stderr.write(`stopped: the report covers the rows decided so far\n`);
     }
 
-    // Written for a stopped run too, and that is the whole point of stopping
-    // this way: `end` reads the decisions file, so it reports over however many
-    // rows the walk reached.
-    const report = await decider.end(usage);
+    // Written for a stopped run and a failed one too, and that is the whole
+    // point of ending this way: `end` reads the decisions file, so it reports
+    // over however many rows the walk reached.
+    let report = null;
+    try {
+      report = await decider.end(usage);
+    } catch (endError) {
+      stderr.write(
+        `${stopped ? 'stopped, and ' : ''}the report could not be written: ${endError?.message ?? endError}\n`
+      );
+      if (failed) {
+        throw failed;
+      }
+      if (stopped) {
+        return { slot, runId, report: null, usage, stopped: true };
+      }
+      failed = endError;
+      throw endError;
+    }
+
     // What the run saw, beside what the plan predicted. A chain that clusters
     // differently from the one that was measured says so here.
     if (report?.reasks) {
@@ -488,24 +636,34 @@ export async function runCuration({
         `re-asked ${report.reasks.stale} of ${report.reasks.decided} decided rows\n`
       );
     }
-    stderr.write(`report: ${report.report}\n`);
-    return { slot, runId: opened.runId, report, usage, stopped };
-  } catch (error) {
-    // A stop that arrived before the first row (during the wait for the
-    // gateway, or while the run was opening) has no decisions to report, so
-    // there is nothing to write and nothing to say beyond the teardown below.
-    if (signal?.aborted) {
-      stderr.write(
-        runId === null
-          ? 'stopped before the run opened; nothing was decided\n'
-          : `stopped, and the report could not be written: ${error.message ?? error}\n`
-      );
-      return { slot, runId, report: null, usage, stopped: true };
+    let full = null;
+    if (readReport && report?.report) {
+      try {
+        full = readReport(report.report);
+      } catch {
+        // The summary is the convenience, and the report file is still where
+        // `end` wrote it. A summary without the brands is better than none.
+      }
     }
-    failed = error;
-    throw error;
+    stderr.write(
+      summaryText({
+        runDir,
+        reportPath: report?.report ?? null,
+        counts: report?.counts ?? {},
+        report: full,
+        mainUser,
+        passwordGiven,
+        stopped,
+        failed: failed !== null,
+      })
+    );
+
+    if (failed) {
+      throw failed;
+    }
+    return { slot, runId, report, usage, stopped };
   } finally {
-    if (failed && dumpPath) {
+    if (failed && dumpPath && brought) {
       try {
         await slots.dumpCatalog(slot, dumpPath);
         stderr.write(`rehearsal catalog dumped to ${dumpPath}\n`);

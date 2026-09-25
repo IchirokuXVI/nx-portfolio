@@ -1,12 +1,15 @@
+import type { CatalogSuggestion } from '@portfolio/velista/models';
 import {
   toAssistantReply,
+  toBasketFromView,
+  toBasketRun,
+  toBasketSummary,
   toCatalogItem,
   toCatalogSuggestion,
+  toCatalogSuggestions,
   toComment,
-  toGeneratedListFromView,
-  toGeneratedListRun,
-  toGeneratedListSummary,
   toLine,
+  toLineSettlement,
   toListAccessEntries,
   toListIdResult,
   toListPermissions,
@@ -798,11 +801,12 @@ describe('toAssistantReply', () => {
  * Generated shopping lists (plan 0045), which is rule D4 applied to the two shapes the
  * listing and the create answer with.
  */
-describe('toGeneratedListSummary', () => {
+describe('toBasketSummary', () => {
   const wire = {
     id: 'gl1',
+    kind: 'GENERATED',
     name: 'Saturday big shop',
-    status: 'ACTIVE',
+    status: 'OPEN',
     generatedAt: '2026-08-21T10:00:00.000Z',
     lineCount: 12,
     settledLineCount: 4,
@@ -812,10 +816,11 @@ describe('toGeneratedListSummary', () => {
   };
 
   it('maps the listing shape', () => {
-    expect(toGeneratedListSummary(wire)).toEqual({
+    expect(toBasketSummary(wire)).toEqual({
       id: 'gl1',
+      kind: 'GENERATED',
       name: 'Saturday big shop',
-      status: 'ACTIVE',
+      status: 'OPEN',
       generatedAt: new Date('2026-08-21T10:00:00.000Z'),
       lineCount: 12,
       settledLineCount: 4,
@@ -835,10 +840,11 @@ describe('toGeneratedListSummary', () => {
    * breakdown would claim three purchases nobody made.
    */
   it('reads a summary with no breakdown as zeroes rather than dropping it', () => {
-    const mapped = toGeneratedListSummary({
+    const mapped = toBasketSummary({
       id: 'gl1',
+      kind: 'GENERATED',
       name: null,
-      status: 'ACTIVE',
+      status: 'OPEN',
       generatedAt: '2026-08-21T10:00:00.000Z',
       lineCount: 12,
       settledLineCount: 4,
@@ -854,13 +860,13 @@ describe('toGeneratedListSummary', () => {
   // Collapsing it to an empty string would erase the difference between unnamed and
   // named nothing.
   it('keeps a null name as null rather than as an empty string', () => {
-    expect(toGeneratedListSummary({ ...wire, name: null })?.name).toBeNull();
+    expect(toBasketSummary({ ...wire, name: null })?.name).toBeNull();
   });
 
   it('drops a body that is not a record, and one with no id', () => {
-    expect(toGeneratedListSummary(null)).toBeNull();
-    expect(toGeneratedListSummary('gl1')).toBeNull();
-    expect(toGeneratedListSummary({ ...wire, id: undefined })).toBeNull();
+    expect(toBasketSummary(null)).toBeNull();
+    expect(toBasketSummary('gl1')).toBeNull();
+    expect(toBasketSummary({ ...wire, id: undefined })).toBeNull();
   });
 
   /**
@@ -870,20 +876,20 @@ describe('toGeneratedListSummary', () => {
    * history and title itself today.
    */
   it('drops a summary whose date cannot be read, rather than inventing one', () => {
-    expect(toGeneratedListSummary({ ...wire, generatedAt: 'soon' })).toBeNull();
-    expect(toGeneratedListSummary({ ...wire, generatedAt: null })).toBeNull();
+    expect(toBasketSummary({ ...wire, generatedAt: 'soon' })).toBeNull();
+    expect(toBasketSummary({ ...wire, generatedAt: null })).toBeNull();
   });
 
   // An unrecognised status must never read as ACTIVE, which would put a basket the
   // server considers finished back on the dashboard.
   it('falls back to UNKNOWN for a status this build does not know', () => {
-    expect(toGeneratedListSummary({ ...wire, status: 'PAUSED' })?.status).toBe(
+    expect(toBasketSummary({ ...wire, status: 'PAUSED' })?.status).toBe(
       'UNKNOWN'
     );
   });
 
   it('reads a missing count as zero rather than dropping the row', () => {
-    const mapped = toGeneratedListSummary({
+    const mapped = toBasketSummary({
       ...wire,
       lineCount: undefined,
       settledLineCount: undefined,
@@ -894,7 +900,7 @@ describe('toGeneratedListSummary', () => {
   });
 });
 
-describe('toGeneratedListFromView', () => {
+describe('toBasketFromView', () => {
   const line = (quantity: number, settled: number) => ({
     id: `l${quantity}${settled}`,
     content: 'Milk',
@@ -916,7 +922,7 @@ describe('toGeneratedListFromView', () => {
    * three call sites cannot disagree.
    */
   it('counts the lines and the finished ones off the basket itself', () => {
-    const mapped = toGeneratedListFromView(view);
+    const mapped = toBasketFromView(view);
 
     expect(mapped?.lineCount).toBe(3);
     expect(mapped?.settledLineCount).toBe(1);
@@ -925,7 +931,7 @@ describe('toGeneratedListFromView', () => {
   // A NOT_AVAILABLE outcome closes the outstanding amount without claiming anything was
   // bought, so the line is done and the card should say so.
   it('counts a line settled past what was asked for as finished', () => {
-    const mapped = toGeneratedListFromView({
+    const mapped = toBasketFromView({
       ...view,
       lines: [line(2, 5)],
     });
@@ -936,67 +942,69 @@ describe('toGeneratedListFromView', () => {
   // Zero is not an amount somebody worked through, and counting it would let an empty
   // basket report itself finished.
   it('does not count a line asking for nothing', () => {
-    const mapped = toGeneratedListFromView({ ...view, lines: [line(0, 0)] });
+    const mapped = toBasketFromView({ ...view, lines: [line(0, 0)] });
 
     expect(mapped?.lineCount).toBe(1);
     expect(mapped?.settledLineCount).toBe(0);
   });
 
   it('reads a basket with no lines as empty rather than dropping it', () => {
-    const mapped = toGeneratedListFromView({ ...view, lines: [] });
+    const mapped = toBasketFromView({ ...view, lines: [] });
 
     expect(mapped?.lineCount).toBe(0);
   });
 
   it('drops a body it cannot read at all', () => {
-    expect(toGeneratedListFromView(null)).toBeNull();
-    expect(
-      toGeneratedListFromView({ ...view, generatedAt: 'soon' })
-    ).toBeNull();
+    expect(toBasketFromView(null)).toBeNull();
+    expect(toBasketFromView({ ...view, generatedAt: 'soon' })).toBeNull();
   });
 });
 
-describe('toGeneratedListRun', () => {
+describe('toBasketRun', () => {
   const run = {
-    list: {
+    basket: {
       id: 'gl1',
+      kind: 'GENERATED',
       name: null,
-      status: 'ACTIVE',
+      status: 'OPEN',
       generatedAt: '2026-08-21T10:00:00.000Z',
       lines: [{ id: 'l1', content: 'Milk', quantity: 1, settledQuantity: 0 }],
     },
-    skipped: [
-      {
-        zoneId: 'z1',
-        listId: 'list-1',
-        lineId: 'line-1',
-        content: 'Milk',
-        carriedByGeneratedListId: 'gl0',
-      },
-    ],
   };
 
   /**
-   * What a run **did not** take is part of the answer to "why is this basket what it
-   * is". A basket missing the milk somebody distinctly remembers putting on the list is
-   * a bug report, and this is the difference between answering it and guessing.
+   * The basket, and nothing else. A run used to answer what it had refused as
+   * well, and backend `0133` section 7 deleted the refusal: it was about two
+   * frozen copies of one line and false of two views of it.
    */
-  it('keeps what the run skipped beside the basket it made', () => {
-    const mapped = toGeneratedListRun(run);
+  it('keeps the basket the run made', () => {
+    const mapped = toBasketRun(run);
 
-    expect(mapped?.list.id).toBe('gl1');
-    expect(mapped?.skipped).toEqual([{ listId: 'list-1', content: 'Milk' }]);
+    expect(mapped).toEqual({ list: expect.objectContaining({ id: 'gl1' }) });
   });
 
-  it('answers an empty skipped list rather than omitting it', () => {
-    expect(toGeneratedListRun({ ...run, skipped: undefined })?.skipped).toEqual(
-      []
-    );
+  // Backend 0159 answers the basket under `basket`, with the old `list` key
+  // beside it for one release. This client reads only `basket`.
+  it('reads the basket under basket and never under the old list key', () => {
+    expect(toBasketRun({ list: run.basket })).toBeNull();
+    expect(
+      toBasketRun({ ...run, list: { ...run.basket, id: 'old-key' } })?.list.id
+    ).toBe('gl1');
+  });
+
+  it('reads an unknown kind as UNKNOWN rather than dropping the run', () => {
+    // A kind this build has never heard of must not read as the permanent
+    // basket, which is the safe direction the enum's fallback takes.
+    const mapped = toBasketRun({
+      basket: { ...run.basket, kind: 'SOMETHING_NEW' },
+    });
+
+    expect(mapped?.list.kind).toBe('UNKNOWN');
   });
 
   it('drops a run whose basket cannot be read', () => {
-    expect(toGeneratedListRun({ ...run, list: null })).toBeNull();
-    expect(toGeneratedListRun(null)).toBeNull();
+    expect(toBasketRun({ ...run, basket: null })).toBeNull();
+    expect(toBasketRun(null)).toBeNull();
   });
 });
 
@@ -1030,6 +1038,10 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       // Absent on this fixture, so it falls back (velista `0082`).
       category: 'OTHER',
       offer: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+      unitBasis: null,
     });
   });
 
@@ -1273,5 +1285,220 @@ describe('toCatalogSuggestion', () => {
     const mapped = toCatalogSuggestion(offer);
 
     expect(mapped?.kind === 'group' ? mapped.offer : 'wrong kind').toBeNull();
+  });
+});
+
+/**
+ * The suggest response as a whole (velista `0101`, backend `0161`): the card
+ * names chains, so every offer is resolved against the response's own scope
+ * map while the map is in hand.
+ */
+describe('toCatalogSuggestions', () => {
+  const at = (priceScopeId: string, price: number | null, stale = false) => ({
+    price,
+    currency: 'EUR',
+    unitPrice: price,
+    unitPriceLabel: 'EUR/L',
+    observedAt: '2026-09-20T08:00:00.000Z',
+    sourceKind: 'OFFICIAL_WEB',
+    stale,
+    priceScopeId,
+  });
+  const chain = (priceScopeId: string, id: string, name: string) => ({
+    priceScopeId,
+    supermarketId: id,
+    supermarketName: { es: name, en: name },
+  });
+  const milk = {
+    id: 'i1',
+    name: { es: 'Leche entera', en: 'Whole milk' },
+    brand: 'Asturiana',
+    imageUrl: 'https://img.example/i1.jpg',
+    bestOffer: at('s-merc-1', 1.19),
+    offers: [
+      at('s-dia', 1.29),
+      at('s-merc-2', 1.25),
+      at('s-merc-1', 1.19),
+      at('s-unknown', 0.5),
+      at('s-lidl', null),
+    ],
+  };
+  const body = {
+    suggestions: [{ kind: 'item', group: null, item: milk }],
+    scopes: [
+      chain('s-merc-1', 'mercadona', 'Mercadona'),
+      chain('s-merc-2', 'mercadona', 'Mercadona'),
+      chain('s-dia', 'dia', 'Dia'),
+      chain('s-lidl', 'lidl', 'Lidl'),
+    ],
+  };
+
+  function chainsOf(mapped: readonly CatalogSuggestion[]): unknown[] {
+    const first = mapped[0];
+    return first?.kind === 'item'
+      ? first.item.chainPrices.map((one) => [one.chain.id, one.offer.price])
+      : [];
+  }
+
+  it('names one row per chain, cheapest first, a chain keeping its cheapest scope', () => {
+    expect(chainsOf(toCatalogSuggestions(body))).toEqual([
+      ['mercadona', 1.19],
+      ['dia', 1.29],
+      ['lidl', null],
+    ]);
+  });
+
+  it('drops an offer whose scope the map does not name, never guessing a chain', () => {
+    const names = chainsOf(toCatalogSuggestions(body)).map(
+      (row) => (row as unknown[])[0]
+    );
+    expect(names).not.toContain(undefined);
+    expect(names).toHaveLength(3);
+  });
+
+  it('names no chain at all when the map is absent or empty', () => {
+    expect(chainsOf(toCatalogSuggestions({ ...body, scopes: [] }))).toEqual([]);
+    expect(
+      chainsOf(toCatalogSuggestions({ suggestions: body.suggestions }))
+    ).toEqual([]);
+  });
+
+  it('reads the photograph, and null where there is none', () => {
+    const [first] = toCatalogSuggestions(body);
+    expect(first?.kind === 'item' ? first.item.imageUrl : 'x').toBe(
+      'https://img.example/i1.jpg'
+    );
+    expect(toCatalogItem({ id: 'i2' })?.imageUrl).toBeNull();
+  });
+
+  it("carries a group's members with their chains resolved", () => {
+    const [group] = toCatalogSuggestions({
+      ...body,
+      suggestions: [
+        {
+          kind: 'group',
+          item: null,
+          group: {
+            group: { id: 'g1', name: { es: 'Leche', en: 'Milk' } },
+            itemIds: ['i1', 'i2', 'i3'],
+            offer: at('s-merc-1', 1.19),
+            members: [milk, { nope: true }],
+          },
+        },
+      ],
+    });
+
+    expect(group?.kind).toBe('group');
+    if (group?.kind === 'group') {
+      expect(group.members.map((one) => one.id)).toEqual(['i1']);
+      expect(group.members[0]?.chainPrices[0]?.chain.name.es).toBe('Mercadona');
+    }
+  });
+
+  it('reads a group with no members as an empty reveal', () => {
+    const [group] = toCatalogSuggestions({
+      suggestions: [
+        {
+          kind: 'group',
+          item: null,
+          group: {
+            group: { id: 'g1', name: { es: 'Leche', en: 'Milk' } },
+            itemIds: [],
+            offer: null,
+          },
+        },
+      ],
+    });
+    expect(group?.kind === 'group' ? group.members : null).toEqual([]);
+  });
+
+  it("reads a group's synonyms, so a card can say which one matched (velista 0108)", () => {
+    const [group, older] = toCatalogSuggestions({
+      suggestions: [
+        {
+          kind: 'group',
+          item: null,
+          group: {
+            group: {
+              id: 'g1',
+              name: { es: 'Discos desmaquillantes', en: 'Cotton Pads' },
+              synonyms: { en: ['cotton pads', 7, ' '], es: ['algodón'] },
+            },
+            itemIds: [],
+            offer: null,
+          },
+        },
+        {
+          kind: 'group',
+          item: null,
+          group: {
+            group: { id: 'g2', name: { es: 'Leche', en: 'Milk' } },
+            itemIds: [],
+            offer: null,
+          },
+        },
+      ],
+    });
+    expect(group?.kind === 'group' ? group.synonyms : null).toEqual({
+      en: ['cotton pads'],
+      es: ['algodón'],
+    });
+    // A gateway that sends none reads as a group with none.
+    expect(older?.kind === 'group' ? older.synonyms : older).toEqual({
+      en: [],
+      es: [],
+    });
+  });
+
+  it('answers nothing for a body that is not a response', () => {
+    expect(toCatalogSuggestions(null)).toEqual([]);
+    expect(toCatalogSuggestions('oops')).toEqual([]);
+  });
+});
+
+/** Backend `0162`: how many units a pack holds, a whole number from 2. */
+describe('toCatalogItem: the pack count', () => {
+  it('reads a whole number from 2 and nothing else', () => {
+    expect(toCatalogItem({ id: 'i', packCount: 6 })?.packCount).toBe(6);
+    expect(toCatalogItem({ id: 'i', packCount: 1 })?.packCount).toBeNull();
+    expect(toCatalogItem({ id: 'i', packCount: 2.5 })?.packCount).toBeNull();
+    expect(toCatalogItem({ id: 'i', packCount: '6' })?.packCount).toBeNull();
+    expect(toCatalogItem({ id: 'i' })?.packCount).toBeNull();
+  });
+});
+
+describe('toLineSettlement, what one unit cost (velista 0095, section 7)', () => {
+  const RAW = {
+    id: 'st-1',
+    lineId: 'l-1',
+    listId: 'list-1',
+    itemId: null,
+    outcome: 'BOUGHT',
+    quantity: 3,
+    settledByUserId: null,
+    settledAt: '2026-09-20T10:00:00.000Z',
+    revertedAt: null,
+    pricePaidCents: 115,
+    pricePaidCurrency: 'EUR',
+    priceScopeId: 'scope-1',
+  };
+
+  it('maps the unit price and its currency', () => {
+    const settlement = toLineSettlement(RAW);
+
+    expect(settlement?.unitPriceCents).toBe(115);
+    expect(settlement?.currency).toBe('EUR');
+  });
+
+  it('maps a price with no currency, or none at all, to two nulls', () => {
+    for (const raw of [
+      { ...RAW, pricePaidCurrency: null },
+      { ...RAW, pricePaidCents: null, pricePaidCurrency: null },
+      { ...RAW, pricePaidCents: undefined, pricePaidCurrency: undefined },
+    ]) {
+      const settlement = toLineSettlement(raw);
+      expect(settlement?.unitPriceCents).toBeNull();
+      expect(settlement?.currency).toBeNull();
+    }
   });
 });

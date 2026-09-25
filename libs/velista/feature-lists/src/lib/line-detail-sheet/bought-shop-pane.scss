@@ -1,0 +1,45 @@
+:host {
+  display: block;
+}
+
+// The chevron and the title on one line, which is the basket picker's own head:
+// this pane is reached from the "I bought this" step, so the way back is here.
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin-block-end: var(--app-space-4);
+}
+
+.back {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--app-touch-target);
+  min-block-size: var(--app-touch-target);
+  border: none;
+  background: none;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.title {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}

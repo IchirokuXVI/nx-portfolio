@@ -34,7 +34,7 @@ export type {
   LidlStorePage,
   NormalizeProductOptions,
 } from './lib/normalize';
-export { parseSize } from './lib/size';
+export { packCountIn, parseSize } from './lib/size';
 export type { LidlSize } from './lib/size';
 export {
   LIDL_BASE_URL,

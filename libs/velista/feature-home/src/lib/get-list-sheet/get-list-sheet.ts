@@ -1,9 +1,13 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  type ElementRef,
   inject,
+  Injector,
   signal,
+  viewChild,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -12,7 +16,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   ContactStore,
-  GeneratedListStore,
+  BasketListStore,
   LIST_SERVICE,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileStore,
@@ -23,22 +27,30 @@ import {
 import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
 import {
   APP_BASE_PATH,
+  formatDistance,
   formatGeneratedDate,
-  GENERATED_LIST_NAME_MAX_LENGTH,
+  BASKET_NAME_MAX_LENGTH,
   groupContacts,
-  type GeneratedListSource,
+  inLocale,
+  type BasketSource,
   type ProfileGenerationScope,
+  type Shop,
 } from '@portfolio/velista/models';
 import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import {
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CloseIcon,
+  OutsideAreas,
   PeoplePicker,
+  PinIcon,
   SheetShell,
+  ShopPickMessage,
   SpinnerIcon,
   type PeoplePickerToggle,
 } from '@portfolio/velista/ui';
+import { GetListShopPane, type NearShopPick } from './get-list-shop-pane';
 
 /**
  * What a group contributes to the run.
@@ -124,8 +136,13 @@ const MAX_LIST_PAGES = 100;
     CheckIcon,
     ChevronDownIcon,
     ChevronRightIcon,
+    CloseIcon,
+    GetListShopPane,
+    OutsideAreas,
     PeoplePicker,
+    PinIcon,
     SheetShell,
+    ShopPickMessage,
     SpinnerIcon,
   ],
   templateUrl: './get-list-sheet.html',
@@ -134,7 +151,7 @@ const MAX_LIST_PAGES = 100;
 })
 export class GetListSheet {
   private readonly _zones = inject(ZoneStore);
-  private readonly _generated = inject(GeneratedListStore);
+  private readonly _generated = inject(BasketListStore);
   private readonly _profiles = inject(ShoppingProfileStore);
   /**
    * The profile service directly, for the generation scope and nothing else.
@@ -152,38 +169,118 @@ export class GetListSheet {
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _route = inject(ActivatedRoute);
   private readonly _contacts = inject(ContactStore);
+  private readonly _injector = inject(Injector);
+
+  /**
+   * Which half of the sheet is showing: the form, or the shop picker a "Buying at"
+   * row opens (velista `0102`).
+   *
+   * A pane rather than a second sheet, because a second sheet would destroy this
+   * one and every name typed and group ticked in it. The settle sheet's panes are
+   * the same shape for the same reason.
+   */
+  readonly pane = signal<'form' | 'shop'>('form');
+
+  /**
+   * The shop the new list is bought at, or null for any of the person's shops
+   * (velista `0102`).
+   *
+   * **Kept here and nowhere else until Generate**, and changeable as often as the
+   * person likes until then: Generate sends it and from then on it is the basket's,
+   * fixed for everybody in it, with no way to change it afterwards.
+   */
+  readonly shop = signal<Shop | null>(null);
+
+  /**
+   * The shop "Near me" picked and how far it was (velista `0103`), for the message
+   * under the row, or null. Held until dismissed or until the shop changes.
+   */
+  readonly nearPick = signal<{
+    readonly shopId: string;
+    readonly distanceMetres: number;
+  } | null>(null);
+
+  /**
+   * The chosen shop as the row draws it, or null.
+   *
+   * "Outside your areas" is worked out against the **profile the list uses**, with
+   * the server's own definition (backend `0163`, section 3): the shop's postal code
+   * is one of that profile's. So switching the profile after choosing a shop says
+   * so rather than quietly pricing a list somewhere the new profile does not reach.
+   */
+  readonly chosenShop = computed(() => {
+    const shop = this.shop();
+    if (shop === null) {
+      return null;
+    }
+
+    const locale = this._locale();
+    const profile = this.profiles().find(
+      (candidate) => candidate.id === this.selectedProfileId()
+    );
+    const code = shop.postalCode?.trim() ?? '';
+    const outsideAreas =
+      profile !== undefined &&
+      !profile.postalCodes.some(
+        (candidate) => code !== '' && candidate.postalCode.trim() === code
+      );
+    // The street, and the town beside it only for a shop somewhere else: inside
+    // the person's own areas the town goes without saying.
+    const where = (outsideAreas ? [shop.address, shop.city] : [shop.address])
+      .filter((part): part is string => part !== null && part.trim() !== '')
+      .join(', ');
+    return {
+      chain: inLocale(shop.chainName, locale),
+      where:
+        shop.name !== null
+          ? inLocale(shop.name, locale)
+          : where !== ''
+            ? where
+            : shop.city,
+      outsideAreas,
+    };
+  });
+
+  /** The "Buying at" row, which focus returns to when the picker closes. */
+  private readonly _shopRow = viewChild<ElementRef<HTMLButtonElement>>('shopRow');
 
   /**
    * The page this sheet is drawn over, named by the route rather than worked out from
    * the URL.
    *
-   * This sheet exists twice, once over the dashboard and once over the history, and
-   * after dismissal somebody belongs back on whichever they opened it from. Route data
-   * makes that a declaration in the one table instead of string surgery on a URL, and
-   * it is also right for a deep link, where there is no history entry to go back to.
-   * Read from the snapshot because a sheet is created when its route activates and
-   * destroyed when it deactivates, so there is no later value to miss.
+   * This sheet exists twice, once over the history and once over the third tab's own
+   * screen, and after dismissal somebody belongs back on whichever they opened it from.
+   * Route data makes that a declaration in the one table instead of string surgery on a
+   * URL, and it is also right for a deep link, where there is no history entry to go
+   * back to. Read from the snapshot because a sheet is created when its route activates
+   * and destroyed when it deactivates, so there is no later value to miss.
    *
-   * The default matches the route that has always existed, so a sheet route added
-   * without the data behaves as the dashboard's rather than throwing.
+   * **The dashboard's copy is gone** (velista `0097`, section 6): home's bottom row was
+   * replaced by the app's own bar, so nothing on that page opens this any more. The
+   * value is a **path**, which is what lets `dismiss` hand it straight to `appPath`,
+   * and the default is the history, so a sheet route added without the data lands on a
+   * real page rather than throwing.
    */
-  private readonly _returnTo: 'home' | 'shopping-lists' =
-    this._route.snapshot.data['returnTo'] === 'shopping-lists'
-      ? 'shopping-lists'
-      : 'home';
+  private readonly _returnTo: 'shopping-lists' | 'shopping-lists/current' =
+    this._route.snapshot.data['returnTo'] === 'shopping-lists/current'
+      ? 'shopping-lists/current'
+      : 'shopping-lists';
 
   /**
    * Whether to offer the way to the history.
    *
-   * Section 3.1 puts it here because the dashboard's own History link lives in the
-   * shopping list card, which goes away when every basket is finished; without this
-   * one such a person would have no route to their history at all. None of that
-   * applies when the history is the page underneath, and a control that leads to the
-   * screen it is already on is worse than no control.
+   * Section 3.1 puts it here because the dashboard's own History link lived in the
+   * shopping list card, which goes away when every basket is finished; without this one
+   * such a person would have had no route to their history at all. None of that applies
+   * when the history **is** the page underneath, and a control that leads to the screen
+   * it is already on is worse than no control.
+   *
+   * Over the third tab it stays, because that screen is not the history: it has its own
+   * clock in the header, and two ways to one screen is not the fault a missing way is.
    */
   readonly showHistory = this._returnTo !== 'shopping-lists';
 
-  readonly maxLength = GENERATED_LIST_NAME_MAX_LENGTH;
+  readonly maxLength = BASKET_NAME_MAX_LENGTH;
 
   readonly name = signal('');
   readonly submitting = signal(false);
@@ -297,8 +394,8 @@ export class GetListSheet {
   readonly showProfiles = computed(() => this.profiles().length > 1);
 
   /** What Generate will send. Empty means nothing is ticked and the submit is off. */
-  readonly sources = computed<readonly GeneratedListSource[]>(() => {
-    const sources: GeneratedListSource[] = [];
+  readonly sources = computed<readonly BasketSource[]>(() => {
+    const sources: BasketSource[] = [];
 
     for (const zone of this.zones()) {
       const chosen = this._selectionOf(zone.id);
@@ -573,6 +670,11 @@ export class GetListSheet {
         sources: this.sources(),
         idempotencyKey: this._idempotencyKey,
         ...(memberUserIds.length === 0 ? {} : { memberUserIds }),
+        // Only when one was chosen. "Any of your shops" sends no shop, ever
+        // (velista `0102`), and the list is then priced across the profile.
+        ...(this.shop() === null
+          ? {}
+          : { supermarketLocationId: this.shop()?.id }),
       });
 
       // Straight into the basket, which is where somebody who just pressed Generate is
@@ -614,9 +716,95 @@ export class GetListSheet {
    * pops, and popping lands on whichever page that was regardless of what is passed.
    */
   async dismiss(): Promise<void> {
+    if (this.pane() === 'shop') {
+      // Escape, the scrim and the back gesture close the picker first, back onto
+      // the form, which is where the person came from.
+      this.closeShopPicker();
+      return;
+    }
     await this._sheet.dismiss(
       appPath(this._locale(), this._basePath, this._returnTo)
     );
+  }
+
+  /**
+   * Open the shop picker over the form (velista `0102`), which is the "Buying at"
+   * row, its Change button and nothing else.
+   *
+   * It needs a profile to read shops from, and one is in hand the moment the
+   * profiles have arrived, which is before anybody can reach the row.
+   */
+  openShopPicker(): void {
+    if (this.selectedProfileId() === null || this.submitting()) {
+      return;
+    }
+    this.pane.set('shop');
+  }
+
+  /** Back to the form with the shop as it was, focus on the row that opened it. */
+  closeShopPicker(): void {
+    this.pane.set('form');
+    this._focusShopRow();
+  }
+
+  /** A shop was chosen in the picker: keep it, and go back to the form. */
+  pickShop(shop: Shop): void {
+    this.nearPick.set(null);
+    this.shop.set(shop);
+    this.closeShopPicker();
+  }
+
+  /**
+   * "Near me" picked a shop (velista `0103`): keep it, go back to the form, and say
+   * which shop and how far, so a wrong automatic choice is easy to see and undo.
+   */
+  pickNearShop(pick: NearShopPick): void {
+    this.shop.set(pick.shop);
+    this.nearPick.set({
+      shopId: pick.shop.id,
+      distanceMetres: pick.distanceMetres,
+    });
+    this.closeShopPicker();
+  }
+
+  /** The x on the pick message: the message goes, and the shop stays. */
+  dismissNearPick(): void {
+    this.nearPick.set(null);
+  }
+
+  /**
+   * The message after "Near me" picked the shop, or null. Only while the shop it
+   * names is still the chosen one, so any change of shop takes it away.
+   */
+  protected readonly nearPickMessage = computed(() => {
+    const pick = this.nearPick();
+    const chosen = this.chosenShop();
+    if (pick === null || chosen === null || this.shop()?.id !== pick.shopId) {
+      return null;
+    }
+    return {
+      shop:
+        chosen.where === null || chosen.where === ''
+          ? chosen.chain
+          : `${chosen.chain}, ${chosen.where}`,
+      distance: formatDistance(pick.distanceMetres, this._locale()),
+    };
+  });
+
+  /**
+   * The x beside the chosen shop: back to any of the person's shops. Focus goes to
+   * the row, which is redrawn as the "any" row, so it is not lost with the x.
+   */
+  clearShop(): void {
+    this.nearPick.set(null);
+    this.shop.set(null);
+    this._focusShopRow();
+  }
+
+  private _focusShopRow(): void {
+    afterNextRender(() => this._shopRow()?.nativeElement.focus(), {
+      injector: this._injector,
+    });
   }
 
   onNameInput(event: Event): void {

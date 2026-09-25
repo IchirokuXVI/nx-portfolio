@@ -14,7 +14,6 @@ function row(overrides: Partial<TripRowVm> = {}): TripRowVm {
     mark: 'partly',
     claimedBy: null,
     buyer: null,
-    nowAsks: null,
     quiet: false,
     ...overrides,
   };
@@ -109,20 +108,11 @@ describe('TripRow (velista 0088)', () => {
     });
   });
 
-  describe('the list now asks for more (test 6)', () => {
-    it('says so when the page gave it a number', async () => {
-      const fixture = await render(row({ nowAsks: 4 }));
+  it('draws no caption comparing the trip with the list (velista 0095, test 7)', async () => {
+    const fixture = await render(row());
 
-      expect(button(fixture).querySelector('.now-asks')?.textContent).toContain(
-        'list.trips.row.nowAsks'
-      );
-    });
-
-    it('says nothing otherwise', async () => {
-      const fixture = await render(row());
-
-      expect(button(fixture).querySelector('.now-asks')).toBeNull();
-    });
+    expect(button(fixture).querySelector('.now-asks')).toBeNull();
+    expect(button(fixture).textContent).not.toContain('nowAsks');
   });
 
   it('is a button named by the line, the outcome and the numbers, and opens the line', async () => {

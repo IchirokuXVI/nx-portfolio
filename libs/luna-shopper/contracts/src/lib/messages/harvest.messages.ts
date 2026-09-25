@@ -16,6 +16,7 @@ import type {
   HarvestRunWrites,
   HarvestWarningCode,
   ItemSourceMatch,
+  PlaceMatchRung,
   PostalCodeDiscoveryStatus,
   SourceEntryStatus,
   SourceLocationStatus,
@@ -26,6 +27,7 @@ import type {
   BulkOperationError,
   ContentLocale,
   ItemView,
+  LocalizedText,
 } from './catalog.messages';
 
 /**
@@ -110,6 +112,11 @@ export const DISCOVERED_PLACE_PATTERNS = {
    */
   groups: 'place.groups',
   import: 'place.import',
+  /**
+   * Bind a place to a shop the catalog already holds (plan 0152, section 3).
+   * It fills only the fields the shop lacks, and never creates one.
+   */
+  link: 'place.link',
   reject: 'place.reject',
 } as const;
 
@@ -176,6 +183,15 @@ export const SOURCE_ENTRY_PATTERNS = {
    * spellings, and the answer is capped rather than cut into pages.
    */
   brandSpellings: 'sourceEntry.brandSpellings',
+  /**
+   * The source rows bound to one product, with how many rows of the same
+   * chain share each row's EAN (plan 0160).
+   *
+   * Every row whose `itemId` is the product: `ACTIVE` rows are bound, and a
+   * `CANDIDATE` row carries it as a proposal, which its `status` says. A
+   * shared EAN is how two walk rows of one chain end up on one product.
+   */
+  listByItem: 'sourceEntry.listByItem',
 } as const;
 
 /**
@@ -245,6 +261,20 @@ export const ADAPTER_KEYS = [
   'manual',
 ] as const;
 export type AdapterKey = (typeof ADAPTER_KEYS)[number];
+
+/**
+ * The adapters a source row may be written with (plan 0153).
+ *
+ * Every key but `osm-places`. OpenStreetMap is asked for every postal code
+ * whatever the rows say, so a row for it switches nothing on, and an operator
+ * who enables one has been told something false. The key stays in
+ * {@link ADAPTER_KEYS}, because a place still names it as its provider and a
+ * row written before this list existed still has to read.
+ */
+export const SOURCE_ADAPTER_KEYS = ADAPTER_KEYS.filter(
+  (key): key is Exclude<AdapterKey, 'osm-places'> => key !== 'osm-places'
+);
+export type SourceAdapterKey = (typeof SOURCE_ADAPTER_KEYS)[number];
 
 /**
  * What a source is able to tell us, stated once for every adapter (plan 0103,
@@ -628,6 +658,13 @@ export interface DiscoveredPlaceView {
   website: string | null;
   openingHours: string | null;
   tags: Record<string, string>;
+  /**
+   * The price scope key the run declared for this shop (plan 0152, section 1):
+   * a Mercadona warehouse or a LIDL offer region. Null when the source declares
+   * none, which is every OpenStreetMap place. Import joins the chain's scope
+   * with this `externalKey` unless the caller names another.
+   */
+  scopeKey: string | null;
   status: DiscoveredPlaceStatus;
   supermarketLocationId: string | null;
   firstSeenAt: string;
@@ -685,6 +722,12 @@ export interface SourceCatalogEntryView {
   unitSize: number | null;
   /** The source's own size text, and half of the key for a source with no id. */
   sizeFormat: string | null;
+  /**
+   * How many units the pack holds, as the last run that saw the row read it
+   * (plan 0162). Null when the source stated no count. It is the source's, so
+   * every run rewrites it exactly as it rewrites `sizeFormat`.
+   */
+  packCount: number | null;
   categoryPath: string[];
   url: string | null;
   /**
@@ -794,6 +837,28 @@ export interface SourceLocationView {
   /** The run that created the row, and the run that last saw the shop. */
   firstRunId: string | null;
   lastRunId: string | null;
+  /**
+   * The chain's shops this row may be, best first, at most three (plan 0154).
+   *
+   * Filled on an `UNMAPPED` row only, and empty on every other status. A
+   * candidate is a suggestion: nothing maps a shop but `PUT .../location`.
+   */
+  candidates: SourceLocationCandidate[];
+}
+
+/**
+ * One catalog shop an unmapped source shop may be (plan 0154, section 1).
+ *
+ * `score` is the share of the printed name's tokens that the location's label,
+ * address or postal code holds, and `strong` says it holds every one of them.
+ */
+export interface SourceLocationCandidate {
+  supermarketLocationId: string;
+  label: LocalizedText | null;
+  address: string | null;
+  postalCode: string | null;
+  score: number;
+  strong: boolean;
 }
 
 // --- Run requests ----------------------------------------------------------
@@ -1094,9 +1159,52 @@ export interface ImportDiscoveredPlaceRequest extends AdminCredential {
   placeId: string;
   /** Attach to an existing chain instead of resolving by `brand:wikidata`. */
   supermarketId?: string;
-  /** The scope the new location prices against; resolved from its postal code
-   *  when omitted, falling back to the run's centre with a review flag. */
+  /**
+   * The scope the new location prices against. When omitted, the chain's scope
+   * whose `externalKey` is the place's {@link DiscoveredPlaceView.scopeKey}, and
+   * a `STORE` scope of its own when the place declares none (plan 0152,
+   * section 1).
+   */
   priceScopeId?: string;
+  /**
+   * Create a new shop even though the catalog holds one the place may be
+   * (plan 0152, section 2). Without it, a match answers 409
+   * `place_matches_location` and writes nothing.
+   */
+  force?: boolean;
+  /**
+   * The chain to create when no chain matches the place (plan 0153). The
+   * operator names it and says which language the name is in, which is what
+   * an OpenStreetMap place cannot say for itself. A chain that already
+   * matches, by the place or by this name, is used instead.
+   */
+  newChain?: NewChainInput;
+}
+
+/** A chain an import creates, named by the operator (plan 0153). */
+export interface NewChainInput {
+  name: string;
+  locale: ContentLocale;
+}
+
+/** Bind a place to a shop the catalog already holds (plan 0152, section 3). */
+export interface LinkDiscoveredPlaceRequest extends AdminCredential {
+  placeId: string;
+  /** A shop of the place's own chain. */
+  supermarketLocationId: string;
+}
+
+/**
+ * One catalog shop a discovered place may be, as the 409
+ * `place_matches_location` lists it under `details.candidates` (plan 0152,
+ * section 2).
+ */
+export interface PlaceLocationCandidate {
+  supermarketLocationId: string;
+  label: LocalizedText | null;
+  address: string | null;
+  postalCode: string | null;
+  rung: PlaceMatchRung;
 }
 
 export interface DiscoveredPlaceIdRequest extends AdminCredential {
@@ -1159,6 +1267,22 @@ export interface SourceEntryIdRequest extends AdminCredential {
   entryId: string;
 }
 
+/** The source rows that name one product (plan 0160). */
+export interface ListSourceEntriesByItemRequest
+  extends PageQuery, AdminCredential {
+  itemId: string;
+}
+
+/** A source row on the product's own read, with its EAN counted (plan 0160). */
+export interface ItemSourceEntryView extends SourceCatalogEntryView {
+  /**
+   * How many rows of this chain carry this EAN, this row included. More than
+   * one says the chain lists the same barcode twice. Null for a row with no
+   * EAN.
+   */
+  eanSharedBy: number | null;
+}
+
 /** Bind a queued row to a product the catalog already holds. */
 export interface AcceptSourceEntryRequest extends AdminCredential {
   entryId: string;
@@ -1183,6 +1307,8 @@ export interface CreateItemFromSourceEntryRequest extends AdminCredential {
   brand?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  /** Override the pack count the row read (plan 0162). Null creates a product with none. */
+  packCount?: number | null;
   /** Override the category the source's own tree mapped to. */
   category?: ItemCategory;
   /** Override the unit the source's own size text mapped to. */
@@ -1256,6 +1382,8 @@ export interface CreateItemFromSourceEntryOperation {
     brand?: string | null;
     ean?: string | null;
     unitSize?: number | null;
+    /** Plan 0162. Absent takes the row's own count. */
+    packCount?: number | null;
     category?: ItemCategory;
     defaultUnit?: UnitOfMeasure;
   };
@@ -1477,6 +1605,7 @@ export type HarvestRunPage = Paginated<HarvestRunView>;
 export type HarvestRunPresetPage = Paginated<HarvestRunPresetView>;
 export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
+export type ItemSourceEntryPage = Paginated<ItemSourceEntryView>;
 export type SourceLocationPage = Paginated<SourceLocationView>;
 export type SupermarketSourcePage = Paginated<SupermarketSourceView>;
 

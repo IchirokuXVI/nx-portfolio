@@ -39,6 +39,13 @@ const domainEventEnvelope = object(
     zoneId: nonEmptyString(),
     listId: string(),
     userIds: array(nonEmptyString()),
+    // The basket audience, in both of its names (plan 0139, section 1). Core
+    // writes `basketIds` alone; `basketId` is declared because the
+    // consumer still reads it for one release and `object` defaults
+    // `additionalProperties` to false, so a replayed envelope validated strictly
+    // would be rejected for carrying the field it was written with.
+    basketIds: array(nonEmptyString()),
+    basketId: nonEmptyString(),
     payload: any(),
   },
   ['event', 'eventId', 'payload']
@@ -68,6 +75,6 @@ export const domainEventContracts: Record<string, string> = {
   // Like the two above, computed by the realtime service rather than published
   // by a domain one, so it is mapped here explicitly instead of arriving through
   // DOMAIN_EVENT_SUBJECTS (plan 0051, section 7).
-  [RealtimeEvent.PresenceGeneratedListUpdated]:
-    REALTIME_SCHEMA_IDS.generatedListPresence,
+  [RealtimeEvent.PresenceBasketUpdated]:
+    REALTIME_SCHEMA_IDS.basketPresence,
 };

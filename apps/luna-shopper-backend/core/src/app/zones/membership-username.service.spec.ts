@@ -9,10 +9,18 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ZoneMembership } from '../entities';
 import type { SharedListGrantService } from '../lists/shared-list-grant.service';
 import { MembershipService } from './membership.service';
 import { ZoneAuthzService } from './zone-authz.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 const ZONE = 'z1';
 
@@ -67,7 +75,8 @@ function build(rows: Partial<ZoneMembership>[]) {
     counts as never,
     events as never,
     // Member facing paths only, which record nothing.
-    {} as never
+    {} as never,
+    announcer
   );
   return { service, events, memberships };
 }

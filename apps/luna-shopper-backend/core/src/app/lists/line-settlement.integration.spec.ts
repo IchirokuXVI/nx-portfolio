@@ -11,6 +11,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   CORE_ENTITIES,
   LineSettlement,
@@ -20,10 +21,17 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { ListAccessService } from './list-access.service';
 import { SettlementService } from './settlement.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * The two settlement reads, against real Postgres (plan 0047, section 6).
@@ -146,7 +154,8 @@ describeIntegration('the settlement history (real Postgres)', () => {
       dataSource.getRepository(LineSettlement),
       listAccess,
       fakeLineClaims().service,
-      { emit: jest.fn() } as never
+      { emit: jest.fn() } as never,
+      announcer
     );
 
     const home = await seedZone('Home', ids.shopper, 'Milk');
@@ -247,6 +256,10 @@ describeIntegration('the settlement history (real Postgres)', () => {
     it('never serves the basket a purchase came out of', async () => {
       // Section 3.1: the purchase is a zone fact and the basket is not. The
       // column is written and there is no field on the view for it to reach.
+      //
+      // The column is `basketId` since plan 0134 and it is the only one left
+      // since plan 0136 section 9: a basket holds no lines, so what a purchase
+      // names is the basket itself.
       const repo = dataSource.getRepository(LineSettlement);
       await repo.save(
         repo.create({
@@ -257,7 +270,7 @@ describeIntegration('the settlement history (real Postgres)', () => {
           quantity: 1,
           settledByUserId: ids.shopper,
           settledAt: new Date('2026-01-01T10:00:00.000Z'),
-          generatedListLineId: randomUUID(),
+          basketId: randomUUID(),
         })
       );
 
@@ -267,7 +280,7 @@ describeIntegration('the settlement history (real Postgres)', () => {
       });
 
       expect(page.items).toHaveLength(1);
-      expect(JSON.stringify(page.items[0])).not.toContain('generatedListLine');
+      expect(JSON.stringify(page.items[0])).not.toContain('basket');
     });
 
     it('is refused for somebody who cannot read the list', async () => {
@@ -473,77 +486,89 @@ describeIntegration('the settlement history (real Postgres)', () => {
       await lines.delete({ id: line.id });
     });
   });
-  describe('a purchase with no list is invisible to both reads (plan 0093)', () => {
-    // Plan 0093 section 2.2 states this as structural rather than careful: both
-    // reads select by `lineId` or join the list through `listId`, and a waiting
-    // row has neither. It is asserted here rather than trusted, because the day
-    // somebody adds a read over `generatedListLineId` alone is the day a guest's
-    // purchase could be named to a household that never received the line.
-    const basketLine = randomUUID();
+  /**
+   * The waiting settlement, reversed (plan 0136, section 9).
+   *
+   * Plan 0093 wrote a purchase made on a basket line before that line reached
+   * any list, with `lineId` and `listId` both null, and this block asserted that
+   * neither read could reach one. Plan 0136 removes the thing it was waiting
+   * for: a basket holds no lines, so there is nowhere for such a purchase to
+   * belong and nothing for it to become. The migration deletes the rows that
+   * were waiting and puts both columns back to `NOT NULL`.
+   *
+   * So the rule those three tests protected is kept, and it is now stronger than
+   * "invisible to both reads": such a row cannot be written at all. It is
+   * asserted against the database rather than trusted, because the columns being
+   * nullable is what made a guest's purchase reachable by a household that never
+   * received the line, and a migration that quietly relaxed them again would
+   * bring that back.
+   */
+  describe('a purchase with no list cannot exist (plan 0136, section 9)', () => {
+    /**
+     * Raw SQL, not the repository: the entity types both columns as `string`,
+     * so the insert this refuses is one TypeScript refuses to write. What is
+     * asserted is the database's own answer.
+     */
+    async function insertWaiting(columns: {
+      lineId: string | null;
+      listId: string | null;
+    }): Promise<void> {
+      await dataSource.query(
+        `INSERT INTO "line_settlements"
+           ("lineId", "listId", "itemId", "outcome", "quantity",
+            "settledByUserId", "settledByParticipantId", "settledAt")
+         VALUES ($1, $2, $3, 'BOUGHT', 4, NULL, $4, $5)`,
+        [
+          columns.lineId,
+          columns.listId,
+          MILK,
+          randomUUID(),
+          new Date('2026-05-01T10:00:00.000Z'),
+        ]
+      );
+    }
 
-    /** A purchase attached to a basket line and to no list at all. */
-    async function waiting(): Promise<LineSettlement> {
+    it('is refused by the database with no zone line', async () => {
+      await expect(
+        insertWaiting({ lineId: null, listId: ids.list })
+      ).rejects.toThrow(/lineId/);
+    });
+
+    it('is refused by the database with no list', async () => {
+      await expect(
+        insertWaiting({ lineId: ids.line, listId: null })
+      ).rejects.toThrow(/listId/);
+    });
+
+    it('carries the basket it was bought through, and nothing more', async () => {
+      // What plan 0093's column has become: a purchase still records where it
+      // was made, and it is the basket itself rather than a row inside one
+      // (plan 0134). The basket holds no foreign key, so an id naming no
+      // basket is written happily, which is what lets a purchase outlive the
+      // trip it came off.
+      const basket = randomUUID();
       const repo = dataSource.getRepository(LineSettlement);
-      return repo.save(
+      const written = await repo.save(
         repo.create({
-          lineId: null,
-          listId: null,
+          lineId: ids.line,
+          listId: ids.list,
           itemId: MILK,
           outcome: SettlementOutcome.BOUGHT,
           quantity: 4,
           settledByUserId: null,
           settledByParticipantId: randomUUID(),
           settledAt: new Date('2026-05-01T10:00:00.000Z'),
-          generatedListLineId: basketLine,
+          basketId: basket,
         })
       );
-    }
 
-    afterEach(async () => {
-      await dataSource
-        .getRepository(LineSettlement)
-        .delete({ generatedListLineId: basketLine });
-    });
-
-    it("is not in the line's own history, next to a purchase that is", async () => {
-      await settlement(ids.line, ids.list, '2026-01-01T10:00:00.000Z');
-      const hidden = await waiting();
-
-      const page = await settlements.listForLine({
-        userId: ids.shopper,
-        lineId: ids.line,
-      });
-
-      expect(page.items).toHaveLength(1);
-      expect(page.items.map((row) => row.id)).not.toContain(hidden.id);
-    });
-
-    it("is not in the product's history across every readable list", async () => {
-      await settlement(ids.line, ids.list, '2026-01-01T10:00:00.000Z');
-      const hidden = await waiting();
-
-      const page = await settlements.listForItem({
-        userId: ids.shopper,
-        itemId: MILK,
-      });
-
-      expect(page.items).toHaveLength(1);
-      expect(page.items.map((row) => row.id)).not.toContain(hidden.id);
-    });
-
-    it('is stored all the same, which is the point of writing it', async () => {
-      // The failing half of the assertion above would be a purchase that was
-      // simply never written, which is the state plan 0093 exists to end.
-      const written = await waiting();
-      const back = await dataSource
-        .getRepository(LineSettlement)
-        .findOneByOrFail({ id: written.id });
+      const back = await repo.findOneByOrFail({ id: written.id });
 
       expect(back).toMatchObject({
-        lineId: null,
-        listId: null,
+        lineId: ids.line,
+        listId: ids.list,
         quantity: 4,
-        generatedListLineId: basketLine,
+        basketId: basket,
       });
     });
   });

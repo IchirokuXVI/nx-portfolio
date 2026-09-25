@@ -93,6 +93,9 @@ format apart, and rule 1 merges anything they do not separate.
   `item.category`. The vocabulary is ours, and the chain's own words are not in it.
 - `entry.brand` can be null even when the printed name states a brand.
 - `entry.ean` is the barcode the source published, or null.
+- `entry.sharedEan` is null, or it lists the other queued entries of this chain with the same
+  barcode. A shared barcode cannot tell two products apart. If `entry.sharedEan` is present,
+  answer `REVIEW`. The tool records a `REVIEW` for any answer.
 - `entry.chainName` is the chain this entry belongs to, which is what rule 6 turns on.
 - `entry.brandMatch` is the entry's brand as the registry holds it, or null. Candidates are
   not annotated: a `LINK` takes the candidate's brand as it is.
@@ -163,8 +166,12 @@ Your answer is checked before anything is written, and a refused answer is recor
 `REVIEW`. Every one of these is avoidable, so read your answer against the list before you
 send it:
 
-- `LINK_TARGET_MISSING`: an `itemId` or `itemRef` that was not in the packet.
-- `FORMAT_MISMATCH`: a `LINK` onto a product whose `unitSize` differs from the entry's.
+- `LINK_TARGET_NOT_SHOWN`: an `itemId` or `itemRef` that was not in the packet. A real
+  catalog id is refused too. Name only a candidate or the `eanMatch` you were given.
+- `LINK_TARGET_MISSING`: a candidate the catalog no longer holds.
+- `FORMAT_MISMATCH`: a `LINK` onto a product of another format. The tool compares sizes in
+  grams, millilitres or units. 420 g and 0.42 kg are one format. 1 L and 1.5 L are two.
+- `SHARED_EAN`: any answer on an entry with an `entry.sharedEan` list.
 - `EAN_CONFLICT`: a `LINK` onto a product carrying a different barcode, or a `CREATE` whose
   `item.ean` a catalog product already holds.
 - `NAME_CARRIES_BRAND` and `NAME_CARRIES_SIZE`: rules 2 and 3, checked on `nameEs` and

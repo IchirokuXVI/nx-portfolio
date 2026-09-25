@@ -12,6 +12,11 @@ import {
   SourceLocationStatus,
 } from '../../lib/enums/harvest.enums';
 import {
+  CONTENT_LOCALES,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
+} from '../../lib/messages/catalog.messages';
+import {
   ADAPTER_CAPABILITIES,
   ADAPTER_KEYS,
   BRAND_SPELLINGS_MAX,
@@ -76,6 +81,7 @@ export const HARVEST_SCHEMA_IDS = {
   sourceCatalogEntryView: schemaId('harvest/SourceCatalogEntryView'),
   sourceEntryPriceView: schemaId('harvest/SourceEntryPriceView'),
   sourceEntryAcceptResult: schemaId('harvest/SourceEntryAcceptResult'),
+  sourceLocationCandidate: schemaId('harvest/SourceLocationCandidate'),
   sourceLocationView: schemaId('harvest/SourceLocationView'),
   supermarketSourceView: schemaId('harvest/SupermarketSourceView'),
   postalCodeDiscoveryRequestView: schemaId(
@@ -122,11 +128,16 @@ export const HARVEST_SCHEMA_IDS = {
   listPlacesRequest: schemaId('msg/place.list/request'),
   groupPlacesRequest: schemaId('msg/place.groups/request'),
   importPlaceRequest: schemaId('msg/place.import/request'),
+  linkPlaceRequest: schemaId('msg/place.link/request'),
   placeIdRequest: schemaId('msg/place.id/request'),
   listSourceLocationsRequest: schemaId('msg/sourceLocation.list/request'),
   mapSourceLocationRequest: schemaId('msg/sourceLocation.map/request'),
   sourceLocationIdRequest: schemaId('msg/sourceLocation.id/request'),
   listEntriesRequest: schemaId('msg/sourceEntry.list/request'),
+  // Plan 0160: the rows that name one product.
+  listEntriesByItemRequest: schemaId('msg/sourceEntry.listByItem/request'),
+  itemSourceEntryView: schemaId('harvest/ItemSourceEntryView'),
+  itemSourceEntryPage: schemaId('harvest/ItemSourceEntryPage'),
   entryIdRequest: schemaId('msg/sourceEntry.id/request'),
   acceptEntryRequest: schemaId('msg/sourceEntry.accept/request'),
   createItemFromEntryRequest: schemaId('msg/sourceEntry.createItem/request'),
@@ -157,6 +168,12 @@ export const HARVEST_SCHEMA_IDS = {
 } as const;
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
+/** A pack count (plan 0162): a whole number in the bounds, or null. */
+const packCountOrNull = (): JsonSchema => ({
+  type: ['integer', 'null'],
+  minimum: PACK_COUNT_MIN,
+  maximum: PACK_COUNT_MAX,
+});
 const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
 /** A tag bag kept exactly as the provider sent it (plan 0038, section 8.2). */
 const stringMap = (): JsonSchema => ({
@@ -328,6 +345,9 @@ const discoveredPlaceView = object(
     website: nullableString(),
     openingHours: nullableString(),
     tags: stringMap(),
+    // The price scope key the run declared: a warehouse or an offer region
+    // (plan 0152, section 1). Import joins the chain's scope with this key.
+    scopeKey: nullableString(),
     status: ref(HARVEST_SCHEMA_IDS.discoveredPlaceStatus),
     supermarketLocationId: nullableString(),
     firstSeenAt: string({ format: 'date-time' }),
@@ -351,6 +371,7 @@ const discoveredPlaceView = object(
     'website',
     'openingHours',
     'tags',
+    'scopeKey',
     'status',
     'supermarketLocationId',
     'firstSeenAt',
@@ -385,65 +406,78 @@ const discoveredPlaceGroupsResult = object(
  * verbatim, and a person's, which a run only reads. `sourceKind` is the
  * discriminator every code path reads; nothing parses `externalId`.
  */
+const sourceCatalogEntryProperties = {
+  id: nonEmptyString(),
+  supermarketId: nonEmptyString(),
+  externalId: nonEmptyString(),
+  sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+  name: nonEmptyString(),
+  brand: nullableString(),
+  ean: nullableString(),
+  unitSize: numberOrNull(),
+  sizeFormat: nullableString(),
+  packCount: packCountOrNull(),
+  categoryPath: array(string()),
+  url: nullableString(),
+  // Stored, shown, and never interpreted (plan 0086, section 6.1).
+  extra: nullableObject(),
+  timesSeen: integer({ minimum: 0 }),
+  firstSeenAt: string({ format: 'date-time' }),
+  lastSeenAt: string({ format: 'date-time' }),
+  firstRunId: nullableString(),
+  lastRunId: nullableString(),
+  itemId: nullableString(),
+  candidateEntryId: nullableString(),
+  status: ref(HARVEST_SCHEMA_IDS.sourceEntryStatus),
+  matchedBy: {
+    anyOf: [ref(HARVEST_SCHEMA_IDS.itemSourceMatch), { type: 'null' }],
+  },
+  confidence: { type: 'number', minimum: 0, maximum: 1 },
+  decidedAt: nullableString(),
+  // Inline, because there is one per scope and a chain has a handful of
+  // scopes, and the queue cannot decide a row without seeing what it holds.
+  prices: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceView)),
+};
+const sourceCatalogEntryRequired = [
+  'id',
+  'supermarketId',
+  'externalId',
+  'sourceKind',
+  'name',
+  'brand',
+  'ean',
+  'unitSize',
+  'sizeFormat',
+  'packCount',
+  'categoryPath',
+  'url',
+  'extra',
+  'timesSeen',
+  'firstSeenAt',
+  'lastSeenAt',
+  'firstRunId',
+  'lastRunId',
+  'itemId',
+  'candidateEntryId',
+  'status',
+  'matchedBy',
+  'confidence',
+  'decidedAt',
+  'prices',
+];
 const sourceCatalogEntryView = object(
   HARVEST_SCHEMA_IDS.sourceCatalogEntryView,
+  sourceCatalogEntryProperties,
+  sourceCatalogEntryRequired
+);
+/** A source row on the product's own read, with its EAN counted (plan 0160). */
+const itemSourceEntryView = object(
+  HARVEST_SCHEMA_IDS.itemSourceEntryView,
   {
-    id: nonEmptyString(),
-    supermarketId: nonEmptyString(),
-    externalId: nonEmptyString(),
-    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
-    name: nonEmptyString(),
-    brand: nullableString(),
-    ean: nullableString(),
-    unitSize: numberOrNull(),
-    sizeFormat: nullableString(),
-    categoryPath: array(string()),
-    url: nullableString(),
-    // Stored, shown, and never interpreted (plan 0086, section 6.1).
-    extra: nullableObject(),
-    timesSeen: integer({ minimum: 0 }),
-    firstSeenAt: string({ format: 'date-time' }),
-    lastSeenAt: string({ format: 'date-time' }),
-    firstRunId: nullableString(),
-    lastRunId: nullableString(),
-    itemId: nullableString(),
-    candidateEntryId: nullableString(),
-    status: ref(HARVEST_SCHEMA_IDS.sourceEntryStatus),
-    matchedBy: {
-      anyOf: [ref(HARVEST_SCHEMA_IDS.itemSourceMatch), { type: 'null' }],
-    },
-    confidence: { type: 'number', minimum: 0, maximum: 1 },
-    decidedAt: nullableString(),
-    // Inline, because there is one per scope and a chain has a handful of
-    // scopes, and the queue cannot decide a row without seeing what it holds.
-    prices: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceView)),
+    ...sourceCatalogEntryProperties,
+    eanSharedBy: { type: ['integer', 'null'], minimum: 1 },
   },
-  [
-    'id',
-    'supermarketId',
-    'externalId',
-    'sourceKind',
-    'name',
-    'brand',
-    'ean',
-    'unitSize',
-    'sizeFormat',
-    'categoryPath',
-    'url',
-    'extra',
-    'timesSeen',
-    'firstSeenAt',
-    'lastSeenAt',
-    'firstRunId',
-    'lastRunId',
-    'itemId',
-    'candidateEntryId',
-    'status',
-    'matchedBy',
-    'confidence',
-    'decidedAt',
-    'prices',
-  ]
+  [...sourceCatalogEntryRequired, 'eanSharedBy']
 );
 
 /**
@@ -532,6 +566,25 @@ const harvestRunExportResult = object(
 );
 
 /**
+ * One catalog shop an unmapped source shop may be (plan 0154). A suggestion
+ * only: nothing maps a shop but a person.
+ */
+const sourceLocationCandidate = object(
+  HARVEST_SCHEMA_IDS.sourceLocationCandidate,
+  {
+    supermarketLocationId: nonEmptyString(),
+    label: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
+    },
+    address: nullableString(),
+    postalCode: nullableString(),
+    score: { type: 'number', minimum: 0, maximum: 1 },
+    strong: boolean(),
+  },
+  ['supermarketLocationId', 'label', 'address', 'postalCode', 'score', 'strong']
+);
+
+/**
  * One shop a source names (plan 0084, section 6). Keyed on the source's own
  * code, so a shop the chain renames keeps its mapping.
  */
@@ -549,6 +602,7 @@ const sourceLocationView = object(
     lastSeenAt: nonEmptyString(),
     firstRunId: nullableString(),
     lastRunId: nullableString(),
+    candidates: array(ref(HARVEST_SCHEMA_IDS.sourceLocationCandidate)),
   },
   [
     'id',
@@ -562,6 +616,7 @@ const sourceLocationView = object(
     'lastSeenAt',
     'firstRunId',
     'lastRunId',
+    'candidates',
   ]
 );
 
@@ -658,6 +713,10 @@ const discoveredPlacePage = paginated(
 const sourceCatalogEntryPage = paginated(
   HARVEST_SCHEMA_IDS.sourceCatalogEntryPage,
   HARVEST_SCHEMA_IDS.sourceCatalogEntryView
+);
+const itemSourceEntryPage = paginated(
+  HARVEST_SCHEMA_IDS.itemSourceEntryPage,
+  HARVEST_SCHEMA_IDS.itemSourceEntryView
 );
 const sourceLocationPage = paginated(
   HARVEST_SCHEMA_IDS.sourceLocationPage,
@@ -955,8 +1014,29 @@ const importPlaceRequest = object(
     placeId: nonEmptyString(),
     supermarketId: string(),
     priceScopeId: string(),
+    // Create a new shop although the catalog holds one it may be (plan 0152).
+    force: boolean(),
+    // The chain to create when none matches (plan 0153).
+    newChain: {
+      type: 'object',
+      properties: {
+        name: nonEmptyString(),
+        locale: { type: 'string', enum: [...CONTENT_LOCALES] },
+      },
+      required: ['name', 'locale'],
+      additionalProperties: false,
+    },
   },
   ['userId', 'placeId']
+);
+const linkPlaceRequest = object(
+  HARVEST_SCHEMA_IDS.linkPlaceRequest,
+  {
+    ...adminCredentialProperties,
+    placeId: nonEmptyString(),
+    supermarketLocationId: nonEmptyString(),
+  },
+  ['userId', 'placeId', 'supermarketLocationId']
 );
 const placeIdRequest = object(
   HARVEST_SCHEMA_IDS.placeIdRequest,
@@ -1011,6 +1091,16 @@ const listEntriesRequest = object(
   },
   ['userId']
 );
+const listEntriesByItemRequest = object(
+  HARVEST_SCHEMA_IDS.listEntriesByItemRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'itemId']
+);
 const entryIdRequest = object(
   HARVEST_SCHEMA_IDS.entryIdRequest,
   { ...adminCredentialProperties, entryId: nonEmptyString() },
@@ -1044,6 +1134,7 @@ const createItemFromEntryRequest = object(
     brand: nullableString(),
     ean: nullableString(),
     unitSize: numberOrNull(),
+    packCount: packCountOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
   },
@@ -1096,6 +1187,7 @@ const createItemEntryOperation = object(
         brand: nullableString(),
         ean: nullableString(),
         unitSize: numberOrNull(),
+        packCount: packCountOrNull(),
         category: ref(CATALOG_SCHEMA_IDS.itemCategory),
         defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
       },
@@ -1310,8 +1402,10 @@ export const harvestSchemas: JsonSchema[] = [
   discoveredPlaceGroup,
   discoveredPlaceGroupsResult,
   sourceCatalogEntryView,
+  itemSourceEntryView,
   sourceEntryPriceView,
   sourceEntryAcceptResult,
+  sourceLocationCandidate,
   sourceLocationView,
   discoveredPlaceCounts,
   postalCodeDiscoveryRequestView,
@@ -1319,6 +1413,7 @@ export const harvestSchemas: JsonSchema[] = [
   harvestRunPage,
   discoveredPlacePage,
   sourceCatalogEntryPage,
+  itemSourceEntryPage,
   sourceLocationPage,
   brandSuggestionChain,
   brandSuggestionView,
@@ -1344,11 +1439,13 @@ export const harvestSchemas: JsonSchema[] = [
   listPlacesRequest,
   groupPlacesRequest,
   importPlaceRequest,
+  linkPlaceRequest,
   placeIdRequest,
   listSourceLocationsRequest,
   mapSourceLocationRequest,
   sourceLocationIdRequest,
   listEntriesRequest,
+  listEntriesByItemRequest,
   entryIdRequest,
   acceptEntryRequest,
   createItemFromEntryRequest,
@@ -1435,6 +1532,10 @@ export const harvestMessageContracts: Record<
     request: HARVEST_SCHEMA_IDS.importPlaceRequest,
     response: HARVEST_SCHEMA_IDS.discoveredPlaceView,
   },
+  [DISCOVERED_PLACE_PATTERNS.link]: {
+    request: HARVEST_SCHEMA_IDS.linkPlaceRequest,
+    response: HARVEST_SCHEMA_IDS.discoveredPlaceView,
+  },
   [DISCOVERED_PLACE_PATTERNS.reject]: {
     request: HARVEST_SCHEMA_IDS.placeIdRequest,
     response: HARVEST_SCHEMA_IDS.discoveredPlaceView,
@@ -1462,6 +1563,10 @@ export const harvestMessageContracts: Record<
   [SOURCE_ENTRY_PATTERNS.list]: {
     request: HARVEST_SCHEMA_IDS.listEntriesRequest,
     response: HARVEST_SCHEMA_IDS.sourceCatalogEntryPage,
+  },
+  [SOURCE_ENTRY_PATTERNS.listByItem]: {
+    request: HARVEST_SCHEMA_IDS.listEntriesByItemRequest,
+    response: HARVEST_SCHEMA_IDS.itemSourceEntryPage,
   },
   [SOURCE_ENTRY_PATTERNS.accept]: {
     request: HARVEST_SCHEMA_IDS.acceptEntryRequest,

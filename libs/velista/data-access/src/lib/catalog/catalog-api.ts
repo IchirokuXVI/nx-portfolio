@@ -12,11 +12,16 @@ import { operation } from '../auth/http-context';
 import { GatewayError } from '../errors';
 import {
   toCatalogItem,
-  toCatalogSuggestion,
+  toCatalogSuggestions,
   toProductGroup,
 } from '../mapping/mappers';
 import { isRecord, mapArray } from '../mapping/primitives';
 import type { CatalogServiceI } from './catalog-service';
+
+/** The server's largest page (`MAX_PAGE_SIZE`), so a group is one request. */
+const GROUP_MEMBERS_PAGE = 100;
+/** How many pages {@link CatalogApi.groupMembers} follows before it stops. */
+const GROUP_MEMBERS_MAX_PAGES = 3;
 
 /**
  * The catalog search behind the composer, over HTTP. The default behind
@@ -57,9 +62,7 @@ export class CatalogApi implements CatalogServiceI {
       // The order is the server's, from `item.searchOffers`, and is deliberately not
       // re-sorted: a group ranks above an item for a bare word, and the client has
       // none of the prices, scopes or synonyms that decided it.
-      return isRecord(body)
-        ? mapArray(body['suggestions'], toCatalogSuggestion)
-        : [];
+      return toCatalogSuggestions(body);
     } catch {
       // **Empty rather than thrown.** A dropdown is an offer, and an offer that
       // errors is worse than one that is not there: the composer still submits, the
@@ -136,6 +139,55 @@ export class CatalogApi implements CatalogServiceI {
     return answers.some((answer) => answer === 'failed')
       ? null
       : answers.filter((answer): answer is ProductGroup => answer !== 'gone');
+  }
+
+  /**
+   * Every member of one group, priced, following the cursor.
+   *
+   * A page is the server's largest, and a group is a handful of products, so this is
+   * one request in practice. The cap on pages keeps a runaway cursor from turning one
+   * sheet into a crawl: a group larger than that is drawn with what arrived.
+   */
+  async groupMembers(
+    groupId: string,
+    options?: { profileId?: string; priceScopeIds?: readonly string[] }
+  ): Promise<readonly CatalogItem[] | null> {
+    let params = new HttpParams().set('limit', GROUP_MEMBERS_PAGE);
+    if (options?.profileId !== undefined) {
+      params = params.set('profileId', options.profileId);
+    }
+    for (const scopeId of options?.priceScopeIds ?? []) {
+      params = params.append('priceScopeId', scopeId);
+    }
+
+    const members: CatalogItem[] = [];
+    try {
+      for (let page = 0; page < GROUP_MEMBERS_MAX_PAGES; page += 1) {
+        const body = await firstValueFrom(
+          this._http.get<unknown>(
+            this._urls.gateway(
+              `/v1/catalog/product-groups/${encodeURIComponent(groupId)}/items`
+            ),
+            { params, context: operation('catalog.groupMembers') }
+          )
+        );
+        if (!isRecord(body)) {
+          return null;
+        }
+        members.push(...mapArray(body['items'], toCatalogItem));
+        const next = body['nextCursor'];
+        if (typeof next !== 'string' || next === '') {
+          break;
+        }
+        params = params.set('cursor', next);
+      }
+      return members;
+    } catch (error) {
+      // A group deleted under a product is gone, not failed: it has no siblings.
+      return error instanceof GatewayError && error.code === 'not_found'
+        ? []
+        : null;
+    }
   }
 
   /** One group: itself, `gone` for a 404, or `failed` for anything else. */

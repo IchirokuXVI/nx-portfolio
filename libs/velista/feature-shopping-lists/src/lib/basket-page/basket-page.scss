@@ -1,22 +1,14 @@
 @use '../basket-shared' as shared;
 
-// A screen tall page, so the composer at the end of it is at the bottom of the
-// screen rather than under the last line of a two line basket (plan 0053, section 6).
-//
-// `block-size: 100%` alone cannot do that: standalone there is no definite height
-// above this host for the percentage to resolve against, so it degrades to `auto`
-// and the page is as tall as what is in it. The minimum is the viewport less the one
-// inset between the two, `.app-main`'s bottom safe area. Mounted in the shell the
-// percentage does resolve and is already at least this, so the minimum never binds.
-// The list page's host says the same thing for the same reason.
-//
-// `svh` and not `dvh`: the app is sized in the small viewport everywhere, and
-// `AppLayout`'s stylesheet says why.
+// Exactly as tall as the app's page slot, so the composer at the end of it is at the
+// foot of the slot, directly above the bar, rather than under the last line of a two
+// line basket (plan 0053, section 6). The slot has a definite height in both run modes,
+// because the app is a frame one viewport tall that never scrolls (velista 0106). The
+// list page's host says the same thing for the same reason.
 :host {
   display: flex;
   flex-direction: column;
   block-size: 100%;
-  min-block-size: calc(100svh - var(--app-safe-bottom));
 }
 
 .page {
@@ -38,41 +30,31 @@
   min-block-size: 0;
   overflow-y: auto;
   // **No bottom safe area padding**, which is the one way this differs from the
-  // shared mixin: the composer is pinned below this column and owns that inset
-  // itself, so keeping it here would leave a gap the height of a home indicator
-  // between the last line and the field. The inset is still applied once, by
-  // `.app-main`, for the finished basket that draws no composer at all.
+  // shared mixin: the composer sits below this column and owns that inset itself,
+  // so keeping it here would leave a gap the height of a home indicator between the
+  // last line and the field. The basket is drawn with the bar, which carries the
+  // inset whenever the composer is not there.
+  //
+  // This is the one scroll container on the screen in both run modes (velista
+  // 0106), so the tools bar sticks to its top standalone and mounted alike.
   padding-block-end: var(--app-space-5);
-}
-
-// Standalone the document scrolls, so `.page` must not be a scroll container of its
-// own, or the sticky tools bar sticks to a box that never moves (velista 0079,
-// section 2). Nothing else changes: standalone `.page` is already as tall as its
-// content, so `overflow-y: auto` never produced a scroll there anyway.
-:host(.standalone) .page {
-  overflow-y: visible;
 }
 
 // Always at the bottom of the screen, which is what makes the field reachable with
 // a thumb no matter how long the basket is. The same treatment, and the same
 // reasoning, as the list page's dock.
 //
-// Sticky rather than fixed. Fixed would take it out of the flow and leave the last
-// line of a full basket underneath it forever, with no honest way to reserve the
-// space, since the composer's height is one row of text plus whatever the safe area
-// inset is on this device. Sticky keeps the box in the flow.
+// An ordinary item of the host's column, after `.page` (velista 0106). It used to be
+// `position: sticky` at the bottom of the document, which is exactly the strip the
+// bar covered. As the item after the scroller it is never over a line and nothing is
+// ever over it.
 //
-// It is also what keeps a footer off a sheet (plan 0040). A sheet is fixed to the
-// viewport at its own stacking order, well above this one, so the composer is
-// covered by the sheet and its scrim rather than floating a text field over the
-// settle controls.
+// A sheet still covers it (plan 0040): a sheet is fixed to the viewport at its own
+// stacking order, so the composer is under the sheet and its scrim rather than
+// floating a text field over the settle controls.
 .composer-dock {
   display: block;
-  position: sticky;
-  inset-block-end: 0;
-  // Above the rows it floats over. The composer paints its own surface, so without
-  // a stacking order a row's own raised background can show through it.
-  z-index: 1;
+  flex: none;
 }
 
 lib-line-composer {
@@ -95,7 +77,7 @@ lib-line-composer {
   border-block-end: 1px solid var(--app-border-subtle);
 }
 
-.back,
+.history,
 .share,
 .people,
 .finish {
@@ -117,13 +99,10 @@ lib-line-composer {
   }
 }
 
-// The two **actions** in the bar react to a pointer. The way out of the bar does
-// not, and that is the whole of plan 0052 section 9: the `page.back` mixin in
-// `_list-page.scss`, `_zone-page.scss`, `_account-page.scss` and
-// `_install-page.scss` sets a focus ring and stops, and every hand written back
-// control in the app does the same. This one shared its rule with `.share` and
-// `.people` and inherited a hover from them, so the basket's was the one back
-// control in the product that lit up under a cursor.
+// Every control in the bar is an action and reacts to a pointer. The history took
+// the back chevron's place (velista 0111), and the chevron was the one control here
+// that did not light up, by plan 0052 section 9's rule for a way out.
+.history,
 .share,
 .people,
 .finish {
@@ -133,7 +112,7 @@ lib-line-composer {
   }
 }
 
-.back-glyph,
+.history-glyph,
 .share-glyph,
 .people-glyph,
 .finish-glyph {
@@ -168,6 +147,20 @@ lib-line-composer {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+// What the basket that is always there is (velista `0091`, section 3).
+//
+// Secondary text, one line of it, sitting where the first row of the list would
+// otherwise start. It takes the page's own inline padding rather than the bar's,
+// because it belongs to the content below it and not to the furniture above.
+.hint {
+  flex: none;
+  margin: 0;
+  padding-inline: var(--app-space-4);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
 }
 
 // A row of faces and no sentence. The overflow collapses into a stacked chip,
@@ -467,6 +460,54 @@ lib-line-composer {
   text-wrap: pretty;
 }
 
+// The usual filter hid every row (velista 0104). Read as a short explanation with
+// a way out, so it starts at the leading edge as the mock draws it, where the other
+// empty states are one centred sentence.
+.empty.is-usual {
+  align-items: flex-start;
+  padding-inline: var(--app-space-7);
+  text-align: start;
+
+  .empty-title {
+    font-size: var(--app-text-lg);
+    font-weight: 600;
+    line-height: var(--app-leading-heading);
+    text-wrap: balance;
+  }
+
+  .empty-body {
+    margin-block-start: var(--app-space-2);
+    color: var(--app-text-secondary);
+    line-height: var(--app-leading-body);
+  }
+
+  .is-quiet {
+    color: var(--app-text-muted);
+  }
+}
+
+// "Show every line": the quiet action role, outlined, because it undoes a filter
+// rather than doing anything to the basket.
+.empty-action {
+  @include shared.tap-target;
+
+  margin-block-start: var(--app-space-6);
+  padding: var(--app-space-3) var(--app-space-6);
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-quiet-bg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
 .visually-hidden {
   @include shared.visually-hidden;
 }
@@ -489,4 +530,58 @@ lib-line-composer {
 .stale-glyph {
   flex-shrink: 0;
   font-size: var(--app-icon-sm);
+}
+
+// Where the next line goes, above the field (velista 0092, section 7.2).
+//
+// A chip in the quiet action role, sized and padded the same whether it is a
+// button or the static line that stands in for it on a basket covering one list:
+// the dock must not change height when a second household joins the basket.
+//
+// The surface is the composer's own, so the chip reads as part of the dock rather
+// than as a row floating over the last line of the basket.
+.target {
+  @include shared.tap-target;
+
+  display: block;
+  inline-size: 100%;
+  margin: 0;
+  padding: var(--app-space-2) var(--app-space-4);
+  border: none;
+  border-block-end: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+  font-family: inherit;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  color: var(--app-action-quiet-fg);
+  text-align: start;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+}
+
+// One list, which chose itself: a statement rather than a control, so it takes
+// no pointer, no quiet accent and no target height it cannot honour.
+.target.is-static {
+  min-block-size: 0;
+  color: var(--app-text-muted);
+  font-weight: 500;
+  cursor: default;
+}
+
+// Nothing chosen yet, on a basket with more than one list (velista 0110): the
+// field below is locked until a list is, so the chip is the next step and is
+// tinted in the quiet accent it already speaks in. The dock keeps its height.
+.target.is-next {
+  background: var(--app-action-quiet-bg);
+}
+
+// Inside the popover the locked field opens. The sentence is the reason, in the
+// primary text, and the whole of what the popover holds (velista 0113).
+.needs-list-text {
+  margin: 0;
+  color: var(--app-text-primary);
 }

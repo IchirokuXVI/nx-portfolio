@@ -23,9 +23,12 @@
 export enum ListPermission {
   /** See the list and everything on it. Write nothing, comments included. */
   READ = 'READ',
-  /** Add lines, edit and delete unapproved ones, reorder, comment. */
+  /**
+   * Add lines, edit and delete unapproved ones, reorder, comment, and settle a
+   * line: record what was bought or that the shop had none (plan 0131).
+   */
   WRITE = 'WRITE',
-  /** Approve, reject, settle a line, change an approved quantity, comment. */
+  /** Approve, reject, change an approved quantity, comment. */
   DECIDE = 'DECIDE',
   /** All of the above, plus any line whatever its approval, and governing the list. */
   MANAGE = 'MANAGE',
@@ -128,13 +131,20 @@ export enum CommentTranscription {
 /**
  * What kind of shopping trip touched a zone list (plan 0122, section 3).
  *
- * `BASKET` is a generated list that drew from the list. `LOOSE` is a run of
+ * `BASKET` is a basket that drew from the list. `SESSION` is a run of
  * purchases that belong to no basket, grouped by elapsed time and never by a
  * calendar day.
+ *
+ * It read `LOOSE` until plan 0142, section 7. The word described an absence,
+ * the screen was never allowed to say it (plan 0130, section 3), and a wire
+ * that said it kept putting it back. There is no period where both words are
+ * accepted: plan 0130 section 12 already says `dev` is not releasable inside
+ * this series, and a gateway answering two spellings is a second rule to delete
+ * later.
  */
 export enum TripKind {
   BASKET = 'BASKET',
-  LOOSE = 'LOOSE',
+  SESSION = 'SESSION',
 }
 
 /**

@@ -1,0 +1,981 @@
+import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import {
+  RokuLocaleStore,
+  RokuTranslatorTestingModule,
+} from '@portfolio/localization/rokutranslator-angular';
+import {
+  QUANTITY_REEL_IDLE_MS,
+  type BasketListRef,
+  type BasketParticipant,
+  type BasketRow,
+  type BasketRowEntry,
+} from '@portfolio/velista/models';
+import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { BasketRow as BasketRowComponent } from './basket-row';
+
+/**
+ * The row's status control (plan 0052, section 6).
+ *
+ * What this is really asserting is that the control **says what pressing it does**,
+ * differently for each of the four states, and that the row's own button is still the
+ * control it always was with the composed label it always had. A row that grew a
+ * second button and lost the first would pass a test that only counted glyphs.
+ *
+ * Assertions are on `aria-label` keys rather than on rendered English, because the
+ * testing translator echoes keys: the question is which sentence was chosen and what
+ * it was given, never how it reads after a copy edit.
+ */
+
+function line(overrides: Partial<BasketRow> = {}): BasketRow {
+  return {
+    rowKey: 'zl-1',
+    content: 'Milk',
+    left: 3,
+    bought: 0,
+    asked: 3,
+    state: 'WANTED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
+    optionIds: [],
+    touchedBy: null,
+    touchedAt: null,
+    usual: null,
+    entries: [entry(null)],
+    ...overrides,
+  };
+}
+
+function entry(
+  listId: string | null,
+  over: Partial<BasketRowEntry> = {}
+): BasketRowEntry {
+  return {
+    lineId: `zl-${listId ?? 'none'}`,
+    listId,
+    left: 3,
+    bought: 0,
+    asked: 3,
+    state: 'WANTED',
+    awaitingApproval: false,
+    demandEditable: true,
+    ...over,
+  };
+}
+
+function ref(listId: string, name: string): BasketListRef {
+  return { listId, name, zoneId: 'z', zoneName: 'Home' };
+}
+
+/**
+ * The two finished states, which is the pair the glyph is really about: a row
+ * somebody bought out and one the shop had none of are both done, and no pair of
+ * numbers can tell them apart.
+ */
+const bought = () =>
+  line({ left: 0, bought: 3, state: 'DONE', touchedBy: 'p-1' });
+const unavailable = () => line({ state: 'NOT_AVAILABLE', touchedBy: 'p-1' });
+
+async function render(
+  row: BasketRow,
+  options: {
+    entry?: BasketRowEntry | null;
+    people?: ReadonlyMap<string, BasketParticipant>;
+    lists?: ReadonlyMap<string, BasketListRef>;
+    busy?: boolean;
+    notice?: { key: string; count: number } | null;
+    /** Whether the **trip** is over, which is not the same as a finished line. */
+    finished?: boolean;
+    /** What the basket is being searched for, already folded (velista `0074`). */
+    highlight?: string;
+  } = {}
+) {
+  TestBed.resetTestingModule();
+
+  await TestBed.configureTestingModule({
+    imports: [BasketRowComponent, RokuTranslatorTestingModule.forTesting()],
+    providers: [
+      provideVelistaTesting({ basePath: '/velista' }),
+      { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+    ],
+  }).compileComponents();
+
+  const fixture = TestBed.createComponent(BasketRowComponent);
+  fixture.componentRef.setInput('row', row);
+  fixture.componentRef.setInput('entry', options.entry ?? null);
+  fixture.componentRef.setInput(
+    'people',
+    options.people ?? new Map<string, BasketParticipant>()
+  );
+  fixture.componentRef.setInput('products', new Map());
+  fixture.componentRef.setInput('lists', options.lists ?? new Map());
+  fixture.componentRef.setInput('busy', options.busy ?? false);
+  fixture.componentRef.setInput('notice', options.notice ?? null);
+  fixture.componentRef.setInput('finished', options.finished ?? false);
+  fixture.componentRef.setInput('highlight', options.highlight ?? '');
+  fixture.detectChanges();
+
+  return fixture;
+}
+
+/** One participant, enough to be named. */
+function person(id: string, displayName: string): BasketParticipant {
+  return {
+    id,
+    kind: 'GUEST',
+    displayName,
+    username: null,
+    guestNumber: 1,
+    userId: null,
+    joinedAt: null,
+    lastSeenAt: null,
+    shareLinkId: 'link-1',
+  };
+}
+
+const status = (fixture: Awaited<ReturnType<typeof render>>) =>
+  (fixture.nativeElement as HTMLElement).querySelector('.status');
+
+const body = (fixture: Awaited<ReturnType<typeof render>>) =>
+  (fixture.nativeElement as HTMLElement).querySelector('.body');
+
+const reel = (fixture: Awaited<ReturnType<typeof render>>) =>
+  (fixture.nativeElement as HTMLElement).querySelector(
+    'lib-quantity-reel'
+  ) as HTMLElement;
+
+const text = (fixture: Awaited<ReturnType<typeof render>>, selector: string) =>
+  (fixture.nativeElement as HTMLElement).querySelector(selector)?.textContent ??
+  '';
+
+/**
+ * The keyboard half of the reel, which is a real path and the one a spec can drive.
+ *
+ * jsdom has no `PointerEvent`, so the drag is stood in for by the keys the same
+ * control answers: they move the same pending value, they commit on the same idle
+ * beat, and section 7 requires them to work anyway.
+ */
+function key(fixture: Awaited<ReturnType<typeof render>>, name: string): void {
+  reel(fixture).dispatchEvent(
+    new KeyboardEvent('keydown', { key: name, bubbles: true })
+  );
+  fixture.detectChanges();
+}
+
+/** Let go: the overlay waits out its idle beat, and the close is the commit. */
+function letGo(fixture: Awaited<ReturnType<typeof render>>): void {
+  jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+  fixture.detectChanges();
+}
+
+describe('BasketRowComponent: the status control', () => {
+  it('offers to get the whole thing on a line nobody has touched', async () => {
+    const fixture = await render(line());
+
+    const control = status(fixture);
+    expect(control?.tagName).toBe('BUTTON');
+    expect(control?.getAttribute('aria-label')).toContain('basket.status.got');
+  });
+
+  it('offers the rest on a line somebody got some of', async () => {
+    // A different sentence, because a person who has already got two of three is not
+    // being asked the same question as somebody starting the line.
+    const fixture = await render(
+      line({ left: 2, bought: 1, asked: 3, state: 'PARTLY' })
+    );
+
+    expect(status(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.status.rest'
+    );
+  });
+
+  it('offers to undo a purchase on a finished line', async () => {
+    const fixture = await render(bought());
+
+    expect(status(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.status.undoGot'
+    );
+  });
+
+  it('does not call a shop that had none a purchase', async () => {
+    // The reason the fourth state exists at all. `NOT_AVAILABLE` closes the
+    // outstanding amount exactly as a purchase does, so these two lines have
+    // identical numbers, and a tick on this one would claim a purchase that never
+    // happened.
+    const fixture = await render(unavailable());
+
+    expect(status(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.status.undoNone'
+    );
+  });
+
+  it('draws a different shape for each of the four states', async () => {
+    // Never colour alone (`0044`, section 7). The shape is what survives a bright
+    // aisle and a reader who does not distinguish the hues.
+    const glyphs = await Promise.all(
+      [
+        line(),
+        line({ left: 2, bought: 1, asked: 3, state: 'PARTLY' }),
+        bought(),
+        unavailable(),
+      ].map(async (row) => {
+        const fixture = await render(row);
+        return status(fixture)?.firstElementChild?.tagName ?? '';
+      })
+    );
+
+    expect(new Set(glyphs).size).toBe(4);
+    expect(glyphs).not.toContain('');
+  });
+});
+
+describe('BasketRowComponent: what a tap does', () => {
+  it('asks for the whole outstanding amount, and never opens the sheet', async () => {
+    // One tap is the whole point: settling everything used to cost a tap, a sheet, a
+    // tap and a dismissal.
+    const fixture = await render(line());
+    const settled: unknown[] = [];
+    const opened: unknown[] = [];
+    fixture.componentInstance.settle.subscribe(() => settled.push(1));
+    fixture.componentInstance.open.subscribe(() => opened.push(1));
+
+    (status(fixture) as HTMLButtonElement).click();
+
+    expect(settled).toHaveLength(1);
+    expect(opened).toHaveLength(0);
+  });
+
+  it('reopens a finished line rather than settling it again', async () => {
+    const fixture = await render(bought());
+    const reopened: unknown[] = [];
+    const settled: unknown[] = [];
+    fixture.componentInstance.revert.subscribe(() => reopened.push(1));
+    fixture.componentInstance.settle.subscribe(() => settled.push(1));
+
+    (status(fixture) as HTMLButtonElement).click();
+
+    expect(reopened).toHaveLength(1);
+    expect(settled).toHaveLength(0);
+  });
+});
+
+/**
+ * A finished row is a control again, always (velista `0090`).
+ *
+ * `BASKET_REOPEN_AVAILABLE` gated a reopen route backend `0136` replaced with a
+ * revert that is always available, so the constant went with it: there is no build
+ * where a finished row's glyph would 404.
+ */
+describe('BasketRowComponent: a finished row', () => {
+  it('offers the act rather than stating what the row is', async () => {
+    const fixture = await render(bought());
+
+    const control = status(fixture);
+    expect(control?.tagName).toBe('BUTTON');
+    expect(control?.getAttribute('aria-label')).toContain(
+      'basket.status.undoGot'
+    );
+  });
+
+  it('still lets an unfinished row be settled in one tap', async () => {
+    const fixture = await render(line());
+
+    expect(status(fixture)?.tagName).toBe('BUTTON');
+  });
+
+  /**
+   * A row whose lines all left the coverage (velista `0093`, section 4).
+   *
+   * Every control is gone, which is the whole of it: no status glyph, no reel,
+   * no body button and so no sheet. What is left is words, because the reason
+   * the row is on screen at all is that somebody has to be told.
+   */
+  it('offers nothing at all on a REMOVED row, and still says what it is', async () => {
+    const fixture = await render(line({ state: 'REMOVED', entries: [] }));
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('.status')).toBeNull();
+    expect(host.querySelector('lib-quantity-reel')).toBeNull();
+    // Nothing focusable at all, which is what "skipped by Tab" means for a row
+    // whose only elements are spans: a query for every natively focusable tag
+    // finds none, so there is no stop here to pass over.
+    expect(host.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(
+      0
+    );
+    expect(host.textContent).toContain('Milk');
+    expect(host.textContent).toContain('basket.line.removed');
+  });
+});
+
+/**
+ * What this viewer has not seen about a row (velista `0093`, section 3).
+ *
+ * Two of the three marks draw a tag. `REMOVED` is a whole second shape of row
+ * and is asserted above, beside the other states.
+ *
+ * The tag is inside the row's **one** accessible name rather than a second
+ * focus stop, and nothing about the row moves: a marked row is drawn exactly
+ * where the server's order put it, because a list that rearranges under a thumb
+ * is what velista `0053` section 7 refused.
+ */
+describe('BasketRowComponent: the change mark', () => {
+  it('tags a row somebody added, and says so in the row’s own name', async () => {
+    const fixture = await render(line({ mark: 'ADDED' }));
+
+    expect(text(fixture, '.mark')).toContain('basket.mark.added');
+    expect(body(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.mark.addedLabel'
+    );
+  });
+
+  it('tags a row somebody changed, with its own word', async () => {
+    const fixture = await render(line({ mark: 'CHANGED' }));
+
+    expect(text(fixture, '.mark')).toContain('basket.mark.changed');
+    expect(body(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.mark.changedLabel'
+    );
+  });
+
+  it('draws no tag on a row with no mark', async () => {
+    const fixture = await render(line());
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.mark')
+    ).toBeNull();
+  });
+
+  it('keeps the tag out of the accessible tree, because the row already says it', async () => {
+    // Said once. The tag is four letters at the end of the name line, and a
+    // second announcement of it is a row read twice.
+    const fixture = await render(line({ mark: 'ADDED' }));
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('.mark')?.getAttribute('aria-hidden')).toBe(
+      'true'
+    );
+  });
+
+  it('adds no control, so a marked row is the row it was', async () => {
+    const marked = await render(line({ mark: 'CHANGED' }));
+    const plain = await render(line());
+    const count = (fixture: Awaited<ReturnType<typeof render>>) =>
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button').length;
+
+    expect(count(marked)).toBe(count(plain));
+  });
+
+  it('puts the tag inside the name, so the row keeps its height', async () => {
+    // Inside `.content` and not a sibling of it: a tag on a line of its own
+    // would make a marked row taller than the rows around it, and the list
+    // would jump as marks arrive and go.
+    const fixture = await render(line({ mark: 'ADDED' }));
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('.content .mark')).not.toBeNull();
+  });
+});
+
+/**
+ * A row on a trip that is over (velista `0057`, section 6).
+ *
+ * The row still **says** everything it said: the words, the product, who settled it,
+ * which household it came from. What goes is everything that would change it, absent
+ * rather than disabled, because every one of those writes is refused by the server on
+ * a finished basket and a drawn control is an invitation that cannot be honoured.
+ */
+describe('BasketRowComponent: the trip is finished', () => {
+  it('draws no settle control, even on a line nobody settled', async () => {
+    // The case a line-level check would miss entirely: this line has everything
+    // outstanding, so `canReopen` and the line's own state both say "offer the
+    // control", and the basket says no.
+    const fixture = await render(line(), { finished: true });
+
+    const control = status(fixture);
+    expect(control?.tagName).toBe('SPAN');
+    expect(control?.getAttribute('aria-label')).toContain(
+      'basket.status.isWanted'
+    );
+  });
+
+  it('says what a partly settled line is rather than offering the rest', async () => {
+    const fixture = await render(
+      line({ left: 2, bought: 1, asked: 3, state: 'PARTLY' }),
+      { finished: true }
+    );
+
+    expect(status(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.status.isPartly'
+    );
+  });
+
+  it('offers no undo on a line somebody did settle', async () => {
+    const fixture = await render(bought(), { finished: true });
+
+    const control = status(fixture);
+    expect(control?.tagName).toBe('SPAN');
+    expect(control?.getAttribute('aria-label')).toContain(
+      'basket.status.isGot'
+    );
+  });
+
+  it('turns the reel back into the number it was before plan 0054', async () => {
+    const fixture = await render(
+      line({ left: 2, bought: 1, asked: 3, state: 'PARTLY' }),
+      {
+        finished: true,
+      }
+    );
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('lib-quantity-reel')
+    ).toBeNull();
+    expect(text(fixture, '.settled-count').trim()).toBe('2');
+  });
+
+  it('still opens the sheet, which is where the history is', async () => {
+    // A finished basket is the receipt for a trip somebody took, and the most likely
+    // reason to open one is to see what was bought.
+    const fixture = await render(bought(), { finished: true });
+
+    expect(body(fixture)?.tagName).toBe('BUTTON');
+  });
+});
+
+describe('BasketRowComponent: the row itself', () => {
+  it('still opens the sheet, and still carries the whole line in its name', async () => {
+    // `0044`'s composed label is not a casualty of the split: the quantity and the
+    // attribution are separate lines visually, and a reader moving by button would
+    // otherwise hear only the content.
+    const fixture = await render(line({ left: 3, asked: 3 }));
+    const opened: unknown[] = [];
+    fixture.componentInstance.open.subscribe(() => opened.push(1));
+
+    const control = body(fixture) as HTMLButtonElement;
+    control.click();
+
+    expect(opened).toHaveLength(1);
+    const label = control.getAttribute('aria-label') ?? '';
+    expect(label).toContain('Milk');
+    expect(label).toContain('basket.line.wanted');
+  });
+
+  /**
+   * Plan 0053, section 5: a line somebody typed in an aisle.
+   *
+   * It is an ordinary row with two things absent and one added, and none of the
+   * three needs a flag: the data decides, which is the same rule the "from" caption
+   * has followed since `0044` section 4.1.
+   */
+  describe('a line added in the shop', () => {
+    /**
+     * "Who put this here" needs a line's own author, and a row is a group of
+     * lines: backend `0136` leaves `createdBy` on the line rather than on the
+     * row. Velista `0092` brings the question back with the composer.
+     */
+    it('names who last touched it, which is the question a row can answer', async () => {
+      const fixture = await render(
+        line({ bought: 1, state: 'PARTLY', touchedBy: 'p-1' }),
+        { people: new Map([['p-1', person('p-1', 'Dani')]]) }
+      );
+
+      expect(
+        (fixture.nativeElement as HTMLElement).textContent ?? ''
+      ).toContain('basket.touched.gotSome');
+    });
+
+    it('shows no list name, for a reader who would otherwise see one', async () => {
+      // An entry on a list this reader was not served: they know how much and
+      // never where. Nothing in the row says so; the caption simply has nothing
+      // to draw, which is the whole design.
+      const fixture = await render(line({ entries: [entry(null)] }), {
+        people: new Map([['p-1', person('p-1', 'Dani')]]),
+        lists: new Map([['list-weekly', ref('list-weekly', 'Weekly shop')]]),
+      });
+
+      const html = fixture.nativeElement as HTMLElement;
+      expect(html.querySelector('.from')).toBeNull();
+      expect(html.textContent ?? '').not.toContain('Weekly shop');
+    });
+  });
+
+  it('is a container rather than a control, so it may hold its buttons', async () => {
+    // A button cannot contain a button, which is what splits the row in the first
+    // place. The row keeping its own `button` role would be an invalid tree that
+    // renders anyway and announces wrongly. Two of its own, the status and the body,
+    // and the reel's minus and plus beside them.
+    const fixture = await render(line());
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector('.row');
+    expect(row?.tagName).toBe('DIV');
+    expect(row?.querySelector('button.status')).not.toBeNull();
+    expect(row?.querySelector('button.body')).not.toBeNull();
+    expect(row?.querySelectorAll('button:not(.step)')).toHaveLength(2);
+  });
+});
+
+/**
+ * The number on the row is the control (plan 0054).
+ *
+ * Two things are asserted here and neither of them is the reel, which has its own
+ * spec. The first is the **sentence**: down and up are different acts, and the row
+ * has to say which one is about to happen while the thumb is still down, because
+ * that caption is the confirmation and there is deliberately no dialog behind it.
+ * The second is that the row still opens the sheet on a tap while never opening it
+ * on a gesture, which is the arrangement the whole control rests on.
+ */
+describe('BasketRowComponent: the number as a control', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('names what is still to get, not how many to buy', async () => {
+    // Section 7. The reel is bound to the outstanding amount, so that is what its
+    // name says; "how many to buy" is the number underneath it.
+    const fixture = await render(line({ left: 5, asked: 5 }));
+
+    expect(reel(fixture).getAttribute('aria-label')).toContain(
+      'basket.outstanding.label'
+    );
+    expect(reel(fixture).getAttribute('aria-valuenow')).toBe('5');
+  });
+
+  it('leaves the reel out of the name on the row body', async () => {
+    // Section 7 again: the body keeps the full composed name it always had, and the
+    // reel is excluded from it rather than repeated inside it.
+    const fixture = await render(line({ left: 5, asked: 5 }));
+
+    expect(body(fixture)?.getAttribute('aria-label')).not.toContain(
+      'basket.outstanding.label'
+    );
+  });
+
+  it('runs from zero to what the lists asked for', async () => {
+    // Velista `0073`, section 2 and test 1. The reel used to stop at
+    // `LINE_QUANTITY_MAX` minus what was settled, so up meant "buy more than
+    // anybody asked for". It now caps at the line's own quantity, and a line of six
+    // settled to zero offers a reel from zero to six.
+    const fixture = await render(
+      line({ left: 0, bought: 6, asked: 6, state: 'DONE' })
+    );
+
+    expect(reel(fixture).getAttribute('aria-valuemax')).toBe('6');
+    expect(reel(fixture).getAttribute('aria-valuemin')).toBe('0');
+    expect(reel(fixture).getAttribute('aria-valuenow')).toBe('0');
+  });
+
+  it('says how many are being bought while the thumb is down', async () => {
+    const fixture = await render(line({ left: 5, asked: 5 }));
+
+    key(fixture, 'ArrowDown');
+    key(fixture, 'ArrowDown');
+
+    expect(text(fixture, '.preview')).toContain('basket.outstanding.bought');
+  });
+
+  it('says how many are being taken back, on the way up', async () => {
+    // Velista `0073`, section 2 and test 2. A different sentence, because it is a
+    // different act: down puts tins in the trolley and up takes them out again.
+    // "buying 20 instead of 5" went with the act it described.
+    const fixture = await render(
+      line({ left: 2, bought: 3, asked: 5, state: 'PARTLY' })
+    );
+
+    key(fixture, 'ArrowUp');
+
+    expect(text(fixture, '.preview')).toContain('basket.line.takenBack');
+  });
+
+  it('says nothing when the gesture comes back to where it started', async () => {
+    const fixture = await render(line({ left: 5, asked: 5 }));
+
+    key(fixture, 'ArrowDown');
+    key(fixture, 'ArrowUp');
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.preview')
+    ).toBeNull();
+  });
+
+  it('reports where the run began and where it ended', async () => {
+    // Absolute numbers in both halves. `from` is what lets the server refuse a
+    // stale gesture rather than apply it as the opposite act (backend `0056`,
+    // section 3.2).
+    const fixture = await render(line({ left: 5, asked: 5 }));
+    const moves: { from: number; to: number }[] = [];
+    fixture.componentInstance.left.subscribe((move) => moves.push(move));
+
+    key(fixture, 'ArrowDown');
+    key(fixture, 'ArrowDown');
+    letGo(fixture);
+
+    expect(moves).toEqual([{ from: 5, to: 3 }]);
+  });
+
+  it('takes a purchase back off a finished line', async () => {
+    // What `0054` section 5 said this gesture was, and what `0073` says it is. A
+    // done line raised by one is one tin coming back out of the trolley, which is
+    // exactly what somebody putting it back on the shelf reaches for.
+    const fixture = await render(bought());
+    const moves: { from: number; to: number }[] = [];
+    fixture.componentInstance.left.subscribe((move) => moves.push(move));
+
+    key(fixture, 'ArrowUp');
+
+    expect(text(fixture, '.preview')).toContain('basket.line.takenBack');
+
+    letGo(fixture);
+
+    expect(moves).toEqual([{ from: 0, to: 1 }]);
+  });
+
+  it('draws itself partly settled when a purchase comes back', async () => {
+    // Section 2 and test 3, and the sentence the whole plan is for. A line of six
+    // dragged to zero and brought back to four is two bought and four still to get.
+    const fixture = await render(
+      line({ left: 4, bought: 2, asked: 6, state: 'PARTLY' })
+    );
+
+    expect(reel(fixture).getAttribute('aria-valuenow')).toBe('4');
+    expect(text(fixture, '.progress')).toContain('basket.row.boughtOf');
+  });
+
+  it('is readable rather than disabled while the write is out', async () => {
+    // What the input was built for: the number is real and worth reading while it
+    // settles, and a disabled control would say something about this reader that is
+    // not true.
+    const fixture = await render(line({ left: 5, asked: 5 }), { busy: true });
+
+    expect(reel(fixture).getAttribute('aria-readonly')).toBe('true');
+  });
+
+  it('still shows how far through a partly settled line is', async () => {
+    const fixture = await render(
+      line({ left: 3, bought: 2, asked: 5, state: 'PARTLY' })
+    );
+
+    expect(text(fixture, '.progress')).toContain('basket.row.boughtOf');
+  });
+});
+
+describe('BasketRowComponent: the tap and the gesture stay apart', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('opens the sheet on a tap on the words', async () => {
+    const fixture = await render(line({ left: 5, asked: 5 }));
+    const opened: unknown[] = [];
+    fixture.componentInstance.open.subscribe(() => opened.push(1));
+
+    (body(fixture) as HTMLButtonElement).click();
+
+    expect(opened).toHaveLength(1);
+  });
+
+  it('does not open it on a tap that was really dismissing the reel', async () => {
+    // `line-row`s arrangement, for its reason: the overlay reaches over the row
+    // beside it, so the tap that puts it away must not also open a screen over the
+    // number somebody was reading. It commits what it was holding instead.
+    const fixture = await render(line({ left: 5, asked: 5 }));
+    const opened: unknown[] = [];
+    const moves: { from: number; to: number }[] = [];
+    fixture.componentInstance.open.subscribe(() => opened.push(1));
+    fixture.componentInstance.left.subscribe((move) => moves.push(move));
+
+    key(fixture, 'ArrowDown');
+    (body(fixture) as HTMLButtonElement).click();
+
+    expect(opened).toHaveLength(0);
+    expect(moves).toEqual([{ from: 5, to: 4 }]);
+  });
+
+  it('does not open it on a click coming out of the reel itself', async () => {
+    const fixture = await render(line({ left: 5, asked: 5 }));
+    const opened: unknown[] = [];
+    fixture.componentInstance.open.subscribe(() => opened.push(1));
+
+    reel(fixture).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(opened).toHaveLength(0);
+  });
+});
+
+describe('BasketRowComponent: what somebody else did', () => {
+  it('says the number as it now stands, in one sentence', async () => {
+    // Section 4.1. The store refetched before it answered, so by the time this is
+    // drawn the count beside it is the true one, which is the only thing that makes
+    // the sentence worth saying.
+    const fixture = await render(line({ left: 3, asked: 3 }), {
+      notice: { key: 'basket.error.staleLine', count: 3 },
+    });
+
+    expect(text(fixture, '.line-notice')).toContain('basket.error.staleLine');
+  });
+
+  it('draws nothing at all when there is nothing to report', async () => {
+    const fixture = await render(line({ left: 3, asked: 3 }));
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.line-notice')
+    ).toBeNull();
+  });
+});
+
+/**
+ * The searched fragment, painted on the row (velista `0074`, section 4.5).
+ *
+ * Two things have to hold and the second is the easy one to break. The mark has to
+ * land on the letters that matched, accents and all, and **the words have to still
+ * read as the words**: splitting a string across three nodes is exactly how a space
+ * gets into the middle of a name.
+ */
+describe('the searched fragment', () => {
+  const content = (fixture: Awaited<ReturnType<typeof render>>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('.content');
+
+  it('marks the first match and leaves the words unchanged', async () => {
+    const fixture = await render(line({ content: 'Skimmed milk' }), {
+      highlight: 'mil',
+    });
+
+    const mark = content(fixture)?.querySelector('mark');
+    expect(mark?.textContent).toBe('mil');
+    // No space anywhere it was split. Angular collapses whitespace around an
+    // interpolation into a real one, so a line break between the pieces would put
+    // a space inside the word.
+    expect(content(fixture)?.textContent?.trim()).toBe('Skimmed milk');
+  });
+
+  it('marks the accented letters the query found without them', async () => {
+    const fixture = await render(line({ content: 'Zumo de plátano' }), {
+      highlight: 'platano',
+    });
+
+    expect(content(fixture)?.querySelector('mark')?.textContent).toBe(
+      'plátano'
+    );
+  });
+
+  it('marks nothing when nothing is being searched for', async () => {
+    const fixture = await render(line({ content: 'Skimmed milk' }));
+
+    expect(content(fixture)?.querySelector('mark')).toBeNull();
+    expect(content(fixture)?.textContent?.trim()).toBe('Skimmed milk');
+  });
+
+  it('marks nothing when the line matched on its product rather than its words', async () => {
+    // The page searched a brand, the line was kept, and there is nothing in its own
+    // words to point at. The caption is matched but never marked: it is 12px muted
+    // text and a mark on it competes with the name beside it.
+    const fixture = await render(line({ content: 'Milk' }), {
+      highlight: 'hacendado',
+    });
+
+    expect(content(fixture)?.querySelector('mark')).toBeNull();
+  });
+
+  it("leaves the row's accessible name alone, because the mark is presentational", async () => {
+    const fixture = await render(line({ content: 'Skimmed milk' }), {
+      highlight: 'mil',
+    });
+
+    expect(body(fixture)?.getAttribute('aria-label')).toContain('Skimmed milk');
+  });
+});
+
+/**
+ * Three ways for a row to be finished with, and they have to be three (velista
+ * `0092`, section 4).
+ *
+ * "I got it", "they had none" and "not today" are different facts, and the
+ * acceptance criterion is that a shopper cannot mistake one for another in either
+ * theme, in greyscale. So what is asserted here is the **shape**: which glyph,
+ * whether the reel is drawn, and what the words under the name say. Colour is
+ * asserted nowhere, deliberately, because it is never the carrier.
+ */
+describe('BasketRowComponent: skipped, unavailable and bought to zero', () => {
+  const skipped = () => line({ state: 'SKIPPED' });
+
+  it('draws a clock on a skipped row and no reel', async () => {
+    const fixture = await render(skipped());
+    const html = fixture.nativeElement as HTMLElement;
+
+    expect(html.querySelector('lib-clock-icon')).not.toBeNull();
+    // The shape that tells it from a wanted row at arm's length. A skip was not
+    // reached by a number, so there is no number to take back.
+    expect(html.querySelector('lib-quantity-reel')).toBeNull();
+  });
+
+  it('says it is skipped for now, in words under the name', async () => {
+    const fixture = await render(skipped());
+    expect(text(fixture, '.skipped')).toContain('basket.skip.caption');
+  });
+
+  it('never strikes the name through', async () => {
+    // velista `0043`: a skipped row is still on a household's list and still a
+    // thing to buy tomorrow.
+    const fixture = await render(skipped());
+    const html = fixture.nativeElement as HTMLElement;
+
+    expect(html.querySelector('.content s')).toBeNull();
+    expect(html.querySelector('.content del')).toBeNull();
+    // `is-done` is what mutes a finished row's words, and a skipped one is not
+    // finished: it counts as pending and its name keeps its ordinary weight.
+    expect(html.querySelector('.row')?.classList.contains('is-done')).toBe(
+      false
+    );
+  });
+
+  it('names a skipped row by what it is, and offers to buy it', async () => {
+    const fixture = await render(skipped());
+
+    // What the glyph promises is the same act a wanted row's promises: a person
+    // who skipped the bread and then found it presses this, and the server ends
+    // the skip with the purchase.
+    expect(status(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.status.got'
+    );
+    // And what the row **is** reaches a reader who hears it rather than sees it.
+    expect(body(fixture)?.getAttribute('aria-label')).toContain(
+      'basket.skip.state'
+    );
+  });
+
+  it('draws three different glyphs for the three ways of being finished with', async () => {
+    const one = (fixture: Awaited<ReturnType<typeof render>>) => {
+      const html = fixture.nativeElement as HTMLElement;
+      return html.querySelector('.status-glyph')?.tagName.toLowerCase() ?? '';
+    };
+
+    expect(one(await render(bought()))).toBe('lib-check-filled-icon');
+    expect(one(await render(unavailable()))).toBe('lib-slash-circle-icon');
+    expect(one(await render(skipped()))).toBe('lib-clock-icon');
+  });
+
+  it('keeps the reel on a row bought to zero and takes it off the other two', async () => {
+    const hasReel = (fixture: Awaited<ReturnType<typeof render>>) =>
+      (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-quantity-reel'
+      ) !== null;
+
+    // The gesture that put a row at zero is the gesture that takes it back.
+    expect(hasReel(await render(bought()))).toBe(true);
+    // Neither of the other two was reached by a number, and a reel on either
+    // would be one control that could be dragged to zero and mean something the
+    // state does not.
+    expect(hasReel(await render(unavailable()))).toBe(false);
+    expect(hasReel(await render(skipped()))).toBe(false);
+  });
+});
+
+/**
+ * After the window (velista `0092`, section 3.3).
+ *
+ * The row arrives `WANTED` with a note, which is the server saying twelve hours
+ * have passed. **This side never counts hours**, so what is asserted is that the
+ * row reads the note and the date it came with, and nothing more.
+ */
+describe('BasketRowComponent: a row skipped earlier', () => {
+  const earlier = (noteAt: Date | null) =>
+    line({ state: 'WANTED', note: 'SKIPPED_EARLIER', noteAt });
+
+  it('is an ordinary row again, with its reel back', async () => {
+    const fixture = await render(earlier(new Date('2026-09-01T09:00:00.000Z')));
+    const html = fixture.nativeElement as HTMLElement;
+
+    expect(html.querySelector('lib-quantity-reel')).not.toBeNull();
+    expect(html.querySelector('lib-circle-icon')).not.toBeNull();
+  });
+
+  it('draws the dated sentence when the server sent a date', async () => {
+    const fixture = await render(earlier(new Date('2026-09-01T09:00:00.000Z')));
+
+    // Which sentence, and not how it reads: the testing translator echoes a key
+    // without its values, so the date itself is asserted where it is composed,
+    // in `basket-labels.spec.ts`.
+    expect(text(fixture, '.skipped')).toContain('basket.skip.earlierOn');
+  });
+
+  it('says it plainly when the server sent no date', async () => {
+    // A guard rather than a case anybody meets, and it draws the undated
+    // sentence rather than a sentence with a hole in it.
+    const fixture = await render(earlier(null));
+
+    const said = text(fixture, '.skipped');
+    expect(said).toContain('basket.skip.earlier');
+    expect(said).not.toContain('basket.skip.earlierOn');
+  });
+
+  it('says nothing about a skip on a row that carries no note', async () => {
+    const fixture = await render(line());
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.skipped')
+    ).toBeNull();
+  });
+});
+
+/**
+ * "Bought here 2 of the last 6 times" (velista `0104`).
+ *
+ * The row draws what the pipeline hands it and decides nothing: the threshold and
+ * the filter are the pipeline's, and their specs are in `compose-basket-view`.
+ */
+describe('BasketRow: how often it was bought here', () => {
+  async function withUsual(usual: { bought: number; of: number } | null) {
+    const fixture = await render(line());
+    fixture.componentRef.setInput('usual', usual);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('draws the message it is handed, and says it with the row', async () => {
+    const fixture = await withUsual({ bought: 2, of: 6 });
+
+    expect(text(fixture, '.usual')).toBe('basket.view.usual.here');
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.body')
+        ?.getAttribute('aria-label')
+    ).toContain('basket.view.usual.here');
+  });
+
+  it('draws nothing when it is handed nothing', async () => {
+    const fixture = await withUsual(null);
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.usual')
+    ).toBeNull();
+  });
+
+  /**
+   * The copy itself, through a real i18next, because the testing translator echoes
+   * keys: pluralised on the purchases counted, in both languages, with the
+   * server's two numbers and never the street.
+   */
+  it.each([
+    ['en', 6, 2, 'Bought here 2 of the last 6 times'],
+    ['en', 1, 1, 'Bought here the one time it was bought'],
+    ['es', 6, 2, 'Comprado aquí 2 de las últimas 6 veces'],
+    ['es', 1, 1, 'Comprado aquí la única vez que se compró'],
+  ])(
+    'reads in %s for %i counted and %i here',
+    async (lng, of, bought, said) => {
+      const { readFileSync } = await import('fs');
+      const { resolve } = await import('path');
+      const i18next = (await import('i18next')).default;
+      const file = resolve(__dirname, `../../../../ui/assets/i18n/${lng}.json`);
+      const instance = i18next.createInstance();
+      await instance.init({
+        lng,
+        resources: {
+          [lng]: { translation: JSON.parse(readFileSync(file, 'utf8')) },
+        },
+      });
+
+      expect(instance.t('basket.view.usual.here', { count: of, bought })).toBe(
+        said
+      );
+    }
+  );
+});

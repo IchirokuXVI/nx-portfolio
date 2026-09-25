@@ -29,6 +29,10 @@ export const ERROR_CATALOG: Record<
     en: 'You are no longer part of this shopping list.',
     es: 'Ya no formas parte de esta lista de la compra.',
   },
+  [ERROR_CODES.PARTICIPANT_EXPIRED]: {
+    en: 'Your access to this shopping list has ended. Ask the owner to add you.',
+    es: 'Tu acceso a esta lista de la compra ha terminado. Pide que te añadan.',
+  },
   [ERROR_CODES.FORBIDDEN]: {
     en: 'You do not have permission to do that.',
     es: 'No tienes permiso para hacer eso.',
@@ -66,20 +70,22 @@ export const ERROR_CATALOG: Record<
   // move of what is outstanding, in either direction. One code with one sentence
   // that is true of every one of them beats a sentence that is exact for the
   // first caller and wrong for the second.
-  [ERROR_CODES.GENERATED_LIST_FINISHED]: {
+  [ERROR_CODES.BASKET_FINISHED]: {
     en: 'This basket is finished, so it cannot be changed.',
     es: 'Esta cesta está terminada, así que no se puede modificar.',
   },
-  // Both carry their number in the message rather than only in a code, because
+  // A fact about the basket, and what to do about it is implied: the shop was
+  // chosen when the basket was started, so there is nothing to pick now.
+  [ERROR_CODES.BASKET_SHOP_LOCKED]: {
+    en: 'This basket was started at a shop, and that shop cannot be changed.',
+    es: 'Esta cesta se empezó en una tienda, y esa tienda no se puede cambiar.',
+  },
+  // It carries its number in the message rather than only in a code, because
   // the client's job is to say it: "somebody else moved this, it is 3 now" is
-  // actionable and "that failed" is not (plan 0057, sections 5 and 5.2).
+  // actionable and "that failed" is not (plan 0057, section 5).
   [ERROR_CODES.STALE_QUANTITY]: {
     en: 'Somebody else changed this while you were looking at it. It is {current} now.',
     es: 'Alguien más cambió esto mientras lo mirabas. Ahora es {current}.',
-  },
-  [ERROR_CODES.BELOW_SETTLED]: {
-    en: 'This basket has already bought {floor}, so it cannot go below that.',
-    es: 'Esta cesta ya ha comprado {floor}, así que no puede bajar de ahí.',
   },
   // Phrased about the account rather than about the request, and it says how the
   // state ends, because the two things an operator needs are "waiting is what
@@ -147,6 +153,19 @@ export const ERROR_CATALOG: Record<
   [ERROR_CODES.BRAND_LINK_KEEPS_KEY]: {
     en: 'A spelling of another brand keeps its key. Register the other spelling as its own brand.',
     es: 'La grafía de otra marca conserva su clave. Registra la otra grafía como una marca propia.',
+  },
+  // The three refusals of the places queue (plan 0152).
+  [ERROR_CODES.PLACE_ALREADY_IMPORTED]: {
+    en: 'That place is already imported into the catalog.',
+    es: 'Ese lugar ya está importado en el catálogo.',
+  },
+  [ERROR_CODES.PLACE_MATCHES_LOCATION]: {
+    en: 'The catalog already holds a shop that may be this place. Link it, or create a new shop anyway.',
+    es: 'El catálogo ya tiene una tienda que puede ser este lugar. Enlázala o crea una tienda nueva de todos modos.',
+  },
+  [ERROR_CODES.SCOPE_NOT_FOUND]: {
+    en: 'The chain has no price scope with the key this place declares. Create that scope first.',
+    es: 'La cadena no tiene un ámbito de precios con la clave que declara este lugar. Crea ese ámbito primero.',
   },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',

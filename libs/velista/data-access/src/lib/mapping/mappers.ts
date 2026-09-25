@@ -1,8 +1,10 @@
 import {
+  BASKET_KIND_FALLBACK,
+  BASKET_KINDS,
+  BASKET_STATUS_FALLBACK,
+  BASKET_STATUSES,
   COMMENT_TRANSCRIPTION_FALLBACK,
   COMMENT_TRANSCRIPTIONS,
-  GENERATED_LIST_STATUS_FALLBACK,
-  GENERATED_LIST_STATUSES,
   GENERATION_SCOPE_FALLBACK,
   GENERATION_SCOPES,
   LINE_APPROVAL_STATUS_FALLBACK,
@@ -14,6 +16,7 @@ import {
   POSTAL_CODE_SOURCES,
   PRICE_SOURCE_KIND_FALLBACK,
   PRICE_SOURCE_KINDS,
+  PRICE_UNIT_BASES,
   PRODUCT_CATEGORIES,
   PRODUCT_CATEGORY_FALLBACK,
   SETTLEMENT_OUTCOME_FALLBACK,
@@ -27,20 +30,22 @@ import {
   ZONE_STATUS_FALLBACK,
   ZONE_STATUSES,
   type AlsoOnPlaceVm,
+  type AppState,
   type AssistantChoice,
   type AssistantListLink,
   type AssistantReply,
+  type BasketRun,
+  type BasketSummary,
   type CatalogItem,
   type CatalogScope,
   type CatalogSuggestion,
+  type CatalogSynonyms,
   type ChainPreference,
+  type ChainPrice,
   type Comment,
   type CommentRecording,
   type CommentTranscription,
   type Contact,
-  type GeneratedListRun,
-  type GeneratedListSkippedLine,
-  type GeneratedListSummary,
   type Line,
   type LineSettlement,
   type ListAccessEntry,
@@ -61,7 +66,7 @@ import {
   type ProfilePostalCode,
   type ResolvedPostalCode,
   type SessionTokens,
-  type SharedGeneratedListSummary,
+  type SharedBasketSummary,
   type ShoppingList,
   type ShoppingListSummary,
   type ShoppingProfile,
@@ -79,6 +84,7 @@ import {
   nullableStr,
   numOr,
   oneOf,
+  oneOfOrNull,
   str,
   strOr,
 } from './primitives';
@@ -478,7 +484,23 @@ export function toLineSettlement(raw: unknown): LineSettlement | null {
     // Absent against a backend before luna `0054`, which reads as null: a history
     // with nothing marked is exactly what a deployment that cannot revert produces.
     revertedAt: date(raw['revertedAt']),
+    // Both or neither: an amount in no currency cannot be printed honestly.
+    ...paidOf(raw['pricePaidCents'], raw['pricePaidCurrency']),
   };
+}
+
+/** A unit price and its currency, or two nulls when either is missing. */
+function paidOf(
+  cents: unknown,
+  currency: unknown
+): { unitPriceCents: number | null; currency: string | null } {
+  const code = str(currency);
+  return typeof cents === 'number' &&
+    Number.isFinite(cents) &&
+    code !== null &&
+    code.trim() !== ''
+    ? { unitPriceCents: Math.round(cents), currency: code }
+    : { unitPriceCents: null, currency: null };
 }
 
 /**
@@ -543,7 +565,10 @@ export function toProductOffer(raw: unknown): ProductOffer | null {
  * brand once per carton size. They were on the wire all along and dropped here,
  * which is what made those rows identical on screen.
  */
-export function toCatalogItem(raw: unknown): CatalogItem | null {
+export function toCatalogItem(
+  raw: unknown,
+  chains: ReadonlyMap<string, Supermarket> = NO_CHAINS
+): CatalogItem | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -552,6 +577,9 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
   if (id === null) {
     return null;
   }
+
+  const bestOffer = raw['bestOffer'];
+  const offer = toProductOffer(bestOffer);
 
   return {
     id,
@@ -567,8 +595,121 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
       PRODUCT_CATEGORIES,
       PRODUCT_CATEGORY_FALLBACK
     ),
-    offer: toProductOffer(raw['bestOffer']),
+    offer,
+    // Null with no offer, so a basis can never describe a price that is not
+    // there. The browse mapper's rule for the same field.
+    unitBasis:
+      offer !== null && isRecord(bestOffer)
+        ? oneOfOrNull(bestOffer['unitBasis'], PRICE_UNIT_BASES)
+        : null,
+    chainPrices: toChainPrices(raw['offers'], chains),
+    imageUrl: nullableStr(raw['imageUrl']),
+    packCount: toPackCount(raw['packCount']),
   };
+}
+
+/** The default for every read that carries no scope map: nothing can be named. */
+const NO_CHAINS: ReadonlyMap<string, Supermarket> = new Map();
+
+/**
+ * Every chain's price, cheapest first, one per chain (velista `0101`).
+ *
+ * An offer whose scope the map does not name is dropped, never guessed: the
+ * gateway leaves out a scope it cannot name (backend `0161`, section 3), and a
+ * price the card cannot attribute is not a chain's price. A chain priced in two
+ * scopes keeps its cheapest. An offer with no price sorts after every one that
+ * has one, so the chain named first is the chain the card's price came from.
+ */
+function toChainPrices(
+  raw: unknown,
+  chains: ReadonlyMap<string, Supermarket>
+): readonly ChainPrice[] {
+  if (chains.size === 0) {
+    return [];
+  }
+
+  const cheapest = new Map<string, ChainPrice>();
+  for (const offer of mapArray(raw, toProductOffer)) {
+    const chain = chains.get(offer.priceScopeId);
+    if (chain === undefined) {
+      continue;
+    }
+    const held = cheapest.get(chain.id);
+    if (held === undefined || cheaper(offer, held.offer)) {
+      cheapest.set(chain.id, { chain, offer });
+    }
+  }
+
+  // A stable sort, so two chains at the same price keep the server's order.
+  return [...cheapest.values()].sort((a, b) =>
+    cheaper(a.offer, b.offer) ? -1 : cheaper(b.offer, a.offer) ? 1 : 0
+  );
+}
+
+/** Whether `a` is the lower price. A null price is never lower than a number. */
+function cheaper(a: ProductOffer, b: ProductOffer): boolean {
+  if (a.price === null) {
+    return false;
+  }
+  return b.price === null || a.price < b.price;
+}
+
+/**
+ * How many units the pack holds (backend `0162`): a whole number from 2, or
+ * null. Anything else reads as not a pack, because "Pack 1" or "Pack 2,5" drawn
+ * beside a product is worse than drawing nothing.
+ */
+function toPackCount(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 2
+    ? raw
+    : null;
+}
+
+/**
+ * The chain behind every scope a suggest response names (backend `0161`,
+ * section 3), keyed by scope id. An entry that cannot name a chain is left
+ * out, so the offers that quote it are left out of the card too.
+ */
+function toScopeChains(raw: unknown): ReadonlyMap<string, Supermarket> {
+  const chains = new Map<string, Supermarket>();
+  if (!Array.isArray(raw)) {
+    return chains;
+  }
+  for (const entry of raw) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+    const scopeId = str(entry['priceScopeId']);
+    const chainId = str(entry['supermarketId']);
+    if (scopeId === null || chainId === null) {
+      continue;
+    }
+    chains.set(scopeId, {
+      id: chainId,
+      name: toLocalizedName(entry['supermarketName']),
+    });
+  }
+  return chains;
+}
+
+/**
+ * From `catalog.CatalogSuggestResponse`, the answer both suggest routes give:
+ * the suggestions, with every offer's chain resolved against the response's
+ * own scope map (velista `0101`). Empty for a body that is not one.
+ *
+ * The order is the server's and is never re-sorted, for the reason
+ * {@link toCatalogSuggestion} gives.
+ */
+export function toCatalogSuggestions(
+  body: unknown
+): readonly CatalogSuggestion[] {
+  if (!isRecord(body)) {
+    return [];
+  }
+  const chains = toScopeChains(body['scopes']);
+  return mapArray(body['suggestions'], (raw) =>
+    toCatalogSuggestion(raw, chains)
+  );
 }
 
 /**
@@ -585,7 +726,10 @@ export function toCatalogItem(raw: unknown): CatalogItem | null {
  * the prices, the scopes or the synonyms that produced the first one (velista
  * plan 0043, section 6).
  */
-export function toCatalogSuggestion(raw: unknown): CatalogSuggestion | null {
+export function toCatalogSuggestion(
+  raw: unknown,
+  chains: ReadonlyMap<string, Supermarket> = NO_CHAINS
+): CatalogSuggestion | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -613,11 +757,39 @@ export function toCatalogSuggestion(raw: unknown): CatalogSuggestion | null {
           // key here reads as a catalog with no prices in it rather than as a
           // mistake.
           offer: toProductOffer(groupOffer['offer']),
+          // The reveal's products (backend `0161`), each with its one best
+          // price. Absent on an older gateway, which draws a reveal of none.
+          members: mapArray(groupOffer['members'], (member) =>
+            toCatalogItem(member, chains)
+          ),
+          // What the card names when a synonym and not the name matched
+          // (velista `0108`). Read off the same `ProductGroupView` the name is.
+          synonyms: toCatalogSynonyms(
+            isRecord(groupOffer['group'])
+              ? groupOffer['group']['synonyms']
+              : undefined
+          ),
         };
   }
 
-  const item = toCatalogItem(raw['item']);
+  const item = toCatalogItem(raw['item'], chains);
   return item === null ? null : { kind: 'item', item };
+}
+
+/**
+ * From `catalog.LocalizedSynonyms`: each language's list, with anything that is
+ * not a word left out. Both lists empty for a body that is not one.
+ */
+export function toCatalogSynonyms(raw: unknown): CatalogSynonyms {
+  if (!isRecord(raw)) {
+    return { en: [], es: [] };
+  }
+  const words = (list: unknown): readonly string[] =>
+    mapArray(list, (word) => {
+      const text = str(word)?.trim() ?? '';
+      return text === '' ? null : text;
+    });
+  return { en: words(raw['en']), es: words(raw['es']) };
 }
 
 /** From `catalog.ProductGroupView`. What "milk" means before it means a brand. */
@@ -813,6 +985,28 @@ export function toUserProfile(raw: unknown): UserProfile | null {
     email: nullableStr(raw['email']),
     emailVerified: raw['emailVerified'] === true,
     displayName: nullableStr(raw['displayName']),
+    // Left off entirely when the body carries none, rather than set to two nulls. The
+    // rename's answer has no `appState`, and two nulls there would read as a new
+    // account and send the setup guard after somebody who finished it an hour ago.
+    ...(isRecord(raw['appState'])
+      ? { appState: toAppState(raw['appState']) }
+      : {}),
+  };
+}
+
+/**
+ * From `UserAppStateView`, on `me` and as the answer of `PATCH /v1/account/app-state`.
+ *
+ * A timestamp that is not a string reads as null, "not yet". Of the two ways to be
+ * wrong that is the cheap one: the setup is offered once more, where the other way
+ * would hide it from an account that never saw it.
+ */
+export function toAppState(raw: unknown): AppState {
+  const record = isRecord(raw) ? raw : {};
+
+  return {
+    setupCompletedAt: nullableStr(record['setupCompletedAt']),
+    tourSeenAt: nullableStr(record['tourSeenAt']),
   };
 }
 
@@ -1167,7 +1361,7 @@ export function toProfileGenerationScope(
 }
 
 /** From `PostalCodeCoverageView`. */
-function toPostalCodeCoverage(raw: unknown): PostalCodeCoverage | null {
+export function toPostalCodeCoverage(raw: unknown): PostalCodeCoverage | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -1196,7 +1390,7 @@ export function toCatalogScope(raw: unknown): CatalogScope | null {
 }
 
 /**
- * From `GeneratedListSummaryView` (backend `0050` section 7).
+ * From `BasketHistoryView` (backend `0050` section 7).
  *
  * `name` is `nullableStr` for `toShoppingProfile`'s reason: null is a basket nobody
  * named, which this client displays as its localized generation date, and collapsing it
@@ -1208,9 +1402,7 @@ export function toCatalogScope(raw: unknown): CatalogScope | null {
  * fabricated `new Date()` would sort itself to the top of somebody's history and title
  * itself today. Dropping it costs one row and is counted, per rule D4.
  */
-export function toGeneratedListSummary(
-  raw: unknown
-): GeneratedListSummary | null {
+export function toBasketSummary(raw: unknown): BasketSummary | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -1223,12 +1415,9 @@ export function toGeneratedListSummary(
 
   return {
     id,
+    kind: oneOf(raw['kind'], BASKET_KINDS, BASKET_KIND_FALLBACK),
     name: nullableStr(raw['name']),
-    status: oneOf(
-      raw['status'],
-      GENERATED_LIST_STATUSES,
-      GENERATED_LIST_STATUS_FALLBACK
-    ),
+    status: oneOf(raw['status'], BASKET_STATUSES, BASKET_STATUS_FALLBACK),
     generatedAt,
     lineCount: numOr(raw['lineCount'], 0),
     settledLineCount: numOr(raw['settledLineCount'], 0),
@@ -1243,16 +1432,16 @@ export function toGeneratedListSummary(
 }
 
 /**
- * From `SharedGeneratedListView` (backend `0114`, section 8): a summary plus who
+ * From `SharedBasketHeaderView` (backend `0114`, section 8): a summary plus who
  * shared it and when.
  *
  * The owner and the date are required. A row with no owner could not say whose basket
  * it is, which is the one thing the Shared lists tab adds to a row.
  */
-export function toSharedGeneratedListSummary(
+export function toSharedBasketSummary(
   raw: unknown
-): SharedGeneratedListSummary | null {
-  const summary = toGeneratedListSummary(raw);
+): SharedBasketSummary | null {
+  const summary = toBasketSummary(raw);
   if (summary === null || !isRecord(raw)) {
     return null;
   }
@@ -1293,22 +1482,8 @@ export function toContact(raw: unknown): Contact | null {
     : { userId, zoneId, username };
 }
 
-/** From `GeneratedListSkippedLineView`. */
-function toGeneratedListSkippedLine(
-  raw: unknown
-): GeneratedListSkippedLine | null {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  const listId = str(raw['listId']);
-  return listId === null
-    ? null
-    : { listId, content: strOr(raw['content'], '') };
-}
-
 /**
- * From `GeneratedListRunResult` (backend `0050` section 4), keeping the summary alone.
+ * From `BasketRunResult` (backend `0050` section 4), keeping the summary alone.
  *
  * The create answers the whole basket, lines and origins and options included, and this
  * client reads a summary out of it. That is deliberate: the sheet's next act is to
@@ -1320,19 +1495,19 @@ function toGeneratedListSkippedLine(
  * ago, and is read rather than assumed for the idempotent replay: the same key returns
  * the **first** run, which by then may have been half shopped.
  */
-export function toGeneratedListRun(raw: unknown): GeneratedListRun | null {
+export function toBasketRun(raw: unknown): BasketRun | null {
   if (!isRecord(raw)) {
     return null;
   }
 
-  const list = toGeneratedListFromView(raw['list']);
-  return list === null
-    ? null
-    : { list, skipped: mapArray(raw['skipped'], toGeneratedListSkippedLine) };
+  // Under `basket` since backend 0159. The old `list` key rides beside it for
+  // one release and is not read.
+  const list = toBasketFromView(raw['basket']);
+  return list === null ? null : { list };
 }
 
 /**
- * From `GeneratedListView`, the **whole** basket, keeping only what a summary holds.
+ * From `BasketHeaderView`, the **whole** basket, keeping only what a summary holds.
  *
  * The create answers one of these and so do the two owner realtime events, none of
  * which carry the two counts the summary listing serves, having sent the lines
@@ -1348,10 +1523,8 @@ export function toGeneratedListRun(raw: unknown): GeneratedListRun | null {
  * somebody worked through, and counting it would let an empty basket report itself
  * finished.
  */
-export function toGeneratedListFromView(
-  raw: unknown
-): GeneratedListSummary | null {
-  const summary = toGeneratedListSummary(raw);
+export function toBasketFromView(raw: unknown): BasketSummary | null {
+  const summary = toBasketSummary(raw);
   if (summary === null || !isRecord(raw)) {
     return null;
   }

@@ -1,9 +1,11 @@
 import {
   ITEM_PATTERNS,
+  type CatalogScopeView,
   type ItemPage,
   type ProductGroupOfferPage,
 } from '@portfolio/luna-shopper/contracts';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { CatalogSuggestService } from './catalog-suggest.service';
 import { CatalogSuggestController } from './catalog.controller';
 import { SuggestQueryDto } from './catalog.dto';
 
@@ -49,14 +51,23 @@ function build() {
   });
   // No scopes at all, which since plan 0069 is what an empty profile and a
   // profile that refused every shop near it both resolve to.
-  const forRead = jest.fn(async () => [] as string[]);
+  const describe = jest.fn(
+    async (): Promise<CatalogScopeView> => ({
+      priceScopeIds: [],
+      scopes: [],
+      coverage: [],
+      approximate: false,
+      profileId: null,
+      explicit: false,
+    })
+  );
   const controller = new CatalogSuggestController(
-    { send } as never,
+    new CatalogSuggestService({ send } as never),
     {
-      forRead,
+      describe,
     } as never
   );
-  return { controller, send, forRead };
+  return { controller, send, describe };
 }
 
 function query(): SuggestQueryDto {
@@ -83,13 +94,15 @@ describe('GET /v1/catalog/suggest with no scopes', () => {
   });
 
   it('sends the same empty scope set to both halves', async () => {
-    const { controller, send, forRead } = build();
+    const { controller, send, describe } = build();
 
-    await controller.suggest(USER, query());
+    const result = await controller.suggest(USER, query());
 
     // Resolved once, so the two reads cannot quote prices from different
     // places; empty here means neither quotes any.
-    expect(forRead).toHaveBeenCalledTimes(1);
+    expect(describe).toHaveBeenCalledTimes(1);
+    // Nothing priced, so no chain to name and no listing asked for.
+    expect(result.scopes).toEqual([]);
     for (const call of send.mock.calls) {
       expect(call[1]).toMatchObject({ priceScopeIds: [] });
     }

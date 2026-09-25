@@ -1,6 +1,6 @@
 import {
   displayNames,
-  type GeneratedListSummary,
+  type BasketSummary,
   type Identity,
   type MyZone,
 } from '@portfolio/velista/models';
@@ -40,13 +40,12 @@ function zone(overrides: Partial<MyZone> = {}): MyZone {
   };
 }
 
-function basket(
-  overrides: Partial<GeneratedListSummary> = {}
-): GeneratedListSummary {
+function basket(overrides: Partial<BasketSummary> = {}): BasketSummary {
   return {
     id: 'gl1',
+    kind: 'GENERATED',
     name: 'Saturday big shop',
-    status: 'ACTIVE',
+    status: 'OPEN',
     generatedAt: new Date('2026-08-21T10:00:00.000Z'),
     lineCount: 12,
     settledLineCount: 4,
@@ -58,7 +57,7 @@ function basket(
  * The container's own pairing of a listing with its names, so a spec cannot
  * accidentally test a card named from a different set than it was selected from.
  */
-function withNames(lists: readonly GeneratedListSummary[]) {
+function withNames(lists: readonly BasketSummary[]) {
   return {
     activeShoppingLists: lists,
     shoppingListNames: displayNames(lists, (date) =>
@@ -382,5 +381,43 @@ describe('selectHomeState', () => {
         shoppingList: { id: 'gl2', name: '2026-08-21 2' },
       });
     });
+  });
+});
+
+/**
+ * The permanent basket on the dashboard.
+ *
+ * It had a card of its own at the top of the dock until velista `0105`, which gave
+ * the way in to the basket tab. What stays true is that the trip card never counts
+ * it and never shows it: the history it links to does not list this basket.
+ */
+describe('selectHomeState: the permanent basket', () => {
+  it('has no card of its own on the dashboard', () => {
+    expect(select()).not.toHaveProperty('liveBasket');
+  });
+
+  it('is not counted by the card below it', () => {
+    // The strip below draws a trip somebody composed, with a date and a count of
+    // the others that links to a history this basket is not listed in.
+    const state = select({
+      ...withNames([
+        basket({ id: 'live', kind: 'LIVE', name: null }),
+        basket({ id: 'gl1' }),
+      ]),
+    });
+
+    expect(state).toMatchObject({
+      shoppingList: { id: 'gl1', otherActiveCount: 0 },
+    });
+  });
+
+  it('never leads that card either', () => {
+    // Newest first is the listing's order, so a permanent basket with a recent
+    // `generatedAt` would otherwise take the strip and draw a date nobody shopped.
+    const state = select({
+      ...withNames([basket({ id: 'live', kind: 'LIVE', name: null })]),
+    });
+
+    expect(state).toMatchObject({ shoppingList: null });
   });
 });

@@ -1,0 +1,45 @@
+<!--
+  The chevron beside the title, which is this pane's own way back to the form. It
+  changes nothing: a pick is the only thing that sets the shop.
+-->
+<div class="head">
+  <button
+    (click)="back.emit()"
+    [attr.aria-label]="'getList.shop.back' | rokuT"
+    #backButton
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
+  </button>
+  <h2 class="title" id="get-list-shop-title">
+    {{ 'getList.shop.label' | rokuT }}
+  </h2>
+  <!--
+    In the title row, reachable without scrolling (velista 0103). It asks for the
+    position only when pressed.
+  -->
+  <lib-near-me-button (pressed)="findNear()" [busy]="finding()" />
+</div>
+
+<!--
+  The body the basket's filter sheet draws too (velista 0102): the search, the chain
+  buttons, and the open chain's shops or the flat matches, one radio each.
+-->
+<lib-shop-picker
+  (chosen)="select($event)"
+  (picked)="pick($event)"
+  (queried)="onQuery($event)"
+  [chains]="chains()"
+  [groups]="groups()"
+  [matchCount]="matchCount()"
+  [matches]="matches()"
+  [near]="near()"
+  [openKey]="openKey()"
+  [openName]="openName()"
+  [pickedId]="pickedId()"
+  [query]="query()"
+  [recent]="recent()"
+  [state]="state()"
+  fieldId="get-list-shop-search"
+/>

@@ -17,6 +17,9 @@ import {
   chainNamesById,
   findBrand,
   findCanonicalBrand,
+  printedUnit,
+  sameBaseSize,
+  toBaseSize,
 } from './rules.mjs';
 
 /** Below this a decision is a REVIEW, whatever the model wrote. */
@@ -43,10 +46,16 @@ export const CONFIDENCE_THRESHOLD = 0.9;
  * one anybody has to weigh: the detail names the correct brand, so the second
  * attempt is asked a question the first one was not. Nothing is written until
  * it answers, and a second miss is the REVIEW a person reads.
+ *
+ * `LINK_TARGET_NOT_SHOWN` is the third (plan 0006). The model named a product
+ * the packet did not show it, which is a slip rather than a judgment about the
+ * candidates it did see, and the second attempt is told which ones it may
+ * name.
  */
 export const RETRYABLE_ISSUE_CODES = new Set([
   'NAME_GLITCH',
   'BRAND_IS_LINKED',
+  'LINK_TARGET_NOT_SHOWN',
 ]);
 
 /** Whether these issues are worth asking the same row about once more. */
@@ -177,6 +186,54 @@ function sameNumber(a, b) {
 }
 
 /**
+ * The issue a row whose EAN other queued rows of its chain share carries
+ * (plan 0006), or null when it shares none.
+ *
+ * Not a validator of the answer. It is a fact about the queue that `start`
+ * read, and it demotes whatever the model answered: a LINK cannot tell two
+ * products printing one barcode apart, because an equal EAN on both sides is
+ * exactly what passes the EAN check, and two CREATEs carrying one barcode
+ * collide on the catalog's unique EAN. So it is not retryable either, since
+ * no second answer changes it.
+ */
+export function sharedEanIssue(entry, sharedWith) {
+  if (!Array.isArray(sharedWith) || sharedWith.length === 0) {
+    return null;
+  }
+  return issue(
+    'SHARED_EAN',
+    `EAN ${entry?.ean ?? '(unknown)'} is also printed on queued entries ${sharedWith.join(', ')} of this chain, so a person tells them apart.`
+  );
+}
+
+/** A size as a person reads it, with its unit when there is one. */
+function describeSize(size, unit) {
+  return unit ? `${size} ${unit}` : String(size);
+}
+
+/**
+ * Whether the entry and the link target are one format (plan 0006).
+ *
+ * Both sides are converted to grams, millilitres or units first. The entry's
+ * unit is the word its `sizeFormat` ends in and the target's is its
+ * `defaultUnit`, so a chain printing 0.42 `kg` and a product of 420 `GRAM` are
+ * one format, and a weight is never the same format as a volume. When either
+ * unit is one the table cannot read, the two numbers are compared as they
+ * stand, which is what this check did before it read units at all.
+ */
+export function sameFormat(entry, linkTarget) {
+  const printed = printedUnit(entry.sizeFormat);
+  const entryBase = printed
+    ? toBaseSize(entry.unitSize, printed.unit, printed.factor)
+    : null;
+  const targetBase = toBaseSize(linkTarget.unitSize, linkTarget.defaultUnit);
+  if (entryBase && targetBase) {
+    return sameBaseSize(entryBase, targetBase);
+  }
+  return sameNumber(entry.unitSize, linkTarget.unitSize);
+}
+
+/**
  * Every check the library makes for itself, whatever the model's confidence was.
  *
  * A decision that fails any of them is demoted to REVIEW with the named issue,
@@ -187,6 +244,9 @@ export function validateDecision({
   entry,
   supermarket,
   linkTarget = null,
+  // Whether the id the LINK names was among the candidates this row was shown
+  // (plan 0006). Only `decide` knows, because only it holds the handout.
+  linkTargetShown = true,
   eanOwner = null,
   brands = new Map(),
   supermarkets = [],
@@ -269,7 +329,17 @@ export function validateDecision({
   }
 
   if (decision.decision === 'LINK') {
-    if (!linkTarget) {
+    if (!linkTargetShown) {
+      // A real id counts for nothing here. The model judged the candidates it
+      // was shown, and a product it was not shown is one nobody compared
+      // against the entry, however the model came to write its id.
+      issues.push(
+        issue(
+          'LINK_TARGET_NOT_SHOWN',
+          `${decision.itemId ?? decision.itemRef} was not among the candidates this entry was shown. Name one of them, or answer REVIEW.`
+        )
+      );
+    } else if (!linkTarget) {
       issues.push(
         issue(
           'LINK_TARGET_MISSING',
@@ -290,12 +360,12 @@ export function validateDecision({
         entry.unitSize !== undefined &&
         linkTarget.unitSize !== null &&
         linkTarget.unitSize !== undefined &&
-        !sameNumber(entry.unitSize, linkTarget.unitSize)
+        !sameFormat(entry, linkTarget)
       ) {
         issues.push(
           issue(
             'FORMAT_MISMATCH',
-            `The entry is ${entry.unitSize} and item ${linkTarget.id} is ${linkTarget.unitSize}. Same brand plus same format merges, and nothing else does (rule 1).`
+            `The entry is ${describeSize(entry.unitSize, entry.sizeFormat)} and item ${linkTarget.id} is ${describeSize(linkTarget.unitSize, linkTarget.defaultUnit)}. Same brand plus same format merges, and nothing else does (rule 1).`
           )
         );
       }

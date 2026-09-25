@@ -19,8 +19,10 @@ import {
   type CreateItemFromSourceEntryRequest,
   type ExportHarvestRunRequest,
   type HarvestRunExportResult,
+  type ItemSourceEntryPage,
   type ItemView,
   type ListBrandSuggestionsRequest,
+  type ListSourceEntriesByItemRequest,
   type ListSourceEntriesRequest,
   type SourceCatalogEntryPage,
   type SourceCatalogEntryView,
@@ -36,6 +38,7 @@ import {
   clampPageSize,
   ConflictException,
   decodeCursor,
+  describeError,
   encodeCursor,
   NotFoundException,
   ValidationException,
@@ -234,6 +237,88 @@ export class SourceEntryService {
     };
   }
 
+  /**
+   * The source rows that name one product, newest observation first (plan
+   * 0160), each with how many rows of its chain carry its EAN.
+   *
+   * Every row whose `itemId` is the product, whatever its status: an `ACTIVE`
+   * row is bound, a `CANDIDATE` row proposes it, and the status says which.
+   * The count is over every row of the chain, this one included, whatever
+   * their status, because a barcode the chain lists twice is the finding
+   * whether or not somebody rejected one of the two.
+   */
+  async listByItem(
+    req: ListSourceEntriesByItemRequest
+  ): Promise<ItemSourceEntryPage> {
+    await this.admin.requireAdmin(req);
+    const limit = clampPageSize(req.limit);
+    const cursor = decodeCursor(req.cursor) as EntryCursor | undefined;
+
+    const qb = this.entries
+      .createQueryBuilder('e')
+      .leftJoinAndSelect('e.prices', 'p')
+      .where('e."itemId" = :itemId', { itemId: req.itemId })
+      // The property path, for the reason `list` gives above.
+      .orderBy('e.lastSeenAt', 'DESC')
+      .addOrderBy('e.id', 'DESC')
+      .take(limit + 1);
+    if (cursor) {
+      qb.andWhere('(e."lastSeenAt", e.id) < (:cv, :cid)', {
+        cv: cursor.value,
+        cid: cursor.id,
+      });
+    }
+
+    const rows = await qb.getMany();
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+    const shared = await this.eanCounts(page);
+    return {
+      items: page.map((row) => ({
+        ...toSourceCatalogEntryView(row),
+        eanSharedBy: row.ean
+          ? (shared.get(`${row.supermarketId}|${row.ean}`) ?? 1)
+          : null,
+      })),
+      nextCursor:
+        hasMore && last
+          ? encodeCursor({ value: last.lastSeenAt.toISOString(), id: last.id })
+          : null,
+    };
+  }
+
+  /** How many rows each (chain, EAN) of these rows has, in one query. */
+  private async eanCounts(
+    rows: readonly SourceCatalogEntry[]
+  ): Promise<Map<string, number>> {
+    const eans = [
+      ...new Set(
+        rows.map((row) => row.ean).filter((ean): ean is string => !!ean)
+      ),
+    ];
+    const counts = new Map<string, number>();
+    if (eans.length === 0) {
+      return counts;
+    }
+    const found: { supermarketId: string; ean: string; count: number }[] =
+      await this.entries.query(
+        `
+        SELECT e."supermarketId"::text AS "supermarketId",
+               e."ean"                 AS "ean",
+               count(*)::int           AS "count"
+          FROM "source_catalog_entries" e
+         WHERE e."ean" = ANY($1::varchar[])
+         GROUP BY e."supermarketId", e."ean"
+        `,
+        [eans]
+      );
+    for (const row of found) {
+      counts.set(`${row.supermarketId}|${row.ean}`, row.count);
+    }
+    return counts;
+  }
+
   /** Bind a queued row to a product the catalog already holds, then the prices. */
   async accept(
     req: AcceptSourceEntryRequest
@@ -316,6 +401,9 @@ export class SourceEntryService {
             ? null
             : Number(entry.unitSize)
           : req.unitSize,
+      // The row's count unless the request names one (plan 0162).
+      packCount:
+        req.packCount === undefined ? (entry.packCount ?? null) : req.packCount,
       // Never from the chain (plan 0038, section 5.7): `imageUrl` comes from
       // Open Food Facts or the owner, and is never rehosted from a supermarket's
       // own photography.
@@ -755,7 +843,8 @@ export class SourceEntryService {
       return scopes.find((scope) => scope.externalKey)?.externalKey ?? null;
     } catch (error) {
       this.logger.warn(
-        `Could not read the scopes of ${supermarketId}: ${String(error)}`
+        `Could not read the scopes of ${supermarketId}: ` +
+          describeError(error).message
       );
       return null;
     }

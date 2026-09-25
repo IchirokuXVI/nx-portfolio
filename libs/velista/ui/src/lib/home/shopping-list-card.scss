@@ -70,6 +70,16 @@
   min-inline-size: 0;
 }
 
+// What the row is, above the name. Quieter than the name and in sentence case, so it
+// reads as a caption for the title rather than as a heading competing with it.
+.label {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 // A step down from the page card's `lg`: the name is the biggest thing in a strip two
 // lines tall, and it no longer has to hold its own against a section heading above it.
 .list-name {

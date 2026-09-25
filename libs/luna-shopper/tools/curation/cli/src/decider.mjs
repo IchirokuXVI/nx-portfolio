@@ -340,14 +340,17 @@ export function makeDecider({
      * the refreshed packet, writes nothing, and spends no retry: the model was
      * asked the wrong question rather than answering badly.
      */
-    decide(entryId, decision, { final = false } = {}) {
+    decide(rowId, decision, { final = false } = {}) {
       return call(
         'decide',
         [
           '--run-dir',
           runDir,
-          '--entry',
-          entryId,
+          // One flag for both deciders (plan 0005). The suggestions decider
+          // also reads `--entry` and the groups decider `--item`, so a row is
+          // named the same way whichever of them is running.
+          '--row',
+          rowId,
           ...(final ? ['--final'] : []),
           ...password,
         ],
@@ -361,8 +364,18 @@ export function makeDecider({
      * The last thing a run asks for, so it is also what closes the child. A
      * run that fails before it gets here is closed by `cli.mjs`, and `close` is
      * idempotent, so the two paths cannot fight.
+     *
+     * It runs on a failed walk too (plan 0005), and a walk can fail because
+     * the child died. So a child that has exited is replaced here, and only
+     * here: every other call after a death still fails, because a walk has no
+     * business going on in a process it cannot see. `end` only reads the run
+     * directory, so a fresh child writes the same report the old one would
+     * have written.
      */
     async end(usage) {
+      if (channel?.exited) {
+        channel = null;
+      }
       try {
         return await call('end', [
           '--run-dir',
@@ -381,6 +394,11 @@ export function makeDecider({
      * 2, which the one shot channel turned into a throw. There are no exit
      * codes inside a session, so the throw is raised here instead. It is the
      * contract callers have, accident of the exit code or not.
+     *
+     * A file with nothing in it to send is not a refusal (plan 0005). A run
+     * whose every row is a REVIEW is a finished run with nothing to apply, and
+     * the groups decider answers it `applied: false` because nothing was
+     * applied. So zero operations passes through as the answer it is.
      */
     async apply({ mainUrl, file, mainUser }) {
       try {
@@ -392,7 +410,7 @@ export function makeDecider({
           ...(mainUser ? ['--main-user', mainUser] : []),
           ...password,
         ]);
-        if (answer?.applied === false) {
+        if (answer?.applied === false && answer?.operations !== 0) {
           throw new Error(`apply failed: ${JSON.stringify(answer)}`);
         }
         return answer;

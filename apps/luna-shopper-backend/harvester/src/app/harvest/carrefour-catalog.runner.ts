@@ -222,6 +222,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         ean: null,
         unitSize: product.unitSize,
         sizeFormat: product.sizeFormat,
+        packCount: product.packCount,
         categoryPath: product.categoryPath,
         url: product.path,
         observedAt,

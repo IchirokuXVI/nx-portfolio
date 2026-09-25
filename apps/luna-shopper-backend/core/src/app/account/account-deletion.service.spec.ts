@@ -3,9 +3,17 @@ import {
   RealtimeEvent,
   ZoneStatus,
 } from '@portfolio/luna-shopper/contracts';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { Zone, ZoneMembership } from '../entities';
 import { AccountDeletionService } from './account-deletion.service';
 import { ANONYMIZED_USERNAME_PREFIX } from './anonymize';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 type MembershipRepo = {
   find: jest.Mock;
@@ -44,17 +52,18 @@ function build(opts: {
   };
 
   // A departing account's baskets go with it (plan 0050, section 7), and they go
-  // first: a generated list belongs to a person rather than to a zone, so
+  // first: a basket belongs to a person rather than to a zone, so
   // somebody who left every group still has one and the membership loop below
   // would never reach it.
-  const generatedLists = { deleteForUser: jest.fn().mockResolvedValue(0) };
+  const baskets = { deleteForUser: jest.fn().mockResolvedValue(0) };
   const svc = new AccountDeletionService(
     zonesRepo as never,
     membershipsRepo as never,
     events as never,
     zoneCounts as never,
     store as never,
-    generatedLists as never
+    baskets as never,
+    announcer
   );
   return {
     svc,
@@ -63,13 +72,13 @@ function build(opts: {
     events,
     store,
     zoneCounts,
-    generatedLists,
+    baskets,
   };
 }
 
 describe('AccountDeletionService.handleUserDeleted', () => {
   it('deletes the departing account’s baskets (plan 0050, section 7)', async () => {
-    const { svc, generatedLists } = build({
+    const { svc, baskets } = build({
       memberships: [
         { id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
       ],
@@ -84,17 +93,17 @@ describe('AccountDeletionService.handleUserDeleted', () => {
 
     await svc.handleUserDeleted('u1');
 
-    expect(generatedLists.deleteForUser).toHaveBeenCalledWith('u1');
+    expect(baskets.deleteForUser).toHaveBeenCalledWith('u1');
   });
 
   it('deletes them even for a user who held no membership at all', async () => {
     // The case the membership loop cannot reach, and the reason the call sits
     // outside it: a basket belongs to a person rather than to a zone.
-    const { svc, generatedLists } = build({ memberships: [], zones: {} });
+    const { svc, baskets } = build({ memberships: [], zones: {} });
 
     await svc.handleUserDeleted('u-nomad');
 
-    expect(generatedLists.deleteForUser).toHaveBeenCalledWith('u-nomad');
+    expect(baskets.deleteForUser).toHaveBeenCalledWith('u-nomad');
   });
 
   it('owner path: marks the owned zone for deletion and retires the membership', async () => {
@@ -213,7 +222,8 @@ describe('AccountDeletionService.usersWithoutMemberships', () => {
       { emit: jest.fn() } as never,
       { emitZoneCounts: jest.fn() } as never,
       { firstSeen: jest.fn() } as never,
-      { deleteForUser: jest.fn() } as never
+      { deleteForUser: jest.fn() } as never,
+      announcer
     );
     return svc;
   }

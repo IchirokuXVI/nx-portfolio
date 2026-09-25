@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import {
   BRAND_PATTERNS,
+  BrandBatchOutcome,
   SOURCE_ENTRY_PATTERNS,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -625,6 +626,120 @@ describe('the brand routes, over HTTP', () => {
         query: 'el pozo',
         limit: 25,
       });
+    } finally {
+      await nest.close();
+    }
+  });
+});
+
+describe('registering many brands, over HTTP (plan 0160)', () => {
+  const post = (origin: string, body: unknown) =>
+    fetch(`${origin}/v1/admin/catalog/brands/register-many`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it('sends the names with the operator credential and answers one outcome per name', async () => {
+    const results = {
+      results: [
+        {
+          label: 'Mahou',
+          outcome: BrandBatchOutcome.CREATED,
+          brandId: BRAND.id,
+          linkedItems: 38,
+          reason: null,
+        },
+        {
+          label: 'ELPOZO',
+          outcome: BrandBatchOutcome.EXISTS,
+          brandId: SPELLING.id,
+          linkedItems: null,
+          reason: null,
+        },
+        {
+          label: '---',
+          outcome: BrandBatchOutcome.REFUSED,
+          brandId: null,
+          linkedItems: null,
+          reason: { code: 'brand_label_empty', detail: 'No key.' },
+        },
+      ],
+    };
+    const { nest, sent, origin } = await boot({
+      [BRAND_PATTERNS.registerMany]: results,
+    });
+    try {
+      const res = await post(origin, {
+        brands: [
+          { label: 'Mahou' },
+          { label: 'ELPOZO' },
+          {
+            label: '---',
+            privateLabelSupermarketId: '33333333-3333-4333-8333-333333333333',
+          },
+        ],
+      });
+
+      // A refused name is an outcome, not a failed request.
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual(results);
+      expect(sent[0].subject).toBe(BRAND_PATTERNS.registerMany);
+      expect(sent[0].payload).toEqual({
+        userId: 'admin-1',
+        adminToken: 'operator-token',
+        brands: [
+          { label: 'Mahou' },
+          { label: 'ELPOZO' },
+          {
+            label: '---',
+            privateLabelSupermarketId: '33333333-3333-4333-8333-333333333333',
+          },
+        ],
+      });
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it.each([
+    ['an empty list', { brands: [] }],
+    [
+      '201 names',
+      {
+        brands: Array.from({ length: 201 }, (_, i) => ({ label: `B${i}` })),
+      },
+    ],
+    [
+      'a chain that is not a uuid',
+      {
+        brands: [
+          { label: 'Hacendado', privateLabelSupermarketId: 'mercadona' },
+        ],
+      },
+    ],
+    ['a label over the length', { brands: [{ label: 'x'.repeat(121) }] }],
+  ])('refuses %s with a 400 and sends nothing', async (_, body) => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await post(origin, body);
+      expect(res.status).toBe(400);
+      expect(sent).toHaveLength(0);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('takes 200 names, the most one batch may carry', async () => {
+    const { nest, sent, origin } = await boot({
+      [BRAND_PATTERNS.registerMany]: { results: [] },
+    });
+    try {
+      const res = await post(origin, {
+        brands: Array.from({ length: 200 }, (_, i) => ({ label: `B${i}` })),
+      });
+      expect(res.status).toBe(201);
+      expect(sent[0].payload['brands']).toHaveLength(200);
     } finally {
       await nest.close();
     }

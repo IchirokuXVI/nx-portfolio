@@ -1,3 +1,4 @@
+import type { BasketAddress } from '@portfolio/velista/models';
 import {
   shareUrl as absoluteShareUrl,
   appPath,
@@ -22,7 +23,17 @@ export const BASKET_PATHS = {
   /** The history listing (`0045`), and the prefix the basket sits under. */
   list: 'shopping-lists',
   /** One basket, the screen `0044` is about. Takes a generated list id. */
-  basket: 'shopping-lists/:generatedListId',
+  basket: 'shopping-lists/:basketId',
+  /**
+   * The caller's own permanent basket (velista `0091`, section 2.1).
+   *
+   * **One stable URL that is the same for every person**, which is what a
+   * dashboard card and an installed app's shortcut need. It is an alias for "my
+   * own": the page behind it is the same page `basket` reaches, and a `LIVE`
+   * basket somebody **else** owns is still opened by its id, from a link or from
+   * the shared tab.
+   */
+  live: 'shopping-lists/live',
   /**
    * The guest join screen, on a short segment because it is the one path in this
    * app that gets pasted into a group chat and read aloud.
@@ -34,24 +45,41 @@ export const BASKET_PATHS = {
   join: 's/:secret',
 } as const;
 
-/** The path to one basket. `appPath` puts the mount and the locale in front. */
+/**
+ * The path to one basket. `appPath` puts the mount and the locale in front.
+ *
+ * It takes a {@link BasketAddress} rather than an id since velista `0091`, so
+ * that one call site serves both routes: a sheet over the permanent basket
+ * dismisses to `shopping-lists/live` and the same code over a generated one
+ * dismisses to its id.
+ *
+ * **Null is the store letting the basket go**, which is the page being left, and
+ * it lands on the history. Nothing navigates there in practice — a sheet is
+ * destroyed with the page it covers — and it is a destination rather than a
+ * thrown error because a dismissal that cannot fail is worth more here than a
+ * report of a state nobody can reach.
+ */
 export function basketPath(
   locale: string,
   basePath: string,
-  generatedListId: string
+  address: BasketAddress | null
 ): string {
-  return appPath(locale, basePath, BASKET_PATHS.list, generatedListId);
+  if (address === null) {
+    return appPath(locale, basePath, BASKET_PATHS.list);
+  }
+
+  return address === 'live'
+    ? appPath(locale, basePath, BASKET_PATHS.live)
+    : appPath(locale, basePath, BASKET_PATHS.list, address.basketId);
 }
 
 /**
- * The settle sheet's own URL, which is where the two sheets over it go back to.
+ * The settle sheet's own URL, addressed by the **row key** (velista `0090`).
  *
- * A line's units sheet (`0055`) and its send sheet (`0056`) are both reached from
- * the settle sheet, so dismissing one of them onto the basket would take the person
- * two screens back from one gesture. They name this instead, in full, for the reason
- * every dismissal in this app names its page in full: a relative climb makes a
- * component's correctness depend on how many segments some other file's path
- * happens to have (plan 0031).
+ * Every caller that opens the sheet goes through it, and so does the sheet itself
+ * when its row is re-keyed underneath it: a row's key is its anchor's line id, and
+ * the anchor moves when a rename merges two rows or the anchor is bought to zero.
+ * One function means the replacement URL and the opening URL cannot differ.
  *
  * The `sheet` marker is stamped by {@link sheetSegments} rather than typed, because
  * a URL written by hand is the one that can quietly opt out of the rule.
@@ -59,12 +87,12 @@ export function basketPath(
 export function settleSheetPath(
   locale: string,
   basePath: string,
-  generatedListId: string,
-  lineId: string
+  address: BasketAddress | null,
+  rowKey: string
 ): string {
-  return `${basketPath(locale, basePath, generatedListId)}/${sheetSegments(
-    'lines',
-    lineId,
+  return `${basketPath(locale, basePath, address)}/${sheetSegments(
+    'rows',
+    rowKey,
     'settle'
   ).join('/')}`;
 }
@@ -80,9 +108,9 @@ export function settleSheetPath(
 export function filterSheetPath(
   locale: string,
   basePath: string,
-  generatedListId: string
+  address: BasketAddress | null
 ): string {
-  return `${basketPath(locale, basePath, generatedListId)}/${sheetSegments(
+  return `${basketPath(locale, basePath, address)}/${sheetSegments(
     'filter'
   ).join('/')}`;
 }
@@ -91,9 +119,9 @@ export function filterSheetPath(
 export function shopPickerPath(
   locale: string,
   basePath: string,
-  generatedListId: string
+  address: BasketAddress | null
 ): string {
-  return `${basketPath(locale, basePath, generatedListId)}/${sheetSegments(
+  return `${basketPath(locale, basePath, address)}/${sheetSegments(
     'filter',
     'shop'
   ).join('/')}`;

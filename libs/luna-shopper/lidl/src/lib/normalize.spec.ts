@@ -13,6 +13,7 @@ import {
   openingHoursLine,
 } from './normalize';
 import { parseFlat, readProductState } from './nuxt-payload';
+import { packCountIn } from './size';
 import type { LidlListRow } from './types';
 
 /**
@@ -91,6 +92,11 @@ describe('normalizeListPage', () => {
     ]);
     expect(page.rows.length - kept.length).toBeGreaterThan(0);
   });
+
+  it('prints a size whose N is the pack count (plan 0162)', () => {
+    const [almonds] = page.rows;
+    expect(packCountIn(almonds.sizeFormat)).toBe(4);
+  });
 });
 
 describe('normalizeProduct', () => {
@@ -160,6 +166,8 @@ describe('normalizeProduct', () => {
     expect(product?.unitSize).toBe(400);
     expect(product?.unit).toBe(UnitOfMeasure.GRAM);
     expect(product?.sizeFormat).toBe('400 g');
+    // A single size is not a pack (plan 0162).
+    expect(product?.packCount).toBeNull();
     expect(product?.category).toBe(ItemCategory.PRODUCE);
   });
 

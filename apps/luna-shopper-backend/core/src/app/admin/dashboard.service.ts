@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   ADMIN_DASHBOARD_ACTIVITY_LIMIT,
-  GeneratedListStatus,
+  BasketKind,
+  BasketStatus,
   MembershipStatus,
   ZoneStatus,
   type AdminCoreDashboard,
@@ -14,7 +15,7 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository, type ObjectLiteral } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
-import { GeneratedList, ShoppingList, Zone, ZoneMembership } from '../entities';
+import { Basket, ShoppingList, Zone, ZoneMembership } from '../entities';
 import { CorePlatformAdminService } from './platform-admin.service';
 
 /**
@@ -37,8 +38,8 @@ export class CoreDashboardService {
     private readonly memberships: Repository<ZoneMembership>,
     @InjectRepository(ShoppingList)
     private readonly lists: Repository<ShoppingList>,
-    @InjectRepository(GeneratedList)
-    private readonly baskets: Repository<GeneratedList>,
+    @InjectRepository(Basket)
+    private readonly baskets: Repository<Basket>,
     private readonly gate: CorePlatformAdminService,
     private readonly audit: CoreAuditService
   ) {}
@@ -108,31 +109,49 @@ export class CoreDashboardService {
   }
 
   /**
-   * Baskets by status.
+   * Baskets by status, and the permanent ones beside them.
    *
-   * `total` is sent rather than derived from the two. `ACTIVE` is never written,
-   * so the live basket is `DRAFT`, and the two reported statuses fall short of
-   * the total exactly when an `ARCHIVED` row exists.
+   * `total`, `open` and `finished` count **trips** (plan 0133, section 6): the
+   * baskets somebody composed. `open` and `finished` fall short of the total
+   * exactly when an `ARCHIVED` row exists, which is why the total is sent rather
+   * than derived.
+   *
+   * `live` counts the permanent baskets and is deliberately outside the total.
+   * One row per person is a different number from how many trips have been
+   * composed, and adding them would make a chart of trips move when somebody
+   * signs up.
    */
   private async countBaskets(): Promise<AdminCoreDashboard['baskets']> {
     const row = await this.baskets
       .createQueryBuilder('g')
-      .select('count(*)::int', 'total')
-      .addSelect(`count(*) FILTER (WHERE g.status = :draft)::int`, 'draft')
+      .select(`count(*) FILTER (WHERE g.kind = :generated)::int`, 'total')
       .addSelect(
-        `count(*) FILTER (WHERE g.status = :completed)::int`,
-        'completed'
+        `count(*) FILTER (WHERE g.kind = :generated AND g.status = :open)::int`,
+        'open'
       )
+      .addSelect(
+        `count(*) FILTER (WHERE g.kind = :generated AND g.status = :finished)::int`,
+        'finished'
+      )
+      .addSelect(`count(*) FILTER (WHERE g.kind = :live)::int`, 'live')
       .setParameters({
-        draft: GeneratedListStatus.DRAFT,
-        completed: GeneratedListStatus.COMPLETED,
+        generated: BasketKind.GENERATED,
+        live: BasketKind.LIVE,
+        open: BasketStatus.OPEN,
+        finished: BasketStatus.FINISHED,
       })
-      .getRawOne<{ total: number; draft: number; completed: number }>();
+      .getRawOne<{
+        total: number;
+        open: number;
+        finished: number;
+        live: number;
+      }>();
 
     return {
       total: row?.total ?? 0,
-      draft: row?.draft ?? 0,
-      completed: row?.completed ?? 0,
+      open: row?.open ?? 0,
+      finished: row?.finished ?? 0,
+      live: row?.live ?? 0,
     };
   }
 

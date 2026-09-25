@@ -7,16 +7,26 @@ import {
   ZoneRole,
   type LineSettlementResult,
 } from '@portfolio/luna-shopper/contracts';
+import { ValidationException } from '@portfolio/luna-shopper/platform';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import { LineSettlement, ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineItems } from './line-items.fake';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { ListAccessService } from './list-access.service';
+import { toLineSettlementView } from './list.mappers';
 import { SettlementService } from './settlement.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * Settling a line (plan 0047, section 4).
@@ -40,6 +50,9 @@ const SHOPPER = 'u-shopper';
 const AUTHOR = 'u-author';
 const MILK_ITEM = '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13';
 const BREAD_ITEM = '7c2b9d41-5e6a-4f38-9b02-1a4c7e8d5f62';
+/** A chain's catchment and one of its shops, both opaque here (plan 0143). */
+const SCOPE = 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73';
+const SHOP = '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f';
 
 interface Harness {
   service: SettlementService;
@@ -121,9 +134,10 @@ function build(options: {
         id: 'a1',
         listId: LIST_ID,
         membershipId: 'm1',
+        // `WRITE` since plan 0131, which is what a settle now asks for.
         permissions: options.permissions ?? [
           ListPermission.READ,
-          ListPermission.DECIDE,
+          ListPermission.WRITE,
         ],
       }) as ListAccess,
   };
@@ -153,6 +167,10 @@ function build(options: {
           return entity === LineSettlement ? settlementRepo : lineRepo;
         },
       } as unknown as EntityManager),
+    // `line.settlePick` reads the product set outside any transaction (plan
+    // 0151), from the same rows the settle locks and reads.
+    getRepository: (entity: unknown) =>
+      entity === ListLineItem ? lineItems.repo : lineRepo,
   } as unknown as DataSource;
 
   const publisher = {
@@ -168,7 +186,8 @@ function build(options: {
     settlementRepo as never,
     listAccess,
     fakeLineClaims().service,
-    publisher
+    publisher,
+    announcer
   );
 
   return { service, saved, written, events, line };
@@ -193,6 +212,30 @@ describe('line.settle (plan 0047, section 4)', () => {
     expect(line.quantity).toBe(0);
     expect(w.saved).toHaveLength(1);
     expect(w.written).toHaveLength(1);
+  });
+
+  it('came through no basket, and still names the line it bought', async () => {
+    // Plan 0134, section 2: null `basketId` is the list page. It used to be
+    // null together with `basketLineId`, and that column is deleted with
+    // the table it pointed at (plan 0136, section 9), so what is left to assert
+    // is the other half of the same migration: `lineId` and `listId` are `NOT
+    // NULL` again, because there is no waiting settlement any more. Every
+    // purchase belongs to a line of a list, whichever screen it came from.
+    const w = build({ quantity: 2 });
+
+    await w.service.settle({
+      userId: SHOPPER,
+      lineId: 'li1',
+      outcome: SettlementOutcome.BOUGHT,
+      quantity: 2,
+    });
+
+    expect(w.written[0]).not.toHaveProperty('basketLineId');
+    expect(w.written[0]).toMatchObject({
+      basketId: null,
+      lineId: 'li1',
+      listId: LIST_ID,
+    });
   });
 
   /**
@@ -516,5 +559,228 @@ describe('line.settle (plan 0047, section 4)', () => {
     ).rejects.toThrow();
     expect(w.written).toHaveLength(0);
     expect(w.events).toHaveLength(0);
+  });
+
+  // Plan 0131, section 3. The two surfaces that record a purchase asked two
+  // different people for it until this; these are the pair that pins which one
+  // won.
+  describe('who may settle (plan 0131)', () => {
+    it('admits a WRITE holder on an approved line, and leaves it approved', async () => {
+      const w = build({
+        quantity: 2,
+        permissions: [ListPermission.READ, ListPermission.WRITE],
+      });
+
+      const result = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 1,
+      });
+
+      expect(w.written).toHaveLength(1);
+      expect(result.line.quantity).toBe(1);
+      expect(result.line.approvalStatus).toBe(LineApprovalStatus.APPROVED);
+    });
+
+    it('refuses a DECIDE holder who cannot write, with the write sentence', async () => {
+      const w = build({
+        permissions: [ListPermission.READ, ListPermission.DECIDE],
+      });
+
+      await expect(
+        w.service.settle({
+          userId: SHOPPER,
+          lineId: 'li1',
+          outcome: SettlementOutcome.BOUGHT,
+        })
+      ).rejects.toThrow(/write access to this list/);
+      expect(w.written).toHaveLength(0);
+      expect(w.events).toHaveLength(0);
+    });
+  });
+
+  /**
+   * What was paid, recorded at the shelf (plan 0143, section 4.3).
+   *
+   * Core stores what the gateway said and reads no price of its own: it has no
+   * catalog client, so every case here is about the shape of the message and
+   * about which of its four values survive the outcome.
+   */
+  describe('the price it records (plan 0143)', () => {
+    const PAID = {
+      priceScopeId: SCOPE,
+      supermarketLocationId: SHOP,
+      pricePaidCents: 129,
+      pricePaidCurrency: 'EUR',
+    };
+
+    it('writes all four columns on the settlement', async () => {
+      const w = build({ quantity: 2 });
+
+      const { settlement } = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 2,
+        paid: PAID,
+      });
+
+      expect(w.written[0]).toMatchObject(PAID);
+      // All four are served to a reader of the list since plan 0151 section 5,
+      // which put the shop back beside the scope.
+      expect(settlement).toMatchObject(PAID);
+    });
+
+    // Plan 0151, section 5: the view says who settled. From the list page that
+    // is the account, and the participant column is null by the actor check.
+    it('serves who settled, with no participant from the list page', async () => {
+      const w = build({ quantity: 2 });
+
+      const { settlement } = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 2,
+      });
+
+      expect(settlement).toMatchObject({
+        settledByUserId: SHOPPER,
+        settledByParticipantId: null,
+        supermarketLocationId: null,
+      });
+    });
+
+    it('records nothing at all when the message carried no price', async () => {
+      const w = build({ quantity: 2 });
+
+      await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        quantity: 2,
+      });
+
+      expect(w.written[0]).toMatchObject({
+        pricePaidCents: null,
+        pricePaidCurrency: null,
+        priceScopeId: null,
+        supermarketLocationId: null,
+      });
+    });
+
+    // Which chain had none is the half of that outcome worth keeping, and
+    // nothing was paid for a thing nobody got.
+    it('keeps the place and drops the price on NOT_AVAILABLE', async () => {
+      const w = build({ quantity: 2 });
+
+      await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.NOT_AVAILABLE,
+        paid: PAID,
+      });
+
+      expect(w.written[0]).toMatchObject({
+        pricePaidCents: null,
+        pricePaidCurrency: null,
+        priceScopeId: SCOPE,
+        supermarketLocationId: SHOP,
+      });
+    });
+
+    it.each([
+      ['a negative amount', { ...PAID, pricePaidCents: -1 }],
+      ['a fractional amount', { ...PAID, pricePaidCents: 12.5 }],
+      ['a two letter currency', { ...PAID, pricePaidCurrency: 'EU' }],
+      ['an amount with no currency', { ...PAID, pricePaidCurrency: null }],
+      ['a currency with no amount', { ...PAID, pricePaidCents: null }],
+      ['a scope that is not a uuid', { ...PAID, priceScopeId: 'nope' }],
+      ['a shop that is not a uuid', { ...PAID, supermarketLocationId: 'no' }],
+    ])('refuses %s, before anything is written', async (_name, paid) => {
+      const w = build({ quantity: 2 });
+
+      await expect(
+        w.service.settle({
+          userId: SHOPPER,
+          lineId: 'li1',
+          outcome: SettlementOutcome.BOUGHT,
+          quantity: 2,
+          paid,
+        })
+      ).rejects.toBeInstanceOf(ValidationException);
+      expect(w.written).toHaveLength(0);
+      expect(w.saved).toHaveLength(0);
+    });
+  });
+});
+
+/**
+ * Who settled a basket row, which the view could not say before plan 0151
+ * section 5: `settledByUserId` is null there by the actor check.
+ */
+describe('the settlement view of a basket settle (plan 0151)', () => {
+  it('names the participant and the shop', () => {
+    const view = toLineSettlementView({
+      id: 's1',
+      lineId: 'li1',
+      listId: LIST_ID,
+      itemId: MILK_ITEM,
+      outcome: SettlementOutcome.BOUGHT,
+      quantity: 1,
+      settledByUserId: null,
+      settledByParticipantId: 'p-guest',
+      settledAt: new Date('2026-09-01T18:40:00.000Z'),
+      revertedAt: null,
+      pricePaidCents: 95,
+      pricePaidCurrency: 'EUR',
+      priceScopeId: 'scope-1',
+      supermarketLocationId: 'shop-1',
+    } as LineSettlement);
+
+    expect(view).toMatchObject({
+      settledByUserId: null,
+      settledByParticipantId: 'p-guest',
+      supermarketLocationId: 'shop-1',
+    });
+  });
+});
+
+/**
+ * Which product a settle that names none records, asked before the price is
+ * read (plan 0151, section 3).
+ *
+ * The gateway prices this answer, so it has to be the product `line.settle`
+ * then writes. Each case here mirrors one in "the product it records" above.
+ */
+describe('line.settlePick (plan 0151)', () => {
+  const ask = (w: Harness) =>
+    w.service.settlePick({ userId: SHOPPER, lineId: 'li1' });
+
+  it('answers the only product of a line that carries one', async () => {
+    const w = build({ itemIds: [MILK_ITEM] });
+
+    expect(await ask(w)).toEqual({ pickedItemId: MILK_ITEM, optionCount: 1 });
+  });
+
+  it('answers no product, and how many there are, for a line with several', async () => {
+    const w = build({ itemIds: [MILK_ITEM, BREAD_ITEM] });
+
+    expect(await ask(w)).toEqual({ pickedItemId: null, optionCount: 2 });
+  });
+
+  it('answers no product for a free text line', async () => {
+    const w = build({});
+
+    expect(await ask(w)).toEqual({ pickedItemId: null, optionCount: 0 });
+  });
+
+  it('is refused for a caller who could not settle the line', async () => {
+    const w = build({
+      permissions: [ListPermission.READ],
+      itemIds: [MILK_ITEM],
+    });
+
+    await expect(ask(w)).rejects.toThrow();
   });
 });

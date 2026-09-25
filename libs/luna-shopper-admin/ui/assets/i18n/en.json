@@ -187,6 +187,12 @@
       "brandLinkKeepsKey": "A spelling of another brand keeps its key. Register the other spelling as its own brand.",
       "brandNotLinked": "Only a spelling linked to another brand can be deleted.",
       "openRow": "Open the row it names."
+    },
+    "bulk": {
+      "selectRow": "Select {{name}}",
+      "selectColumn": "Select",
+      "selected": "{{count}} selected",
+      "clear": "Clear the selection"
     }
   },
   "catalog": {
@@ -200,7 +206,7 @@
       "externalBrandKey": "Wikidata identifier",
       "externalBrandKeyHelp": "The chain's stable identity across discovery runs. It is what splits Carrefour from Carrefour Express, so change it only when that is what you mean.",
       "defaultPriceScopeId": "Default price scope",
-      "defaultPriceScopeIdHelp": "Set by the catalog service, not from here.",
+      "defaultPriceScopeIdHelp": "The scope a shop of this chain prices against when nothing more specific holds a price. Only this chain's scopes are offered, and a new chain starts with its national scope.",
       "filter": {
         "query": "Name or Wikidata identifier contains"
       },
@@ -208,7 +214,8 @@
         "name": "By name",
         "created": "Newest first",
         "updated": "Recently changed"
-      }
+      },
+      "noDefaultScope": "No default scope"
     },
     "locations": {
       "one": "shop",
@@ -258,6 +265,21 @@
       }
     },
     "items": {
+      "pricesLink": "Prices at every scope",
+      "sources": {
+        "heading": "Source products",
+        "empty": "No chain product is bound to or proposed for this product.",
+        "chain": "Chain",
+        "externalId": "Chain id",
+        "name": "Chain name",
+        "ean": "Barcode",
+        "status": "Status",
+        "matchedBy": "Matched by",
+        "sharedEan": "{{count}} rows of this chain share this barcode",
+        "matchSharedEan": "A barcode other products share",
+        "matchNone": "Not matched",
+        "more": "Show more"
+      },
       "one": "product",
       "many": "Products",
       "id": "Identifier",
@@ -283,6 +305,12 @@
         "query": "Name or barcode contains",
         "category": "Category",
         "productGroupId": "Product group"
+      },
+      "setGroup": {
+        "action": "Set group",
+        "heading": "Set the group of {{count}} products",
+        "group": "Group",
+        "review": "Review"
       }
     },
     "productGroups": {
@@ -303,6 +331,43 @@
       },
       "filter": {
         "query": "Name contains"
+      },
+      "addItems": {
+        "heading": "Add items",
+        "lead": "Find products, tick them, and move them into this group after a review.",
+        "open": "Add items",
+        "search": "Search products",
+        "showingUngrouped": "Showing products in no group. Type to search every product.",
+        "showingMatches": "Showing every product that matches.",
+        "inNoGroup": "In no group",
+        "inGroup": "In {{group}}",
+        "inThisGroup": "Already in this group",
+        "selected": "{{count}} selected",
+        "review": "Review {{count}}"
+      },
+      "assign": {
+        "heading": "Move {{count}} products into {{group}}",
+        "lead": "Each product below moves into this group. Nothing moves until you press the button.",
+        "from": "From {{from}} to {{group}}",
+        "fromNone": "From no group to {{group}}",
+        "alreadyIn": "Already in this group, left out",
+        "confirm": "Move {{count}} into {{group}}",
+        "back": "Back",
+        "applied": "{{count}} products moved into {{group}}.",
+        "refused": "Nothing moved. The request was refused.",
+        "moved": "Moved",
+        "notMoved": "Not moved, because the request was refused.",
+        "close": "Done",
+        "error": {
+          "NOT_FOUND": "The product no longer exists.",
+          "NOT_PENDING": "The product cannot be moved right now.",
+          "EXPECT_MISMATCH": "The product changed group after the review.",
+          "DUPLICATE_SUBJECT": "The product is named twice.",
+          "UNKNOWN_REFERENCE": "The group named does not exist.",
+          "MALFORMED_OPERATION": "The request for this product was malformed.",
+          "ALREADY_TAKEN": "Something this product needs is already taken.",
+          "UNKNOWN": "Refused for a reason this app does not know."
+        }
       }
     },
     "prices": {
@@ -374,6 +439,33 @@
         "noLocations": "No shop prices against it yet.",
         "counting": "Counting the shops it covers…",
         "none": "Choose a price scope. A price belongs to a scope, not to a shop."
+      },
+      "observedAtFuture": "The observed date cannot be in the future.",
+      "observedAtTooOld": "The observed date can go back 30 days at most.",
+      "proposal": {
+        "heading": "Proposed unit price: {{price}} / {{label}}",
+        "caution": "Worked out as the price divided by the size. The chain’s own figure can differ, so check it before you use it.",
+        "use": "Use this unit price",
+        "inUse": "The unit price field holds this proposal."
+      },
+      "byItem": {
+        "open": "Every scope for this product",
+        "back": "Back to the product",
+        "lead": "Every scope that prices this product, the rows each one weighed, and why the shown price is the one shown.",
+        "empty": "No scope prices this product.",
+        "stale": "Shown on sufferance",
+        "nothingShown": "No row is shown at this scope.",
+        "protectedUntil": "Protected until {{date}}",
+        "protectionEnded": "Protection ended {{date}}",
+        "history": "History, and add a price here",
+        "more": "Show more scopes",
+        "because": {
+          "PROTECTED_ADMIN": "A person typed this price, it is inside its seven days of protection, and no source disputes it.",
+          "POLICY_PRIORITY": "Several rows were eligible, and this source comes first in the price policies.",
+          "ONLY_ROW": "No other row was a candidate.",
+          "NEWEST": "It is the newest: two eligible rows ranked the same, or nothing was eligible and the newest is shown as stale.",
+          "UNKNOWN": "The server gave a reason this screen does not know."
+        }
       }
     },
     "pricePolicies": {
@@ -525,6 +617,32 @@
         "doneNone": "{{label}} registered. No product carries it yet.",
         "doneLinked": "{{spelling}} linked to {{label}}. {{count}} products now carry {{label}}.",
         "chainKept": "{{label}} was already registered, so its chain was kept."
+      },
+      "bulk": {
+        "start": "Select several",
+        "stop": "Stop selecting",
+        "selectRow": "Select {{name}}",
+        "selectColumn": "Select",
+        "selected": "{{count}} selected",
+        "full": "A batch holds at most {{max}} names.",
+        "review": "Review {{count}}",
+        "reviewHeading": "Register these brands",
+        "reviewLead": "Each name is registered under the label written here. Nothing is registered until you press Register.",
+        "reviewEmpty": "Nothing is selected. Go back to the list and tick the brands to register.",
+        "label": "Label",
+        "remove": "Remove",
+        "removeAria": "Remove {{name}} from the batch",
+        "noKey": "This label makes no key, so it cannot be a brand. Type at least one letter or digit.",
+        "keyDiffers": "This label makes the key {{key}}, not {{original}}. A batch registers names as they are and links nothing, so this row would stay a suggestion. Register it on its own to link it, or change the label back.",
+        "send": "Register {{count}}",
+        "back": "Back to the list",
+        "resultHeading": "What the batch did",
+        "created": "Registered. {{count}} products now carry it.",
+        "createdPlain": "Registered.",
+        "exists": "Already registered.",
+        "openExisting": "Open that brand",
+        "refused": "Refused.",
+        "refusedKept": "The refused names are still selected. Correct them and review again."
       }
     }
   },
@@ -725,6 +843,10 @@
         },
         "missingScope": "This scope no longer exists. Remove it to save.",
         "removeMissingScope": "Remove"
+      },
+      "modeFilter": {
+        "label": "Mode",
+        "any": "Any mode"
       }
     },
     "presets": {
@@ -848,6 +970,29 @@
         "revertedPrices": "Prices deleted",
         "revertedBy": "Reverted by",
         "correlationId": "Correlation identifier"
+      },
+      "tabs": {
+        "label": "Views of this run",
+        "overview": "Overview",
+        "prices": "Prices written"
+      },
+      "prices": {
+        "lead": "The price rows this run inserted, and the rows it saw again. A later run that repeats a price takes the confirmation over, so this list can shrink.",
+        "filter": "Product",
+        "item": "Product",
+        "scope": "Scope",
+        "kind": "Source",
+        "price": "Price",
+        "unitPrice": "Unit price",
+        "writtenBy": "Written",
+        "written": {
+          "INSERTED": "Inserted",
+          "CONFIRMED": "Confirmed",
+          "UNKNOWN": "Unknown"
+        },
+        "empty": "This run wrote no prices.",
+        "emptyForItem": "This run wrote no prices for this product.",
+        "more": "Show more"
       }
     },
     "places": {
@@ -855,7 +1000,7 @@
       "empty": "Every discovered place has been decided.",
       "import": "Add to the catalog",
       "reject": "Not a shop we want",
-      "why": "Nothing in the catalog matched this: neither its OpenStreetMap reference nor the same brand nearby. It is being offered rather than created.",
+      "why": "Discovery did not match this to a shop in the catalog by itself, so it is offered to a person rather than created. Any shop of the chain the catalog holds nearby is listed with it.",
       "supermarketId": "Chain to file it under (optional)",
       "near": {
         "heading": "Others of the same brand nearby",
@@ -888,6 +1033,60 @@
           "heading": "Reject {{count}} places?",
           "body": "Each place stays as rejected, so no run offers it again."
         }
+      },
+      "groups": {
+        "open": "See them grouped by chain",
+        "heading": "Discovered places by chain",
+        "lead": "Every place discovery found, grouped by the chain it belongs to. A place with no Wikidata identifier is grouped by the brand it prints, then by its name.",
+        "back": "Back to the queue",
+        "empty": "Discovery has found no places yet.",
+        "noBrand": "No brand",
+        "count_one": "{{count}} place",
+        "count_other": "{{count}} places",
+        "unknownChain": "No chain in the catalog yet",
+        "knownChain": "Filed under {{chain}}"
+      },
+      "newChain": {
+        "start": "Create a chain for it",
+        "name": "Chain name",
+        "locale": "Language of the name",
+        "language": {
+          "en": "English",
+          "es": "Spanish"
+        },
+        "hint": "OpenStreetMap does not say what language a name is in, so say it here. The chain is created, with a national price scope, when the place is added and not before.",
+        "cancel": "Pick an existing chain instead"
+      },
+      "scope": {
+        "heading": "Price scope",
+        "declared": "The run that found it declared scope {{key}}. The shop joins that scope of the chain unless you pick another.",
+        "none": "The run declared no scope, so the new shop gets a store scope of its own unless you pick one.",
+        "pick": "Pick another scope of this chain only when the run's is wrong.",
+        "chainFirst": "Pick the chain to choose a different scope."
+      },
+      "match": {
+        "heading": "The catalog may already hold this shop",
+        "lead": "Nothing was added. Link the place to the shop that is the same one, or add it as a new shop if none of them is.",
+        "rung": {
+          "EXTERNAL_REF": "Same provider reference",
+          "NEARBY": "Same chain within 50 metres",
+          "ADDRESS": "Same address and postal code",
+          "UNKNOWN": "Matched by the catalog"
+        },
+        "link": "Link to this shop",
+        "force": "Create a new shop anyway"
+      },
+      "error": {
+        "matchesLocation": "The catalog may already hold this shop, so nothing was added. Open it on its own to link it or to add it anyway.",
+        "alreadyImported": "This place is already in the catalog. Its shop is removed from the catalog's locations, not from this queue.",
+        "scopeNotFound": "The run declared a price scope this chain does not hold. Create that scope first, or pick one.",
+        "needsChain": "OpenStreetMap does not say what language this place's name is in, so no chain could be made from it. Name the chain below, or pick one."
+      },
+      "nearCatalog": {
+        "heading": "Shops of this chain the catalog holds nearby",
+        "none": "The catalog holds no shop of this chain near it.",
+        "unplaced": "No position, same postal code",
+        "metres": "{{metres}} m away"
       }
     },
     "entries": {
@@ -971,6 +1170,54 @@
         "rejectConfirm": {
           "heading": "Reject {{count}} products?",
           "body": "Each row stays as rejected, so no run asks about it again. You can find them later by asking for rejected rows."
+        }
+      },
+      "decisionsFile": {
+        "open": "Apply a decisions file",
+        "heading": "Apply a decisions file",
+        "lead": "A decisions.jsonl written by a curation run. Every operation it holds is listed before anything is sent, and the file is applied whole or not at all.",
+        "close": "Close",
+        "file": "Decisions file",
+        "run": "Run",
+        "decidedAgainst": "Decided against",
+        "counts": "Operations",
+        "countsValue": "{{creates}} new products, {{links}} links. {{reviews}} rows were left for review and send nothing.",
+        "otherGateway": "This file was decided against {{url}}, which is not the gateway this app talks to. Every row is still checked before anything is written.",
+        "nothing": "This file holds no operation to apply.",
+        "kind": "Kind",
+        "entry": "Entry",
+        "target": "Target",
+        "name": "Name",
+        "reason": "Reason",
+        "kindCreate": "New product",
+        "kindLink": "Link",
+        "apply": "Apply {{count}} operations",
+        "applied": "Applied {{count}} operations. {{prices}} prices written.",
+        "priceSkips": "Prices not written",
+        "refused": "Nothing was applied. The file was refused at {{step}}.",
+        "orphaned": "Products created and then left unbound: {{ids}}.",
+        "another": "Choose another file",
+        "step": {
+          "VALIDATE": "the check of every row",
+          "CREATE_ITEMS": "creating the new products",
+          "BIND": "binding the rows",
+          "UNKNOWN": "a step this app does not know"
+        },
+        "problem": {
+          "notJson": "Line {{line}} is not a JSON object, so this is not a decisions file.",
+          "noHeader": "This file has no header line, so it is not a decisions file.",
+          "empty": "This file is empty.",
+          "tooMany": "This file holds {{count}} operations and one request takes at most {{max}}. It is not split, because a split file is not applied whole."
+        },
+        "error": {
+          "NOT_FOUND": "The row no longer exists.",
+          "NOT_PENDING": "The row was already decided.",
+          "EXPECT_MISMATCH": "The row changed after the file was decided.",
+          "DUPLICATE_SUBJECT": "The row is named twice.",
+          "UNKNOWN_REFERENCE": "It names a product this file does not create.",
+          "MALFORMED_OPERATION": "The operation is malformed.",
+          "ALREADY_TAKEN": "Something it needs is already taken.",
+          "UNKNOWN": "Refused for a reason this app does not know."
         }
       }
     },
@@ -1100,6 +1347,13 @@
           "heading": "Unmap {{count}} shops?",
           "body": "Each one stops pointing at a shop of ours, and the next run writes no availability for it until somebody maps it again. {{leftAlone}} of the picked rows are not mapped and are left alone."
         }
+      },
+      "candidates": {
+        "heading": "Shops of ours it may be",
+        "strong": "Strong match",
+        "map": "Map to this location",
+        "notBackfilled": "Mapping does not fill in what the last run skipped: the next run writes it.",
+        "best": "Best guess: {{location}}"
       }
     },
     "sources": {
@@ -1136,7 +1390,8 @@
         "lastRunAt": "Last run",
         "lastSuccessAt": "Last success",
         "failures": "Failures in a row"
-      }
+      },
+      "osmAlways": "OpenStreetMap: always asked for every postal code."
     },
     "postalCodes": {
       "one": "Postal code",
@@ -1416,24 +1671,42 @@
       "id": "Identifier",
       "name": "Name",
       "ownerUserId": "Owner",
-      "zoneIds": "Zones the lines came from",
-      "lineCount": "Lines",
+      "zoneIds": "Zones it draws from",
+      "lineCount": "Rows",
       "generatedAt": "Generated",
       "updatedAt": "Last changed",
-      "lines": "Lines",
-      "noLines": "This shopping list has no lines.",
+      "lines": "Rows",
+      "noLines": "This basket is showing no rows.",
+      "bought": "{{bought}} of {{asked}} bought",
+      "kind": {
+        "label": "Kind",
+        "LIVE": "Always there",
+        "GENERATED": "A trip"
+      },
       "status": {
         "label": "State",
-        "DRAFT": "Being shopped",
-        "ACTIVE": "Active",
-        "COMPLETED": "Finished",
+        "OPEN": "Being shopped",
+        "FINISHED": "Finished",
         "ARCHIVED": "Archived"
       },
       "filter": {
         "ownerUserId": "Belonging to this person",
         "zoneId": "With lines from this zone"
       },
-      "note": "A shopping list is a record of what somebody took to the shop, so nothing here can be changed. It was put together from the household’s lists at a moment it remembers, and its lines carry what was claimed and settled while that person walked round. What an operator can correct is the list it came from."
+      "note": "A shopping list is a record of what somebody took to the shop, so nothing here can be changed. It was put together from the household’s lists at a moment it remembers, and its lines carry what was claimed and settled while that person walked round. What an operator can correct is the list it came from.",
+      "settlement": {
+        "none": "Not settled yet.",
+        "outcome": {
+          "BOUGHT": "Bought",
+          "NOT_AVAILABLE": "Not available",
+          "UNKNOWN": "Unknown outcome"
+        },
+        "noPrice": "No price",
+        "at": "at {{shop}}",
+        "by": "by {{name}}",
+        "byParticipant": "by participant {{id}}",
+        "reverted": "Taken back"
+      }
     },
     "admins": {
       "one": "admin",
@@ -1630,7 +1903,7 @@
       "zonesCaption": "{{active}} active of {{total}}",
       "lists": "Lists",
       "baskets": "Baskets",
-      "basketsCaption": "{{draft}} draft, {{completed}} completed",
+      "basketsCaption": "{{open}} being shopped, {{finished}} finished, {{live}} always there",
       "signUps": "Sign ups",
       "signUpsTitle": "Sign ups per day",
       "zonesSeries": "Zones",

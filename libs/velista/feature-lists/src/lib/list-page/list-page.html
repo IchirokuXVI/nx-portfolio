@@ -116,9 +116,11 @@
       -->
       @if (!reordering()) {
         <lib-list-tools
+          (openChange)="setSearchOpen($event)"
           (openFilter)="openFilter()"
           (queryChange)="search($event)"
           [activeCount]="activeCount()"
+          [open]="searchOpen()"
           [query]="searchQuery()"
           [shown]="shownCount()"
           [total]="current.lines.length"
@@ -366,13 +368,19 @@
       }
 
       <lib-line-composer
+        (holdingChanged)="changeHolding($event)"
         (queryChanged)="onComposerQuery($event)"
         (recordingFailed)="onRecordingFailed()"
         (spoke)="addAloud($event)"
         (submitted)="add($event)"
         [busy]="composerBusy()"
+        [holdingsOf]="holdingsOf()"
+        [productLink]="productLink()"
+        [suggestedFor]="suggestedFor()"
+        [suggesting]="suggesting()"
         [suggestions]="suggestions()"
         [takeFocus]="page.empty"
+        libTourAnchor="list-composer"
       />
     </div>
   }

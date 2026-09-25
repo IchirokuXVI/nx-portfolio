@@ -6,7 +6,6 @@ import {
   Get,
   Header,
   HttpStatus,
-  Param,
   Post,
   Put,
   Query,
@@ -34,6 +33,7 @@ import {
   type HarvestRunPresetPage,
   type HarvestRunPresetView,
   type HarvestRunView,
+  type ItemSourceEntryPage,
   type PostalCodeDiscoveryRequestPage,
   type PostalCodeDiscoveryRequestView,
   type PostalCodeDiscoverySummaryView,
@@ -45,6 +45,7 @@ import {
   type SupermarketSourcePage,
   type SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
+import { PageQueryDto, UuidParam } from '@portfolio/luna-shopper/platform';
 import type { Response } from 'express';
 import { adminCredential } from '../admin/admin-credential';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
@@ -68,6 +69,7 @@ import {
   HarvestRunPresetListQueryDto,
   ImportDiscoveredPlaceDto,
   ImportHarvestDocumentDto,
+  LinkDiscoveredPlaceDto,
   MapSourceLocationDto,
   PostalCodeDiscoveryListQueryDto,
   SetSourceEnabledDto,
@@ -151,7 +153,7 @@ export class AdminHarvestRunsController {
   @ApiContractResponse(HARVEST_PATTERNS.runGet)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<HarvestRunView> {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.runGet, {
       ...adminCredential(admin),
@@ -168,7 +170,7 @@ export class AdminHarvestRunsController {
   @ApiContractResponse(HARVEST_PATTERNS.abort, { status: HttpStatus.CREATED })
   abort(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<HarvestRunView> {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.abort, {
       ...adminCredential(admin),
@@ -193,7 +195,7 @@ export class AdminHarvestRunsController {
   @ApiProblemResponses({ body: true, conflict: true })
   revert(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<HarvestRunView> {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.revert, {
       ...adminCredential(admin),
@@ -226,7 +228,7 @@ export class AdminHarvestRunsController {
   @ApiProblemResponses({ body: true })
   async exportRun(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Res({ passthrough: true }) response: Response
   ): Promise<unknown> {
     const result = await this.nats.send<HarvestRunExportResult>(
@@ -379,6 +381,16 @@ export class AdminHarvestPlacesController {
     );
   }
 
+  /**
+   * Create a shop from the place (plan 0152). The scope is the one named, or
+   * the chain's scope the run declared for the place; a declared key the chain
+   * does not hold answers 409 `scope_not_found` with `details.scopeKey`.
+   *
+   * A shop the catalog may already hold answers 409 `place_matches_location`
+   * with `details.candidates`, each naming the rung that found it, and writes
+   * nothing. Link one of them, or send `force` to create a new shop anyway. An
+   * imported place answers 409 `place_already_imported`.
+   */
   @Post(':id/import')
   @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.import, {
     status: HttpStatus.CREATED,
@@ -386,7 +398,7 @@ export class AdminHarvestPlacesController {
   @ApiProblemResponses({ body: true, conflict: true })
   importPlace(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: ImportDiscoveredPlaceDto
   ): Promise<DiscoveredPlaceView> {
     return this.nats.send<DiscoveredPlaceView>(
@@ -395,13 +407,41 @@ export class AdminHarvestPlacesController {
     );
   }
 
+  /**
+   * Bind the place to a shop of its chain that the catalog already holds (plan
+   * 0152, section 3). It fills only the fields the shop lacks: coordinates, the
+   * provider's ref and a postal code. It never creates a shop. An imported
+   * place answers 409 `place_already_imported`.
+   */
+  @Post(':id/link')
+  @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.link, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true, notFound: true })
+  linkPlace(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: LinkDiscoveredPlaceDto
+  ): Promise<DiscoveredPlaceView> {
+    return this.nats.send<DiscoveredPlaceView>(DISCOVERED_PLACE_PATTERNS.link, {
+      ...adminCredential(admin),
+      placeId: id,
+      supermarketLocationId: dto.supermarketLocationId,
+    });
+  }
+
+  /**
+   * An imported place answers 409 `place_already_imported`: removing its shop
+   * is a catalog act on the location (plan 0152, section 5).
+   */
   @Post(':id/reject')
   @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.reject, {
     status: HttpStatus.CREATED,
   })
+  @ApiProblemResponses({ conflict: true })
   reject(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<DiscoveredPlaceView> {
     return this.nats.send<DiscoveredPlaceView>(
       DISCOVERED_PLACE_PATTERNS.reject,
@@ -466,7 +506,7 @@ export class AdminHarvestEntriesController {
   @ApiProblemResponses({ body: true })
   accept(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AcceptSourceEntryDto
   ): Promise<SourceEntryAcceptResult> {
     return this.nats.send<SourceEntryAcceptResult>(
@@ -492,7 +532,7 @@ export class AdminHarvestEntriesController {
   @ApiProblemResponses({ body: true, conflict: true })
   createItem(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: CreateItemFromEntryDto
   ): Promise<SourceEntryAcceptResult> {
     return this.nats.send<SourceEntryAcceptResult>(
@@ -547,11 +587,53 @@ export class AdminHarvestEntriesController {
   })
   reject(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<SourceCatalogEntryView> {
     return this.nats.send<SourceCatalogEntryView>(
       SOURCE_ENTRY_PATTERNS.reject,
       { ...adminCredential(admin), entryId: id }
+    );
+  }
+}
+
+/**
+ * The queue read from the other side: a product, and the source rows that name
+ * it (plan 0160).
+ *
+ * The entries queue answers from the row's side only, so "which chain rows are
+ * bound to this product" used to be a psql query. Each row carries
+ * `eanSharedBy`, how many rows of its chain list the same barcode, which is the
+ * count operator plan 0150 made by hand.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/items', version: '1' })
+export class AdminHarvestItemsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * Every source row whose `itemId` is this product, newest observation first.
+   * `ACTIVE` rows are bound and a `CANDIDATE` row proposes the product; the
+   * status says which. A product id nothing names answers an empty page: the
+   * harvester does not own products, so it cannot say one does not exist.
+   */
+  @Get(':itemId/entries')
+  @ApiContractResponse(SOURCE_ENTRY_PATTERNS.listByItem)
+  entries(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('itemId') itemId: string,
+    @Query() query: PageQueryDto
+  ): Promise<ItemSourceEntryPage> {
+    return this.nats.send<ItemSourceEntryPage>(
+      SOURCE_ENTRY_PATTERNS.listByItem,
+      {
+        ...adminCredential(admin),
+        itemId,
+        cursor: query.cursor,
+        limit: query.limit,
+      }
     );
   }
 }
@@ -598,7 +680,7 @@ export class AdminHarvestShopsController {
   @ApiProblemResponses({ body: true })
   map(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: MapSourceLocationDto
   ): Promise<SourceLocationView> {
     return this.nats.send<SourceLocationView>(SOURCE_LOCATION_PATTERNS.map, {
@@ -612,7 +694,7 @@ export class AdminHarvestShopsController {
   @ApiContractResponse(SOURCE_LOCATION_PATTERNS.unmap)
   unmap(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<SourceLocationView> {
     return this.nats.send<SourceLocationView>(SOURCE_LOCATION_PATTERNS.unmap, {
       ...adminCredential(admin),
@@ -627,7 +709,7 @@ export class AdminHarvestShopsController {
   })
   ignore(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<SourceLocationView> {
     return this.nats.send<SourceLocationView>(SOURCE_LOCATION_PATTERNS.ignore, {
       ...adminCredential(admin),
@@ -641,7 +723,7 @@ export class AdminHarvestShopsController {
   })
   unignore(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<SourceLocationView> {
     return this.nats.send<SourceLocationView>(
       SOURCE_LOCATION_PATTERNS.unignore,
@@ -675,7 +757,7 @@ export class AdminHarvestSourcesController {
   @ApiContractResponse(SUPERMARKET_SOURCE_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('supermarketId') supermarketId: string
+    @UuidParam('supermarketId') supermarketId: string
   ): Promise<SupermarketSourceView> {
     return this.nats.send<SupermarketSourceView>(
       SUPERMARKET_SOURCE_PATTERNS.get,
@@ -688,7 +770,7 @@ export class AdminHarvestSourcesController {
   @ApiProblemResponses({ body: true })
   upsert(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('supermarketId') supermarketId: string,
+    @UuidParam('supermarketId') supermarketId: string,
     @Body() dto: UpsertSupermarketSourceDto
   ): Promise<SupermarketSourceView> {
     return this.nats.send<SupermarketSourceView>(
@@ -706,7 +788,7 @@ export class AdminHarvestSourcesController {
   @ApiProblemResponses({ body: true })
   setEnabled(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('supermarketId') supermarketId: string,
+    @UuidParam('supermarketId') supermarketId: string,
     @Body() dto: SetSourceEnabledDto
   ): Promise<SupermarketSourceView> {
     return this.nats.send<SupermarketSourceView>(
@@ -726,7 +808,7 @@ export class AdminHarvestSourcesController {
   @ApiContractResponse(SUPERMARKET_SOURCE_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('supermarketId') supermarketId: string
+    @UuidParam('supermarketId') supermarketId: string
   ): Promise<{ id: string }> {
     return this.nats.send(SUPERMARKET_SOURCE_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -796,7 +878,7 @@ export class AdminHarvestPresetsController {
   @ApiContractResponse(HARVEST_PRESET_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<HarvestRunPresetView> {
     return this.nats.send<HarvestRunPresetView>(HARVEST_PRESET_PATTERNS.get, {
       ...adminCredential(admin),
@@ -810,7 +892,7 @@ export class AdminHarvestPresetsController {
   @ApiProblemResponses({ body: true, conflict: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateHarvestRunPresetDto
   ): Promise<HarvestRunPresetView> {
     return this.nats.send<HarvestRunPresetView>(
@@ -829,7 +911,7 @@ export class AdminHarvestPresetsController {
   @ApiContractResponse(HARVEST_PRESET_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(HARVEST_PRESET_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -849,7 +931,7 @@ export class AdminHarvestPresetsController {
   @ApiProblemResponses({ body: true, conflict: true, notConfigured: true })
   start(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<HarvestRunView> {
     return this.nats.send<HarvestRunView>(HARVEST_PATTERNS.spawnFromPreset, {
       ...adminCredential(admin),
@@ -952,7 +1034,7 @@ export class AdminHarvestPostalCodesController {
   @ApiProblemResponses({ conflict: true })
   requeue(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<PostalCodeDiscoveryRequestView> {
     return this.nats.send<PostalCodeDiscoveryRequestView>(
       POSTAL_CODE_DISCOVERY_PATTERNS.requeue,
@@ -967,7 +1049,7 @@ export class AdminHarvestPostalCodesController {
   })
   dismiss(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<PostalCodeDiscoveryRequestView> {
     return this.nats.send<PostalCodeDiscoveryRequestView>(
       POSTAL_CODE_DISCOVERY_PATTERNS.dismiss,

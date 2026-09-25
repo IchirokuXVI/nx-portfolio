@@ -5,6 +5,7 @@ import {
   output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { OutsideAreas } from './outside-areas';
 
 /** One shop, with every string already chosen in the reader's language. */
 export interface ShopRow {
@@ -20,6 +21,28 @@ export interface ShopRow {
   /** The brand is refused, which makes this row inert (backend plan 0064, section 2.1). */
   readonly excludedChain: boolean;
   readonly failed: boolean;
+  /**
+   * The shop is outside the basket owner's areas (velista `0102`), which draws
+   * "Outside your areas" under it. Absent everywhere but the shop picker, and false
+   * for every shop of the owner's own profile.
+   */
+  readonly outsideAreas?: boolean;
+  /**
+   * One short fact at the end of the row, under `pick` only (velista `0103`): how
+   * far the shop is for a shop near the device, and when this person last bought
+   * there for a recent one. Absent everywhere else.
+   */
+  readonly aside?: ShopRowAside;
+}
+
+/**
+ * The fact at the end of a pick row. A distance is the thing a candidate is chosen
+ * by, so it is drawn as strongly as the name beside it; a day is context, drawn
+ * quietly.
+ */
+export interface ShopRowAside {
+  readonly text: string;
+  readonly kind: 'distance' | 'when';
 }
 
 /**
@@ -83,7 +106,7 @@ export interface ShopGroup {
  */
 @Component({
   selector: 'lib-shop-list',
-  imports: [RokuTranslatorPipe],
+  imports: [OutsideAreas, RokuTranslatorPipe],
   templateUrl: './shop-list.html',
   styleUrl: './shop-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -105,6 +128,15 @@ export class ShopList {
 
   /** The picked shop under `pick`, so the group has one checked radio. */
   readonly pickedId = input<string | null>(null);
+
+  /**
+   * The radio group's name under `pick` (velista `0103`).
+   *
+   * One per section of the picker, so the recent shops, the shops near the device
+   * and a chain's shops are three groups: the arrow keys stay inside the section
+   * they started in, and a shop drawn in two sections is checked in both.
+   */
+  readonly groupName = input('shop-pick');
 
   /**
    * A row's checkbox was tapped under `exclude`.

@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import {
   LineSuggestionReason,
-  LIVE_GENERATED_LIST_STATUSES,
+  PURCHASE_SESSION_GAP_MS,
   type LineSuggestionPage,
   type LineSuggestionView,
   type ListSuggestionsRequest,
 } from '@portfolio/luna-shopper/contracts';
 import { DataSource } from 'typeorm';
-import { LineClaimService } from '../../generated-lists/line-claim.service';
+import { LineClaimService } from '../../baskets/line-claim.service';
 import { ListAccessService } from '../list-access.service';
 import {
   daysBetween,
@@ -16,7 +16,10 @@ import {
   periodOf,
   type Purchase,
 } from './suggestion-rules';
-import { STAPLE_TRIPS } from './suggestions.constants';
+import {
+  STAPLE_SESSION_MIN_LINES,
+  STAPLE_TRIPS,
+} from './suggestions.constants';
 import {
   SUGGESTION_CANDIDATES_SQL,
   SUGGESTION_LAST_ASKED_SQL,
@@ -47,9 +50,16 @@ interface Ranked {
  *
  * `periodOf` says a line is due when the median time between its purchases has
  * almost passed. `isStaple` says a line is due whenever it is at zero, because
- * the list's recent baskets nearly always ask for it. Both live in
+ * the list's recent trips nearly always want it. Both live in
  * `suggestion-rules.ts` and take a `now` from here, so neither reads a clock and
  * neither knows a calendar day.
+ *
+ * ## A trip is a basket or a session (plan 0142, section 8)
+ *
+ * It was a basket alone, so a household that shops from the permanent basket or
+ * ticks the list off in the shop had no trips, no staples, and a quantity that
+ * always fell back. The widening is one statement's, and neither rule above
+ * changed: `isStaple` takes a list of booleans and never knew what a trip was.
  */
 @Injectable()
 export class SuggestionsService {
@@ -70,13 +80,12 @@ export class SuggestionsService {
     await this.listAccess.requireRead(req.listId, req.userId);
 
     const now = new Date();
-    const live = [[...LIVE_GENERATED_LIST_STATUSES], this.claims.since()];
 
     // One after the other, never together: each query draws its own pooled
     // connection, and a request holding several is how the pool runs dry.
     const candidates = await this.dataSource.query<CandidateRow[]>(
       SUGGESTION_CANDIDATES_SQL,
-      [req.listId, ...live]
+      [req.listId, this.claims.since(), this.claims.skipWindow()]
     );
     if (candidates.length === 0) {
       return { items: [] };
@@ -89,17 +98,25 @@ export class SuggestionsService {
     );
     const trips = await this.dataSource.query<RecentTripRow[]>(
       SUGGESTION_RECENT_TRIPS_SQL,
-      [req.listId, ...live, lineIds, STAPLE_TRIPS]
+      [
+        req.listId,
+        lineIds,
+        STAPLE_TRIPS,
+        PURCHASE_SESSION_GAP_MS,
+        now,
+        STAPLE_SESSION_MIN_LINES,
+      ]
     );
     const asked = await this.dataSource.query<LastAskedRow[]>(
       SUGGESTION_LAST_ASKED_SQL,
-      [req.listId, ...live, lineIds]
+      [req.listId, lineIds]
     );
 
     const purchases = groupPurchases(purchaseRows);
-    const askedOf = new Map(
-      asked.map((row) => [row.lineId, Number(row.asked)])
-    );
+    // The whole row and not the number alone: the rule below asks which basket
+    // asked and when, so it can tell a basket that is still the last word on
+    // the line from one that a later session has overtaken.
+    const askedOf = new Map(asked.map((row) => [row.lineId, row]));
     const presentIn = trips.map((trip) => new Set(trip.lineIds));
 
     const ranked: Ranked[] = [];
@@ -126,7 +143,11 @@ function groupPurchases(rows: readonly PurchaseRow[]): Map<string, Purchase[]> {
   const byLine = new Map<string, Purchase[]>();
   for (const row of rows) {
     const list = byLine.get(row.lineId) ?? [];
-    list.push({ at: new Date(row.settledAt), quantity: Number(row.quantity) });
+    list.push({
+      at: new Date(row.settledAt),
+      quantity: Number(row.quantity),
+      basketId: row.basketId,
+    });
     byLine.set(row.lineId, list);
   }
   return byLine;
@@ -135,15 +156,24 @@ function groupPurchases(rows: readonly PurchaseRow[]): Map<string, Purchase[]> {
 /**
  * One candidate through both rules, or null when neither says it is due.
  *
- * `PERIOD` wins when both hold, because its number says more. `quantity` is what
- * the newest ended basket asked for the line, else the units of its last merged
- * purchase, and never below 1.
+ * `PERIOD` wins when both hold, because its number says more.
+ *
+ * ## The quantity (plan 0123 section 5, as plan 0142 section 8.2 narrowed it)
+ *
+ * What the newest ended **basket** trip asked for the line, but only while that
+ * trip is still the last word on it: either it is where the line was last
+ * bought, or it is newer than the last purchase. Otherwise the units of the
+ * last merged purchase. Never below 1.
+ *
+ * Without the second half a basket from last spring would decide the quantity
+ * for a household that has shopped from the permanent basket every week since,
+ * because a session asks for nothing and so can never replace the number.
  */
 function suggest(
   candidate: CandidateRow,
   purchases: readonly Purchase[],
   presentIn: readonly ReadonlySet<string>[],
-  lastAsked: number | null,
+  lastAsked: LastAskedRow | null,
   now: Date
 ): Ranked | null {
   const merged = mergePurchases(purchases);
@@ -164,6 +194,10 @@ function suggest(
 
   const byPeriod = period?.due === true;
   const tripsWith = presence.filter(Boolean).length;
+  const askStillStands =
+    lastAsked !== null &&
+    (lastAsked.tripId === last.basketId ||
+      new Date(lastAsked.startedAt).getTime() > last.at.getTime());
   return {
     view: {
       lineId: candidate.lineId,
@@ -174,7 +208,10 @@ function suggest(
       daysSinceBought: daysBetween(last.at, now),
       tripsWith: byPeriod ? null : tripsWith,
       tripsSeen: byPeriod ? null : presence.length,
-      quantity: Math.max(1, lastAsked ?? last.quantity),
+      quantity: Math.max(
+        1,
+        askStillStands && lastAsked ? Number(lastAsked.asked) : last.quantity
+      ),
     },
     overdueDays: byPeriod ? period.overdueDays : 0,
     position: Number(candidate.position),

@@ -59,8 +59,15 @@ export interface ShopServiceI {
    * The rows arrive as the catalog counted them, including the keyless ones. Bucketing
    * those into OTHER is the screen's, not this call's: the server reports what it knows
    * and the word OTHER is a client's reading of it (backend plan 0068, section 4).
+   *
+   * `postalCodes` looks in those codes instead of the profile's own (velista `0098`).
+   * The setup's place step asks what a code reaches **before** it is written, so the
+   * person sees the answer to the question they are about to confirm.
    */
-  summarizeChains(profileId: string): Promise<readonly ShopChainSummary[]>;
+  summarizeChains(
+    profileId: string,
+    postalCodes?: readonly string[]
+  ): Promise<readonly ShopChainSummary[]>;
 
   /**
    * A page of shops (`GET /v1/catalog/shops`).

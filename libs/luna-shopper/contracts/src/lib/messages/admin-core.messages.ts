@@ -1,5 +1,11 @@
-import type { GeneratedListStatus } from '../enums/generated-list.enums';
-import type { LineApprovalStatus } from '../enums/list.enums';
+import type { BasketKind } from '../enums/basket.enums';
+import type {
+  BasketStatus,
+} from '../enums/basket.enums';
+import type {
+  LineApprovalStatus,
+  SettlementOutcome,
+} from '../enums/list.enums';
 import type {
   MembershipStatus,
   ZoneRole,
@@ -13,7 +19,7 @@ import type { MembershipView } from './zone.messages';
  * The back office's view of core: zones, lists and baskets that belong to
  * somebody else (plan 0074).
  *
- * Every subject in `zone.*`, `list.*` and `generatedList.*` is scoped to the
+ * Every subject in `zone.*`, `list.*` and `basket.*` is scoped to the
  * caller, deliberately and from the day each was written. An operator is not a
  * member of the zone they are looking at and never should be, so none of those
  * subjects can answer for them; widening one to accept an operator would put a
@@ -21,7 +27,7 @@ import type { MembershipView } from './zone.messages';
  * A separate namespace keeps the bypass in files that are entirely about it.
  *
  * **Every write goes through the service, and never through the row** (plan
- * 0077, section 1). A list line participates in settlements, generated list
+ * 0077, section 1). A list line participates in settlements, basket
  * bindings, permission sets and realtime broadcasts other clients have already
  * applied, and the invariants live in services rather than in constraints. So
  * every subject here that writes delegates to the service method the user facing
@@ -571,10 +577,12 @@ export interface AdminLineDeleteResult {
 export interface AdminBasketView {
   id: string;
   ownerUserId: string;
+  /** What this basket is (plan 0133, section 2). */
+  kind: BasketKind;
   /** Null is not missing: an unnamed basket displays as its generation date. */
   name: string | null;
-  status: GeneratedListStatus;
-  /** The distinct zones this basket's lines were drawn from. May be empty. */
+  status: BasketStatus;
+  /** The distinct zones this basket covers (plan 0136). May be empty. */
   zoneIds: string[];
   lineCount: number;
   /** ISO 8601 UTC. */
@@ -585,23 +593,69 @@ export interface AdminBasketView {
   updatedAt: string;
 }
 
-/** One basket line, on the detail read only. */
-export interface AdminBasketLineView {
-  id: string;
+/**
+ * One row of a basket, on the detail read only (plan 0136, section 7.5).
+ *
+ * A basket has no lines of its own any more, so an operator is shown what a
+ * shopper is shown: the row, what is left of it and what has been bought of it.
+ * It carries no timestamp, because a row is not a record and has none: the
+ * anchor's own line was created on a list, not here.
+ */
+export interface AdminBasketRowView {
+  /** The anchor's list line id, as `BasketRowView.rowKey` is. */
+  rowKey: string;
   content: string;
+  left: number;
+  bought: number;
+  /** `bought + left`, computed, never stored. */
+  asked: number;
+  /**
+   * Every settlement made through this basket on the row's lines, oldest
+   * first, including the ones taken back (plan 0160). A reverted one carries
+   * `revertedAt` and counts toward nothing.
+   */
+  settlements: AdminBasketSettlementView[];
+}
+
+/**
+ * One settlement on a basket row, as an operator sees it (plan 0160).
+ *
+ * It serves what a shopper's own history keeps to itself: the shop and who
+ * settled. An operator reads it to check what a row was bought for.
+ */
+export interface AdminBasketSettlementView {
+  id: string;
+  /** The list line settled. One of the row's entries, not always its anchor. */
+  lineId: string;
+  /** The exact product bought. Null for free text, or when nobody said which. */
+  itemId: string | null;
+  outcome: SettlementOutcome;
+  /** Units bought, and `0` for `NOT_AVAILABLE`. */
   quantity: number;
+  /** What one unit cost, in the minor unit of `pricePaidCurrency`. Null when nobody knew. */
+  pricePaidCents: number | null;
+  pricePaidCurrency: string | null;
+  /** The price scope the shopper was looking at. A catalog id. */
+  priceScopeId: string | null;
+  /** The one shop, when one was picked. A catalog id. */
+  supermarketLocationId: string | null;
+  /** Exactly one of these two is set: an account holder, or a basket participant. */
+  settledByUserId: string | null;
+  settledByParticipantId: string | null;
   /** ISO 8601 UTC. */
-  createdAt: string;
+  settledAt: string;
+  /** ISO 8601 UTC. Null while the settlement stands. */
+  revertedAt: string | null;
 }
 
 export interface AdminBasketDetailView extends AdminBasketView {
-  lines: AdminBasketLineView[];
+  lines: AdminBasketRowView[];
 }
 
-/** Baskets, by owner or by a zone their lines came from. */
+/** Baskets, by owner or by a zone they cover. */
 export interface ListAdminBasketsRequest extends AdminCredential, PageQuery {
   ownerUserId?: string;
-  /** Baskets with at least one line origin in this zone. */
+  /** Baskets with at least one source in this zone (plan 0136). */
   zoneId?: string;
 }
 

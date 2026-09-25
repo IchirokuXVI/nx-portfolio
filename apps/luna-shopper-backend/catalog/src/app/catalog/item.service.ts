@@ -5,10 +5,17 @@ import {
   BULK_DECISION_MAX_OPERATIONS,
   ITEM_LOOKUP_LIMITS,
   LINE_ITEM_SET_MAX,
+  PACK_COUNT_FILL_MAX,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
+  packCountOf,
+  PRODUCT_GROUP_MEMBERS_MAX,
   type CreateItemInput,
   type CreateItemRequest,
   type CreateItemsRequest,
   type CreateItemsResult,
+  type FillPackCountsRequest,
+  type FillPackCountsResult,
   type FindItemByEanRequest,
   type FindItemByEanResult,
   type GetItemsRequest,
@@ -30,6 +37,7 @@ import {
   DEFAULT_LOCALE,
   encodeCursor,
   getRequestContext,
+  isUuid,
   NotFoundException,
   ValidationException,
   type SupportedLocale,
@@ -54,6 +62,7 @@ import {
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
 import {
+  brandTypedSql,
   GROUP_SEARCH_TEXT,
   ITEM_SEARCH_TEXT,
   literalMatchSql,
@@ -63,6 +72,7 @@ import {
   wholeWordMatchSql,
   type SearchTerm,
 } from './search-term';
+import { unitBasisOf } from './unit-basis';
 
 interface ItemCursor {
   order: ItemOrder;
@@ -81,6 +91,38 @@ function params() {
     /** Binds a value and answers the placeholder that names it. */
     bind: (value: unknown): string => `$${values.push(value)}`,
   };
+}
+
+/**
+ * The products the named chains sell (plan 0146, section 2), written once for
+ * both branches of the search.
+ *
+ * The caller hands in the placeholder that names its own bound list, because the
+ * two branches bind differently: the ranked one assembles positional parameters
+ * and the listing one goes through the query builder's named ones. What must not
+ * differ is the rule itself, which is why it is a function here and not a string
+ * in each of them.
+ *
+ * **An `EXISTS` rather than a join**, so a product the chain sells at nine of its
+ * scopes is still one row rather than nine.
+ *
+ * **`available` is part of the meaning and not an optimization.** A source row
+ * saying the chain does not stock the product is exactly the row that must not
+ * put it in that chain's catalog, and `bestOffer` and the `scopes` array already
+ * exclude it for the same reason (plan 0109, section 2).
+ *
+ * It says nothing about price. A product the chain sells with no price row is
+ * listed with its price fields null, as it would be with no filter at all.
+ */
+function soldByChainSql(placeholder: string): string {
+  return `EXISTS (
+        SELECT 1
+        FROM "supermarket_items" si
+        JOIN "price_scopes" ps ON ps."id" = si."priceScopeId"
+        WHERE si."itemId" = i."id"
+          AND ps."supermarketId" = ANY(${placeholder})
+          AND si."available"
+      )`;
 }
 
 /**
@@ -157,6 +199,7 @@ export class ItemService {
       sku: req.sku ?? null,
       ean: req.ean ?? null,
       unitSize: req.unitSize ?? null,
+      packCount: req.packCount ?? null,
       category: req.category,
       defaultUnit: req.defaultUnit,
       productGroupId: await this.resolveGroup(req.productGroupId ?? null),
@@ -234,6 +277,7 @@ export class ItemService {
         sku: input.sku ?? null,
         ean: input.ean ?? null,
         unitSize: input.unitSize ?? null,
+        packCount: input.packCount ?? null,
         category: input.category,
         defaultUnit: input.defaultUnit,
         productGroupId: await this.resolveGroup(input.productGroupId ?? null),
@@ -252,7 +296,7 @@ export class ItemService {
         return rows;
       });
     } catch (error) {
-      throw asEanConflict(error, EAN_TAKEN_IN_BATCH);
+      throw asEanConflict(error, eanTakenInBatch(takenEanOf(error)));
     }
 
     for (const row of saved) {
@@ -306,6 +350,9 @@ export class ItemService {
     if (req.unitSize !== undefined) {
       row.unitSize = req.unitSize;
     }
+    if (req.packCount !== undefined) {
+      row.packCount = req.packCount;
+    }
     if (req.category !== undefined) {
       row.category = req.category;
     }
@@ -340,6 +387,78 @@ export class ItemService {
 
   async get(req: ItemIdRequest): Promise<ItemView> {
     return toItemView(await this.load(req.itemId));
+  }
+
+  /**
+   * Write a pack count onto each product that has none (plan 0162, section 3).
+   *
+   * **One statement, and it never overwrites.** The `IS NULL` is the rule, not
+   * a detail of it: a count that is set was either read by an earlier run or
+   * typed by a person, and only {@link update} may change it, so a correction
+   * survives every run after it. A pair naming a product that is gone writes
+   * nothing and is not counted.
+   *
+   * The harvester already left out every product whose sources disagree, so a
+   * product named twice here is a caller's mistake and is refused whole rather
+   * than settled by whichever pair came last.
+   */
+  async fillPackCounts(
+    req: FillPackCountsRequest
+  ): Promise<FillPackCountsResult> {
+    const actor = await this.admin.requireAdmin(req);
+    if (req.entries.length > PACK_COUNT_FILL_MAX) {
+      throw new ValidationException(
+        `A pack count fill carries at most ${PACK_COUNT_FILL_MAX} products, ` +
+          `and this one carries ${req.entries.length}. Send several calls: ` +
+          'each product is written on its own merit, so nothing is half done.'
+      );
+    }
+    const ids = new Set<string>();
+    for (const entry of req.entries) {
+      if (ids.has(entry.itemId)) {
+        throw new ValidationException(
+          `The product ${entry.itemId} is named twice in one pack count fill.`
+        );
+      }
+      if (packCountOf(entry.packCount) !== entry.packCount) {
+        throw new ValidationException(
+          `The pack count ${entry.packCount} for ${entry.itemId} is not a ` +
+            `whole number from ${PACK_COUNT_MIN} to ${PACK_COUNT_MAX}.`
+        );
+      }
+      ids.add(entry.itemId);
+    }
+    // An id that is not a uuid names no product, and casting it would fail the
+    // whole statement rather than skip one pair.
+    const entries = req.entries.filter((entry) => isUuid(entry.itemId));
+    if (entries.length === 0) {
+      return { written: 0 };
+    }
+
+    return this.audit.write(actor, async (tx) => {
+      // `UPDATE ... RETURNING` answers `[rows, rowCount]` through `query()`.
+      const [rows] = (await tx.manager.query(
+        `UPDATE "items" AS i
+            SET "packCount" = v."packCount", "updatedAt" = now()
+           FROM unnest($1::uuid[], $2::smallint[]) AS v("id", "packCount")
+          WHERE i."id" = v."id"
+            AND i."packCount" IS NULL
+      RETURNING i."id", i."packCount"`,
+        [
+          entries.map((entry) => entry.itemId),
+          entries.map((entry) => entry.packCount),
+        ]
+      )) as [{ id: string; packCount: number }[], number];
+      // Only the one column moved, so the trail records that and nothing
+      // else: every other field reads the same on both sides.
+      for (const row of rows) {
+        await tx.recordUpdate(Item, { id: row.id, packCount: null }, {
+          id: row.id,
+          packCount: row.packCount,
+        } as Item);
+      }
+      return { written: rows.length };
+    });
   }
 
   /**
@@ -396,7 +515,7 @@ export class ItemService {
         }),
       };
     }
-    const offers = await this.offersFor(itemIds, scopeIds, 'price');
+    const offers = await this.offersFor(itemIds, scopeIds);
     return {
       items: rows.map((row) => ({
         ...toItemView(row),
@@ -455,16 +574,28 @@ export class ItemService {
 
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
-    const offers = await this.offersFor(
-      page.map((row) => row.id),
-      req.priceScopeIds
-    );
     const last = page[page.length - 1];
     const nextCursor =
       !hasMore || !last
         ? null
         : this.nextCursor(order, locale, cursor, limit, last);
 
+    const pageIds = page.map((row) => row.id);
+    const scopeIds = req.priceScopeIds ?? [];
+    if (req.offers === 'all' && scopeIds.length > 0) {
+      // Plan 0161, section 1: what `getMany` answers for `all`, for the same
+      // reason. `bestOffer` is the first entry of the one array rather than a
+      // second query, so the two cannot disagree.
+      const perItem = await this.allOffersFor(pageIds, scopeIds);
+      return {
+        items: page.map((row) => {
+          const offers = perItem.get(row.id) ?? [];
+          return { ...toItemView(row), bestOffer: offers[0] ?? null, offers };
+        }),
+        nextCursor,
+      };
+    }
+    const offers = await this.offersFor(pageIds, req.priceScopeIds);
     return {
       items: page.map((row) => toItemView(row, offers.get(row.id))),
       nextCursor,
@@ -503,6 +634,11 @@ export class ItemService {
     // it, because unit price is one of the ranking keys. With no scopes there is
     // nothing to join to, so the lateral is left out entirely and every group
     // answers with null prices.
+    //
+    // A member with a till price comes before any other key (plan 0157). The
+    // members are different products, so unit price is still how they are
+    // compared, but only among offers somebody can pay: a leaflet row with no
+    // price and a unit price of 2 is not the cheapest beer in the group.
     const offerJoin =
       scopeIds.length === 0
         ? ''
@@ -516,7 +652,8 @@ export class ItemService {
         WHERE mi."productGroupId" = g."id"
           AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
           AND si."available"
-        ORDER BY si."unitPrice" ASC NULLS LAST,
+        ORDER BY si."price" IS NULL ASC,
+                 si."unitPrice" ASC NULLS LAST,
                  si."price" ASC NULLS LAST,
                  si."itemId" ASC
         LIMIT 1
@@ -567,7 +704,14 @@ export class ItemService {
       ? `(${wholeWordMatchSql(GROUP_SEARCH_TEXT, term.words, p.bind)}) DESC,
                `
       : '';
-    const priced = scopeIds.length === 0 ? 'NULL::numeric' : 'o."unitPrice"';
+    // The offer's unit price only when the offer has a till price, the rule the
+    // items' `cheapest` key follows (plan 0157). The lateral already prefers a
+    // priced member, so this is null only for a group none of whose members has
+    // a price here, which then ranks with the unpriced ones.
+    const priced =
+      scopeIds.length === 0
+        ? 'NULL::numeric'
+        : 'CASE WHEN o."price" IS NULL THEN NULL ELSE o."unitPrice" END';
 
     const rows: RankedGroupRow[] = await this.groups.query(
       `
@@ -604,25 +748,49 @@ export class ItemService {
 
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
-
-    // The cheapest member as a full ItemView, in one query for the page. The
-    // ranking already knows which product it is; this is what it looks like.
-    const itemIds = page
-      .map((row) => row.offerItemId)
-      .filter((id): id is string => id !== null);
-    const members =
-      itemIds.length === 0
-        ? []
-        : await this.items.find({ where: { id: In(itemIds) } });
-    const byId = new Map(members.map((item) => [item.id, item]));
+    const groupIds = page.map((row) => row.id);
 
     // The whole membership of every group on the page, which is what choosing one
-    // attaches to a line. One query for the page rather than one per group.
-    const membership = await this.membersOf(page.map((row) => row.id));
+    // attaches to a line, and the cheapest few as products when they were asked
+    // for (plan 0161, section 2). One query each for the page rather than one per
+    // group.
+    const memberCount = Math.min(req.members ?? 0, PRODUCT_GROUP_MEMBERS_MAX);
+    const [membership, ranked] = await Promise.all([
+      this.membersOf(groupIds),
+      memberCount > 0
+        ? this.cheapestMembersOf(groupIds, scopeIds, memberCount)
+        : Promise.resolve(undefined),
+    ]);
+
+    // The cheapest member as a full ItemView, in one query for the page. The
+    // ranking already knows which product it is; this is what it looks like. The
+    // ranked members are loaded by the same query.
+    const cheapestIds = page
+      .map((row) => row.offerItemId)
+      .filter((id): id is string => id !== null);
+    const itemIds = [
+      ...new Set([
+        ...cheapestIds,
+        ...[...(ranked?.values() ?? [])].flat().map((row) => row.itemId),
+      ]),
+    ];
+    const [members, offers] = await Promise.all([
+      itemIds.length === 0
+        ? Promise.resolve([] as Item[])
+        : this.items.find({ where: { id: In(itemIds) } }),
+      // Plan 0161, section 1: every scope's price for each cheapest member.
+      req.offers === 'all' && scopeIds.length > 0
+        ? this.allOffersFor(cheapestIds, scopeIds)
+        : Promise.resolve(undefined),
+    ]);
+    const byId = new Map(members.map((item) => [item.id, item]));
 
     return {
       items: page.map((row) =>
-        this.toOfferView(row, byId, membership.get(row.id) ?? [])
+        this.toOfferView(row, byId, membership.get(row.id) ?? [], {
+          offers,
+          members: ranked ? (ranked.get(row.id) ?? []) : undefined,
+        })
       ),
       nextCursor: hasMore
         ? encodeCursor({
@@ -684,10 +852,116 @@ export class ItemService {
     return byGroup;
   }
 
+  /**
+   * The cheapest `count` members of each group, as the card's reveal draws them
+   * (plan 0161, section 2), in one query for the page.
+   *
+   * **The same keys as the lateral in {@link searchOffers}**, applied twice:
+   * once to pick each member's own offer, and once to rank the members by it.
+   * That is what makes the first member the group's `cheapestItem`: the lateral
+   * takes the lowest row of the whole group by those keys, and the lowest of
+   * every member's lowest row is that same row. A member with no offer at these
+   * scopes sorts after every member that has one, by English name then id,
+   * which is the order {@link membersOf} uses.
+   *
+   * Capped **in the database** with a window function, for the reason
+   * {@link membersOf} gives: ten groups must not pull ten whole ranges out of
+   * Postgres to answer one keystroke.
+   */
+  private async cheapestMembersOf(
+    groupIds: string[],
+    scopeIds: string[],
+    count: number
+  ): Promise<Map<string, RankedMemberRow[]>> {
+    const byGroup = new Map<string, RankedMemberRow[]>();
+    if (groupIds.length === 0) {
+      return byGroup;
+    }
+    const p = params();
+    // With no scopes there is no offer to join, and every member ranks by name.
+    const offerJoin =
+      scopeIds.length === 0
+        ? ''
+        : `
+          LEFT JOIN LATERAL (
+            SELECT si."priceScopeId", si."price", si."currency",
+                   si."unitPrice", si."unitPriceLabel", si."priceObservedAt",
+                   si."priceSourceKind", si."priceCopiedFromScopeId", si."stale"
+            FROM "supermarket_items" si
+            WHERE si."itemId" = i."id"
+              AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
+              AND si."available"
+            ORDER BY si."price" IS NULL ASC,
+                     si."unitPrice" ASC NULLS LAST,
+                     si."price" ASC NULLS LAST,
+                     si."priceScopeId" ASC
+            LIMIT 1
+          ) o ON true`;
+    const offerColumns =
+      scopeIds.length === 0
+        ? `NULL::uuid AS "offerScopeId",
+           NULL::numeric AS "offerPrice", NULL::varchar AS "offerCurrency",
+           NULL::numeric AS "offerUnitPrice", NULL::varchar AS "offerUnitPriceLabel",
+           NULL::timestamptz AS "offerObservedAt",
+           NULL::"price_source_kind" AS "offerSourceKind",
+           NULL::uuid AS "offerCopiedFromScopeId",
+           NULL::boolean AS "offerStale"`
+        : `o."priceScopeId" AS "offerScopeId",
+           o."price" AS "offerPrice", o."currency" AS "offerCurrency",
+           o."unitPrice" AS "offerUnitPrice", o."unitPriceLabel" AS "offerUnitPriceLabel",
+           o."priceObservedAt" AS "offerObservedAt",
+           o."priceSourceKind" AS "offerSourceKind",
+           o."priceCopiedFromScopeId" AS "offerCopiedFromScopeId",
+           o."stale" AS "offerStale"`;
+    const rank =
+      scopeIds.length === 0
+        ? `i."name" ->> 'en' ASC, i."id" ASC`
+        : `o."price" IS NULL ASC,
+           o."unitPrice" ASC NULLS LAST,
+           o."price" ASC NULLS LAST,
+           o."priceScopeId" IS NULL ASC,
+           CASE WHEN o."priceScopeId" IS NULL THEN i."name" ->> 'en' END ASC,
+           i."id" ASC`;
+
+    const rows: (RankedMemberRow & { rn: string })[] = await this.items.query(
+      `
+      SELECT *
+      FROM (
+        SELECT i."id" AS "itemId", i."productGroupId", ${offerColumns},
+               row_number() OVER (
+                 PARTITION BY i."productGroupId"
+                 ORDER BY ${rank}
+               ) AS rn
+        FROM "items" i${offerJoin}
+        WHERE i."productGroupId" = ANY(${p.bind(groupIds)})
+      ) ranked
+      WHERE rn <= ${p.bind(count)}
+      ORDER BY "productGroupId" ASC, rn ASC
+      `,
+      p.values
+    );
+
+    for (const row of rows) {
+      const current = byGroup.get(row.productGroupId);
+      if (current === undefined) {
+        byGroup.set(row.productGroupId, [row]);
+      } else {
+        current.push(row);
+      }
+    }
+    return byGroup;
+  }
+
   private toOfferView(
     row: RankedGroupRow,
     members: Map<string, Item>,
-    itemIds: string[]
+    itemIds: string[],
+    extra: {
+      /** Every scope's offer per cheapest member, when `offers: 'all'`. */
+      offers?: Map<string, ItemOfferView[]>;
+      /** The ranked members, when `members` was asked for. */
+      members?: RankedMemberRow[];
+    } = {}
   ): ProductGroupOfferView {
     const group = toProductGroupView({
       id: row.id,
@@ -698,64 +972,96 @@ export class ItemService {
     } as ProductGroup);
 
     const member = row.offerItemId ? members.get(row.offerItemId) : undefined;
-    if (!member || !row.offerScopeId) {
-      return { group, cheapestItem: null, offer: null, itemIds };
+    const offer =
+      member && row.offerScopeId
+        ? rawOfferView(member.id, row.offerScopeId, row)
+        : null;
+
+    const view: ProductGroupOfferView =
+      !member || !offer
+        ? { group, cheapestItem: null, offer: null, itemIds }
+        : {
+            group,
+            cheapestItem: extra.offers
+              ? {
+                  ...toItemView(member, offer),
+                  // The group's own offer leads the array, so `bestOffer` is
+                  // its first entry without being changed (plan 0161, section
+                  // 1). The lateral ranks one product's rows by unit price
+                  // before price and `allOffersFor` by price first; for one
+                  // product the two almost always agree, and where they do not
+                  // the offer the group was ranked by is the one that stays.
+                  offers: [
+                    offer,
+                    ...(extra.offers.get(member.id) ?? []).filter(
+                      (other) => other.priceScopeId !== offer.priceScopeId
+                    ),
+                  ],
+                }
+              : toItemView(member, offer),
+            offer,
+            itemIds,
+          };
+
+    if (extra.members === undefined) {
+      return view;
     }
-    const offer: ItemOfferView = {
-      itemId: member.id,
-      priceScopeId: row.offerScopeId,
-      price: row.offerPrice === null ? null : Number(row.offerPrice),
-      currency: row.offerCurrency,
-      unitPrice:
-        row.offerUnitPrice === null ? null : Number(row.offerUnitPrice),
-      unitPriceLabel: row.offerUnitPriceLabel,
-      observedAt: row.offerObservedAt
-        ? new Date(row.offerObservedAt).toISOString()
-        : null,
-      sourceKind: row.offerSourceKind ?? null,
-      priceCopiedFromScopeId: row.offerCopiedFromScopeId ?? null,
-      stale: row.offerStale ?? false,
-    };
-    return { group, cheapestItem: toItemView(member, offer), offer, itemIds };
+    const ranked: ItemView[] = [];
+    for (const entry of extra.members) {
+      const item = members.get(entry.itemId);
+      if (!item) {
+        // Deleted between the two reads. A missing product is left out rather
+        // than drawn without a name.
+        continue;
+      }
+      ranked.push(
+        // `members[0]` is `cheapestItem` exactly: the same product by the
+        // ranking, and the same offer even where two of its scopes tie.
+        offer && item.id === offer.itemId && ranked.length === 0
+          ? toItemView(item, offer)
+          : toItemView(
+              item,
+              entry.offerScopeId
+                ? rawOfferView(item.id, entry.offerScopeId, entry)
+                : undefined
+            )
+      );
+    }
+    return { ...view, members: ranked };
   }
 
   /**
    * The cheapest price each of these items has at these scopes.
    *
    * `DISTINCT ON` rather than a group by with a self join: one pass, and the
-   * ordering inside it is the definition of cheapest, which is the one thing the
-   * two callers disagree on. {@link search} ranks by **unit price** first because
-   * that is the field whose only purpose is comparison (plan 0038, section 2.4),
-   * then the shelf price for a product whose source published no unit price at
-   * all, which would otherwise never be quotable. {@link getMany} ranks by
-   * **price** first (plan 0066, section 2.1): it quotes what the till charges for
-   * one product, and a unit price ranking there would be half of backlog 0004.
+   * ordering inside it is the definition of cheapest, which is
+   * {@link orderOffers} and is the same for every caller (plan 0157).
+   *
+   * {@link search} used to rank by unit price here, and that is how a leaflet
+   * row with no till price and a unit price of 2 was quoted over a Mercadona row
+   * at 0,69 € with none, while the basket, ranking by price, quoted the
+   * Mercadona row for the same product. Every row this picks between prices one
+   * product, so the till price is the comparison, and a search result and a
+   * basket line cannot name two different best offers.
    */
   private async offersFor(
     itemIds: string[],
-    priceScopeIds?: string[],
-    rank: 'unitPrice' | 'price' = 'unitPrice'
+    priceScopeIds?: string[]
   ): Promise<Map<string, ItemOfferView>> {
     const offers = new Map<string, ItemOfferView>();
     if (itemIds.length === 0 || !priceScopeIds || priceScopeIds.length === 0) {
       return offers;
     }
-    const [first, second] =
-      rank === 'price'
-        ? ['si."price"', 'si."unitPrice"']
-        : ['si."unitPrice"', 'si."price"'];
-    const rows = await this.prices
-      .createQueryBuilder('si')
-      .distinctOn(['si."itemId"'])
-      .where('si."itemId" IN (:...itemIds)', { itemIds })
-      .andWhere('si."priceScopeId" IN (:...scopeIds)', {
-        scopeIds: priceScopeIds,
-      })
-      .andWhere('si."available"')
-      .orderBy('si."itemId"', 'ASC')
-      .addOrderBy(first, 'ASC', 'NULLS LAST')
-      .addOrderBy(second, 'ASC', 'NULLS LAST')
-      .getMany();
+    const rows = await orderOffers(
+      this.prices
+        .createQueryBuilder('si')
+        .distinctOn(['si."itemId"'])
+        .where('si."itemId" IN (:...itemIds)', { itemIds })
+        .andWhere('si."priceScopeId" IN (:...scopeIds)', {
+          scopeIds: priceScopeIds,
+        })
+        .andWhere('si."available"')
+    ).getMany();
     for (const row of rows) {
       offers.set(row.itemId, toItemOfferView(row));
     }
@@ -774,9 +1080,9 @@ export class ItemService {
    * collapsed answer at all, so a filter built on it silently drops exactly the
    * products it was asked about.
    *
-   * Ranked by **price** and not by unit price, for {@link getMany}'s reason
-   * (plan 0066, section 2.1): this quotes what the till charges, and the caller
-   * reads the first entry as the cheapest.
+   * Ranked by {@link orderOffers}, the ordering {@link offersFor} uses: this
+   * quotes what the till charges (plan 0066, section 2.1), and the caller reads
+   * the first entry as the cheapest.
    *
    * Unpaged, and bounded by the caller: a basket of forty lines against ten
    * scopes is four hundred rows in one query, which is less than the product
@@ -790,20 +1096,18 @@ export class ItemService {
     if (itemIds.length === 0 || !priceScopeIds || priceScopeIds.length === 0) {
       return offers;
     }
-    const rows = await this.prices
-      .createQueryBuilder('si')
-      .where('si."itemId" IN (:...itemIds)', { itemIds })
-      .andWhere('si."priceScopeId" IN (:...scopeIds)', {
-        scopeIds: priceScopeIds,
-      })
-      // A row that says the product is not on the shelf is absent rather than
-      // listed as unavailable, exactly as it is from the cheapest answer, so
-      // "no row" is the client's one way of reading "not sold here".
-      .andWhere('si."available"')
-      .orderBy('si."itemId"', 'ASC')
-      .addOrderBy('si."price"', 'ASC', 'NULLS LAST')
-      .addOrderBy('si."unitPrice"', 'ASC', 'NULLS LAST')
-      .getMany();
+    const rows = await orderOffers(
+      this.prices
+        .createQueryBuilder('si')
+        .where('si."itemId" IN (:...itemIds)', { itemIds })
+        .andWhere('si."priceScopeId" IN (:...scopeIds)', {
+          scopeIds: priceScopeIds,
+        })
+        // A row that says the product is not on the shelf is absent rather than
+        // listed as unavailable, exactly as it is from the cheapest answer, so
+        // "no row" is the client's one way of reading "not sold here".
+        .andWhere('si."available"')
+    ).getMany();
     for (const row of rows) {
       const list = offers.get(row.itemId);
       if (list) {
@@ -824,7 +1128,10 @@ export class ItemService {
   ): Promise<Item[]> {
     const offset = Number(cursor?.value ?? 0) || 0;
     const p = params();
-    const query = p.bind(term.tsquery);
+    // Through `catalog_norm` before the stemmer, because the item documents are
+    // built from normalized text (plan 0156). The group search binds the same
+    // tsquery unnormalized, since group documents still keep their accents.
+    const query = `"catalog_norm"(${p.bind(term.tsquery)})`;
     const raw = p.bind(term.raw);
     // The barcode test, bound once and spent in both the filter and the
     // ordering, or the constant `false` when the query is words. A barcode names
@@ -877,9 +1184,19 @@ export class ItemService {
     if (req.withoutProductGroup) {
       filters.push('i."productGroupId" IS NULL');
     }
+    // Plan 0146: which chains sell the product, which is not what the scopes
+    // below decide. Empty is the same as absent, so a person who cleared the
+    // chain chips reads the catalog rather than an empty page.
+    if (req.soldBy?.length) {
+      filters.push(soldByChainSql(p.bind(req.soldBy)));
+    }
     // Unit price is the last ranking key, so it is joined even when the caller
     // asked for no prices in the answer: with no scopes there is nothing to join
     // and every row sorts as unpriced, which is the same order.
+    //
+    // Only over rows with a till price (plan 0157). A leaflet row with no price
+    // and a unit price of 2 is not an offer, so a product whose only cheap unit
+    // price is one of those ranks by its priced rows, or with the unpriced.
     const scopeIds = req.priceScopeIds ?? [];
     const cheapest =
       scopeIds.length === 0
@@ -890,6 +1207,7 @@ export class ItemService {
             WHERE si."itemId" = i."id"
               AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
               AND si."available"
+              AND si."price" IS NOT NULL
           )`;
 
     return this.items.query(
@@ -913,6 +1231,7 @@ export class ItemService {
         term.words,
         p.bind
       )}) DESC,
+               ${brandTypedSql('i."brand"', term.words, p.bind)} DESC,
                round(GREATEST(
                  ts_rank(i."search_es", to_tsquery('spanish', ${query}), 1),
                  ts_rank(i."search_en", to_tsquery('english', ${query}), 1),
@@ -973,8 +1292,8 @@ export class ItemService {
           ${term.ean === null ? 'false' : 'i."ean" = :ean'}
           OR (
             (
-              i."search_es" @@ to_tsquery('spanish', :tsquery)
-              OR i."search_en" @@ to_tsquery('english', :tsquery)
+              i."search_es" @@ to_tsquery('spanish', "catalog_norm"(:tsquery))
+              OR i."search_en" @@ to_tsquery('english', "catalog_norm"(:tsquery))
             )
             AND ${literal}
           )
@@ -1005,6 +1324,11 @@ export class ItemService {
       // group filter rather than instead of it, so asking for both answers with
       // nothing, which is what the two clauses together mean.
       qb.andWhere('i."productGroupId" IS NULL');
+    }
+    if (req.soldBy?.length) {
+      // The same rule the ranked branch applies, from the same function: the
+      // chain chips must not stop narrowing the moment somebody types a word.
+      qb.andWhere(soldByChainSql(':soldBy'), { soldBy: req.soldBy });
     }
     this.applyOrder(qb, order, locale, cursor);
     return qb.getMany();
@@ -1256,10 +1580,31 @@ const PG_UNIQUE_VIOLATION = '23505';
  * differs: a batch landed nothing at all, a create landed nothing, and an edit
  * left the product as it was. A single message would have to leave out which.
  */
-const EAN_TAKEN_IN_BATCH =
-  'One of these products carries an EAN the catalog already holds, so ' +
-  'none of them were created. Bind that row onto the product that has ' +
-  'the barcode instead of creating a second one.';
+function eanTakenInBatch(ean: string | null): string {
+  // The barcode, because "one of these products" in a file of a thousand
+  // leaves the operator to find which (plan 0158).
+  const which = ean
+    ? `A product of this batch carries EAN ${ean}, which the catalog ` +
+      'already holds'
+    : 'One of these products carries an EAN the catalog already holds';
+  return (
+    `${which}, so none of them were created. Bind that row onto the ` +
+    'product that has the barcode instead of creating a second one.'
+  );
+}
+
+/**
+ * The barcode a unique violation on `uq_items_ean` names. Postgres writes it
+ * into the error's detail as `Key (ean)=(8480000123456) already exists.`
+ */
+function takenEanOf(error: unknown): string | null {
+  const detail = (error as { driverError?: { detail?: unknown } })?.driverError
+    ?.detail;
+  if (typeof detail !== 'string') {
+    return null;
+  }
+  return /\(ean\)=\(([^)]+)\)/.exec(detail)?.[1] ?? null;
+}
 
 const EAN_TAKEN_ON_CREATE =
   'The catalog already holds a product with this EAN, so nothing was ' +
@@ -1292,6 +1637,73 @@ function asEanConflict(error: unknown, message: string): unknown {
     return new ConflictException(message);
   }
   return error;
+}
+
+/**
+ * The one definition of "the best offer" for one product (plan 0157), applied
+ * to a query over `supermarket_items` aliased `si`.
+ *
+ * **A row with a till price first, before any other key.** A leaflet row can
+ * carry a unit price and no price, on purpose (plan 0081): a per kilo tile or
+ * a conditional promotion is information, and it is not an offer anybody can
+ * pay. Then the price, then the unit price for two rows at one price, then the
+ * scope id, so that two equal rows cannot swap places between the search read
+ * and the basket read of the same product.
+ */
+function orderOffers(
+  query: SelectQueryBuilder<SupermarketItem>
+): SelectQueryBuilder<SupermarketItem> {
+  return query
+    .orderBy('si."itemId"', 'ASC')
+    .addOrderBy('si."price" IS NULL', 'ASC')
+    .addOrderBy('si."price"', 'ASC', 'NULLS LAST')
+    .addOrderBy('si."unitPrice"', 'ASC', 'NULLS LAST')
+    .addOrderBy('si."priceScopeId"', 'ASC');
+}
+
+/**
+ * The offer columns a raw query aliases with an `offer` prefix, as Postgres
+ * hands them back: numerics as strings.
+ */
+interface RawOfferColumns {
+  offerPrice: string | null;
+  offerCurrency: string | null;
+  offerUnitPrice: string | null;
+  offerUnitPriceLabel: string | null;
+  offerObservedAt: string | Date | null;
+  offerSourceKind: SupermarketItem['priceSourceKind'];
+  offerCopiedFromScopeId: string | null;
+  offerStale: boolean | null;
+}
+
+/** One offer out of a raw query's `offer` columns. */
+function rawOfferView(
+  itemId: string,
+  priceScopeId: string,
+  row: RawOfferColumns
+): ItemOfferView {
+  return {
+    itemId,
+    priceScopeId,
+    price: row.offerPrice === null ? null : Number(row.offerPrice),
+    currency: row.offerCurrency,
+    unitPrice: row.offerUnitPrice === null ? null : Number(row.offerUnitPrice),
+    unitPriceLabel: row.offerUnitPriceLabel,
+    unitBasis: unitBasisOf(row.offerUnitPriceLabel),
+    observedAt: row.offerObservedAt
+      ? new Date(row.offerObservedAt).toISOString()
+      : null,
+    sourceKind: row.offerSourceKind ?? null,
+    priceCopiedFromScopeId: row.offerCopiedFromScopeId ?? null,
+    stale: row.offerStale ?? false,
+  };
+}
+
+/** One member of a group, ranked for the card's reveal (plan 0161). */
+interface RankedMemberRow extends RawOfferColumns {
+  itemId: string;
+  productGroupId: string;
+  offerScopeId: string | null;
 }
 
 /** One row of the ranked group query, before it becomes a view. */

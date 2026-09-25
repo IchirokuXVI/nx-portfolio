@@ -3,18 +3,21 @@ import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
-  fakeGeneratedListStore,
+  fakeBasketListStore,
+  fakeLiveBasketStore,
   fakeSharedListStore,
   GatewayError,
-  provideFakeGeneratedListStore,
+  provideFakeBasketListStore,
+  provideFakeLiveBasketStore,
   provideFakeSharedListStore,
-  type FakeGeneratedListStore,
+  type FakeBasketListStore,
+  type FakeLiveBasketStore,
   type FakeSharedListStore,
 } from '@portfolio/velista/data-access';
 import {
   formatGeneratedDate,
-  type GeneratedListSummary,
-  type SharedGeneratedListSummary,
+  type BasketSummary,
+  type SharedBasketSummary,
 } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
@@ -32,11 +35,12 @@ import { ShoppingListsPage } from './shopping-lists-page';
  * changes one thing about the world and asserts on the DOM.
  */
 
-function basket(overrides: Partial<GeneratedListSummary> = {}) {
+function basket(overrides: Partial<BasketSummary> = {}) {
   return {
     id: 'gl1',
+    kind: 'GENERATED',
     name: 'Saturday big shop',
-    status: 'ACTIVE',
+    status: 'OPEN',
     generatedAt: new Date('2026-08-21T10:00:00.000Z'),
     lineCount: 12,
     settledLineCount: 4,
@@ -46,14 +50,15 @@ function basket(overrides: Partial<GeneratedListSummary> = {}) {
     notAvailableLineCount: 1,
     presentCount: 0,
     ...overrides,
-  } as GeneratedListSummary;
+  } as BasketSummary;
 }
 
 async function render(
-  store: FakeGeneratedListStore = fakeGeneratedListStore(),
+  store: FakeBasketListStore = fakeBasketListStore(),
   shared: FakeSharedListStore = fakeSharedListStore(),
   /** The URL the page is opened at, which is where the tab is read from. */
-  url = '/'
+  url = '/',
+  live: FakeLiveBasketStore = fakeLiveBasketStore()
 ): Promise<ComponentFixture<ShoppingListsPage>> {
   TestBed.resetTestingModule();
 
@@ -63,8 +68,9 @@ async function render(
       provideRouter([]),
       provideVelistaTesting(),
       provideFakeBrowserFacade(),
-      provideFakeGeneratedListStore(store),
+      provideFakeBasketListStore(store),
       provideFakeSharedListStore(shared),
+      provideFakeLiveBasketStore(live),
     ],
   }).compileComponents();
 
@@ -89,7 +95,7 @@ describe('ShoppingListsPage', () => {
   describe('the states', () => {
     it('shows skeleton rows while the listing is on its way', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([], { state: 'loading' })
+        fakeBasketListStore([], { state: 'loading' })
       );
 
       expect(query(fixture, 'lib-row-skeleton')).not.toBeNull();
@@ -100,9 +106,7 @@ describe('ShoppingListsPage', () => {
     // instant before it happens and drawing the empty state there would flash "no
     // shopping lists yet" at somebody who has a hundred.
     it('treats idle as loading rather than as empty', async () => {
-      const fixture = await render(
-        fakeGeneratedListStore([], { state: 'idle' })
-      );
+      const fixture = await render(fakeBasketListStore([], { state: 'idle' }));
 
       expect(query(fixture, 'lib-row-skeleton')).not.toBeNull();
       expect(text(fixture)).not.toContain('history.empty.title');
@@ -119,7 +123,7 @@ describe('ShoppingListsPage', () => {
 
     it('offers a retry with the support reference when the read failed', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([], {
+        fakeBasketListStore([], {
           state: 'failed',
           error: new GatewayError({
             code: 'internal',
@@ -141,7 +145,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('asks the store for the listing when it is created', async () => {
-      const store = fakeGeneratedListStore();
+      const store = fakeBasketListStore();
 
       await render(store);
 
@@ -152,9 +156,9 @@ describe('ShoppingListsPage', () => {
   describe('the rows', () => {
     it('draws one per trip, in the order the listing gave them', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([
+        fakeBasketListStore([
           basket({ id: 'a', name: 'Newest' }),
-          basket({ id: 'b', name: 'Older', status: 'COMPLETED' }),
+          basket({ id: 'b', name: 'Older', status: 'FINISHED' }),
         ])
       );
 
@@ -165,27 +169,27 @@ describe('ShoppingListsPage', () => {
     });
 
     // Never colour alone (section 7): the word is what says it.
-    it('marks an active trip with the word, not only a colour', async () => {
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+    it('marks an open trip with the word, not only a colour', async () => {
+      const fixture = await render(fakeBasketListStore([basket()]));
 
       expect(text(fixture)).toContain('history.status.active');
     });
 
-    // A draft is a trip somebody is still going to make, and it is what a run actually
-    // composes: core writes `DRAFT` and never promotes it, so a badge that asked for
-    // `ACTIVE` alone was a badge no row could ever earn. Same one line bug as the
-    // dashboard card's, and both now ask `isLiveGeneratedList`.
-    it('marks a draft too, since that is what a run composes', async () => {
+    // The badge used to ask for `ACTIVE` alone, which core never wrote: it composed
+    // every run as `DRAFT` and never promoted one, so it was a badge no row could
+    // ever earn. Same one line bug as the dashboard card's, and both now ask
+    // `isOpenBasket`, against the one value backend `0133` left.
+    it('says nothing about being shopped now on a status it cannot read', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'DRAFT' })])
+        fakeBasketListStore([basket({ status: 'UNKNOWN' })])
       );
 
-      expect(text(fixture)).toContain('history.status.active');
+      expect(text(fixture)).not.toContain('history.status.active');
     });
 
     it('says nothing about being shopped now on a finished trip', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'COMPLETED' })])
+        fakeBasketListStore([basket({ status: 'FINISHED' })])
       );
 
       expect(text(fixture)).not.toContain('history.status.active');
@@ -202,7 +206,7 @@ describe('ShoppingListsPage', () => {
      */
     it('marks a finished trip, and keeps it in the listing', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'COMPLETED' })])
+        fakeBasketListStore([basket({ status: 'FINISHED' })])
       );
 
       expect(all(fixture, 'lib-shopping-list-row')).toHaveLength(1);
@@ -210,7 +214,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('says nothing about being finished on a trip that is still live', async () => {
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
 
       expect(text(fixture)).not.toContain('history.status.finished');
     });
@@ -223,7 +227,7 @@ describe('ShoppingListsPage', () => {
      */
     it('claims nothing at all about a status it cannot read', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ status: 'UNKNOWN' })])
+        fakeBasketListStore([basket({ status: 'UNKNOWN' })])
       );
 
       expect(text(fixture)).not.toContain('history.status.finished');
@@ -232,7 +236,7 @@ describe('ShoppingListsPage', () => {
 
     it('titles an unnamed trip with its date rather than leaving it blank', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket({ name: null })])
+        fakeBasketListStore([basket({ name: null })])
       );
 
       const row = query(fixture, 'lib-shopping-list-row');
@@ -250,7 +254,7 @@ describe('ShoppingListsPage', () => {
   describe('what it refuses to offer', () => {
     it('gives no way to delete or archive anything', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket(), basket({ id: 'b' })])
+        fakeBasketListStore([basket(), basket({ id: 'b' })])
       );
 
       const html = (fixture.nativeElement as HTMLElement).innerHTML;
@@ -260,7 +264,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('gives each row exactly one control, which is opening it', async () => {
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
 
       const row = query(fixture, 'lib-shopping-list-row');
       expect(row?.querySelectorAll('button')).toHaveLength(1);
@@ -269,7 +273,7 @@ describe('ShoppingListsPage', () => {
 
   describe('paging', () => {
     it('draws a skeleton at the bottom while a further page is on its way', async () => {
-      const store = fakeGeneratedListStore([basket()]);
+      const store = fakeBasketListStore([basket()]);
       store.setLoadingMore(true);
       const fixture = await render(store);
 
@@ -279,7 +283,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('asks for the next page when the scroller nears the bottom', async () => {
-      const store = fakeGeneratedListStore([basket()], { hasMore: true });
+      const store = fakeBasketListStore([basket()], { hasMore: true });
       const fixture = await render(store);
 
       const scroller = query(fixture, '.scroller') as HTMLElement;
@@ -295,7 +299,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('leaves it alone while there is still a screenful to read', async () => {
-      const store = fakeGeneratedListStore([basket()], { hasMore: true });
+      const store = fakeBasketListStore([basket()], { hasMore: true });
       const fixture = await render(store);
 
       const scroller = query(fixture, '.scroller') as HTMLElement;
@@ -313,7 +317,7 @@ describe('ShoppingListsPage', () => {
 
   describe('where it goes', () => {
     it('opens the basket a row names', async () => {
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
       const router = TestBed.inject(Router);
       const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
 
@@ -334,7 +338,7 @@ describe('ShoppingListsPage', () => {
      * is what keeps the history underneath and its scroll intact.
      */
     it('opens the generation sheet over the history, not over the dashboard', async () => {
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
       const router = TestBed.inject(Router);
       const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
 
@@ -347,7 +351,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('offers the same sheet from the empty state', async () => {
-      const fixture = await render(fakeGeneratedListStore([]));
+      const fixture = await render(fakeBasketListStore([]));
       const router = TestBed.inject(Router);
       const navigate = jest.spyOn(router, 'navigate').mockResolvedValue(true);
 
@@ -362,14 +366,14 @@ describe('ShoppingListsPage', () => {
     it('has an outlet for the sheet to render into', async () => {
       // Rule E1 makes the sheet a child route, and a child route with no outlet to
       // render into is a navigation that changes the URL and draws nothing.
-      const fixture = await render(fakeGeneratedListStore([basket()]));
+      const fixture = await render(fakeBasketListStore([basket()]));
 
       expect(query(fixture, 'router-outlet')).not.toBeNull();
     });
 
     it('announces how many rows there are, once, rather than one per row', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([basket(), basket({ id: 'b' })])
+        fakeBasketListStore([basket(), basket({ id: 'b' })])
       );
 
       const live = all(fixture, '[aria-live]');
@@ -390,7 +394,7 @@ describe('ShoppingListsPage', () => {
      * is a quiet refresh, rows plus `pagesLoaded` is a page arriving.
      */
     it('stays silent when a settle refresh changes the listing under it', async () => {
-      const store = fakeGeneratedListStore([basket(), basket({ id: 'b' })]);
+      const store = fakeBasketListStore([basket(), basket({ id: 'b' })]);
       const fixture = await render(store);
 
       const spoken = fixture.componentInstance.announced();
@@ -405,7 +409,7 @@ describe('ShoppingListsPage', () => {
     });
 
     it('speaks again when a further page lands', async () => {
-      const store = fakeGeneratedListStore([basket()]);
+      const store = fakeBasketListStore([basket()]);
       const fixture = await render(store);
 
       store.landPage([basket(), basket({ id: 'b' }), basket({ id: 'c' })]);
@@ -421,7 +425,7 @@ describe('ShoppingListsPage', () => {
 
     it('says nothing at all before any page has arrived', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([], { state: 'loading', pagesLoaded: 0 })
+        fakeBasketListStore([], { state: 'loading', pagesLoaded: 0 })
       );
 
       expect(fixture.componentInstance.announced()).toBe('');
@@ -440,7 +444,7 @@ describe('ShoppingListsPage', () => {
   describe('what the rows say happened', () => {
     it('says what was got and what was unavailable', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([
+        fakeBasketListStore([
           basket({
             lineCount: 4,
             settledLineCount: 4,
@@ -458,7 +462,7 @@ describe('ShoppingListsPage', () => {
     // "0 not available" is furniture on the ordinary trip where the shop had everything.
     it('drops the unavailable half when there was none', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([
+        fakeBasketListStore([
           basket({
             lineCount: 4,
             settledLineCount: 3,
@@ -480,7 +484,7 @@ describe('ShoppingListsPage', () => {
      */
     it('says finished where the breakdown cannot account for the finished lines', async () => {
       const fixture = await render(
-        fakeGeneratedListStore([
+        fakeBasketListStore([
           basket({
             lineCount: 4,
             settledLineCount: 3,
@@ -498,8 +502,8 @@ describe('ShoppingListsPage', () => {
 
 /** A basket somebody else shared with the reader. */
 function sharedBasket(
-  overrides: Partial<SharedGeneratedListSummary> = {}
-): SharedGeneratedListSummary {
+  overrides: Partial<SharedBasketSummary> = {}
+): SharedBasketSummary {
   return {
     ...basket({ id: 'sh1', name: 'Marta s shop' }),
     owner: { userId: 'u-marta', name: 'Marta' },
@@ -514,7 +518,7 @@ describe('ShoppingListsPage: the two tabs', () => {
     fixture.debugElement.query(By.directive(Tabs))?.componentInstance as Tabs;
 
   it('opens on My lists and reads only its store', async () => {
-    const mine = fakeGeneratedListStore();
+    const mine = fakeBasketListStore();
     const shared = fakeSharedListStore();
 
     const fixture = await render(mine, shared);
@@ -528,7 +532,7 @@ describe('ShoppingListsPage: the two tabs', () => {
   });
 
   it('keeps tab=shared through a reload, reading only the shared store', async () => {
-    const mine = fakeGeneratedListStore();
+    const mine = fakeBasketListStore();
     const shared = fakeSharedListStore();
 
     const fixture = await render(mine, shared, '/?tab=shared');
@@ -539,7 +543,7 @@ describe('ShoppingListsPage: the two tabs', () => {
   });
 
   it('writes the chosen tab into the URL and loads each store once', async () => {
-    const mine = fakeGeneratedListStore();
+    const mine = fakeBasketListStore();
     const shared = fakeSharedListStore();
     const fixture = await render(mine, shared);
     const router = TestBed.inject(Router);
@@ -589,7 +593,7 @@ describe('ShoppingListsPage: the two tabs', () => {
   });
 
   it('draws no byline on the reader s own rows', async () => {
-    const fixture = await render(fakeGeneratedListStore([basket()]));
+    const fixture = await render(fakeBasketListStore([basket()]));
 
     const row = fixture.debugElement.query(By.directive(ShoppingListRow))
       ?.componentInstance as ShoppingListRow;
@@ -630,5 +634,181 @@ describe('ShoppingListsPage: the two tabs', () => {
     fixture.componentInstance.retry();
 
     expect(shared.calls).toContain('reload');
+  });
+});
+
+/**
+ * The permanent basket, in a listing of trips (velista `0091`, section 6).
+ *
+ * The server leaves the reader's own out of "mine" already. This asserts the
+ * client drops it anyway, in one place, because of what a row **is**: a date, a
+ * Finished badge and a delete, over the one basket that has no date, is never
+ * finished and cannot go away. One somebody **shared** is a real thing to open,
+ * so the shared tab keeps it and titles it by its owner.
+ */
+describe('ShoppingListsPage: the basket that is always there', () => {
+  it('is never a row of the reader’s own history', async () => {
+    const mine = fakeBasketListStore([
+      basket({ id: 'live', kind: 'LIVE', name: null }),
+      basket({ id: 'gl1' }),
+    ]);
+
+    const fixture = await render(mine);
+
+    const drawn = fixture.debugElement
+      .queryAll(By.directive(ShoppingListRow))
+      .map((found) => (found.componentInstance as ShoppingListRow).row().id);
+    expect(drawn).toEqual(['gl1']);
+  });
+
+  it('leaves the history empty rather than listing it alone', async () => {
+    const mine = fakeBasketListStore([
+      basket({ id: 'live', kind: 'LIVE', name: null }),
+    ]);
+
+    const fixture = await render(mine);
+
+    expect(
+      fixture.debugElement.queryAll(By.directive(ShoppingListRow))
+    ).toHaveLength(0);
+  });
+
+  it('is kept on the shared tab, titled by whose it is', async () => {
+    const shared = fakeSharedListStore();
+    shared.landPage([
+      sharedBasket({ id: 'sh-live', kind: 'LIVE', name: null }),
+    ]);
+
+    const fixture = await render(undefined, shared, '/?tab=shared');
+
+    const row = fixture.debugElement.query(By.directive(ShoppingListRow))
+      ?.componentInstance as ShoppingListRow;
+    expect(row.row().name).toBe('basket.live.titleOf');
+    // And no date, because it has none: `generatedAt` is the moment the server
+    // first made it, which is not a day anybody shopped.
+    expect(row.row().live).toBe(true);
+  });
+
+  it('shows no date on that row', async () => {
+    const shared = fakeSharedListStore();
+    shared.landPage([
+      sharedBasket({ id: 'sh-live', kind: 'LIVE', name: null }),
+    ]);
+
+    const fixture = await render(undefined, shared, '/?tab=shared');
+
+    // The row still says who shared it and when, which is the one date that is
+    // about a person rather than about the basket.
+    expect(text(fixture)).toContain('history.shared.byOn');
+    expect(text(fixture)).not.toContain('21 August');
+  });
+});
+
+/**
+ * The live basket leads My lists (velista `0111`): always first, above the generated
+ * baskets and outside their date order and paging, and drawn when there is no
+ * generated basket at all.
+ */
+describe('ShoppingListsPage: the live basket first', () => {
+  const live = (pending: number) =>
+    fakeLiveBasketStore({
+      id: 'basket-live',
+      progress: { done: 0, unavailable: 0, total: pending },
+      pending,
+    });
+
+  /** Every row the tab draws, in document order, by what kind of row it is. */
+  const order = (fixture: ComponentFixture<ShoppingListsPage>) =>
+    Array.from(all(fixture, 'lib-live-basket-row, lib-shopping-list-row')).map(
+      (element) => element.tagName.toLowerCase()
+    );
+
+  it('comes before every generated basket', async () => {
+    const fixture = await render(
+      fakeBasketListStore([basket({ id: 'gl1' }), basket({ id: 'gl2' })]),
+      undefined,
+      '/',
+      live(5)
+    );
+
+    expect(order(fixture)).toEqual([
+      'lib-live-basket-row',
+      'lib-shopping-list-row',
+      'lib-shopping-list-row',
+    ]);
+    const row = query(fixture, 'lib-live-basket-row');
+    expect(row?.textContent).toContain('basket.live.title');
+    expect(row?.textContent).toContain('basket.live.left');
+  });
+
+  it('is there with no generated basket, above the empty message', async () => {
+    const fixture = await render(
+      fakeBasketListStore(),
+      undefined,
+      '/',
+      live(2)
+    );
+
+    expect(order(fixture)).toEqual(['lib-live-basket-row']);
+    const content = query(fixture, '.content') as HTMLElement;
+    expect(content.textContent?.indexOf('basket.live.title')).toBeLessThan(
+      content.textContent?.indexOf('history.empty.title') ?? -1
+    );
+  });
+
+  it('is there while the listing is on its way', async () => {
+    const fixture = await render(
+      fakeBasketListStore([], { state: 'loading' }),
+      undefined,
+      '/',
+      live(2)
+    );
+
+    expect(query(fixture, 'lib-live-basket-row')).not.toBeNull();
+  });
+
+  it('reads the live summary with the tab', async () => {
+    const summary = live(1);
+    await render(fakeBasketListStore(), undefined, '/', summary);
+
+    expect(summary.calls).toContain('load');
+  });
+
+  it('opens the live basket', async () => {
+    const fixture = await render(
+      fakeBasketListStore(),
+      undefined,
+      '/',
+      live(1)
+    );
+    const navigate = jest
+      .spyOn(TestBed.inject(Router), 'navigate')
+      .mockResolvedValue(true);
+
+    (query(fixture, 'lib-live-basket-row button') as HTMLElement).click();
+
+    expect(navigate).toHaveBeenCalledWith(
+      ['..', 'shopping-lists', 'live'],
+      expect.anything()
+    );
+  });
+
+  it('is its title alone before its summary arrives', async () => {
+    const fixture = await render(
+      fakeBasketListStore(),
+      undefined,
+      '/',
+      fakeLiveBasketStore(null)
+    );
+
+    const row = query(fixture, 'lib-live-basket-row');
+    expect(row?.textContent).toContain('basket.live.title');
+    expect(row?.textContent).not.toContain('basket.live.left');
+  });
+
+  it('is not on the shared tab', async () => {
+    const fixture = await render(undefined, undefined, '/?tab=shared', live(1));
+
+    expect(query(fixture, 'lib-live-basket-row')).toBeNull();
   });
 });

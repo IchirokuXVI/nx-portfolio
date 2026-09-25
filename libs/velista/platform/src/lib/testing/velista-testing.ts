@@ -12,6 +12,7 @@ import {
   type GeolocationReaderI,
   type LocationOutcome,
   type LocationPermission,
+  type LocationReadOptions,
 } from '../geolocation-reader';
 import { VELISTA_PLATFORM_PROVIDERS } from '../platform-providers';
 
@@ -133,6 +134,11 @@ export function fakeBrowserFacade(
     location: null,
     document: globalThis.document,
     matchMedia: () => () => false,
+    // Observes nothing, like the real facade under a server render: a row is
+    // never reported on screen, so nothing is ever acknowledged by accident
+    // (velista `0093`, section 7). A spec that drives an intersection passes
+    // its own in `overrides` and keeps the callback.
+    observeIntersection: () => () => undefined,
     readStorage: (key: string) => storage.get(key) ?? null,
     writeStorage: (key: string, value: string) => void storage.set(key, value),
     removeStorage: (key: string) => void storage.delete(key),
@@ -225,6 +231,11 @@ export function fakeGeolocationReader(
     reads: 0,
     /** How many times the permission was asked about, which prompts nobody. */
     queries: 0,
+    /**
+     * What each read asked the browser for, in order, with `{}` for a read that
+     * passed nothing (velista `0103`).
+     */
+    options: [] as LocationReadOptions[],
   };
 
   const reader: GeolocationReaderI = {
@@ -232,8 +243,9 @@ export function fakeGeolocationReader(
       state.queries++;
       return options.permission ?? 'prompt';
     },
-    read: async () => {
+    read: async (readOptions?: LocationReadOptions) => {
       state.reads++;
+      state.options.push(readOptions ?? {});
       return (
         options.outcome ?? {
           state: 'located',

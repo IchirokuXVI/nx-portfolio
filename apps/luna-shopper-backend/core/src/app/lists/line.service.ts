@@ -35,10 +35,12 @@ import {
   decodeCursor,
   encodeCursor,
   ForbiddenException,
+  isUuid,
   LineMergeNeedsApprovalException,
   LineMergeRequiredException,
   LineMergeTooManyProductsException,
   NotFoundException,
+  StaleQuantityException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import {
@@ -51,7 +53,9 @@ import {
   type SelectQueryBuilder,
 } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import {
+  LineComment,
   LineSettlement,
   ListLine,
   ListLineGroupRemoval,
@@ -59,7 +63,15 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { LineClaimService } from '../generated-lists/line-claim.service';
+import { LineClaimService } from '../baskets/line-claim.service';
+import {
+  actorOf,
+  LineChangeRecorder,
+  operatorActor,
+  snapshotOf,
+  type LineChangeActor,
+  type ListRef,
+} from './changes/line-change.recorder';
 import { itemSetHash } from './item-set-hash';
 import { normalizeContent } from './line-content';
 import {
@@ -74,6 +86,7 @@ import {
   mergedItemIds,
 } from './line-merge.service';
 import { ListAccessService } from './list-access.service';
+import { canChangeDemand } from './list-acts';
 import { toLineView } from './list.mappers';
 import { readLineSettlementSummaries } from './settlement.sql';
 
@@ -129,6 +142,15 @@ export interface ListRenamePlan {
   steps: ListRenameStep[];
   /** The first line the new name collided with, or null when nothing merges. */
   collision: { otherContent: string; otherQuantity: number } | null;
+  /**
+   * Who is renaming, for the change record each step writes (plan 0138, section
+   * 4).
+   *
+   * On the plan rather than on {@link LineService.writeListRename}'s arguments,
+   * because one rename covers several lists and the actor is the same for all of
+   * them: carried once, by the thing that already carries the list.
+   */
+  actor: LineChangeActor;
 }
 
 /** What a written plan left, for the announcements after the commit. */
@@ -148,10 +170,6 @@ interface FoldLine {
   quantity: number;
   approvalStatus: LineApprovalStatus;
 }
-
-/** Canonical UUID shape, for validating the cross-service catalog `itemId`. */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * What an operator edits with (plan 0077, section 5.2).
@@ -190,19 +208,24 @@ interface LineEdit {
 /**
  * How an edit reaches the database.
  *
- * Two methods rather than one, because {@link LineService.update} opens a
- * transaction only when it is also rewriting the product set, and that decision
- * belongs to the edit rather than to who is making it. A member's writes through
- * this service's repositories and records nothing; an operator's writes and
- * records inside one transaction, so the change and its trail commit together
- * (plan 0077, section 8).
+ * **One method, since plan 0138.** It had two, because {@link LineService.update}
+ * opened a transaction only when it was also rewriting the product set, and that
+ * decision belonged to the edit rather than to who was making it. Every write that
+ * moves what a list asks for now records a change beside it, and the two rows have
+ * to commit together, so there is nowhere left for a bare `save` to be correct.
+ *
+ * The argument the `save` made for itself (an absolute write is last writer wins
+ * over a value somebody chose, so there is nothing to lock it against) is still
+ * true of the race and is no longer an argument here: the transaction exists to
+ * commit two rows together, and it locks nothing the save did not.
+ *
+ * A member's write records only the change; an operator's records the change and
+ * its audit trail, in the same transaction (plan 0077, section 8).
  */
 interface LineWriter {
-  /** Save the row on its own, for an edit that touches no join rows. */
-  save(line: ListLine): Promise<ListLine>;
   /**
-   * Run the whole edit in one transaction, for one that rewrites the set or
-   * renames the line (plan 0112), whose answer can be more than one line.
+   * Run the whole edit in one transaction. `record` is the audit trail's, or
+   * `undefined` for a member's write.
    */
   transaction<T>(
     work: (manager: EntityManager, record: RecordLine) => Promise<T>
@@ -211,6 +234,17 @@ interface LineWriter {
 
 /** What a write inside a transaction leaves in the trail, or nothing. */
 type RecordLine = ((saved: ListLine) => Promise<void>) | undefined;
+
+/**
+ * Who tells the baskets, for one call of the private line event helper (plan
+ * 0139, section 3).
+ *
+ * `'here'` is every ordinary write: one line moved and the helper announces it.
+ * `'caller'` is the two writes whose announcement cannot be built from one line
+ * — a batch, which is one event for the whole write, and a merge, whose event
+ * names the line that went as well as the one that stayed.
+ */
+type Announcer = 'here' | 'caller';
 
 @Injectable()
 export class LineService {
@@ -242,10 +276,40 @@ export class LineService {
     // `@Global()`, so the operator writes below reach the trail without any
     // caller having to hand it one (plan 0077, section 8).
     private readonly audit: CoreAuditService,
-    // Two lines becoming one, on a rename that collides (plan 0112). Last, so
-    // no positional construction in a spec has to shift an argument to take it.
-    private readonly merges: LineMergeService
+    // Two lines becoming one, on a rename that collides (plan 0112).
+    private readonly merges: LineMergeService,
+    // What changed on a list, written in the transaction of the write that
+    // changed it (plan 0138). Last, so no positional construction in a spec has
+    // to shift an argument to take it.
+    private readonly changes: LineChangeRecorder,
+    // Every basket that covers the list hears that these lines moved (plan 0139,
+    // section 3). Last for the same reason `changes` was, one plan ago.
+    private readonly baskets: BasketAnnouncer
   ) {}
+
+  /**
+   * The list a change is recorded against.
+   *
+   * The zone is copied onto the row, so the list ref of a change can be redacted
+   * without a join (plan 0138, section 2).
+   */
+  private listRef(list: ShoppingList): ListRef {
+    return { id: list.id, zoneId: list.zoneId };
+  }
+
+  /**
+   * A transaction with no audit trail, for a member's write.
+   *
+   * The plain half of {@link auditedWriter}: one transaction, no `record`. It is
+   * a method rather than a literal at four call sites so the two writers are
+   * obviously the same shape.
+   */
+  private plainWriter(): LineWriter {
+    return {
+      transaction: (work) =>
+        this.dataSource.transaction((manager) => work(manager, undefined)),
+    };
+  }
 
   /**
    * Validate a line's product set (plan 0012, section 4; plan 0048, section 1.1).
@@ -299,7 +363,7 @@ export class LineService {
       );
     }
     for (const itemId of itemIds) {
-      if (typeof itemId !== 'string' || !UUID_PATTERN.test(itemId)) {
+      if (typeof itemId !== 'string' || !isUuid(itemId)) {
         throw new ValidationException(
           'itemIds must all be valid item references',
           { messageArgs: { field: 'itemIds' } }
@@ -531,8 +595,7 @@ export class LineService {
     if (line.productGroupId !== null) {
       const refused = before
         .filter(
-          (row) =>
-            row.source === LineItemSource.GROUP && !kept.has(row.itemId)
+          (row) => row.source === LineItemSource.GROUP && !kept.has(row.itemId)
         )
         .map((row) => ({ lineId: line.id, itemId: row.itemId }));
       if (refused.length > 0) {
@@ -567,13 +630,26 @@ export class LineService {
    * a whole line on the wire, so an edit that announced an unclaimed one would
    * clear the indicator on every phone in the household over a rename.
    */
+  /**
+   * Every basket that covers the line hears it too (plan 0139, section 3).
+   *
+   * Here rather than at each of the five call sites, so that a write that goes
+   * through this helper cannot forget: it serves `add`, `addMany`, the plain
+   * edit, {@link announce} and {@link applyApproval}, which means an approval
+   * change is covered by construction.
+   *
+   * `announces` is how a caller takes the announcement over. Two do: a batch,
+   * which announces once for the whole write rather than once per line, and a
+   * merge, whose one event has to name both the absorbed line and the survivor.
+   */
   private emit(
     event: RealtimeEvent,
     zoneId: string,
     line: ListLine,
     items: LineItemSet,
     settlements: LineSettlementSummary,
-    claim: LineClaim
+    claim: LineClaim,
+    announces: Announcer = 'here'
   ): void {
     this.events.emit(
       event,
@@ -581,6 +657,9 @@ export class LineService {
       toLineView(line, items, settlements, claim),
       line.listId
     );
+    if (announces === 'here') {
+      void this.baskets.linesChanged(line.listId, [line.id]);
+    }
   }
 
   /**
@@ -657,6 +736,10 @@ export class LineService {
     // typing "milk" in the same second would otherwise both read no match and
     // both create (plan 0091, section 3.2). The row lock is on the **list**, so
     // it serializes adds to one list and nothing else.
+    // Whoever is adding, as the change record names them (plan 0138, section 4).
+    // A basket's add sets `via`, and then the actor is the participant who typed
+    // it rather than the account the write was checked against.
+    const actor = actorOf(req);
     const outcome = await this.dataSource.transaction(async (manager) => {
       await this.lockList(manager, req.listId);
 
@@ -667,7 +750,10 @@ export class LineService {
       if (existing !== undefined) {
         return {
           merged: true as const,
-          written: await this.raiseForAdd(manager, existing, quantity),
+          written: await this.raiseForAdd(manager, existing, quantity, {
+            list: this.listRef(list),
+            actor,
+          }),
         };
       }
 
@@ -688,6 +774,9 @@ export class LineService {
       if (itemIds.length > 0) {
         await this.writeItemSet(manager, line.id, itemIds, source);
       }
+      // Inside the add's own transaction, so a line and the record of it
+      // arriving cannot exist apart.
+      await this.changes.added(manager, this.listRef(list), line, actor);
       return { merged: false as const, line };
     });
 
@@ -704,19 +793,23 @@ export class LineService {
       itemIds,
       groupItemIds: source === LineItemSource.GROUP ? [...itemIds] : [],
     };
-    // A line cannot have been bought in the same breath as being added, nor be
-    // in somebody's basket a moment after it was typed, so the empty pair is the
-    // truth here rather than a stand in for two unread values.
+    // **A line is born claimed** (plan 0136, section 7.1). A line cannot have
+    // been bought in the same breath as being added, so the settlements really
+    // are empty. The claim is not: under coverage a basket holds every covered
+    // line, so a line added to a covered list is in somebody's basket the moment
+    // it is typed, and announcing `NO_LINE_CLAIM` would take the indicator off a
+    // line that is being shopped right now.
+    const claim = await this.claims.claimOf(outcome.line.id);
     this.emit(
       RealtimeEvent.LineAdded,
       list.zoneId,
       outcome.line,
       items,
       NO_LINE_SETTLEMENTS,
-      NO_LINE_CLAIM
+      claim
     );
     return {
-      line: toLineView(outcome.line, items, NO_LINE_SETTLEMENTS, NO_LINE_CLAIM),
+      line: toLineView(outcome.line, items, NO_LINE_SETTLEMENTS, claim),
       merged: false,
     };
   }
@@ -781,6 +874,7 @@ export class LineService {
       this.validateQuantity(item.quantity ?? 1)
     );
     const keys = items.map((item) => normalizeContent(item.content));
+    const actor = actorOf(req);
 
     const written = await this.dataSource.transaction(async (manager) => {
       // The same lock a single add takes, for the same reason and once for the
@@ -851,6 +945,10 @@ export class LineService {
           itemSets[creation.index],
           LineItemSource.USER
         );
+        // One change per written line, which is the same rule a single add
+        // follows: a batch is fifty adds in one transaction, so it is fifty
+        // changes sharing one `createdAt`.
+        await this.changes.added(manager, this.listRef(list), line, actor);
         created.push(line);
       }
 
@@ -858,7 +956,10 @@ export class LineService {
       for (const [lineId, raise] of raises) {
         raised.set(
           lineId,
-          await this.raiseForAdd(manager, raise.line, raise.delta)
+          await this.raiseForAdd(manager, raise.line, raise.delta, {
+            list: this.listRef(list),
+            actor,
+          })
         );
       }
       return { creations, created, slots, raised };
@@ -883,7 +984,8 @@ export class LineService {
         row,
         items,
         NO_LINE_SETTLEMENTS,
-        NO_LINE_CLAIM
+        NO_LINE_CLAIM,
+        'caller'
       );
       views.set(
         row.id,
@@ -891,8 +993,14 @@ export class LineService {
       );
     }
     for (const [lineId, entry] of written.raised) {
-      views.set(lineId, this.announce(list, entry));
+      views.set(lineId, this.announce(list, entry, 'caller'));
     }
+    // One basket announcement for the whole batch, naming every line it touched
+    // (plan 0139, section 3). The list rooms take the burst above, because each
+    // of those events carries a whole line and a client applies them one by one.
+    // A basket reads again whatever it is told, so N nudges would be N reads of
+    // the same basket for one write.
+    void this.baskets.linesChanged(list.id, [...views.keys()]);
 
     // One result per item, in request order. Two items that folded into one line
     // answer with that same line twice, and the second of them says `merged`.
@@ -998,6 +1106,13 @@ export class LineService {
    * made. Asking for the same thing again is a new request that they get to
    * decide again, and merging into the rejected line would instead raise a
    * quantity on a line the list will never buy.
+   *
+   * A **deleted** line is skipped too, and by TypeORM rather than by a branch
+   * here: the read below is a repository read, so plan 0132's `deletedAt` keeps
+   * it out. So adding "Milk" to a list whose Milk was deleted creates a new line,
+   * with a new id and no history. That is intended. The old purchases stay
+   * reachable by product through `GET /v1/items/:id/settlements`, and a merge
+   * into a tombstone would put a household's deleted line back on their list.
    */
   private async findMergeTarget(
     manager: EntityManager,
@@ -1084,11 +1199,26 @@ export class LineService {
   private async raiseForAdd(
     manager: EntityManager,
     line: ListLine,
-    added: number
+    added: number,
+    record: { list: ListRef; actor: LineChangeActor }
   ): Promise<WrittenLine> {
+    // Before the raise, since the change says what the list asked for and what
+    // it asks for now. A raise is an **edit** rather than an add (plan 0091 made
+    // it one), so the record says `QUANTITY_CHANGED` and not `ADDED`: the line
+    // was already on the list.
+    const before = snapshotOf(line);
     line.quantity = this.capQuantity(line.quantity + added);
     line.version += 1;
-    return this.writeEdit(manager, line);
+    const written = await this.writeEdit(manager, line);
+    await this.changes.edited(
+      manager,
+      record.list,
+      line.id,
+      before,
+      snapshotOf(written.line),
+      record.actor
+    );
+    return written;
   }
 
   /** A quantity held under the ceiling, for the sums only a merge produces. */
@@ -1214,11 +1344,14 @@ export class LineService {
       line.listId,
       req.userId
     );
-    return this.applyLineEdit(line, list, req, permissions, {
-      save: (row) => this.lines.save(row),
-      transaction: (work) =>
-        this.dataSource.transaction((manager) => work(manager, undefined)),
-    });
+    return this.applyLineEdit(
+      line,
+      list,
+      req,
+      permissions,
+      this.plainWriter(),
+      actorOf(req)
+    );
   }
 
   /**
@@ -1264,7 +1397,12 @@ export class LineService {
       list,
       changes,
       OPERATOR_PERMISSIONS,
-      this.auditedWriter(actorId, before)
+      this.auditedWriter(actorId, before),
+      // An operator's edit writes a change **as well as** its audit row (plan
+      // 0138, section 9). The two tables answer different people: the trail is
+      // for whoever investigates the operator, and the change is what tells the
+      // household's shopper that their list moved while they were in the aisle.
+      operatorActor(actorId)
     );
   }
 
@@ -1273,7 +1411,8 @@ export class LineService {
     list: ShoppingList,
     req: LineEdit,
     permissions: ReadonlySet<ListPermission>,
-    writer: LineWriter
+    writer: LineWriter,
+    actor: LineChangeActor
   ): Promise<UpdateLineResult> {
     this.authorizeEdit(req, line, permissions);
 
@@ -1290,9 +1429,14 @@ export class LineService {
         list,
         req,
         permissions,
-        writer
+        writer,
+        actor
       );
     }
+
+    // Read before any of the three fields below is written, which is the move
+    // `updateAsOperator` already makes for the audit trail one line above it.
+    const before = snapshotOf(line);
 
     if (req.content !== undefined) {
       line.content = req.content;
@@ -1325,44 +1469,34 @@ export class LineService {
     this.reopenAfterEdit(line, list, permissions);
     line.version += 1;
 
-    if (!touchesSet) {
-      // No join rows, so no transaction. That is correct here and stays correct
-      // now that a delta exists beside it (plan 0040, section 3.4): an absolute
-      // write is a last-writer-wins race over a value somebody deliberately
-      // chose, and there is nothing to lock it against.
-      // No transaction on this path (see above), so the pooled repositories are
-      // free to answer in parallel.
-      const saved = await writer.save(line);
-      const [items, settlements, claim] = await Promise.all([
-        this.itemSetOf(saved.id),
-        this.settlementsOf(saved.id),
-        this.claims.claimOf(saved.id),
-      ]);
-      this.emit(
-        RealtimeEvent.LineUpdated,
-        list.zoneId,
-        saved,
-        items,
-        settlements,
-        claim
-      );
-      return toLineView(saved, items, settlements, claim);
-    }
-
-    // The set and the line have to move together, or a stored hash outlives the
-    // rows it summarises. An adoption alone takes this path too (plan 0070,
-    // section 9): it writes no product and moves no hash, but it does rewrite
-    // rows, so it belongs in the same transaction and produces the same event.
+    // **One transaction for both shapes of edit, since plan 0138.** The set and
+    // the line have to move together, or a stored hash outlives the rows it
+    // summarises; the change and the line have to move together for the reason
+    // the recorder gives about itself. The second applies to a quantity only
+    // edit as much as to a product one, so the path that used to save the row on
+    // its own is gone.
+    //
+    // An adoption alone takes the set branch too (plan 0070, section 9): it
+    // writes no product and moves no hash, but it does rewrite rows.
     return this.announce(
       list,
-      await writer.transaction((manager, record) =>
-        this.writeEdit(
+      await writer.transaction(async (manager, record) => {
+        const written = await this.writeEdit(
           manager,
           line,
-          { next: nextItemIds, adopt: adoptItemIds },
+          touchesSet ? { next: nextItemIds, adopt: adoptItemIds } : undefined,
           record
-        )
-      )
+        );
+        await this.changes.edited(
+          manager,
+          this.listRef(list),
+          line.id,
+          before,
+          snapshotOf(written.line),
+          actor
+        );
+        return written;
+      })
     );
   }
 
@@ -1400,7 +1534,8 @@ export class LineService {
     list: ShoppingList,
     req: LineEdit,
     permissions: ReadonlySet<ListPermission>,
-    writer: LineWriter
+    writer: LineWriter,
+    actor: LineChangeActor
   ): Promise<UpdateLineResult> {
     const adopt = req.adoptItemIds ?? [];
     const touchesSet = req.itemIds !== undefined || adopt.length > 0;
@@ -1426,6 +1561,10 @@ export class LineService {
         // Asked again of the row as it stands under the lock, since its approval
         // may have moved since the check outside.
         this.authorizeEdit(req, line, permissions);
+        // The row as the lock read it, which is what the change compares against:
+        // the object outside this transaction was read before anybody else's
+        // write could have landed on it.
+        const before = snapshotOf(line);
         const nextItemIds =
           req.itemIds === undefined
             ? undefined
@@ -1460,14 +1599,21 @@ export class LineService {
           }
           this.reopenAfterEdit(line, locked, permissions);
           line.version += 1;
-          return {
-            written: await this.writeEdit(
-              manager,
-              line,
-              touchesSet ? { next: nextItemIds, adopt } : undefined,
-              record
-            ),
-          };
+          const written = await this.writeEdit(
+            manager,
+            line,
+            touchesSet ? { next: nextItemIds, adopt } : undefined,
+            record
+          );
+          await this.changes.edited(
+            manager,
+            this.listRef(locked),
+            line.id,
+            before,
+            snapshotOf(written.line),
+            actor
+          );
+          return { written };
         }
 
         // Section 2, step 2. Statuses as they stand before the edit.
@@ -1514,7 +1660,19 @@ export class LineService {
         const [survivor, absorbed] = isEarlierLine(line, target)
           ? [line, target]
           : [target, line];
-        await this.merges.merge(manager, survivor, absorbed);
+        // The merge writes the one `MERGED` change itself (plan 0138, section
+        // 4). No `edited` beside it: when the renamed line is the survivor its
+        // new name rides in that row's `contentAfter`, and a second row would
+        // draw the same act twice.
+        //
+        // `absorbedBefore` is the renamed line as it stood before the three
+        // assignments above, and it is what keeps the name that disappeared in
+        // the record: the renamed line is already carrying the new one.
+        await this.merges.merge(manager, survivor, absorbed, {
+          list: this.listRef(locked),
+          actor,
+          absorbedBefore: absorbed.id === line.id ? before : undefined,
+        });
 
         // Read again rather than answering from the object the merge saved: the
         // products, the settlements and the claim all moved underneath it.
@@ -1530,17 +1688,23 @@ export class LineService {
     }
     // Section 5: the absorbed line goes first, so a client that applies events
     // in order never draws two lines of one name, then the survivor as it now
-    // stands. No basket room hears anything.
+    // stands.
     this.events.emit(
       RealtimeEvent.LineDeleted,
       list.zoneId,
       { id: outcome.absorbedLineId, listId: list.id },
       list.id
     );
-    return {
-      ...this.announce(list, outcome.written),
-      absorbedLineId: outcome.absorbedLineId,
-    };
+    const view = this.announce(list, outcome.written, 'caller');
+    // One announcement naming both lines (plan 0139, section 3), rather than the
+    // two single ones the delete and the helper would each have made. A basket
+    // holding the absorbed line and the survivor is one row either way, and two
+    // events would make it read the basket twice to draw the same row.
+    void this.baskets.linesChanged(list.id, [
+      outcome.absorbedLineId,
+      outcome.written.line.id,
+    ]);
+    return { ...view, absorbedLineId: outcome.absorbedLineId };
   }
 
   /**
@@ -1641,7 +1805,8 @@ export class LineService {
     list: ShoppingList,
     lineIds: readonly string[],
     content: string,
-    permissions: ReadonlySet<ListPermission>
+    permissions: ReadonlySet<ListPermission>,
+    actor: LineChangeActor
   ): Promise<ListRenamePlan> {
     const key = normalizeContent(content);
     const repo = manager.getRepository(ListLine);
@@ -1800,7 +1965,7 @@ export class LineService {
       });
       itemSets.set(survivor.id, union);
     }
-    return { list, content, permissions, steps, collision };
+    return { list, content, permissions, steps, collision, actor };
   }
 
   /** The product bound of a merge, refused with the list's name. */
@@ -1856,23 +2021,48 @@ export class LineService {
       }
     };
 
+    // Every step of every list in this rename shares one `createdAt`, because
+    // they share the caller's transaction and the database stamps the row with
+    // the transaction's start (plan 0138, section 2). So acknowledging one of
+    // them acknowledges all of them, which is what a person renaming a row
+    // across three households did: one act.
+    const listRef = this.listRef(plan.list);
+
     for (const step of plan.steps) {
       if (step.kind === 'rename') {
         const line = await load(step.lineId);
+        const before = snapshotOf(line);
         line.content = plan.content;
         this.reopenAfterEdit(line, plan.list, plan.permissions);
         line.version += 1;
-        await repo.save(line);
+        const saved = await repo.save(line);
+        await this.changes.edited(
+          manager,
+          listRef,
+          line.id,
+          before,
+          snapshotOf(saved),
+          plan.actor
+        );
         stands(line.id);
         continue;
       }
       const survivor = await load(step.survivorId);
       const absorbed = await load(step.absorbedId);
+      // Read before the assignment below, for the reason `applyRename` gives:
+      // the line that goes away may be the renamed one, and the change has to
+      // keep the name it had rather than the one it is being given.
+      const absorbedBefore = snapshotOf(absorbed);
       // The renamed line carries the new spelling into the merge, which keeps it
       // only when the renamed line is the survivor (plan 0112, section 3).
       (survivor.id === step.renamedId ? survivor : absorbed).content =
         plan.content;
-      await this.merges.merge(manager, survivor, absorbed);
+      // The merge records its own step, as it does for a single line's rename.
+      await this.merges.merge(manager, survivor, absorbed, {
+        list: listRef,
+        actor: plan.actor,
+        absorbedBefore,
+      });
       absorbedLineIds.push(absorbed.id);
       const gone = standing.indexOf(absorbed.id);
       if (gone >= 0) {
@@ -1903,8 +2093,16 @@ export class LineService {
       );
     }
     for (const written of outcome.written) {
-      this.announce(outcome.list, written);
+      this.announce(outcome.list, written, 'caller');
     }
+    // Once for the list, naming every line the outcome names (plan 0139, section
+    // 3): the ones that went and the ones that stayed. A rename of a row that
+    // spans two lists produces one outcome per list, so each of them announces
+    // its own.
+    void this.baskets.linesChanged(outcome.list.id, [
+      ...outcome.absorbedLineIds,
+      ...outcome.written.map((written) => written.line.id),
+    ]);
   }
 
   /**
@@ -1926,16 +2124,15 @@ export class LineService {
   }
 
   /**
-   * A writer that puts the change and its audit row in one transaction.
+   * A writer that puts the write, its audit row and its change row in one
+   * transaction.
    *
-   * Both halves record the same edit against the same `before`, so which of the
-   * two the edit takes, one row or a rewritten product set, does not decide
-   * whether it leaves a trail.
+   * It had a second method until plan 0138, for the edit that saved one row
+   * outside a transaction. Every edit opens one now, so this is the whole of what
+   * an operator's write adds: the same transaction, with `recordUpdate` in it.
    */
   private auditedWriter(actorId: string, before: ListLine): LineWriter {
     return {
-      save: (line) =>
-        this.audit.write(actorId, (tx) => tx.update(ListLine, before, line)),
       transaction: (work) =>
         this.audit.write(actorId, (tx) =>
           work(tx.manager, (saved) => tx.recordUpdate(ListLine, before, saved))
@@ -2010,16 +2207,41 @@ export class LineService {
         throw new NotFoundException('Line not found');
       }
 
+      if (req.expect !== undefined && line.quantity !== req.expect) {
+        // The `from` bargain of plan 0136 section 5.3, checked against **this**
+        // read and never against the caller's: a shopper moving a household's
+        // demand is acting on a number they were shown, and a settle that landed
+        // in between makes the gesture mean something they did not intend. A
+        // delta applied on top of it would move the line silently and correctly
+        // to the wrong number.
+        throw new StaleQuantityException(
+          'Somebody else changed this while you were looking at it',
+          { messageArgs: { current: line.quantity } }
+        );
+      }
+
       const quantity = this.validateQuantity(line.quantity + req.delta);
       // The request an absolute edit of the same field would have been, so the
       // refusal a caller gets is word for word the one the PATCH gives them.
       this.authorizeEdit({ quantity }, line, permissions);
 
+      // The row as the lock read it, which is the only state a delta can
+      // honestly say it moved from.
+      const before = snapshotOf(line);
       line.quantity = quantity;
       this.reopenAfterEdit(line, list, permissions);
       line.version += 1;
 
-      return this.writeEdit(manager, line);
+      const written = await this.writeEdit(manager, line);
+      await this.changes.edited(
+        manager,
+        this.listRef(list),
+        line.id,
+        before,
+        snapshotOf(written.line),
+        actorOf(req)
+      );
+      return written;
     });
 
     return this.announce(list, written);
@@ -2165,14 +2387,19 @@ export class LineService {
   }
 
   /** Emits what a committed write produced, and answers with its view. */
-  private announce(list: ShoppingList, written: WrittenLine): LineView {
+  private announce(
+    list: ShoppingList,
+    written: WrittenLine,
+    announces: Announcer = 'here'
+  ): LineView {
     this.emit(
       RealtimeEvent.LineUpdated,
       list.zoneId,
       written.line,
       written.items,
       written.settlements,
-      written.claim
+      written.claim,
+      announces
     );
     return written.view;
   }
@@ -2241,7 +2468,15 @@ export class LineService {
     if (!permissions.has(ListPermission.WRITE)) {
       throw new ForbiddenException('You need write access to this list');
     }
-    if (approved && req.quantity !== undefined && !decides) {
+    // Asked through the rule rather than restated here (plan 0131): the basket
+    // asks the same question of the same person, and two copies of it are two
+    // things to keep in step. The answer is identical to the test this replaced,
+    // `approved && !decides`, because `MANAGE` returned above and the `WRITE`
+    // an unapproved line needs was checked immediately above it.
+    if (
+      req.quantity !== undefined &&
+      !canChangeDemand(permissions, line.approvalStatus)
+    ) {
       throw new ForbiddenException(
         'Only somebody who can approve lines can change the quantity of an approved line. Change something else on it first, which puts it back to pending'
       );
@@ -2267,7 +2502,8 @@ export class LineService {
       list,
       req.approvalStatus,
       req.userId,
-      (row) => this.lines.save(row)
+      this.plainWriter(),
+      actorOf(req)
     );
   }
 
@@ -2289,23 +2525,52 @@ export class LineService {
   ): Promise<LineView> {
     const { line, list } = await this.loadLineOfList(listId, lineId);
     const before = { ...line };
-    return this.applyApproval(line, list, status, null, (row) =>
-      this.audit.write(actorId, (tx) => tx.update(ListLine, before, row))
+    return this.applyApproval(
+      line,
+      list,
+      status,
+      null,
+      this.auditedWriter(actorId, before),
+      operatorActor(actorId)
     );
   }
 
+  /**
+   * Write a decision, and the change it is (plan 0138, section 4).
+   *
+   * **The member's path opens a transaction now**, where it used to save the row
+   * through a callback and nothing else. A decision moves what the list asks for
+   * as far as a basket is concerned, so it leaves a change, and the change has to
+   * commit with it. The operator's path was already inside one.
+   */
   private async applyApproval(
     line: ListLine,
     list: ShoppingList,
     status: LineApprovalStatus,
     approvedByUserId: string | null,
-    persist: (line: ListLine) => Promise<ListLine>
+    writer: LineWriter,
+    actor: LineChangeActor
   ): Promise<LineView> {
+    const before = snapshotOf(line);
     line.approvalStatus = status;
     line.approvedByUserId =
       status === LineApprovalStatus.PENDING ? null : approvedByUserId;
     line.version += 1;
-    const saved = await persist(line);
+    const saved = await writer.transaction(async (manager, record) => {
+      const saved = await manager.getRepository(ListLine).save(line);
+      await record?.(saved);
+      await this.changes.edited(
+        manager,
+        this.listRef(list),
+        saved.id,
+        before,
+        snapshotOf(saved),
+        actor
+      );
+      return saved;
+    });
+    // After the commit, through the pooled repositories: the transaction is over,
+    // so there is no second connection held against it here.
     const [items, settlements, claim] = await Promise.all([
       this.itemSetOf(saved.id),
       this.settlementsOf(saved.id),
@@ -2366,6 +2631,11 @@ export class LineService {
    * been agreed to cannot quietly remove what was agreed to, and a list admin has
    * to be able to remove an approved line that should never have existed, which
    * includes a remainder somebody minds (plan 0037, section 4.2).
+   *
+   * Since plan 0132 it is a **soft** delete. The row stays, marked, and keeps its
+   * `line_settlements` rows; {@link removeLineContents} takes everything else
+   * away in the same transaction. Nothing a client can see changes: no read
+   * serves a deleted line, and `line.deleted` carries what it always did.
    */
   async delete(req: DeleteLineRequest): Promise<{ id: string }> {
     const line = await this.listAccess.getLine(req.lineId);
@@ -2383,9 +2653,14 @@ export class LineService {
         throw new ForbiddenException('You need write access to this list');
       }
     }
-    return this.applyLineDeletion(line, list, async (row) => {
-      await this.lines.delete({ id: row.id });
-    });
+    return this.applyLineDeletion(line, list, actorOf(req), (row, record) =>
+      this.dataSource.transaction(async (manager) => {
+        await this.removeLineContents(manager, row.id, req.userId, () =>
+          manager.getRepository(ListLine).softDelete({ id: row.id })
+        );
+        await record(manager);
+      })
+    );
   }
 
   /**
@@ -2403,26 +2678,124 @@ export class LineService {
     actorId: string
   ): Promise<{ id: string }> {
     const { line, list } = await this.loadLineOfList(listId, lineId);
-    return this.applyLineDeletion(line, list, (row) =>
-      this.audit.write(actorId, (tx) => tx.delete(ListLine, row))
+    return this.applyLineDeletion(
+      line,
+      list,
+      operatorActor(actorId),
+      (row, record) =>
+        this.audit.write(actorId, async (tx) => {
+          // No `deletedByUserId`: the column names a member, and the trail this
+          // write lands in is where an operator's name is kept (plan 0132).
+          await this.removeLineContents(tx.manager, row.id, null, () =>
+            tx.softDelete(ListLine, row)
+          );
+          await record(tx.manager);
+        })
     );
   }
 
+  /**
+   * Everything a deleted line owned apart from its purchases (plan 0132,
+   * section 2).
+   *
+   * This is today's cascade with one table taken out of it. `comment_audio`
+   * follows its comment by cascade, so the three deletes here reach four tables,
+   * and `line_settlements` is the one that stays: spend, a person's history and
+   * a basket's removed row are all drawn from it.
+   *
+   * The row is left consistent with what it lost. `itemSetHash` and
+   * `productGroupId` go to null, so no index and no group sync ever treats a
+   * deleted line as holding products or following a group. `quantity`,
+   * `approvalStatus`, `position` and `version` are left exactly as they were:
+   * `version` is not bumped, because nothing reconciles against a deleted line.
+   *
+   * The row is locked first. A line deleted a moment ago answers "Line not
+   * found", which is what a second delete of it has to say.
+   *
+   * `mark` is the call that writes `deletedAt`, and it is the caller's because
+   * the two delete paths mark differently: a member's is a plain `softDelete`,
+   * an operator's is the audited one, which records what the row said. It is
+   * **the only** call in either path that writes that column.
+   *
+   * It runs **before** the update rather than after it, which is not the order
+   * section 6 of the plan lists. `ck_list_lines_deleted_by` refuses a
+   * `deletedByUserId` on a row whose `deletedAt` is still null, so a standing
+   * line cannot be given a deleter and the mark has to land first. The
+   * constraint is the stricter of the two statements, and it is the one worth
+   * keeping: it is what makes a deleter impossible to leave behind on a line
+   * that stands.
+   */
+  private async removeLineContents(
+    manager: EntityManager,
+    lineId: string,
+    deletedByUserId: string | null,
+    // Whatever the two calls answer with: one hands back an `UpdateResult` and
+    // the other nothing, and neither is read.
+    mark: () => Promise<unknown>
+  ): Promise<void> {
+    const locked = await manager.getRepository(ListLine).findOne({
+      where: { id: lineId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!locked) {
+      throw new NotFoundException('Line not found');
+    }
+
+    await manager.getRepository(LineComment).delete({ lineId });
+    await manager.getRepository(ListLineItem).delete({ lineId });
+    await manager.getRepository(ListLineGroupRemoval).delete({ lineId });
+
+    await mark();
+
+    // An ordinary `update`, which is not filtered by the soft delete column, so
+    // it reaches the row the line above has just marked.
+    await manager.getRepository(ListLine).update(
+      { id: lineId },
+      {
+        itemSetHash: null,
+        productGroupId: null,
+        deletedByUserId,
+      }
+    );
+  }
+
+  /**
+   * The two deletes' shared half: the removal, its change row and the event.
+   *
+   * `remove` is handed a `record` it must call **inside** its own transaction
+   * (plan 0138, section 4). Both callers open one, so the soft delete of plan
+   * 0132 and the change that says the line went commit together or not at all: a
+   * basket that was told a line was removed and found it still there would draw a
+   * disabled row over a row that is still being shopped.
+   */
   private async applyLineDeletion(
     line: ListLine,
     list: ShoppingList,
-    remove: (line: ListLine) => Promise<void>
+    actor: LineChangeActor,
+    remove: (
+      line: ListLine,
+      record: (manager: EntityManager) => Promise<void>
+    ) => Promise<void>
   ): Promise<{ id: string }> {
-    // Read before the removal: the trail's delete strips the primary key off the
-    // object it is handed, so an id read afterwards is undefined.
+    // Read before the removal, and kept that way. Neither delete strips the
+    // object any more, but the two ids the event carries are read from the line
+    // as it stood, which is the only state either of them is certain to have.
     const { id, listId } = line;
-    await remove(line);
+    // The same reasoning for the snapshot: `removeLineContents` nulls columns on
+    // the row, and the change says what the list was asking for when it went.
+    const went = snapshotOf(line);
+    await remove(line, (manager) =>
+      this.changes.deleted(manager, this.listRef(list), { id, ...went }, actor)
+    );
     this.events.emit(
       RealtimeEvent.LineDeleted,
       list.zoneId,
       { id, listId },
       listId
     );
+    // A deleted line is a row that leaves every basket covering the list (plan
+    // 0139, section 3).
+    void this.baskets.linesChanged(listId, [id]);
     return { id };
   }
 

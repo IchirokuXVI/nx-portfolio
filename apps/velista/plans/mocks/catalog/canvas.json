@@ -1,0 +1,52 @@
+{
+  "title": "Velista: the catalog",
+  "lede": "The second tab: every product from every supermarket, narrowed to one chain, searched, and ordered, with the search and the order on the screen rather than behind a sheet. Drawn before any plan is written, against <code>GET /v1/catalog/items</code>, which velista does not call today. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Browse.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "Browsing, narrowing, searching" },
+    { "file": "States.dc.html", "x": 1390, "y": 0, "w": 900, "h": 1010, "title": "No prices, nothing found, one product" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -540,
+      "w": 470,
+      "text": "THE BRIEF. Every product from every supermarket, in one list. A search. An order. A way to see one chain on its own. No price sorting and no offers: both were dropped on purpose, and the second one has no data behind it anyway.\nThe screen reads `GET /v1/catalog/items`, which exists, is paged by cursor, and prices each row from where the person shops. velista has never called it: today the app reaches catalog only to suggest a line and to name a product it already holds."
+    },
+    {
+      "id": "c1",
+      "x": 530,
+      "y": -540,
+      "w": 470,
+      "text": "RULE C1: THE TOOLS ARE ON THE SCREEN, NOT BEHIND A GLYPH. The field is a field, the chains are chips, and the order is three pills. Nothing here opens a sheet.\nThat is the opposite of the basket, where `ListTools` hides the search behind a magnifier and the rest behind a filter sheet, and the difference is what each screen is for. In the basket the lines are the point and the tools are occasional. Here narrowing **is** the activity: somebody arrives without knowing what they want, and a screen that hides its own controls gives them a wall of products and a magnifier."
+    },
+    {
+      "id": "c2",
+      "x": 1060,
+      "y": -540,
+      "w": 470,
+      "text": "RULE C2: BEST MATCH EXISTS ONLY WHILE THERE IS SOMETHING TO MATCH. With no words typed, the orders are A to Z and Newest, and A to Z is the one it opens on. Type, and Best match appears in front of them and takes over.\nThis is the server's own rule rather than an invention: the read defaults to relevance when it is given a query and to name when it is not, and relevance without a query is an arbitrary order wearing a confident label. Cheapest first is not offered. The read cannot do it, and adding it means ordering on a price that is materialized per shop."
+    },
+    {
+      "id": "c3",
+      "x": 1590,
+      "y": -540,
+      "w": 470,
+      "text": "RULE C3: A CHAIN CHIP NARROWS THE PRODUCTS, AND THIS IS THE ONE THING THE BACKEND CANNOT DO YET. Today `supermarketId` on that read picks which shops the **prices** come from. It does not decide which products are listed, so choosing Mercadona would still list everything Deza sells, priced at nothing.\nThe chips promise the other thing: Mercadona means the products Mercadona sells. That is a change in catalog, and it is the only part of this canvas that needs one.\nWhile a chain is chosen the right hand column switches from the chain's name to the price per litre or kilo, because with one chain the name is the same on every row and the comparison worth making is between sizes."
+    },
+    {
+      "id": "c4",
+      "x": 2120,
+      "y": -540,
+      "w": 470,
+      "text": "RULE C4: NO POSTAL CODE IS NOT AN EMPTY CATALOG. Backend 0069 already settled this: a read with no scopes is ranked and paged exactly as usual and every price comes back null. So the screen lists everything, marks each row \"no price\", and says once at the top why, with the way to fix it.\nThe opposite reading, an empty screen, tells somebody who merely refused every shop near them that there is no such thing as milk."
+    },
+    {
+      "id": "open",
+      "x": 2650,
+      "y": -540,
+      "w": 470,
+      "text": "STILL TO DECIDE.\n1. What a row does when tapped. Drawn as a sheet naming every shop's price for that product, which is the read velista already makes for a basket line. Whether it also adds the product to one of your lists is a screen of its own and is not drawn.\n2. Whether categories appear as a second chip row. Twelve of them exist in the data and none is drawn here, because two rows of chips above a list is most of a phone.\n3. Whether the catalog is reachable at all by a guest holding a shared basket. Every catalog route is account authenticated today."
+    }
+  ]
+}

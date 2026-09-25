@@ -12,6 +12,15 @@ export interface ReferenceGroup {
   name: LocalizedText;
   referenceUnit: UnitOfMeasure;
   synonyms: LocalizedSynonyms;
+  /**
+   * Barcodes of harvested products that belong to this group although no
+   * receipt names them (plan 0156).
+   *
+   * The seed sets only the group of a row that carries one of these, the same
+   * way it adopts a harvested receipt product. It creates nothing, so in a
+   * database that holds no harvest these barcodes do nothing.
+   */
+  harvestedEans?: string[];
 }
 
 /**

@@ -1,21 +1,25 @@
 import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import {
-  ADAPTER_KEYS,
   BRAND_LABEL_MAX_LENGTH,
   BULK_DECISION_MAX_OPERATIONS,
+  CONTENT_LOCALES,
   DiscoveredPlaceStatus,
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunWrites,
   ItemCategory,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
   PostalCodeDiscoveryStatus,
   PriceSourceKind,
+  SOURCE_ADAPTER_KEYS,
   SourceEntryStatus,
   SourceLocationStatus,
   UnitOfMeasure,
-  type AdapterKey,
+  type ContentLocale,
   type HarvestDocument,
+  type SourceAdapterKey,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
@@ -37,6 +41,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { asBoolean } from '../catalog/catalog.dto';
@@ -299,6 +304,19 @@ export class ImportHarvestDocumentDto {
   document!: HarvestDocument;
 }
 
+/** A chain an import creates, named by the operator (plan 0153). */
+export class NewChainDto {
+  @ApiProperty({ minLength: 1, maxLength: 200 })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  name!: string;
+
+  @ApiProperty({ enum: CONTENT_LOCALES })
+  @IsIn([...CONTENT_LOCALES])
+  locale!: ContentLocale;
+}
+
 export class ImportDiscoveredPlaceDto {
   @ApiPropertyOptional({
     format: 'uuid',
@@ -309,10 +327,42 @@ export class ImportDiscoveredPlaceDto {
   @IsUUID()
   supermarketId?: string;
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The scope the new shop prices against. When omitted, the chain’s scope whose `externalKey` is the place’s `scopeKey`, and a STORE scope of its own when the place declares none.',
+  })
   @IsOptional()
   @IsUUID()
   priceScopeId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Create a new shop although the catalog holds one the place may be. Without it, a match answers 409 `place_matches_location` and writes nothing.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+
+  @ApiPropertyOptional({
+    type: NewChainDto,
+    description:
+      'The chain to create when no chain matches the place (plan 0153), with the language its name is written in. An OpenStreetMap place states no language, so without this its import answers 409 when no chain matches. A chain that matches, by the place or by this name, is used instead. Not combined with `supermarketId`.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NewChainDto)
+  newChain?: NewChainDto;
+}
+
+/** Bind a discovered place to a shop the catalog already holds (plan 0152). */
+export class LinkDiscoveredPlaceDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'A shop of the place’s own chain.',
+  })
+  @IsUUID()
+  supermarketLocationId!: string;
 }
 
 /** Bind a queued row to a product the catalog already holds (plan 0086, section 7). */
@@ -353,6 +403,20 @@ export class CreateItemFromEntryDto {
   @IsOptional()
   @IsNumber()
   unitSize?: number | null;
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    nullable: true,
+    minimum: PACK_COUNT_MIN,
+    maximum: PACK_COUNT_MAX,
+    description:
+      'Override the pack count the row read (plan 0162). Null creates the product with none.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(PACK_COUNT_MIN)
+  @Max(PACK_COUNT_MAX)
+  packCount?: number | null;
 
   @ApiPropertyOptional({
     enum: ItemCategory,
@@ -486,9 +550,15 @@ export class ApplySourceEntryDecisionsDto {
 }
 
 export class UpsertSupermarketSourceDto {
-  @ApiProperty({ enum: ADAPTER_KEYS })
-  @IsIn([...ADAPTER_KEYS])
-  adapterKey!: AdapterKey;
+  // Narrower than the view's `AdapterKey`: a row written before plan 0153 may
+  // still read `osm-places`, and nothing may write one (admin plan 0034).
+  @ApiProperty({
+    enum: SOURCE_ADAPTER_KEYS,
+    description:
+      '`osm-places` is refused with 400: OpenStreetMap is asked for every postal code, so a source row for it switches nothing on.',
+  })
+  @IsIn([...SOURCE_ADAPTER_KEYS])
+  adapterKey!: SourceAdapterKey;
 
   @ApiPropertyOptional({
     description:

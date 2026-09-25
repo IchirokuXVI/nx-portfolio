@@ -17,6 +17,7 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  LINK_VISIT_HOURS,
   type BasketLinkPreview,
 } from '@portfolio/velista/models';
 import { appPath, InstallStore } from '@portfolio/velista/platform';
@@ -86,8 +87,7 @@ export class JoinPage {
    * Arriving here creates this component, so there is no later value to miss, and
    * a subscription would be one that fires exactly once.
    */
-  private readonly _secret =
-    this._route.snapshot.paramMap.get('secret') ?? '';
+  private readonly _secret = this._route.snapshot.paramMap.get('secret') ?? '';
 
   private readonly _state = signal<JoinState>('checking');
   private readonly _preview = signal<BasketLinkPreview>({ joinable: false });
@@ -100,6 +100,15 @@ export class JoinPage {
 
   /** Whether an install can be offered at all, which most browsers answer no to. */
   protected readonly canInstall = this._install.canPrompt;
+
+  /**
+   * How long the link buys whoever opens it (velista `0094`, section 4).
+   *
+   * From the constant rather than written into the sentence, so the day the
+   * number changes it changes in one place. A plain field: it is a fact about
+   * the product and never moves while this page is open.
+   */
+  protected readonly visitHours = LINK_VISIT_HOURS;
 
   /**
    * The head count, only when the link is live.
@@ -160,7 +169,9 @@ export class JoinPage {
     try {
       const session = await this._service.join(this._secret, this.name());
       await this._router.navigateByUrl(
-        basketPath(this._locale(), this._basePath, session.generatedListId)
+        basketPath(this._locale(), this._basePath, {
+          basketId: session.basketId,
+        })
       );
     } catch {
       // A link that died between the preview and the tap lands here, and so does

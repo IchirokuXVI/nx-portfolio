@@ -177,7 +177,7 @@ const ZONE_LISTS_PREVIEW_SQL = `(
         count(*) AS line_count,
         count(*) FILTER (WHERE ll."quantity" > 0) AS wanted_count
       FROM "list_lines" ll
-      WHERE ll."listId" = sl.id
+      WHERE ll."listId" = sl.id AND ll."deletedAt" IS NULL
     ) lc ON true
     WHERE sl."zoneId" = z.id AND (${READABLE_LIST})
     ORDER BY sl."updatedAt" DESC, sl.id DESC
@@ -219,6 +219,10 @@ export function selectZoneSummary(
  * somebody ticked (plan 0047, section 2.3): a line at zero is stocked, and "four
  * things needed" is the figure a card has always wanted to show. Lines and not
  * units, per that section.
+ *
+ * Both numbers skip a deleted line by hand, because this is raw SQL and plan
+ * 0132's column reaches only the entity. Without the predicate a line deleted
+ * while it still asked for two would be counted as wanted for ever.
  */
 export const LIST_COUNTS_SQL = `(
   SELECT json_build_object(
@@ -226,7 +230,7 @@ export const LIST_COUNTS_SQL = `(
     'wantedCount', count(*) FILTER (WHERE ll."quantity" > 0)
   )
   FROM "list_lines" ll
-  WHERE ll."listId" = l.id
+  WHERE ll."listId" = l.id AND ll."deletedAt" IS NULL
 )`;
 
 /** The raw column the list line counts arrive in. */

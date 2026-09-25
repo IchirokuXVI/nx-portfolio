@@ -4,7 +4,8 @@ import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   AccountNotice,
-  fakeGeneratedListStore,
+  fakeBasketListStore,
+  fakeLiveBasketStore,
   fakeMemberNames,
   fakePresenceStore,
   fakeProfileStore,
@@ -12,7 +13,8 @@ import {
   profileFor,
   provideAccountNotice,
   provideFakeAuthService,
-  provideFakeGeneratedListStore,
+  provideFakeBasketListStore,
+  provideFakeLiveBasketStore,
   provideFakeMemberNames,
   provideFakePresenceStore,
   provideFakeProfileStore,
@@ -20,14 +22,15 @@ import {
   provideFakeZoneStore,
   VERIFY_RESEND_AVAILABLE,
   ZoneStore,
-  type FakeGeneratedListStore,
+  type FakeBasketListStore,
   type FakeIdentity,
+  type FakeLiveBasketStore,
   type FakePresenceOptions,
   type FakeProfileStore,
   type FakeZoneStore,
   type ZoneEntry,
 } from '@portfolio/velista/data-access';
-import type { GeneratedListSummary, MyZone } from '@portfolio/velista/models';
+import type { BasketSummary, MyZone } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -73,7 +76,9 @@ interface Options {
   /** Who the server says is present, which the zone cards render (plan 0017). */
   presence?: FakePresenceOptions;
   /** The caller's generated shopping lists, for the dashboard card (plan 0045). */
-  generated?: FakeGeneratedListStore;
+  generated?: FakeBasketListStore;
+  /** The permanent basket's store, to prove the dashboard no longer reads it. */
+  live?: FakeLiveBasketStore;
   /** User id to the name they go by in the zone, since presence carries ids alone. */
   names?: Readonly<Record<string, string>>;
   /** Where this tab is, and what the browser can do, for the invite link tests. */
@@ -130,9 +135,10 @@ async function render(
       provideFakeZoneStore(store),
       // Plan 0045: the dashboard's shopping list card reads the listing. A double, so
       // a spec states "there is one active basket" rather than driving a request.
-      provideFakeGeneratedListStore(
-        options.generated ?? fakeGeneratedListStore()
-      ),
+      provideFakeBasketListStore(options.generated ?? fakeBasketListStore()),
+      // Provided although nothing here injects it since velista `0105`, so a spec
+      // can say the dashboard does not read it.
+      provideFakeLiveBasketStore(options.live ?? fakeLiveBasketStore()),
       provideFakeSessionStore(options.identity ?? 'REGISTERED'),
       // Both arrived with plan 0009: the page reports what just happened to the
       // account, and offers another confirmation email once there is an endpoint.
@@ -216,10 +222,16 @@ describe('HomePage', () => {
       expect(text(fixture)).toContain('3');
     });
 
-    it('shows the bottom action bar', async () => {
+    /**
+     * Velista `0097`, section 6. Home's button row went when the app grew a bar of its
+     * own: the button that composed a basket is what the third tab offers, and the
+     * clock beside it is in that tab's header. Home would otherwise have a card, a
+     * button row and a tab row stacked at the same edge.
+     */
+    it('draws no button row of its own any more', async () => {
       const fixture = await render();
 
-      expect(query(fixture, 'lib-bottom-action-bar')).not.toBeNull();
+      expect(query(fixture, 'lib-bottom-action-bar')).toBeNull();
     });
 
     it('renders no card as a nested button, which would be invalid', async () => {
@@ -573,25 +585,24 @@ describe('HomePage', () => {
   // slot and it now comes from the server rather than from what the device remembered.
   //
   // The old block's whole "who is shopping it" section is gone with it and has no
-  // replacement here: `generatedList.listMine` answers summaries, which carry no
+  // replacement here: `basket.listMine` answers summaries, which carry no
   // participants, so there is no presence on this card to test. `0044`'s basket screen
   // is where the people on a basket are drawn.
   describe('the shopping list card', () => {
-    const basket = (
-      overrides: Partial<GeneratedListSummary> = {}
-    ): GeneratedListSummary => ({
+    const basket = (overrides: Partial<BasketSummary> = {}): BasketSummary => ({
       id: 'gl1',
+      kind: 'GENERATED',
       name: 'Saturday big shop',
-      status: 'ACTIVE',
+      status: 'OPEN',
       generatedAt: new Date('2026-08-21T10:00:00.000Z'),
       lineCount: 12,
       settledLineCount: 4,
       ...overrides,
     });
 
-    it('appears for an active basket, and names it', async () => {
+    it('appears for an open basket, and names it', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket()]),
+        generated: fakeBasketListStore([basket()]),
       });
 
       expect(query(fixture, 'lib-shopping-list-card')).not.toBeNull();
@@ -599,48 +610,44 @@ describe('HomePage', () => {
     });
 
     /**
-     * **The case the whole feature exists for, and the one it did not handle.**
+     * **The case the whole feature exists for, read from the other side.**
      *
-     * Core composes a run as `DRAFT` and never promotes it, so a draft is not an edge
-     * case here: it is every basket velista has ever generated. The card filtered on
-     * `ACTIVE` alone and therefore drew for nobody, while a suite full of `ACTIVE`
-     * fixtures stayed green over it. This is that suite disagreeing with the server,
-     * written down so it cannot happen quietly a second time.
+     * The card filtered on `ACTIVE`, which core never wrote: it composed every run as
+     * `DRAFT` and never promoted one, so the card drew for nobody while a suite full
+     * of `ACTIVE` fixtures stayed green over it. Backend `0133` deleted the second
+     * spelling, so there is one value to agree on, and what is left to state is the
+     * direction this app falls when it cannot read the word at all: a status it has
+     * never heard of costs a card, where the other way round would offer somebody a
+     * way back into a trip the server considers over.
      */
-    it('appears for a draft, which is what the server actually composes', async () => {
+    it('stays away for a status it cannot read, which is the safe direction', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket({ status: 'DRAFT' })]),
+        generated: fakeBasketListStore([basket({ status: 'UNKNOWN' })]),
       });
 
-      expect(query(fixture, 'lib-shopping-list-card')).not.toBeNull();
-      expect(text(fixture)).toContain('Saturday big shop');
+      expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
     });
 
     /**
-     * The dock (section 3.2 of this change): the strip sits directly on top of the
-     * action bar, on the same ground, so getting back into the basket you have and
-     * composing a new one are one object on the screen rather than two at opposite
-     * ends of it.
+     * The dock (section 3.2 of plan 0045, as velista `0097` left it): the strip is the
+     * last thing in the page's column, so it sits on the app's own bar. What it must
+     * not be is one more row inside the scrolling content, which is the half that
+     * regressed for a year: a couple of groups push the card off the screen there.
      *
-     * Asserted as **adjacency in the DOM** rather than by reading styles, because that
-     * is what the seam actually depends on: the strip draws the rule above itself and
-     * the bar's own rule becomes the divider between them, which only works while
-     * nothing is laid out in between. It also pins the half that regressed for a year,
-     * which is the card living up in the scrolling content where a couple of groups
-     * push it off the screen.
+     * Asserted as **position in the DOM** rather than by reading styles, because that
+     * is what the placement actually depends on: `.page` is a flex column whose
+     * `.content` takes the spare height, so anything after it is pinned to the foot.
      */
-    it('docks the strip on the action bar rather than leaving it in the scroll', async () => {
+    it('docks the strip at the foot rather than leaving it in the scroll', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket()]),
+        generated: fakeBasketListStore([basket()]),
       });
 
       const card = query(fixture, 'lib-shopping-list-card');
-      const bar = query(fixture, 'lib-bottom-action-bar');
 
       expect(card).not.toBeNull();
-      expect(bar).not.toBeNull();
-      expect(card?.nextElementSibling).toBe(bar);
       expect(query(fixture, '.content lib-shopping-list-card')).toBeNull();
+      expect(card?.parentElement?.lastElementChild).toBe(card);
     });
 
     // Absent entirely: no header, no empty card, no gap (section 3.1). A person who has
@@ -657,14 +664,14 @@ describe('HomePage', () => {
     // history page and not on the dashboard.
     it('stays away for a basket that is no longer active', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket({ status: 'COMPLETED' })]),
+        generated: fakeBasketListStore([basket({ status: 'FINISHED' })]),
       });
 
       expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
     });
 
     it('asks the store for the listing when the page is created', async () => {
-      const store = fakeGeneratedListStore([basket()]);
+      const store = fakeBasketListStore([basket()]);
 
       await render({ generated: store });
 
@@ -675,7 +682,7 @@ describe('HomePage', () => {
     // the owner's own realtime room is for. Driven through the store here, since the
     // container's job is to render whatever the store holds at the time.
     it('appears without a reload when one arrives while the page is open', async () => {
-      const store = fakeGeneratedListStore([]);
+      const store = fakeBasketListStore([]);
       const fixture = await render({ generated: store });
 
       expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
@@ -698,7 +705,7 @@ describe('HomePage', () => {
 
     it('shows the newest and counts the others rather than guessing between them', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([
+        generated: fakeBasketListStore([
           basket({ id: 'gl1' }),
           basket({ id: 'gl2', name: 'Corner shop' }),
         ]),
@@ -712,7 +719,7 @@ describe('HomePage', () => {
     // needs a locale and cannot be computed from one basket in isolation.
     it('titles an unnamed basket with its generation date', async () => {
       const fixture = await render({
-        generated: fakeGeneratedListStore([basket({ name: null })]),
+        generated: fakeBasketListStore([basket({ name: null })]),
       });
 
       expect(card(fixture).list().name).not.toBe('');
@@ -904,29 +911,17 @@ describe('HomePage', () => {
       ]);
     });
 
-    // The dock's second action, with no basket anywhere on the page: it is still
-    // drawn, still enabled, and it reaches the history. The strip that used to be the
-    // only other entry point needs a basket to exist, so this is the case that matters.
-    it('opens the history from the dock, with no basket in sight', async () => {
+    /**
+     * The way to the history from this page is the card's own, and with no basket there
+     * is no card. That is not a hole any more: the bar's third tab is on this screen,
+     * it opens a page whose header carries the clock, and velista `0097` moved the
+     * dock's second action there precisely so that one screen answers it.
+     */
+    it('leaves the history to the bar once its own card is gone', async () => {
       const fixture = await render();
-      const router = TestBed.inject(Router);
-      const navigate = jest
-        .spyOn(router, 'navigate')
-        .mockResolvedValue(true as never);
 
       expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
-
-      const history = query(
-        fixture,
-        'lib-bottom-action-bar .secondary'
-      ) as HTMLButtonElement;
-      expect(history.disabled).toBe(false);
-
-      history.click();
-
-      expect(navigate.mock.calls.map(([commands]) => commands)).toEqual([
-        ['..', 'shopping-lists'],
-      ]);
+      expect(query(fixture, 'lib-bottom-action-bar')).toBeNull();
     });
 
     it('has an outlet for the sheet to render into', async () => {
@@ -1097,5 +1092,48 @@ describe('HomePage', () => {
 
       expect(copied).toEqual(['https://velista.app/join/HK7M2QPD']);
     });
+  });
+});
+
+/**
+ * The dock holds the trip and nothing else (velista `0105`).
+ *
+ * The permanent basket's card used to lead it. The basket tab in the bottom bar is
+ * the way into the basket now, so the dashboard stopped repeating it, and it stopped
+ * asking for the numbers that card drew.
+ */
+describe('HomePage: the dock', () => {
+  const trip = {
+    id: 'gl1',
+    kind: 'GENERATED',
+    name: 'Saturday big shop',
+    status: 'OPEN',
+    generatedAt: new Date('2026-08-21T10:00:00.000Z'),
+    lineCount: 12,
+    settledLineCount: 4,
+    boughtLineCount: 3,
+    notAvailableLineCount: 1,
+    presentCount: 0,
+  } as BasketSummary;
+
+  it('draws no live basket card when there is no trip', async () => {
+    const fixture = await render();
+
+    expect(query(fixture, 'lib-live-basket-card')).toBeNull();
+    expect(query(fixture, 'lib-shopping-list-card')).toBeNull();
+  });
+
+  it('draws the trip alone when there is one', async () => {
+    const fixture = await render({ generated: fakeBasketListStore([trip]) });
+
+    expect(query(fixture, 'lib-live-basket-card')).toBeNull();
+    expect(query(fixture, 'lib-shopping-list-card')).not.toBeNull();
+  });
+
+  it('no longer reads the permanent basket summary', async () => {
+    const live = fakeLiveBasketStore();
+    await render({ live });
+
+    expect(live.calls).toEqual([]);
   });
 });

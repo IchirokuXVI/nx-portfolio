@@ -1,0 +1,52 @@
+{
+  "title": "Velista: the tour",
+  "lede": "The short walk through the app that the end of the setup offers, and that the account screen plays again. Five cards over the real screens, each one pointing at a real control, each one with the same way out. Drawn before any plan is written. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Stops.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "Three of the five stops" },
+    { "file": "Anchors.dc.html", "x": 1390, "y": 0, "w": 900, "h": 1010, "title": "The last stop, and the rules" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -540,
+      "w": 470,
+      "text": "THE BRIEF. A few messages over the interface explaining the things a person will not find on their own: what a group is, what the lists inside it are, what the shopping list does, the assistant, and talking to a list while you shop. A way out on every one of them. Playable again from the account screen.\nThe offer that starts it is on the last onboarding screen and is drawn on that canvas. This one is what happens after Show me around."
+    },
+    {
+      "id": "t1",
+      "x": 530,
+      "y": -540,
+      "w": 470,
+      "text": "RULE T1: A STOP POINTS AT SOMETHING THAT IS REALLY THERE. The screen behind the card is the app, the control being explained is lit through the dimming, and the card sits next to it rather than in the middle of the screen.\nThe alternative, five full screen slides with pictures of the app, is easier to build and teaches nothing: somebody who has just been shown a drawing of a button still has to find the button. It also rots, because the drawing does not change when the screen does."
+    },
+    {
+      "id": "t2",
+      "x": 1060,
+      "y": -540,
+      "w": 470,
+      "text": "RULE T2: A NEW ACCOUNT IS EMPTY, AND THE TOUR HAS TO WORK ANYWAY. There is no group to open, no list to read and no basket to shop, so every stop is anchored to something a fresh account has: the bar, the groups section with its New group button, the shopping list tab and the assistant.\nA stop whose anchor does not exist is left out rather than faked, and the tour counts what it will show before the first card, which is what lets a card say 1 of 5 honestly. Talking to a list is the stop that waits: it appears when the tour is replayed and there is a list to point at."
+    },
+    {
+      "id": "t3",
+      "x": 1590,
+      "y": -540,
+      "w": 470,
+      "text": "RULE T3: THE TOUR DRIVES THE APP, AND THE PERSON PRESSES ONE BUTTON. Next moves to the tab the next stop is about, so nobody has to find a screen to be shown it. Nothing else on the screen responds while a card is up, because a tour that half works is worse than none.\nSkip is on every card, the same size and in the same place, never a cross in a corner. It ends the tour exactly as finishing does, and the account row plays it again."
+    },
+    {
+      "id": "t4",
+      "x": 2120,
+      "y": -540,
+      "w": 470,
+      "text": "RULE T4: THE WORDS SAY WHAT THE THING IS FOR, NOT WHAT IT IS CALLED. \"A group is who you shop with. Your household, your family, the flat you share.\" Not \"groups let you collaborate\".\nTwo sentences a card, fifteen words a sentence where it can be done, and the second sentence earns its place by saying what it is worth. This is rule O6 from the setup canvas, and it is the whole reason the tour exists rather than a page of help."
+    },
+    {
+      "id": "open",
+      "x": 2650,
+      "y": -540,
+      "w": 470,
+      "text": "STILL TO DECIDE.\n1. Whether stops 2 and 3, groups and the lists inside them, are two cards or one. They are drawn as two and they point at the same part of the screen on a fresh account, which is the weakest moment in the tour.\n2. Whether the tour offers to make a first group at the end, rather than just ending.\n3. Where the seen flag lives. Same question as the setup's, and the same answer settles both.\n4. Whether the tour ever starts by itself again after an update that adds a screen. Drawn as no."
+    }
+  ]
+}

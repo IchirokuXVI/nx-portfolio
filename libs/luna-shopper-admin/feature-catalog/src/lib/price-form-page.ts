@@ -12,9 +12,23 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceFormPage } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  fieldMessage,
+  parseMoney,
+  type FieldMessage,
+} from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog, ResourceForm } from '@portfolio/luna-shopper-admin/ui';
 import { PRICE_SCOPE_KIND_OPTIONS } from './catalog-enums';
-import { locationSource, priceScopeSource } from './catalog-sources';
+import {
+  itemSource,
+  locationSource,
+  priceScopeSource,
+} from './catalog-sources';
+import {
+  checkObservedAt,
+  proposeUnitPrice,
+  type UnitPriceProposal,
+} from './price-proposal';
 import { PriceScopeNotice } from './price-scope-notice';
 
 /**
@@ -72,6 +86,28 @@ const COUNT_PAGE_SIZE = 100;
         [scopeName]="scopeName()"
       />
 
+      <!-- A proposal and nothing more (admin plan 0033): the unit price field
+           stays as typed until the operator chooses to use it, so nothing is
+           sent that they did not see. -->
+      @if (proposal(); as proposed) {
+        <section class="proposal" role="note">
+          <p class="what">
+            {{
+              'catalog.prices.proposal.heading'
+                | rokuT: { price: proposed.unitPrice, label: proposed.label }
+            }}
+          </p>
+          <p class="muted">{{ 'catalog.prices.proposal.caution' | rokuT }}</p>
+          @if (proposalInUse()) {
+            <p class="muted">{{ 'catalog.prices.proposal.inUse' | rokuT }}</p>
+          } @else {
+            <button (click)="useProposal()" type="button">
+              {{ 'catalog.prices.proposal.use' | rokuT }}
+            </button>
+          }
+        </section>
+      }
+
       <lib-resource-form
         (leave)="leave()"
         (save)="submit()"
@@ -81,7 +117,7 @@ const COUNT_PAGE_SIZE = 100;
         [errorKey]="bannerKey()"
         [fields]="descriptor.fields"
         [lookup]="references"
-        [messages]="messages()"
+        [messages]="priceMessages()"
         [mode]="mode"
         [readonlyCells]="readonlyCells()"
         [strayErrors]="store.strayErrors()"
@@ -107,6 +143,26 @@ const COUNT_PAGE_SIZE = 100;
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
+    }
+
+    .proposal {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+      align-items: flex-start;
+      max-inline-size: 36rem;
+      padding: var(--admin-space-3) var(--admin-space-4);
+      border: 1px dashed var(--admin-accent);
+      border-radius: var(--admin-radius);
+    }
+
+    .proposal .what {
+      font-weight: 600;
+    }
+
+    .muted {
+      font-size: 0.875rem;
+      color: var(--admin-ink-muted);
     }
 
     .state {
@@ -170,6 +226,81 @@ export class PriceFormPage extends ResourceFormPage {
    */
   private _generation = 0;
 
+  /** The product the form prices, read for its size and unit. */
+  private readonly _item = signal<{
+    readonly unitSize: number | null;
+    readonly defaultUnit: string;
+  } | null>(null);
+  private _itemGeneration = 0;
+
+  /** The product the form is pointed at, from the draft or the row. */
+  private readonly _itemId = computed(() => {
+    const chosen = this.store.draft()['itemId'];
+    if (typeof chosen === 'string' && chosen !== '') {
+      return chosen;
+    }
+    const onRow = this.store.row()?.['itemId'];
+    return typeof onRow === 'string' && onRow !== '' ? onRow : null;
+  });
+
+  /**
+   * The price divided by the size in the product's base unit, offered and
+   * never applied (admin plan 0033).
+   *
+   * `prices.ts` records why the app derives nothing: the obvious division
+   * disagrees with the source on 110 of 4,232 products. So this is a proposal
+   * with its working shown, and only a click puts it in the field. Drawn on the
+   * add form alone, which is the only form this screen has.
+   */
+  readonly proposal = computed<UnitPriceProposal | null>(() => {
+    const item = this._item();
+    if (item === null || this.mode !== 'create') {
+      return null;
+    }
+    const price = parseMoney(String(this.store.draft()['price'] ?? ''), 2);
+    return price.ok && price.value !== ''
+      ? proposeUnitPrice(Number(price.value), item.unitSize, item.defaultUnit)
+      : null;
+  });
+
+  /** Whether the unit price field already holds the proposal. */
+  readonly proposalInUse = computed(() => {
+    const proposed = this.proposal();
+    const typed = parseMoney(String(this.store.draft()['unitPrice'] ?? ''), 4);
+    return (
+      proposed !== null &&
+      typed.ok &&
+      typed.value !== '' &&
+      Number(typed.value) === Number(proposed.unitPrice)
+    );
+  });
+
+  /**
+   * Why the typed `observedAt` cannot be sent, or `null`.
+   *
+   * The gateway refuses a date in the future or more than 30 days back, and
+   * says so as a 400 naming the field. Saying it here, as the date is typed,
+   * spares a round trip that would say the same thing.
+   */
+  readonly observedAtProblem = computed<FieldMessage | null>(() => {
+    const key = checkObservedAt(this.store.draft()['observedAt'], Date.now());
+    return key === null ? null : fieldMessage(key);
+  });
+
+  /** The form's own messages, with the observed date's window beside them. */
+  readonly priceMessages = computed<
+    Readonly<Record<string, readonly FieldMessage[]>>
+  >(() => {
+    const problem = this.observedAtProblem();
+    const messages = this.messages();
+    return problem === null
+      ? messages
+      : {
+          ...messages,
+          observedAt: [...(messages['observedAt'] ?? []), problem],
+        };
+  });
+
   constructor() {
     super();
 
@@ -177,6 +308,57 @@ export class PriceFormPage extends ResourceFormPage {
       const scopeId = this._scopeId();
       void this._describe(scopeId);
     });
+
+    effect(() => {
+      const itemId = this._itemId();
+      void this._readItem(itemId);
+    });
+  }
+
+  /**
+   * Put the proposal in the unit price field, and its label in the label field
+   * when that is empty. Both are fields on the form, so the operator sees what
+   * will be sent and can still change it.
+   */
+  useProposal(): void {
+    const proposed = this.proposal();
+    if (proposed === null) {
+      return;
+    }
+    this.store.set('unitPrice', proposed.unitPrice);
+    const label = this.store.draft()['unitPriceLabel'];
+    if (typeof label !== 'string' || label.trim() === '') {
+      this.store.set('unitPriceLabel', proposed.label);
+    }
+  }
+
+  /** Refused here while the observed date is outside its window. */
+  override async submit(): Promise<void> {
+    if (this.observedAtProblem() !== null) {
+      return;
+    }
+    await super.submit();
+  }
+
+  /** Read the product for its size and unit. A failure means no proposal. */
+  private async _readItem(itemId: string | null): Promise<void> {
+    this._itemGeneration += 1;
+    const generation = this._itemGeneration;
+    this._item.set(null);
+    if (itemId === null) {
+      return;
+    }
+    try {
+      const item = await this._gateways.for(itemSource()).read(itemId);
+      if (generation === this._itemGeneration) {
+        this._item.set({
+          unitSize: typeof item.unitSize === 'number' ? item.unitSize : null,
+          defaultUnit: String(item.defaultUnit ?? ''),
+        });
+      }
+    } catch {
+      // No product, no proposal. The form itself refuses an unreadable one.
+    }
   }
 
   /** Read the scope, then count what it covers. */

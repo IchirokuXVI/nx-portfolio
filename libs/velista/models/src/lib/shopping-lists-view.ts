@@ -1,4 +1,4 @@
-import type { GeneratedListSummary } from './generated-list-view';
+import type { BasketSummary } from './basket-summary';
 
 /**
  * What a finished trip actually came to: bought, and not available (plan 0049,
@@ -34,7 +34,7 @@ export interface OutcomeBreakdownVm {
  */
 export function outcomeBreakdown(
   summary: Pick<
-    GeneratedListSummary,
+    BasketSummary,
     'settledLineCount' | 'boughtLineCount' | 'notAvailableLineCount'
   >
 ): OutcomeBreakdownVm | null {
@@ -48,7 +48,7 @@ export function outcomeBreakdown(
 /**
  * The view models for the shopping list card and the history page (plan 0045).
  *
- * Separate from `generated-list-view.ts`, which holds what a generated list **is**:
+ * Separate from `basket-summary.ts`, which holds what a basket **is**:
  * these are what two particular screens draw. Plan 0004 rule D1 is the reason the split
  * is worth a file, since a container assembles one object shaped like the page rather
  * than handing a component eight inputs shaped like the API. Keeping them apart also
@@ -137,7 +137,7 @@ export interface ShoppingListRowVm {
   /**
    * Whether this trip is the one being shopped now.
    *
-   * Drawn as the word, never as colour alone (section 7). It is `status === 'ACTIVE'`
+   * Drawn as the word, never as colour alone (section 7). It is `status === 'OPEN'`
    * and is derived here so no template re-derives it from an enum.
    */
   readonly active: boolean;
@@ -148,7 +148,7 @@ export interface ShoppingListRowVm {
    * than a second badge: a row says one thing about where a trip has got to, and the
    * two can never both be true.
    *
-   * `status === 'COMPLETED'` exactly, which is narrower than "not live" on purpose.
+   * `status === 'FINISHED'` exactly, which is narrower than "not open" on purpose.
    * `UNKNOWN` is this build's fallback for a status it does not recognise, and the
    * one thing a history row must not do is tell somebody their shopping is over
    * because the app could not read a word.
@@ -158,6 +158,16 @@ export interface ShoppingListRowVm {
    * to check what came home.
    */
   readonly finished: boolean;
+  /**
+   * Whether this is the permanent basket (velista `0091`, section 6).
+   *
+   * Only ever true on the **Shared lists** tab: the reader's own is dropped from
+   * the listing entirely, and one somebody shared is a real thing to open. It is
+   * what takes the date off the row, because that basket has none: `generatedAt`
+   * is the moment the server first made it, which is nothing a shopper has ever
+   * thought about.
+   */
+  readonly live: boolean;
 }
 
 /**
@@ -221,7 +231,7 @@ export type ShoppingListsState =
  * @returns The display name per trip id.
  */
 export function displayNames(
-  summaries: readonly GeneratedListSummary[],
+  summaries: readonly BasketSummary[],
   formatDate: (date: Date) => string
 ): ReadonlyMap<string, string> {
   const names = new Map<string, string>();

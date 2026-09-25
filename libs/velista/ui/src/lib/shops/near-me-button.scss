@@ -1,0 +1,44 @@
+:host {
+  display: inline-flex;
+  flex: none;
+}
+
+// A pill in the quiet action role: the amber outline says it does something
+// without competing with the sheet's one filled button.
+.near {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-5);
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  &:active:not(.is-busy) {
+    transform: scale(0.98);
+  }
+
+  // Working: the words say so, and the amber steps back so it no longer reads
+  // as something to press.
+  &.is-busy {
+    border-color: var(--app-border-strong);
+    color: var(--app-text-muted);
+    cursor: progress;
+  }
+}
+
+.glyph {
+  font-size: var(--app-icon-sm);
+}

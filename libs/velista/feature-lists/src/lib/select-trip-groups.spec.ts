@@ -88,6 +88,39 @@ describe('selectTripGroups (velista 0088)', () => {
       expect(vm.countArgs).toEqual({ bought: 3, total: 5 });
     });
 
+    it('adds the time of day to a session only when another group shares its day (velista 0095, test 6)', () => {
+      const dayOnly = new Intl.DateTimeFormat('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      });
+      const withTime = new Intl.DateTimeFormat('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const morning = new Date('2026-09-12T08:00:00.000Z');
+      const evening = new Date('2026-09-12T18:40:00.000Z');
+      const monday = new Date('2026-09-14T09:00:00.000Z');
+
+      const [alone] = select([
+        group({ kind: 'SESSION', id: 's-1', name: null, startedAt: morning }),
+        group({ kind: 'SESSION', id: 's-2', name: null, startedAt: monday }),
+      ]);
+      expect(alone.date).toBe(dayOnly.format(morning));
+
+      const [late, early, basket] = select([
+        group({ kind: 'SESSION', id: 's-2', name: null, startedAt: evening }),
+        group({ kind: 'SESSION', id: 's-1', name: null, startedAt: morning }),
+        group({ id: 'b-1', startedAt: morning }),
+      ]);
+      expect(late.date).toBe(withTime.format(evening));
+      expect(early.date).toBe(withTime.format(morning));
+      expect(basket.date).toBe(dayOnly.format(morning));
+    });
+
     it('formats the same date in Spanish for a Spanish reader', () => {
       const [english] = select([group()], { locale: 'en' });
       const [spanish] = select([group()], { locale: 'es' });
@@ -95,10 +128,10 @@ describe('selectTripGroups (velista 0088)', () => {
       expect(spanish.date).not.toBe(english.date);
     });
 
-    it('labels an unnamed basket by its date, and a loose trip with no name and a line count', () => {
+    it('labels an unnamed basket by its date, and a session with no name and a line count', () => {
       const [unnamed, loose] = select([
         group({ name: null }),
-        group({ id: 's-1', kind: 'LOOSE', name: 'ignored', lineCount: 2 }),
+        group({ id: 's-1', kind: 'SESSION', name: 'ignored', lineCount: 2 }),
       ]);
 
       expect(unnamed.name).toBeNull();
@@ -186,25 +219,22 @@ describe('selectTripGroups (velista 0088)', () => {
       expect(vm.rows?.[0].mark).toBe('notBought');
     });
 
-    it('says the list now asks for more only on a live trip, and only when the numbers differ', () => {
-      const rows = (live: boolean, quantity: number) =>
-        select(
-          [
-            group({ live }, [
-              { row: tripRow('onions', { left: 2 }), line: lineRow('onions') },
-            ]),
-          ],
-          { lines: [line('onions', { quantity })] }
-        )[0].rows?.[0].nowAsks;
+    it('draws no comparison with the list on any row (velista 0095, test 7)', () => {
+      const [vm] = select(
+        [
+          group({ live: true }, [
+            { row: tripRow('onions', { left: 2 }), line: lineRow('onions') },
+          ]),
+        ],
+        { lines: [line('onions', { quantity: 3 })] }
+      );
 
-      expect(rows(true, 3)).toBe(3);
-      expect(rows(true, 2)).toBeNull();
-      expect(rows(false, 3)).toBeNull();
+      expect(vm.rows?.[0]).not.toHaveProperty('nowAsks');
     });
 
-    it('names the buyer of a loose purchase, and leaves it off when unknown', () => {
+    it('names the buyer of a session purchase, and leaves it off when unknown', () => {
       const [vm] = select([
-        group({ kind: 'LOOSE', id: 's-1' }, [
+        group({ kind: 'SESSION', id: 's-1' }, [
           {
             row: tripRow('bread', {
               asked: null,

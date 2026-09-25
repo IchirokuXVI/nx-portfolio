@@ -366,6 +366,18 @@
           {{ 'list.detail.everything' | rokuT }}
         </button>
       </div>
+    } @else if (step() === 'shop') {
+      <!--
+        Where it was bought (velista 0114), in place of the step so the quantity and
+        the product chosen a moment ago survive it. The dialog stays labelled by the
+        line, which is why its name is here too.
+      -->
+      <h2 class="visually-hidden" id="line-detail-title">{{ line.content }}</h2>
+      <lib-bought-shop-pane
+        (back)="closeShop()"
+        (picked)="onShopPicked($event)"
+        [pickedId]="chosenShop()?.id ?? null"
+      />
     } @else {
       <!--
         The how many step. One question, prefilled with the whole outstanding quantity,
@@ -430,6 +442,58 @@
           </div>
         </div>
       }
+
+      <!--
+        Where it was bought, optional (velista 0114). One row that says what will be
+        recorded, "Not specified" until somebody says otherwise, and opens the picker.
+        A chosen shop can be cleared from here, which also stops it being offered next
+        time.
+      -->
+      <div class="step">
+        <span class="step-label" id="bought-shop-label">
+          {{ 'list.detail.shop.label' | rokuT }}
+        </span>
+
+        <div class="shop-choice">
+          <button
+            (click)="openShop()"
+            [attr.aria-describedby]="'bought-shop-label'"
+            [disabled]="line.busy"
+            #shopRow
+            class="shop-row"
+            type="button"
+          >
+            <span class="shop-text">
+              @if (chosenShopName(); as name) {
+                <span class="shop-name">{{ name }}</span>
+                @if (chosenShopWhere(); as where) {
+                  <span class="shop-where">{{ where }}</span>
+                }
+              } @else {
+                <span class="shop-none">{{
+                  'list.detail.shop.none' | rokuT
+                }}</span>
+                <span class="shop-where">{{
+                  'list.detail.shop.optional' | rokuT
+                }}</span>
+              }
+            </span>
+            <lib-chevron-right-icon aria-hidden="true" class="shop-glyph" />
+          </button>
+
+          @if (chosenShop() !== null) {
+            <button
+              (click)="clearShop()"
+              [attr.aria-label]="'list.detail.shop.clear' | rokuT"
+              [disabled]="line.busy"
+              class="shop-clear"
+              type="button"
+            >
+              <lib-close-icon aria-hidden="true" class="shop-clear-glyph" />
+            </button>
+          }
+        </div>
+      </div>
 
       @if (errorKey(); as key) {
         <p class="error" role="alert">{{ key | rokuT }}</p>

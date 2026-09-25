@@ -35,6 +35,8 @@ export const LIST_SCHEMA_IDS = {
   addLineResultList: schemaId('list/AddLineResultList'),
   lineClaimRef: schemaId('list/LineClaimRef'),
   lineClaimChangedEvent: schemaId('list/LineClaimChangedEvent'),
+  settlementPaid: schemaId('list/SettlementPaid'),
+  settlePick: schemaId('list/SettlePick'),
   lineSettlementView: schemaId('list/LineSettlementView'),
   lineSettlementResult: schemaId('list/LineSettlementResult'),
   lineSettlementPage: schemaId('list/LineSettlementPage'),
@@ -57,6 +59,7 @@ export const LIST_SCHEMA_IDS = {
   updateLineRequest: schemaId('msg/line.update/request'),
   setApprovalRequest: schemaId('msg/line.setApproval/request'),
   settleLineRequest: schemaId('msg/line.settle/request'),
+  settlePickRequest: schemaId('msg/line.settlePick/request'),
   lineSettlementsRequest: schemaId('msg/line.settlements/request'),
   itemSettlementsRequest: schemaId('msg/line.itemSettlements/request'),
   listHoldingItemView: schemaId('list/ListHoldingItemView'),
@@ -223,10 +226,54 @@ const updateLineResult = object(
   lineViewRequired
 );
 
+// What a settle cost, as the gateway read it (plan 0143, section 4.2).
+//
+// It appears on the two settle **messages** and on neither settle DTO. A client
+// names a place, the gateway reads the price, and there is no field on either
+// request body to put an amount in.
+//
+// `pricePaidCurrency` is three upper case letters and `pricePaidCents` a non
+// negative integer, and core checks both before it writes (`paidColumns`). Here
+// the currency is bounded by its length alone, as `countryCode` already is: a
+// regex in a document nothing validates against is a second statement of one
+// rule. That the two are null together is a check constraint in the database
+// rather than a `not` here, because that is the one place it cannot be forgotten.
+const settlementPaid = object(
+  LIST_SCHEMA_IDS.settlementPaid,
+  {
+    priceScopeId: nonEmptyString(),
+    supermarketLocationId: nullableString(),
+    // The shop's chain (plan 0163, section 5). Optional, so a message from a
+    // gateway older than that plan is still read, and absent is null.
+    supermarketId: nullableString(),
+    pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
+    pricePaidCurrency: { type: ['string', 'null'], maxLength: 3 },
+  },
+  [
+    'priceScopeId',
+    'supermarketLocationId',
+    'pricePaidCents',
+    'pricePaidCurrency',
+  ]
+);
+
+// Core's answer to "which product does a settle that names none record" (plan
+// 0151). The rule is core's, so the gateway prices this and never its own guess.
+const settlePick = object(
+  LIST_SCHEMA_IDS.settlePick,
+  {
+    pickedItemId: nullableString(),
+    optionCount: integer({ minimum: 0 }),
+  },
+  ['pickedItemId', 'optionCount']
+);
+
 // One origin line touched by one settling act (plan 0047, section 3).
-// `generatedListLineId` is deliberately absent: it is stored and never served, so
+// `basketLineId` is deliberately absent: it is stored and never served, so
 // a reader learns that something was bought and not which basket it came out of
-// (section 3.1).
+// (section 3.1). `settledByParticipantId` and `supermarketLocationId` are served
+// since plan 0151 section 5, which reverses plan 0051 section 6 and plan 0143
+// section 6 for these two fields: the view has to say who settled and where.
 const lineSettlementView = object(
   LIST_SCHEMA_IDS.lineSettlementView,
   {
@@ -239,12 +286,23 @@ const lineSettlementView = object(
     // buying more than was asked for is recorded as it happened (section 4.2).
     quantity: integer({ minimum: 0 }),
     settledByUserId: nonEmptyString(),
+    // Exactly one of this and `settledByUserId` is set: a basket settle names
+    // the participant, the list page names the account.
+    settledByParticipantId: nullableString(),
     settledAt: string({ format: 'date-time' }),
     // Null while the settlement stands, and set once somebody took it back
     // (plan 0054, section 3.3). The row is kept and served either way: a
     // reverted settlement is excluded from every total and still appears in the
     // history, marked.
     revertedAt: nullableString(),
+    // What one unit cost, and where the price was read: a chain's catchment and
+    // never a shop (plan 0143, section 6). Null together, and null on every row
+    // written before that plan.
+    pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
+    pricePaidCurrency: { type: ['string', 'null'], maxLength: 3 },
+    priceScopeId: nullableString(),
+    // The one shop, set only by a settler who was served shops.
+    supermarketLocationId: nullableString(),
   },
   [
     'id',
@@ -254,8 +312,13 @@ const lineSettlementView = object(
     'outcome',
     'quantity',
     'settledByUserId',
+    'settledByParticipantId',
     'settledAt',
     'revertedAt',
+    'pricePaidCents',
+    'pricePaidCurrency',
+    'priceScopeId',
+    'supermarketLocationId',
   ]
 );
 
@@ -280,7 +343,7 @@ const lineClaimRef = object(
 );
 
 // The zone room's claim event (plan 0052, section 2), and the whole of what it
-// may say: that these lines are claimed, and whose. No generated list id, ever;
+// may say: that these lines are claimed, and whose. No basket id, ever;
 // an id in a payload is an invitation to fetch it, and the refusal would then be
 // the only thing between a zone member and somebody else's basket.
 //
@@ -493,6 +556,9 @@ const addLineQuantityRequest = object(
     // Schema states "not zero" only as a `not`, which reads far worse than the
     // one decorator that says it (plan 0040, section 3.7).
     delta: integer({ minimum: -LINE_QUANTITY_MAX, maximum: LINE_QUANTITY_MAX }),
+    // Optional: a delta needs no starting point, and the basket sends one so a
+    // settle that landed in between refuses the gesture (plan 0136, section 5.3).
+    expect: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
   },
   ['userId', 'lineId', 'delta']
 );
@@ -549,8 +615,18 @@ const settleLineRequest = object(
     outcome: ref(ENUM_IDS.settlementOutcome),
     quantity: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
     itemId: nonEmptyString(),
+    // Written by the gateway (plan 0143). A client body has no field for it.
+    paid: ref(LIST_SCHEMA_IDS.settlementPaid),
   },
   ['userId', 'lineId', 'outcome']
+);
+const settlePickRequest = object(
+  LIST_SCHEMA_IDS.settlePickRequest,
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+  },
+  ['userId', 'lineId']
 );
 const lineSettlementsRequest = object(
   LIST_SCHEMA_IDS.lineSettlementsRequest,
@@ -626,9 +702,24 @@ const tripView = object(
     live: boolean(),
     startedAt: string({ format: 'date-time' }),
     lineCount: integer({ minimum: 0 }),
-    boughtLineCount: integer({ minimum: 0 }),
+    fullyBoughtLineCount: integer({ minimum: 0 }),
+    // The old name, with the same value, for one release (plan 0159).
+    boughtLineCount: integer({
+      minimum: 0,
+      deprecated: true,
+      description: 'The same value as `fullyBoughtLineCount`. Read that.',
+    }),
   },
-  ['id', 'kind', 'name', 'live', 'startedAt', 'lineCount', 'boughtLineCount']
+  [
+    'id',
+    'kind',
+    'name',
+    'live',
+    'startedAt',
+    'lineCount',
+    'fullyBoughtLineCount',
+    'boughtLineCount',
+  ]
 );
 
 // Not `paginated`, because it has two parts: live trips whole on the first
@@ -644,7 +735,7 @@ const tripPage = object(
 );
 
 // What one trip did to one zone line (section 4). `asked` and `left` are null
-// for a loose trip, which asked for nothing: it is a record of purchases alone.
+// for a session, which asked for nothing: it is a record of purchases alone.
 const tripRowView = object(
   LIST_SCHEMA_IDS.tripRowView,
   {
@@ -823,6 +914,8 @@ export const listSchemas: JsonSchema[] = [
   addLineResultList,
   lineClaimRef,
   lineClaimChangedEvent,
+  settlementPaid,
+  settlePick,
   lineSettlementView,
   lineSettlementResult,
   commentRecording,
@@ -845,6 +938,7 @@ export const listSchemas: JsonSchema[] = [
   updateLineRequest,
   setApprovalRequest,
   settleLineRequest,
+  settlePickRequest,
   lineSettlementsRequest,
   itemSettlementsRequest,
   listHoldingItemView,
@@ -937,6 +1031,10 @@ export const listMessageContracts: Record<
   [LINE_PATTERNS.settle]: {
     request: LIST_SCHEMA_IDS.settleLineRequest,
     response: LIST_SCHEMA_IDS.lineSettlementResult,
+  },
+  [LINE_PATTERNS.settlePick]: {
+    request: LIST_SCHEMA_IDS.settlePickRequest,
+    response: LIST_SCHEMA_IDS.settlePick,
   },
   [LINE_PATTERNS.settlements]: {
     request: LIST_SCHEMA_IDS.lineSettlementsRequest,

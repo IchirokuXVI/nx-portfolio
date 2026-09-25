@@ -10,9 +10,13 @@ import {
   AppUpdates,
   BackendReadiness,
   ConnectionState,
+  LiveBasketBadge,
+  NavChrome,
   ReloadBlocker,
   StartupGate,
   ThemeStore,
+  TourAnchor,
+  TourStore,
 } from '@portfolio/velista/platform';
 import { AppUiModule } from '../app-ui-module';
 import {
@@ -20,6 +24,9 @@ import {
   StartupScreen,
   UpdateScreen,
 } from '../home/state-panels';
+import { TourCard } from '../tour/tour-card';
+import { TourSpotlight } from '../tour/tour-spotlight';
+import { AppNav } from './app-nav';
 
 /**
  * The app's own root. Every route in this app renders inside it.
@@ -53,6 +60,10 @@ import {
     AppUiModule,
     RokuTranslatorPipe,
     RouterOutlet,
+    AppNav,
+    TourAnchor,
+    TourCard,
+    TourSpotlight,
     ConnectionLost,
     StartupScreen,
     UpdateScreen,
@@ -62,6 +73,7 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '[class]': 'rootClass()',
+    '[class.nav-up]': 'navReserved()',
   },
 })
 export class AppLayout {
@@ -71,6 +83,9 @@ export class AppLayout {
   private readonly _gate = inject(StartupGate);
   private readonly _reload = inject(ReloadBlocker);
   private readonly _updates = inject(AppUpdates);
+  private readonly _nav = inject(NavChrome);
+  private readonly _badge = inject(LiveBasketBadge);
+  private readonly _tour = inject(TourStore);
 
   /**
    * Whether to cover the page with the connection screen.
@@ -114,6 +129,62 @@ export class AppLayout {
    * of this library: see the service for what it decides and why it lives where it does.
    */
   readonly rendersNow = this._gate.rendersNow;
+
+  /**
+   * Whether the bottom bar is drawn on the screen the app is on (plan 0097).
+   *
+   * Read from `platform` for the reason `offline` is: the question needs the URL and
+   * the activated route's `data`, and rule D1 keeps every router read out of this
+   * library. See {@link NavChrome} for the three things that close it.
+   */
+  readonly navVisible = this._nav.visible;
+
+  /**
+   * Whether the bar belongs to the screen, drawn or not.
+   *
+   * It decides two things: the `nav-up` class, which takes the bottom inset off
+   * everything below this element because the bar carries it, and whether the column
+   * keeps the bar's room when it is not drawn (velista 0106).
+   *
+   * `reserved` and not `visible`, which differ on exactly one thing: a sheet hides the
+   * bar and keeps its room. Reserving on `visible` would reflow the page under every
+   * sheet by the height of the bar on the way in and back again on the way out.
+   */
+  readonly navReserved = this._nav.reserved;
+
+  /** Where the app is, which is the only thing that decides the active tab. */
+  readonly navUrl = this._nav.url;
+
+  /** The count over the third tab's glyph, or null. Written by `data-access`. */
+  readonly navBadge = this._badge.pending;
+
+  /**
+   * Whether the tour is over the app (velista `0099`).
+   *
+   * While a run is going, card or no card: between stops the screen stays dimmed and
+   * inert, so nothing can be pressed while the app moves. Never over a sheet, and never
+   * over the screens that replace the outlet, because there is nothing there to light.
+   */
+  readonly tourUp = computed(
+    () =>
+      this._tour.running() &&
+      !this._nav.sheetOpen() &&
+      this.rendersNow() &&
+      !this.mustUpdate()
+  );
+
+  /** The card to draw, from `TourStore`, which reads the router on this one's behalf. */
+  readonly tourCard = this._tour.card;
+
+  /** Next, or Finish on the last card. */
+  tourNext(): void {
+    this._tour.next();
+  }
+
+  /** Skip the tour, and Escape. */
+  tourSkip(): void {
+    this._tour.skip();
+  }
 
   /** Somebody pressed Try again on the startup screen. */
   retryConnection(): void {

@@ -21,6 +21,8 @@ import { Supermarket } from './supermarket.entity';
  * localized; address/geo are per location.
  */
 @Entity({ name: 'supermarket_locations' })
+// Plan 0164: the shops near a point are read by a bounding box on these two.
+@Index('ix_locations_geo', ['latitude', 'longitude'])
 export class SupermarketLocation extends BaseEntity {
   @Index('ix_locations_supermarket')
   @Column({ type: 'uuid' })

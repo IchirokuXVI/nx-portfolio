@@ -41,6 +41,16 @@ export const AUTH_PATTERNS = {
   /** Read the caller's own profile (plan 0018, section 12). */
   getProfile: 'auth.getProfile',
   /**
+   * A fresh generated username, for the setup's first step (plan 0145,
+   * section 4).
+   *
+   * **It writes nothing.** The name is a suggestion on a screen, and it becomes
+   * this account's name only when the client sends it to
+   * {@link AUTH_PATTERNS.setUsername}, which is the subject that already owns
+   * that write and already carries the rename throttle.
+   */
+  suggestUsername: 'auth.suggestUsername',
+  /**
    * The global usernames of several accounts at once (plan 0114, section 9), so
    * the gateway can name people core knows only by id.
    */
@@ -71,7 +81,7 @@ export type AuthPattern = (typeof AUTH_PATTERNS)[keyof typeof AUTH_PATTERNS];
 export interface MintParticipantTokenRequest {
   participantId: string;
   /** Becomes the token's `aud`, so it is worthless on any other basket. */
-  generatedListId: string;
+  basketId: string;
   /** Copied into the claims so a guard can tell a guest from a member cheaply. */
   kind: string;
 }
@@ -242,6 +252,24 @@ export interface UserProfileView {
   email: string | null;
   emailVerified: boolean;
   displayName: string | null;
+}
+
+/**
+ * Ask for a fresh generated name (plan 0145, section 4). The locale comes from
+ * the request context when it is omitted, exactly as registration's does.
+ */
+export interface SuggestUsernameRequest {
+  locale?: string;
+}
+
+/**
+ * One name, drawn from one locale's pool and stored nowhere.
+ *
+ * Plural in the route's path and singular here is deliberate: a later screen
+ * that offers three names at once must not need a second route.
+ */
+export interface SuggestUsernameResult {
+  username: string;
 }
 
 /** How many accounts one {@link GetUsernamesRequest} may name. */

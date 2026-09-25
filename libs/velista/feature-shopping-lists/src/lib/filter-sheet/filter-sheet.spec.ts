@@ -6,8 +6,18 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore, BasketViewStore } from '@portfolio/velista/data-access';
-import type { BasketLine, BasketPriceScope } from '@portfolio/velista/models';
+import {
+  BasketStore,
+  BasketViewStore,
+  ShopPickNotices,
+} from '@portfolio/velista/data-access';
+import type {
+  BasketListRef,
+  BasketPriceScope,
+  BasketRow,
+  BasketShop,
+  ParticipantKind,
+} from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -17,46 +27,59 @@ import { FilterSheet } from './filter-sheet';
 
 const BASKET_ID = 'b4b1f0e2-1f5a-4c2e-9a4d-6f0e2b7c1d33';
 
+/**
+ * One row, on the named lists.
+ *
+ * `null` is a reader served no list at all, which is a guest: every entry they
+ * hold names none, so there is nothing for the filter to offer (velista `0090`,
+ * section 8.2).
+ */
 function line(
-  id: string,
+  rowKey: string,
   content: string,
   listIds: readonly string[] | null
-): BasketLine {
+): BasketRow {
+  const lists = listIds ?? [null];
   return {
-    id,
+    rowKey,
     content,
-    quantity: 1,
-    settled: 0,
-    waitingSettled: 0,
-    pickId: null,
+    left: 1,
+    bought: 0,
+    asked: 1,
+    state: 'WANTED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
     optionIds: [],
-    position: 0,
-    createdBy: null,
     touchedBy: null,
     touchedAt: null,
-    lastOutcome: null,
-    ...(listIds === null
-      ? {}
-      : {
-          origins: listIds.map((listId) => ({
-            id: `o-${id}-${listId}`,
-            zoneId: 'z1',
-            listId,
-            lineId: `zl-${id}`,
-            quantity: 1,
-          })),
-        }),
-  } as BasketLine;
+    usual: null,
+    entries: (lists.length === 0 ? [null] : lists).map((listId) => ({
+      lineId: `zl-${rowKey}-${listId ?? 'none'}`,
+      listId,
+      left: 1,
+      bought: 0,
+      asked: 1,
+      state: 'WANTED' as const,
+      awaitingApproval: false,
+      demandEditable: true,
+    })),
+  };
 }
 
-/** The owner's basket: three lines, two lists the run drew from. */
+function ref(listId: string, name: string): BasketListRef {
+  return { listId, name, zoneId: 'z1', zoneName: 'Home' };
+}
+
+/** The owner's basket: three rows, two lists they were served. */
 const OWNER_LINES = [
   line('l-1', 'Milk', ['l-groceries']),
   line('l-2', 'Bread', ['l-weekly']),
   line('l-3', 'Batteries', []),
 ];
 
-/** A guest's: the same lines with every origin redacted, and no sources. */
+/** A guest's: the same rows, with no list any of them can name. */
 const GUEST_LINES = [
   line('l-1', 'Milk', null),
   line('l-2', 'Bread', null),
@@ -88,9 +111,14 @@ function scope(
 }
 
 function render(options: {
-  readonly lines: readonly BasketLine[];
-  readonly sources?: readonly { zoneId: string; listId: string }[];
+  readonly lines: readonly BasketRow[];
+  /** The lists this reader was served, which is what the sheet offers. */
+  readonly served?: readonly BasketListRef[];
   readonly scopes?: readonly BasketPriceScope[];
+  /** Who is reading. The owner unless a test says otherwise. */
+  readonly meKind?: ParticipantKind;
+  /** The shop the basket was started at, which locks it (velista `0102`). */
+  readonly own?: BasketShop;
 }) {
   TestBed.resetTestingModule();
 
@@ -99,25 +127,39 @@ function render(options: {
     leaveTo: jest.fn().mockResolvedValue(undefined),
   };
 
-  const sources = signal(options.sources ?? []);
   const scopes = signal(
     new Map((options.scopes ?? []).map((held) => [held.priceScopeId, held]))
   );
+  const served = options.served ?? [
+    ref('l-groceries', 'Groceries'),
+    ref('l-weekly', 'Weekly shop'),
+  ];
+  // The device's shop (velista `0102`), read at once by this double.
+  const readAt = signal<string | null>(null);
   const store = {
-    lines: signal(options.lines),
+    readAt,
+    shopRead: readAt,
+    readAtShop: jest.fn((locationId: string | null) => {
+      readAt.set(locationId);
+      return Promise.resolve();
+    }),
+    rows: signal(options.lines),
+    // How a sheet addresses its own basket since velista `0091`: off the store,
+    // never off `paramMap`, which has no id under `shopping-lists/live`.
+    address: signal({ basketId: BASKET_ID }),
     products: signal(new Map()),
-    lastAdded: signal(null),
-    me: signal(null),
-    basket: computed(() => ({ sources: sources(), scopes: scopes() })),
-    listNames: signal(
-      new Map([
-        ['l-groceries', 'Groceries'],
-        ['l-weekly', 'Weekly shop'],
-      ])
-    ),
+    me: signal({ kind: options.meKind ?? 'OWNER' }),
+    basket: computed(() => ({
+      id: BASKET_ID,
+      scopes: scopes(),
+      shop: options.own ?? null,
+      lockedShopId: options.own?.id ?? null,
+      readAt: options.own?.id ?? readAt(),
+    })),
+    lists: signal(new Map(served.map((held) => [held.listId, held]))),
   };
 
-  const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const paramMap = convertToParamMap({ basketId: BASKET_ID });
   TestBed.configureTestingModule({
     imports: [FilterSheet, RokuTranslatorTestingModule.forTesting()],
     providers: [
@@ -176,7 +218,7 @@ function choices(fixture: ReturnType<typeof render>['fixture'], name: string) {
  */
 describe('FilterSheet', () => {
   it('draws order and group by for every reader', () => {
-    const { fixture } = render({ lines: GUEST_LINES });
+    const { fixture } = render({ lines: GUEST_LINES, served: [] });
 
     expect(legends(fixture)).toEqual([
       'basket.view.order.legend',
@@ -190,7 +232,7 @@ describe('FilterSheet', () => {
    * a reader the server sent no sources to, and the same emptiness hides both.
    */
   it('draws no list grouping and no lists section for a reader with no sources', () => {
-    const { fixture } = render({ lines: GUEST_LINES });
+    const { fixture } = render({ lines: GUEST_LINES, served: [] });
 
     expect(legends(fixture)).not.toContain('basket.view.lists.legend');
     expect(choices(fixture, 'basket-grouping')).toHaveLength(2);
@@ -413,7 +455,7 @@ describe('FilterSheet', () => {
         scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
       });
 
-      view.setShop('s-merca');
+      view.setShop('s-merca-0');
       fixture.detectChanges();
 
       expect(text(fixture, '.shops .choice-body .choice-title')).toBe(
@@ -443,7 +485,7 @@ describe('FilterSheet', () => {
         scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
       });
 
-      view.setShop('s-merca');
+      view.setShop('s-merca-0');
       fixture.detectChanges();
 
       fixture.debugElement
@@ -455,21 +497,135 @@ describe('FilterSheet', () => {
       fixture.debugElement
         .queryAll(By.css('input[name="basket-shop"]'))[1]
         .triggerEventHandler('change', { target: {} });
-      expect(view.shop()).toBe('s-merca');
+      expect(view.shop()).toBe('s-merca-0');
 
       expect(sheets.leaveTo).not.toHaveBeenCalled();
     });
 
-    /** A guest is told these are "the shops" and never "your shops". */
-    it('says whose shops these are from the locations the server sent', () => {
+    /**
+     * A guest picks from the same shops the owner sees (backend `0163`, section 4),
+     * and is told they are "the shops" and never "your shops".
+     */
+    it('offers a guest the same shops, and never calls them theirs', () => {
       const { fixture } = render({
         lines: GUEST_LINES,
-        scopes: [scope('s-merca', 'Mercadona')],
+        served: [],
+        meKind: 'GUEST',
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
       });
 
       expect(text(fixture, '.shops .choice-title')).toBe(
         'basket.view.shop.anyGuest'
       );
+      expect(text(fixture, '.shops .pick')).toBe('basket.view.shop.choose');
+    });
+
+    it('calls them the owner’s own shops for the owner', () => {
+      const { fixture } = render({
+        lines: OWNER_LINES,
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
+      });
+
+      expect(text(fixture, '.shops .choice-title')).toBe(
+        'basket.view.shop.any'
+      );
+    });
+
+    it('is titled Buying at', () => {
+      const { fixture } = render({
+        lines: OWNER_LINES,
+        scopes: [scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32'])],
+      });
+
+      expect(legends(fixture)).toContain('basket.view.shop.legend');
+    });
+
+    /**
+     * Velista `0102`: a basket started at a shop. **The lock is the server's fact**,
+     * drawn from the basket read, and nobody can change it, the owner included.
+     */
+    describe('on a basket started at a shop', () => {
+      const MERCADONA: BasketShop = {
+        id: 'loc-mayor',
+        supermarketId: 'sm-merca',
+        chain: { en: 'Mercadona', es: 'Mercadona' },
+        label: null,
+        address: 'Calle Mayor 3',
+        city: 'Córdoba',
+        postalCode: '14001',
+        inProfile: true,
+      };
+
+      it.each<ParticipantKind>(['OWNER', 'GUEST'])(
+        'draws the shop checked and disabled for the %s, with the line under it',
+        (meKind) => {
+          const { fixture, view } = render({
+            lines: OWNER_LINES,
+            meKind,
+            scopes: [
+              scope('s-merca', 'Mercadona', ['Ronda de los Tejares 32']),
+            ],
+            own: MERCADONA,
+          });
+
+          const fieldset = fixture.debugElement.query(By.css('fieldset.shops'))
+            .nativeElement as HTMLFieldSetElement;
+          expect(fieldset.disabled).toBe(true);
+
+          const radios = choices(fixture, 'basket-shop').map(
+            (node) => node.nativeElement as HTMLInputElement
+          );
+          expect(radios[0].checked).toBe(false);
+          expect(radios[1].checked).toBe(true);
+
+          expect(text(fixture, '.shops .choice-body .choice-title')).toBe(
+            'Mercadona'
+          );
+          expect(text(fixture, '.shops .choice-body .choice-hint')).toBe(
+            'Calle Mayor 3'
+          );
+          // A padlock where Change would be, and no Change at all.
+          expect(
+            fixture.debugElement.query(By.css('.shops .lock'))
+          ).not.toBeNull();
+          expect(fixture.debugElement.query(By.css('.shops .pick'))).toBeNull();
+          expect(text(fixture, '.locked-note')).toBe('basket.view.shop.locked');
+          expect(view.shop()).toBe('loc-mayor');
+        }
+      );
+
+      it('says a shop outside the owner’s areas is outside them', () => {
+        const { fixture } = render({
+          lines: OWNER_LINES,
+          scopes: [],
+          own: {
+            ...MERCADONA,
+            chain: { en: 'Lidl', es: 'Lidl' },
+            address: 'Avenida de Andalucía 21',
+            city: 'Málaga',
+            inProfile: false,
+          },
+        });
+
+        expect(text(fixture, '.shops .choice-body .choice-hint')).toBe(
+          'Avenida de Andalucía 21, Málaga'
+        );
+        expect(
+          fixture.debugElement.query(By.css('.shops lib-outside-areas'))
+        ).not.toBeNull();
+      });
+
+      it('draws no note for a shop in the owner’s areas', () => {
+        const { fixture } = render({
+          lines: OWNER_LINES,
+          scopes: [],
+          own: MERCADONA,
+        });
+
+        expect(
+          fixture.debugElement.query(By.css('.shops lib-outside-areas'))
+        ).toBeNull();
+      });
     });
 
     /**
@@ -505,3 +661,205 @@ function text(
     (node?.nativeElement as HTMLElement | undefined)?.textContent?.trim() ?? ''
   );
 }
+
+/**
+ * The message after "Near me" picked the shop (velista `0103`): drawn in the
+ * "Buying at" section, with the distance and Change, until dismissed or until the
+ * shop changes.
+ */
+describe('FilterSheet, the pick message', () => {
+  const SCOPES = [scope('s-merca', 'Mercadona', ['Calle Mayor 3'])];
+  const PICKED: BasketShop = {
+    id: 's-merca-0',
+    supermarketId: 'sm-merca',
+    chain: { en: 'Mercadona', es: 'Mercadona' },
+    label: null,
+    address: 'Calle Mayor 3',
+    city: 'Córdoba',
+    postalCode: '14001',
+    inProfile: true,
+  };
+
+  function picked(basket = BASKET_ID) {
+    const rendered = render({ lines: OWNER_LINES, scopes: SCOPES });
+    rendered.view.setShop(PICKED.id);
+    TestBed.inject(ShopPickNotices).show({
+      basket,
+      shop: PICKED,
+      distanceMetres: 120,
+    });
+    rendered.fixture.detectChanges();
+    return rendered;
+  }
+
+  const message = (fixture: ReturnType<typeof render>['fixture']) =>
+    fixture.debugElement.query(By.css('lib-shop-pick-message'));
+
+  it('names the shop and the distance above the radios', () => {
+    const { fixture } = picked();
+
+    const node = message(fixture);
+    expect(node).not.toBeNull();
+    expect(node.componentInstance.shop()).toBe('Mercadona, Calle Mayor 3');
+    expect(node.componentInstance.distance()).toBe('120 m');
+  });
+
+  it('goes when dismissed, and the shop stays', () => {
+    const { fixture, view } = picked();
+
+    (
+      fixture.nativeElement.querySelector(
+        'lib-shop-pick-message .dismiss'
+      ) as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+
+    expect(message(fixture)).toBeNull();
+    expect(view.shop()).toBe(PICKED.id);
+  });
+
+  it('opens the picker from Change', () => {
+    const { fixture } = picked();
+
+    (
+      fixture.nativeElement.querySelector(
+        'lib-shop-pick-message .change'
+      ) as HTMLButtonElement
+    ).click();
+
+    expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
+      `/en/shopping-lists/${BASKET_ID}/sheet/filter/shop`
+    );
+  });
+
+  it('goes when the shop changes, and does not come back with the same shop', () => {
+    const { fixture, view } = picked();
+
+    const radios = fixture.debugElement.queryAll(
+      By.css('input[name="basket-shop"]')
+    );
+    radios[0].triggerEventHandler('change', {
+      target: radios[0].nativeElement,
+    });
+    fixture.detectChanges();
+    expect(view.shop()).toBeNull();
+    expect(message(fixture)).toBeNull();
+
+    view.setShop(PICKED.id);
+    fixture.detectChanges();
+    expect(message(fixture)).toBeNull();
+  });
+
+  it('is not drawn over another basket', () => {
+    const { fixture } = picked('another-basket');
+
+    expect(message(fixture)).toBeNull();
+  });
+});
+
+/**
+ * Only what I usually buy here (velista `0104`).
+ *
+ * The switch exists only once a shop is chosen, a basket's own locked shop
+ * included, and it applies at once like every other control in this sheet.
+ */
+describe('FilterSheet: the usual switch', () => {
+  const MERCADONA_SCOPE = scope('s-merca', 'Mercadona', [
+    'Ronda de los Tejares 32',
+  ]);
+
+  function usualSwitch(
+    fixture: ReturnType<typeof render>['fixture']
+  ): HTMLInputElement | null {
+    return (
+      (fixture.debugElement.query(By.css('input[role="switch"]'))
+        ?.nativeElement as HTMLInputElement | undefined) ?? null
+    );
+  }
+
+  it('is absent while no shop is chosen', () => {
+    const { fixture } = render({
+      lines: OWNER_LINES,
+      scopes: [MERCADONA_SCOPE],
+    });
+
+    expect(usualSwitch(fixture)).toBeNull();
+  });
+
+  it('is drawn off below Buying at once a shop is chosen', () => {
+    const { fixture, view } = render({
+      lines: OWNER_LINES,
+      scopes: [MERCADONA_SCOPE],
+    });
+
+    view.setShop('s-merca-0');
+    fixture.detectChanges();
+
+    const control = usualSwitch(fixture);
+    expect(control).not.toBeNull();
+    expect(control?.type).toBe('checkbox');
+    expect(control?.checked).toBe(false);
+    expect(text(fixture, '.usual .choice-title')).toBe(
+      'basket.view.usual.label'
+    );
+
+    // Below the shop fieldset, and before the lists.
+    const order = fixture.debugElement
+      .queryAll(By.css('.shops, .usual'))
+      .map((node) => (node.nativeElement as HTMLElement).classList[1]);
+    expect(order).toEqual(['shops', 'usual']);
+  });
+
+  it('turns the filter on and off at once, and goes with the shop', () => {
+    const { fixture, view } = render({
+      lines: OWNER_LINES,
+      scopes: [MERCADONA_SCOPE],
+    });
+    view.setShop('s-merca-0');
+    fixture.detectChanges();
+
+    const control = usualSwitch(fixture);
+    if (control === null) {
+      throw new Error('the switch was not drawn');
+    }
+    control.click();
+    fixture.detectChanges();
+    expect(view.usual()).toBe(true);
+
+    control.click();
+    fixture.detectChanges();
+    expect(view.usual()).toBe(false);
+
+    control.click();
+    view.setShop(null);
+    fixture.detectChanges();
+    expect(view.usual()).toBe(false);
+    expect(usualSwitch(fixture)).toBeNull();
+  });
+
+  it('is drawn, and usable, on a basket started at its own shop', () => {
+    const { fixture, view } = render({
+      lines: OWNER_LINES,
+      meKind: 'GUEST',
+      scopes: [MERCADONA_SCOPE],
+      own: {
+        id: 'loc-mayor',
+        supermarketId: 'sm-merca',
+        chain: { en: 'Mercadona', es: 'Mercadona' },
+        label: null,
+        address: 'Calle Mayor 3',
+        city: 'Córdoba',
+        postalCode: '14001',
+        inProfile: true,
+      },
+    });
+
+    const control = usualSwitch(fixture);
+    expect(control).not.toBeNull();
+    expect(control?.disabled).toBe(false);
+
+    control?.click();
+    fixture.detectChanges();
+    expect(view.usual()).toBe(true);
+  });
+});

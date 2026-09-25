@@ -6,6 +6,7 @@ import {
   stripFence,
 } from '../../../../../shared/model-engines/src/index.mjs';
 import {
+  FAILURES_IN_A_ROW,
   decideRow,
   fetchBatch,
   parseDecision,
@@ -134,6 +135,15 @@ test('a row is identified whichever decider answered it', () => {
     rowIdentity({ item: { id: 'i9', name: { es: 'Arroz', en: 'Rice' } } }),
     { id: 'i9', name: 'Arroz' }
   );
+  // The groups packet spells the name as two flat fields (plan 0005).
+  assert.deepEqual(
+    rowIdentity({ item: { id: 'i9', nameEs: 'Arroz', nameEn: 'Rice' } }),
+    { id: 'i9', name: 'Arroz' }
+  );
+  assert.deepEqual(rowIdentity({ item: { id: 'i9', nameEn: 'Rice' } }), {
+    id: 'i9',
+    name: 'Rice',
+  });
   assert.deepEqual(rowIdentity({ item: { id: 'i9' } }), {
     id: 'i9',
     name: 'i9',
@@ -1565,4 +1575,441 @@ test('the slot is named to the caller before it is brought up', async () => {
     onSlot: (slot) => seen.push(slot),
   });
   assert.deepEqual(seen, [3]);
+});
+
+// ---------------------------------------------------------------------------
+// Plan 0005: a walk that survives a bad row
+// ---------------------------------------------------------------------------
+
+/** Rows e1 to eN, as the suggestions decider hands them out one at a time. */
+function rowsOf(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    entry: { id: `e${index + 1}`, name: `Producto e${index + 1}` },
+    candidates: [],
+    eanMatch: null,
+    remaining: count - index,
+  }));
+}
+
+/** A decider whose `decide` throws for the rows named, and records the rest. */
+function failingDecider({ rows, failFor = [], nextErrors = [] }) {
+  const decider = fakeDecider({ rows });
+  const errors = [...nextErrors];
+  const next = decider.next;
+  decider.next = async () => {
+    const error = errors.shift();
+    if (error) {
+      decider.calls.push({ command: 'next', failed: true });
+      throw error;
+    }
+    return next();
+  };
+  decider.decide = async (entryId, decision, options) => {
+    decider.calls.push({
+      command: 'decide',
+      entryId,
+      final: options?.final ?? false,
+    });
+    if (failFor.includes(entryId)) {
+      throw new Error(`decide failed: search for ${entryId} answered 400`);
+    }
+    return {
+      accepted: true,
+      retryable: false,
+      decision: { entryId, decision: 'LINK' },
+    };
+  };
+  return decider;
+}
+
+/** A model that answers every prompt with a link. */
+function linkingEngine() {
+  return {
+    asked: 0,
+    async ask() {
+      this.asked += 1;
+      return { text: '{"decision":"LINK","itemId":"i1","confidence":0.95}' };
+    },
+  };
+}
+
+/** The recorder the CLI passes, as a list. */
+function failureLog() {
+  const recorded = [];
+  return {
+    recorded,
+    recordRowFailure: async ({ row, error }) => {
+      const record = {
+        entryId: row.entry.id,
+        decision: 'REVIEW',
+        issues: [{ code: 'ROW_FAILED', detail: String(error.message) }],
+      };
+      recorded.push(record);
+      return record;
+    },
+  };
+}
+
+function runWith(overrides) {
+  return runCuration({
+    slots: fakeSlots(),
+    engine: linkingEngine(),
+    runDir: '/runs/x',
+    mainUrl: 'http://a',
+    waitForGateway: async () => undefined,
+    stripFence,
+    stdout: sink(),
+    stderr: sink(),
+    dumpPath: '/runs/x/dump.sql',
+    ...overrides,
+  });
+}
+
+test('a row that fails becomes a ROW_FAILED review and the walk goes on', async () => {
+  const decider = failingDecider({ rows: rowsOf(3), failFor: ['e2'] });
+  const log = failureLog();
+  const stdout = sink();
+  const stderr = sink();
+
+  const outcome = await runWith({
+    makeDeciderFor: () => decider,
+    recordRowFailure: log.recordRowFailure,
+    stdout,
+    stderr,
+  });
+
+  assert.equal(outcome.stopped, false);
+  assert.deepEqual(
+    log.recorded.map((record) => [record.entryId, record.issues[0].code]),
+    [['e2', 'ROW_FAILED']]
+  );
+  assert.match(log.recorded[0].issues[0].detail, /search for e2 answered 400/);
+  // The rows on either side of it were decided as usual.
+  assert.deepEqual(
+    decider.calls
+      .filter((call) => call.command === 'decide')
+      .map((call) => call.entryId),
+    ['e1', 'e2', 'e3']
+  );
+  // Every row is one line on stdout, the failed one included.
+  const lines = stdout
+    .text()
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  assert.equal(lines.length, 3);
+  assert.equal(lines[1].decision.issues[0].code, 'ROW_FAILED');
+  assert.match(stderr.text(), /row e2 failed: decide failed/);
+  assert.equal(decider.calls.at(-1).command, 'end');
+});
+
+test('a failure between two successes does not count toward the stop', async () => {
+  const decider = failingDecider({
+    rows: rowsOf(6),
+    failFor: ['e1', 'e2', 'e4', 'e5'],
+  });
+  const log = failureLog();
+  const outcome = await runWith({
+    makeDeciderFor: () => decider,
+    recordRowFailure: log.recordRowFailure,
+  });
+  assert.equal(outcome.stopped, false);
+  assert.equal(log.recorded.length, 4);
+});
+
+test('three failed rows in a row stop the walk, and the report is still written', async () => {
+  const slots = fakeSlots();
+  const decider = failingDecider({
+    rows: rowsOf(5),
+    failFor: ['e1', 'e2', 'e3', 'e4', 'e5'],
+  });
+  const log = failureLog();
+  const stderr = sink();
+
+  await assert.rejects(
+    () =>
+      runWith({
+        slots,
+        makeDeciderFor: () => decider,
+        recordRowFailure: log.recordRowFailure,
+        stderr,
+      }),
+    /3 steps in a row failed, which is not a problem with one row/
+  );
+
+  assert.equal(FAILURES_IN_A_ROW, 3);
+  assert.deepEqual(
+    log.recorded.map((record) => record.entryId),
+    ['e1', 'e2', 'e3']
+  );
+  // The fourth row was never handed out.
+  assert.equal(
+    decider.calls.filter((call) => call.command === 'next').length,
+    3
+  );
+  assert.equal(
+    decider.calls.filter((call) => call.command === 'end').length,
+    1
+  );
+  assert.match(stderr.text(), /report: \/runs\/x\/report\.json/);
+  assert.match(stderr.text(), /--resume \/runs\/x/);
+  assert.deepEqual(slots.verbs, [
+    'list',
+    'up:2:gateway,auth,catalog',
+    'dump:2',
+    'down:2',
+  ]);
+});
+
+test('a next that fails is asked again, and three in a row stop the walk', async () => {
+  const once = failingDecider({
+    rows: rowsOf(2),
+    nextErrors: [new Error('next failed: search answered 400')],
+  });
+  const log = failureLog();
+  const outcome = await runWith({
+    makeDeciderFor: () => once,
+    recordRowFailure: log.recordRowFailure,
+  });
+  assert.equal(outcome.stopped, false);
+  assert.equal(
+    once.calls.filter((call) => call.command === 'decide').length,
+    2
+  );
+
+  const always = failingDecider({
+    rows: rowsOf(2),
+    nextErrors: [1, 2, 3, 4].map(() => new Error('next failed: 400')),
+  });
+  await assert.rejects(
+    () =>
+      runWith({
+        makeDeciderFor: () => always,
+        recordRowFailure: log.recordRowFailure,
+      }),
+    /3 steps in a row failed/
+  );
+  assert.equal(
+    always.calls.filter((call) => call.command === 'next').length,
+    3
+  );
+  assert.equal(always.calls.filter((call) => call.command === 'end').length, 1);
+});
+
+test('end runs on a failed walk and writes the report', async () => {
+  const decider = fakeDecider({ rows: [ROW] });
+  decider.decide = async () => {
+    throw new Error('the gateway answered 500');
+  };
+  const stderr = sink();
+  // With nowhere to record a failed row, the row fails the run, as it did
+  // before. The report is written all the same.
+  await assert.rejects(
+    () => runWith({ makeDeciderFor: () => decider, stderr }),
+    /answered 500/
+  );
+  assert.equal(decider.calls.at(-1).command, 'end');
+  assert.match(stderr.text(), /report: \/runs\/x\/report\.json/);
+});
+
+test('an up that fails still takes the slot down, and dumps nothing', async () => {
+  const slots = fakeSlots();
+  slots.up = async (slot) => {
+    slots.verbs.push(`up:${slot}`);
+    throw new Error('luna-slot up failed with exit 1: port busy');
+  };
+  await assert.rejects(
+    () => runWith({ slots, makeDeciderFor: () => fakeDecider() }),
+    /port busy/
+  );
+  assert.deepEqual(slots.verbs, ['list', 'up:2', 'down:2']);
+});
+
+test('a resumed run replays into the new slot, opens nothing and walks on', async () => {
+  const decider = fakeDecider({
+    rows: [
+      {
+        entry: { id: 'e9', name: 'Producto e9' },
+        candidates: [],
+        remaining: 2,
+      },
+      {
+        entry: { id: 'e10', name: 'Producto e10' },
+        candidates: [],
+        remaining: 1,
+      },
+    ],
+  });
+  const replayed = [];
+  const stderr = sink();
+  const opened = [];
+
+  const outcome = await runWith({
+    makeDeciderFor: () => decider,
+    stderr,
+    onOpened: (answer) => opened.push(answer),
+    resume: {
+      opened: { runId: 'r1', remaining: 10, prompt: 'THE RULES' },
+      replay: async ({ rehearsalUrl }) => {
+        replayed.push(rehearsalUrl);
+        return { created: 3, decided: 8 };
+      },
+    },
+  });
+
+  assert.equal(outcome.runId, 'r1');
+  assert.deepEqual(replayed, ['http://localhost:43100']);
+  assert.ok(!decider.calls.some((call) => call.command === 'start'));
+  assert.deepEqual(opened, []);
+  assert.match(
+    stderr.text(),
+    /resuming run r1: 8 rows already decided, 3 creations written again into slot 2/
+  );
+  // The walk counts from where the run stopped.
+  assert.match(stderr.text(), /9\/10 - Producto e9/);
+  assert.match(stderr.text(), /10\/10 - Producto e10/);
+});
+
+test('a resumed run counts its limit over the rows it had already decided', async () => {
+  const decider = fakeDecider({ rows: rowsOf(10).slice(8) });
+  const stderr = sink();
+  await runWith({
+    makeDeciderFor: () => decider,
+    stderr,
+    limit: 9,
+    resume: {
+      opened: { runId: 'r1', remaining: 10, prompt: 'THE RULES' },
+      replay: async () => ({ created: 0, decided: 8 }),
+    },
+  });
+  assert.equal(
+    decider.calls.filter((call) => call.command === 'decide').length,
+    1
+  );
+  assert.match(stderr.text(), /limit 9 reached: 9 rows handed out/);
+});
+
+test('a new run hands what start answered to the caller, to keep for a resume', async () => {
+  const opened = [];
+  await runWith({
+    makeDeciderFor: () => fakeDecider({ rows: [] }),
+    onOpened: (answer) => opened.push(answer),
+  });
+  assert.deepEqual(opened, [
+    { runId: 'r1', remaining: 0, prompt: 'THE RULES' },
+  ]);
+});
+
+test('the progress line counts to the limit rather than to the queue', async () => {
+  const stderr = sink();
+  await runWith({
+    makeDeciderFor: () => fakeDecider({ rows: rowsOf(4) }),
+    stderr,
+    limit: 2,
+  });
+  assert.match(stderr.text(), /1\/2 - Producto e1/);
+  assert.match(stderr.text(), /2\/2 - Producto e2/);
+  assert.doesNotMatch(stderr.text(), /\/4 - /);
+});
+
+test('the run ends on the summary, with the apply command to paste', async () => {
+  const decider = fakeDecider({ rows: rowsOf(1) });
+  decider.end = async () => ({
+    report: '/runs/x/report.json',
+    counts: { LINK: 1, CREATE: 0, REVIEW: 0 },
+    decided: 1,
+  });
+  const stderr = sink();
+  await runWith({
+    makeDeciderFor: () => decider,
+    stderr,
+    readReport: (path) => {
+      assert.equal(path, '/runs/x/report.json');
+      return {
+        unregisteredBrands: [
+          { key: 'hacendado', spelling: 'Hacendado', rows: 4 },
+        ],
+      };
+    },
+  });
+  const text = stderr.text();
+  assert.match(text, /decided 1 rows: LINK 1, CREATE 0, REVIEW 0/);
+  assert.match(text, /Hacendado \(hacendado\): 4 rows/);
+  assert.ok(
+    text.includes(
+      'npx nx run luna-shopper/curation-cli:curate -- --apply /runs/x/decisions.jsonl'
+    )
+  );
+  assert.doesNotMatch(text, /--resume/);
+});
+
+test('a run whose every row is a review ends as a success with nothing to apply', async () => {
+  const decider = fakeDecider({ rows: rowsOf(2) });
+  decider.end = async () => ({
+    report: '/runs/x/report.json',
+    counts: { ASSIGN: 0, CREATE_GROUP: 0, REVIEW: 2 },
+    decided: 2,
+  });
+  const stderr = sink();
+  const outcome = await runWith({ makeDeciderFor: () => decider, stderr });
+  assert.equal(outcome.stopped, false);
+  assert.match(
+    stderr.text(),
+    /nothing to apply: every decided row is a REVIEW/
+  );
+  assert.doesNotMatch(stderr.text(), /--apply/);
+});
+
+test('a failed row in a round leaves the rest of the round to be decided', async () => {
+  // A round of four, as an engine holding several requests in flight walks
+  // it. The second row fails in the decider and the other three are recorded.
+  const rows = rowsOf(4).map((row) => ({ ...row, remaining: 4 }));
+  const decider = fakeDecider();
+  let handed = false;
+  decider.start = async () => ({
+    runId: 'r1',
+    remaining: 4,
+    prompt: 'P',
+    batches: 4,
+  });
+  decider.next = async () => {
+    decider.calls.push({ command: 'next' });
+    if (handed) {
+      return { rows: [], remaining: 0 };
+    }
+    handed = true;
+    return { rows, remaining: 4 };
+  };
+  decider.decide = async (entryId) => {
+    decider.calls.push({ command: 'decide', entryId });
+    if (entryId === 'e2') {
+      throw new Error('decide failed: 400');
+    }
+    return { accepted: true, retryable: false };
+  };
+  const engine = {
+    batchSize: 4,
+    askEach: (texts) =>
+      texts.map(async () => ({
+        text: '{"decision":"LINK","itemId":"i1","confidence":0.95}',
+      })),
+  };
+  const log = failureLog();
+
+  await runWith({
+    makeDeciderFor: () => decider,
+    engine,
+    recordRowFailure: log.recordRowFailure,
+  });
+
+  assert.deepEqual(
+    decider.calls
+      .filter((call) => call.command === 'decide')
+      .map((call) => call.entryId),
+    ['e1', 'e2', 'e3', 'e4']
+  );
+  assert.deepEqual(
+    log.recorded.map((record) => record.entryId),
+    ['e2']
+  );
 });

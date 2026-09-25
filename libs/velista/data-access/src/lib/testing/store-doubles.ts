@@ -1,13 +1,14 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
   AddPostalCodeRequest,
+  BasketSummary,
   CatalogItem,
   Comment,
-  GeneratedListSummary,
   Identity,
   Line,
   LineApprovalStatus,
   LineSettlement,
+  LiveBasketSummary,
   Membership,
   MembershipStatus,
   MyZone,
@@ -18,8 +19,9 @@ import type {
   ProfilePostalCode,
   ResolvedPostalCode,
   SessionTokens,
+  SettleLineOptions,
   SettlementOutcome,
-  SharedGeneratedListSummary,
+  SharedBasketSummary,
   ShoppingListsLoad,
   ShoppingListSummary,
   ShoppingProfile,
@@ -29,7 +31,7 @@ import type {
   UserProfile,
   WriteShoppingProfileRequest,
 } from '@portfolio/velista/models';
-import { isLiveGeneratedList } from '@portfolio/velista/models';
+import { isOpenBasket } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
 import {
@@ -39,10 +41,16 @@ import {
   type VerifiedEmail,
 } from '../auth/auth-service';
 import { SessionStore } from '../auth/session-store';
+import { BasketListStore } from '../baskets/basket-list-store';
+import { LiveBasketStore } from '../baskets/live-basket-store';
+import { SharedListStore } from '../baskets/shared-list-store';
+import {
+  GroupMembers,
+  type GroupMembersEntry,
+  type GroupMembersScope,
+} from '../catalog/group-members';
 import { GroupNames } from '../catalog/group-names';
 import { ItemNames } from '../catalog/item-names';
-import { GeneratedListStore } from '../generated-lists/generated-list-store';
-import { SharedListStore } from '../generated-lists/shared-list-store';
 import { LineStore, type LineLoadState } from '../lines/line-store';
 import { ListStore, type ListLoadState } from '../lists/list-store';
 import { MemberNames } from '../memberships/member-names';
@@ -689,6 +697,7 @@ export type LineWriteCall =
       readonly outcome: SettlementOutcome;
       readonly quantity?: number;
       readonly itemId?: string;
+      readonly supermarketLocationId?: string;
     }
   | {
       readonly kind: 'approval';
@@ -1019,7 +1028,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     settle: async (
       lineId: string,
       settleOutcome: SettlementOutcome,
-      settleOptions?: { quantity?: number; itemId?: string }
+      settleOptions?: SettleLineOptions
     ) => {
       calls.push({
         kind: 'settle',
@@ -1357,6 +1366,50 @@ export function provideFakeGroupNames(
   return { provide: GroupNames, useValue: store };
 }
 
+/** What a fake catalog says a product group holds. */
+export interface FakeGroupMembersOptions {
+  /** Group id to its members. A group not in here has not answered yet. */
+  readonly members?: Readonly<Record<string, readonly CatalogItem[]>>;
+  /** Groups whose read failed. */
+  readonly failed?: readonly string[];
+}
+
+/** A `GroupMembers` that knows what you told it, at every scope alike. */
+export function fakeGroupMembers(options: FakeGroupMembersOptions = {}) {
+  const members = options.members ?? {};
+  const failed = new Set(options.failed ?? []);
+  const asked: { groupIds: string[]; scope?: GroupMembersScope }[] = [];
+
+  const entry = (groupId: string): GroupMembersEntry | null => {
+    if (failed.has(groupId)) {
+      return { status: 'failed' };
+    }
+    const found = members[groupId];
+    return found === undefined ? null : { status: 'ready', members: found };
+  };
+
+  return {
+    entry: (groupId: string, _scope?: GroupMembersScope) => entry(groupId),
+    membersOf: (groupId: string, _scope?: GroupMembersScope) => {
+      const found = entry(groupId);
+      return found?.status === 'ready' ? found.members : null;
+    },
+    ensure: async (groupIds: readonly string[], scope?: GroupMembersScope) => {
+      asked.push({ groupIds: [...groupIds], scope });
+    },
+    /** Every read that was asked for, in order, with its scope. */
+    asked,
+  };
+}
+
+export type FakeGroupMembers = ReturnType<typeof fakeGroupMembers>;
+
+export function provideFakeGroupMembers(
+  store: FakeGroupMembers = fakeGroupMembers()
+): Provider {
+  return { provide: GroupMembers, useValue: store };
+}
+
 /** Who a fake says is present, per zone and per list (plan 0017). */
 export interface FakePresenceOptions {
   /** Zone id to the user ids online in it. */
@@ -1596,6 +1649,8 @@ export interface FakeProfileOptions {
   readonly renameRejectsWith?: unknown;
   /** What `remove` throws back as its failure, if anything. */
   readonly removeRejectsWith?: unknown;
+  /** The names `suggestUsername` hands out, in turn. */
+  readonly suggestions?: readonly string[];
 }
 
 /** One recorded call to a faked `ProfileStore`. */
@@ -1607,6 +1662,8 @@ export type ProfileCall =
       readonly scope: UsernameScope;
     }
   | { readonly method: 'remove' }
+  | { readonly method: 'completeSetup' }
+  | { readonly method: 'suggestUsername' }
   | { readonly method: 'clear' };
 
 /**
@@ -1622,6 +1679,9 @@ export function fakeProfileStore(options: FakeProfileOptions = {}) {
   const calls: ProfileCall[] = [];
   const profile = signal<UserProfile | null>(options.profile ?? null);
   const state = signal<ProfileLoad>(options.state ?? 'loaded');
+  const setupMarked = signal(false);
+  const appState = computed(() => profile()?.appState ?? null);
+  let suggested = 0;
 
   return {
     profile: profile.asReadonly(),
@@ -1635,6 +1695,33 @@ export function fakeProfileStore(options: FakeProfileOptions = {}) {
     load: async () => {
       calls.push({ method: 'load' });
     },
+
+    appState,
+
+    /** The real rule, on the fake's own state: a mark wins, else the held stamp. */
+    setupPending: computed<boolean | null>(() => {
+      if (setupMarked()) {
+        return false;
+      }
+      const held = appState();
+      return held === null ? null : held.setupCompletedAt === null;
+    }),
+
+    completeSetup: () => {
+      calls.push({ method: 'completeSetup' });
+      setupMarked.set(true);
+    },
+
+    suggestUsername: async () => {
+      calls.push({ method: 'suggestUsername' });
+      const pool = options.suggestions ?? ['Quiet Harbour'];
+      const name = pool[suggested % pool.length];
+      suggested += 1;
+      return name;
+    },
+
+    /** Put a profile in, as a load that answered would. */
+    setProfile: (next: UserProfile | null) => profile.set(next),
 
     rename: async (username: string, scope: UsernameScope) => {
       calls.push({ method: 'rename', username, scope });
@@ -2153,7 +2240,7 @@ export function provideFakeShoppingProfileStore(
 }
 
 /**
- * A `GeneratedListStore` holding a fixed listing (plan 0045).
+ * A `BasketListStore` holding a fixed listing (plan 0045).
  *
  * A double rather than the real store over a fake service, for `fakeZoneStore`'s
  * reason: a page spec wants to state "there is one active basket" as a fact about the
@@ -2161,8 +2248,8 @@ export function provideFakeShoppingProfileStore(
  * is the paging, the merge on a further page and the realtime upsert, is covered
  * against the real thing in its own spec.
  */
-export function fakeGeneratedListStore(
-  initial: readonly GeneratedListSummary[] = [],
+export function fakeBasketListStore(
+  initial: readonly BasketSummary[] = [],
   options: {
     state?: ShoppingListsLoad;
     error?: unknown;
@@ -2171,7 +2258,7 @@ export function fakeGeneratedListStore(
     pagesLoaded?: number;
   } = {}
 ) {
-  const lists = signal<readonly GeneratedListSummary[]>(initial);
+  const lists = signal<readonly BasketSummary[]>(initial);
   const state = signal<ShoppingListsLoad>(options.state ?? 'loaded');
   const error = signal<unknown>(options.error ?? null);
   const loadingMore = signal(false);
@@ -2193,12 +2280,10 @@ export function fakeGeneratedListStore(
     loadingMore: loadingMore.asReadonly(),
     hasMore: hasMore.asReadonly(),
     pagesLoaded: pagesLoaded.asReadonly(),
-    // `isLiveGeneratedList` rather than a status comparison, for the reason the real
+    // `isOpenBasket` rather than a status comparison, for the reason the real
     // store now uses it: a double that filtered differently from the thing it stands in
     // for is how a card stayed green in every spec and drew on no phone.
-    active: computed(() =>
-      lists().filter((list) => isLiveGeneratedList(list.status))
-    ),
+    active: computed(() => lists().filter((list) => isOpenBasket(list.status))),
 
     load: async () => {
       calls.push('load');
@@ -2211,13 +2296,13 @@ export function fakeGeneratedListStore(
     },
     create: async () => {
       calls.push('create');
-      throw new Error('fakeGeneratedListStore.create is not configured');
+      throw new Error('fakeBasketListStore.create is not configured');
     },
 
     calls: calls as readonly string[],
 
     /** Move the store while a fixture is mounted, to test a live update. */
-    set: (next: readonly GeneratedListSummary[]) => lists.set(next),
+    set: (next: readonly BasketSummary[]) => lists.set(next),
     setState: (next: ShoppingListsLoad, cause: unknown = null) => {
       state.set(next);
       error.set(cause);
@@ -2233,31 +2318,80 @@ export function fakeGeneratedListStore(
      * refresh, which changes the rows and leaves the counter where it is. A spec about
      * that quiet case uses {@link set} on its own.
      */
-    landPage: (next: readonly GeneratedListSummary[]) => {
+    landPage: (next: readonly BasketSummary[]) => {
       lists.set(next);
       pagesLoaded.update((n) => n + 1);
     },
   };
 }
 
-export type FakeGeneratedListStore = ReturnType<typeof fakeGeneratedListStore>;
+export type FakeBasketListStore = ReturnType<typeof fakeBasketListStore>;
 
-/** {@link fakeGeneratedListStore} bound to the real token. */
-export function provideFakeGeneratedListStore(
-  store: FakeGeneratedListStore = fakeGeneratedListStore()
+/** {@link fakeBasketListStore} bound to the real token. */
+export function provideFakeBasketListStore(
+  store: FakeBasketListStore = fakeBasketListStore()
 ): Provider {
-  return { provide: GeneratedListStore, useValue: store };
+  return { provide: BasketListStore, useValue: store };
+}
+
+/**
+ * A `LiveBasketStore` in whatever state a spec needs (velista `0091`).
+ *
+ * **Loaded with nothing by default**, which is the ordinary dashboard: an
+ * account with no lines has a permanent basket saying "0 to buy", and the card
+ * is drawn for it. A spec about the skeleton passes `state: 'loading'` with no
+ * summary; a spec about a failed read passes `'failed'`.
+ */
+export function fakeLiveBasketStore(
+  initial: LiveBasketSummary | null = {
+    id: 'basket-live',
+    progress: { done: 0, unavailable: 0, total: 0 },
+    pending: 0,
+  },
+  options: { state?: ShoppingListsLoad } = {}
+) {
+  const summary = signal<LiveBasketSummary | null>(initial);
+  const state = signal<ShoppingListsLoad>(
+    options.state ?? (initial === null ? 'loading' : 'loaded')
+  );
+
+  /** What the page asked for, so a spec can assert the read happened at all. */
+  const calls: string[] = [];
+
+  return {
+    summary: summary.asReadonly(),
+    state: state.asReadonly(),
+
+    load: async () => {
+      calls.push('load');
+    },
+
+    calls: calls as readonly string[],
+
+    /** Move the store while a fixture is mounted, to test a live update. */
+    set: (next: LiveBasketSummary | null) => summary.set(next),
+    setState: (next: ShoppingListsLoad) => state.set(next),
+  };
+}
+
+export type FakeLiveBasketStore = ReturnType<typeof fakeLiveBasketStore>;
+
+/** {@link fakeLiveBasketStore} bound to the real token. */
+export function provideFakeLiveBasketStore(
+  store: FakeLiveBasketStore = fakeLiveBasketStore()
+): Provider {
+  return { provide: LiveBasketStore, useValue: store };
 }
 
 /**
  * A `SharedListStore` in whatever state a spec needs (velista `0085`).
  *
- * `fakeGeneratedListStore`'s shape, over the shared listing, and **idle with no pages
+ * `fakeBasketListStore`'s shape, over the shared listing, and **idle with no pages
  * by default**: the Shared lists tab is read only when it is first shown, so a store
  * that had already read something would hide the one thing a page spec checks.
  */
 export function fakeSharedListStore(
-  initial: readonly SharedGeneratedListSummary[] = [],
+  initial: readonly SharedBasketSummary[] = [],
   options: {
     state?: ShoppingListsLoad;
     error?: unknown;
@@ -2265,7 +2399,7 @@ export function fakeSharedListStore(
     pagesLoaded?: number;
   } = {}
 ) {
-  const lists = signal<readonly SharedGeneratedListSummary[]>(initial);
+  const lists = signal<readonly SharedBasketSummary[]>(initial);
   const state = signal<ShoppingListsLoad>(options.state ?? 'idle');
   const error = signal<unknown>(options.error ?? null);
   const loadingMore = signal(false);
@@ -2293,12 +2427,12 @@ export function fakeSharedListStore(
 
     calls: calls as readonly string[],
 
-    set: (next: readonly SharedGeneratedListSummary[]) => lists.set(next),
+    set: (next: readonly SharedBasketSummary[]) => lists.set(next),
     setState: (next: ShoppingListsLoad, cause: unknown = null) => {
       state.set(next);
       error.set(cause);
     },
-    landPage: (next: readonly SharedGeneratedListSummary[]) => {
+    landPage: (next: readonly SharedBasketSummary[]) => {
       lists.set(next);
       state.set('loaded');
       pagesLoaded.update((n) => n + 1);

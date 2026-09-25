@@ -87,7 +87,10 @@ function build(options: {
   let created = 0;
 
   const entries = {
-    find: jest.fn(async () => stored),
+    // Filtered as the real query is: a session loads one chain's rows only.
+    find: jest.fn(async (query: { where: { supermarketId: string } }) =>
+      stored.filter((row) => row.supermarketId === query.where.supermarketId)
+    ),
     create: jest.fn((row: SourceCatalogEntry) => {
       created += 1;
       return { id: `new-${created}`, ...row };
@@ -785,7 +788,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
     expect(priceRows[0].details).toEqual(extra);
   });
 
-  it('counts the batch result as updated and unchanged, as a refresh did', async () => {
+  it('counts new prices as updated, and unchanged as products only', async () => {
     const { ingest, context, reported } = build({
       rows: [
         {
@@ -807,8 +810,15 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
       ],
     });
 
-    // A new row is "the source said something new"; a confirmed row is not.
-    expect(reported).toContainEqual({ updated: 2, unchanged: 1 });
+    // A new row is "the source said something new". A confirmed price moves
+    // no progress counter: `unchanged` is the one product the ladder left
+    // alone, and the confirmed price is `pricesConfirmed` (plan 0158).
+    expect(reported).toContainEqual({ updated: 2 });
+    const unchanged = reported.reduce(
+      (sum, counters) => sum + (counters.unchanged ?? 0),
+      0
+    );
+    expect(unchanged).toBe(1);
     expect(result.counters).toMatchObject({
       pricesWritten: 2,
       pricesConfirmed: 1,
@@ -1161,7 +1171,7 @@ describe('SourceIngest, a price copied to other scopes (plan 0118)', () => {
     expect(copies.pricedScopes).toEqual(new Set([SCOPE]));
     expect(copies.pricesCopied).toEqual(new Map([[SCOPE, 2]]));
     expect(reported.filter((each) => !('processed' in each))).toEqual([
-      { updated: 1, unchanged: 0 },
+      { updated: 1 },
     ]);
   });
 
@@ -1434,5 +1444,387 @@ describe('SourceIngest, a partial observation (plan 0119)', () => {
       'a-target',
     ]);
     expect(catalog.addPrices).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * An EAN that several rows of one chain share binds none of them (plan 0155).
+ *
+ * Mercadona gives one EAN to five cuts of one fish. Each cut bound to the one
+ * product that held the EAN, each walk wrote all five prices onto it, and a
+ * shopper saw whichever was written last.
+ */
+describe('SourceIngest, an EAN that several rows of one chain share', () => {
+  const OTHER_CHAIN = '55555555-5555-4555-8555-555555555555';
+  const DORADA = '2300000000017';
+  const dorada = {
+    id: 'item-dorada',
+    name: { es: 'Dorada', en: null },
+    brand: null,
+    ean: DORADA,
+    unitSize: null,
+  };
+  const cuts = ['entera', 'limpia', 'filetes', 'lomos', 'rodajas'].map(
+    (cut, index) =>
+      observation({
+        externalId: `dorada-${index + 1}`,
+        name: `Dorada ${cut}`,
+        ean: DORADA,
+        price: { ...PRICE, price: 4.5 + index / 10 },
+      })
+  );
+
+  it('queues five cuts sharing an EAN as candidates and sends no price for them', async () => {
+    const { ingest, context, saved, catalog } = build({
+      items: [dorada],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { outcomes, counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: cuts,
+    });
+
+    expect(outcomes).toHaveLength(5);
+    for (const outcome of outcomes) {
+      expect(outcome).toMatchObject({ rung: 2, created: true, itemId: null });
+    }
+    expect(saved).toHaveLength(5);
+    for (const row of saved) {
+      // The item stays on the row as the proposal a person decides on.
+      expect(row).toMatchObject({
+        status: SourceEntryStatus.CANDIDATE,
+        matchedBy: ItemSourceMatch.SHARED_EAN,
+        itemId: 'item-dorada',
+        confidence: 0.6,
+        decidedAt: null,
+      });
+    }
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+    // The chain's own rows still record what it stated.
+    expect(counters).toMatchObject({ pricesRecorded: 5, pricesWritten: 0 });
+  });
+
+  it('still binds the same EAN in each chain when each chain carries it once', async () => {
+    // A row of another chain with the same EAN is not a sibling: the count is
+    // per chain, and joining two chains is what an EAN is for.
+    const { ingest, context, saved, catalog } = build({
+      rows: [
+        {
+          id: 'other-chain-row',
+          supermarketId: OTHER_CHAIN,
+          externalId: 'x-1',
+          name: 'Dorada',
+          ean: DORADA,
+          status: SourceEntryStatus.ACTIVE,
+          matchedBy: ItemSourceMatch.EAN,
+          itemId: 'item-dorada',
+        },
+      ],
+      items: [dorada],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    for (const supermarketId of [CHAIN, OTHER_CHAIN]) {
+      await ingest.ingest(context, {
+        supermarketId,
+        defaultPriceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_API,
+        observations: [
+          observation({
+            externalId: supermarketId === CHAIN ? 'a-1' : 'x-1',
+            name: 'Dorada',
+            ean: DORADA,
+            price: PRICE,
+          }),
+        ],
+      });
+    }
+
+    expect(
+      saved.map((row) => [row.externalId, row.status, row.matchedBy])
+    ).toEqual([
+      ['a-1', SourceEntryStatus.ACTIVE, ItemSourceMatch.EAN],
+      ['x-1', SourceEntryStatus.ACTIVE, ItemSourceMatch.EAN],
+    ]);
+    expect(catalog.addPrices).toHaveBeenCalledTimes(2);
+  });
+
+  it('unbinds a row an earlier chunk bound once a sibling with its EAN arrives', async () => {
+    const { ingest, context, saved, catalog } = build({
+      items: [dorada],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const session = await ingest.open(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+    });
+    // Alone in its chunk, the first cut cannot know about the second yet.
+    const first = await session.push([cuts[0]]);
+    expect(first[0].itemId).toBe('item-dorada');
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+
+    const second = await session.push([cuts[1]]);
+    await session.close();
+
+    expect(second[0].itemId).toBeNull();
+    const byExternalId = new Map(saved.map((row) => [row.externalId, row]));
+    for (const externalId of ['dorada-1', 'dorada-2']) {
+      expect(byExternalId.get(externalId)).toMatchObject({
+        status: SourceEntryStatus.CANDIDATE,
+        matchedBy: ItemSourceMatch.SHARED_EAN,
+        decidedAt: null,
+      });
+    }
+    // Nothing more was sent. The first chunk's price stays in catalog, because
+    // the ingest never deletes one.
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+  });
+
+  it('unbinds a loaded EAN row that a new sibling shares, and not one a person accepted', async () => {
+    const decidedAt = new Date('2026-09-01T00:00:00Z');
+    const { ingest, context, catalog } = build({
+      rows: [
+        {
+          id: 'bound-by-ean',
+          externalId: 'dorada-1',
+          name: 'Dorada entera',
+          ean: DORADA,
+          status: SourceEntryStatus.ACTIVE,
+          matchedBy: ItemSourceMatch.EAN,
+          itemId: 'item-dorada',
+          confidence: 1,
+          decidedAt,
+        },
+        {
+          id: 'accepted',
+          externalId: 'dorada-3',
+          name: 'Dorada filetes',
+          ean: DORADA,
+          status: SourceEntryStatus.ACTIVE,
+          matchedBy: ItemSourceMatch.MANUAL,
+          itemId: 'item-dorada-filetes',
+          confidence: 1,
+          decidedAt,
+        },
+      ],
+      items: [dorada],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { outcomes } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [cuts[0], cuts[1], cuts[2]],
+    });
+
+    const [entera, limpia, filetes] = outcomes;
+    expect(entera.itemId).toBeNull();
+    expect(entera.entry).toMatchObject({
+      status: SourceEntryStatus.CANDIDATE,
+      matchedBy: ItemSourceMatch.SHARED_EAN,
+      itemId: 'item-dorada',
+      decidedAt: null,
+    });
+    expect(limpia.entry.matchedBy).toBe(ItemSourceMatch.SHARED_EAN);
+    // A person's decision is not a run's to reopen, and its price is owed.
+    expect(filetes.itemId).toBe('item-dorada-filetes');
+    expect(filetes.entry).toMatchObject({
+      status: SourceEntryStatus.ACTIVE,
+      matchedBy: ItemSourceMatch.MANUAL,
+      decidedAt,
+    });
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-dorada-filetes' })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+  });
+
+  it('proposes rather than binds when a row learns an EAN another row carries', async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          externalId: 'dorada-1',
+          name: 'Dorada entera',
+          ean: DORADA,
+          status: SourceEntryStatus.CANDIDATE,
+          matchedBy: ItemSourceMatch.SHARED_EAN,
+          itemId: 'item-dorada',
+        },
+        { externalId: 'dorada-2', name: 'Dorada limpia', ean: null },
+      ],
+      items: [dorada],
+    });
+
+    const { outcomes } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [cuts[1]],
+    });
+
+    expect(outcomes[0]).toMatchObject({ rung: 2, itemId: null });
+    expect(saved[0]).toMatchObject({
+      externalId: 'dorada-2',
+      status: SourceEntryStatus.CANDIDATE,
+      matchedBy: ItemSourceMatch.SHARED_EAN,
+      itemId: 'item-dorada',
+    });
+  });
+});
+
+/**
+ * At most one price per item and scope in a batch (plan 0155).
+ *
+ * Catalog keeps one current price per item, scope and kind, and compares each
+ * entry with the one before it, so two entries of one item inserted a row each
+ * time they disagreed and the one written last was what a shopper saw.
+ */
+describe('SourceIngest, two entries of one item in one batch', () => {
+  const accepted = {
+    status: SourceEntryStatus.ACTIVE,
+    matchedBy: ItemSourceMatch.MANUAL,
+    itemId: 'item-1',
+    decidedAt: new Date('2026-09-01T00:00:00Z'),
+  };
+
+  it('sends no price for the item and counts one conflict', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: 'a', name: 'Uno', ...accepted },
+        { id: 'entry-b', externalId: 'b', name: 'Dos', ...accepted },
+        {
+          id: 'entry-c',
+          externalId: 'c',
+          name: 'Tres',
+          ...accepted,
+          itemId: 'item-2',
+        },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [
+        observation({ externalId: 'a', name: 'Uno', price: PRICE }),
+        observation({
+          externalId: 'b',
+          name: 'Dos',
+          price: { ...PRICE, price: 2.5 },
+        }),
+        observation({ externalId: 'c', name: 'Tres', price: PRICE }),
+      ],
+    });
+
+    // Only the item one entry priced reaches catalog.
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-2' })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+    expect(counters).toMatchObject({
+      pricesRecorded: 3,
+      pricesWritten: 1,
+      pricesConflicted: 1,
+    });
+  });
+
+  it('sends one price when the same entry is observed twice in one batch', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [{ id: 'entry-a', externalId: 'a', name: 'Uno', ...accepted }],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [
+        observation({ externalId: 'a', name: 'Uno', price: PRICE }),
+        observation({
+          externalId: 'a',
+          name: 'Uno',
+          price: { ...PRICE, price: 2.5 },
+        }),
+      ],
+    });
+
+    // One row is one row: its later observation is the one it holds.
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-1', price: 2.5 })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+    expect(counters.pricesConflicted).toBe(0);
+  });
+});
+
+describe('SourceIngest, rung 4 compares the size (plan 0155)', () => {
+  it('does not propose a 1 l product for a 0.33 l entry of the same name', async () => {
+    // Mercadona states only the unit in `sizeFormat`, so name and format alone
+    // put a can and a bottle under one key. Postgres reads `numeric` as text.
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          id: 'bottle',
+          externalId: 'm-1',
+          name: 'Refresco cola',
+          sizeFormat: 'l',
+          unitSize: '1.0000' as unknown as number,
+          status: SourceEntryStatus.ACTIVE,
+          matchedBy: ItemSourceMatch.MANUAL,
+          itemId: 'item-bottle',
+        },
+      ],
+    });
+
+    const { outcomes } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [
+        observation({
+          externalId: 'm-2',
+          name: 'Refresco cola',
+          sizeFormat: 'l',
+          unitSize: 0.33,
+        }),
+        observation({
+          externalId: 'm-3',
+          name: 'Refresco cola',
+          sizeFormat: 'l',
+          unitSize: 1,
+        }),
+      ],
+    });
+
+    expect(outcomes.map((outcome) => outcome.rung)).toEqual([5, 4]);
+    expect(saved[0]).toMatchObject({
+      externalId: 'm-2',
+      status: SourceEntryStatus.UNRESOLVED,
+      itemId: null,
+    });
+    expect(saved[1]).toMatchObject({
+      externalId: 'm-3',
+      status: SourceEntryStatus.CANDIDATE,
+      itemId: 'item-bottle',
+    });
   });
 });

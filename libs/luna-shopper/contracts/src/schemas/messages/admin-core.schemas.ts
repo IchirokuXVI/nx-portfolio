@@ -21,7 +21,7 @@ import {
 } from '../builders';
 import { adminCredentialProperties, COMMON_IDS } from '../common.schemas';
 import { ENUM_IDS } from '../enums.schemas';
-import { GENERATED_LIST_SCHEMA_IDS } from './generated-list.schemas';
+import { BASKET_SCHEMA_IDS } from './basket.schemas';
 import { LIST_SCHEMA_IDS } from './list.schemas';
 import { ZONE_SCHEMA_IDS } from './zone.schemas';
 
@@ -30,7 +30,7 @@ import { ZONE_SCHEMA_IDS } from './zone.schemas';
  *
  * Every view here is a shape of its own rather than a reference to the user
  * facing one, and that is the design rather than duplication. `ZoneView`,
- * `ListView` and `GeneratedListSummaryView` are all caller relative: they carry
+ * `ListView` and `BasketHistoryView` are all caller relative: they carry
  * what **you** may do, what **your** membership is, which lists **you** may read.
  * An operator has no membership and no permissions in somebody's household, so
  * every one of those fields would have to be filled with a lie or a null. The
@@ -55,7 +55,8 @@ export const ADMIN_CORE_SCHEMA_IDS = {
   listDetailView: schemaId('admin-core/AdminListDetailView'),
   listPage: schemaId('admin-core/AdminListPage'),
   basketView: schemaId('admin-core/AdminBasketView'),
-  basketLineView: schemaId('admin-core/AdminBasketLineView'),
+  basketRowView: schemaId('admin-core/AdminBasketRowView'),
+  basketSettlementView: schemaId('admin-core/AdminBasketSettlementView'),
   basketDetailView: schemaId('admin-core/AdminBasketDetailView'),
   basketPage: schemaId('admin-core/AdminBasketPage'),
   membershipPage: schemaId('admin-core/AdminMembershipPage'),
@@ -242,8 +243,9 @@ const listPage = paginated(
 const basketFields = {
   id: nonEmptyString(),
   ownerUserId: nonEmptyString(),
+  kind: ref(BASKET_SCHEMA_IDS.basketKind),
   name: nullableString(),
-  status: ref(GENERATED_LIST_SCHEMA_IDS.generatedListStatus),
+  status: ref(BASKET_SCHEMA_IDS.basketStatus),
   zoneIds: array(nonEmptyString()),
   lineCount: integer({ minimum: 0 }),
   generatedAt: string({ format: 'date-time' }),
@@ -252,6 +254,7 @@ const basketFields = {
 const basketKeys = [
   'id',
   'ownerUserId',
+  'kind',
   'name',
   'status',
   'zoneIds',
@@ -266,20 +269,57 @@ const basketView = object(
   basketKeys
 );
 
-const basketLineView = object(
-  ADMIN_CORE_SCHEMA_IDS.basketLineView,
+const basketRowView = object(
+  ADMIN_CORE_SCHEMA_IDS.basketRowView,
+  {
+    rowKey: nonEmptyString(),
+    content: string(),
+    left: integer({ minimum: 0 }),
+    bought: integer({ minimum: 0 }),
+    asked: integer({ minimum: 0 }),
+    // Plan 0160: what the row was bought for, reverted ones included.
+    settlements: array(ref(ADMIN_CORE_SCHEMA_IDS.basketSettlementView)),
+  },
+  ['rowKey', 'content', 'left', 'bought', 'asked', 'settlements']
+);
+
+const basketSettlementView = object(
+  ADMIN_CORE_SCHEMA_IDS.basketSettlementView,
   {
     id: nonEmptyString(),
-    content: string(),
-    quantity: integer(),
-    createdAt: string({ format: 'date-time' }),
+    lineId: nonEmptyString(),
+    itemId: nullableString(),
+    outcome: ref(ENUM_IDS.settlementOutcome),
+    quantity: integer({ minimum: 0 }),
+    pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
+    pricePaidCurrency: nullableString(),
+    priceScopeId: nullableString(),
+    supermarketLocationId: nullableString(),
+    settledByUserId: nullableString(),
+    settledByParticipantId: nullableString(),
+    settledAt: string({ format: 'date-time' }),
+    revertedAt: nullableString(),
   },
-  ['id', 'content', 'quantity', 'createdAt']
+  [
+    'id',
+    'lineId',
+    'itemId',
+    'outcome',
+    'quantity',
+    'pricePaidCents',
+    'pricePaidCurrency',
+    'priceScopeId',
+    'supermarketLocationId',
+    'settledByUserId',
+    'settledByParticipantId',
+    'settledAt',
+    'revertedAt',
+  ]
 );
 
 const basketDetailView = object(
   ADMIN_CORE_SCHEMA_IDS.basketDetailView,
-  { ...basketFields, lines: array(ref(ADMIN_CORE_SCHEMA_IDS.basketLineView)) },
+  { ...basketFields, lines: array(ref(ADMIN_CORE_SCHEMA_IDS.basketRowView)) },
   [...basketKeys, 'lines']
 );
 
@@ -553,7 +593,8 @@ export const adminCoreSchemas: JsonSchema[] = [
   listDetailView,
   listPage,
   basketView,
-  basketLineView,
+  basketRowView,
+  basketSettlementView,
   basketDetailView,
   basketPage,
   listZonesRequest,

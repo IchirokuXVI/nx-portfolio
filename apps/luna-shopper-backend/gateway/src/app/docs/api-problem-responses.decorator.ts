@@ -57,6 +57,11 @@ export interface ProblemResponseOptions {
    */
   finishedBasket?: boolean;
   /**
+   * The route names a shop, and a basket started at a shop refuses any other
+   * with a 409 of its own code (plan 0163).
+   */
+  shopLocked?: boolean;
+  /**
    * The route renames a line, so a name the list already holds can answer 409
    * with one of the three merge codes (plan 0112, section 7), each told apart
    * from a plain conflict because the client asks, explains, or explains with a
@@ -131,7 +136,10 @@ export function ApiProblemResponses(
     codes.push(ERROR_CODES.NOT_CONFIGURED);
   }
   if (options.finishedBasket) {
-    codes.push(ERROR_CODES.GENERATED_LIST_FINISHED);
+    codes.push(ERROR_CODES.BASKET_FINISHED);
+  }
+  if (options.shopLocked) {
+    codes.push(ERROR_CODES.BASKET_SHOP_LOCKED);
   }
   if (options.lineMerge) {
     codes.push(

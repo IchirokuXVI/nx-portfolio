@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ClientProxy, NatsRecordBuilder } from '@nestjs/microservices';
 import {
+  BasketKind,
   REALTIME_ACCESS_PATTERNS,
   type AccessCheckResult,
   type CheckListAccessRequest,
@@ -25,6 +26,17 @@ import {
 
 /** Injection token for the realtime service's request/reply client to core. */
 export const CORE_ACCESS_CLIENT = 'CORE_ACCESS_CLIENT';
+
+/**
+ * What core answers when it admits a participant socket (plan 0139, section 6).
+ *
+ * Who they are, and what kind of basket they are on. The gateway joins the
+ * basket's room either way and enters presence only for a `GENERATED` one.
+ */
+export interface ParticipantAdmission {
+  entry: ParticipantPresenceEntry;
+  basketKind: BasketKind;
+}
 
 /**
  * What a `zone.subscribe` needs to know: whether the caller is in the zone, and
@@ -216,11 +228,11 @@ export class CoreAccessClient {
    */
   async checkParticipant(
     participantId: string,
-    generatedListId: string
-  ): Promise<ParticipantPresenceEntry | undefined> {
+    basketId: string
+  ): Promise<ParticipantAdmission | undefined> {
     const req: CheckParticipantAccessRequest = {
       participantId,
-      generatedListId,
+      basketId,
     };
     const answer = await this.send(
       REALTIME_ACCESS_PATTERNS.checkParticipant,
@@ -228,7 +240,17 @@ export class CoreAccessClient {
     );
     // The entry rides back with the yes, so admitting a socket and seeding its
     // presence are one round trip rather than two.
-    return answer.allowed ? answer.participant : undefined;
+    if (!answer.allowed || !answer.participant) {
+      return undefined;
+    }
+    return {
+      entry: answer.participant,
+      // **`GENERATED` when core did not say** (plan 0139, section 6). A core
+      // that predates this field is one where every basket was a trip, which is
+      // what `GENERATED` means, so the old behaviour is the right default for
+      // the deploy window in which the two versions overlap.
+      basketKind: answer.basketKind ?? BasketKind.GENERATED,
+    };
   }
 
   /**
@@ -325,7 +347,11 @@ export class CoreAccessClient {
     const result = await this.send(REALTIME_ACCESS_PATTERNS.checkZone, req);
     const listIds = [...(result.listIds ?? [])];
 
-    await this.remember(zoneAccessKey(zoneId), userId, result.allowed ? ALLOW : DENY);
+    await this.remember(
+      zoneAccessKey(zoneId),
+      userId,
+      result.allowed ? ALLOW : DENY
+    );
     await this.remember(
       zoneListsAccessKey(zoneId),
       userId,

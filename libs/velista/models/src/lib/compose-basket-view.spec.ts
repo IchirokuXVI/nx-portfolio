@@ -1,14 +1,20 @@
 import type {
-  BasketLine,
-  BasketLineOrigin,
+  BasketListRef,
   BasketPriceScope,
   BasketProduct,
+  BasketProductAtShop,
+  BasketRow,
+  BasketRowEntry,
+  BasketShop,
 } from './basket-view';
 import {
-  basketPricedScope,
+  basketPricedAtShop,
+  basketReadAtShop,
+  basketRowsProgress,
+  basketUsualApplies,
   basketViewActiveCount,
   basketViewChips,
-  basketViewLines,
+  basketViewRows,
   composeBasketView,
   DEFAULT_BASKET_VIEW_STATE,
   resetBasketViewProperty,
@@ -18,39 +24,62 @@ import {
 import type { ProductOffer } from './domain';
 import type { ProductCategory } from './enums';
 
-function line(
-  id: string,
+/**
+ * One row, with one entry unless the test says otherwise.
+ *
+ * A row with no entry at all is only `REMOVED`, so the default carries one: a
+ * pipeline that walked an empty `entries` would pass tests the real model cannot
+ * produce. Its list is unserved by default, which is a guest's view and the case
+ * the filter and the grouping both have to keep.
+ */
+function row(
+  rowKey: string,
   content: string,
-  extra: Partial<BasketLine> = {}
-): BasketLine {
+  extra: Partial<BasketRow> = {}
+): BasketRow {
+  const left = extra.left ?? 1;
+  const bought = extra.bought ?? 0;
   return {
-    id,
+    rowKey,
     content,
-    quantity: 1,
-    settled: 0,
-    waitingSettled: 0,
-    pickId: null,
+    left,
+    bought,
+    asked: bought + left,
+    state: 'WANTED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
     optionIds: [],
-    position: 0,
-    createdBy: null,
-    createdByName: null,
-    lastOutcome: null,
+    touchedBy: null,
+    touchedAt: null,
+    usual: null,
+    entries: [entry(null, { lineId: `zl-${rowKey}` })],
     ...extra,
-  } as BasketLine;
+  };
 }
 
-function origin(
-  listId: string,
-  over: Partial<BasketLineOrigin> = {}
-): BasketLineOrigin {
+/** One entry of a row, on a served list or on none. */
+function entry(
+  listId: string | null,
+  over: Partial<BasketRowEntry> = {}
+): BasketRowEntry {
   return {
-    id: `o-${listId}`,
-    zoneId: 'z1',
+    lineId: `zl-${listId ?? 'none'}`,
     listId,
-    lineId: `zone-line-${listId}`,
-    quantity: 1,
+    left: 1,
+    bought: 0,
+    asked: 1,
+    state: 'WANTED',
+    awaitingApproval: false,
+    demandEditable: true,
     ...over,
   };
+}
+
+/** One served list ref, which is what lets a reader name a list. */
+function ref(listId: string, name: string): BasketListRef {
+  return { listId, name, zoneId: 'z1', zoneName: 'Home' };
 }
 
 function product(
@@ -71,8 +100,9 @@ const CONTEXT: BasketViewContext = {
   query: '',
   products: new Map(),
   locale: 'en',
-  listNames: new Map(),
+  lists: new Map(),
   scopes: new Map(),
+  shop: null,
 };
 
 /** One offer at one scope, which is all the price marks read off it. */
@@ -98,11 +128,45 @@ function scope(priceScopeId: string, chain: string): BasketPriceScope {
   };
 }
 
+/** One shop, named, which is what a read at a shop names (velista `0102`). */
+function shop(id: string, chain: string): BasketShop {
+  return {
+    id,
+    supermarketId: null,
+    chain: { en: chain, es: chain },
+    label: null,
+    address: null,
+    city: null,
+    postalCode: null,
+    inProfile: null,
+  };
+}
+
+/** What the shop the read was made at says about one product. */
+function at(
+  priceScopeId: string | null,
+  price: number | null,
+  available: boolean | null = null
+): BasketProductAtShop {
+  return {
+    priceScopeId,
+    price,
+    currency: price === null ? null : 'EUR',
+    available,
+  };
+}
+
+/** The Mercadona the fixtures are read at. */
+const MERCA = 'loc-merca';
+
 /**
- * A basket priced at two chains, which is the smallest world the marks need.
+ * A basket priced at two chains and read at a Mercadona, which is the smallest
+ * world the marks need.
  *
  * Milk is listed at both and cheaper at Dia; bread is listed at Mercadona alone;
- * eggs are listed at Dia alone, so a view of Mercadona sinks them.
+ * eggs are listed at Dia alone, so a view of Mercadona sinks them. **The price at
+ * the shop is `atShop`**, which the server decided, and never a scope picked out of
+ * `offers` here.
  */
 function priced(): BasketViewContext {
   return {
@@ -113,6 +177,7 @@ function priced(): BasketViewContext {
         {
           ...product('p-milk', 'Milk', null),
           offers: [offer('s-dia', 0.79), offer('s-merca', 0.95)],
+          atShop: at('s-merca', 0.95),
         },
       ],
       [
@@ -120,6 +185,7 @@ function priced(): BasketViewContext {
         {
           ...product('p-bread', 'Bread', null),
           offers: [offer('s-merca', 1.2)],
+          atShop: at('s-merca', 1.2),
         },
       ],
       [
@@ -127,6 +193,7 @@ function priced(): BasketViewContext {
         {
           ...product('p-eggs', 'Eggs', null),
           offers: [offer('s-dia', 2.4)],
+          atShop: at(null, null),
         },
       ],
     ]),
@@ -134,6 +201,7 @@ function priced(): BasketViewContext {
       ['s-merca', scope('s-merca', 'Mercadona')],
       ['s-dia', scope('s-dia', 'Dia')],
     ]),
+    shop: shop(MERCA, 'Mercadona'),
   };
 }
 
@@ -143,22 +211,22 @@ function state(over: Partial<BasketViewState> = {}): BasketViewState {
 
 describe('composeBasketView', () => {
   it('draws one unheaded section holding every line, by default', () => {
-    const lines = [line('a', 'Milk'), line('b', 'Bread')];
+    const rows = [row('a', 'Milk'), row('b', 'Bread')];
 
-    const sections = composeBasketView(lines, state(), CONTEXT);
+    const sections = composeBasketView(rows, state(), CONTEXT);
 
     expect(sections).toHaveLength(1);
     expect(sections[0].heading).toBeNull();
     expect(sections[0].hint).toBeNull();
-    expect(sections[0].rows.map((row) => row.line.id)).toEqual(['a', 'b']);
+    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['a', 'b']);
   });
 
   it('leaves the server order alone, which is the order the shopper walks', () => {
-    const lines = [line('a', 'Zucchini'), line('b', 'Apples')];
+    const rows = [row('a', 'Zucchini'), row('b', 'Apples')];
 
-    const sections = composeBasketView(lines, state(), CONTEXT);
+    const sections = composeBasketView(rows, state(), CONTEXT);
 
-    expect(sections[0].rows.map((row) => row.line.content)).toEqual([
+    expect(sections[0].rows.map((row) => row.row.content)).toEqual([
       'Zucchini',
       'Apples',
     ]);
@@ -169,46 +237,47 @@ describe('composeBasketView', () => {
    * break by reaching for a tidier implementation: grouping must not get to impose
    * an order of its own.
    */
-  it('filters, then orders, then groups, so a line keeps its place inside its group', () => {
-    const lines = [
-      line('a', 'Zucchini', { origins: [origin('l1')] }),
-      line('b', 'Apples', { origins: [] }),
-      line('c', 'Bread', { origins: [origin('l1')] }),
-      line('d', 'Cherries', { origins: [] }),
+  it('filters, then orders, then groups, so a row keeps its place inside its group', () => {
+    const rows = [
+      row('a', 'Zucchini', { entries: [entry('l1')] }),
+      row('b', 'Apples', { entries: [entry('l2')] }),
+      row('c', 'Bread', { entries: [entry('l1')] }),
+      row('d', 'Cherries', { entries: [entry('l2')] }),
     ];
 
     const sections = composeBasketView(
-      lines,
-      state({ order: 'alpha', lists: new Set(['l1']) }),
-      CONTEXT
+      rows,
+      state({ order: 'alpha', grouping: 'list', lists: null }),
+      { ...CONTEXT, lists: new Map([['l1', ref('l1', 'Weekly shop')]]) }
     );
 
-    // Alphabetical across the whole basket first, and only then cut in two, so each
-    // section is alphabetical without the grouping having sorted anything.
-    expect(sections[0].rows.map((row) => row.line.content)).toEqual([
+    // Alphabetical across the whole basket first, and only then cut up, so each
+    // section is alphabetical without the grouping having sorted anything. The
+    // second section is the one heading for every entry this reader cannot place.
+    expect(sections[0].rows.map((row) => row.row.content)).toEqual([
       'Bread',
       'Zucchini',
     ]);
-    expect(sections[1].rows.map((row) => row.line.content)).toEqual([
+    expect(sections[1].rows.map((row) => row.row.content)).toEqual([
       'Apples',
       'Cherries',
     ]);
   });
 
   it('sorts alpha with a base sensitivity collator, so "Ávila" sorts with "Avila"', () => {
-    const lines = [
-      line('a', 'Azúcar'),
-      line('b', 'Ávila'),
-      line('c', 'Avila'),
-      line('d', 'Arroz'),
+    const rows = [
+      row('a', 'Azúcar'),
+      row('b', 'Ávila'),
+      row('c', 'Avila'),
+      row('d', 'Arroz'),
     ];
 
-    const sections = composeBasketView(lines, state({ order: 'alpha' }), {
+    const sections = composeBasketView(rows, state({ order: 'alpha' }), {
       ...CONTEXT,
       locale: 'es',
     });
 
-    expect(sections[0].rows.map((row) => row.line.content)).toEqual([
+    expect(sections[0].rows.map((row) => row.row.content)).toEqual([
       'Arroz',
       'Ávila',
       'Avila',
@@ -217,10 +286,10 @@ describe('composeBasketView', () => {
   });
 
   it('narrows to the search, which looks at the pick as well as the line', () => {
-    const lines = [
-      line('a', 'Leche'),
-      line('b', 'bread', { pickId: 'p1' }),
-      line('c', 'Cheese'),
+    const rows = [
+      row('a', 'Leche'),
+      row('b', 'bread', { optionIds: ['p1'] }),
+      row('c', 'Cheese'),
     ];
     const context: BasketViewContext = {
       ...CONTEXT,
@@ -228,28 +297,38 @@ describe('composeBasketView', () => {
       products: new Map([['p1', product('p1', 'Pan de molde', 'Hacendado')]]),
     };
 
-    const sections = composeBasketView(lines, state(), context);
+    const sections = composeBasketView(rows, state(), context);
 
-    expect(sections[0].rows.map((row) => row.line.id)).toEqual(['b']);
+    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['b']);
   });
 
+  /**
+   * The list filter (velista `0090`, section 8.2).
+   *
+   * Two claims carry it, and the second is the one a tidier implementation drops:
+   * a row with a served entry on a kept list stays, and **a row this reader cannot
+   * place stays too**, because a reader cannot filter out what they cannot name.
+   *
+   * There is no sink here any more. Backend `0136` removed the thing it held: a
+   * line is on a list or it does not exist, so "lines on no list yet" describes
+   * nothing.
+   */
   describe('the list filter', () => {
-    const lines = [
-      line('kept', 'Milk', { origins: [origin('l1')] }),
-      line('both', 'Bread', { origins: [origin('l1'), origin('l2')] }),
-      line('dropped', 'Cheese', { origins: [origin('l2')] }),
-      line('none', 'Batteries', { origins: [] }),
-      line('guest', 'Candles'),
+    const rows = [
+      row('kept', 'Milk', { entries: [entry('l1')] }),
+      row('both', 'Bread', { entries: [entry('l1'), entry('l2')] }),
+      row('dropped', 'Cheese', { entries: [entry('l2')] }),
+      row('guest', 'Candles', { entries: [entry(null)] }),
     ];
 
-    it('keeps a line that reaches any kept list', () => {
+    it('keeps a row with any served entry on a kept list', () => {
       const sections = composeBasketView(
-        lines,
+        rows,
         state({ lists: new Set(['l1']) }),
         CONTEXT
       );
 
-      expect(sections[0].rows.map((row) => row.line.id)).toEqual([
+      expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual([
         'kept',
         'both',
         'guest',
@@ -257,74 +336,69 @@ describe('composeBasketView', () => {
     });
 
     /**
-     * The distinction the plan's section 6 turns on, and the one a tidier
-     * implementation collapses: `origins: []` is a line nobody has accepted, and
-     * an absent `origins` is a reader who may not see them at all.
+     * A reader cannot filter out what they cannot name, so an unserved entry keeps
+     * its row whichever list is kept. Dropping it would hide, from a guest, rows
+     * that may well be on the very list they chose.
      */
-    it('sinks the line on no list and leaves a redacted one where it was', () => {
-      const sections = composeBasketView(
-        lines,
-        state({ lists: new Set(['l1']) }),
-        CONTEXT
-      );
-
-      expect(sections).toHaveLength(2);
-      expect(sections[0].rows.map((row) => row.line.id)).toContain('guest');
-      expect(sections[1].heading).toEqual({
-        kind: 'key',
-        key: 'basket.group.noList',
-      });
-      expect(sections[1].hint).toBe('basket.group.noListHint');
-      expect(sections[1].rows.map((row) => row.line.id)).toEqual(['none']);
-    });
-
-    it('never hides a line on no list yet, whichever list is kept', () => {
+    it('keeps a row with an unserved entry, whichever list is kept', () => {
       for (const kept of ['l1', 'l2']) {
-        const drawn = basketViewLines(
-          composeBasketView(lines, state({ lists: new Set([kept]) }), CONTEXT)
+        const drawn = basketViewRows(
+          composeBasketView(rows, state({ lists: new Set([kept]) }), CONTEXT)
         );
 
-        expect(drawn.map((item) => item.id)).toContain('none');
+        expect(drawn.map((item) => item.rowKey)).toContain('guest');
       }
     });
 
-    it('draws no sink when every line is on a list', () => {
+    it('drops a row whose every served entry is on a list that was filtered out', () => {
       const sections = composeBasketView(
-        [lines[0], lines[1]],
+        rows,
         state({ lists: new Set(['l1']) }),
         CONTEXT
       );
 
-      expect(sections).toHaveLength(1);
+      expect(sections[0].rows.map((row) => row.row.rowKey)).not.toContain(
+        'dropped'
+      );
     });
 
     /**
-     * The sink belongs to the filter. With no filter the basket is the order the
-     * shopper walks and nothing else, so an aisle's own line stays where it was put.
+     * One section and no sink, whatever the filter says: the only sink left is the
+     * chosen shop's, and no shop is chosen here.
      */
-    it('draws no sink at all while no list filter is on', () => {
-      const sections = composeBasketView(lines, state(), CONTEXT);
+    it('draws one section whether or not the filter is on', () => {
+      expect(
+        composeBasketView(rows, state({ lists: new Set(['l1']) }), CONTEXT)
+      ).toHaveLength(1);
+      expect(composeBasketView(rows, state(), CONTEXT)).toHaveLength(1);
+    });
 
-      expect(sections).toHaveLength(1);
-      expect(sections[0].rows.map((row) => row.line.id)).toEqual([
-        'kept',
-        'both',
-        'dropped',
-        'none',
-        'guest',
-      ]);
+    /** Information about the basket, so no filter and no search hides it. */
+    it('keeps a REMOVED row past every filter', () => {
+      const gone = row('gone', 'Olives', {
+        state: 'REMOVED',
+        entries: [],
+      });
+
+      const sections = composeBasketView(
+        [...rows, gone],
+        state({ lists: new Set(['l1']) }),
+        { ...CONTEXT, query: 'nothing matches this' }
+      );
+
+      expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['gone']);
     });
   });
 
   /**
-   * The ungrouped view is about lines and not about origins, and its one section
+   * The ungrouped view is about rows and not about entries, and its one section
    * is the whole screen, so a count on it would only repeat the sentence in the
    * tools row above it.
    */
-  it('draws no origin and no count on an ungrouped view', () => {
-    const sections = composeBasketView([line('a', 'Milk')], state(), CONTEXT);
+  it('draws no entry and no count on an ungrouped view', () => {
+    const sections = composeBasketView([row('a', 'Milk')], state(), CONTEXT);
 
-    expect(sections[0].rows[0].origin).toBeNull();
+    expect(sections[0].rows[0].entry).toBeNull();
     expect(sections[0].progress).toBeNull();
   });
 });
@@ -346,10 +420,10 @@ describe('composeBasketView, grouped by category', () => {
   ]);
 
   function grouped(
-    lines: readonly BasketLine[],
+    rows: readonly BasketRow[],
     over: Partial<BasketViewState> = {}
   ) {
-    return composeBasketView(lines, state({ grouping: 'category', ...over }), {
+    return composeBasketView(rows, state({ grouping: 'category', ...over }), {
       ...CONTEXT,
       products: CATALOG,
     });
@@ -357,15 +431,15 @@ describe('composeBasketView, grouped by category', () => {
 
   it('puts every line under its product’s category', () => {
     const sections = grouped([
-      line('a', 'Milk', { pickId: 'p-milk' }),
-      line('b', 'Bread', { pickId: 'p-bread' }),
-      line('c', 'Cheese', { pickId: 'p-cheese' }),
+      row('a', 'Milk', { optionIds: ['p-milk'] }),
+      row('b', 'Bread', { optionIds: ['p-bread'] }),
+      row('c', 'Cheese', { optionIds: ['p-cheese'] }),
     ]);
 
     expect(
       sections.map((part) => [
         part.heading,
-        part.rows.map((row) => row.line.id),
+        part.rows.map((row) => row.row.rowKey),
       ])
     ).toEqual([
       [{ kind: 'key', key: 'basket.category.DAIRY' }, ['a', 'c']],
@@ -380,9 +454,9 @@ describe('composeBasketView, grouped by category', () => {
    */
   it('gives a section the place of its first line, OTHER included', () => {
     const sections = grouped([
-      line('a', 'Batteries', { pickId: 'p-odd' }),
-      line('b', 'Bread', { pickId: 'p-bread' }),
-      line('c', 'Milk', { pickId: 'p-milk' }),
+      row('a', 'Batteries', { optionIds: ['p-odd'] }),
+      row('b', 'Bread', { optionIds: ['p-bread'] }),
+      row('c', 'Milk', { optionIds: ['p-milk'] }),
     ]);
 
     expect(sections.map((part) => part.key)).toEqual([
@@ -398,7 +472,7 @@ describe('composeBasketView, grouped by category', () => {
     ]);
 
     const sections = composeBasketView(
-      [line('a', 'Yoghurt', { pickId: 'p-both' })],
+      [row('a', 'Yoghurt', { optionIds: ['p-both'] })],
       state({ grouping: 'category' }),
       { ...CONTEXT, products: twoAisles }
     );
@@ -407,7 +481,7 @@ describe('composeBasketView, grouped by category', () => {
       'category:DAIRY',
       'category:SNACKS',
     ]);
-    expect(basketViewLines(sections)).toHaveLength(1);
+    expect(basketViewRows(sections)).toHaveLength(1);
   });
 
   /**
@@ -417,9 +491,9 @@ describe('composeBasketView, grouped by category', () => {
    */
   it('puts every line with no resolved pick last, under a heading that says why', () => {
     const sections = grouped([
-      line('free', 'Something for dinner'),
-      line('milk', 'Milk', { pickId: 'p-milk' }),
-      line('gone', 'Old thing', { pickId: 'p-deleted' }),
+      row('free', 'Something for dinner'),
+      row('milk', 'Milk', { optionIds: ['p-milk'] }),
+      row('gone', 'Old thing', { optionIds: ['p-deleted'] }),
     ]);
 
     const last = sections[sections.length - 1];
@@ -429,25 +503,25 @@ describe('composeBasketView, grouped by category', () => {
       key: 'basket.group.noCategory',
     });
     expect(last.hint).toBe('basket.group.noCategoryHint');
-    expect(last.rows.map((row) => row.line.id)).toEqual(['free', 'gone']);
+    expect(last.rows.map((row) => row.row.rowKey)).toEqual(['free', 'gone']);
   });
 
   it('counts each section over its own lines, with a close that bought nothing apart', () => {
     const sections = grouped([
-      line('a', 'Milk', {
-        pickId: 'p-milk',
-        quantity: 1,
-        settled: 1,
-        lastOutcome: 'BOUGHT',
+      row('a', 'Milk', {
+        optionIds: ['p-milk'],
+        left: 0,
+        bought: 1,
+        state: 'DONE',
       }),
-      line('b', 'Cheese', {
-        pickId: 'p-cheese',
-        quantity: 1,
-        settled: 1,
-        lastOutcome: 'NOT_AVAILABLE',
+      row('b', 'Cheese', {
+        optionIds: ['p-cheese'],
+        left: 1,
+        bought: 0,
+        state: 'NOT_AVAILABLE',
       }),
-      line('c', 'Cream', { pickId: 'p-milk' }),
-      line('d', 'Bread', { pickId: 'p-bread' }),
+      row('c', 'Cream', { optionIds: ['p-milk'] }),
+      row('d', 'Bread', { optionIds: ['p-bread'] }),
     ]);
 
     expect(sections[0].progress).toEqual({ done: 1, unavailable: 1, total: 3 });
@@ -461,14 +535,14 @@ describe('composeBasketView, grouped by category', () => {
   it('keeps the order the shop sink gave a line inside its category', () => {
     const sections = grouped(
       [
-        line('z', 'Zucchini', { pickId: 'p-milk' }),
-        line('a', 'Apples', { pickId: 'p-milk' }),
-        line('m', 'Milk', { pickId: 'p-milk' }),
+        row('z', 'Zucchini', { optionIds: ['p-milk'] }),
+        row('a', 'Apples', { optionIds: ['p-milk'] }),
+        row('m', 'Milk', { optionIds: ['p-milk'] }),
       ],
       { order: 'alpha' }
     );
 
-    expect(sections[0].rows.map((row) => row.line.content)).toEqual([
+    expect(sections[0].rows.map((row) => row.row.content)).toEqual([
       'Apples',
       'Milk',
       'Zucchini',
@@ -478,8 +552,8 @@ describe('composeBasketView, grouped by category', () => {
   it('narrows to the search before it groups', () => {
     const sections = composeBasketView(
       [
-        line('a', 'Milk', { pickId: 'p-milk' }),
-        line('b', 'Bread', { pickId: 'p-bread' }),
+        row('a', 'Milk', { optionIds: ['p-milk'] }),
+        row('b', 'Bread', { optionIds: ['p-bread'] }),
       ],
       state({ grouping: 'category' }),
       { ...CONTEXT, products: CATALOG, query: 'bread' }
@@ -493,105 +567,115 @@ describe('composeBasketView, grouped by category', () => {
 /**
  * The household view (velista `0077`, section 4).
  *
- * The claim that matters most here is that a line is drawn **once per origin** with
- * that origin on the row: everything the row does differently under this grouping
- * reads the origin, so a row handed none would quietly draw the basket's summed
+ * The claim that matters most here is that a row is drawn **once per entry** with
+ * that entry on it: everything the row does differently under this grouping reads
+ * the entry, so a drawn row handed none would quietly show the basket's summed
  * numbers under one household's heading.
  */
 describe('composeBasketView, grouped by list', () => {
-  const NAMES = new Map([
-    ['l1', 'Weekly shop'],
-    ['l2', 'Flat 3B'],
+  const REFS = new Map([
+    ['l1', ref('l1', 'Weekly shop')],
+    ['l2', ref('l2', 'Flat 3B')],
   ]);
 
   function grouped(
-    lines: readonly BasketLine[],
+    rows: readonly BasketRow[],
     over: Partial<BasketViewState> = {}
   ) {
-    return composeBasketView(lines, state({ grouping: 'list', ...over }), {
+    return composeBasketView(rows, state({ grouping: 'list', ...over }), {
       ...CONTEXT,
-      listNames: NAMES,
+      lists: REFS,
     });
   }
 
   it('heads a section with the list’s own name, which is data and not a key', () => {
-    const sections = grouped([line('a', 'Milk', { origins: [origin('l1')] })]);
+    const sections = grouped([row('a', 'Milk', { entries: [entry('l1')] })]);
 
     expect(sections[0].heading).toEqual({ kind: 'text', text: 'Weekly shop' });
     expect(sections[0].key).toBe('list:l1');
   });
 
-  it('draws a line once per origin, each row carrying its own', () => {
+  it('draws a row once per entry, each drawn row carrying its own', () => {
     const sections = grouped([
-      line('both', 'Eggs', {
-        origins: [origin('l1', { quantity: 6 }), origin('l2', { quantity: 6 })],
+      row('both', 'Eggs', {
+        entries: [
+          entry('l1', { left: 6, asked: 6 }),
+          entry('l2', { left: 6, asked: 6 }),
+        ],
       }),
     ]);
 
     expect(sections.map((part) => part.key)).toEqual(['list:l1', 'list:l2']);
-    expect(sections[0].rows[0].origin?.listId).toBe('l1');
-    expect(sections[1].rows[0].origin?.listId).toBe('l2');
+    expect(sections[0].rows[0].entry?.listId).toBe('l1');
+    expect(sections[1].rows[0].entry?.listId).toBe('l2');
     // One thing to buy, drawn in two places. The sheet's button says one.
-    expect(basketViewLines(sections)).toHaveLength(1);
+    expect(basketViewRows(sections)).toHaveLength(1);
   });
 
   it('gives a section the place of its first line, like every other grouping', () => {
     const sections = grouped([
-      line('a', 'Milk', { origins: [origin('l2')] }),
-      line('b', 'Bread', { origins: [origin('l1')] }),
+      row('a', 'Milk', { entries: [entry('l2')] }),
+      row('b', 'Bread', { entries: [entry('l1')] }),
     ]);
 
     expect(sections.map((part) => part.key)).toEqual(['list:l2', 'list:l1']);
   });
 
-  it('sinks the line on no list yet, under 0075’s own words', () => {
+  /**
+   * Every entry this reader cannot place goes under **one** heading, last, and it
+   * names none of them (velista `0090`, section 8.2).
+   *
+   * It replaced the sink for "lines on no list yet". No such line exists: a line is
+   * on a list or it does not exist, so what a reader cannot head is a list they
+   * were not **served**, and the only honest sentence for those is one that names
+   * nothing.
+   */
+  it('puts every unserved entry under one last heading', () => {
     const sections = grouped([
-      line('a', 'Milk', { origins: [origin('l1')] }),
-      line('b', 'Batteries', { origins: [] }),
+      row('a', 'Milk', { entries: [entry('l1')] }),
+      row('b', 'Batteries', { entries: [entry(null)] }),
+      row('c', 'Candles', { entries: [entry('unknown')] }),
     ]);
 
     const last = sections[sections.length - 1];
-    expect(last.key).toBe('no-list');
-    expect(last.heading).toEqual({ kind: 'key', key: 'basket.group.noList' });
-    expect(last.hint).toBe('basket.group.noListHint');
-    expect(last.rows.map((row) => row.line.id)).toEqual(['b']);
-    expect(last.rows[0].origin).toBeNull();
+    expect(last.key).toBe('other-lists');
+    expect(last.heading).toEqual({
+      kind: 'key',
+      key: 'basket.group.otherLists',
+    });
+    expect(last.rows.map((row) => row.row.rowKey)).toEqual(['b', 'c']);
+    // Drawn for its entry like every other row here: the numbers under this
+    // heading are that household's, even where it cannot be named.
+    expect(last.rows[0].entry).not.toBeNull();
   });
 
   /**
-   * Redaction is not a fact about the line. A guest is never told that something is
-   * on no list, because they are never told about lists at all, so a line with no
-   * `origins` key stays unheaded rather than joining the sink.
+   * A list the basket served no ref for is one this reader may not name, and an
+   * entry with a null `listId` is one the server withheld. They are the same
+   * nothing to the reader, and the mapper already collapses the first onto the
+   * second, so there is one heading rather than two that read alike.
    */
-  it('leaves a redacted line unheaded rather than sinking it', () => {
+  it('heads no section for a list it was served no ref for', () => {
     const sections = grouped([
-      line('guest', 'Candles'),
-      line('a', 'Milk', { origins: [origin('l1')] }),
+      row('a', 'Milk', { entries: [entry('l1'), entry('unknown')] }),
     ]);
 
-    expect(sections[0].heading).toBeNull();
-    expect(sections[0].rows.map((row) => row.line.id)).toEqual(['guest']);
-    expect(sections[1].key).toBe('list:l1');
-  });
-
-  it('does not head a section for a list it has no name for', () => {
-    const sections = grouped([
-      line('a', 'Milk', { origins: [origin('l1'), origin('unknown')] }),
+    expect(sections.map((part) => part.key)).toEqual([
+      'list:l1',
+      'other-lists',
     ]);
-
-    expect(sections.map((part) => part.key)).toEqual(['list:l1']);
   });
 
   it('gives each list its own count', () => {
     const sections = grouped([
-      line('a', 'Milk', {
-        quantity: 1,
-        settled: 1,
-        lastOutcome: 'BOUGHT',
-        origins: [origin('l1')],
+      row('a', 'Milk', {
+        left: 0,
+        bought: 1,
+        state: 'DONE',
+        entries: [entry('l1', { left: 0, bought: 1, state: 'DONE' })],
       }),
-      line('b', 'Bread', { origins: [origin('l1')] }),
-      line('c', 'Cheese', { origins: [origin('l2')] }),
+      row('b', 'Bread', { entries: [entry('l1')] }),
+      row('c', 'Cheese', { entries: [entry('l2')] }),
     ]);
 
     expect(sections[0].progress).toEqual({ done: 1, unavailable: 0, total: 2 });
@@ -599,31 +683,32 @@ describe('composeBasketView, grouped by list', () => {
   });
 
   /**
-   * A row's key has to survive a line reaching one household through two zone lines,
-   * which `@for` tracks on. The line's id is the same for both.
+   * A drawn row's key has to survive one household asking for the same thing on two
+   * lines, which `@for` tracks on. The row's own key is the same for both, so the
+   * key is the pair.
    */
-  it('gives two rows of one line under one heading distinct keys', () => {
+  it('gives two rows of one row under one heading distinct keys', () => {
     const sections = grouped([
-      line('a', 'Milk', {
-        origins: [
-          origin('l1', { id: 'o-first', lineId: 'zl-1' }),
-          origin('l1', { id: 'o-second', lineId: 'zl-2' }),
+      row('a', 'Milk', {
+        entries: [
+          entry('l1', { lineId: 'zl-1' }),
+          entry('l1', { lineId: 'zl-2' }),
         ],
       }),
     ]);
 
     expect(sections).toHaveLength(1);
     expect(sections[0].rows.map((row) => row.key)).toEqual([
-      'o-first',
-      'o-second',
+      'a:zl-1',
+      'a:zl-2',
     ]);
   });
 
   it('keeps the list filter, which runs before the grouping', () => {
     const sections = grouped(
       [
-        line('a', 'Milk', { origins: [origin('l1')] }),
-        line('b', 'Cheese', { origins: [origin('l2')] }),
+        row('a', 'Milk', { entries: [entry('l1')] }),
+        row('b', 'Cheese', { entries: [entry('l2')] }),
       ],
       { lists: new Set(['l1']) }
     );
@@ -632,32 +717,88 @@ describe('composeBasketView, grouped by list', () => {
   });
 });
 
-describe('basketViewLines', () => {
-  it('counts a line once however many sections draw it', () => {
-    const one = line('a', 'Milk');
+/**
+ * The one counting function left (velista `0090`, section 8.3).
+ *
+ * It counts **states the server wrote** and compares no number with another, which
+ * is the whole difference from `basketLinesProgress`: that one asked whether a
+ * line's settled amount had reached what it asked for, and could not tell a shop
+ * that had none from a purchase.
+ */
+describe('basketRowsProgress', () => {
+  it('counts states, and never a REMOVED row', () => {
+    expect(
+      basketRowsProgress([
+        { state: 'DONE' },
+        { state: 'NOT_AVAILABLE' },
+        { state: 'PARTLY' },
+        { state: 'WANTED' },
+        { state: 'SKIPPED' },
+        { state: 'REMOVED' },
+      ])
+    ).toEqual({ done: 1, unavailable: 1, total: 5 });
+  });
+
+  /**
+   * The assertion the heading and the sentence above it both rest on: over an
+   * unfiltered, ungrouped basket the section's count **is** the server's own. A
+   * build where the two could disagree is one where a section says "1 of 3" under
+   * a sentence saying "2 of 4".
+   */
+  it('equals the server’s own progress over an unfiltered, ungrouped basket', () => {
+    const rows = [
+      row('a', 'Milk', { state: 'DONE', left: 0, bought: 1 }),
+      row('b', 'Bread', { state: 'NOT_AVAILABLE' }),
+      row('c', 'Eggs', { state: 'PARTLY', left: 1, bought: 1 }),
+      row('d', 'Olives', { state: 'REMOVED', entries: [] }),
+    ];
+    // What a server with this basket would send, by backend `0130` section 4.
+    const served = { done: 1, unavailable: 1, total: 3 };
+
+    const sections = composeBasketView(rows, state({ grouping: 'category' }), {
+      ...CONTEXT,
+    });
+
+    expect(basketRowsProgress(basketViewRows(sections))).toEqual(served);
+  });
+
+  /** A `SKIPPED` row is pending, which is what keeps it out of both counts. */
+  it('counts a SKIPPED row in the total and in neither half', () => {
+    const counted = basketRowsProgress([{ state: 'SKIPPED' }]);
+
+    expect(counted).toEqual({ done: 0, unavailable: 0, total: 1 });
+  });
+});
+
+describe('basketViewRows', () => {
+  it('counts a row once however many sections draw it', () => {
+    const one = row('a', 'Milk');
     const sections = [
       {
         key: 'x',
         heading: null,
         hint: null,
         progress: null,
-        rows: [{ key: 'a', line: one, origin: null }],
+        rows: [{ key: 'a', row: one, entry: null, priceMark: null }],
       },
       {
         key: 'y',
         heading: null,
         hint: null,
         progress: null,
-        rows: [{ key: 'a', line: one, origin: null }],
+        rows: [{ key: 'a', row: one, entry: null, priceMark: null }],
       },
     ];
 
-    expect(basketViewLines(sections)).toEqual([one]);
+    expect(basketViewRows(sections)).toEqual([one]);
   });
 });
 
 describe('basketViewChips', () => {
-  const names = { listNames: new Map([['l1', 'Groceries']]), listCount: 3 };
+  const names = {
+    lists: new Map([['l1', ref('l1', 'Groceries')]]),
+    listCount: 3,
+  };
 
   it('draws nothing at all for the default view', () => {
     expect(basketViewChips(DEFAULT_BASKET_VIEW_STATE, names)).toEqual([]);
@@ -720,6 +861,24 @@ describe('basketViewChips', () => {
       },
     ]);
   });
+
+  /** Velista `0102`: a lock and no x on a basket started at a shop. */
+  it('locks the shop chip of a basket started at a shop', () => {
+    const chips = basketViewChips(state({ shop: 'loc-1' }), {
+      ...names,
+      chainName: 'Mercadona',
+      shopLocked: true,
+    });
+
+    expect(chips).toEqual([
+      {
+        property: 'shop',
+        key: 'basket.view.chip.shop',
+        args: { name: 'Mercadona' },
+        locked: true,
+      },
+    ]);
+  });
 });
 
 describe('basketViewActiveCount', () => {
@@ -758,37 +917,37 @@ describe('resetBasketViewProperty', () => {
  * on a build that marked a line and left it where it was.
  */
 describe('composeBasketView: prices from one shop', () => {
-  const MILK = line('a', 'Milk', { pickId: 'p-milk' });
-  const BREAD = line('b', 'Bread', { pickId: 'p-bread' });
-  const EGGS = line('c', 'Eggs', { pickId: 'p-eggs' });
+  const MILK = row('a', 'Milk', { optionIds: ['p-milk'] });
+  const BREAD = row('b', 'Bread', { optionIds: ['p-bread'] });
+  const EGGS = row('c', 'Eggs', { optionIds: ['p-eggs'] });
 
   it('marks a line another shop sells cheaper, and names the chain', () => {
     const sections = composeBasketView(
       [MILK, BREAD],
-      state({ shop: 's-merca' }),
+      state({ shop: MERCA }),
       priced()
     );
 
-    expect(sections[0].rows[0].mark).toEqual({
+    expect(sections[0].rows[0].priceMark).toEqual({
       kind: 'cheaper',
       price: 0.79,
       currency: 'EUR',
       chain: 'Dia',
     });
     // Listed here and cheapest here: there is nothing to say.
-    expect(sections[0].rows[1].mark).toBeNull();
+    expect(sections[0].rows[1].priceMark).toBeNull();
   });
 
   it('marks a line this shop does not list, with the cheapest price elsewhere', () => {
     const sections = composeBasketView(
       [MILK, EGGS],
-      state({ shop: 's-merca' }),
+      state({ shop: MERCA }),
       priced()
     );
 
     const sunk = sections[1].rows[0];
-    expect(sunk.line.id).toBe('c');
-    expect(sunk.mark).toEqual({
+    expect(sunk.row.rowKey).toBe('c');
+    expect(sunk.priceMark).toEqual({
       kind: 'unlisted',
       chain: 'Mercadona',
       elsewhere: { price: 2.4, currency: 'EUR', chain: 'Dia' },
@@ -798,19 +957,19 @@ describe('composeBasketView: prices from one shop', () => {
   it('sinks the unlisted lines under their own heading, ungrouped', () => {
     const sections = composeBasketView(
       [EGGS, MILK, BREAD],
-      state({ shop: 's-merca' }),
+      state({ shop: MERCA }),
       priced()
     );
 
     expect(sections).toHaveLength(2);
-    expect(sections[0].rows.map((row) => row.line.id)).toEqual(['a', 'b']);
+    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['a', 'b']);
     expect(sections[1].heading).toEqual({
       kind: 'key',
       key: 'basket.group.notListed',
       args: { chain: 'Mercadona' },
     });
     expect(sections[1].hint).toBe('basket.group.notListedHint');
-    expect(sections[1].rows.map((row) => row.line.id)).toEqual(['c']);
+    expect(sections[1].rows.map((row) => row.row.rowKey)).toEqual(['c']);
   });
 
   /**
@@ -818,18 +977,18 @@ describe('composeBasketView: prices from one shop', () => {
    * which is what keeps a category's own unlisted lines inside that category.
    */
   it('sinks to the end of a group, keeping the relative order of what sank', () => {
-    const second = line('d', 'More eggs', { pickId: 'p-eggs' });
+    const second = row('d', 'More eggs', { optionIds: ['p-eggs'] });
 
     const sections = composeBasketView(
       [EGGS, MILK, second, BREAD],
-      state({ shop: 's-merca', grouping: 'category' }),
+      state({ shop: MERCA, grouping: 'category' }),
       priced()
     );
 
     // One category, because every product here is `OTHER`: the two sunk lines are
     // last inside it, in the order they arrived in.
     expect(sections).toHaveLength(1);
-    expect(sections[0].rows.map((row) => row.line.id)).toEqual([
+    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual([
       'a',
       'b',
       'c',
@@ -838,53 +997,104 @@ describe('composeBasketView: prices from one shop', () => {
   });
 
   it('leaves a line with no pick unmarked, and never sinks it', () => {
-    const typed = line('d', 'Something for the cat');
+    const typed = row('d', 'Something for the cat');
 
     // Milk is here so that the shop prices *something*, which is what turns the
     // marks on at all (section 5.1): without it nothing on this basket is marked.
     const sections = composeBasketView(
       [typed, MILK, EGGS],
-      state({ shop: 's-merca' }),
+      state({ shop: MERCA }),
       priced()
     );
 
-    expect(sections[0].rows.map((row) => row.line.id)).toEqual(['d', 'a']);
-    expect(sections[0].rows[0].mark).toBeNull();
-    expect(sections[1].rows.map((row) => row.line.id)).toEqual(['c']);
+    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['d', 'a']);
+    expect(sections[0].rows[0].priceMark).toBeNull();
+    expect(sections[1].rows.map((row) => row.row.rowKey)).toEqual(['c']);
   });
 
   /**
    * Section 5.1, and the case staging and production are actually in: a shop nobody
    * has priced is not a shop that stocks nothing.
    */
-  it('marks nothing and sinks nothing at a shop that lists no line of the basket', () => {
+  it('marks nothing and sinks nothing at a shop that prices no line of the basket', () => {
     const context = priced();
+    const unpriced = new Map(
+      [...context.products].map(([id, item]) => [
+        id,
+        { ...item, atShop: at(null, null) },
+      ])
+    );
 
     const sections = composeBasketView(
       [EGGS, BREAD],
-      state({ shop: 's-empty' }),
+      state({ shop: 'loc-carrefour' }),
       {
         ...context,
-        scopes: new Map([
-          ...context.scopes,
-          ['s-empty', scope('s-empty', 'Carrefour')],
-        ]),
+        products: unpriced,
+        shop: shop('loc-carrefour', 'Carrefour'),
       }
     );
 
     expect(sections).toHaveLength(1);
-    expect(sections[0].rows.map((row) => row.mark)).toEqual([null, null]);
+    expect(sections[0].rows.map((row) => row.priceMark)).toEqual([null, null]);
   });
 
-  it('marks nothing for a shop this basket was not priced at', () => {
+  /**
+   * The products still describe the last shop while the read at the next one is
+   * out, and quoting them under the new shop's name would be a lie.
+   */
+  it('marks nothing while the read at the chosen shop is still out', () => {
     const sections = composeBasketView(
       [MILK, EGGS],
-      state({ shop: 's-gone' }),
+      state({ shop: 'loc-next' }),
       priced()
     );
 
     expect(sections).toHaveLength(1);
-    expect(sections[0].rows.map((row) => row.mark)).toEqual([null, null]);
+    expect(sections[0].rows.map((row) => row.priceMark)).toEqual([null, null]);
+    expect(sections[0].rows.map((row) => row.shelf)).toEqual([null, null]);
+  });
+
+  /**
+   * **The server decides the price at a shop.** Milk's Mercadona scope says 0.95,
+   * and the shop's own stack says 0.75: the row is priced from `atShop`, so nothing
+   * elsewhere is cheaper.
+   */
+  it('prices from atShop and compares cheaper elsewhere against it', () => {
+    const context = priced();
+    const products = new Map(context.products);
+    const milk = products.get('p-milk') as BasketProduct;
+    products.set('p-milk', { ...milk, atShop: at('s-merca-store', 0.75) });
+
+    const sections = composeBasketView([MILK, BREAD], state({ shop: MERCA }), {
+      ...context,
+      products,
+    });
+
+    expect(sections[0].rows[0].priceMark).toBeNull();
+    expect(
+      basketPricedAtShop([MILK], state({ shop: MERCA }), {
+        ...context,
+        products,
+      })
+    ).toBe(true);
+  });
+
+  it('sinks a line whose product has no price at the shop, whatever its offers say', () => {
+    const context = priced();
+    const products = new Map(context.products);
+    const bread = products.get('p-bread') as BasketProduct;
+    // Mercadona's scope lists bread, and this Mercadona has no price for it.
+    products.set('p-bread', { ...bread, atShop: at(null, null) });
+
+    const sections = composeBasketView([BREAD, MILK], state({ shop: MERCA }), {
+      ...context,
+      products,
+    });
+
+    expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual(['a']);
+    expect(sections[1].rows.map((row) => row.row.rowKey)).toEqual(['b']);
+    expect(sections[1].rows[0].priceMark?.kind).toBe('unlisted');
   });
 
   /**
@@ -894,17 +1104,13 @@ describe('composeBasketView: prices from one shop', () => {
   it('names no chain it cannot name, and says the line is unlisted anyway', () => {
     const context = priced();
 
-    const sections = composeBasketView(
-      [MILK, EGGS],
-      state({ shop: 's-merca' }),
-      {
-        ...context,
-        scopes: new Map([['s-merca', scope('s-merca', 'Mercadona')]]),
-      }
-    );
+    const sections = composeBasketView([MILK, EGGS], state({ shop: MERCA }), {
+      ...context,
+      scopes: new Map([['s-merca', scope('s-merca', 'Mercadona')]]),
+    });
 
-    expect(sections[0].rows[0].mark).toBeNull();
-    expect(sections[1].rows[0].mark).toEqual({
+    expect(sections[0].rows[0].priceMark).toBeNull();
+    expect(sections[1].rows[0].priceMark).toEqual({
       kind: 'unlisted',
       chain: 'Mercadona',
       elsewhere: null,
@@ -912,28 +1118,394 @@ describe('composeBasketView: prices from one shop', () => {
   });
 });
 
-describe('basketPricedScope', () => {
-  it('answers the chosen scope when it prices something on the basket', () => {
+describe('basketPricedAtShop', () => {
+  it('answers true when the shop prices something on the basket', () => {
     expect(
-      basketPricedScope(
-        [line('a', 'Milk', { pickId: 'p-milk' })],
-        state({ shop: 's-merca' }),
+      basketPricedAtShop(
+        [row('a', 'Milk', { optionIds: ['p-milk'] })],
+        state({ shop: MERCA }),
         priced()
       )
-    ).toBe('s-merca');
+    ).toBe(true);
   });
 
-  it('answers null for a shop with no offer on any line', () => {
+  it('answers false for a shop with no price for any line', () => {
     expect(
-      basketPricedScope(
-        [line('c', 'Eggs', { pickId: 'p-eggs' })],
-        state({ shop: 's-merca' }),
+      basketPricedAtShop(
+        [row('c', 'Eggs', { optionIds: ['p-eggs'] })],
+        state({ shop: MERCA }),
         priced()
       )
-    ).toBeNull();
+    ).toBe(false);
   });
 
-  it('answers null when no shop is chosen', () => {
-    expect(basketPricedScope([], state(), priced())).toBeNull();
+  it('answers false when no shop is chosen', () => {
+    expect(basketPricedAtShop([], state(), priced())).toBe(false);
+  });
+});
+
+describe('basketReadAtShop', () => {
+  it('answers true only when the read was made at the chosen shop', () => {
+    expect(basketReadAtShop(state({ shop: MERCA }), priced())).toBe(true);
+    expect(basketReadAtShop(state({ shop: 'loc-next' }), priced())).toBe(false);
+    expect(basketReadAtShop(state(), priced())).toBe(false);
+  });
+});
+
+/**
+ * Velista `0102`: what the chosen shop is known not to have. A mark, and never a
+ * move, and unknown is never marked.
+ */
+describe('composeBasketView: what the shop does not have', () => {
+  /** A product this shop prices, with what it says about the shelf. */
+  function stocked(
+    id: string,
+    available: boolean | null,
+    price: number | null = 1
+  ): BasketProduct {
+    return {
+      ...product(id, id, null),
+      offers: price === null ? [] : [offer('s-merca', price)],
+      atShop: at(price === null ? null : 's-merca', price, available),
+    };
+  }
+
+  function world(...products: BasketProduct[]): BasketViewContext {
+    return {
+      ...CONTEXT,
+      products: new Map(products.map((item) => [item.id, item])),
+      scopes: new Map([['s-merca', scope('s-merca', 'Mercadona')]]),
+      shop: shop(MERCA, 'Mercadona'),
+    };
+  }
+
+  function shelves(rows: BasketRow[], context: BasketViewContext) {
+    return composeBasketView(rows, state({ shop: MERCA }), context).flatMap(
+      (section) => section.rows.map((drawn) => drawn.shelf)
+    );
+  }
+
+  it('marks a row unavailable only when every option is known missing', () => {
+    const context = world(
+      stocked('p-a', false),
+      stocked('p-b', false),
+      stocked('p-c', null)
+    );
+
+    expect(
+      shelves([row('r1', 'Yogurt', { optionIds: ['p-a', 'p-b'] })], context)
+    ).toEqual([{ kind: 'unavailable' }]);
+    // One option nobody has said anything about is not a missing row.
+    expect(
+      shelves([row('r2', 'Yogurt', { optionIds: ['p-c', 'p-a'] })], context)
+    ).toEqual([null]);
+  });
+
+  it('never marks a row whose shop said nothing, or said it is there', () => {
+    const context = world(stocked('p-a', null), stocked('p-b', true));
+
+    expect(
+      shelves(
+        [
+          row('r1', 'Oat drink', { optionIds: ['p-a'] }),
+          row('r2', 'Rice', { optionIds: ['p-b'] }),
+        ],
+        context
+      )
+    ).toEqual([null, null]);
+  });
+
+  it('offers another option in place of a default known missing, preferring one known there', () => {
+    const context = world(
+      stocked('p-danone', false),
+      stocked('p-unknown', null),
+      stocked('p-hacendado', true)
+    );
+
+    expect(
+      shelves(
+        [
+          row('r1', 'Greek yogurt', {
+            optionIds: ['p-danone', 'p-unknown', 'p-hacendado'],
+          }),
+        ],
+        context
+      )
+    ).toEqual([
+      { kind: 'instead', optionId: 'p-hacendado', replacedId: 'p-danone' },
+    ]);
+  });
+
+  it('offers an option nobody has said anything about when none is known there', () => {
+    const context = world(stocked('p-danone', false), stocked('p-other', null));
+
+    expect(
+      shelves(
+        [row('r1', 'Yogurt', { optionIds: ['p-danone', 'p-other'] })],
+        context
+      )
+    ).toEqual([
+      { kind: 'instead', optionId: 'p-other', replacedId: 'p-danone' },
+    ]);
+  });
+
+  it('keeps a marked row in its place', () => {
+    const context = world(stocked('p-a', true), stocked('p-b', false));
+    const sections = composeBasketView(
+      [
+        row('r1', 'Oat drink', { optionIds: ['p-b'] }),
+        row('r2', 'Milk', { optionIds: ['p-a'] }),
+      ],
+      state({ shop: MERCA }),
+      context
+    );
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].rows.map((drawn) => drawn.row.rowKey)).toEqual([
+      'r1',
+      'r2',
+    ]);
+    expect(sections[0].rows[0].shelf).toEqual({ kind: 'unavailable' });
+  });
+
+  /** The user's answer on the mock: the price rule came first, so it sinks. */
+  it('sinks a row that is both unlisted and unavailable, and says both', () => {
+    const context = world(stocked('p-a', true), stocked('p-b', false, null));
+    const sections = composeBasketView(
+      [
+        row('r1', 'Washing up liquid', { optionIds: ['p-b'] }),
+        row('r2', 'Milk', { optionIds: ['p-a'] }),
+      ],
+      state({ shop: MERCA }),
+      context
+    );
+
+    expect(sections[1].rows[0].row.rowKey).toBe('r1');
+    expect(sections[1].rows[0].priceMark?.kind).toBe('unlisted');
+    expect(sections[1].rows[0].shelf).toEqual({ kind: 'unavailable' });
+  });
+
+  /** Availability without a single price is the one source of it today. */
+  it('marks the shelf at a shop that prices nothing', () => {
+    const context = world(
+      stocked('p-a', false, null),
+      stocked('p-b', true, null)
+    );
+
+    expect(
+      shelves(
+        [
+          row('r1', 'Rice', { optionIds: ['p-a'] }),
+          row('r2', 'Milk', { optionIds: ['p-b'] }),
+        ],
+        context
+      )
+    ).toEqual([{ kind: 'unavailable' }, null]);
+  });
+});
+
+/**
+ * Only what I usually buy here (velista `0104`; backend `0165`, section 1).
+ *
+ * Three things, kept apart: **which rows stay**, one test per state; **what a kept
+ * row says**, with the threshold on each side; and **where the kept rows sit**,
+ * which is exactly where they sat with the switch off.
+ */
+describe('composeBasketView: what you usually buy here', () => {
+  function usualRow(
+    rowKey: string,
+    state: 'NEVER_BOUGHT' | 'NO_SHOP_KNOWN' | 'ELSEWHERE' | 'HERE',
+    bought = 0,
+    of = 0,
+    extra: Partial<BasketRow> = {}
+  ): BasketRow {
+    return row(rowKey, rowKey, {
+      usual: { state, bought, of },
+      ...extra,
+    });
+  }
+
+  const on = state({ shop: MERCA, usual: true });
+  const off = state({ shop: MERCA });
+  const keys = (sections: ReturnType<typeof composeBasketView>) =>
+    basketViewRows(sections).map((kept) => kept.rowKey);
+
+  it('keeps a row never bought, and says nothing under it', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'NEVER_BOUGHT')],
+      on,
+      priced()
+    );
+
+    expect(keys(sections)).toEqual(['a']);
+    expect(sections[0].rows[0].usual).toBeNull();
+  });
+
+  it('keeps a row bought here', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'HERE', 2, 6)],
+      on,
+      priced()
+    );
+
+    expect(keys(sections)).toEqual(['a']);
+  });
+
+  it('hides a row bought only at other chains', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'ELSEWHERE', 0, 6), usualRow('b', 'NEVER_BOUGHT')],
+      on,
+      priced()
+    );
+
+    expect(keys(sections)).toEqual(['b']);
+  });
+
+  it('hides a row bought with no shop chosen, which is its own state', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'NO_SHOP_KNOWN', 0, 4), usualRow('b', 'NEVER_BOUGHT')],
+      on,
+      priced()
+    );
+
+    expect(keys(sections)).toEqual(['b']);
+  });
+
+  it('says how often a row was bought here at 4, and nothing at 5', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'HERE', 4, 6), usualRow('b', 'HERE', 5, 6)],
+      on,
+      priced()
+    );
+
+    expect(sections[0].rows.map((drawn) => drawn.usual)).toEqual([
+      { bought: 4, of: 6 },
+      null,
+    ]);
+  });
+
+  it('passes the numbers through exactly as the server sent them', () => {
+    const sections = composeBasketView(
+      [usualRow('a', 'HERE', 1, 1)],
+      on,
+      priced()
+    );
+
+    expect(sections[0].rows[0].usual).toEqual({ bought: 1, of: 1 });
+  });
+
+  it('keeps the kept rows in exactly the order they had with it off', () => {
+    const rows = [
+      usualRow('a', 'HERE', 2, 6),
+      usualRow('b', 'ELSEWHERE', 0, 6),
+      usualRow('c', 'NEVER_BOUGHT'),
+      usualRow('d', 'NO_SHOP_KNOWN', 0, 3),
+      usualRow('e', 'HERE', 6, 6),
+      usualRow('f', 'NEVER_BOUGHT'),
+    ];
+
+    for (const order of ['shop', 'alpha'] as const) {
+      const without = keys(
+        composeBasketView(rows, { ...off, order }, priced())
+      );
+      const withIt = keys(composeBasketView(rows, { ...on, order }, priced()));
+
+      expect(withIt).toEqual(
+        without.filter((key) => ['a', 'c', 'e', 'f'].includes(key))
+      );
+    }
+  });
+
+  it('draws no message and hides nothing with the switch off', () => {
+    const rows = [
+      usualRow('a', 'HERE', 2, 6),
+      usualRow('b', 'ELSEWHERE', 0, 6),
+    ];
+
+    const sections = composeBasketView(rows, off, priced());
+
+    expect(keys(sections)).toEqual(['a', 'b']);
+    expect(sections[0].rows.every((drawn) => drawn.usual === null)).toBe(true);
+  });
+
+  it('does nothing while the read at the chosen shop is still out', () => {
+    const rows = [
+      usualRow('a', 'ELSEWHERE', 0, 6),
+      usualRow('b', 'HERE', 2, 6),
+    ];
+
+    const sections = composeBasketView(rows, on, { ...priced(), shop: null });
+
+    expect(keys(sections)).toEqual(['a', 'b']);
+    expect(sections[0].rows.every((drawn) => drawn.usual === null)).toBe(true);
+  });
+
+  it('keeps a row nobody has said anything about, and a removed row', () => {
+    const rows = [
+      row('a', 'Just added'),
+      usualRow('b', 'ELSEWHERE', 0, 6, { state: 'REMOVED', entries: [] }),
+      usualRow('c', 'ELSEWHERE', 0, 6),
+    ];
+
+    const sections = composeBasketView(rows, on, priced());
+
+    expect(keys(sections)).toEqual(['a', 'b']);
+  });
+
+  it('carries the message under the list grouping too', () => {
+    const lists = new Map([['l1', ref('l1', 'Groceries')]]);
+    const rows = [
+      usualRow('a', 'HERE', 3, 5, { entries: [entry('l1')] }),
+      usualRow('b', 'ELSEWHERE', 0, 6, { entries: [entry('l1')] }),
+    ];
+
+    const sections = composeBasketView(
+      rows,
+      { ...on, grouping: 'list' },
+      { ...priced(), lists }
+    );
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].rows.map((drawn) => drawn.usual)).toEqual([
+      { bought: 3, of: 5 },
+    ]);
+  });
+});
+
+describe('basketUsualApplies', () => {
+  it('is true only with the switch on and the read made at the chosen shop', () => {
+    const context = { shop: shop(MERCA, 'Mercadona') };
+
+    expect(
+      basketUsualApplies(state({ shop: MERCA, usual: true }), context)
+    ).toBe(true);
+    expect(basketUsualApplies(state({ shop: MERCA }), context)).toBe(false);
+    expect(basketUsualApplies(state({ usual: true }), context)).toBe(false);
+    expect(
+      basketUsualApplies(state({ shop: 'loc-other', usual: true }), context)
+    ).toBe(false);
+  });
+});
+
+describe('the usual chip', () => {
+  const names = { lists: new Map<string, BasketListRef>(), listCount: 0 };
+
+  it('is chipped and counted with a shop, and removable to its default', () => {
+    const on = state({ shop: MERCA, usual: true });
+
+    expect(basketViewChips(on, names)).toContainEqual({
+      property: 'usual',
+      key: 'basket.view.usual.chip',
+      args: null,
+    });
+    expect(basketViewActiveCount(on)).toBe(2);
+    expect(resetBasketViewProperty(on, 'usual').usual).toBe(false);
+  });
+
+  it('is neither chipped nor counted without a shop', () => {
+    const noShop = state({ usual: true });
+
+    expect(basketViewChips(noShop, names)).toEqual([]);
+    expect(basketViewActiveCount(noShop)).toBe(0);
   });
 });

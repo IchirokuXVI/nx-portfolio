@@ -1,6 +1,6 @@
 import {
-  GeneratedLineOrigin,
-  GeneratedListStatus,
+  BasketKind,
+  BasketStatus,
   LINE_ITEM_SET_MAX,
   LineApprovalStatus,
   LineItemSource,
@@ -18,11 +18,11 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
+  BasketTripRow,
   CORE_ENTITIES,
-  GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOrigin,
+  Basket,
   LineComment,
   LineSettlement,
   ListAccess,
@@ -33,21 +33,29 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { LineChangeRecorder } from './changes/line-change.recorder';
 import { itemSetHash } from './item-set-hash';
 import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 
 /**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
+
+/**
  * A renamed line joins the line of that name (plan 0112, section 9).
  *
  * Against Postgres, because what is asserted is mostly rows that moved between
- * tables under a lock: comments, settlements and basket origins that cascade on
- * delete and are lost if the merge forgets one, a unique key on origins that a
- * careless move violates, and two renames that only stay one line because the
- * list row was held. A mocked repository has none of those.
+ * tables under a lock: comments, settlements and a finished trip's rows that
+ * cascade on delete and are lost if the merge forgets one, a unique key on the
+ * trip rows that a careless move violates, and two renames that only stay one
+ * line because the list row was held. A mocked repository has none of those.
  */
 describeIntegration('a rename that collides merges (real Postgres)', () => {
   let dataSource: DataSource;
@@ -90,7 +98,11 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
       fakeLineClaims().service,
       { emit } as never,
       new CoreAuditService(dataSource),
-      new LineMergeService()
+      new LineMergeService(new LineChangeRecorder()),
+      // The **real** recorder: what a merge writes down is a fact about a
+      // database, and this suite has one (plan 0138, section 13, test 4).
+      new LineChangeRecorder(),
+      announcer
     );
 
     const zone = await dataSource.getRepository(Zone).save(
@@ -169,7 +181,7 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
   afterAll(async () => {
     if (ids.zone) {
       await dataSource
-        .getRepository(GeneratedList)
+        .getRepository(Basket)
         .delete({ ownerUserId: ids.owner });
       // Memberships, lists, access rows and lines all cascade from the zone.
       await dataSource.getRepository(Zone).delete({ id: ids.zone });
@@ -179,8 +191,11 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
 
   beforeEach(async () => {
     emit.mockReset();
+    // Reset beside the emit, so a test can count the announcements one write
+    // makes (plan 0139, section 3).
+    announcer.reset();
     await dataSource
-      .getRepository(GeneratedList)
+      .getRepository(Basket)
       .delete({ ownerUserId: ids.owner });
     await dataSource.getRepository(ListLine).delete({ listId: ids.list });
     await dataSource.getRepository(ListLine).delete({ listId: ids.autoList });
@@ -318,6 +333,14 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     ]);
     expect(emit.mock.calls[0][2]).toEqual({ id: bread.id, listId: ids.list });
     expect(emit.mock.calls[1][2]).toMatchObject({ id: milk.id, quantity: 3 });
+
+    // **One** basket announcement naming both lines (plan 0139, section 3),
+    // rather than the two the delete and the update would each have made. A
+    // basket holding the absorbed line and the survivor draws one row either
+    // way, and two nudges would make it read the basket twice for one write.
+    expect(announcer.calls.linesChanged).toEqual([
+      { listId: ids.list, lineIds: [bread.id, milk.id] },
+    ]);
   });
 
   it('keeps the new spelling when the renamed line is the earlier one (case 4)', async () => {
@@ -457,9 +480,27 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     expect(view.approvedByUserId).toBe(ids.owner);
   });
 
-  it('moves comments, settlements and basket origins, summing an origin both lines had (case 9)', async () => {
+  it('moves comments and settlements, and the purchases keep the basket they were made on (case 9)', async () => {
+    // Plan 0136, section 7.6 reverses half of this test. The merge used to move
+    // `basket_line_origins` to the survivor and sum an origin both lines
+    // had; there are no origins any more, because an open basket holds no copy
+    // of a line. What is left is the half that always did the work: the
+    // settlements move, carrying the `basketId` they were made on, so the basket
+    // reads one row afterwards with both lines' purchases on it. The trip rows
+    // of a finished basket are the next test's.
     const milk = await seedLine({ content: 'Milk', position: 1, quantity: 2 });
     const bread = await seedLine({ content: 'Bread', position: 2 });
+
+    const basket = await dataSource.getRepository(Basket).save(
+      dataSource.getRepository(Basket).create({
+        ownerUserId: ids.owner,
+        name: 'Saturday',
+        status: BasketStatus.OPEN,
+        generatedAt: new Date(),
+        kind: BasketKind.GENERATED,
+        idempotencyKey: null,
+      })
+    );
 
     for (const line of [milk, bread]) {
       await dataSource.getRepository(LineComment).save(
@@ -484,60 +525,10 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
           settledByParticipantId: null,
           settledAt: new Date(),
           revertedAt: null,
-          generatedListLineId: null,
+          basketId: basket.id,
         })
       );
     }
-
-    const basket = await dataSource.getRepository(GeneratedList).save(
-      dataSource.getRepository(GeneratedList).create({
-        ownerUserId: ids.owner,
-        name: 'Saturday',
-        status: GeneratedListStatus.DRAFT,
-        generatedAt: new Date(),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [{ zoneId: ids.zone, listId: ids.list }],
-        },
-        defaultTargetListId: null,
-        idempotencyKey: null,
-      })
-    );
-    const basketLine = (content: string) =>
-      dataSource.getRepository(GeneratedListLine).save(
-        dataSource.getRepository(GeneratedListLine).create({
-          generatedListId: basket.id,
-          content,
-          quantity: 3,
-          settledQuantity: 0,
-          itemId: null,
-          origin: GeneratedLineOrigin.ADDED,
-          targetListId: null,
-          position: 1,
-        })
-      );
-    const both = await basketLine('milk');
-    const breadOnly = await basketLine('bread');
-    const origins = dataSource.getRepository(GeneratedListLineOrigin);
-    const origin = (
-      generatedListLineId: string,
-      line: ListLine,
-      quantity: number
-    ) =>
-      origins.save(
-        origins.create({
-          generatedListLineId,
-          zoneId: ids.zone,
-          listId: ids.list,
-          lineId: line.id,
-          quantity,
-          lineVersion: 1,
-        })
-      );
-    await origin(both.id, milk, 2);
-    await origin(both.id, bread, 1);
-    await origin(breadOnly.id, bread, 1);
 
     const view = await rename(bread, 'milk', { confirmMerge: true });
 
@@ -553,18 +544,62 @@ describeIntegration('a rename that collides merges (real Postgres)', () => {
     ).toBe(2);
     expect(view.boughtCount).toBe(2);
 
-    const onBoth = await origins.find({
-      where: { generatedListLineId: both.id },
-    });
+    // Both purchases are the survivor's and both still name the basket, which
+    // is what makes the open basket's `bought` for that one row the sum of the
+    // two: the number is read from these rows on every request rather than
+    // copied anywhere at the merge.
+    const moved = await dataSource
+      .getRepository(LineSettlement)
+      .find({ where: { lineId: milk.id } });
+    expect(moved.map((row) => row.basketId)).toEqual([basket.id, basket.id]);
     expect(
-      onBoth.map((row) => [row.lineId, row.quantity, row.lineVersion])
-    ).toEqual([[milk.id, 3, 2]]);
-    const onBreadOnly = await origins.find({
-      where: { generatedListLineId: breadOnly.id },
-    });
-    expect(
-      onBreadOnly.map((row) => [row.lineId, row.quantity, row.lineVersion])
-    ).toEqual([[milk.id, 1, 2]]);
+      await dataSource
+        .getRepository(LineSettlement)
+        .count({ where: { lineId: bread.id } })
+    ).toBe(0);
+  });
+
+  it('moves a finished trip’s rows, summing a basket that asked for both (plan 0135, test 10)', async () => {
+    // A trip row names its line by a foreign key, so a row left on the absorbed
+    // line would be deleted with it. The merge moves it, and a basket holding a
+    // row on both lines ends with one, because `uq_basket_trip_rows_line` allows
+    // one row per basket and zone line.
+    const milk = await seedLine({ content: 'Milk', position: 1, quantity: 2 });
+    const bread = await seedLine({ content: 'Bread', position: 2 });
+
+    const baskets = dataSource.getRepository(Basket);
+    const ended = (name: string) =>
+      baskets.save(
+        baskets.create({
+          ownerUserId: ids.owner,
+          name,
+          status: BasketStatus.FINISHED,
+          generatedAt: new Date(),
+          kind: BasketKind.GENERATED,
+          idempotencyKey: null,
+        })
+      );
+    const both = await ended('Asked for both');
+    const breadOnly = await ended('Asked for bread');
+
+    const rows = dataSource.getRepository(BasketTripRow);
+    await rows.insert([
+      { basketId: both.id, listId: ids.list, lineId: milk.id, asked: 2 },
+      { basketId: both.id, listId: ids.list, lineId: bread.id, asked: 3 },
+      { basketId: breadOnly.id, listId: ids.list, lineId: bread.id, asked: 4 },
+    ]);
+
+    await rename(bread, 'milk', { confirmMerge: true });
+
+    const askedOf = async (basketId: string) =>
+      (await rows.find({ where: { basketId } })).map((row) => [
+        row.lineId,
+        row.asked,
+      ]);
+    // Both asks on the survivor, as one row.
+    expect(await askedOf(both.id)).toEqual([[milk.id, 5]]);
+    // The other basket's row is repointed and keeps its number.
+    expect(await askedOf(breadOnly.id)).toEqual([[milk.id, 4]]);
   });
 
   it('never collides on a change of case or accents alone (case 10)', async () => {

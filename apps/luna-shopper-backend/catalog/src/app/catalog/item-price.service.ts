@@ -1,15 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type {
-  AddItemPriceBatchRequest,
-  AddItemPriceBatchResult,
-  AddItemPriceRequest,
-  DeleteItemPricesByRunRequest,
-  DeleteItemPricesByRunResult,
-  ItemPriceIdRequest,
-  ItemPricePage,
-  ItemPriceView,
-  ListItemPricesRequest,
+import {
+  ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS,
+  ItemPriceWrittenBy,
+  PriceSourceKind,
+  type AddItemPriceBatchRequest,
+  type AddItemPriceBatchResult,
+  type AddItemPriceRequest,
+  type DeleteItemPricesByRunRequest,
+  type DeleteItemPricesByRunResult,
+  type ItemPriceIdRequest,
+  type ItemPricePage,
+  type ItemPricesByItemRequest,
+  type ItemPriceView,
+  type ItemScopePricesPage,
+  type ItemScopePricesView,
+  type ListItemPricesRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
@@ -19,11 +25,14 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { Repository, type EntityManager } from 'typeorm';
-import { Item, ItemPrice, PriceScope } from '../entities';
+import { Item, ItemPrice, PricePolicy, PriceScope } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import { toItemPriceView } from './catalog.mappers';
+import { AUTOMATED_KINDS, resolveEffectivePrice } from './effective-price';
 import {
+  currentPriceRows,
   EffectivePriceService,
+  lessSpecificScopesOf,
   type PriceKey,
 } from './effective-price.service';
 import { writeItemPrices } from './item-price-writer';
@@ -33,6 +42,15 @@ interface ItemPriceCursor {
   value: string;
   id: string;
 }
+
+/** Where the all scopes read stopped: chain, then priority, then scope id. */
+interface ScopeCursor {
+  supermarketId: string;
+  priority: number;
+  id: string;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Every price a source gave (plan 0080, section 9). Writes are owner or
@@ -61,8 +79,22 @@ export class ItemPriceService {
   /** One row. An `ADMIN` add computes its override snapshot server side. */
   async add(req: AddItemPriceRequest): Promise<ItemPriceView> {
     const actor = await this.admin.requireAdmin(req);
-    const scope = await this.requireItemAndScope(req.itemId, req.priceScopeId);
+    if (
+      req.sourceKind !== PriceSourceKind.ADMIN &&
+      !AUTOMATED_KINDS.includes(req.sourceKind)
+    ) {
+      // Backlog 0008 opens the user kinds, and until then nothing writes one
+      // through here (plan 0158). Not in the writer: the reference seed
+      // writes USER_RECEIPT through it on purpose, with no run.
+      throw new ValidationException(
+        `sourceKind ${req.sourceKind} is not accepted here. A price typed ` +
+          'through the back office is ADMIN or one of the automated kinds.',
+        { messageArgs: { field: 'sourceKind' } }
+      );
+    }
     const now = new Date();
+    requireObservedAtInWindow(req.observedAt, now);
+    const scope = await this.requireItemAndScope(req.itemId, req.priceScopeId);
 
     const row = await this.audit.write(actor, async (tx) => {
       const outcome = await writeItemPrices(tx.manager, {
@@ -158,16 +190,56 @@ export class ItemPriceService {
     });
   }
 
-  /** The history for one (item, scope), newest first. Operator only. */
+  /**
+   * The history for one (item, scope), newest first, or the rows one run
+   * wrote (plan 0160). Operator only.
+   *
+   * A run's rows are the ones it inserted, which carry it in `sourceRunId`,
+   * and the ones whose `lastObservedAt` it moved **last**, which carry it in
+   * `lastObservedRunId` only. A later run that repeats the price takes the
+   * second column over, so an old run's confirmations shrink as newer runs
+   * confirm the same rows. That is the stored record and not a gap in the read.
+   */
   async list(req: ListItemPricesRequest): Promise<ItemPricePage> {
     await this.admin.requireAdmin(req);
     const limit = clampPageSize(req.limit);
     const cursor = decodeCursor(req.cursor) as ItemPriceCursor | undefined;
 
-    const qb = this.prices
-      .createQueryBuilder('p')
-      .where('p."itemId" = :itemId', { itemId: req.itemId })
-      .andWhere('p."priceScopeId" = :scopeId', { scopeId: req.priceScopeId })
+    const qb = this.prices.createQueryBuilder('p');
+    const runId = req.runId;
+    if (runId) {
+      if (req.priceScopeId) {
+        throw new ValidationException(
+          'A run read takes runId and, optionally, itemId. Leave out priceScopeId.',
+          { details: { priceScopeId: 'not allowed with runId' } }
+        );
+      }
+      qb.where('(p."sourceRunId" = :runId OR p."lastObservedRunId" = :runId)', {
+        runId,
+      });
+      if (req.itemId) {
+        qb.andWhere('p."itemId" = :itemId', { itemId: req.itemId });
+      }
+    } else {
+      if (!req.itemId || !req.priceScopeId) {
+        throw new ValidationException(
+          'Name itemId and priceScopeId for a history, or runId for the rows a run wrote.',
+          {
+            details: {
+              ...(req.itemId ? {} : { itemId: 'required without runId' }),
+              ...(req.priceScopeId
+                ? {}
+                : { priceScopeId: 'required without runId' }),
+            },
+          }
+        );
+      }
+      qb.where('p."itemId" = :itemId', { itemId: req.itemId }).andWhere(
+        'p."priceScopeId" = :scopeId',
+        { scopeId: req.priceScopeId }
+      );
+    }
+    qb
       // The one read that wants what a leaflet printed beside the number
       // (plan 0081, section 6.4). Left joined here and nowhere else: the
       // recompute reads this table on every write and must not pay for it.
@@ -190,7 +262,131 @@ export class ItemPriceService {
       hasMore && last
         ? encodeCursor({ value: last.observedAt.toISOString(), id: last.id })
         : null;
-    return { items: list.map(toItemPriceView), nextCursor };
+    const items = list.map((row): ItemPriceView => {
+      const view = toItemPriceView(row);
+      if (!runId) {
+        return view;
+      }
+      return {
+        ...view,
+        writtenBy:
+          row.sourceRunId === runId
+            ? ItemPriceWrittenBy.INSERTED
+            : ItemPriceWrittenBy.CONFIRMED,
+      };
+    });
+    return { items, nextCursor };
+  }
+
+  /**
+   * One product at every scope that prices it, with the row each scope shows
+   * and why (plan 0160). Operator only, paged by scope.
+   *
+   * A scope is listed when the product has a price row there or a materialized
+   * row there, so a shop that only inherits a region's price is listed too.
+   *
+   * **The reason comes from the decision, run again here.** Each scope's
+   * current rows across its stack go through `resolveEffectivePrice`, the
+   * function the recompute calls, and `shownBecause` is what it returned
+   * beside the row. Nothing here restates the rule. The stored row follows
+   * within one sweep, so for at most sixty seconds this read is ahead of it.
+   */
+  async byItem(req: ItemPricesByItemRequest): Promise<ItemScopePricesPage> {
+    await this.admin.requireAdmin(req);
+    const limit = clampPageSize(req.limit);
+    const cursor = decodeCursor(req.cursor) as ScopeCursor | undefined;
+    const item = await this.items.findOne({ where: { id: req.itemId } });
+    if (!item) {
+      throw new NotFoundException('Item not found');
+    }
+
+    const qb = this.scopes
+      .createQueryBuilder('s')
+      .where(
+        `(EXISTS (SELECT 1 FROM "item_prices" p
+                   WHERE p."itemId" = :itemId AND p."priceScopeId" = s.id)
+          OR EXISTS (SELECT 1 FROM "supermarket_items" si
+                      WHERE si."itemId" = :itemId AND si."priceScopeId" = s.id))`,
+        { itemId: req.itemId }
+      )
+      .orderBy('s."supermarketId"', 'ASC')
+      .addOrderBy('s."priority"', 'ASC')
+      .addOrderBy('s.id', 'ASC')
+      .take(limit + 1);
+    if (cursor) {
+      qb.andWhere(
+        '(s."supermarketId", s."priority", s.id) > (:csid, :cpriority, :cid)',
+        {
+          csid: cursor.supermarketId,
+          cpriority: cursor.priority,
+          cid: cursor.id,
+        }
+      );
+    }
+    const scopes = await qb.getMany();
+    const hasMore = scopes.length > limit;
+    const page = scopes.slice(0, limit);
+    const last = page[page.length - 1];
+
+    const manager = this.prices.manager;
+    const policies = await manager.find(PricePolicy);
+    const now = new Date();
+    const items: ItemScopePricesView[] = [];
+    // One scope at a time, through one manager: each scope reads its own
+    // stack, and the page is at most one page of scopes.
+    for (const scope of page) {
+      const inherited = await lessSpecificScopesOf(manager, scope);
+      const stack = [scope, ...inherited];
+      const rows = await currentPriceRows(
+        manager,
+        [req.itemId],
+        stack.map((row) => row.id)
+      );
+      const resolved = resolveEffectivePrice({
+        rows,
+        priceScopeId: scope.id,
+        scopePriorities: new Map(stack.map((row) => [row.id, row.priority])),
+        policies,
+        now,
+      });
+      const shown = resolved.row
+        ? (rows.find((row) => row.id === resolved.row?.id) ?? null)
+        : null;
+      const isAdmin = shown?.sourceKind === PriceSourceKind.ADMIN;
+      items.push({
+        priceScopeId: scope.id,
+        supermarketId: scope.supermarketId,
+        scopeKind: scope.kind,
+        scopeExternalKey: scope.externalKey ?? null,
+        scopeLabel: scope.label ?? null,
+        scopePriority: scope.priority,
+        rows: [...rows]
+          .sort(
+            (a, b) => b.lastObservedAt.getTime() - a.lastObservedAt.getTime()
+          )
+          .map(toItemPriceView),
+        shownItemPriceId: shown?.id ?? null,
+        shownBecause: resolved.shownBecause,
+        stale: resolved.stale,
+        protectedUntil:
+          isAdmin && shown?.protectedUntil
+            ? shown.protectedUntil.toISOString()
+            : null,
+        overrides: isAdmin ? (shown?.overrides ?? null) : null,
+      });
+    }
+
+    return {
+      items,
+      nextCursor:
+        hasMore && last
+          ? encodeCursor({
+              supermarketId: last.supermarketId,
+              priority: last.priority,
+              id: last.id,
+            })
+          : null,
+    };
   }
 
   /** Remove one row. The materialized row is recomputed behind it. */
@@ -386,5 +582,43 @@ export class ItemPriceService {
       );
     }
     return copiedFromScopeId;
+  }
+}
+
+/**
+ * A hand typed `observedAt` may reach back 30 days and never forward (plan
+ * 0160).
+ *
+ * Protection runs from `observedAt` (`ADMIN_PROTECTION_DAYS`), so a past date
+ * protects a row for less time, never more, which is why the window opens
+ * backwards only. A future date would protect a row past its seven days, and
+ * that is refused. Absent means now, and passes.
+ */
+export function requireObservedAtInWindow(
+  observedAt: string | null | undefined,
+  now: Date
+): void {
+  if (observedAt === null || observedAt === undefined || observedAt === '') {
+    return;
+  }
+  const at = new Date(observedAt).getTime();
+  if (Number.isNaN(at)) {
+    // The writer refuses it with the field named. Nothing to add here.
+    return;
+  }
+  if (at > now.getTime()) {
+    throw new ValidationException('observedAt cannot be in the future.', {
+      details: { observedAt: 'must not be in the future' },
+    });
+  }
+  if (at < now.getTime() - ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS * DAY_MS) {
+    throw new ValidationException(
+      `observedAt can reach back ${ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS} days at most.`,
+      {
+        details: {
+          observedAt: `must be within the last ${ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS} days`,
+        },
+      }
+    );
   }
 }

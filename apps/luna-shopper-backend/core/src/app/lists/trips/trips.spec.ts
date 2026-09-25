@@ -1,4 +1,5 @@
 import {
+  PURCHASE_SESSION_GAP_MS,
   RealtimeEvent,
   SettlementOutcome,
   TripKind,
@@ -6,7 +7,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import type { DataSource } from 'typeorm';
-import type { LineClaimService } from '../../generated-lists/line-claim.service';
+import type { LineClaimService } from '../../baskets/line-claim.service';
 import type { ListAccessService } from '../list-access.service';
 import { announceTripsChanged } from './trips.announce';
 import { toTripRowView, toTripView } from './trips.mappers';
@@ -15,7 +16,6 @@ import {
   BASKET_TRIP_ROWS_SQL,
   ENDED_TRIPS_SQL,
   LIVE_TRIPS_SQL,
-  LOOSE_TRIP_GAP_MS,
   LOOSE_TRIP_ROWS_SQL,
 } from './trips.sql';
 
@@ -78,7 +78,7 @@ describe('what a trip did to a line (section 4)', () => {
 
   it('reads a loose row as its latest settlement, with nothing asked', () => {
     expect(
-      toTripRowView(TripKind.LOOSE, {
+      toTripRowView(TripKind.SESSION, {
         lineId: LINE,
         bought: 3,
         lastOutcome: SettlementOutcome.BOUGHT,
@@ -93,7 +93,7 @@ describe('what a trip did to a line (section 4)', () => {
       settledByUserId: USER,
     });
     expect(
-      toTripRowView(TripKind.LOOSE, {
+      toTripRowView(TripKind.SESSION, {
         lineId: LINE,
         bought: 0,
         lastOutcome: SettlementOutcome.NOT_AVAILABLE,
@@ -120,6 +120,8 @@ describe('what a trip did to a line (section 4)', () => {
       live: true,
       startedAt: '2026-01-10T10:00:00.000Z',
       lineCount: 4,
+      fullyBoughtLineCount: 1,
+      // The old name, with the same value, for one release (plan 0159).
       boughtLineCount: 1,
     });
   });
@@ -191,19 +193,21 @@ describe('the two reads', () => {
       LIVE_TRIPS_SQL,
       ENDED_TRIPS_SQL,
     ]);
+    // The statuses are no longer a parameter: "open and a trip" is a fragment
+    // both queries carry (plan 0133, section 6), so the window is all that is
+    // left of what the claim hands over.
     expect(w.queries[0].parameters).toEqual([
       LIST,
-      LOOSE_TRIP_GAP_MS,
-      ['DRAFT', 'ACTIVE'],
+      PURCHASE_SESSION_GAP_MS,
       SINCE,
     ]);
     // No cursor, and one row past the default page to learn whether more exist.
-    expect(w.queries[1].parameters.slice(4)).toEqual([null, null, 21]);
+    expect(w.queries[1].parameters.slice(3)).toEqual([null, null, 21]);
   });
 
   it('carries the kind and the id in the cursor, and skips live trips behind one', async () => {
     const first = build({
-      [ENDED_TRIPS_SQL]: [head(TRIP, 'LOOSE'), head(LINE, 'BASKET')],
+      [ENDED_TRIPS_SQL]: [head(TRIP, 'SESSION'), head(LINE, 'BASKET')],
     });
     const page = await first.service.list({
       userId: USER,
@@ -223,7 +227,7 @@ describe('the two reads', () => {
 
     expect(next.live).toEqual([]);
     expect(second.queries.map((query) => query.sql)).toEqual([ENDED_TRIPS_SQL]);
-    expect(second.queries[0].parameters.slice(4)).toEqual([TRIP, 'LOOSE', 2]);
+    expect(second.queries[0].parameters.slice(3)).toEqual([TRIP, 'SESSION', 2]);
   });
 
   it('starts from the beginning on a cursor it cannot read', async () => {
@@ -238,7 +242,7 @@ describe('the two reads', () => {
       LIVE_TRIPS_SQL,
       ENDED_TRIPS_SQL,
     ]);
-    expect(w.queries[1].parameters.slice(4, 6)).toEqual([null, null]);
+    expect(w.queries[1].parameters.slice(3, 5)).toEqual([null, null]);
   });
 
   it('reads the rows of a basket or of a loose trip, each through its own query', async () => {
@@ -257,7 +261,7 @@ describe('the two reads', () => {
     await w.service.rows({
       userId: USER,
       listId: LIST,
-      kind: TripKind.LOOSE,
+      kind: TripKind.SESSION,
       tripId: TRIP,
       limit: 100,
     });
@@ -266,7 +270,7 @@ describe('the two reads', () => {
       { sql: BASKET_TRIP_ROWS_SQL, parameters: [LIST, TRIP, null, 21] },
       {
         sql: LOOSE_TRIP_ROWS_SQL,
-        parameters: [LIST, LOOSE_TRIP_GAP_MS, TRIP, null, 101],
+        parameters: [LIST, PURCHASE_SESSION_GAP_MS, TRIP, null, 101],
       },
     ]);
   });
@@ -286,7 +290,7 @@ describe('the two reads', () => {
       w.service.rows({
         userId: USER,
         listId: LIST,
-        kind: TripKind.LOOSE,
+        kind: TripKind.SESSION,
         tripId: 'not-an-id',
       })
     ).rejects.toBeInstanceOf(NotFoundException);

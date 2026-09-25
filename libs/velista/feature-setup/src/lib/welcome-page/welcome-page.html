@@ -1,0 +1,33 @@
+<main class="page">
+  <lib-brand-wordmark class="wordmark" />
+
+  <h1 #heading class="title" tabindex="-1">
+    {{ 'setup.welcome.title' | rokuT }}
+  </h1>
+  <p class="lede">{{ 'setup.welcome.body' | rokuT }}</p>
+
+  <!--
+    The questions as rows and not as a feature list: each is one thing the next three
+    screens ask, in the order they ask it.
+  -->
+  <ol class="questions">
+    @for (question of questions; track question.title; let index = $index) {
+      <li class="question">
+        <span aria-hidden="true" class="number">{{ index + 1 }}</span>
+        <span class="text">
+          <span class="question-title">{{ question.title | rokuT }}</span>
+          <span class="question-body">{{ question.body | rokuT }}</span>
+        </span>
+      </li>
+    }
+  </ol>
+
+  <div class="foot">
+    <button (click)="start()" class="primary" type="button">
+      {{ 'setup.welcome.start' | rokuT }}
+    </button>
+    <button (click)="later()" class="later" type="button">
+      {{ 'setup.welcome.later' | rokuT }}
+    </button>
+  </div>
+</main>

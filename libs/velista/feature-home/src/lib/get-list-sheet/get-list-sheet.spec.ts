@@ -5,26 +5,36 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   ContactStore,
   fakeZoneStore,
-  GeneratedListStore,
+  BasketListStore,
   LIST_SERVICE,
   provideFakeSessionStore,
   provideFakeZoneStore,
+  SHOP_FINDER_SERVICE,
+  SHOP_SERVICE,
+  ShopFinderMemory,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileStore,
+  toNearbyShops,
+  toRecentShops,
   type ListServiceI,
+  type ShopServiceI,
   type ShoppingProfileServiceI,
 } from '@portfolio/velista/data-access';
 import type {
   Contact,
-  CreateGeneratedListRequest,
-  GeneratedListRun,
+  CreateBasketRequest,
+  BasketRun,
   MyZone,
   ProfileGenerationScope,
+  Shop,
+  ShopChainSummary,
   ShoppingListSummary,
   ShoppingProfile,
 } from '@portfolio/velista/models';
 import {
+  fakeGeolocationReader,
   provideFakeBrowserFacade,
+  provideFakeGeolocationReader,
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
@@ -84,10 +94,11 @@ interface Options {
   /**
    * The page the sheet is declared over, as its route states it.
    *
-   * Left out it is the dashboard's copy, which is what an absent `returnTo` means and
-   * what the route table said before the history gained a copy of its own.
+   * Left out it is the history's copy, which is what an absent `returnTo` means since
+   * velista `0097` took the dashboard's copy away: home's button row was replaced by
+   * the app's own bar, so the two copies left are the history and the third tab.
    */
-  readonly returnTo?: 'home' | 'shopping-lists';
+  readonly returnTo?: 'shopping-lists' | 'shopping-lists/current';
   /** The profiles the chooser has to choose between. One unnamed default by default. */
   readonly profiles?: readonly ShoppingProfile[];
   /**
@@ -107,6 +118,52 @@ interface Options {
   readonly pageSize?: number;
   /** The reader's contacts, as the flat memberships the contacts read answers. */
   readonly contacts?: readonly Contact[];
+  /** What the nearby and recent shops routes answer (velista `0103`). */
+  readonly finder?: ShopFinderMemory;
+  /** What the device says when "Near me" is pressed. */
+  readonly reader?: ReturnType<typeof fakeGeolocationReader>;
+  /** The profile's shops, which the "Buying at" picker offers (velista `0102`). */
+  readonly shops?: readonly Shop[];
+}
+
+/** One chain the profile's postal codes hold a shop of. */
+function chain(
+  supermarketId: string,
+  name: string,
+  locations: number
+): ShopChainSummary {
+  return {
+    supermarketId,
+    name: { en: name, es: name },
+    externalBrandKey: name.toLowerCase(),
+    locations,
+    excluded: 0,
+    excludedChain: false,
+  };
+}
+
+/** One shop of a profile, as the catalog answers it. */
+function shopOf(
+  id: string,
+  supermarketId: string,
+  chainName: string,
+  address: string,
+  postalCode: string,
+  city = 'Córdoba'
+): Shop {
+  return {
+    id,
+    supermarketId,
+    chainName: { en: chainName, es: chainName },
+    name: null,
+    address,
+    city,
+    postalCode,
+    postalCodeDerived: false,
+    provider: 'OSM',
+    excluded: false,
+    excludedChain: false,
+  };
 }
 
 /** One profile, named or not, for the chooser and the scope read. */
@@ -128,7 +185,41 @@ function profile(
 }
 
 /** Records what the sheet asked the store to compose. */
-const created: CreateGeneratedListRequest[] = [];
+const created: CreateBasketRequest[] = [];
+
+/**
+ * The catalog's shops for a profile, as the supermarkets page reads them (velista
+ * `0102`): one summary row per chain, and a chain's shops or a search's matches.
+ */
+function shopService(shops: readonly Shop[]): Partial<ShopServiceI> {
+  return {
+    summarizeChains: async () => {
+      const byChain = new Map<string, ShopChainSummary>();
+      for (const held of shops) {
+        const counted = byChain.get(held.supermarketId);
+        byChain.set(
+          held.supermarketId,
+          chain(
+            held.supermarketId,
+            held.chainName.en,
+            (counted?.locations ?? 0) + 1
+          )
+        );
+      }
+      return [...byChain.values()];
+    },
+    searchShops: async (query) => ({
+      items: shops.filter(
+        (held) =>
+          (query.supermarketId === undefined ||
+            held.supermarketId === query.supermarketId) &&
+          (query.query === undefined ||
+            (held.address ?? '').includes(query.query))
+      ),
+      nextCursor: null,
+    }),
+  };
+}
 
 /** Every `listLists` the sheet made, so the cursor test can see it followed one. */
 const listPages: { zoneId: string; cursor: string | null }[] = [];
@@ -172,7 +263,7 @@ async function render(
   };
 
   const generated = {
-    create: async (request: CreateGeneratedListRequest) => {
+    create: async (request: CreateBasketRequest) => {
       created.push(request);
       if (options.createRejects) {
         throw new Error('refused');
@@ -190,7 +281,7 @@ async function render(
           presentCount: 0,
         },
         skipped: [],
-      } as GeneratedListRun;
+      } as BasketRun;
     },
   };
 
@@ -234,9 +325,23 @@ async function render(
         },
       },
       { provide: SHOPPING_PROFILE_SERVICE, useValue: profileService },
+      { provide: SHOP_SERVICE, useValue: shopService(options.shops ?? []) },
+      {
+        provide: SHOP_FINDER_SERVICE,
+        useValue: options.finder ?? new ShopFinderMemory(),
+      },
+      provideFakeGeolocationReader(
+        options.reader ??
+          fakeGeolocationReader({
+            outcome: {
+              state: 'located',
+              point: { latitude: 37.88, longitude: -4.78, accuracyMetres: 12 },
+            },
+          })
+      ),
       // The real store's own behaviour is covered by its spec; here it is a recorder,
       // so what is under test is what the sheet decides to send.
-      { provide: GeneratedListStore, useValue: generated },
+      { provide: BasketListStore, useValue: generated },
       // After `provideRouter`, so this wins: the sheet reads which page it covers from
       // its own route's data, and `provideRouter([])` has no route carrying any.
       {
@@ -500,14 +605,14 @@ describe('GetListSheet', () => {
   });
 
   describe('the way to the history', () => {
-    it('offers it from the header, even with no active basket to have a card', async () => {
-      const fixture = await render();
+    it('offers it from the header over the third tab', async () => {
+      const fixture = await render({ returnTo: 'shopping-lists/current' });
 
       expect(query(fixture, '.history')).not.toBeNull();
     });
 
     it('is drawn beside the title rather than beside the submit', async () => {
-      const fixture = await render();
+      const fixture = await render({ returnTo: 'shopping-lists/current' });
 
       expect(query(fixture, '.head-row .history')).not.toBeNull();
     });
@@ -515,16 +620,18 @@ describe('GetListSheet', () => {
     it('is offered even when there is nowhere to draw from', async () => {
       // The one case where the sheet can do nothing else for you is exactly the case
       // where looking at what you already have is the useful thing left.
-      const fixture = await render({ zones: [] });
+      const fixture = await render({
+        zones: [],
+        returnTo: 'shopping-lists/current',
+      });
 
       expect(fixture.componentInstance.noSources()).toBe(true);
       expect(query(fixture, '.history')).not.toBeNull();
     });
 
     it('is absent over the history itself, which is where it would lead', async () => {
-      // The whole reason for the link is that somebody with no card has no other route
-      // to the history. Over the history that reason is gone, and a control leading to
-      // the screen it is on is worse than no control.
+      // A control leading to the screen it is already on is worse than no control. The
+      // third tab above is not that case: it is its own screen, with its own clock.
       const fixture = await render({ returnTo: 'shopping-lists' });
 
       expect(fixture.componentInstance.showHistory).toBe(false);
@@ -541,14 +648,33 @@ describe('GetListSheet', () => {
    * exactly when there is nothing to pop.
    */
   describe('the page it falls back to', () => {
-    it('is the dashboard for the dashboard copy', async () => {
+    it('is the third tab for the third tab copy', async () => {
+      const fixture = await render({ returnTo: 'shopping-lists/current' });
+      const sheet = TestBed.inject(SheetNavigation);
+      const dismiss = jest.spyOn(sheet, 'dismiss').mockResolvedValue(undefined);
+
+      await fixture.componentInstance.dismiss();
+
+      expect(dismiss).toHaveBeenCalledWith(
+        expect.stringContaining('/shopping-lists/current')
+      );
+    });
+
+    /**
+     * An unstated `returnTo` lands on the history rather than throwing, and the history
+     * is the right default: it is a real page that lists every basket, so a sheet route
+     * added without the data is merely blunt rather than broken.
+     */
+    it('is the history when the route says nothing', async () => {
       const fixture = await render();
       const sheet = TestBed.inject(SheetNavigation);
       const dismiss = jest.spyOn(sheet, 'dismiss').mockResolvedValue(undefined);
 
       await fixture.componentInstance.dismiss();
 
-      expect(dismiss).toHaveBeenCalledWith(expect.stringContaining('/home'));
+      expect(dismiss).toHaveBeenCalledWith(
+        expect.stringContaining('/shopping-lists')
+      );
     });
 
     it('is the history for the history copy', async () => {
@@ -835,5 +961,353 @@ describe('GetListSheet', () => {
       expect(rows[0]?.getAttribute('role')).toBe('checkbox');
       expect(rows[0]?.getAttribute('aria-checked')).toBe('true');
     });
+  });
+});
+
+/**
+ * "Buying at" (velista `0102`): starting a trip at a shop.
+ *
+ * Any of the person's shops by default, which sends no shop. A shop chosen in the
+ * same picker the basket's filter sheet opens is sent on Generate, and it can be
+ * changed as often as the person likes until then.
+ */
+describe('GetListSheet: buying at', () => {
+  const MAYOR = shopOf(
+    'loc-mayor',
+    'sm-merca',
+    'Mercadona',
+    'Calle Mayor 3',
+    '14001'
+  );
+  const RONDA = shopOf(
+    'loc-ronda',
+    'sm-merca',
+    'Mercadona',
+    'Ronda de los Tejares 32',
+    '14008'
+  );
+  const MALAGA = shopOf(
+    'loc-malaga',
+    'sm-lidl',
+    'Lidl',
+    'Avenida de Andalucía 21',
+    '29002',
+    'Málaga'
+  );
+
+  async function withShops() {
+    return render({
+      profiles: [
+        profile('p1', {
+          isDefault: true,
+          postalCodes: [
+            { id: 'pc1', postalCode: '14001', label: null },
+            { id: 'pc2', postalCode: '14008', label: null },
+          ],
+        } as Partial<ShoppingProfile>),
+      ],
+      shops: [MAYOR, RONDA],
+    });
+  }
+
+  async function settle(fixture: ComponentFixture<GetListSheet>) {
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  it('reads any of your shops by default, and Generate sends no shop', async () => {
+    const fixture = await withShops();
+
+    expect(query(fixture, '.shop-row.is-any')?.textContent).toContain(
+      'getList.shop.any'
+    );
+    expect(text(fixture)).toContain('getList.shop.anyHint');
+
+    await fixture.componentInstance.submit();
+
+    expect(created[0]).not.toHaveProperty('supermarketLocationId');
+  });
+
+  it('opens the picker over the form, and a shop picked there is sent on Generate', async () => {
+    const fixture = await withShops();
+
+    (query(fixture, '.shop-row.is-any') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    // The form is gone and the picker body is drawn, inside the same sheet.
+    expect(
+      query(fixture, 'lib-get-list-shop-pane lib-shop-picker')
+    ).not.toBeNull();
+    expect(query(fixture, '#get-list-name')).toBeNull();
+
+    // Open the chain, then pick its second shop.
+    (
+      query(fixture, 'lib-franchise-buttons .chip') as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+    const radios = all(fixture, 'lib-shop-list .checkbox');
+    expect(radios).toHaveLength(2);
+    radios[1].click();
+    await settle(fixture);
+
+    // Back on the form, naming the shop, with the line that says what Generate does.
+    expect(query(fixture, '#get-list-name')).not.toBeNull();
+    expect(
+      query(fixture, '.shop-row.is-chosen .shop-chain')?.textContent
+    ).toBe('Mercadona');
+    expect(
+      query(fixture, '.shop-row.is-chosen .shop-where')?.textContent
+    ).toBe('Ronda de los Tejares 32');
+    expect(text(fixture)).toContain('getList.shop.chosenHint');
+
+    await fixture.componentInstance.submit();
+
+    expect(created[0]?.supermarketLocationId).toBe('loc-ronda');
+  });
+
+  it('can be changed as often as liked, and the x goes back to any', async () => {
+    const fixture = await withShops();
+    const sheet = fixture.componentInstance;
+
+    sheet.pickShop(MAYOR);
+    sheet.pickShop(RONDA);
+    fixture.detectChanges();
+    expect(sheet.shop()?.id).toBe('loc-ronda');
+
+    (query(fixture, '.shop-clear') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(sheet.shop()).toBeNull();
+    expect(query(fixture, '.shop-row.is-any')).not.toBeNull();
+
+    await sheet.submit();
+    expect(created[0]).not.toHaveProperty('supermarketLocationId');
+  });
+
+  it('closes the picker without a pick on Escape, leaving the shop as it was', async () => {
+    const fixture = await withShops();
+    const sheet = fixture.componentInstance;
+    sheet.pickShop(MAYOR);
+    sheet.openShopPicker();
+    fixture.detectChanges();
+
+    await sheet.dismiss();
+    fixture.detectChanges();
+
+    expect(sheet.pane()).toBe('form');
+    expect(sheet.shop()?.id).toBe('loc-mayor');
+  });
+
+  it('says a shop outside the areas of the profile is outside them', async () => {
+    const fixture = await withShops();
+
+    fixture.componentInstance.pickShop(MALAGA);
+    fixture.detectChanges();
+
+    expect(query(fixture, '.shop-row lib-outside-areas')).not.toBeNull();
+    // Somewhere else, so the town is named beside the street.
+    expect(query(fixture, '.shop-row .shop-where')?.textContent).toBe(
+      'Avenida de Andalucía 21, Málaga'
+    );
+  });
+
+  it('draws no note for a shop in the areas of the profile', async () => {
+    const fixture = await withShops();
+
+    fixture.componentInstance.pickShop(MAYOR);
+    fixture.detectChanges();
+
+    expect(query(fixture, '.shop-row lib-outside-areas')).toBeNull();
+  });
+});
+
+/**
+ * "Near me" and the recent shops in the get a list sheet (velista `0103`): there
+ * is no basket yet, so the catalog's route, judged against the profile the list
+ * will use; and the person is signed in, so their recent shops head the picker.
+ */
+describe('GetListSheet: the shop picker that finds you', () => {
+  function view(id: string, chain: string, postalCode = '14001') {
+    return {
+      id,
+      supermarketId: `sm-${chain}`,
+      supermarketName: { en: chain, es: chain },
+      label: null,
+      address: `Calle ${id}`,
+      city: 'Córdoba',
+      postalCode,
+      inProfile: true,
+    };
+  }
+
+  async function opened(options: Options = {}) {
+    const fixture = await render({
+      profiles: [
+        profile('p1', {
+          isDefault: true,
+          postalCodes: [{ id: 'pc1', postalCode: '14001', label: null }],
+        } as Partial<ShoppingProfile>),
+      ],
+      ...options,
+    });
+    fixture.componentInstance.openShopPicker();
+    await drawn(fixture);
+    return fixture;
+  }
+
+  async function drawn(fixture: ComponentFixture<GetListSheet>) {
+    for (let i = 0; i < 6; i++) {
+      await Promise.resolve();
+    }
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  function pressNearMe(fixture: ComponentFixture<GetListSheet>) {
+    (query(fixture, 'lib-near-me-button button') as HTMLButtonElement).click();
+  }
+
+  it('asks for no position until Near me is pressed', async () => {
+    const reader = fakeGeolocationReader();
+    await opened({ reader });
+
+    expect(reader.state.reads).toBe(0);
+  });
+
+  it('picks through the catalog route for the profile, closes, and says what it chose', async () => {
+    const finder = new ShopFinderMemory();
+    finder.nearby = toNearbyShops({
+      candidates: [
+        {
+          ...view('near-1', 'Mercadona'),
+          distanceMetres: 120,
+          excluded: false,
+        },
+      ],
+      pick: { locationId: 'near-1', distanceMetres: 120 },
+      noPick: null,
+    });
+    const fixture = await opened({ finder });
+
+    pressNearMe(fixture);
+    await drawn(fixture);
+
+    expect(finder.calls).toContain('profile');
+    expect(finder.asked).toEqual(['p1']);
+    expect(fixture.componentInstance.pane()).toBe('form');
+    expect(fixture.componentInstance.shop()?.id).toBe('near-1');
+    const message = query(fixture, 'lib-shop-pick-message');
+    expect(message?.textContent).toContain('basket.view.shop.near.picked');
+
+    // It goes when dismissed, and the shop stays.
+    (
+      query(fixture, 'lib-shop-pick-message .dismiss') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    expect(query(fixture, 'lib-shop-pick-message')).toBeNull();
+    expect(fixture.componentInstance.shop()?.id).toBe('near-1');
+
+    await fixture.componentInstance.submit();
+    expect(created[0]?.supermarketLocationId).toBe('near-1');
+  });
+
+  it('drops the message when the shop is changed by hand', async () => {
+    const finder = new ShopFinderMemory();
+    finder.nearby = toNearbyShops({
+      candidates: [
+        {
+          ...view('near-1', 'Mercadona'),
+          distanceMetres: 120,
+          excluded: false,
+        },
+      ],
+      pick: { locationId: 'near-1', distanceMetres: 120 },
+      noPick: null,
+    });
+    const fixture = await opened({ finder });
+    pressNearMe(fixture);
+    await drawn(fixture);
+
+    (query(fixture, '.shop-clear') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(query(fixture, 'lib-shop-pick-message')).toBeNull();
+  });
+
+  it('draws the candidates when there is no pick, and one can be chosen by hand', async () => {
+    const finder = new ShopFinderMemory();
+    finder.nearby = toNearbyShops({
+      candidates: [
+        {
+          ...view('near-1', 'Mercadona'),
+          distanceMetres: 180,
+          excluded: false,
+        },
+        { ...view('near-2', 'Dia'), distanceMetres: 230, excluded: false },
+      ],
+      pick: null,
+      noPick: 'AMBIGUOUS',
+    });
+    const fixture = await opened({ finder });
+
+    pressNearMe(fixture);
+    await drawn(fixture);
+
+    expect(fixture.componentInstance.pane()).toBe('shop');
+    expect(query(fixture, '.near-region')?.textContent).toContain(
+      'basket.view.shop.near.reason.AMBIGUOUS'
+    );
+    all(fixture, '.near-region input')[1].click();
+    await drawn(fixture);
+
+    expect(fixture.componentInstance.shop()?.id).toBe('near-2');
+    expect(query(fixture, 'lib-shop-pick-message')).toBeNull();
+  });
+
+  it('says so in one line when the position is refused', async () => {
+    const fixture = await opened({
+      reader: fakeGeolocationReader({ outcome: { state: 'denied' } }),
+    });
+
+    pressNearMe(fixture);
+    await drawn(fixture);
+
+    expect(query(fixture, '.near-region .line')?.textContent).toContain(
+      'basket.view.shop.near.denied'
+    );
+    expect(query(fixture, 'lib-franchise-buttons')).not.toBeNull();
+  });
+
+  it('draws the recent shops first, and a pick from them is the list’s shop', async () => {
+    const finder = new ShopFinderMemory();
+    finder.recent = toRecentShops({
+      shops: [
+        {
+          shop: view('recent-1', 'Lidl', '29002'),
+          lastBoughtAt: '2026-09-01T10:00:00Z',
+        },
+      ],
+    });
+    const fixture = await opened({ finder });
+
+    expect(finder.calls).toEqual(['recent']);
+    const section = query(fixture, '.section') as HTMLElement;
+    expect(section.textContent).toContain('basket.view.shop.recent.heading');
+
+    (section.querySelector('input') as HTMLInputElement).click();
+    await drawn(fixture);
+
+    expect(fixture.componentInstance.shop()?.id).toBe('recent-1');
+    // A shop outside the profile's areas is still one to choose, and says so.
+    expect(query(fixture, '.shop-row lib-outside-areas')).not.toBeNull();
+  });
+
+  it('draws no recent section when the person has none', async () => {
+    const fixture = await opened();
+
+    expect(text(fixture)).not.toContain('basket.view.shop.recent.heading');
   });
 });

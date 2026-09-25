@@ -214,6 +214,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     sku: '12345',
     ean: '8480000123459',
     unitSize: 1,
+    packCount: null,
     category: 'DAIRY',
     defaultUnit: 'LITER',
     productGroupId: 'pg_whole_milk',
@@ -226,6 +227,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     sku: '12346',
     ean: '8480000123466',
     unitSize: 6,
+    packCount: 6,
     category: 'DAIRY',
     defaultUnit: 'LITER',
     productGroupId: 'pg_whole_milk',
@@ -241,6 +243,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     sku: '22001',
     ean: '8480000220011',
     unitSize: 1,
+    packCount: null,
     category: 'PANTRY',
     defaultUnit: 'LITER',
     productGroupId: 'pg_olive_oil',
@@ -253,6 +256,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     sku: '31007',
     ean: '8480000310071',
     unitSize: 750,
+    packCount: null,
     category: 'HOUSEHOLD',
     defaultUnit: 'MILLILITER',
     // Curation has not reached it. Nothing is wrong with this row.
@@ -420,6 +424,80 @@ export const ITEM_PRICE_SEED: readonly Wire.CatalogItemPriceView[] = [
     overrides: {},
     protectedUntil: '2026-09-04T18:05:00.000Z',
     details: null,
+  },
+];
+
+/**
+ * One product at one scope, as the all scopes read answers it (backend plan
+ * 0160), with the product it belongs to.
+ *
+ * The wire row does not name its product, because the product is in the URL.
+ * The gateway puts it back on every row that comes out, and the memory table
+ * needs it to answer one product's scopes.
+ */
+export type ItemScopePrices = Wire.CatalogItemScopePricesView & {
+  readonly itemId?: string;
+};
+
+/** The rows of {@link ITEM_PRICE_SEED} with this id, in that order. */
+function rowsOf(...ids: readonly string[]): Wire.CatalogItemPriceView[] {
+  return ids.flatMap((id) => ITEM_PRICE_SEED.filter((row) => row.id === id));
+}
+
+/**
+ * Each product at every scope that prices it, grouped the way `GET
+ * /items/{id}/prices` answers (admin plan 0033).
+ *
+ * Built from {@link ITEM_PRICE_SEED} so the two cannot disagree. The olive oil
+ * pair is the protected `ADMIN` row winning over a crawl that still says 8.9;
+ * the others are single rows, which is the commonest answer there is.
+ */
+export const ITEM_SCOPE_PRICES_SEED: readonly ItemScopePrices[] = [
+  {
+    itemId: 'it_olive_oil_1l',
+    priceScopeId: 'ps_mercadona_4661',
+    supermarketId: MERCADONA,
+    scopeKind: 'REGION',
+    scopeExternalKey: '4661',
+    scopeLabel: { en: 'Córdoba warehouse', es: 'Almacén de Córdoba' },
+    scopePriority: 300,
+    rows: rowsOf('ip_oil_4661_admin', 'ip_oil_4661_api'),
+    shownItemPriceId: 'ip_oil_4661_admin',
+    shownBecause: 'PROTECTED_ADMIN',
+    stale: false,
+    protectedUntil: '2026-09-10T09:40:00.000Z',
+    overrides: { OFFICIAL_API: { price: 8.9, unitPrice: 8.9 } },
+  },
+  {
+    itemId: 'it_milk_1l',
+    priceScopeId: 'ps_consum_centro',
+    supermarketId: CONSUM,
+    scopeKind: 'STORE',
+    scopeExternalKey: 'loc_consum_centro',
+    scopeLabel: null,
+    scopePriority: 100,
+    rows: rowsOf('ip_milk_consum_admin'),
+    shownItemPriceId: 'ip_milk_consum_admin',
+    shownBecause: 'ONLY_ROW',
+    stale: false,
+    protectedUntil: '2026-09-04T18:05:00.000Z',
+    overrides: {},
+  },
+  {
+    itemId: 'it_milk_1l',
+    priceScopeId: 'ps_mercadona_4661',
+    supermarketId: MERCADONA,
+    scopeKind: 'REGION',
+    scopeExternalKey: '4661',
+    scopeLabel: { en: 'Córdoba warehouse', es: 'Almacén de Córdoba' },
+    scopePriority: 300,
+    rows: rowsOf('ip_milk_4661_api'),
+    shownItemPriceId: 'ip_milk_4661_api',
+    shownBecause: 'ONLY_ROW',
+    // Shown on sufferance: the crawl stopped a fortnight ago.
+    stale: true,
+    protectedUntil: null,
+    overrides: null,
   },
 ];
 

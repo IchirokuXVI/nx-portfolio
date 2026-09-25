@@ -8,17 +8,19 @@ import { AuthMemory } from './auth/auth-memory';
 import { SessionStore } from './auth/session-store';
 import { SessionValidation } from './auth/session-validation';
 import { TokenStore } from './auth/token-store';
+import { BasketListMemory } from './baskets/basket-list-memory';
+import { BasketListStore } from './baskets/basket-list-store';
+import { BasketSessionStore } from './baskets/basket-session-store';
+import { BasketStore } from './baskets/basket-store';
+import { LiveBasketStore } from './baskets/live-basket-store';
+import { SharedListStore } from './baskets/shared-list-store';
+import { GroupMembers } from './catalog/group-members';
 import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
 import { CommentMemory } from './comments/comment-memory';
 import { ConnectionRecovery } from './connection-recovery';
 import { ContactMemory } from './contacts/contact-memory';
 import { ContactStore } from './contacts/contact-store';
-import { BasketSessionStore } from './generated-lists/basket-session-store';
-import { BasketStore } from './generated-lists/basket-store';
-import { GeneratedListMemory } from './generated-lists/generated-list-memory';
-import { GeneratedListStore } from './generated-lists/generated-list-store';
-import { SharedListStore } from './generated-lists/shared-list-store';
 import { LineMemory } from './lines/line-memory';
 import { LineStore } from './lines/line-store';
 import { ListMemory } from './lists/list-memory';
@@ -29,7 +31,10 @@ import { MembershipStore } from './memberships/membership-store';
 import { PresenceStore } from './presence/presence-store';
 import { ShoppingProfileMemory } from './profiles/shopping-profile-memory';
 import { ShoppingProfileStore } from './profiles/shopping-profile-store';
+import { PurchaseMemory } from './purchases/purchase-memory';
+import { PurchaseStore } from './purchases/purchase-store';
 import { ShopMemory } from './shops/shop-memory';
+import { CatalogBrowseMemory } from './catalog/catalog-browse-memory';
 import { StartupProbe } from './startup-probe';
 import { ZoneMemory } from './zones/zone-memory';
 import { ZoneStore } from './zones/zone-store';
@@ -115,14 +120,27 @@ import { ZoneStore } from './zones/zone-store';
  * `ShoppingProfileMemory` joins for `AccountMemory`'s reason exactly, and
  * `ShoppingProfileApi` stays out like every other real transport.
  *
- * `GeneratedListStore` (plan 0045) joins for `ZoneStore`'s reason a sixth time: it
- * resolves `GENERATED_LIST_SERVICE` and `REALTIME_CLIENT`, so at the root it would list
+ * `BasketListStore` (plan 0045) joins for `ZoneStore`'s reason a sixth time: it
+ * resolves `BASKET_LIST_SERVICE` and `REALTIME_CLIENT`, so at the root it would list
  * fixture baskets beside a real account and would apply the owner's own basket events
  * from a socket nobody was connected to. It is app scoped rather than page scoped for
  * `ShoppingProfileStore`'s second reason: the dashboard card and the history page are
  * two routes reading one listing, and a page owned store would refetch it on every move
- * between them. `GeneratedListMemory` joins for `AccountMemory`'s reason exactly, and
- * `GeneratedListApi` stays out like every other real transport.
+ * between them. `BasketListMemory` joins for `AccountMemory`'s reason exactly, and
+ * `BasketListApi` stays out like every other real transport.
+ *
+ * `PurchaseStore` (velista `0095`) sits beside `SharedListStore`, for its reason: the
+ * history page's third tab, a listing read once and kept. `PurchaseMemory` joins for
+ * `BasketListMemory`'s reason, and `PurchaseApi` stays out like every other real
+ * transport.
+ *
+ * `LiveBasketStore` (velista `0091`) joins for `BasketListStore`'s reason exactly: it
+ * resolves `BASKET_SERVICE` and `REALTIME_CLIENT`. It is app scoped rather than page
+ * scoped because the dashboard reads it on every visit and the numbers it holds outlive
+ * one, so returning from the basket draws the card immediately and asks again behind it.
+ * It is a **second** reader of `BASKET_SERVICE` beside the page scoped `BasketStore`,
+ * which is allowed and is not a duplicate: one holds a whole basket for the screen in a
+ * shop, the other holds three numbers for a card.
  *
  * `ItemNames` (plan 0047) joins for `MemberNames`' reason exactly: it resolves
  * `CATALOG_SERVICE`, so at the root it would name products from whatever that token's
@@ -131,6 +149,8 @@ import { ZoneStore } from './zones/zone-store';
  * question about the same products, and the second is usually opened from the first.
  * `GroupNames` (plan 0065) joins beside it for every one of those reasons, being the
  * same resolver for the group a line follows rather than for the products on it.
+ * `GroupMembers` joins for the same reasons: the line page, the product sheet and the
+ * basket ask for the same group's members, and it primes `ItemNames` as they arrive.
  *
  * `AssistantMemory` (plan 0032) joins for `CommentMemory`'s reason and no stronger one:
  * it injects nothing, so root scope would work for it, and it is listed here anyway so
@@ -157,6 +177,10 @@ import { ZoneStore } from './zones/zone-store';
  * this library that is not: everything it holds is about the screen that is open, a
  * franchise somebody tapped and a word they typed, so it is provided by the supermarkets
  * page itself and destroyed with it. `ShopApi` stays out like every other real transport.
+ *
+ * `CatalogBrowseMemory` (velista `0100`) joins for `ShopMemory`'s reason exactly. The
+ * catalog tab holds its query, chain and pages on the page itself, so there is no store
+ * to list here, and `CatalogBrowseApi` stays out like every other real transport.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
@@ -176,6 +200,7 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   LineMemory,
   LineStore,
   CommentMemory,
+  GroupMembers,
   GroupNames,
   ItemNames,
   MemberNames,
@@ -184,13 +209,17 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ShoppingProfileMemory,
   ShoppingProfileStore,
   ShopMemory,
-  GeneratedListMemory,
-  GeneratedListStore,
+  CatalogBrowseMemory,
+  BasketListMemory,
+  BasketListStore,
   SharedListStore,
+  PurchaseMemory,
+  PurchaseStore,
   ContactMemory,
   ContactStore,
   BasketSessionStore,
   BasketStore,
+  LiveBasketStore,
   StartupProbe,
   SessionValidation,
 ];

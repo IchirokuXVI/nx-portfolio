@@ -30,6 +30,7 @@ import {
   COMMENT_PATTERNS,
   LINE_PATTERNS,
   LIST_PATTERNS,
+  SettlementOutcome,
   type AddLineResult,
   type CommentAudioView,
   type CommentPage,
@@ -37,6 +38,7 @@ import {
   type LinePage,
   type LineSettlementPage,
   type LineSettlementResult,
+  type LineSettlePickRequest,
   type LineSuggestionPage,
   type LineView,
   type ListAccessView,
@@ -47,6 +49,8 @@ import {
   type ListTripRowsRequest,
   type ListTripsRequest,
   type ListView,
+  type SettleLineRequest,
+  type SettlePick,
   type TripKind,
   type TripPage,
   type TripRowPage,
@@ -55,11 +59,17 @@ import {
 import {
   PageQueryDto,
   THROTTLE_LIMITS,
+  UuidParam,
 } from '@portfolio/luna-shopper/platform';
 import type { Request, Response } from 'express';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import {
+  pricedItemId,
+  SettlePriceService,
+  shopPricedItemId,
+} from '../baskets/settle-price.service';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { CommentTranscriptionService } from './comment-transcription.service';
@@ -99,7 +109,7 @@ export class ZoneListsController {
   @ApiProblemResponses({ body: true })
   create(
     @AuthUser() user: CurrentUser,
-    @Param('zoneId') zoneId: string,
+    @UuidParam('zoneId') zoneId: string,
     @Body() dto: CreateListDto
   ): Promise<ListView> {
     return this.nats.send<ListView>(LIST_PATTERNS.create, {
@@ -114,7 +124,7 @@ export class ZoneListsController {
   @ApiContractResponse(LIST_PATTERNS.list)
   list(
     @AuthUser() user: CurrentUser,
-    @Param('zoneId') zoneId: string,
+    @UuidParam('zoneId') zoneId: string,
     @Query() query: ListQueryDto
   ): Promise<ListPage> {
     return this.nats.send<ListPage>(LIST_PATTERNS.list, {
@@ -149,7 +159,7 @@ export class ItemHistoryController {
   @ApiContractResponse(LINE_PATTERNS.itemSettlements)
   settlements(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: PageQueryDto
   ): Promise<LineSettlementPage> {
     return this.nats.send<LineSettlementPage>(LINE_PATTERNS.itemSettlements, {
@@ -188,7 +198,7 @@ export class ItemHistoryController {
   @ApiProblemResponses({ body: true })
   holdingLists(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query('excludeListId') excludeListId?: string
   ): Promise<ListsHoldingItemResult> {
     const req: ListsHoldingItemRequest = {
@@ -217,7 +227,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   update(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateListDto
   ): Promise<ListView> {
     return this.nats.send<ListView>(LIST_PATTERNS.update, {
@@ -233,7 +243,7 @@ export class ListsController {
   @ApiContractResponse(LIST_PATTERNS.delete)
   remove(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(LIST_PATTERNS.delete, {
       userId: user.userId,
@@ -246,7 +256,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   setAccess(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: SetListAccessDto
   ): Promise<{ listId: string }> {
     return this.nats.send(LIST_PATTERNS.setAccess, {
@@ -268,7 +278,7 @@ export class ListsController {
   @ApiContractResponse(LIST_PATTERNS.getAccess)
   getAccess(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<ListAccessView> {
     return this.nats.send<ListAccessView>(LIST_PATTERNS.getAccess, {
       userId: user.userId,
@@ -294,7 +304,7 @@ export class ListsController {
   @ApiContractResponse(LIST_PATTERNS.trips)
   listTrips(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: PageQueryDto
   ): Promise<TripPage> {
     const req: ListTripsRequest = {
@@ -318,12 +328,12 @@ export class ListsController {
    * not exist or touches no line of this list.
    */
   @Get(':id/trips/:kind/:tripId/rows')
-  @ApiParam({ name: 'kind', enum: ['basket', 'loose'] })
+  @ApiParam({ name: 'kind', enum: ['basket', 'session'] })
   @ApiContractResponse(LIST_PATTERNS.tripRows)
   @ApiProblemResponses({ body: true })
   listTripRows(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Param('kind') kind: string,
     @Param('tripId') tripId: string,
     @Query() query: PageQueryDto
@@ -354,7 +364,7 @@ export class ListsController {
   @ApiContractResponse(LIST_PATTERNS.suggestions)
   listSuggestions(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<LineSuggestionPage> {
     const req: ListSuggestionsRequest = { userId: user.userId, listId: id };
     return this.nats.send<LineSuggestionPage>(LIST_PATTERNS.suggestions, req);
@@ -364,7 +374,7 @@ export class ListsController {
   @ApiContractResponse(LINE_PATTERNS.list)
   listLines(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: LineQueryDto
   ): Promise<LinePage> {
     return this.nats.send<LinePage>(LINE_PATTERNS.list, {
@@ -381,7 +391,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   addLine(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddLineDto
   ): Promise<AddLineResult> {
     return this.nats.send<AddLineResult>(LINE_PATTERNS.add, {
@@ -412,7 +422,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   addLines(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddLinesDto
   ): Promise<AddLineResult[]> {
     return this.nats.send<AddLineResult[]>(LINE_PATTERNS.addMany, {
@@ -427,7 +437,7 @@ export class ListsController {
   @ApiProblemResponses({ body: true })
   reorder(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: ReorderLinesDto
   ): Promise<{ listId: string }> {
     return this.nats.send(LINE_PATTERNS.reorder, {
@@ -447,7 +457,9 @@ export class ListsController {
 export class LinesController {
   constructor(
     private readonly nats: NatsClient,
-    private readonly transcription: CommentTranscriptionService
+    private readonly transcription: CommentTranscriptionService,
+    /** What a settle cost, read here and never sent by a client (plan 0143). */
+    private readonly prices: SettlePriceService
   ) {}
 
   /**
@@ -464,7 +476,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true, lineMerge: true })
   update(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateLineDto
   ): Promise<UpdateLineResult> {
     return this.nats.send<UpdateLineResult>(LINE_PATTERNS.update, {
@@ -502,7 +514,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true })
   addQuantity(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddLineQuantityDto
   ): Promise<LineView> {
     return this.nats.send<LineView>(LINE_PATTERNS.addQuantity, {
@@ -519,7 +531,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true })
   setApproval(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: SetApprovalDto
   ): Promise<LineView> {
     return this.nats.send<LineView>(LINE_PATTERNS.setApproval, {
@@ -530,7 +542,11 @@ export class LinesController {
   }
 
   /**
-   * Say what happened to this line on a trip (plan 0047, section 4).
+   * Say what happened to this line on a trip (plan 0047, section 4). `WRITE`.
+   *
+   * `WRITE` and not `DECIDE` since plan 0131: the same person settles the same
+   * line from a basket, so one rule now answers for both surfaces. Approving a
+   * line and moving an approved quantity keep `DECIDE`.
    *
    * It replaced `POST :id/status`, which moved a line between trip states a zone
    * line no longer carries. Buying decrements the quantity by what was bought and
@@ -546,18 +562,77 @@ export class LinesController {
   @Post(':id/settle')
   @ApiContractResponse(LINE_PATTERNS.settle, { status: HttpStatus.CREATED })
   @ApiProblemResponses({ body: true })
-  settle(
+  async settle(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: SettleLineDto
   ): Promise<LineSettlementResult> {
-    return this.nats.send<LineSettlementResult>(LINE_PATTERNS.settle, {
+    // What the screen said one of it costs (plan 0143). Here the caller is the
+    // account the price is read as, their own default profile supplies the
+    // scopes, and `servedLocations` is true: they are the caller's own shops.
+    // With no `itemId`, core says which product the line records and that is
+    // the product priced (plan 0151, section 3).
+    //
+    // A shop with no scope is the zone list's "I bought this" (velista `0114`):
+    // the gateway works the scope out from the shop and records neither when it
+    // cannot, so naming a shop never fails a purchase.
+    const paid = dto.priceScopeId
+      ? await this.prices.read({
+          userId: user.userId,
+          profileId: undefined,
+          itemId: pricedItemId(
+            dto.itemId,
+            dto.itemId === undefined
+              ? await this.settlePick(user.userId, id)
+              : undefined
+          ),
+          priceScopeId: dto.priceScopeId,
+          supermarketLocationId: dto.supermarketLocationId,
+          servedLocations: true,
+        })
+      : dto.supermarketLocationId && dto.outcome === SettlementOutcome.BOUGHT
+        ? await this.prices.readAtShop({
+            userId: user.userId,
+            profileId: undefined,
+            itemId: shopPricedItemId(
+              dto.itemId,
+              dto.itemId === undefined
+                ? await this.settlePick(user.userId, id)
+                : undefined
+            ),
+            supermarketLocationId: dto.supermarketLocationId,
+            servedLocations: true,
+          })
+        : null;
+    const req: SettleLineRequest = {
       userId: user.userId,
       lineId: id,
       outcome: dto.outcome,
       quantity: dto.quantity,
       itemId: dto.itemId,
-    });
+      paid: paid ?? undefined,
+    };
+    return this.nats.send<LineSettlementResult>(LINE_PATTERNS.settle, req);
+  }
+
+  /**
+   * The product a settle that names none records on this line, as core answers
+   * it (plan 0151, section 3).
+   *
+   * Undefined when core cannot answer. The settle is about to ask core about the
+   * same line and will fail or succeed on its own terms, which is how the basket
+   * route treats the same question.
+   */
+  private async settlePick(
+    userId: string,
+    lineId: string
+  ): Promise<SettlePick | undefined> {
+    const req: LineSettlePickRequest = { userId, lineId };
+    try {
+      return await this.nats.send<SettlePick>(LINE_PATTERNS.settlePick, req);
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -571,7 +646,7 @@ export class LinesController {
   @ApiContractResponse(LINE_PATTERNS.settlements)
   settlements(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: PageQueryDto
   ): Promise<LineSettlementPage> {
     return this.nats.send<LineSettlementPage>(LINE_PATTERNS.settlements, {
@@ -586,7 +661,7 @@ export class LinesController {
   @ApiContractResponse(LINE_PATTERNS.delete)
   remove(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<{ id: string }> {
     return this.nats.send(LINE_PATTERNS.delete, {
       userId: user.userId,
@@ -598,7 +673,7 @@ export class LinesController {
   @ApiContractResponse(COMMENT_PATTERNS.list)
   listComments(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Query() query: ListQueryDto
   ): Promise<CommentPage> {
     return this.nats.send<CommentPage>(COMMENT_PATTERNS.list, {
@@ -614,7 +689,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true })
   addComment(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: AddCommentDto
   ): Promise<CommentView> {
     return this.nats.send<CommentView>(COMMENT_PATTERNS.add, {
@@ -662,7 +737,7 @@ export class LinesController {
   @ApiProblemResponses({ body: true })
   async addVoiceComment(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Req() request: Request,
     @Body() dto: AddVoiceCommentDto
   ): Promise<CommentView> {
@@ -752,7 +827,7 @@ export class CommentsController {
   })
   async getCommentAudio(
     @AuthUser() user: CurrentUser,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Res() response: Response
   ): Promise<void> {
     const audio = await this.nats.send<CommentAudioView>(

@@ -76,7 +76,7 @@ export const coreValidationSchema = Joi.object({
    * answer: a live basket older than this window claims nothing.
    *
    * **Two readers, one number, on purpose.** `LINE_CLAIMS_SQL` stops counting a
-   * basket past this age, and `GeneratedListSweepService` moves it to
+   * basket past this age, and `BasketSweepService` moves it to
    * `COMPLETED` past the same age. Past the window the claim has already
    * expired, so the sweep is writing down what the read already believed rather
    * than changing what anybody sees, and a second number here would be a way for
@@ -92,14 +92,100 @@ export const coreValidationSchema = Joi.object({
    * that section still has no number to borrow; a cap or an age based archive,
    * when one lands, should read this rather than declare another beside it.
    */
-  GENERATED_LIST_CLAIM_WINDOW: Joi.string().default('60h'),
+  BASKET_CLAIM_WINDOW: Joi.string().default('60h'),
+
+  /**
+   * How long a skip, and a `LIVE` basket's "the shop had none", keep a row
+   * marked (plan 0137, section 8).
+   *
+   * Twelve hours, which is the length of the day a shopper said "not today"
+   * about: long enough that the mark is still there when they come back in the
+   * evening, short enough that tomorrow's trip starts clean.
+   *
+   * It has a default, so the Helm chart, `compose.apps.yml` and `luna-slot.sh`
+   * need no entry. Every comparison against it happens in SQL against the
+   * database's `now()`, so no application server and no device clock decides
+   * whether a row is still skipped.
+   */
+  BASKET_SKIP_WINDOW: Joi.string().default('12h'),
+
+  /**
+   * How long a share link accepts joins, counted from the moment it was minted
+   * (plan 0140, section 2).
+   *
+   * Twelve hours, decided by the product owner rather than asked for by a
+   * caller: the request carries no lifetime at all, because a field nobody sets
+   * is a field somebody sets to a year.
+   */
+  BASKET_LINK_TTL: Joi.string().default('12h'),
+
+  /**
+   * How long a link visitor's access lasts, counted from **their own** join
+   * (plan 0140, section 2).
+   *
+   * A second number rather than the one above, because they are two decisions.
+   * A link opened in its eleventh hour still buys a whole shop, and a link from
+   * yesterday opens nothing. A person reached at the worst moment has access for
+   * just under a day from the moment the owner pressed share, which is the
+   * bound.
+   *
+   * It reaches the row as a column at join, which is what keeps the hot path one
+   * indexed lookup that never reads the link.
+   */
+  BASKET_LINK_SESSION_TTL: Joi.string().default('12h'),
+
+  /**
+   * The sweep that ends expired access (plan 0140, section 7).
+   *
+   * **HTTP never waits for it.** The live participant predicate refuses an
+   * expired row at the instant of its expiry; the sweep exists for the two
+   * things a predicate cannot do, closing a socket that is already open and
+   * writing down why a row ended. A minute, so a connected socket outlives its
+   * access by one interval at most.
+   */
+  BASKET_ACCESS_SWEEP_ENABLED: Joi.boolean().default(true),
+  BASKET_ACCESS_SWEEP_INTERVAL: Joi.string().default('1m'),
+  BASKET_ACCESS_SWEEP_BATCH: Joi.number().integer().min(1).default(200),
+
+  /**
+   * How long a change stays marked **after the viewer acknowledged it** (plan
+   * 0138, section 5).
+   *
+   * Ten minutes, measured from the acknowledgement rather than from the change,
+   * which is what makes the mark useful to somebody who was away: a phone in a
+   * pocket for three hours acknowledges nothing, so the mark is there when it
+   * comes out, and then lasts ten minutes from the moment it was actually seen.
+   *
+   * Every comparison against it happens in SQL against the database's `now()`,
+   * so no device clock decides whether a row is still marked. The client is told
+   * the window as a **duration** and never as a moment.
+   */
+  BASKET_CHANGE_MARK_WINDOW: Joi.string().default('10m'),
+
+  /**
+   * How long a change is kept, and the sweep that deletes the rest (plan 0138,
+   * section 10).
+   *
+   * Thirty days. It is the one number the reads do **not** trust the sweep for:
+   * both of them filter `"createdAt" >= now() - retention` themselves, so a row
+   * the sweep has not reached yet is already invisible, and lowering the
+   * retention takes effect on the next read rather than on the next tick.
+   *
+   * Every key has a default, so the Helm config map, `compose.apps.yml` and
+   * `luna-slot.sh` need no entry: the tier 2 compose rule is about a **required**
+   * key.
+   */
+  LIST_LINE_CHANGE_RETENTION: Joi.string().default('30d'),
+  LIST_LINE_CHANGE_SWEEP_ENABLED: Joi.boolean().default(true),
+  LIST_LINE_CHANGE_SWEEP_INTERVAL: Joi.string().default('1h'),
+  LIST_LINE_CHANGE_SWEEP_BATCH: Joi.number().integer().min(1).default(5000),
 
   // The sweep (plan 0059, section 4): finishes live baskets older than the claim
   // window, one `update` each so the household hears the release. Switched the
   // same way the zone reaper above is, and on by default like it.
-  GENERATED_LIST_SWEEP_ENABLED: Joi.boolean().default(true),
-  GENERATED_LIST_SWEEP_INTERVAL: Joi.string().default('1h'),
-  GENERATED_LIST_SWEEP_BATCH: Joi.number().integer().min(1).default(100),
+  BASKET_SWEEP_ENABLED: Joi.boolean().default(true),
+  BASKET_SWEEP_INTERVAL: Joi.string().default('1h'),
+  BASKET_SWEEP_BATCH: Joi.number().integer().min(1).default(100),
 
   /**
    * The voice comment caps (plan 0045, section 6).
@@ -141,6 +227,14 @@ export const coreValidationSchema = Joi.object({
     .min(0)
     .default(DEFAULT_LOCATION_MAX_DISTANCE_METRES),
 
+  /**
+   * Stamp the tour as seen on every account created while this is on, so that a
+   * new account never opens it. A development convenience: the developer
+   * registers accounts all day and has seen the tour. Off by default, and off in
+   * every cluster.
+   */
+  NEW_ACCOUNTS_SKIP_TOUR: Joi.boolean().default(false),
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -168,12 +262,45 @@ export interface CoreConfig {
     intervalMs: number;
     batchSize: number;
   };
-  generatedList: {
+  /**
+   * The basket. One block since plan 0144, which folded `generatedList` into
+   * it: the two described the same thing under the two names the code carried
+   * for the length of the series plan 0130 opened.
+   */
+  basket: {
     /**
      * A live basket older than this claims nothing (plan 0052, section 4.1) and
      * is finished by the sweep (plan 0059, section 4.2). One number for both.
      */
     claimWindowMs: number;
+    sweep: {
+      enabled: boolean;
+      intervalMs: number;
+      /** A cap per tick, not per run: whatever is left waits for the next one. */
+      batchSize: number;
+    };
+    /** How long a skip, and a `LIVE` basket's close, keep a row marked. */
+    skipWindowMs: number;
+    /**
+     * How long a change stays marked after **this viewer** acknowledged it (plan
+     * 0138). Measured from the acknowledgement, by the database's clock.
+     */
+    changeMarkWindowMs: number;
+    /** How long a link accepts joins, from its own creation (plan 0140). */
+    linkTtlMs: number;
+    /** How long a link visitor's access lasts, from their join (plan 0140). */
+    linkSessionTtlMs: number;
+    /** The sweep that ends expired access and revokes expired links. */
+    accessSweep: {
+      enabled: boolean;
+      intervalMs: number;
+      /** A cap per tick, not per run: whatever is left waits for the next one. */
+      batchSize: number;
+    };
+  };
+  /** What changed on a list, and how long it is kept (plan 0138). */
+  listLineChange: {
+    retentionMs: number;
     sweep: {
       enabled: boolean;
       intervalMs: number;
@@ -190,6 +317,11 @@ export interface CoreConfig {
   nearbyRadius: NearbyRadiusConfig;
   /** How far a device may be from the code it is placed in (velista plan 0058). */
   locationMaxDistanceMetres: number;
+  /** What an account has been shown (plan 0145). */
+  appState: {
+    /** Stamp `tourSeenAt` when an account is created. */
+    newAccountsSkipTour: boolean;
+  };
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -229,16 +361,41 @@ export const coreConfiguration = registerAs(
       intervalMs: parseDurationMs(process.env.ZONE_REAPER_INTERVAL as string),
       batchSize: Number(process.env.ZONE_REAPER_BATCH),
     },
-    generatedList: {
-      claimWindowMs: parseDurationMs(
-        process.env.GENERATED_LIST_CLAIM_WINDOW as string
+    basket: {
+      claimWindowMs: parseDurationMs(process.env.BASKET_CLAIM_WINDOW as string),
+      sweep: {
+        enabled: process.env.BASKET_SWEEP_ENABLED !== 'false',
+        intervalMs: parseDurationMs(
+          process.env.BASKET_SWEEP_INTERVAL as string
+        ),
+        batchSize: Number(process.env.BASKET_SWEEP_BATCH),
+      },
+      skipWindowMs: parseDurationMs(process.env.BASKET_SKIP_WINDOW as string),
+      changeMarkWindowMs: parseDurationMs(
+        process.env.BASKET_CHANGE_MARK_WINDOW as string
+      ),
+      linkTtlMs: parseDurationMs(process.env.BASKET_LINK_TTL as string),
+      linkSessionTtlMs: parseDurationMs(
+        process.env.BASKET_LINK_SESSION_TTL as string
+      ),
+      accessSweep: {
+        enabled: process.env.BASKET_ACCESS_SWEEP_ENABLED !== 'false',
+        intervalMs: parseDurationMs(
+          process.env.BASKET_ACCESS_SWEEP_INTERVAL as string
+        ),
+        batchSize: Number(process.env.BASKET_ACCESS_SWEEP_BATCH),
+      },
+    },
+    listLineChange: {
+      retentionMs: parseDurationMs(
+        process.env.LIST_LINE_CHANGE_RETENTION as string
       ),
       sweep: {
-        enabled: process.env.GENERATED_LIST_SWEEP_ENABLED !== 'false',
+        enabled: process.env.LIST_LINE_CHANGE_SWEEP_ENABLED !== 'false',
         intervalMs: parseDurationMs(
-          process.env.GENERATED_LIST_SWEEP_INTERVAL as string
+          process.env.LIST_LINE_CHANGE_SWEEP_INTERVAL as string
         ),
-        batchSize: Number(process.env.GENERATED_LIST_SWEEP_BATCH),
+        batchSize: Number(process.env.LIST_LINE_CHANGE_SWEEP_BATCH),
       },
     },
     voiceComment: {
@@ -259,6 +416,9 @@ export const coreConfiguration = registerAs(
       process.env.PROFILE_LOCATION_MAX_DISTANCE_METRES ??
         DEFAULT_LOCATION_MAX_DISTANCE_METRES
     ),
+    appState: {
+      newAccountsSkipTour: process.env.NEW_ACCOUNTS_SKIP_TOUR === 'true',
+    },
     logLevel: process.env.LOG_LEVEL as CoreConfig['logLevel'],
   })
 );

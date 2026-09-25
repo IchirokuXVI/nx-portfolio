@@ -1,14 +1,12 @@
 /**
- * El Jamon's own defaults for a future `build-document.mjs` run.
+ * El Jamon's own defaults for a `build-document.mjs` run.
  *
- * **Not consumed by `to-harvest-document.mjs` today.** El Jamon has no per page
- * readings and no build script (its readings are already whole documents in
- * the old leaflet shape, with a `section` already resolved on every page by
- * whatever produced that reading), so nothing in this repository actually
- * calls this file yet. It exists so `drift-check.mjs` has a heading vocabulary
- * to check a future El Jamon reading against, and so a first per page build for
- * this chain starts from the vocabulary the September 2026 reading already
- * used rather than an empty map.
+ * `build-document.mjs` loads this file on every El Jamon build, as it does for
+ * every chain: `SECTIONS` resolves the printed department heading, and
+ * `FIXED_SECTIONS` and `TOOL_NAME` are the defaults a leaflet's own
+ * `leaflet.json` can override. `cli.mjs` reads `DPI` when it renders the pages.
+ * The vocabulary is the one the September 2026 whole document reading used,
+ * before El Jamon moved to per page readings.
  */
 
 /** The printed heading, folded (accents stripped, upper cased), mapped onto

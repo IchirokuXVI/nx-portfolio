@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: none; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 1010px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <!-- ============ STOP 5: THE ASSISTANT ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">STOP 5 &middot; a button in the corner nobody would press</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
+
+      <div style="display: flex; flex-direction: column; height: 100%;">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+          <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
+        </div>
+        <div style="flex: 1; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;">
+          <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">YOUR GROUPS</span>
+          <div style="height: 120px; border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.09);"></div>
+        </div>
+        <div style="height: 92px;"></div>
+      </div>
+
+      <div style="position: absolute; inset: 0; background: rgba(4,6,12,0.74);"></div>
+
+      <div style="position: absolute; right: 12px; top: 12px; border-radius: 16px; border: 2px solid #ffb454; background: #0a0c14; padding: 4px; display: flex; align-items: center; gap: 2px;">
+        <span style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z"/></svg>
+        </span>
+        <span style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+          <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #98a0bb; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
+        </span>
+      </div>
+
+      <div style="position: absolute; left: 16px; right: 16px; top: 92px; background: #161a28; border: 1px solid rgba(255,255,255,0.14); border-radius: 20px; padding: 18px 18px 16px;">
+        <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; color: #6f7899;">5 OF 5</div>
+        <div style="margin-top: 8px; font-size: 19px; font-weight: 650; color: #f7f8fc;">Ask instead of looking</div>
+        <div style="margin-top: 8px; font-size: 15px; line-height: 1.6; color: #c2c8db;">Tell Velista what you need in your own words, the way you would tell a person. It writes it on the right list for you.</div>
+        <div style="margin-top: 16px; display: flex; align-items: center; gap: 10px;">
+          <button type="button" style="flex: none; height: 48px; padding: 0 14px; border: 0; border-radius: 13px; background: transparent; color: #98a0bb; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;">Skip the tour</button>
+          <button type="button" style="flex: 1; height: 48px; border: 0; border-radius: 13px; background: #ffb454; color: #0a0c14; font-family: inherit; font-size: 16px; font-weight: 650; cursor: pointer;">Finish</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ THE RULES ============ -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE RULES &middot; what is pointed at, and how it ends</span>
+    <div style="width: 390px; display: flex; flex-direction: column; gap: 14px;">
+
+      <div style="display: flex; flex-direction: column; gap: 7px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">A STOP WITH NOTHING TO POINT AT IS NOT SHOWN</span>
+        <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10);">
+          <div style="font-size: 14px; line-height: 1.55; color: #f7f8fc;">Talking to a list is a sixth stop, and a new account has no list to talk to.</div>
+          <div style="margin-top: 8px; font-size: 13px; line-height: 1.55; color: #98a0bb;">So it is left out on the first run and appears when the tour is played again later, by which time there is a list and a microphone to point at. The tour counts its stops when it starts, which is why the cards can say 1 of 5 and mean it.</div>
+          <div style="margin-top: 13px; display: flex; align-items: center; gap: 10px; padding: 12px 13px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
+            <span style="flex: 1; font-size: 14px; color: #f7f8fc;">Add to this list</span>
+            <span style="width: 34px; height: 34px; border-radius: 10px; background: rgba(255,180,84,0.12); border: 2px solid #ffb454; display: flex; align-items: center; justify-content: center;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3.4" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.6"/></svg>
+            </span>
+          </div>
+          <div style="margin-top: 8px; font-size: 12.5px; color: #6f7899;">The sixth stop, when a list exists: hold it and say what you need.</div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 7px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">SKIPPING &middot; on every card, and it means the same as finishing</span>
+        <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10);">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="flex: none; height: 44px; padding: 0 14px; border-radius: 13px; color: #98a0bb; font-size: 15px; font-weight: 600; display: flex; align-items: center; border: 1px dashed rgba(255,255,255,0.18);">Skip the tour</span>
+            <span style="flex: 1; font-size: 13px; line-height: 1.5; color: #98a0bb;">Same size and same place on all five cards, never a small cross in a corner.</span>
+          </div>
+          <div style="margin-top: 12px; font-size: 13.5px; line-height: 1.55; color: #f7f8fc;">Skipping ends the tour and does not ask again. It is not a loss: the row below plays the whole thing whenever somebody wants it.</div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 7px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">THE ACCOUNT SCREEN &middot; where it lives afterwards</span>
+        <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10);">
+          <div style="background: #161a28; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 2px 14px;">
+            <div style="display: flex; align-items: center; gap: 12px; height: 54px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+              <span style="flex: 1; font-size: 14.5px; color: #f7f8fc;">Shopping profiles</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; height: 54px;">
+              <span style="flex: 1; font-size: 14.5px; color: #ffc271;">Show me around again</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+            </div>
+          </div>
+          <div style="margin-top: 10px; font-size: 13px; line-height: 1.55; color: #98a0bb;">Pressing it goes to Home and starts at the first stop. A tour played from the account is the same tour, with however many stops the app can show that day.</div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 7px;">
+        <span style="font-size: 11.5px; letter-spacing: 0.06em; color: #6f7899;">THE FIVE STOPS, IN ORDER</span>
+        <div style="padding: 16px; border-radius: 16px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.10); font-size: 13.5px; line-height: 1.75; color: #c2c8db;">
+          1. The bar at the bottom.<br>
+          2. Groups, on home.<br>
+          3. The lists inside a group, on home.<br>
+          4. The shopping list tab.<br>
+          5. The assistant, top right.<br>
+          <span style="color: #6f7899;">6. Talking to a list, when there is one.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

@@ -19,7 +19,10 @@ import {
   mapSizeFormat,
   resolveCategory,
 } from '@portfolio/luna-shopper/mercadona';
-import { ValidationException } from '@portfolio/luna-shopper/platform';
+import {
+  describeError,
+  ValidationException,
+} from '@portfolio/luna-shopper/platform';
 import { In, Repository, type EntityManager } from 'typeorm';
 import { SourceCatalogEntry } from '../entities';
 import { CatalogClient } from './catalog-client.service';
@@ -131,15 +134,22 @@ export class SourceEntryBatchService {
     if (checked.some((outcome) => outcome.error !== null)) {
       return refusedAt('VALIDATE', runId, checked, null);
     }
+    const creates = operations.filter(isCreate);
+    const rows =
+      creates.length > 0
+        ? await this.entries.find({
+            where: { id: In(creates.map((operation) => operation.entryId)) },
+          })
+        : [];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const taken = await this.checkEans(operations, byId);
+    if (taken.some((outcome) => outcome.error !== null)) {
+      return refusedAt('VALIDATE', runId, taken, null);
+    }
 
     // --- Step 2: create every product ---------------------------------------
-    const creates = operations.filter(isCreate);
     let created: ItemView[] = [];
     if (creates.length > 0) {
-      const rows = await this.entries.find({
-        where: { id: In(creates.map((operation) => operation.entryId)) },
-      });
-      const byId = new Map(rows.map((row) => [row.id, row]));
       // What each chain prints its own text in, so a row accepted with no name
       // of its own files the printed string under the right language (plan
       // 0111, section 7). One read per chain on the file rather than one per
@@ -158,11 +168,13 @@ export class SourceEntryBatchService {
         );
         created = result.items;
       } catch (error) {
+        // Catalog's 409 is the backstop for a barcode taken between the
+        // check above and this write, and its sentence is the answer's.
         return refusedAt(
           'CREATE_ITEMS',
           runId,
           blank(operations),
-          reason(error)
+          describeError(error).message
         );
       }
       if (created.length !== creates.length) {
@@ -217,7 +229,12 @@ export class SourceEntryBatchService {
       const refusal =
         error instanceof BatchRefused
           ? refusedAt('BIND', runId, error.outcomes, null)
-          : refusedAt('BIND', runId, blank(operations), reason(error));
+          : refusedAt(
+              'BIND',
+              runId,
+              blank(operations),
+              describeError(error).message
+            );
       return { ...refusal, orphanedItemIds: orphaned };
     }
 
@@ -243,10 +260,11 @@ export class SourceEntryBatchService {
         priceSkips.push({
           entryId: row.id,
           itemId: outcomes[index].itemId ?? '',
-          reason: reason(error),
+          reason: describeError(error).message,
         });
         this.logger.warn(
-          `Bound entry ${row.id} but could not write its prices: ${reason(error)}`
+          `Bound entry ${row.id} but could not write its prices: ` +
+            describeError(error).message
         );
       }
     }
@@ -320,6 +338,52 @@ export class SourceEntryBatchService {
   }
 
   /**
+   * Every barcode a create would give a product that catalog already holds,
+   * named on the operation that carries it (plan 0158).
+   *
+   * The one at a time route asks the same question before it creates, and this
+   * asks it for the same reason: catalog refuses a taken barcode anyway, but
+   * refuses the whole batch with one sentence about "one of these products",
+   * and the operator is left to find which. Asked here, the file is refused at
+   * `VALIDATE` with the row, the barcode and the product that holds it.
+   *
+   * Outside any transaction on purpose: it is a round trip to catalog per
+   * barcode, and the rows are not what it reads.
+   */
+  private async checkEans(
+    operations: readonly SourceEntryDecisionOperation[],
+    rows: ReadonlyMap<string, SourceCatalogEntry>
+  ): Promise<SourceEntryDecisionOutcome[]> {
+    const outcomes = blank(operations);
+    const holders = new Map<string, string | null>();
+    for (const [index, operation] of operations.entries()) {
+      if (!isCreate(operation)) {
+        continue;
+      }
+      const entry = rows.get(operation.entryId);
+      const ean =
+        operation.item.ean === undefined ? entry?.ean : operation.item.ean;
+      if (!ean) {
+        continue;
+      }
+      if (!holders.has(ean)) {
+        const { item } = await this.catalog.findItemByEan(ean);
+        holders.set(ean, item?.id ?? null);
+      }
+      const holder = holders.get(ean);
+      if (holder) {
+        fail(
+          outcomes[index],
+          BulkOperationErrorCode.ALREADY_TAKEN,
+          `Catalog already holds an item with EAN ${ean} (${holder}). Accept ` +
+            'this row onto that product instead of creating a second one.'
+        );
+      }
+    }
+    return outcomes;
+  }
+
+  /**
    * The named rows, locked for the length of the transaction.
    *
    * **No relations**, which is not an oversight: Postgres refuses `FOR UPDATE`
@@ -356,7 +420,8 @@ export class SourceEntryBatchService {
       } catch (error) {
         orphaned.push(itemId);
         this.logger.error(
-          `Could not delete the unbound product ${itemId}: ${reason(error)}`
+          `Could not delete the unbound product ${itemId}: ` +
+            describeError(error).message
         );
       }
     }
@@ -413,6 +478,9 @@ function itemFrom(
           ? null
           : Number(entry.unitSize)
         : item.unitSize,
+    // The row's count unless the operation names one (plan 0162).
+    packCount:
+      item.packCount === undefined ? (entry.packCount ?? null) : item.packCount,
     // Never from the chain (plan 0038, section 5.7).
     imageUrl: null,
     sku: null,
@@ -552,13 +620,6 @@ function isCreate(
   operation: SourceEntryDecisionOperation
 ): operation is CreateItemFromSourceEntryOperation {
   return operation.op === 'createItem';
-}
-
-function reason(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
 }
 
 /** The outcomes on their way out of a transaction that must not commit. */

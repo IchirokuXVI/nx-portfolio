@@ -1,0 +1,87 @@
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  #shell
+  labelledBy="catalog-product-title"
+>
+  @switch (status()) {
+    @case ('loading') {
+      <h2 class="title" id="catalog-product-title">
+        {{ 'catalog.product.loading' | rokuT }}
+      </h2>
+    }
+    @case ('failed') {
+      <h2 class="title" id="catalog-product-title">
+        {{ 'catalog.error.title' | rokuT }}
+      </h2>
+      <p class="note" role="alert">{{ 'catalog.product.failed' | rokuT }}</p>
+    }
+    @default {
+      <h2 class="title" id="catalog-product-title">{{ name() }}</h2>
+      @if (detail(); as text) {
+        <p class="detail">{{ text }}</p>
+      }
+
+      @if (priced()) {
+        <!--
+          Every chain near the person, cheapest first. The cheapest is marked in
+          words, and a chain that does not sell it says so rather than drawing a
+          dash (section 7).
+        -->
+        <ul class="prices">
+          @for (line of lines(); track line.supermarketId) {
+            <li [class.is-absent]="line.kind === 'notSold'" class="line">
+              <span class="chain">{{ line.chain }}</span>
+              @if (line.cheapest) {
+                <span class="cheapest">{{
+                  'catalog.product.cheapest' | rokuT
+                }}</span>
+              }
+              @switch (line.kind) {
+                @case ('priced') {
+                  <span [class.is-stale]="line.stale" class="price">{{
+                    line.price
+                  }}</span>
+                }
+                @case ('unpriced') {
+                  <span class="absent">{{
+                    'catalog.row.noPrice' | rokuT
+                  }}</span>
+                }
+                @default {
+                  <span class="absent">{{
+                    'catalog.product.notSold' | rokuT
+                  }}</span>
+                }
+              }
+            </li>
+          }
+        </ul>
+
+        @if (seen(); as when) {
+          <p class="note">{{ 'catalog.product.seen' | rokuT: { when } }}</p>
+        }
+      } @else {
+        <p class="note">{{ 'catalog.product.noShops' | rokuT }}</p>
+      }
+
+      @if (similar(); as group) {
+        <lib-similar-products
+          (picked)="openSimilar($event)"
+          [excludeIds]="[itemId()]"
+          [failed]="group.failed"
+          [loading]="group.loading"
+          [members]="group.members"
+          class="similar"
+        />
+      }
+    }
+  }
+
+  <!--
+    Through the shell, so Close plays the same fall the scrim and Escape do. No
+    Add to a list here, on purpose (section 5).
+  -->
+  <button (click)="shell.requestDismiss()" class="close" type="button">
+    {{ 'catalog.product.close' | rokuT }}
+  </button>
+</lib-sheet-shell>

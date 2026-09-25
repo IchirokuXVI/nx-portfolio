@@ -20,6 +20,7 @@ import {
   type LinePage,
   type LineSettlementPage,
   type LineSettlementResult,
+  type LineSettlePickRequest,
   type LineView,
   type ListAccessView,
   type ListCommentsRequest,
@@ -37,6 +38,7 @@ import {
   type SetLineApprovalRequest,
   type SetListAccessRequest,
   type SettleLineRequest,
+  type SettlePick,
   type UpdateLineRequest,
   type UpdateLineResult,
   type UpdateListRequest,
@@ -124,6 +126,11 @@ export class ListController {
   @MessagePattern(LINE_PATTERNS.settle)
   settle(@Payload() req: SettleLineRequest): Promise<LineSettlementResult> {
     return this.history.settle(req);
+  }
+
+  @MessagePattern(LINE_PATTERNS.settlePick)
+  settlePick(@Payload() req: LineSettlePickRequest): Promise<SettlePick> {
+    return this.history.settlePick(req);
   }
 
   @MessagePattern(LINE_PATTERNS.settlements)

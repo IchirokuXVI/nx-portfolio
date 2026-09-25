@@ -8,16 +8,19 @@ import {
   ZoneRole,
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ListAccess, ListLine } from '../entities';
 import {
+  LineComment,
   LineSettlement,
   ListLineGroupRemoval,
   ListLineItem,
   ShoppingList,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../generated-lists/line-claims.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { fakeLineChanges } from './changes/line-change.fake';
 import { CommentService } from './comment.service';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { LineMergeService } from './line-merge.service';
@@ -25,6 +28,13 @@ import { fakeLineSettlements } from './line-settlements.fake';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 import { SettlementService } from './settlement.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * The permission matrix (plan 0036, acceptance items 2 to 6).
@@ -147,6 +157,15 @@ function world(options: {
       deleted.push(id);
       return { affected: 1 };
     },
+    // The two calls plan 0132's delete ends in: what the row is left saying, and
+    // the one call that marks it. Neither is what this file asks about, and both
+    // have to answer, or a delete never reaches the point the permission branch
+    // above was deciding about.
+    update: async () => ({ affected: 1 }),
+    softDelete: async ({ id }: { id: string }) => {
+      deleted.push(id);
+      return { affected: 1 };
+    },
     createQueryBuilder: () => {
       const qb = {
         select: () => qb,
@@ -184,10 +203,22 @@ function world(options: {
   const settlementRows = fakeLineSettlements();
   const settlementRepo = settlementRows.repo;
 
+  // Plan 0132: a delete empties the line's comments in the same transaction.
+  // Nothing here leaves one, so the table is always already empty.
+  const commentsOfDeletedLines = {
+    delete: async () => ({ affected: 0 }),
+  };
+
   const dataSource = {
     transaction: async <T>(run: (m: unknown) => Promise<T>) =>
       run({
         getRepository: (entity: unknown) => {
+          // A deleted line's conversation goes with it (plan 0132). Bound by
+          // name, because the line repository answering for it would count an
+          // emptied comment table as a deleted line.
+          if (entity === LineComment) {
+            return commentsOfDeletedLines;
+          }
           if (entity === ListLineGroupRemoval) {
             return groupRemovals.repo;
           }
@@ -212,6 +243,7 @@ function world(options: {
       events.push({ event, payload }),
   } as unknown as CoreEventsPublisher;
 
+  const changes = fakeLineChanges();
   const lines = new LineService(
     dataSource,
     lineRepo as never,
@@ -223,7 +255,11 @@ function world(options: {
     publisher,
     // No operator write here, so nothing reaches the trail.
     {} as never,
-    new LineMergeService()
+    new LineMergeService(changes.recorder),
+    // Every write records a change (plan 0138). A stand in, because this file is
+    // about who may make each write rather than about what it wrote down.
+    changes.recorder,
+    announcer
   );
 
   const settlements = new SettlementService(
@@ -231,7 +267,8 @@ function world(options: {
     settlementRepo as never,
     listAccess,
     fakeLineClaims().service,
-    publisher
+    publisher,
+    announcer
   );
 
   const commentRepo = {
@@ -453,11 +490,13 @@ describe('a member holding {READ, WRITE} (acceptance 3)', () => {
     ).rejects.toThrow();
   });
 
-  it('is refused when it says it bought something', async () => {
-    // The stated cost of the migration (plan 0036, section 3.1), inherited by
-    // the settle that replaced ticking off (plan 0047, section 4): saying what
-    // happened in the shop is DECIDE, so yesterday's WRITER needs it granting
-    // once.
+  it('says it bought something', async () => {
+    // Plan 0131 reverses plan 0036 section 1.2 here and nowhere else. This case
+    // asserted the refusal, as the stated cost of the migration: saying what
+    // happened in the shop was DECIDE, so yesterday's WRITER needed it granting
+    // once. Plan 0051 section 2 then let the same WRITER settle the same line
+    // from a basket, so the refusal held on one screen and not the other.
+    // Approving is still refused, which is the case above.
     const w = world({ permissions: WRITER });
     await expect(
       w.settlements.settle({
@@ -465,7 +504,21 @@ describe('a member holding {READ, WRITE} (acceptance 3)', () => {
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
       })
-    ).rejects.toThrow();
+    ).resolves.toBeDefined();
+  });
+
+  it('records that the shop did not have it, and moves nothing', async () => {
+    const w = world({ permissions: WRITER });
+    const { line, settlement } = await w.settlements.settle({
+      userId: USER_ID,
+      lineId: 'li1',
+      outcome: SettlementOutcome.NOT_AVAILABLE,
+    });
+    expect(settlement.outcome).toBe(SettlementOutcome.NOT_AVAILABLE);
+    // Nothing was bought, so nothing came off what the household still wants
+    // (plan 0047, section 4).
+    expect(settlement.quantity).toBe(0);
+    expect(line.quantity).toBe(3);
   });
 
   it('fixes an approved line, and the fix puts it back to PENDING', async () => {
@@ -577,18 +630,18 @@ describe('a member holding {READ, DECIDE} (acceptance 4)', () => {
     expect(view.approvalStatus).toBe(LineApprovalStatus.REJECTED);
   });
 
-  it('records that the shop did not have it, and moves nothing', async () => {
+  it('is refused when it says the shop did not have it', async () => {
+    // Plan 0131. Reporting a shop that had none is a settle, and a settle is a
+    // write since that plan: this holder decides what the list asks for and does
+    // not write the list. The case itself moved to the WRITER block above.
     const w = world({ permissions: DECIDER });
-    const { line, settlement } = await w.settlements.settle({
-      userId: USER_ID,
-      lineId: 'li1',
-      outcome: SettlementOutcome.NOT_AVAILABLE,
-    });
-    expect(settlement.outcome).toBe(SettlementOutcome.NOT_AVAILABLE);
-    // Nothing was bought, so nothing came off what the household still wants
-    // (plan 0047, section 4).
-    expect(settlement.quantity).toBe(0);
-    expect(line.quantity).toBe(3);
+    await expect(
+      w.settlements.settle({
+        userId: USER_ID,
+        lineId: 'li1',
+        outcome: SettlementOutcome.NOT_AVAILABLE,
+      })
+    ).rejects.toThrow(/write access to this list/);
   });
 
   it('comments', async () => {
@@ -821,8 +874,10 @@ describe('the whole call site table (plan 0036, section 4)', () => {
         }),
     },
     {
+      // `WRITE` since plan 0131: one rule now answers for the list page and the
+      // basket, which settled the same line behind the owner's `WRITE` already.
       operation: 'line.settle',
-      needs: ListPermission.DECIDE,
+      needs: ListPermission.WRITE,
       run: (w) =>
         w.settlements.settle({
           userId: USER_ID,

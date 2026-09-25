@@ -236,7 +236,7 @@ describe('TripStore (velista 0088)', () => {
 
   it('a not found rows answer drops the group and reads the heads (test 9)', async () => {
     jest.useFakeTimers();
-    const loose = trip('s-1', { kind: 'LOOSE' });
+    const loose = trip('s-1', { kind: 'SESSION' });
     const { store, fake } = await opened({
       live: [],
       items: [loose, trip('b-1')],
@@ -244,7 +244,7 @@ describe('TripStore (velista 0088)', () => {
     });
 
     store.ensureRows(loose);
-    expect(fake.rows[0].kind).toBe('LOOSE');
+    expect(fake.rows[0].kind).toBe('SESSION');
     fake.rows[0].answer.reject(
       new GatewayError({ code: 'not_found', status: 404, correlationId: 'x' })
     );

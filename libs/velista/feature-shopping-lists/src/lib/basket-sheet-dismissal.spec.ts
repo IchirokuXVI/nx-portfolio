@@ -7,14 +7,16 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BasketListStore,
   BasketStore,
   BasketViewStore,
   ContactStore,
   fakeZoneStore,
-  GeneratedListStore,
   LINE_SERVICE,
   provideFakeZoneStore,
   SessionStore,
+  SHOP_FINDER_SERVICE,
+  ShopFinderMemory,
 } from '@portfolio/velista/data-access';
 import {
   provideFakeBrowserFacade,
@@ -53,8 +55,8 @@ const SHEETS: readonly {
   {
     name: 'SettleSheet',
     component: SettleSheet,
-    path: 'lines/:lineId/settle',
-    params: { lineId: LINE_ID },
+    path: 'rows/:rowKey/settle',
+    params: { rowKey: LINE_ID },
   },
   { name: 'PeopleSheet', component: PeopleSheet, path: 'people', params: {} },
   { name: 'ShareSheet', component: ShareSheet, path: 'share', params: {} },
@@ -93,41 +95,47 @@ const FROM_FILTER: readonly {
 function storeDouble() {
   return {
     basket: signal(null),
+    // How every sheet over this page addresses its own basket since velista
+    // `0091`: off the store, never off `paramMap`, which has no id at all under
+    // `shopping-lists/live`. That is what these tests are about, so it is the one
+    // member of this double that is not a placeholder.
+    address: signal({ basketId: BASKET_ID }),
     // The three members the two line sheets and the basket page read. They are here
     // rather than in each plan's own double so that a sheet added by either plan can
     // rely on the same store shape this file already provides.
-    pendingTargets: signal(new Set<string>()),
-    rememberListNames: jest.fn(),
     state: signal('loaded'),
     error: signal(null),
     shareLink: signal(null),
-    busyLines: signal(new Set<string>()),
-    lines: signal([]),
-    // What `BasketViewStore` composes the page's sections from, and what its effect
-    // watches to clear the search when the reader's own line lands. Empty, because
+    busyRows: signal(new Set<string>()),
+    // What `BasketViewStore` composes the page's sections from. Empty, because
     // these tests are about the URL a sheet leaves on, and that URL is the same
-    // whether the basket has thirty lines or none.
+    // whether the basket has thirty rows or none.
+    rows: signal([]),
     products: signal(new Map()),
-    lastAdded: signal(null),
-    seesZoneData: signal(false),
-    listNames: signal(new Map<string, string>()),
+    lists: signal(new Map()),
+    // The device's shop (velista `0102`), which no sheet here chooses.
+    readAt: signal(null),
+    shopRead: signal(null),
+    readAtShop: jest.fn().mockResolvedValue(undefined),
     participants: signal([]),
     me: signal(null),
     participantsById: signal(new Map()),
-    progress: signal({ settled: 0, total: 0, spent: 0 }),
+    progress: signal({ done: 0, unavailable: 0, total: 0 }),
     // The finish sheet's two readings of the basket underneath (velista `0057`).
     finished: signal(false),
-    unsettled: signal(0),
+    pending: signal(0),
+    // A sheet that cannot find its row dismisses itself and the page says so
+    // once (velista `0090`, section 7.3).
+    rowGone: signal(0),
+    sayRowGone: jest.fn(),
+    rowFor: () => null,
     open: jest.fn().mockResolvedValue(undefined),
     refresh: jest.fn().mockResolvedValue(undefined),
     settle: jest.fn().mockResolvedValue(null),
-    splitLine: jest.fn().mockResolvedValue(null),
-    setOutstanding: jest.fn().mockResolvedValue(null),
-    loadLineOrigins: jest.fn().mockResolvedValue(null),
-    setOriginQuantity: jest.fn().mockResolvedValue(null),
-    loadLineTargets: jest.fn().mockResolvedValue(null),
-    bindLine: jest.fn().mockResolvedValue(null),
-    apply: jest.fn(),
+    revert: jest.fn().mockResolvedValue(null),
+    setLeft: jest.fn().mockResolvedValue(null),
+    renameRow: jest.fn().mockResolvedValue(null),
+    suggest: jest.fn().mockResolvedValue([]),
     loadShareLink: jest.fn().mockResolvedValue(undefined),
     share: jest.fn().mockResolvedValue(null),
     revokeLink: jest.fn().mockResolvedValue(undefined),
@@ -137,14 +145,14 @@ function storeDouble() {
 
 /**
  * The two activated routes a sheet over the basket really has: the page, which owns
- * `:generatedListId`, and the sheet, which owns whatever its own path declares.
+ * `:basketId`, and the sheet, which owns whatever its own path declares.
  *
  * Two and not one, deliberately. Flattening every parameter onto the leaf would let
  * every sheet pass without walking up the tree, and walking up the tree is the whole of
  * how a sheet knows which basket it is covering.
  */
 function routeTree(params: Readonly<Record<string, string>>) {
-  const pageMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const pageMap = convertToParamMap({ basketId: BASKET_ID });
   const page = {
     paramMap: of(pageMap),
     snapshot: { paramMap: pageMap, parent: null },
@@ -187,6 +195,9 @@ async function render(
       // And a fresh `Map` for what it remembers (`0076`), so no test in this file
       // inherits an order or a grouping another one chose.
       provideFakeBrowserFacade(new Map()),
+      // The shop picker's nearby and recent shops (velista `0103`), which nothing
+      // here asks for, bound to the fake so the picker sheet can be built.
+      { provide: SHOP_FINDER_SERVICE, useClass: ShopFinderMemory },
       // The settle sheet reads a line's settlement history through this. These tests
       // are about the URL a sheet leaves on and never open that pane, so an empty page
       // is enough: what matters is that the injection resolves.
@@ -204,7 +215,7 @@ async function render(
       // to. These tests are about the URL a sheet leaves on and never press the
       // confirm, so what matters is that the injection resolves.
       {
-        provide: GeneratedListStore,
+        provide: BasketListStore,
         useValue: { setStatus: jest.fn().mockResolvedValue(true) },
       },
       // The share sheet's people (velista `0085`). Nobody to choose, since these
@@ -243,8 +254,8 @@ async function close(fixture: Awaited<ReturnType<typeof render>>['fixture']) {
  * ## The defect this exists for
  *
  * `SettleSheet` closed with `navigate(['..'])`. Its route's path is **three** segments,
- * `lines/:lineId/settle`, and `..` climbs exactly one, so closing it left the URL on
- * `lines/:lineId`, a path no route under the basket declares, and the sheet dismissed
+ * `rows/:rowKey/settle`, and `..` climbs exactly one, so closing it left the URL on
+ * `rows/:rowKey`, a path no route under the basket declares, and the sheet dismissed
  * onto the app's own 404. Nothing about the sheet read as wrong: what was wrong was the
  * number of segments in a path it does not contain.
  *

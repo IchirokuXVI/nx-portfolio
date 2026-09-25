@@ -1,9 +1,9 @@
 import {
   basketMatchRange,
   foldForSearch,
-  matchesBasketLine,
+  matchesBasketRow,
 } from './basket-search';
-import type { BasketLine, BasketProduct } from './basket-view';
+import type { BasketProduct, BasketRow } from './basket-view';
 
 /**
  * The basket's search, which runs on the phone (velista `0074`, section 4.2).
@@ -14,22 +14,23 @@ import type { BasketLine, BasketProduct } from './basket-view';
  * line**, because the person looking at the own brand shelf types the brand.
  */
 
-function line(
-  content: string,
-  overrides: Partial<BasketLine> = {}
-): BasketLine {
+function row(content: string, overrides: Partial<BasketRow> = {}): BasketRow {
   return {
-    id: `line-${content}`,
+    rowKey: `row-${content}`,
     content,
-    quantity: 1,
-    settled: 0,
-    pickId: null,
+    left: 1,
+    bought: 0,
+    asked: 1,
+    state: 'WANTED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
     optionIds: [],
-    position: 0,
-    createdBy: 'p-owner',
     touchedBy: null,
     touchedAt: null,
-    lastOutcome: null,
+    usual: null,
+    entries: [],
     ...overrides,
   };
 }
@@ -46,6 +47,7 @@ function product(
     size: null,
     unit: null,
     offer: null,
+    productGroupId: null,
     categories: ['OTHER'],
   };
 }
@@ -61,54 +63,54 @@ describe('foldForSearch', () => {
   });
 });
 
-describe('matchesBasketLine', () => {
+describe('matchesBasketRow', () => {
   it('folds case and accents on both sides of the comparison', () => {
-    expect(matchesBasketLine(line('Plátano'), undefined, 'platano', 'en')).toBe(
+    expect(matchesBasketRow(row('Plátano'), undefined, 'platano', 'en')).toBe(
       true
     );
-    expect(matchesBasketLine(line('platano'), undefined, 'PLÁTANO', 'en')).toBe(
+    expect(matchesBasketRow(row('platano'), undefined, 'PLÁTANO', 'en')).toBe(
       true
     );
-    expect(matchesBasketLine(line('Milk'), undefined, 'MILK', 'en')).toBe(true);
+    expect(matchesBasketRow(row('Milk'), undefined, 'MILK', 'en')).toBe(true);
   });
 
   it('matches part of a line, and refuses what is not there', () => {
+    expect(matchesBasketRow(row('Skimmed milk'), undefined, 'mil', 'en')).toBe(
+      true
+    );
     expect(
-      matchesBasketLine(line('Skimmed milk'), undefined, 'mil', 'en')
-    ).toBe(true);
-    expect(
-      matchesBasketLine(line('Skimmed milk'), undefined, 'yogurt', 'en')
+      matchesBasketRow(row('Skimmed milk'), undefined, 'yogurt', 'en')
     ).toBe(false);
   });
 
   it('matches everything on an empty query, whitespace included', () => {
-    expect(matchesBasketLine(line('Milk'), undefined, '', 'en')).toBe(true);
-    expect(matchesBasketLine(line('Milk'), undefined, '   ', 'en')).toBe(true);
+    expect(matchesBasketRow(row('Milk'), undefined, '', 'en')).toBe(true);
+    expect(matchesBasketRow(row('Milk'), undefined, '   ', 'en')).toBe(true);
   });
 
   it("matches the pick's name in the reader's own locale", () => {
     const pick = product('Whole milk', 'Leche entera');
 
-    expect(matchesBasketLine(line('Milk'), pick, 'leche', 'es')).toBe(true);
+    expect(matchesBasketRow(row('Milk'), pick, 'leche', 'es')).toBe(true);
     // The English reader is offered the English name, so the Spanish one is not
     // what they are searching: `inLocale` decides, exactly as the row's caption does.
-    expect(matchesBasketLine(line('Milk'), pick, 'leche', 'en')).toBe(false);
-    expect(matchesBasketLine(line('Milk'), pick, 'whole', 'en')).toBe(true);
+    expect(matchesBasketRow(row('Milk'), pick, 'leche', 'en')).toBe(false);
+    expect(matchesBasketRow(row('Milk'), pick, 'whole', 'en')).toBe(true);
   });
 
   it("matches the pick's brand, which is what the own brand shelf is searched by", () => {
     const pick = product('Whole milk', 'Leche entera', 'Hacendado');
 
-    expect(matchesBasketLine(line('Milk'), pick, 'hacendado', 'en')).toBe(true);
+    expect(matchesBasketRow(row('Milk'), pick, 'hacendado', 'en')).toBe(true);
   });
 
   it('matches a line with no pick on its content alone', () => {
     expect(
-      matchesBasketLine(line('Something for the cat'), undefined, 'cat', 'en')
+      matchesBasketRow(row('Something for the cat'), undefined, 'cat', 'en')
     ).toBe(true);
     expect(
-      matchesBasketLine(
-        line('Something for the cat'),
+      matchesBasketRow(
+        row('Something for the cat'),
         undefined,
         'hacendado',
         'en'

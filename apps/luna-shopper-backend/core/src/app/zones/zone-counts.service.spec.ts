@@ -6,12 +6,20 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 import type { DataSource, EntityManager } from 'typeorm';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { ZoneMembership } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { SharedListGrantService } from '../lists/shared-list-grant.service';
 import { MembershipService } from './membership.service';
 import type { ZoneAuthzService } from './zone-authz.service';
 import { ZoneCountsService } from './zone-counts.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * Keeping the summary live (plan 0017, section 9). The numbers themselves come
@@ -149,7 +157,8 @@ describe('MembershipService republishes the counts', () => {
       counts as never,
       events,
       // Member facing paths only, which record nothing.
-      {} as never
+      {} as never,
+      announcer
     );
     return { svc, counts, memberships };
   }

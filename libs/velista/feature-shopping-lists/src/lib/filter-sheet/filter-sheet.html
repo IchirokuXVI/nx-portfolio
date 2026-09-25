@@ -116,99 +116,179 @@
   </fieldset>
 
   <!--
-    Which shop's prices the rows show (velista `0078`, section 3).
+    Where the person is buying (velista `0078`, section 3; `0102`).
 
-    Absent for a basket with no price scopes, drawn from the data exactly as the
+    Absent for a basket with no shop to name, drawn from the data exactly as the
     LISTS section below is: a run scoped by hand, a profile since deleted or a
     gateway that could not price the read has nothing to choose between, and a
     control that cannot do anything is an invitation `0038` section 2.1 will not
-    draw.
+    draw. A basket started at a shop always has the section, locked.
   -->
   @if (hasShops()) {
-    <fieldset class="group shops">
+    <fieldset
+      [class.has-note]="locked()"
+      [disabled]="locked()"
+      class="group shops"
+    >
       <legend class="legend">{{ 'basket.view.shop.legend' | rokuT }}</legend>
 
-      <label [class.picked]="!oneShop()" class="choice">
-        <input
-          (change)="setAnyShop()"
-          [checked]="!oneShop()"
-          class="control"
-          name="basket-shop"
-          type="radio"
+      <!--
+        What "Near me" picked (velista 0103), with the distance and a way to change
+        it, until dismissed or until the shop changes. Above the radios, because it
+        explains the one that is checked.
+      -->
+      @if (pickMessage(); as message) {
+        <lib-shop-pick-message
+          (changeShop)="openPicker()"
+          (dismissed)="dismissPickMessage()"
+          [distance]="message.distance"
+          [shop]="message.shop"
+          class="pick-message"
         />
-        <span class="choice-title">
-          @if (ownShops()) {
-            {{ 'basket.view.shop.any' | rokuT }}
-          } @else {
-            {{ 'basket.view.shop.anyGuest' | rokuT }}
-          }
-        </span>
-        <span class="choice-note">{{
-          'basket.view.shop.anyHint' | rokuT
-        }}</span>
-      </label>
+      }
 
       <!--
+        The two radios in their own card, so the message above sits between the
+        legend and the card, as the mock draws it (velista 0103).
+      -->
+      <div class="shop-options">
+        <label
+          [class.is-locked]="locked()"
+          [class.picked]="!oneShop()"
+          class="choice"
+        >
+          <input
+            (change)="setAnyShop()"
+            [checked]="!oneShop()"
+            class="control"
+            name="basket-shop"
+            type="radio"
+          />
+          <span class="choice-title">
+            @if (ownShops()) {
+              {{ 'basket.view.shop.any' | rokuT }}
+            } @else {
+              {{ 'basket.view.shop.anyGuest' | rokuT }}
+            }
+          </span>
+          @if (!locked()) {
+            <span class="choice-note">{{
+              'basket.view.shop.anyHint' | rokuT
+            }}</span>
+          }
+        </label>
+
+        <!--
         The second radio is the shop. Before one has been chosen it is **live, and
         it opens the picker**: a radio that did nothing when tapped read as broken,
         and the tap on it was already the answer to "which shop". It stays
         unchecked until the picker answers, so the group never claims a shop it
         does not have.
 
-        The button beside it is a text button and its accessible name says which
-        section it belongs to, because "Change" alone is four other things on this
-        screen.
+        On a basket started at a shop the whole fieldset is disabled, for
+        everybody, the owner included (`0102`): the lock is the server's fact, and
+        the line under the fieldset says why. A padlock takes Change's place,
+        because a button that could never do anything is a promise broken.
       -->
-      <div [class.picked]="oneShop()" class="choice">
-        <!--
+        <div
+          [class.is-locked]="locked()"
+          [class.picked]="oneShop()"
+          class="choice"
+        >
+          <!--
           A `div` holding a label and a button, where every other row here is one
           label: a label wrapping a button would make the button's tap toggle the
           radio too, which is the one thing Change must not do.
         -->
-        <label class="choice-pick">
-          <input
-            (change)="setOneShop($event)"
-            [checked]="oneShop()"
-            class="control"
-            name="basket-shop"
-            type="radio"
-          />
+          <label class="choice-pick">
+            <input
+              (change)="setOneShop($event)"
+              [checked]="oneShop()"
+              class="control"
+              name="basket-shop"
+              type="radio"
+            />
 
-          @if (shopRow(); as shop) {
-            <span class="choice-body">
-              <span class="choice-title">{{ shop.chain }}</span>
-              @if (shop.shop !== null) {
-                <span class="choice-hint">{{ shop.shop }}</span>
-              }
-            </span>
+            @if (shopRow(); as shop) {
+              <span class="choice-body">
+                <span class="choice-title">{{ shop.chain }}</span>
+                @if (shop.shop !== null) {
+                  <span class="choice-hint">{{ shop.shop }}</span>
+                }
+                @if (shop.outsideAreas) {
+                  <lib-outside-areas class="choice-outside" />
+                }
+              </span>
+            } @else {
+              <span class="choice-title is-muted">
+                {{ 'basket.view.shop.none' | rokuT }}
+              </span>
+            }
+          </label>
+
+          @if (locked()) {
+            <lib-lock-icon class="lock" />
+          } @else if (shopRow() === null) {
+            <button
+              (click)="openPicker()"
+              [attr.aria-label]="'basket.view.shop.chooseLabel' | rokuT"
+              class="pick"
+              type="button"
+            >
+              {{ 'basket.view.shop.choose' | rokuT }}
+            </button>
           } @else {
-            <span class="choice-title is-muted">
-              {{ 'basket.view.shop.none' | rokuT }}
-            </span>
+            <button
+              (click)="openPicker()"
+              [attr.aria-label]="'basket.view.shop.changeLabel' | rokuT"
+              class="pick"
+              type="button"
+            >
+              {{ 'basket.view.shop.change' | rokuT }}
+            </button>
           }
-        </label>
-
-        @if (shopRow() === null) {
-          <button
-            (click)="openPicker()"
-            [attr.aria-label]="'basket.view.shop.chooseLabel' | rokuT"
-            class="pick"
-            type="button"
-          >
-            {{ 'basket.view.shop.choose' | rokuT }}
-          </button>
-        } @else {
-          <button
-            (click)="openPicker()"
-            [attr.aria-label]="'basket.view.shop.changeLabel' | rokuT"
-            class="pick"
-            type="button"
-          >
-            {{ 'basket.view.shop.change' | rokuT }}
-          </button>
-        }
+        </div>
       </div>
     </fieldset>
+
+    @if (locked()) {
+      <p class="locked-note">
+        <lib-lock-icon class="locked-glyph" />
+        {{ 'basket.view.shop.locked' | rokuT }}
+      </p>
+    }
+
+    <!--
+      Only what is usually bought at this shop's chain (velista 0104). Drawn only
+      once a shop is chosen, a basket's own locked shop included, because it counts
+      purchases at that shop's chain and there is nothing to count without one.
+
+      A real checkbox with the switch role, inside its label, so the words and the
+      hint are its accessible name and the whole row is the target. It is off every
+      time a basket opens and nothing remembers it. The hint names the chain and
+      never the street: a purchase at any shop of the chain counts.
+    -->
+    @if (usualChain(); as chain) {
+      <div class="group usual">
+        <label class="choice">
+          <span class="choice-body">
+            <span class="choice-title">
+              {{ 'basket.view.usual.label' | rokuT }}
+            </span>
+            <span class="choice-hint">
+              {{ 'basket.view.usual.hint' | rokuT: { chain } }}
+            </span>
+          </span>
+          <input
+            (change)="setUsual($event)"
+            [checked]="usual()"
+            class="switch"
+            role="switch"
+            type="checkbox"
+          />
+        </label>
+      </div>
+    }
   }
 
   <!--

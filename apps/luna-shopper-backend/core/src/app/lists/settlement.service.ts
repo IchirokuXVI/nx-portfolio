@@ -8,23 +8,28 @@ import {
   type LineSettlementResult,
   type LineSettlementView,
   type ListItemSettlementsRequest,
+  type LineSettlePickRequest,
   type ListLineSettlementsRequest,
   type SettleLineRequest,
+  type SettlePick,
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
   decodeCursor,
   encodeCursor,
+  isUuid,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, IsNull, Repository } from 'typeorm';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import { LineSettlement, ListLine, ListLineItem } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { LineClaimService } from '../generated-lists/line-claim.service';
-import { ListAccessService } from './list-access.service';
+import { LineClaimService } from '../baskets/line-claim.service';
 import { toLineItemSet, type LineItemSet } from './line-item-set';
+import { ListAccessService } from './list-access.service';
 import { toLineSettlementView, toLineView } from './list.mappers';
+import { paidColumns } from './settlement-paid';
 import { ITEM_SETTLEMENTS_SQL } from './settlement.sql';
 
 /**
@@ -39,10 +44,6 @@ import { ITEM_SETTLEMENTS_SQL } from './settlement.sql';
 interface SettlementCursor extends Record<string, unknown> {
   id: string;
 }
-
-/** Canonical UUID shape, for validating the cross-service catalog `itemId`. */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Settling a line, and reading back what was settled (plan 0047).
@@ -66,11 +67,15 @@ export class SettlementService {
     private readonly settlements: Repository<LineSettlement>,
     private readonly listAccess: ListAccessService,
     private readonly claims: LineClaimService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // Every basket covering the list hears that this line moved (plan 0139,
+    // section 3). Buying from the list page is the case this fixes: it changes
+    // what is left on a row somebody else is standing in a shop looking at.
+    private readonly baskets: BasketAnnouncer
   ) {}
 
   /**
-   * Say what happened to one line on a trip (plan 0047, section 4). `DECIDE`.
+   * Say what happened to one line on a trip (plan 0047, section 4). `WRITE`.
    *
    * | Outcome | Writes a settlement | Moves the quantity |
    * | --- | --- | --- |
@@ -82,10 +87,22 @@ export class SettlementService {
    * leave the line exactly as it was and must not look like it was dealt with, so
    * it is the absence of a call rather than a third outcome.
    *
-   * `DECIDE` and not `WRITE`, because this is what `setStatus` was: the flatmate
-   * who walks the aisle and says what went in the trolley is exactly the person
-   * plan 0036 separated that permission out for, and the same call already moves
-   * an approved line's quantity, which nothing below `DECIDE` may do.
+   * ## `WRITE`, which this asked `DECIDE` for until plan 0131
+   *
+   * {@link canSettle} is the rule and this is one of its two callers, the other
+   * being the basket. They used to disagree: this asked `DECIDE` on the ground
+   * that the flatmate who walks the aisle is exactly the person plan 0036
+   * section 1.2 separated that permission out for, while plan 0051 section 2 let
+   * anybody holding `WRITE` take a line into a basket and settle it there. So a
+   * `WRITE` holder already recorded purchases on every list they can write, from
+   * the other screen, and the basket that is always there (plan 0136) makes that
+   * screen the default one. The reversal is for the settle and for nothing else:
+   * `setApproval` and an approved line's quantity keep `DECIDE`.
+   *
+   * What a settle does to the line is unchanged, which is why the looser
+   * permission costs nothing: it decrements, it never reopens an approval and it
+   * never splits, so a `WRITE` holder who settles an approved line does not put
+   * it back to `PENDING`.
    *
    * ## Nothing about it is terminal
    *
@@ -111,12 +128,37 @@ export class SettlementService {
    * draws its own connection from the pool and asking it a question from inside a
    * transaction means one request holding two.
    */
+  /**
+   * The product a settle on this line records when it names none (plan 0151,
+   * section 3).
+   *
+   * The gateway asks before it reads a price, so the price it reads is the
+   * price of the product {@link settle} writes. Both answer through
+   * `resolveItemId`, and the access check is the settle's own, so a caller who
+   * could not settle the line learns nothing about its products here either.
+   */
+  async settlePick(req: LineSettlePickRequest): Promise<SettlePick> {
+    const found = await this.listAccess.getLine(req.lineId);
+    await this.listAccess.requireSettle(found.listId, req.userId);
+    const { itemIds } = await this.itemSetOf(
+      this.dataSource.getRepository(ListLineItem),
+      req.lineId
+    );
+    return {
+      pickedItemId: this.resolveItemId(undefined, itemIds),
+      optionCount: itemIds.length,
+    };
+  }
+
   async settle(req: SettleLineRequest): Promise<LineSettlementResult> {
     const quantity = this.validateSettleQuantity(req);
     this.validateItemId(req.itemId);
+    // Before the transaction, beside the other two shape checks: a malformed
+    // message must be refused without a row locked (plan 0143, section 4.3).
+    const paid = paidColumns(req.paid, req.outcome);
 
     const found = await this.listAccess.getLine(req.lineId);
-    const list = await this.listAccess.requireDecide(found.listId, req.userId);
+    const list = await this.listAccess.requireSettle(found.listId, req.userId);
 
     const result = await this.dataSource.transaction(async (manager) => {
       const lines = manager.getRepository(ListLine);
@@ -169,9 +211,14 @@ export class SettlementService {
           // off the list page (plan 0054, section 7).
           revertedAt: null,
           revertedByParticipantId: null,
-          generatedListLineId: null,
-          pricePaidCents: null,
-          supermarketLocationId: null,
+          // Null is the list page (plan 0134, section 2): this settle came off
+          // the list and through no basket, which is what the trips read calls
+          // a session purchase.
+          basketId: null,
+          // What the screen said one of it costs, and where, as the gateway
+          // read it (plan 0143). Core stores it and never reads a price: it has
+          // no catalog client and this plan does not give it one.
+          ...paid,
         })
       );
 
@@ -216,6 +263,7 @@ export class SettlementService {
     // After the commit, as everywhere else in core. It carries both halves so a
     // phone in the shop and a phone at home agree without a refetch (section 8).
     this.events.emit(RealtimeEvent.LineSettled, list.zoneId, result, list.id);
+    void this.baskets.linesChanged(list.id, [req.lineId]);
     return result;
   }
 
@@ -278,7 +326,7 @@ export class SettlementService {
   async listForItem(
     req: ListItemSettlementsRequest
   ): Promise<LineSettlementPage> {
-    if (!UUID_PATTERN.test(req.itemId)) {
+    if (!isUuid(req.itemId)) {
       throw new ValidationException('itemId must be a valid item reference', {
         messageArgs: { field: 'itemId' },
       });
@@ -351,7 +399,7 @@ export class SettlementService {
 
   /** The catalog reference is cross service, so only its shape is checked here. */
   private validateItemId(itemId?: string): void {
-    if (itemId !== undefined && !UUID_PATTERN.test(itemId)) {
+    if (itemId !== undefined && !isUuid(itemId)) {
       throw new ValidationException('itemId must be a valid item reference', {
         messageArgs: { field: 'itemId' },
       });

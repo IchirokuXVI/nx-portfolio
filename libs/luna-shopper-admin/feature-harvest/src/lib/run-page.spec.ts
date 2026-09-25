@@ -657,3 +657,32 @@ describe('RunPage, what a walk wrote and fetched', () => {
     fixture.componentInstance.watch.stop();
   });
 });
+
+describe('RunPage, its two views', () => {
+  it('opens on the overview and switches to the prices written', async () => {
+    const fixture = await render(run({ status: 'COMPLETED' }));
+
+    expect(
+      fixture.nativeElement.querySelector('lib-run-prices-tab')
+    ).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('lib-run-progress')
+    ).not.toBeNull();
+
+    const tab = [
+      ...fixture.nativeElement.querySelectorAll('[role="tab"]'),
+    ].find((button) =>
+      (button as HTMLElement).textContent?.includes('harvest.run.tabs.prices')
+    ) as HTMLButtonElement;
+    tab.click();
+    fixture.detectChanges();
+
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+    expect(
+      fixture.nativeElement.querySelector('lib-run-prices-tab')
+    ).not.toBeNull();
+    // The counters give way to the rows, rather than sitting above them.
+    expect(fixture.nativeElement.querySelector('lib-run-progress')).toBeNull();
+    fixture.componentInstance.watch.stop();
+  });
+});

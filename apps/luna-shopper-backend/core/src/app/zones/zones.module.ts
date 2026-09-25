@@ -1,13 +1,8 @@
 import { Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import type { CoreConfig } from '../config/app-config';
+import { BasketCoverageModule } from '../baskets/basket-coverage.module';
 import { Zone, ZoneMembership } from '../entities';
-import {
-  CoreEventsPublisher,
-  NATS_EVENTS,
-} from '../events/core-events.publisher';
+import { CoreEventsModule } from '../events/core-events.module';
 import { SharedListGrantModule } from '../lists/shared-list-grant.module';
 import { MemberListingService } from './member-listing.service';
 import { MembershipController } from './membership.controller';
@@ -31,16 +26,14 @@ import { ZoneService } from './zone.service';
     // section 2.3). The grant lives in a module of its own precisely so this
     // import is not `ListsModule`, which imports this one.
     SharedListGrantModule,
-    ClientsModule.registerAsync([
-      {
-        name: NATS_EVENTS,
-        inject: [ConfigService],
-        useFactory: (config: ConfigService) => ({
-          transport: Transport.NATS,
-          options: { servers: [config.getOrThrow<CoreConfig>('core').natsUrl] },
-        }),
-      },
-    ]),
+    // The events client and the publisher used to be declared here. They moved
+    // out in plan 0139 so that this module and `BasketCoverageModule` can both
+    // have them without needing each other.
+    CoreEventsModule,
+    // A change to who is in the zone changes what the household's open baskets
+    // cover (plan 0139, section 5). The coverage module depends on nothing here,
+    // which is the property that lets this import exist.
+    BasketCoverageModule,
   ],
   controllers: [ZoneController, MembershipController, StatsController],
   providers: [
@@ -50,7 +43,6 @@ import { ZoneService } from './zone.service';
     ZoneAuthzService,
     ZoneCountsService,
     StatsService,
-    CoreEventsPublisher,
   ],
   // Exported so the lists slice (plan 0007) reuses membership resolution, the
   // event publisher and the zone counts rather than re-implementing them.
@@ -60,10 +52,16 @@ import { ZoneService } from './zone.service';
   // classes, so the write an operator makes is the write a zone's own admins
   // make. Exporting them is what stops that module from reaching for the
   // repositories and reimplementing the effect.
+  //
+  // The publisher is re-exported as its **module**, which is the only way since
+  // plan 0139 moved it out of here: Nest refuses to export a provider a module
+  // does not itself provide, and it refuses it at boot rather than at build, so
+  // no amount of compiling or unit testing finds it. Re-exporting the module
+  // hands importers the same `CoreEventsPublisher` they always got.
   exports: [
     ZoneAuthzService,
     ZoneCountsService,
-    CoreEventsPublisher,
+    CoreEventsModule,
     ZoneService,
     MembershipService,
   ],

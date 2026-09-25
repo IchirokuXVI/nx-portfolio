@@ -1,13 +1,18 @@
 import type {
+  BrandBatchOutcome,
   BulkOperationErrorCode,
   ItemCategory,
+  ItemPriceWrittenBy,
+  NearbyShopNoPick,
   PostalCodeSource,
   PriceScopeKind,
+  PriceShownBecause,
   PriceSourceKind,
   UnitOfMeasure,
 } from '../enums/catalog.enums';
 import type { PageQuery, Paginated } from '../pagination';
 import type { AdminCredential } from './admin-auth.messages';
+import type { BasketShopView } from './basket.messages';
 
 /**
  * Catalog message contracts (plan 0012). The gateway calls these on the catalog
@@ -96,6 +101,34 @@ export const SUPERMARKET_LOCATION_PATTERNS = {
    * query is a listing, a query narrows the same read.
    */
   search: 'supermarketLocation.search',
+  /**
+   * One shop as a basket read at it needs it: the shop with its scope stack,
+   * its chain, and the stored availability of a set of products there (plan
+   * 0163, section 2).
+   *
+   * One subject rather than `get` plus a second read, because the basket read
+   * asks both at once and a shopper is standing in the shop. Service to service
+   * and carrying no `userId`: a shop and whether it stocks a product are not
+   * private, and the gateway has already decided the reader may be told them.
+   * An unknown shop is the ordinary 404 for a location.
+   */
+  shopAvailability: 'supermarketLocation.shopAvailability',
+  /**
+   * The shops near a point, and whether one of them is clearly the shop the
+   * person is standing in (plan 0164, sections 1 to 3).
+   *
+   * The point travels in this one message and is never stored, cached or
+   * logged. The gateway sends the profile's postal codes and refusals beside
+   * it, because catalog decides the pick and the pick depends on both. Service
+   * to service and carrying no `userId`: the gateway has already decided
+   * whose profile it is.
+   */
+  nearby: 'supermarketLocation.nearby',
+  /**
+   * Several shops by id, named for a person (plan 0164, section 4). Unknown ids
+   * are left out, so a shop deleted since it was recorded is simply absent.
+   */
+  shopsById: 'supermarketLocation.shopsById',
 } as const;
 
 export const ITEM_PATTERNS = {
@@ -147,6 +180,14 @@ export const ITEM_PATTERNS = {
    * nothing about it is the harvester's.
    */
   createMany: 'item.createMany',
+  /**
+   * Write a pack count onto products that have none (plan 0162, section 3).
+   *
+   * The harvester's, after a catalog discovery run. **It never overwrites a
+   * count that is set**: only {@link ITEM_PATTERNS.update}, which a person
+   * sends, changes one, so a correction survives every later run.
+   */
+  fillPackCounts: 'item.fillPackCounts',
 } as const;
 
 /**
@@ -246,6 +287,15 @@ export const BRAND_PATTERNS = {
    * rather than a bigger message.
    */
   keys: 'brand.keys',
+  /**
+   * Register many brands, one outcome per name (plan 0160).
+   *
+   * **Every name is its own transaction**, so one refused name never fails the
+   * batch: a name answers `CREATED`, `EXISTS` with the brand that holds its key,
+   * or `REFUSED` with the reason. A person still chose every name on the list,
+   * which keeps each registration a decision.
+   */
+  registerMany: 'brand.registerMany',
 } as const;
 
 /**
@@ -299,8 +349,18 @@ export const ITEM_PRICE_PATTERNS = {
    * many were inserted and how many merely confirmed (section 9).
    */
   addBatch: 'itemPrice.addBatch',
-  /** The history of one (item, scope), newest first, paged. Operator only. */
+  /**
+   * The history of one (item, scope), newest first, paged. Operator only.
+   *
+   * With a `runId` it is the rows one run wrote or confirmed instead (plan
+   * 0160), each marked with `writtenBy`.
+   */
   list: 'itemPrice.list',
+  /**
+   * One product at every scope that prices it, with the row each scope shows
+   * and why (plan 0160). Operator only, paged by scope.
+   */
+  byItem: 'itemPrice.byItem',
   /**
    * Remove one row by id. Operator only, and the materialized row is recomputed
    * behind it. A typed price with a typo is a row the operator removes and
@@ -672,6 +732,24 @@ export interface RegisterBrandSuggestionResult {
 }
 
 /**
+ * What a unit price is a price per (plan 0157, section 1).
+ *
+ * Read on every request from the verbatim `unitPriceLabel` by a fixed table, so
+ * a client can display "per litre" without parsing "el litro le sale a". The
+ * label and the amount are never changed, and a label the table does not know
+ * reads as null rather than as a guess.
+ */
+export const UNIT_BASES = [
+  'KILOGRAM',
+  'LITER',
+  'UNIT',
+  'DOZEN',
+  /** A washing machine or dishwasher load, Mercadona's `lv`. */
+  'WASH',
+] as const;
+export type UnitBasis = (typeof UNIT_BASES)[number];
+
+/**
  * A price quoted by a search result, from the materialized
  * {@link SupermarketItemView} rows (plan 0048, section 3).
  *
@@ -691,6 +769,11 @@ export interface ItemOfferView {
   /** Verbatim, and never recomputed (plan 0038, section 2.4). */
   unitPrice: number | null;
   unitPriceLabel: string | null;
+  /**
+   * What `unitPrice` is a price per, read from `unitPriceLabel` by a fixed
+   * table (plan 0157). Null for a label the table does not know.
+   */
+  unitBasis: UnitBasis | null;
   /** The effective row's `lastObservedAt`. Null when there is no price row. */
   observedAt: string | null;
   /** Null when there is no price row at all. */
@@ -718,6 +801,16 @@ export interface ItemView {
   ean: string | null;
   /** Without it `defaultUnit` says nothing: "LITER" is not a size. */
   unitSize: number | null;
+  /**
+   * How many units the pack holds, a whole number from {@link PACK_COUNT_MIN}
+   * to {@link PACK_COUNT_MAX}, or null for a product that is not a pack or
+   * whose source did not state a count (plan 0162).
+   *
+   * A number and not a word, because a number has no language: the client
+   * draws "Pack 6" or "Pack de 6" itself. It is what tells a six pack of litre
+   * cartons from a six litre jug, which `unitSize` alone reads the same.
+   */
+  packCount: number | null;
   category: ItemCategory;
   defaultUnit: UnitOfMeasure;
   /**
@@ -777,9 +870,33 @@ export interface ProductGroupOfferView {
    * Capped at `LINE_ITEM_SET_MAX`, so what a suggestion offers is always
    * something a line can hold. A group past that cap is a curation problem, and
    * a suggestion that 400s on choosing is not the place to report it.
+   *
+   * Its length is also how many products the group holds, which is what the
+   * card's "and N more" counts from. {@link members} does not replace it.
    */
   itemIds: string[];
+  /**
+   * The cheapest few members as products, for the card's reveal (plan 0161,
+   * section 2). Present only when {@link SearchOffersRequest.members} asked for
+   * them, and at most {@link PRODUCT_GROUP_MEMBERS_MAX}.
+   *
+   * Ordered by the keys that pick {@link cheapestItem}: a member with a till
+   * price first, then unit price, then price, then id. A member with no offer at
+   * the requested scopes comes after every one that has one, by name, so a group
+   * nobody prices still reveals named products. `members[0]` is
+   * {@link cheapestItem} whenever both exist.
+   *
+   * Each carries `bestOffer` and never `offers`: the reveal draws one price per
+   * product.
+   */
+  members?: ItemView[];
 }
+
+/**
+ * How many members one {@link ProductGroupOfferView} may carry (plan 0161,
+ * section 2). A larger request is clamped to it.
+ */
+export const PRODUCT_GROUP_MEMBERS_MAX = 5;
 
 /**
  * The price a shopper sees for one item within one price scope (plan 0038,
@@ -815,6 +932,11 @@ export interface SupermarketItemView {
    * be parsed into a unit.
    */
   unitPriceLabel: string | null;
+  /**
+   * What `unitPrice` is a price per, read from `unitPriceLabel` by a fixed
+   * table (plan 0157). Null for a label the table does not know.
+   */
+  unitBasis: UnitBasis | null;
   /** The effective row's `lastObservedAt`. Without it a price has no age. */
   observedAt: string | null;
   /** The effective row's kind. Null when no row prices this key at all. */
@@ -914,6 +1036,11 @@ export interface ItemPriceView {
   unitPrice: number | null;
   /** Text, never a unit (plan 0038, section 2.4). */
   unitPriceLabel: string | null;
+  /**
+   * What `unitPrice` is a price per, read from `unitPriceLabel` by a fixed
+   * table (plan 0157). Null for a label the table does not know.
+   */
+  unitBasis: UnitBasis | null;
   observedAt: string;
   lastObservedAt: string;
   /** The row applies from here. Null means from `observedAt`. */
@@ -939,7 +1066,61 @@ export interface ItemPriceView {
    * only on the history read, and null for every row no leaflet wrote.
    */
   details: ItemPriceDetails | null;
+  /**
+   * What the run asked about did to this row (plan 0160). Present only on the
+   * run's read, `GET item-prices?runId=`, and absent everywhere else.
+   */
+  writtenBy?: ItemPriceWrittenBy;
 }
+
+/**
+ * One scope of one product on the all scopes price read (plan 0160): the rows
+ * the price decision weighed there, the one it chose, and why.
+ *
+ * The decision is the same function that writes `supermarket_items`, run again
+ * for this read. The sweep writes its answer within sixty seconds, so for that
+ * long this read can be ahead of the stored row, never behind it.
+ */
+export interface ItemScopePricesView {
+  priceScopeId: string;
+  supermarketId: string;
+  scopeKind: PriceScopeKind;
+  /** The source's own key for the scope, as `PriceScopeView.externalKey`. */
+  scopeExternalKey: string | null;
+  scopeLabel: LocalizedText | null;
+  /** The scope's priority. Lower is more specific. */
+  scopePriority: number;
+  /**
+   * The current row of each kind at this scope and at every scope it falls
+   * through to, newest first: everything the decision weighed. A row's own
+   * `priceScopeId` says which scope it came from. The full history of one
+   * scope is `GET item-prices?itemId=&priceScopeId=`.
+   */
+  rows: ItemPriceView[];
+  /** The row a shopper is shown here. Null when no row prices this key. */
+  shownItemPriceId: string | null;
+  /** Why that row wins. Null exactly when `shownItemPriceId` is. */
+  shownBecause: PriceShownBecause | null;
+  /** Nothing was eligible, so the newest enabled row is shown and flagged. */
+  stale: boolean;
+  /**
+   * The shown row's protection end, when it is an `ADMIN` row. A date in the
+   * past says the protection is over and the row competes on priority.
+   */
+  protectedUntil: string | null;
+  /**
+   * What the shown `ADMIN` row recorded for each automated kind when it was
+   * typed. A source that now states something else displaces it at once.
+   */
+  overrides: ItemPriceOverrides | null;
+}
+
+/** One product at every scope that prices it (plan 0160). */
+export interface ItemPricesByItemRequest extends PageQuery, AdminCredential {
+  itemId: string;
+}
+
+export type ItemScopePricesPage = Paginated<ItemScopePricesView>;
 
 /** One row of `price_policies` (plan 0080, section 3). Lower priority wins. */
 export interface PricePolicyView {
@@ -1091,6 +1272,131 @@ export interface SupermarketLocationIdRequest extends AdminCredential {
   supermarketLocationId: string;
 }
 
+/**
+ * A shop and what catalog stores about these products there (plan 0163,
+ * section 2).
+ */
+export interface ShopAvailabilityRequest {
+  supermarketLocationId: string;
+  /**
+   * The products to answer availability for, at most
+   * {@link ITEM_LOOKUP_LIMITS.maxIds}. Empty or absent asks for the shop alone,
+   * which is what a create and a settle need.
+   */
+  itemIds?: string[];
+}
+
+/** The shop, its chain, and the availability rows it holds for the products asked. */
+export interface ShopAvailabilityView {
+  /** Carries the scope stack, most specific first, in `priceScopeIds`. */
+  location: SupermarketLocationView;
+  supermarket: SupermarketView;
+  /**
+   * One entry per product asked about that has a row for this shop. A product
+   * with no row is absent, which means nobody knows: it is never read as false.
+   */
+  availability: ShopItemAvailabilityView[];
+}
+
+/** `supermarket_location_items.available` for one product at one shop. */
+export interface ShopItemAvailabilityView {
+  itemId: string;
+  /** True, false, or null when the row exists and says nothing. */
+  available: boolean | null;
+}
+
+/**
+ * Whether a shop is in a pricing profile (plan 0163, section 3): its postal
+ * code is one of the profile's postal codes.
+ *
+ * A fact for the client to warn about ("this shop is outside your areas"). A
+ * shop with no postal code is in no profile, because there is nothing to
+ * compare. The codes are compared as they are stored, trimmed: a profile's
+ * codes are the national table's, and so are a shop's.
+ *
+ * Here rather than in the gateway since plan 0164, because catalog composes
+ * the shops near a point with the same rule the basket read uses, and one rule
+ * written twice is two rules.
+ */
+export function isInProfile(
+  postalCode: string | null,
+  profilePostalCodes: readonly string[]
+): boolean {
+  const code = postalCode?.trim();
+  if (!code) {
+    return false;
+  }
+  return profilePostalCodes.some((candidate) => candidate.trim() === code);
+}
+
+/**
+ * Where a device says it is, and what the profile it shops with says (plan
+ * 0164, section 1).
+ *
+ * **The point is never stored, cached, logged or put in an error.** It is read
+ * once, to find the shops around it, and nothing that answers carries it back.
+ */
+export interface NearbyShopsRequest {
+  /** Degrees. */
+  latitude: number;
+  /** Degrees. */
+  longitude: number;
+  /** The radius the device is sure of, in metres. Above 150 nothing is picked. */
+  accuracyMetres: number;
+  /** The profile's postal codes, for `inProfile`. Empty when there is no profile. */
+  profilePostalCodes: string[];
+  /** The chains the profile refuses (plan 0064). */
+  excludedSupermarketIds: string[];
+  /** The shops the profile refuses (plan 0064). */
+  excludedSupermarketLocationIds: string[];
+}
+
+/**
+ * One shop near the point (plan 0164, section 1): the shop view of plan 0163,
+ * with how far it is and whether the profile refuses it.
+ */
+export interface NearbyShopView extends BasketShopView {
+  /** From the point to the shop, rounded to the metre. At most 750. */
+  distanceMetres: number;
+  /**
+   * The profile refuses this shop, or its whole chain (plan 0064). It is still
+   * a candidate, so a person can choose it by hand, and it is never picked
+   * automatically.
+   */
+  excluded: boolean;
+}
+
+/** The shop picked for the person, which the client names so they can check it. */
+export interface NearbyShopPickView {
+  locationId: string;
+  distanceMetres: number;
+}
+
+/**
+ * The shops near a point and the automatic pick (plan 0164, section 2).
+ *
+ * **Exactly one of `pick` and `noPick` is set.** The candidates are every
+ * shop within 750 m in every case, nearest first, including the ones outside
+ * the profile and the ones it refuses.
+ */
+export interface NearbyShopsView {
+  candidates: NearbyShopView[];
+  pick: NearbyShopPickView | null;
+  noPick: NearbyShopNoPick | null;
+}
+
+/** Several shops by id, named against a profile's postal codes (plan 0164, section 4). */
+export interface ShopsByIdRequest {
+  supermarketLocationIds: string[];
+  /** The profile's postal codes, for `inProfile`. Empty when there is no profile. */
+  profilePostalCodes: string[];
+}
+
+/** The shops that still exist, in no particular order. */
+export interface ShopsByIdView {
+  shops: BasketShopView[];
+}
+
 export interface ListSupermarketLocationsRequest extends PageQuery {
   userId: string;
   supermarketId: string;
@@ -1214,6 +1520,8 @@ export interface CreateItemRequest extends AdminCredential {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  /** How many units the pack holds (plan 0162). See {@link ItemView.packCount}. */
+  packCount?: number | null;
   category: ItemCategory;
   defaultUnit: UnitOfMeasure;
   /** Assign the product to a group (plan 0048). Owner curation, never automatic. */
@@ -1249,10 +1557,79 @@ export interface UpdateItemRequest extends AdminCredential {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  /**
+   * Set, correct or (with `null`) clear the pack count (plan 0162).
+   *
+   * **The only write that changes a count that is set.** A run fills a null
+   * count and never overwrites one, so a person who corrected it keeps the
+   * correction.
+   */
+  packCount?: number | null;
   category?: ItemCategory;
   defaultUnit?: UnitOfMeasure;
   /** Assign, reassign or (with `null`) unassign the product's group (plan 0048). */
   productGroupId?: string | null;
+}
+
+/**
+ * The bounds of a pack count (plan 0162), which the column's check restates.
+ *
+ * A count of 1 is not a pack, and the card draws nothing for it, so it is
+ * stored as null. The upper bound is far above any pack a chain sells and low
+ * enough that a misread barcode or a weight cannot pass for a count.
+ */
+export const PACK_COUNT_MIN = 2;
+export const PACK_COUNT_MAX = 1000;
+
+/**
+ * A pack count, or null when the value is not one.
+ *
+ * Every adapter reads its count through this, so the one rule of plan 0162
+ * section 1 lives in one place: a whole number from {@link PACK_COUNT_MIN} to
+ * {@link PACK_COUNT_MAX}, and anything else is null. A string is accepted
+ * because the adapters read the count out of printed text.
+ */
+export function packCountOf(value: unknown): number | null {
+  const count =
+    typeof value === 'string' && /^\d+$/.test(value.trim())
+      ? Number(value.trim())
+      : value;
+  return typeof count === 'number' &&
+    Number.isInteger(count) &&
+    count >= PACK_COUNT_MIN &&
+    count <= PACK_COUNT_MAX
+    ? count
+    : null;
+}
+
+/** One product a run saw with a count, for {@link ITEM_PATTERNS.fillPackCounts}. */
+export interface PackCountFill {
+  itemId: string;
+  packCount: number;
+}
+
+/**
+ * Fill the pack count of products that have none (plan 0162, section 3).
+ *
+ * Sent by the harvester after a catalog discovery run, one pair per product the
+ * run saw bound to an entry that carries a count. Capped at
+ * {@link PACK_COUNT_FILL_MAX} pairs, and the harvester sends several calls for
+ * a longer list: each pair is written on its own merit, so two calls cannot
+ * leave anything half done.
+ */
+export interface FillPackCountsRequest extends AdminCredential {
+  entries: PackCountFill[];
+}
+
+/** How many pairs one {@link FillPackCountsRequest} may carry. */
+export const PACK_COUNT_FILL_MAX = 1000;
+
+export interface FillPackCountsResult {
+  /**
+   * How many products the call wrote. A product whose count was already set,
+   * or that no longer exists, is not counted.
+   */
+  written: number;
 }
 
 /** Find the item carrying this EAN, if catalog has one (plan 0038, section 6.2). */
@@ -1364,6 +1741,33 @@ export interface SearchItemsRequest extends PageQuery {
    * states the caller is in is read from `coverage` on the scope view.
    */
   priceScopeIds?: string[];
+  /**
+   * Only the products these chains sell (plan 0146).
+   *
+   * **This is the assortment and not the prices.** A supermarket reaches this
+   * read twice, and the two mean different things: `priceScopeIds` decides where
+   * a price is quoted from, and this decides which products are listed at all. A
+   * chain chip on the catalog screen asks this one; a shopping profile asks the
+   * other.
+   *
+   * A chain sells a product when it holds an available source row for it, at any
+   * of its scopes. A product it sells with no price row is still listed, every
+   * price field null, because plan 0069's rule holds here too: having no price
+   * is not the same as not existing.
+   *
+   * **Absent and empty both mean every chain**, which is the reading
+   * `priceScopeIds` above already has, so a client that sends an empty array
+   * after the person cleared the chips gets the catalog rather than nothing. Two
+   * ids list what either chain sells.
+   */
+  soldBy?: string[];
+  /**
+   * How much of the pricing to attach (plan 0161, section 1), read exactly as
+   * {@link GetItemsRequest.offers} is: `best` is the default, `all` adds
+   * {@link ItemView.offers}, and `bestOffer` is then its first entry. Read only
+   * when {@link priceScopeIds} names a scope.
+   */
+  offers?: 'best' | 'all';
 }
 
 /**
@@ -1377,6 +1781,17 @@ export interface SearchOffersRequest extends PageQuery {
   userId: string;
   query?: string;
   priceScopeIds?: string[];
+  /**
+   * `all` fills {@link ItemView.offers} on each group's `cheapestItem` (plan
+   * 0161, section 1). The group's own `offer` is unchanged, and it is the first
+   * entry of that array. Read only when {@link priceScopeIds} names a scope.
+   */
+  offers?: 'best' | 'all';
+  /**
+   * Add {@link ProductGroupOfferView.members}, this many per group, clamped to
+   * {@link PRODUCT_GROUP_MEMBERS_MAX} (plan 0161, section 2). Absent adds none.
+   */
+  members?: number;
 }
 
 // --- Product group requests ------------------------------------------------
@@ -1611,6 +2026,48 @@ export interface BrandKeysResult {
   keys: string[];
 }
 
+/** The most names one brand batch may carry (plan 0160). */
+export const BRAND_BATCH_MAX = 200;
+
+/** One name of a brand batch: what `brand.create` takes, without a link. */
+export interface RegisterBrandsEntry {
+  label: string;
+  /** The chain whose private label this is. Null or absent for an ordinary brand. */
+  privateLabelSupermarketId?: string | null;
+}
+
+/** Register many brands, each in its own transaction (plan 0160). */
+export interface RegisterBrandsRequest extends AdminCredential {
+  brands: RegisterBrandsEntry[];
+}
+
+/** Why a name of a brand batch was refused. */
+export interface BrandBatchRefusal {
+  /** The error code the single create would have answered with. */
+  code: string;
+  detail: string;
+}
+
+/** What one name of a brand batch did, in the order the names were sent. */
+export interface RegisterBrandsOutcome {
+  /** The label as it was sent. */
+  label: string;
+  outcome: BrandBatchOutcome;
+  /**
+   * The brand created, or the brand that already holds the key. Null for a
+   * refused name.
+   */
+  brandId: string | null;
+  /** The products a created brand claimed. Null unless `CREATED`. */
+  linkedItems: number | null;
+  /** Null unless `REFUSED`. */
+  reason: BrandBatchRefusal | null;
+}
+
+export interface RegisterBrandsResult {
+  results: RegisterBrandsOutcome[];
+}
+
 // --- Item price requests (plan 0080, section 9) -----------------------------
 
 /** The values one price row carries, shared by the single and the batch write. */
@@ -1683,10 +2140,26 @@ export interface AddItemPriceBatchResult {
   confirmed: number;
 }
 
+/**
+ * The history of one (item, scope), or the rows one run wrote.
+ *
+ * Name `itemId` and `priceScopeId` together for the history. Name `runId` for
+ * the run's rows (plan 0160), optionally narrowed to one `itemId`: every row
+ * the run inserted, and every row whose `lastObservedAt` it moved last.
+ */
 export interface ListItemPricesRequest extends PageQuery, AdminCredential {
-  itemId: string;
-  priceScopeId: string;
+  itemId?: string;
+  priceScopeId?: string;
+  runId?: string;
 }
+
+/**
+ * How far back a hand typed `observedAt` may reach (plan 0160).
+ *
+ * Protection runs from `observedAt`, so a past date protects a row for less
+ * time, never more. A date in the future is refused.
+ */
+export const ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS = 30;
 
 export interface ItemPriceIdRequest extends AdminCredential {
   itemPriceId: string;
@@ -1925,6 +2398,15 @@ export interface ResolvedScopeView {
    * from a till that will not ring it up.
    */
   quoted: boolean;
+  /**
+   * Whether this scope holds at least one available price row (plan 0157).
+   *
+   * Independent of {@link quoted}, which says which tier a shop is read from
+   * and not whether anything is there to read: an imported shop's own STORE
+   * scope heads its stack, so it is quoted, and it is empty until a source
+   * prices it. A client uses this to tell "no prices here yet" from "no match".
+   */
+  priced: boolean;
 }
 
 /**
@@ -2126,6 +2608,33 @@ export interface CatalogSuggestion {
  */
 export interface CatalogSuggestResponse {
   suggestions: CatalogSuggestion[];
+  /**
+   * The chain behind every scope an offer on {@link suggestions} names, and no
+   * other scope (plan 0161, section 3). A scope is named once however many
+   * offers quote it.
+   *
+   * A scope the gateway cannot name is left out and never guessed, and the
+   * offer that names it still comes back. The whole map is empty when the chain
+   * listing fails, because naming never takes the dropdown down.
+   *
+   * A chain can appear under more than one scope. Choosing which of them to
+   * draw is a display rule and belongs to the client.
+   */
+  scopes: PriceScopeChainView[];
+}
+
+/**
+ * Which chain one price scope belongs to (plan 0161, section 3).
+ *
+ * The part of a scope that every reader may have, guests included: a chain's
+ * name is a product fact of the same class as the price it explains. The
+ * basket's {@link BasketPriceScopeView} extends it with the shops.
+ */
+export interface PriceScopeChainView {
+  priceScopeId: string;
+  supermarketId: string;
+  /** The chain, both locales, resolved by the client. */
+  supermarketName: LocalizedText;
 }
 
 /**

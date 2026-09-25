@@ -1,9 +1,8 @@
 import type {
-  BasketLine,
   BasketParticipant,
   BasketPresenceEntry,
   Comment,
-  GeneratedListSummary,
+  BasketSummary,
   Line,
   LineSettlement,
   ListPermission,
@@ -263,85 +262,40 @@ export type RealtimeEvent =
        * summary out of it: the dashboard card and the history draw a name, a date and
        * two counts, and the screen that wants the lines fetches them itself.
        */
-      readonly type: 'generatedList.created' | 'generatedList.updated';
-      readonly list: GeneratedListSummary;
+      readonly type: 'basket.created' | 'basket.updated';
+      readonly list: BasketSummary;
     }
   | {
       /**
-       * A line of one of the caller's baskets was settled (backend `0051` section 6).
+       * Lines of a basket's covered lists moved (backend `0139`, section 3).
        *
-       * It reaches this client on the **owner's own sessions**, which is what makes it
-       * useful to a dashboard: the person watching the card is usually not the person
-       * in the shop. It also goes to the basket's own room, which this app cannot hold
-       * yet, since every socket here authenticates with an account token and a guest
-       * has none (`0044`'s participant connection).
+       * It replaced the four line events velista `0090` deleted, and the
+       * difference is the whole point: those carried a line, and a basket stores
+       * no lines any more. A row is read out of the lists on every request, so
+       * an event that said what a row now is would be a second answer to a
+       * question only the server can answer.
        *
-       * Only the id is kept. The payload carries the line, redacted to the least
-       * privileged reader in the room because a broadcast cannot be projected per
-       * socket, and **the counts this app draws cannot be derived from one line**: a
-       * summary holds how many lines are finished, and knowing that one of them moved
-       * says nothing about whether it had already been counted. So the id is what the
-       * store needs and the line is the basket screen's business.
+       * ## Why it carries line ids and nothing else
+       *
+       * A basket room holds guests, and a row names how much each household asks
+       * for. A broadcast cannot be projected per socket, so it carries the least
+       * privileged view there is (backend `0130`, section 6): the ids of the list
+       * lines that moved, which name no household and no quantity.
+       *
+       * So **the store never merges it**. It reads the basket again, coalesced,
+       * which is the only honest thing a reader holding ids can do.
        */
-      readonly type: 'generatedList.lineSettled' | 'generatedList.lineUpdated';
-      readonly generatedListId: string;
+      readonly type: 'basket.linesChanged';
       /**
-       * The line that moved, or null when the payload did not carry a readable one.
+       * Which lines moved.
        *
-       * Kept since velista `0048`, and it used to be dropped here on the grounds that
-       * a **summary** cannot use it. That is true of `GeneratedListStore` and false of
-       * the basket screen, which holds the lines themselves and wants exactly this: it
-       * merges the line by id and one row moves, with no request at all.
-       *
-       * **Redacted to the least privileged reader in the room**, because a broadcast
-       * cannot be projected per socket. So a line arriving here carries no `origins`
-       * even for somebody entitled to them, and merging it naively would blank a field
-       * a privileged reader had legitimately fetched. `BasketStore.apply` merges by id
-       * and keeps what it holds, which is what makes that safe.
-       *
-       * Null rather than dropping the whole event, because the id is the half
-       * `GeneratedListStore` needs and it is still readable when the line is not.
+       * Read but not acted on line by line: the store reads the whole basket,
+       * because a line id does not say which row holds it and a row is a group
+       * the server computes. It is kept because it is what the event is, and a
+       * future plan that wants to know whether this reader's own row moved has
+       * it without a wire change.
        */
-      readonly line: BasketLine | null;
-    }
-  | {
-      /**
-       * Somebody put a **new** line in a shared basket (luna `0055`, section 8).
-       *
-       * Its own name rather than a second `lineUpdated`, and the name is the whole
-       * reason it exists: a client receiving that one would have to decide whether
-       * to replace a row or append one, and that decision is what an event name is
-       * for. Guessing it from "is this id already held" works right up to the
-       * refetch that landed the line first, and then appends a duplicate.
-       *
-       * There is **no zone event beside it**, because a line added in a shop names
-       * no zone and claims no zone line until somebody binds it to a list.
-       */
-      readonly type: 'generatedList.lineAdded';
-      readonly generatedListId: string;
-      /**
-       * The new line, **redacted to the least privileged reader in the room**, for
-       * the reason every broadcast on this room is.
-       *
-       * Required rather than nullable, unlike the moved event's: there the id alone
-       * is still worth something, because `GeneratedListStore` refetches a summary
-       * from it. Here the line is the entire content of the event, and appending a
-       * row this build cannot read would put an empty line in a shop.
-       */
-      readonly line: BasketLine;
-    }
-  | {
-      /**
-       * A rename merged a basket line into another, and this one went away (backend
-       * `0113`, section 6).
-       *
-       * An id and nothing else, so it names no zone data. The surviving line arrives
-       * beside it as `generatedList.lineUpdated`. It reaches the basket's room and the
-       * owner's own sessions.
-       */
-      readonly type: 'generatedList.lineRemoved';
-      readonly generatedListId: string;
-      readonly lineId: string;
+      readonly lineIds: readonly string[];
     }
   | {
       /**
@@ -356,8 +310,8 @@ export type RealtimeEvent =
        * needs none: it arrives only on a connection pinned to one basket.
        */
       readonly type:
-        | 'generatedList.participantJoined'
-        | 'generatedList.participantLeft';
+        | 'basket.participantJoined'
+        | 'basket.participantLeft';
       readonly participant: BasketParticipant;
     }
   | {
@@ -369,8 +323,8 @@ export type RealtimeEvent =
        * a diff would leave a client that missed one message permanently wrong about
        * who is in a shop.
        */
-      readonly type: 'presence.generatedListUpdated';
-      readonly generatedListId: string;
+      readonly type: 'presence.basketUpdated';
+      readonly basketId: string;
       readonly present: readonly BasketPresenceEntry[];
     }
   | {
@@ -382,8 +336,8 @@ export type RealtimeEvent =
        * anyway, because a card pointing at a basket the server no longer has is worse
        * than a card that quietly goes away.
        */
-      readonly type: 'generatedList.deleted';
-      readonly generatedListId: string;
+      readonly type: 'basket.deleted';
+      readonly basketId: string;
     }
   | {
       /**
@@ -395,8 +349,8 @@ export type RealtimeEvent =
        * access ends: removed, the link revoked with its people, leaving, and the
        * basket being deleted.
        */
-      readonly type: 'generatedList.shared' | 'generatedList.unshared';
-      readonly generatedListId: string;
+      readonly type: 'basket.shared' | 'basket.unshared';
+      readonly basketId: string;
     }
   | { readonly type: 'presence.zoneUpdated'; readonly presence: ZonePresence }
   | { readonly type: 'presence.listUpdated'; readonly presence: ListPresence };
@@ -435,20 +389,17 @@ export const REALTIME_EVENT_NAMES = [
   'merge.approved',
   'merge.rejected',
   'profiles.changed',
-  'generatedList.created',
-  'generatedList.updated',
-  'generatedList.lineSettled',
-  'generatedList.lineUpdated',
-  'generatedList.lineAdded',
-  'generatedList.lineRemoved',
-  'generatedList.participantJoined',
-  'generatedList.participantLeft',
-  'generatedList.deleted',
-  'generatedList.shared',
-  'generatedList.unshared',
+  'basket.created',
+  'basket.updated',
+  'basket.linesChanged',
+  'basket.participantJoined',
+  'basket.participantLeft',
+  'basket.deleted',
+  'basket.shared',
+  'basket.unshared',
   'presence.zoneUpdated',
   'presence.listUpdated',
-  'presence.generatedListUpdated',
+  'presence.basketUpdated',
 ] as const;
 
 /**

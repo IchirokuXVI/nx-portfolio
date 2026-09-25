@@ -1,0 +1,279 @@
+// The catalog tab (velista 0100), drawn as the mock draws it.
+//
+// **The page is its own scroller, and it draws no scrollbar** (velista 0112). Since
+// 0106 the document never scrolls: the frame's page slot does, for every page without
+// a scroller of its own. The catalog takes one so that its scrollbar can be hidden
+// while every other page keeps the slot's. It is exactly as tall as the slot, so the slot
+// never overflows, and the tools stick to the top of this box, which is where they
+// stuck before.
+//
+// Hidden and not removed: the page still scrolls by touch, by wheel, and by the
+// keyboard from anything focused inside it, and a screen reader still moves through
+// it. The pattern is the one `chain-chips` and `suggestion-list` already use.
+:host {
+  display: block;
+  block-size: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  padding-block-end: var(--app-space-7);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4) var(--app-space-5) 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+  letter-spacing: var(--app-tracking-wordmark);
+  color: var(--app-text-primary);
+}
+
+.near {
+  flex: none;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// Sticky on the page's own ground, so the rows passing under it never show through.
+.tools {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  padding: var(--app-space-4) var(--app-space-5) var(--app-space-3);
+  background: var(--app-surface-ground);
+}
+
+// Heard and not seen. Here and not global: velista has no global utility class.
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+// The field, written the way `ListTools` writes its own: the wrapper draws the ring.
+.field {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  block-size: var(--app-space-10);
+  padding-inline: var(--app-space-4) var(--app-space-3);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+
+  &:has(.field-input:focus-visible) {
+    border-color: var(--app-action-quiet-fg);
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.field-glyph {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.field-input {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-inline-size: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  // Rule T3: anything under 16px makes iOS Safari zoom the viewport on focus.
+  font-size: var(--app-field-font-size);
+
+  &::placeholder {
+    color: var(--app-text-muted);
+  }
+
+  &:focus-visible {
+    outline: none;
+  }
+
+  &::-webkit-search-cancel-button {
+    display: none;
+  }
+}
+
+// Smaller than 44 inside a field that is already tall enough, as in `ListTools`.
+.field-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--app-space-7);
+  block-size: var(--app-space-7);
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.field-clear-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+// The chips run to the screen's edges, so the row reads as one that scrolls.
+.chips {
+  margin-inline: calc(-1 * var(--app-space-5));
+  padding-inline: var(--app-space-5);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  padding: var(--app-space-3) var(--app-space-5) 0;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// The one card a priceless read draws, in the quiet action colour: it is a thing
+// to do, not a fault.
+.card {
+  padding: var(--app-space-5);
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-action-quiet-bg);
+}
+
+.card-title {
+  margin: 0;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.card-body {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.card-action {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--app-button-height);
+  margin-block-start: var(--app-space-4);
+  padding-inline: var(--app-space-5);
+  border-radius: var(--app-button-radius);
+  background: var(--app-action-bg);
+  color: var(--app-text-on-action);
+  font-weight: 650;
+  text-decoration: none;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: var(--app-space-7) var(--app-space-5);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  text-align: center;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.empty-body {
+  max-inline-size: 34ch;
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.secondary {
+  min-block-size: var(--app-button-height);
+  margin-block-start: var(--app-space-3);
+  padding-inline: var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.more {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--app-space-3);
+}
+
+.more-note {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  text-align: center;
+}
+
+.sentinel {
+  block-size: 1px;
+}

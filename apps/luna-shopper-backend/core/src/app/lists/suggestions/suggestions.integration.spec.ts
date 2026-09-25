@@ -1,6 +1,6 @@
 import {
-  GeneratedLineOrigin,
-  GeneratedListStatus,
+  BasketKind,
+  BasketStatus,
   LineApprovalStatus,
   LineSuggestionReason,
   MembershipStatus,
@@ -15,10 +15,10 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import {
+  BasketSource,
+  BasketTripRow,
   CORE_ENTITIES,
-  GeneratedList,
-  GeneratedListLine,
-  GeneratedListLineOrigin,
+  Basket,
   LineSettlement,
   ListAccess,
   ListLine,
@@ -26,6 +26,7 @@ import {
   Zone,
   ZoneMembership,
 } from '../../entities';
+import { BasketTripRowsService } from '../../baskets/basket-trip-rows.service';
 import { ZoneAuthzService } from '../../zones/zone-authz.service';
 import { ListAccessService } from '../list-access.service';
 import { DAY_MS } from './suggestions.constants';
@@ -49,6 +50,7 @@ const HOUR_MS = 60 * 60 * 1000;
  */
 describeIntegration('the lines a list suggests (real Postgres)', () => {
   let dataSource: DataSource;
+  const tripRows = new BasketTripRowsService();
   let suggestions: SuggestionsService;
 
   const ids = {
@@ -92,80 +94,65 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
   }
 
   async function basket(
-    status: GeneratedListStatus,
+    status: BasketStatus,
     generatedAt: Date
   ): Promise<string> {
-    const repo = dataSource.getRepository(GeneratedList);
+    const repo = dataSource.getRepository(Basket);
     const saved = await repo.save(
       repo.create({
         ownerUserId: ids.shopper,
         name: null,
         status,
         generatedAt,
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
-        defaultTargetListId: null,
+        kind: BasketKind.GENERATED,
         idempotencyKey: null,
       })
     );
     return saved.id;
   }
 
-  async function basketLine(
-    generatedListId: string,
-    quantity = 1,
-    settledQuantity = 0
-  ): Promise<string> {
-    const repo = dataSource.getRepository(GeneratedListLine);
-    position += 1;
-    const saved = await repo.save(
-      repo.create({
-        generatedListId,
-        content: 'Basket line',
-        quantity,
-        settledQuantity,
-        itemId: null,
-        origin: GeneratedLineOrigin.DERIVED,
-        targetListId: null,
-        position,
-      })
-    );
-    return saved.id;
-  }
-
-  async function origin(
-    generatedListLineId: string,
-    listId: string,
-    lineId: string,
-    quantity: number
+  /**
+   * What a run was asked to draw from (plan 0133, section 4).
+   *
+   * This is the whole of what an **open** basket holds about a list since plan
+   * 0136: a source row naming the zone, or that one list, and the owner's
+   * `WRITE` on it. There is no copy of a line to seed any more.
+   */
+  async function source(
+    basketId: string,
+    listId: string | null
   ): Promise<void> {
-    const repo = dataSource.getRepository(GeneratedListLineOrigin);
-    await repo.save(
-      repo.create({
-        generatedListLineId,
-        zoneId: ids.zone,
-        listId,
-        lineId,
-        quantity,
-        lineVersion: 1,
-      })
-    );
+    const repo = dataSource.getRepository(BasketSource);
+    await repo.save(repo.create({ basketId, zoneId: ids.zone, listId }));
   }
 
-  /** An ended basket that asked for each of these lines, `quantity` of each. */
+  /** The freeze that ends a trip (plan 0135), run against the basket's coverage. */
+  async function freeze(basketId: string): Promise<void> {
+    await tripRows.thaw(dataSource.manager, basketId);
+    await tripRows.freeze(dataSource.manager, basketId);
+  }
+
+  /**
+   * An ended basket that asked for each of these lines, `quantity` of each.
+   *
+   * The rows are written straight into `basket_trip_rows`, which is what a
+   * finish would have written: an ended trip's ask is those rows and nothing
+   * else (plan 0135, and plan 0136 section 7.2, which left that half alone).
+   * Going through the freeze instead would ask the list as it stands **now**,
+   * and every candidate here sits at zero, so a freeze would write no row at
+   * all.
+   */
   async function endedTrip(
     listId: string,
     at: Date,
     lines: readonly string[],
     quantity = 1
   ): Promise<string> {
-    const id = await basket(GeneratedListStatus.COMPLETED, at);
-    const basketLineId = await basketLine(id, quantity);
+    const id = await basket(BasketStatus.FINISHED, at);
+    await source(id, listId);
+    const rows = dataSource.getRepository(BasketTripRow);
     for (const lineId of lines) {
-      await origin(basketLineId, listId, lineId, quantity);
+      await rows.insert({ basketId: id, listId, lineId, asked: quantity });
     }
     return id;
   }
@@ -178,12 +165,12 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       outcome?: SettlementOutcome;
       quantity?: number;
       reverted?: boolean;
-      basketLineId?: string;
+      basketId?: string;
     } = {}
   ): Promise<void> {
     const repo = dataSource.getRepository(LineSettlement);
     const outcome = options.outcome ?? SettlementOutcome.BOUGHT;
-    const byBasket = options.basketLineId !== undefined;
+    const byBasket = options.basketId !== undefined;
     await repo.save(
       repo.create({
         lineId,
@@ -197,7 +184,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
         settledAt: at,
         revertedAt: options.reverted ? new Date() : null,
         revertedByParticipantId: options.reverted ? randomUUID() : null,
-        generatedListLineId: options.basketLineId ?? null,
+        basketId: options.basketId ?? null,
         pricePaidCents: null,
         supermarketLocationId: null,
       })
@@ -240,6 +227,10 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
     );
     suggestions = new SuggestionsService(dataSource, listAccess, {
       since: () => new Date(Date.now() - WINDOW_MS),
+      // The candidates read shares the claim's coverage fragment, which carries
+      // the skip window since plan 0137. Nothing here skips anything, so the
+      // default is the only value it has to be.
+      skipWindow: () => 12 * 60 * 60 * 1000,
     } as never);
 
     const zones = dataSource.getRepository(Zone);
@@ -272,7 +263,7 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
   afterAll(async () => {
     if (dataSource?.isInitialized) {
       await dataSource
-        .getRepository(GeneratedList)
+        .getRepository(Basket)
         .delete({ ownerUserId: ids.shopper });
       if (ids.zone) {
         await dataSource.getRepository(Zone).delete({ id: ids.zone });
@@ -308,26 +299,41 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
   });
 
   describe('a live basket holds a line (test 7)', () => {
-    it('hides the line while the basket is live, settled or not, and suggests it once the basket ends', async () => {
+    /**
+     * Plan 0136, section 7.3 **widens** this rule, and the widening is asserted
+     * below rather than worked around.
+     *
+     * The hold used to be an origin row naming this zone line, so a live basket
+     * held exactly the lines its run had copied into it. A basket holds no copy
+     * of a line any more, so the question the candidates read asks is
+     * `openBasketCoversLine`: is an open trip looking at this list at all. A
+     * candidate is a line **at zero** by definition, which no run would ever
+     * have copied, and it is held all the same. That is the intended answer: a
+     * shopper standing in the shop with this list open should not be handed the
+     * line back as a suggestion behind their back.
+     */
+    it('holds every candidate on a covered list, at zero and never in any basket, until the trip ends', async () => {
       const flat = await list('Flat');
       const bought = await line(flat, 'Bought in the shop');
-      const waiting = await line(flat, 'Still in the trolley list');
+      const waiting = await line(flat, 'Never copied into anything');
       await weekly(flat, bought, 6);
       await weekly(flat, waiting, 6);
 
-      const live = await basket(GeneratedListStatus.ACTIVE, daysAgo(0, -1));
-      // Settled all the way through, so the claim has already ended.
-      const done = await basketLine(live, 1, 1);
-      await origin(done, flat, bought, 1);
-      await settled(flat, bought, daysAgo(0), { basketLineId: done });
-      const open = await basketLine(live, 1, 0);
-      await origin(open, flat, waiting, 1);
+      const live = await basket(BasketStatus.OPEN, daysAgo(0, -1));
+      await source(live, flat);
+      // Bought through the basket a moment ago, so this line's own claim has
+      // already ended. The coverage holds it regardless, which is the wider
+      // question section 7.3 asks.
+      await settled(flat, bought, daysAgo(0), { basketId: live });
 
       expect(await read(flat)).toEqual([]);
 
       await dataSource
-        .getRepository(GeneratedList)
-        .update({ id: live }, { status: GeneratedListStatus.COMPLETED });
+        .getRepository(Basket)
+        .update({ id: live }, { status: BasketStatus.FINISHED });
+      // The status moved by hand here rather than through the service, so the
+      // freeze that ends a trip has to be applied by hand too (plan 0135).
+      await freeze(live);
 
       // The basket settle just now is a new purchase, which starts the period
       // again, so the bought line is no longer due by period. The other still is.
@@ -338,8 +344,30 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       const flat = await list('Flat');
       const milk = await line(flat, 'Milk');
       await weekly(flat, milk, 6);
-      const stale = await basket(GeneratedListStatus.DRAFT, daysAgo(4));
-      await origin(await basketLine(stale), flat, milk, 1);
+      const stale = await basket(BasketStatus.OPEN, daysAgo(4));
+      await source(stale, flat);
+
+      expect((await read(flat)).map((row) => row.lineId)).toEqual([milk]);
+    });
+
+    it('is never held by the permanent basket, which covers every list', async () => {
+      // `openBasketCoversLine` joins `basket_sources`, which a `LIVE` basket has
+      // none of (plan 0133, section 6). Without that join every list its owner
+      // can write would be held for ever and nothing would ever be suggested.
+      const flat = await list('Flat');
+      const milk = await line(flat, 'Milk');
+      await weekly(flat, milk, 6);
+      const repo = dataSource.getRepository(Basket);
+      await repo.save(
+        repo.create({
+          ownerUserId: ids.shopper,
+          name: null,
+          status: BasketStatus.OPEN,
+          generatedAt: daysAgo(0, -1),
+          kind: BasketKind.LIVE,
+          idempotencyKey: null,
+        })
+      );
 
       expect((await read(flat)).map((row) => row.lineId)).toEqual([milk]);
     });
@@ -412,25 +440,44 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
     it('follows what the newest ended basket asked for the line', async () => {
       const flat = await list('Flat');
       const milk = await line(flat, 'Milk');
-      await weekly(flat, milk, 6);
+      // Three purchases a week apart, so the period is 7 and the line is due.
+      // The last of them came off the newest basket that asked for milk, which
+      // is what keeps that basket the last word on the line (plan 0142,
+      // section 8.2).
+      await settled(flat, milk, daysAgo(20));
+      await settled(flat, milk, daysAgo(13));
+      const newest = await endedTrip(flat, daysAgo(6), [milk], 3);
+      await settled(flat, milk, daysAgo(6), { basketId: newest });
+      // An older basket that asked for a different number is not the newest.
       await endedTrip(flat, daysAgo(20), [milk], 2);
-      await endedTrip(flat, daysAgo(13), [milk], 3);
       // A newer basket that asked for something else says nothing about milk.
       const bread = await line(flat, 'Bread', { quantity: 1 });
-      await endedTrip(flat, daysAgo(6), [bread], 5);
+      await endedTrip(flat, daysAgo(4), [bread], 5);
 
       expect(await read(flat)).toEqual([
         expect.objectContaining({ lineId: milk, quantity: 3 }),
       ]);
     });
 
-    it('sums sibling basket lines of one basket', async () => {
+    it('reads what the trip asked as its purchases plus what was left (plan 0136, section 7.2)', async () => {
+      // This test asserted plan 0094's sum: two sibling basket lines of one
+      // basket each carried a part of one ask, and the trip asked for the
+      // total. Those rows are gone with the basket's own, and the sum that
+      // replaced them is the freeze's: `asked` is `bought + left`. So a line
+      // bought all the way down to zero freezes at what the trip asked for
+      // rather than at nothing, and it is still one row per zone line.
       const flat = await list('Flat');
       const milk = await line(flat, 'Milk');
-      await weekly(flat, milk, 6);
-      const id = await basket(GeneratedListStatus.COMPLETED, daysAgo(13));
-      await origin(await basketLine(id, 2), flat, milk, 2);
-      await origin(await basketLine(id, 1), flat, milk, 1);
+      const id = await basket(BasketStatus.FINISHED, daysAgo(6));
+      await source(id, flat);
+      // Three purchases a week apart, so the period is 7 and the line is due.
+      // The last one is the trip's, and it took the line to zero. It is the
+      // last one so that the trip is still the last word on the line, which is
+      // what plan 0142 section 8.2 makes the estimate ask.
+      await settled(flat, milk, daysAgo(20));
+      await settled(flat, milk, daysAgo(13));
+      await settled(flat, milk, daysAgo(6), { quantity: 3, basketId: id });
+      await freeze(id);
 
       expect(await read(flat)).toEqual([
         expect.objectContaining({ lineId: milk, quantity: 3 }),
@@ -457,6 +504,58 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
     });
   });
 
+  /**
+   * Both tests here used to delete the trip's origin rows by hand and then read
+   * again, to prove the two history reads stood on `basket_trip_rows` alone.
+   *
+   * Plan 0136 drops that table, so the deletes are gone and what they proved is
+   * now structural: there is no second place for an ended trip's ask to come
+   * from. The assertions stay, because they are the regression that mattered.
+   * An ended trip answers from its frozen rows, for the quantity and for the
+   * staple count alike, and a basket seeded here holds nothing but those rows.
+   */
+  describe('where an ended trip’s ask comes from (plan 0135, test 13)', () => {
+    it('reads the quantity off the trip’s frozen rows', async () => {
+      const flat = await list('Origins taken away');
+      const milk = await line(flat, 'Milk');
+      await weekly(flat, milk, 6);
+      // Newer than the line's last purchase, which is the other half of plan
+      // 0142 section 8.2: a basket that asked after the last shop is still the
+      // last word on the line even though nothing was bought off it.
+      await endedTrip(flat, daysAgo(4), [milk], 4);
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({ lineId: milk, quantity: 4 }),
+      ]);
+    });
+
+    it('counts trips and absences off them too', async () => {
+      // The staple rule of plan 0123, section 4, over trips that have nothing
+      // but their frozen rows. Which baskets are trips of this list, and which
+      // of them asked for the line, both come off `basket_trip_rows`.
+      const flat = await list('Staple with no origins');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      // Bought yesterday for the only time: no period, and not due by one.
+      await settled(flat, milk, daysAgo(1));
+      await endedTrip(flat, daysAgo(22), [milk]);
+      await endedTrip(flat, daysAgo(15), [milk]);
+      // A trip of this list without milk: one absence, never two in a row.
+      await endedTrip(flat, daysAgo(12), [bread]);
+      await endedTrip(flat, daysAgo(8), [milk]);
+      await endedTrip(flat, daysAgo(2), [milk]);
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({
+          lineId: milk,
+          reason: LineSuggestionReason.STAPLE,
+          tripsWith: 4,
+          tripsSeen: 5,
+        }),
+      ]);
+    });
+  });
+
   describe('the staple rule (section 4)', () => {
     it('suggests a line every recent basket of this list asked for, whatever the clock says', async () => {
       const flat = await list('Flat');
@@ -476,9 +575,10 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
       // Trips of another list are not trips of this one, so they are no absence.
       await endedTrip(other, daysAgo(5), [plasters]);
       await endedTrip(other, daysAgo(4), [plasters]);
-      // A deleted basket has no origins left, so it is not a trip at all.
+      // A deleted basket takes its trip rows with it, so it is not a trip at
+      // all and cannot count as an absence.
       const deleted = await endedTrip(flat, daysAgo(3), [bread]);
-      await dataSource.getRepository(GeneratedList).delete({ id: deleted });
+      await dataSource.getRepository(Basket).delete({ id: deleted });
 
       expect(await read(flat)).toEqual([
         {
@@ -521,6 +621,176 @@ describeIntegration('the lines a list suggests (real Postgres)', () => {
         [staple, LineSuggestionReason.STAPLE],
       ]);
       expect(rows[0]).toMatchObject({ tripsWith: null, tripsSeen: null });
+    });
+  });
+
+  /**
+   * Plan 0142, section 8: a household that shops without baskets has trips
+   * too, and they are its sessions.
+   *
+   * A session here is written as purchases with no `basketId`, which is what a
+   * settle off the list page writes, grouped by the same six hour gap the list
+   * page groups them by.
+   */
+  describe('a session is a trip (plan 0142, section 8.1)', () => {
+    /**
+     * One session: every line bought at one moment, `daysAgo` days back.
+     *
+     * The extra lines are what make it a trip at all: a session states only
+     * what was bought, so it has to have touched at least
+     * `STAPLE_SESSION_MIN_LINES` of the list before its silences mean
+     * anything.
+     */
+    async function session(
+      listId: string,
+      days: number,
+      lines: readonly string[],
+      hoursAgo = 0
+    ): Promise<void> {
+      for (const lineId of lines) {
+        await settled(listId, lineId, daysAgo(days, -hoursAgo));
+      }
+    }
+
+    it('makes a staple of a list whose household never composed a basket', async () => {
+      const flat = await list('No baskets at all');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      const eggs = await line(flat, 'Eggs', { quantity: 1 });
+      // Four weekly shops, each of three lines. The period is 7 and the last
+      // purchase is a day old, so the line is not due by the period: what
+      // answers here is the staple rule, over sessions alone.
+      for (const days of [22, 15, 8, 1]) {
+        await session(flat, days, [milk, bread, eggs]);
+      }
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({
+          lineId: milk,
+          reason: LineSuggestionReason.STAPLE,
+          tripsWith: 4,
+          tripsSeen: 4,
+        }),
+      ]);
+    });
+
+    it('says nothing when every session was an errand for one thing', async () => {
+      const flat = await list('Errands');
+      const milk = await line(flat, 'Milk');
+      for (const days of [22, 15, 8, 1]) {
+        await session(flat, days, [milk]);
+      }
+
+      // Four shops, and not one of them says what the household wanted: they
+      // say what was bought. Counting them would make every other line of the
+      // list absent from four trips running.
+      expect(await read(flat)).toEqual([]);
+    });
+
+    it('is not a trip while it is still inside the gap', async () => {
+      const flat = await list('Still shopping');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      const eggs = await line(flat, 'Eggs', { quantity: 1 });
+      for (const days of [22, 15, 8]) {
+        await session(flat, days, [milk, bread, eggs]);
+      }
+      // A fourth shop an hour ago. Somebody is in the shop, and the lines they
+      // have not reached yet are not absences.
+      await session(flat, 0, [milk, bread, eggs], 1);
+
+      expect(await read(flat)).toEqual([]);
+    });
+
+    it('counts it on the first read after it ends', async () => {
+      const flat = await list('Finished shopping');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      const eggs = await line(flat, 'Eggs', { quantity: 1 });
+      for (const days of [22, 15, 8]) {
+        await session(flat, days, [milk, bread, eggs]);
+      }
+      // The same shopping, seven hours ago instead of one: the silence since
+      // is longer than the gap, so the session is over and is the fourth trip.
+      await session(flat, 0, [milk, bread, eggs], 7);
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({
+          lineId: milk,
+          reason: LineSuggestionReason.STAPLE,
+          tripsWith: 4,
+          tripsSeen: 4,
+        }),
+      ]);
+    });
+
+    it('counts a session and a basket as trips of the same list', async () => {
+      const flat = await list('Both kinds');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      const eggs = await line(flat, 'Eggs', { quantity: 1 });
+      await endedTrip(flat, daysAgo(22), [milk]);
+      await endedTrip(flat, daysAgo(15), [milk]);
+      await session(flat, 8, [milk, bread, eggs]);
+      await session(flat, 1, [milk, bread, eggs]);
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({
+          lineId: milk,
+          reason: LineSuggestionReason.STAPLE,
+          tripsWith: 4,
+          tripsSeen: 4,
+        }),
+      ]);
+    });
+
+    // A purchase belongs to a `GENERATED` basket or to a session and never to
+    // both (plan 0134, section 4.1), so the union cannot count one shop twice.
+    it('does not count a basket’s own purchases as a session as well', async () => {
+      const flat = await list('No double counting');
+      const milk = await line(flat, 'Milk');
+      const bread = await line(flat, 'Bread', { quantity: 1 });
+      const eggs = await line(flat, 'Eggs', { quantity: 1 });
+      for (const days of [22, 15, 8, 1]) {
+        const trip = await endedTrip(flat, daysAgo(days), [milk]);
+        for (const lineId of [milk, bread, eggs]) {
+          await settled(flat, lineId, daysAgo(days), { basketId: trip });
+        }
+      }
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({ lineId: milk, tripsSeen: 4 }),
+      ]);
+    });
+  });
+
+  describe('the quantity when a session came later (plan 0142, section 8.2)', () => {
+    it('follows the basket trip when the line was last bought on it', async () => {
+      const flat = await list('Bought on the basket');
+      const milk = await line(flat, 'Milk');
+      await settled(flat, milk, daysAgo(20), { quantity: 1 });
+      await settled(flat, milk, daysAgo(13), { quantity: 1 });
+      const trip = await endedTrip(flat, daysAgo(6), [milk], 3);
+      await settled(flat, milk, daysAgo(6), { quantity: 1, basketId: trip });
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({ lineId: milk, quantity: 3 }),
+      ]);
+    });
+
+    // Without this the basket would decide the quantity for ever, because a
+    // session asks for nothing and so can never replace the number.
+    it('follows the last purchase when a newer session bought a different number', async () => {
+      const flat = await list('Bought off the list page since');
+      const milk = await line(flat, 'Milk');
+      const trip = await endedTrip(flat, daysAgo(20), [milk], 3);
+      await settled(flat, milk, daysAgo(20), { quantity: 3, basketId: trip });
+      await settled(flat, milk, daysAgo(13), { quantity: 2 });
+      await settled(flat, milk, daysAgo(6), { quantity: 2 });
+
+      expect(await read(flat)).toEqual([
+        expect.objectContaining({ lineId: milk, quantity: 2 }),
+      ]);
     });
   });
 

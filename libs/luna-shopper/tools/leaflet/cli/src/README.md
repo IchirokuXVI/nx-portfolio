@@ -51,7 +51,9 @@ baseline is written only once a reading is accepted (procedure (b), step 6).
 The command's own parts sit beside `cli.mjs`: `chains.mjs` resolves a slug,
 `census.mjs` and `render.mjs` are steps 1 and 2, `layout-check.mjs` is step 3,
 `read-pages.mjs` is step 4, `sanity.mjs` is step 5, `document.mjs` is steps 6 to
-8, `manual.mjs` is `--engine manual`, and `run.mjs` is the eight in order.
+8, `manual.mjs` is `--engine manual`, `check-page.mjs` is `--check-page`,
+`commands.mjs` writes every command the run prints, and `run.mjs` is the eight
+in order.
 
 **One leaflet's own values never belong in a chain's script.** A leaflet's own
 PDF, its page count, which pages carry no department heading, its printed
@@ -193,9 +195,16 @@ It does eight things, in order, and each one can refuse.
    is 62 pages of flat images.
 2. **Render.** Every page to a PNG under `<out>/pages/`, at the dpi
    `chains/src/<slug>/headings.mjs` names, which `--dpi` overrides. It shells out to
-   `pdftoppm`, then `magick`, then a Python with PyMuPDF, and prints the install
-   line for each when it finds none. `--pdf <directory>` of `page_NN.png` skips
-   this step, which is how LIDL is read.
+   `pdftoppm`, then `magick`, then a Python with PyMuPDF, then a running Docker,
+   and prints the install line for each when it finds none. Docker needs nothing
+   else on the machine: it runs `pdftoppm` in `alpine:3.20` with `poppler-utils`
+   over the PDF's folder and the pages folder, renders every wanted page in one
+   container, and says so before it pulls the image. A renderer that answers its
+   probe and then renders no page at all, which is ImageMagick without
+   Ghostscript, is passed over for the next one. `--pdf <directory>` of
+   `page_NN.png` skips this step, which is how LIDL is read. A directory is read
+   for the pages it holds: `page_05.png` to `page_16.png` is pages 5 to 16 of a
+   leaflet of at least 16 pages, and nothing asks for pages 1 to 4.
 3. **Layout check.** `chains/src/<slug>/layout.md` against the first three pages. A
    mismatch stops the run and names what differs. An answer the check could not
    read carries on, and the raw text of it is kept as
@@ -210,12 +219,14 @@ It does eight things, in order, and each one can refuse.
    the page, the product and the rule for every row that fails. It runs for
    every engine, because every model has a systematic defect and only the defect
    differs. It never edits a row and it never drops one.
-6. **Leaflet metadata.** `<out>/import/leaflet.json`, with the validity window
-   asked of the cover. Every field it filled is printed for you to confirm: a
-   wrong date silently mis-scopes every price.
+6. **Leaflet metadata.** `<out>/import/leaflet.json`, with the validity window.
+   `--valid-from` and `--valid-until` set it on any engine, and the cover is
+   asked only for a bound nobody stated. Every field is printed with where it
+   came from, for you to confirm: a wrong date silently mis-scopes every price.
 7. **Build, drift check, validate.** The three scripts below, unchanged, as
    child processes. A drift refusal stops the run before validate.
-   `--update-baseline` is never passed.
+   `--update-baseline` is never passed. The report prints the exact command
+   that passes it, for you to run once you have accepted the reading.
 8. **Report.** What was read, every row to look at, and the document's path.
 
 Then two things are yours, and stay yours:
@@ -224,52 +235,66 @@ Then two things are yours, and stay yours:
   with the chain, the price scope and the source kind `OFFICIAL_LEAFLET`. The
   command prints the call and never makes it. A tool that posted its own output
   would remove the only review this pipeline has.
-- **Once the reading is accepted**, run `build-document.mjs` with
-  `--update-baseline` so the next leaflet is checked against this one.
+- **Once the reading is accepted**, run the `build-document.mjs ...
+  --update-baseline` command the report prints, so the next leaflet is checked
+  against this one.
 
 ### Which engine reads it
 
-`--engine ollama` is the default, and it is not good enough to accept unseen.
-It is free, a leaflet reading is cheap to redo, and the drift check already
-catches a bad one, so a first pass over a 40 page leaflet is worth having. What
-it costs is measured in the plan's section 7: it found every tile and invented
-nothing, and it got 63% of headline prices, 55% of ANTES prices and 31% of unit
-prices right, against 95%, 100% and 100% for Sonnet 5. On every price drop tile
-it invented a single unit price the page does not print.
+**The default is `--engine claude --model sonnet`.** The most accurate reader
+measured here is Sonnet 5, and the `claude` engine hands each page image to
+`claude -p` through its Read tool, billed to the Claude session you are logged
+in to. `sonnet` is Claude Code's alias for the current Sonnet. Name another
+model with `--model`, or `--engine api` to bill `ANTHROPIC_API_KEY` instead.
 
-The command asks that engine for up to 4,096 tokens per page, because a dense
-page of nine offers does not fit in the 1,024 the model engines library defaults
-to and a cut off answer is recorded as an empty page. Set `OLLAMA_NUM_PREDICT`
-to override it.
+**Local vision models are unreliable on leaflets**, and `--engine ollama` says
+so before the run and again after it. gemma4 was measured unstable on leaflets.
+In the plan's section 7 it found every tile and invented nothing, and it got 63%
+of headline prices, 55% of ANTES prices and 31% of unit prices right, against
+95%, 100% and 100% for Sonnet 5. On every price drop tile it invented a single
+unit price the page does not print. Name it only for a reading you will check
+page by page. The command asks it for up to 4,096 tokens per page, because a
+dense page does not fit in the 1,024 the model engines library defaults to, and
+`OLLAMA_NUM_PREDICT` overrides that. The first line of its warning is written
+into `leaflet.json`'s `extraction.tool`, which reaches the document's
+`producer.name`, so a person reading the file next week sees what read it.
 
-So the run prints that **before** it starts as well as after, because a warning
-is worth nothing to somebody who has already waited eleven minutes. The first
-line of it is written into `leaflet.json`'s `extraction.tool`, which is the
-field that reaches the document's `producer.name`, so a person reading the file
-next week sees what read it.
-
-**For a reading that matters, use `--engine manual`.** The most accurate reader
-measured here is Sonnet 5, and manual mode reaches it by not being clever: it
-renders the pages, writes `<out>/PROMPT.md`, and stops.
+**`--engine manual` is for a model this command cannot call**, or for checking
+a reading as it is written. It renders the pages, writes `<out>/PROMPT.md`, and
+stops.
 
 ```sh
 # 1. Render, and write the prompt to paste.
 npx nx run luna-shopper/leaflet-cli:read -- --pdf tmp/dia.pdf --chain dia --engine manual
 
 # 2. Paste <out>/PROMPT.md into Claude Code, or any model you like. It writes
-#    <out>/import/page_NN.json, one JSON array per page.
+#    <out>/import/page_NN.json, one JSON array per page. Check each one as it
+#    lands: the shape every chain prompt asks for, the sanity pass, and the
+#    line of the file for each thing that is wrong.
+npx nx run luna-shopper/leaflet-cli:read -- --out <out> --check-page 5
 
-# 3. Pick the run back up.
-npx nx run luna-shopper/leaflet-cli:read -- --out <out> --resume --engine manual
+# 3. Build, drift check and validate, in order, stopping at the first failure.
+#    The chain, the pages, the dpi and the dates come from <out>/run.json.
+npx nx run luna-shopper/leaflet-cli:read -- --out <out> --finish
 ```
 
-A Claude Code session already reads a PNG with its Read tool and the tokens are
-already paid for. `PROMPT.md` carries `chains/src/<slug>/prompt.txt` byte for byte,
-so it cannot drift from the chain's own rules, and it is generated every run and
-never committed. The pick up refuses a reading it cannot trust rather than
-repairing one: a `page_NN.json` that is not a JSON array is named by page and
-stops the run, and so is a page with no file at all unless `--pages` excluded
-it.
+`PROMPT.md` carries `chains/src/<slug>/prompt.txt` byte for byte, so it cannot
+drift from the chain's own rules, and it is generated every run and never
+committed. It prints the same `--check-page` and `--finish` commands, whole. The
+pick up refuses a reading it cannot trust rather than repairing one: a
+`page_NN.json` that is not a JSON array is named by page and stops the run, and
+so is a page with no file at all unless `--pages` excluded it.
+
+### Picking a run back up
+
+`--out <out> --resume` reads the PDF, the chain, the pages, the dpi and the
+dates from `<out>/run.json` when the flags do not say them, and merges into that
+file rather than writing it whole. A reading already in `<out>/import/` is kept,
+and a page image already rendered is not rendered again. `leaflet.json` keeps
+every field a person filled between two runs: a validity bound, the raw text,
+`campaign`, `notes` and `fixed_sections`. Every resume command the run prints
+carries `--pages` when the run read fewer pages than the leaflet has, so it can
+be pasted as it stands.
 
 ### The three scripts the command calls
 
@@ -293,19 +318,19 @@ node --experimental-strip-types \
 A drift refusal means stop and look. Do not validate or upload a refused
 reading without understanding why it drifted.
 
-**El Jamon does not yet follow this procedure.** It has no per page readings
-and no `leaflet.json`: its one committed reading is already a whole document
-in the old leaflet shape, from before this split, and `to-harvest-document.mjs`
-converts it directly:
+**El Jamon follows this procedure like every other chain.** Its baseline was
+regenerated by `build-document.mjs --update-baseline` from the per page
+reading of backend plan 0150 (pages 5 to 16 of the September 2026 leaflet).
+That reading was taken in the flat shape El Jamon's prompt asked for before
+leaflet cli plan 0002, which `readRow` still reads. It has no department
+heading, no per kilo tile and no printed comparison wording, so the first
+reading in the current shape will name headings and label patterns the
+baseline has not seen. Check those against the pages, then run
+`--update-baseline` again.
 
-```sh
-node libs/luna-shopper/tools/leaflet/cli/src/to-harvest-document.mjs \
-  tmp/leaflet/eljamon.vision.json
-```
-
-`chains/src/el-jamon/baseline.json` still exists, generated from that same
-reading, so `drift-check.mjs` has something to compare a future El Jamon
-reading against once it does move to per page images and this procedure.
+Every chain's prompt asks for one row shape, and `build-document.mjs` names
+each key it does not know, once per page. `--strict` refuses to write the
+document while there is one.
 
 ## Procedure (b): a new chain
 

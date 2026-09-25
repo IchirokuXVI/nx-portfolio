@@ -262,6 +262,12 @@ export function toHarvestDocument(leaflet, options = {}) {
       size,
       price: decided.price,
       unit_price: decided.unit_price,
+      // The tile's own window, when it printed one, over the document's. Both
+      // bounds or none, which the builder already made sure of.
+      validity:
+        str(offer.validity?.from) && str(offer.validity?.until)
+          ? { from: offer.validity.from, until: offer.validity.until }
+          : null,
       // The department the leaflet printed it under, which is the category a
       // created item defaults to. Absent when the page carried no heading,
       // which is every page of a text layer reading, and when the heading names
@@ -292,6 +298,9 @@ export function toHarvestDocument(leaflet, options = {}) {
             : null,
         promotion: offer.promotion ?? null,
         loyalty: offer.loyalty ?? null,
+        category: str(offer.category),
+        validity_text: str(offer.validity_text),
+        validity_assumption: str(offer.validity_assumption),
         legal_note: str(offer.legal_note),
         read_by: str(offer.source),
         confidence: num(offer.confidence),

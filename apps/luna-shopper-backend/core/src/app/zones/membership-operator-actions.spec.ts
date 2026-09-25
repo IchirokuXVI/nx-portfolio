@@ -4,12 +4,20 @@ import {
   ZoneRole,
 } from '@portfolio/luna-shopper/contracts';
 import { fakeAudit, type RecordedChange } from '../audit/core-audit.testing';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import { ZoneMembership } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { SharedListGrantService } from '../lists/shared-list-grant.service';
 import { MembershipService } from './membership.service';
 import type { ZoneAuthzService } from './zone-authz.service';
 import type { ZoneCountsService } from './zone-counts.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * A named action produces the same end state as the equivalent user facing route
@@ -116,7 +124,8 @@ function makeService(target: ZoneMembership): Harness {
       sharedGrant as unknown as SharedListGrantService,
       counts as unknown as ZoneCountsService,
       publisher as unknown as CoreEventsPublisher,
-      audit.service
+      audit.service,
+      announcer
     ),
     saved,
     events,

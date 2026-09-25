@@ -43,6 +43,7 @@ export const LISTS_HOLDING_ITEM_SQL = `
     JOIN "zone_memberships" m
       ON m."zoneId" = sl."zoneId" AND m."userId" = $2
     WHERE lli."itemId" = $1
+      AND ll."deletedAt" IS NULL
       AND ll."approvalStatus" = 'APPROVED'
       AND ll.quantity > 0
       AND ($3::uuid IS NULL OR sl.id <> $3::uuid)

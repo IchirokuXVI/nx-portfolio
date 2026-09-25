@@ -1,0 +1,46 @@
+@use '../styles/tokens' as tokens;
+
+// Over the bar and under a sheet (section 4). No card is drawn while a sheet is open
+// anyway, so the order against a sheet only matters for the frame one opens in.
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: var(--app-tour-z);
+}
+
+.blocker {
+  position: fixed;
+  inset: 0;
+
+  // The dimming does not animate at all (section 10): a fade on every stop change
+  // would be a flash of the undimmed app in the middle of the tour.
+  &.dimmed {
+    background: var(--app-scrim);
+  }
+}
+
+// The control shows through the one hole in the scrim, ringed in the accent. The
+// shadow's spread reaches past every edge of any screen, which is what dims the rest.
+.ring {
+  position: fixed;
+  border: var(--app-focus-ring-width) solid var(--app-action-quiet-fg);
+  border-radius: var(--app-radius-lg);
+  box-shadow: 0 0 0 100vmax var(--app-scrim);
+  pointer-events: none;
+  // The move between stops. The motion tokens are zero under reduced motion, which
+  // turns it into a cut.
+  transition:
+    top var(--app-motion-slow) var(--app-motion-ease),
+    left var(--app-motion-slow) var(--app-motion-ease),
+    width var(--app-motion-slow) var(--app-motion-ease),
+    height var(--app-motion-slow) var(--app-motion-ease);
+}
+
+// The card, in the app's own column: the gutter on a phone, and no wider than the
+// column on a wide screen.
+.slot {
+  position: fixed;
+  inset-inline: var(--app-space-5);
+  max-inline-size: calc(#{tokens.$app-content-max} - 2 * var(--app-space-5));
+  margin-inline: auto;
+}

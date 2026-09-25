@@ -1,6 +1,10 @@
 import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
-import type { UserProfile, UsernameScope } from '@portfolio/velista/models';
+import type {
+  AppStateFlags,
+  UserProfile,
+  UsernameScope,
+} from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { ApiUrl } from '../api-url';
 import { SessionStore } from '../auth/session-store';
@@ -32,10 +36,16 @@ function fakeAccount(
     setRejectsWith?: unknown;
     /** What the server answers to a rename, which is not what was sent. */
     normalizeTo?: string;
+    /** What the app state write throws, if anything. */
+    appStateRejectsWith?: unknown;
   } = {}
 ) {
-  const calls: { method: string; username?: string; scope?: UsernameScope }[] =
-    [];
+  const calls: {
+    method: string;
+    username?: string;
+    scope?: UsernameScope;
+    flags?: AppStateFlags;
+  }[] = [];
   let held = options.profile ?? profile();
 
   const service: AccountServiceI = {
@@ -52,11 +62,25 @@ function fakeAccount(
         throw options.setRejectsWith;
       }
       held = { ...held, username: options.normalizeTo ?? username };
-      return held;
+      // The server's rename answers the auth half alone, with no `appState`.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { appState, ...authHalf } = held;
+      return authHalf;
     },
     deleteAccount: async () => {
       calls.push({ method: 'deleteAccount' });
       return { deleted: true };
+    },
+    setAppState: async (flags: AppStateFlags) => {
+      calls.push({ method: 'setAppState', flags });
+      if (options.appStateRejectsWith !== undefined) {
+        throw options.appStateRejectsWith;
+      }
+      return { setupCompletedAt: '2026-09-23T10:00:00.000Z', tourSeenAt: null };
+    },
+    suggestUsername: async () => {
+      calls.push({ method: 'suggestUsername' });
+      return 'Quiet Harbour';
     },
   };
 
@@ -417,6 +441,187 @@ describe('ProfileStore', () => {
       await store.remove();
 
       expect(tokens.tokens()).not.toBeNull();
+    });
+  });
+
+  describe('what the account has been shown (velista 0098)', () => {
+    const fresh = { setupCompletedAt: null, tourSeenAt: null };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it('does not know whether the setup is owed until the profile has answered', () => {
+      const { store } = setUp(fakeAccount());
+
+      // Null is "not known", never "owed": the guard lets a page through on it.
+      expect(store.setupPending()).toBeNull();
+    });
+
+    it('owes the setup to an account that has never finished it', async () => {
+      const { store } = setUp(
+        fakeAccount({ profile: profile({ appState: fresh }) })
+      );
+      await store.load();
+
+      expect(store.setupPending()).toBe(true);
+    });
+
+    it('owes nothing to an account that finished it', async () => {
+      const { store } = setUp(
+        fakeAccount({
+          profile: profile({
+            appState: {
+              setupCompletedAt: '2026-09-01T00:00:00Z',
+              tourSeenAt: null,
+            },
+          }),
+        })
+      );
+      await store.load();
+
+      expect(store.setupPending()).toBe(false);
+    });
+
+    it('stops owing it on the same tick it is marked, before the server answers', async () => {
+      const service = fakeAccount({ profile: profile({ appState: fresh }) });
+      const { store } = setUp(service);
+      await store.load();
+
+      store.completeSetup();
+
+      expect(store.setupPending()).toBe(false);
+    });
+
+    it('sends the stamp once, however many exits call it', async () => {
+      const service = fakeAccount({ profile: profile({ appState: fresh }) });
+      const { store } = setUp(service);
+      await store.load();
+
+      store.completeSetup();
+      store.completeSetup();
+      store.completeSetup();
+      await settle();
+
+      expect(
+        service.calls.filter((call) => call.method === 'setAppState')
+      ).toHaveLength(1);
+      expect(store.appState()?.setupCompletedAt).not.toBeNull();
+    });
+
+    it('sends nothing for an account the server already knows is set up', async () => {
+      const service = fakeAccount({
+        profile: profile({
+          appState: {
+            setupCompletedAt: '2026-09-01T00:00:00Z',
+            tourSeenAt: null,
+          },
+        }),
+      });
+      const { store } = setUp(service);
+      await store.load();
+
+      store.completeSetup();
+      await settle();
+
+      expect(service.calls.some((call) => call.method === 'setAppState')).toBe(
+        false
+      );
+    });
+
+    it('keeps the mark for this document when the stamp is lost', async () => {
+      // A lost write costs one more offer on the next cold start, never a second one now.
+      const service = fakeAccount({
+        profile: profile({ appState: fresh }),
+        appStateRejectsWith: new Error('offline'),
+      });
+      const { store } = setUp(service);
+      await store.load();
+
+      store.completeSetup();
+      await settle();
+      await store.load();
+
+      expect(store.setupPending()).toBe(false);
+    });
+
+    it('keeps the app state through a rename, whose answer carries none', async () => {
+      const { store } = setUp(
+        fakeAccount({ profile: profile({ appState: fresh }) })
+      );
+      await store.load();
+
+      await store.rename('Dani', 'GLOBAL_ONLY');
+
+      expect(store.appState()).toEqual(fresh);
+      expect(store.setupPending()).toBe(true);
+    });
+
+    it('forgets the mark on clear, so the next account is asked', async () => {
+      const { store } = setUp(
+        fakeAccount({ profile: profile({ appState: fresh }) })
+      );
+      await store.load();
+      store.completeSetup();
+
+      store.clear();
+      await store.load();
+
+      expect(store.setupPending()).toBe(true);
+    });
+  });
+
+  describe('the tour (velista 0099)', () => {
+    const fresh = { setupCompletedAt: null, tourSeenAt: null };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it('sends tourSeen once, however many runs end in one document', async () => {
+      const service = fakeAccount({ profile: profile({ appState: fresh }) });
+      const { store } = setUp(service);
+      await store.load();
+
+      store.markTourSeen();
+      store.markTourSeen();
+      await settle();
+
+      expect(
+        service.calls.filter((call) => call.method === 'setAppState')
+      ).toEqual([{ method: 'setAppState', flags: { tourSeen: true } }]);
+    });
+
+    it('sends nothing for an account the server already has as seen', async () => {
+      // A replay ends too, and `tourSeenAt` is a fact about the past, not a switch.
+      const service = fakeAccount({
+        profile: profile({
+          appState: {
+            setupCompletedAt: '2026-09-01T00:00:00Z',
+            tourSeenAt: '2026-09-01T00:05:00Z',
+          },
+        }),
+      });
+      const { store } = setUp(service);
+      await store.load();
+
+      store.markTourSeen();
+      await settle();
+
+      expect(service.calls.some((call) => call.method === 'setAppState')).toBe(
+        false
+      );
+    });
+
+    it('sends it again for the next account after a clear', async () => {
+      const service = fakeAccount({ profile: profile({ appState: fresh }) });
+      const { store } = setUp(service);
+      await store.load();
+      store.markTourSeen();
+      await settle();
+
+      store.clear();
+      await store.load();
+      store.markTourSeen();
+      await settle();
+
+      expect(
+        service.calls.filter((call) => call.method === 'setAppState')
+      ).toHaveLength(2);
     });
   });
 

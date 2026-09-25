@@ -5,13 +5,25 @@ import type { ReferenceGroup } from './types';
  * The normalized product groups the reference catalog is built around (plan
  * 0067, section 2).
  *
- * A group is **the thing you would write on a shopping list**, which is the
- * grain the whole file is authored at and the only one worth defending. Coarser
- * and it stops being a purchase: "dairy" is a supermarket aisle, and nobody
- * writes it down. Finer and every product becomes its own group, which is the
- * un-normalized catalog again under a friendlier name. So `Chorizo` and
- * `Salchichón` are two groups because you would say which one you meant, while
- * every brand and size of chorizo is one.
+ * A group is **one product sold under several labels**: items so nearly
+ * identical that a shopper takes any of them and compares them only on price.
+ * It exists to find the best price for the same product across brands and
+ * chains, and that is the grain the whole file is authored at.
+ *
+ * A group is not a category. "Milk" is a category, and it is too broad for a
+ * group: whole, semi-skimmed, skimmed and lactose free milk are four groups,
+ * because a shopper who wants one does not accept the others. Anything that
+ * makes a shopper refuse a substitute separates groups: fat level, a free from
+ * variant, flavor, fresh or shelf stable, grade, strength or dose, and form.
+ * Brand, chain, printed name, package size and pack count never do. So every
+ * brand and size of whole milk is one group, and `Chorizo` and `Salchichón` are
+ * two. A product sold under different names is still one group, and the other
+ * names go in `synonyms`: Metamizol, Dipirona and Nolotil at the same dose and
+ * form are one.
+ *
+ * The rule is stated in full in the curation prompt
+ * (`libs/luna-shopper/tools/curation/groups/src/prompt.md`). Some groups below
+ * predate it and are broader than it allows.
  *
  * The English name is the friendly name plan 0067 asks for. The Spanish one is
  * not a translation of it but the word actually used here, which is why several
@@ -743,6 +755,33 @@ export const REFERENCE_GROUPS: ReferenceGroup[] = [
   },
 
   // --- Pantry --------------------------------------------------------------
+  /**
+   * The one group with no receipt behind it (plan 0156). "aove" is how Spain
+   * writes extra virgin olive oil on a shopping list, and it is not a word in
+   * any product name, so the group's synonym is the only way to find it.
+   *
+   * Its members are the Mercadona harvest's extra virgin olive oils, by
+   * barcode, read from a catalog walk on 2026-09-23.
+   */
+  {
+    slug: 'extra-virgin-olive-oil',
+    name: { en: 'Extra Virgin Olive Oil', es: 'Aceite de oliva virgen extra' },
+    referenceUnit: UnitOfMeasure.LITER,
+    synonyms: {
+      en: ['evoo', 'extra virgin olive oil'],
+      es: ['aove', 'virgen extra'],
+    },
+    harvestedEans: [
+      // Hacendado, 0.2 l, 1 l and 3 l
+      '8480000047182',
+      '8402001001185',
+      '8402001001192',
+      // Hacendado Gran Selección, 0.75 l
+      '8480000047069',
+      // Casa Juncal Picual, 0.5 l
+      '8437009466476',
+    ],
+  },
   {
     slug: 'mayonnaise',
     name: { en: 'Mayonnaise', es: 'Mayonesa' },

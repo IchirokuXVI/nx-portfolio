@@ -43,6 +43,8 @@ import {
   type DeleteBrandResult,
   type DeleteItemPricesByRunRequest,
   type DeleteItemPricesByRunResult,
+  type FillPackCountsRequest,
+  type FillPackCountsResult,
   type FindItemByEanRequest,
   type FindItemByEanResult,
   type GetItemsRequest,
@@ -53,7 +55,9 @@ import {
   type ItemPage,
   type ItemPriceIdRequest,
   type ItemPricePage,
+  type ItemPricesByItemRequest,
   type ItemPriceView,
+  type ItemScopePricesPage,
   type ItemView,
   type ListAdminPostalCodesRequest,
   type ListBrandsRequest,
@@ -80,6 +84,8 @@ import {
   type ProductGroupOfferPage,
   type ProductGroupPage,
   type ProductGroupView,
+  type RegisterBrandsRequest,
+  type RegisterBrandsResult,
   type RegisterBrandSuggestionRequest,
   type RegisterBrandSuggestionResult,
   type ResolvedScopesView,
@@ -92,6 +98,8 @@ import {
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityRequest,
   type SetSupermarketLocationItemAvailabilityResult,
+  type ShopAvailabilityRequest,
+  type ShopAvailabilityView,
   type ShopPage,
   type SummarizeLocationsByChainRequest,
   type SupermarketIdRequest,
@@ -278,6 +286,21 @@ export class CatalogController {
     return this.locations.search(req);
   }
 
+  /**
+   * One shop, its scope stack, its chain and the stored availability of some
+   * products there (plan 0163, section 2).
+   *
+   * Service to service and carrying no `userId`, like `item.getMany`: the
+   * basket read that asks may be a guest's, and a shop and whether it stocks a
+   * product are not private.
+   */
+  @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.shopAvailability)
+  shopAvailability(
+    @Payload() req: ShopAvailabilityRequest
+  ): Promise<ShopAvailabilityView> {
+    return this.locationItems.shopAvailability(req);
+  }
+
   // --- Items ---------------------------------------------------------------
 
   @MessagePattern(ITEM_PATTERNS.create)
@@ -343,6 +366,17 @@ export class CatalogController {
   @MessagePattern(ITEM_PATTERNS.createMany)
   createItems(@Payload() req: CreateItemsRequest): Promise<CreateItemsResult> {
     return this.items.createMany(req);
+  }
+
+  /**
+   * The pack counts a catalog discovery run read (plan 0162, section 3),
+   * written only where a product has none.
+   */
+  @MessagePattern(ITEM_PATTERNS.fillPackCounts)
+  fillPackCounts(
+    @Payload() req: FillPackCountsRequest
+  ): Promise<FillPackCountsResult> {
+    return this.items.fillPackCounts(req);
   }
 
   // --- Product groups (plan 0048, section 1) -------------------------------
@@ -437,6 +471,13 @@ export class CatalogController {
   @MessagePattern(BRAND_PATTERNS.keys)
   brandKeys(@Payload() req: BrandKeysRequest): Promise<BrandKeysResult> {
     return this.brands.keys(req);
+  }
+
+  @MessagePattern(BRAND_PATTERNS.registerMany)
+  registerBrands(
+    @Payload() req: RegisterBrandsRequest
+  ): Promise<RegisterBrandsResult> {
+    return this.brands.registerMany(req);
   }
   @MessagePattern(PRODUCT_GROUP_PATTERNS.list)
   listProductGroups(
@@ -590,6 +631,13 @@ export class CatalogController {
     @Payload() req: ListItemPricesRequest
   ): Promise<ItemPricePage> {
     return this.itemPrices.list(req);
+  }
+
+  @MessagePattern(ITEM_PRICE_PATTERNS.byItem)
+  itemPricesByItem(
+    @Payload() req: ItemPricesByItemRequest
+  ): Promise<ItemScopePricesPage> {
+    return this.itemPrices.byItem(req);
   }
 
   @MessagePattern(ITEM_PRICE_PATTERNS.delete)

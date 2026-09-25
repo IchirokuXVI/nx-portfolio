@@ -1,5 +1,5 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
-import { parseSize } from './size';
+import { packCountIn, parseSize } from './size';
 
 /**
  * Every string here was printed by the live assortment on 2026-09-06 (plan
@@ -44,6 +44,21 @@ describe('parseSize', () => {
       unit: UnitOfMeasure.LITER,
       count: 4,
     });
+  });
+
+  it('reads the pack count as the N of NxQ (plan 0162)', () => {
+    expect(packCountIn('3x200 ml')).toBe(3);
+    expect(packCountIn('6x200ml')).toBe(6);
+    expect(packCountIn('4x1 / l')).toBe(4);
+  });
+
+  it('states no pack count for a single size, a count of 1 or no size', () => {
+    expect(packCountIn('500 g')).toBeNull();
+    expect(packCountIn('1x500 g')).toBeNull();
+    expect(packCountIn('Paquete')).toBeNull();
+    expect(packCountIn('Aprox. 0,8-1,2kg')).toBeNull();
+    expect(packCountIn('1001x1 g')).toBeNull();
+    expect(packCountIn(null)).toBeNull();
   });
 
   it('reads the separator the chain prints between number and unit', () => {

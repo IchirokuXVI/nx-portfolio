@@ -56,6 +56,11 @@ export const LINE_PATTERNS = {
    * longer carries.
    */
   settle: 'line.settle',
+  /**
+   * The product a settle on a line records when it names none (plan 0151). The
+   * gateway asks before it reads a price, so it prices what core will write.
+   */
+  settlePick: 'line.settlePick',
   /** One line's own settlements, newest first (plan 0047, section 6.1). */
   settlements: 'line.settlements',
   /**
@@ -434,7 +439,7 @@ export interface LineClaimRef {
  * ## What it may say, which is very little
  *
  * That a line is claimed and whose it is. Not what else is in the basket, not
- * where they are shopping, not what it costs, and **not the generated list id**.
+ * where they are shopping, not what it costs, and **not the basket id**.
  * That last omission is the load bearing one: an id in a payload is an invitation
  * for a client to fetch it, and the refusal would then be the only thing standing
  * between a zone member and somebody else's basket. The event names a person, not
@@ -579,11 +584,34 @@ export interface ListListsRequest extends PageQuery {
   zoneId: string;
 }
 
+/**
+ * The basket a write to a list came through (plan 0138, section 4).
+ *
+ * **Core internal, and it never crosses the broker.** The basket services of plan
+ * 0136 call `LineService` in process and set this so the change record says who
+ * acted and where; the gateway's list DTOs do not carry it, and
+ * `forbidNonWhitelisted` refuses it from a client.
+ *
+ * It is the **actor's** identity and not the account the write was authorized
+ * against. Those differ on every delegated write: changing what a household asks
+ * for is checked against the basket's owner (plan 0131) while the person doing it
+ * may be a guest, so `userId` here is the participant's own account and is null
+ * for a guest.
+ */
+export interface LineWriteVia {
+  participantId: string;
+  basketId: string;
+  /** The participant's own account, null for a guest. */
+  userId: string | null;
+}
+
 export interface AddLineRequest {
   userId: string;
   listId: string;
   content: string;
   quantity?: number;
+  /** Set by a basket write alone (plan 0138). Never sent by a client. */
+  via?: LineWriteVia;
   /**
    * The products this line stands for (plan 0048, section 1.1). Opaque references
    * into the catalog, validated as UUIDs in application code and never a database
@@ -666,6 +694,8 @@ export interface AddLinesRequest {
 export interface UpdateLineRequest {
   userId: string;
   lineId: string;
+  /** Set by a basket write alone (plan 0138). Never sent by a client. */
+  via?: LineWriteVia;
   content?: string;
   quantity?: number;
   /**
@@ -763,12 +793,92 @@ export interface AddLineQuantityRequest {
   userId: string;
   lineId: string;
   delta: number;
+  /** Set by a basket write alone (plan 0138). Never sent by a client. */
+  via?: LineWriteVia;
+  /**
+   * What the caller believed the line's quantity was, checked against the row
+   * the lock reads and refused with `stale_quantity` on a mismatch (plan 0136,
+   * section 5.3).
+   *
+   * Optional, and absent is the ordinary case: a delta needs no starting point,
+   * which is the whole reason it exists. The basket sends one because a shopper
+   * moving a household's demand is acting on a number they were **shown**, and a
+   * settle that landed in between makes the gesture mean something the person
+   * did not intend. A delta alone would apply silently on top of it.
+   */
+  expect?: number;
 }
 
 export interface SetLineApprovalRequest {
   userId: string;
   lineId: string;
   approvalStatus: LineApprovalStatus;
+}
+
+/**
+ * What a settle cost, as the **gateway** read it (plan 0143, section 4.2).
+ *
+ * **It is on the NATS messages only and never on a DTO.** A client names a
+ * place and the gateway reads the price, because the actor at the shelf can be
+ * a guest and a guest writing money into a household's history is exactly the
+ * write plan 0130 section 5 exists to refuse. `forbidNonWhitelisted` on both
+ * settle DTOs is what makes that true rather than merely intended: there is no
+ * field on either body to put an amount in.
+ *
+ * Core validates the shape and stores the four values on every row the settle
+ * writes. It never reads a price of its own and has no catalog client (section
+ * 4.3).
+ */
+export interface SettlementPaid {
+  /** A chain's catchment and not a shop. Recorded even when no price was known. */
+  priceScopeId: string;
+  /** The one shop, or null: a reader not served shops never records one. */
+  supermarketLocationId: string | null;
+  /**
+   * The shop's chain, copied so that a count by chain needs no join into
+   * catalog (plan 0163, section 5). Set together with
+   * {@link supermarketLocationId} and never without it. Optional on the wire,
+   * and absent reads as null.
+   */
+  supermarketId?: string | null;
+  /**
+   * What **one unit** cost at {@link priceScopeId}, in the minor unit of
+   * {@link pricePaidCurrency}. Never the row's total, and never catalog's
+   * `unitPrice`, which is a per kilogram number.
+   */
+  pricePaidCents: number | null;
+  /**
+   * ISO 4217. Null together with {@link pricePaidCents}: the scope was real and
+   * the price was not known.
+   */
+  pricePaidCurrency: string | null;
+}
+
+/**
+ * Which product a settle that names none records, answered by core before the
+ * gateway reads the price (plan 0151, section 1).
+ *
+ * Core owns the rule, and the gateway prices exactly what core will write: a
+ * row or line offering one product records that one, and anything else records
+ * null. The gateway never works the answer out of an item list of its own,
+ * because two copies of one rule are how a price and a settlement came to
+ * disagree.
+ */
+export interface SettlePick {
+  /** The product a settle with no `itemId` records, or null. */
+  pickedItemId: string | null;
+  /**
+   * How many products the row or line offers. Several and no `itemId` is
+   * refused when the caller named a scope (section 2), because a price cannot
+   * be read for a product nobody named.
+   */
+  optionCount: number;
+}
+
+/** Which product a settle on this line records when it names none (plan 0151). */
+export interface LineSettlePickRequest {
+  userId: string;
+  lineId: string;
 }
 
 /**
@@ -788,6 +898,14 @@ export interface SettleLineRequest {
   userId: string;
   lineId: string;
   outcome: SettlementOutcome;
+  /**
+   * What the screen said one of it costs, and where (plan 0143).
+   *
+   * Written by the **gateway** and never by a client. Absent is an ordinary
+   * settle that records no money, which is every settle made from a client that
+   * showed no price.
+   */
+  paid?: SettlementPaid;
   /**
    * The units bought. Required for `BOUGHT`, and refused for `NOT_AVAILABLE`,
    * whose settlement is always zero.
@@ -814,7 +932,7 @@ export interface SettleLineRequest {
 /**
  * One origin line, touched by one settling act (plan 0047, section 3).
  *
- * `generatedListLineId` is stored and **never served**: which basket a purchase
+ * `basketLineId` is stored and **never served**: which basket a purchase
  * came out of is the one thing a settlement does not tell the list (section 3.1).
  * The purchase itself is a zone fact, readable by anybody who can read the list.
  */
@@ -833,16 +951,20 @@ export interface LineSettlementView {
    *
    * Null does not mean nobody. It means the settle came off a basket, where the
    * actor is a participant rather than a user and may be a guest with no account
-   * at all. The participant id is deliberately **not** served here, for the same
-   * reason `generatedListLineId` is not: a participant id is meaningless to a
-   * zone reader who cannot resolve it, and serving one would hand the zone a
-   * handle on a private basket's membership in exchange for nothing.
-   *
-   * What a zone reader learns from a null is that somebody shopping on a basket
-   * got it, which is the disclosure plan 0051 section 5.3 already makes
-   * deliberately and plan 0050 section 8 already called acceptable.
+   * at all, and {@link settledByParticipantId} names them instead. Exactly one
+   * of the two is set, which is `ck_line_settlements_actor`.
    */
   settledByUserId: string | null;
+  /**
+   * The basket participant who settled it, and null when the list page did
+   * (plan 0151, section 5).
+   *
+   * **This reverses plan 0051 section 6**, which kept the participant id off
+   * this view as meaningless to a zone reader. Without it a basket settle
+   * answered "nobody" for who settled, and the view could not say what the
+   * trips read already resolves through `COALESCE(settledByUserId, p.userId)`.
+   */
+  settledByParticipantId: string | null;
   /** ISO 8601 UTC. */
   settledAt: string;
   /**
@@ -857,11 +979,41 @@ export interface LineSettlementView {
    * signs; a nullable timestamp changes each of those by one `WHERE` clause.
    *
    * Null on every row written before that plan, and on every row a settle
-   * writes. Who reverted it is a participant id and is deliberately not served,
-   * for the reason {@link settledByUserId} explains: it is meaningless to a zone
-   * reader who cannot resolve it.
+   * writes. Who reverted it is not served: plan 0151 added only the settling
+   * participant.
    */
   revertedAt: string | null;
+  /**
+   * What **one unit** cost when this was settled, in the minor unit of
+   * {@link pricePaidCurrency} (plan 0143, section 6). A row's cost is this
+   * times {@link quantity}.
+   *
+   * Served to a reader of the list, because a reader already learns what the
+   * household bought, how many, when and who settled it, and what the milk cost
+   * at that chain is the same kind of fact. Plan 0066 section 5 already calls a
+   * chain's price a product fact rather than a fact about anybody's household.
+   *
+   * Null whenever nobody knew: every settlement written before plan 0143, every
+   * `NOT_AVAILABLE`, and every settle whose client named no scope.
+   */
+  pricePaidCents: number | null;
+  /** ISO 4217, null exactly when {@link pricePaidCents} is. */
+  pricePaidCurrency: string | null;
+  /**
+   * The price scope the shopper was looking at: a chain's catchment, not a
+   * shop.
+   */
+  priceScopeId: string | null;
+  /**
+   * The one shop the settle was made in, or null (plan 0151, section 5).
+   *
+   * **This reverses plan 0143 section 6**, which served the shop only in a
+   * person's own history, on the ground that a shop and a time say where a
+   * member of the household was standing. Plan 0151 serves it beside the
+   * scope. It is only ever set by a settler who was served shops (plan 0143
+   * section 4.4), and null on every row written before that plan.
+   */
+  supermarketLocationId: string | null;
 }
 
 /**
@@ -1085,6 +1237,27 @@ export function baseContentType(value: string): string {
 }
 
 /**
+ * How long a silence ends a session of purchases: six hours (plan 0130,
+ * section 3; plan 0134, section 7).
+ *
+ * Elapsed time and never a calendar day, so no time zone is involved and a shop
+ * that crosses midnight stays one session. A gap of exactly this long continues
+ * the session. Only a longer one starts the next.
+ *
+ * **One constant, here.** Two used to say it, six hours for a loose trip and
+ * twelve for the fold behind a suggestion, so the same shopping read as one trip
+ * on the list and two purchases in the estimate. A session is one thing, so it
+ * is one number, and velista mirrors this one because rule D4 forbids it a
+ * contract import.
+ */
+export const PURCHASE_SESSION_GAP_MS = 6 * 60 * 60 * 1000;
+
+/** Whether `next` continues the session `previous` belongs to. */
+export function continuesPurchaseSession(previous: Date, next: Date): boolean {
+  return next.getTime() - previous.getTime() <= PURCHASE_SESSION_GAP_MS;
+}
+
+/**
  * One shopping trip that touched a list (plan 0122, section 3).
  *
  * A trip says its name, its date and what it did to **this** list. It never says
@@ -1099,13 +1272,22 @@ export interface TripView {
   kind: TripKind;
   /** `BASKET` only. Null is "shown as its date". */
   name: string | null;
-  /** Whether the basket still claims its lines. Always false for `LOOSE`. */
+  /** Whether the basket still claims its lines. Always false for `SESSION`. */
   live: boolean;
   /** `generatedAt`, or the earliest `settledAt` of the session. */
   startedAt: string;
-  /** Zone lines of this list the trip touched, and that still exist. */
+  /**
+   * Zone lines of this list the trip covers, and that still exist, pending
+   * ones included.
+   */
   lineCount: number;
-  /** Of those, the ones whose row says `BOUGHT`. */
+  /** Of those, the ones whose row says `BOUGHT`: every unit asked was bought. */
+  fullyBoughtLineCount: number;
+  /**
+   * The same value as {@link fullyBoughtLineCount}, for one release (plan 0159).
+   *
+   * @deprecated Read `fullyBoughtLineCount`. Removed by backlog plan 0015.
+   */
   boughtLineCount: number;
 }
 
@@ -1132,14 +1314,14 @@ export interface TripPage {
  */
 export interface TripRowView {
   lineId: string;
-  /** `BASKET`: what this trip's origins asked of the line. `LOOSE`: null. */
+  /** `BASKET`: what this trip's origins asked of the line. `SESSION`: null. */
   asked: number | null;
   /** Units in this trip's standing `BOUGHT` settlements of the line. */
   bought: number;
-  /** `BASKET`: `max(0, asked - bought)`. `LOOSE`: null. */
+  /** `BASKET`: `max(0, asked - bought)`. `SESSION`: null. */
   left: number | null;
   outcome: TripRowOutcome;
-  /** `LOOSE` only: the latest buyer, or null if they have left the zone. */
+  /** `SESSION` only: the latest buyer, or null if they have left the zone. */
   settledByUserId: string | null;
 }
 
@@ -1189,11 +1371,12 @@ export interface LineSuggestionView {
   periodDays: number | null;
   /** Whole days since the line was last bought, for both reasons. */
   daysSinceBought: number;
-  /** `STAPLE` only: of the recent ended basket trips, how many asked for it. */
+  /** `STAPLE` only: of the recent ended trips, how many wanted it. */
   tripsWith: number | null;
-  /** `STAPLE` only: how many recent ended basket trips were looked at. */
+  /** `STAPLE` only: how many recent ended trips were looked at. */
   tripsSeen: number | null;
-  /** What to add: what the newest ended basket asked, else the last purchase. */
+  /** What to add: what the newest ended basket asked while it is still the
+   * last word on the line, else the units of the last purchase. */
   quantity: number;
 }
 

@@ -8,14 +8,23 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   CATALOG_SERVICE,
-  LINE_SERVICE,
+  type CatalogServiceI,
+  fakeGroupMembers,
+  type FakeGroupMembers,
   fakeGroupNames,
+  type FakeGroupNames,
   fakeItemNames,
+  type FakeItemNames,
   fakeLineStore,
+  type FakeLineStore,
   fakeListStore,
   fakeMemberNames,
   fakeShoppingProfileStore,
+  type FakeShoppingProfileStore,
   fakeZoneStore,
+  LINE_SERVICE,
+  type LineServiceI,
+  provideFakeGroupMembers,
   provideFakeGroupNames,
   provideFakeItemNames,
   provideFakeLineStore,
@@ -24,12 +33,6 @@ import {
   provideFakeSessionStore,
   provideFakeShoppingProfileStore,
   provideFakeZoneStore,
-  type FakeGroupNames,
-  type FakeItemNames,
-  type FakeLineStore,
-  type CatalogServiceI,
-  type FakeShoppingProfileStore,
-  type LineServiceI,
 } from '@portfolio/velista/data-access';
 import {
   LINE_ITEM_SET_MAX,
@@ -195,6 +198,7 @@ interface Options {
   readonly alsoOn?: Readonly<Record<string, AlsoOnVm | Error>>;
   readonly itemNames?: FakeItemNames;
   readonly groupNames?: FakeGroupNames;
+  readonly groupMembers?: FakeGroupMembers;
   readonly settlements?: Readonly<Record<string, readonly LineSettlement[]>>;
   readonly itemSettlements?: Readonly<Record<string, readonly LineSettlement[]>>;
   readonly moreSettlements?: Readonly<Record<string, readonly LineSettlement[]>>;
@@ -243,6 +247,7 @@ async function render(options: Options = {}): Promise<{
       provideFakeItemNames(
         options.itemNames ?? fakeItemNames({ items: [MILK] })
       ),
+      provideFakeGroupMembers(options.groupMembers ?? fakeGroupMembers()),
       provideFakeGroupNames(
         options.groupNames ?? fakeGroupNames({ groups: [MILK_GROUP] })
       ),
@@ -829,5 +834,95 @@ describe('LinePage', () => {
       expect(fixture.componentInstance.page()?.alsoOn).toBeNull();
       expect(textOf(fixture)).not.toContain('list.page.alsoOn');
     });
+  });
+});
+
+describe('LinePage similar products', () => {
+  const GROUPED: CatalogItem = {
+    ...MILK,
+    productGroupId: MILK_GROUP.id,
+    category: 'DAIRY',
+    offer: null,
+    chainPrices: [],
+    imageUrl: null,
+    packCount: null,
+    unitBasis: null,
+  };
+  const PASCUAL: CatalogItem = {
+    ...GROUPED,
+    id: 'item-milk-pascual',
+    name: { es: 'Leche entera Pascual', en: 'Pascual whole milk' },
+    brand: 'Pascual',
+    productGroupId: MILK_GROUP.id,
+  };
+
+  const members = () =>
+    fakeGroupMembers({ members: { [MILK_GROUP.id]: [GROUPED, PASCUAL] } });
+
+  function similarRows(fixture: ComponentFixture<LinePage>): HTMLElement[] {
+    return [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        'lib-similar-products .row'
+      ),
+    ];
+  }
+
+  it('lists the other products of the line product\'s group, and reads the group once', async () => {
+    const groupMembers = members();
+    const { fixture } = await render({
+      itemNames: fakeItemNames({ items: [GROUPED] }),
+      groupMembers,
+    });
+
+    expect(similarRows(fixture).map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Pascual whole milk'),
+    ]);
+    expect(groupMembers.asked.map((read) => read.groupIds)).toEqual([
+      [MILK_GROUP.id],
+    ]);
+  });
+
+  it('changes the line to the one pressed, in place of its own', async () => {
+    const { fixture, lines } = await render({
+      lines: [line({ itemIds: ['item-milk-a', 'item-oat'] })],
+      itemNames: fakeItemNames({ items: [GROUPED, OAT] }),
+      groupMembers: members(),
+    });
+
+    similarRows(fixture)[0].click();
+    await drain(fixture);
+
+    expect(lines.linesIn(LIST_ID)[0].itemIds).toEqual([
+      'item-milk-pascual',
+      'item-oat',
+    ]);
+    // The words stay: changing the product is not renaming the line.
+    expect(lines.linesIn(LIST_ID)[0].content).toBe('Milk');
+  });
+
+  it('opens the product instead for a reader who cannot change the line', async () => {
+    const { fixture, lines } = await render({
+      list: list({ myPermissions: ['READ'] }),
+      itemNames: fakeItemNames({ items: [GROUPED] }),
+      groupMembers: members(),
+    });
+
+    similarRows(fixture)[0].click();
+    await drain(fixture);
+
+    expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
+      `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}/lines/${LINE_ID}/sheet/products/item-milk-pascual`
+    );
+    expect(lines.linesIn(LIST_ID)[0].itemIds).toEqual(['item-milk-a']);
+  });
+
+  it('draws no similar products for a product with no group', async () => {
+    const { fixture } = await render({ groupMembers: members() });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-similar-products'
+      )
+    ).toBeNull();
   });
 });

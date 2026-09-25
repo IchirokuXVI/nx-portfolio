@@ -144,6 +144,145 @@ export function chainName(supermarket) {
 }
 
 // ---------------------------------------------------------------------------
+// Search text (plan 0006)
+// ---------------------------------------------------------------------------
+
+/**
+ * The longest search text the gateway accepts, in characters.
+ *
+ * `catalog-admin.dto.ts` caps the item search `query` at 120, and a longer one
+ * is a 400 rather than a shorter search. A leaflet's printed name can run past
+ * that, and the row then failed on its search before the model saw it.
+ */
+export const SEARCH_TEXT_MAX = 120;
+
+/**
+ * The text cut to {@link SEARCH_TEXT_MAX} at a word boundary.
+ *
+ * The words that survive are the first ones, which is where a printed name
+ * states what the product is; the tail is sizes, claims and codes. A single
+ * word longer than the cap has no boundary to cut at, so it is cut where the
+ * cap falls.
+ */
+export function capSearchText(text, max = SEARCH_TEXT_MAX) {
+  const value = String(text ?? '').trim();
+  if (value.length <= max) {
+    return value;
+  }
+  const head = value.slice(0, max + 1);
+  const boundary = head.lastIndexOf(' ');
+  return (boundary > 0 ? head.slice(0, boundary) : value.slice(0, max)).trim();
+}
+
+// ---------------------------------------------------------------------------
+// Units in base form (plan 0006)
+// ---------------------------------------------------------------------------
+
+/**
+ * Every catalog unit as a family and what one of it is worth in that family's
+ * base unit: grams, millilitres or units.
+ *
+ * The families are the ones `deriveUnitFamilies` in `groups/src/rules.mjs`
+ * derives, copied rather than imported because the two libraries share no code
+ * but `curation-auth`. The factors are the one thing a family cannot say, and
+ * they are why this is a table: 420 GRAM and 0.42 KILOGRAM are one format.
+ *
+ * `PACK` counts like `UNIT`. Neither states how many items a pack holds, so a
+ * pack of 6 and 6 units compare as the same number, which is what the raw
+ * comparison this replaced already did.
+ */
+export const UNIT_BASES = {
+  GRAM: { family: 'weight', factor: 1 },
+  KILOGRAM: { family: 'weight', factor: 1000 },
+  MILLILITER: { family: 'volume', factor: 1 },
+  LITER: { family: 'volume', factor: 1000 },
+  UNIT: { family: 'count', factor: 1 },
+  PACK: { family: 'count', factor: 1 },
+};
+
+/**
+ * The unit words a chain prints in `sizeFormat`, as a catalog unit and a
+ * factor.
+ *
+ * Mercadona prints the unit alone (`kg`, `l`, `ud`), LIDL and the leaflets
+ * print a whole size (`500 g`, `6x200ml`, `33 cl`). Centilitres are not in the
+ * catalog vocabulary and are millilitres times ten, which is a conversion and
+ * not a guess. A word that is not here (`m`, `Paquete`) answers no unit, and
+ * the comparison then falls back to the raw numbers.
+ */
+const PRINTED_UNITS = {
+  g: { unit: 'GRAM', factor: 1 },
+  gr: { unit: 'GRAM', factor: 1 },
+  grs: { unit: 'GRAM', factor: 1 },
+  gramos: { unit: 'GRAM', factor: 1 },
+  kg: { unit: 'KILOGRAM', factor: 1 },
+  kgs: { unit: 'KILOGRAM', factor: 1 },
+  kilo: { unit: 'KILOGRAM', factor: 1 },
+  kilos: { unit: 'KILOGRAM', factor: 1 },
+  ml: { unit: 'MILLILITER', factor: 1 },
+  cl: { unit: 'MILLILITER', factor: 10 },
+  l: { unit: 'LITER', factor: 1 },
+  lt: { unit: 'LITER', factor: 1 },
+  ltr: { unit: 'LITER', factor: 1 },
+  litro: { unit: 'LITER', factor: 1 },
+  litros: { unit: 'LITER', factor: 1 },
+  u: { unit: 'UNIT', factor: 1 },
+  ud: { unit: 'UNIT', factor: 1 },
+  uds: { unit: 'UNIT', factor: 1 },
+  unid: { unit: 'UNIT', factor: 1 },
+  unidad: { unit: 'UNIT', factor: 1 },
+  unidades: { unit: 'UNIT', factor: 1 },
+  pack: { unit: 'PACK', factor: 1 },
+  packs: { unit: 'PACK', factor: 1 },
+};
+
+/**
+ * The unit a printed `sizeFormat` ends in, or null.
+ *
+ * The last word is the unit whether the string is `kg` or `Aprox. 950g`. A
+ * catalog unit written out (`KILOGRAM`) is read as itself.
+ */
+export function printedUnit(sizeFormat) {
+  const text = String(sizeFormat ?? '').trim();
+  if (text === '') {
+    return null;
+  }
+  if (UNIT_BASES[text.toUpperCase()]) {
+    return { unit: text.toUpperCase(), factor: 1 };
+  }
+  const word = normalizeName(text).match(/([a-z]+)$/)?.[1] ?? null;
+  return word ? (PRINTED_UNITS[word] ?? null) : null;
+}
+
+/**
+ * A size in its family's base unit, or null when the unit is not one the
+ * table knows.
+ *
+ * `extra` is the printed factor `printedUnit` answered, so `33` read out of
+ * `33 cl` is 330 millilitres.
+ */
+export function toBaseSize(size, unit, extra = 1) {
+  const base = UNIT_BASES[String(unit ?? '').toUpperCase()];
+  const number = Number(size);
+  if (!base || size === null || size === undefined || Number.isNaN(number)) {
+    return null;
+  }
+  return { family: base.family, value: number * extra * base.factor };
+}
+
+/** Two base sizes are one format when the family and the number agree. */
+export function sameBaseSize(a, b) {
+  if (a.family !== b.family) {
+    return false;
+  }
+  // A product of doubles is not always the number it reads as (0.29 * 100 is
+  // not quite 29). A millionth of the larger side is far below any size a
+  // chain prints.
+  const scale = Math.max(1, Math.abs(a.value), Math.abs(b.value));
+  return Math.abs(a.value - b.value) <= scale * 1e-6;
+}
+
+// ---------------------------------------------------------------------------
 // What the library reads at startup
 // ---------------------------------------------------------------------------
 
@@ -250,6 +389,42 @@ export function canonicalBrand(brands, brand) {
 /** The canonical brand a spelling names, through a link if there is one. */
 export function findCanonicalBrand(brands, text) {
   return canonicalBrand(brands, findBrand(brands, text));
+}
+
+/**
+ * The label to suggest for a brand, from the spellings the chains printed,
+ * most printed first (plan 0006).
+ *
+ * A spelling in mixed case is how the brand writes itself, so the most printed
+ * one wins as it is. A chain that prints every brand in capitals says nothing
+ * about the case, so a spelling that is all capitals is put into title case: a
+ * word carrying a digit keeps its case, because `48H` is a claim and not a
+ * word. A person edits the file before anything is registered, so this only
+ * has to be a good first guess.
+ */
+export function suggestBrandLabel(spellings) {
+  const list = (spellings ?? []).filter(
+    (spelling) => typeof spelling === 'string' && spelling.trim() !== ''
+  );
+  if (list.length === 0) {
+    return null;
+  }
+  const mixed = list.find(
+    (spelling) =>
+      spelling !== spelling.toUpperCase() && spelling !== spelling.toLowerCase()
+  );
+  if (mixed) {
+    return mixed.trim();
+  }
+  return list[0]
+    .trim()
+    .split(/\s+/)
+    .map((word) =>
+      /\d/.test(word)
+        ? word
+        : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    )
+    .join(' ');
 }
 
 /** The chains by id, so a private label can name the chain that owns it. */

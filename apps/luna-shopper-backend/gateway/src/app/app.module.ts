@@ -21,6 +21,7 @@ import { GatewayAccountModule } from './account/account.module';
 import { GatewayAdminModule } from './admin/admin.module';
 import { GatewayAssistantModule } from './assistant/assistant.module';
 import { GatewayAuthModule } from './auth/auth.module';
+import { GatewayBasketsModule } from './baskets/baskets.module';
 import { GatewayCatalogModule } from './catalog/catalog.module';
 import { MinClientVersionGuard } from './client-version/min-client-version.guard';
 import type { GatewayConfig } from './config/app-config';
@@ -28,10 +29,10 @@ import {
   gatewayConfiguration,
   gatewayValidationSchema,
 } from './config/app-config';
-import { GatewayGeneratedListsModule } from './generated-lists/generated-lists.module';
 import { GatewayHarvestModule } from './harvest/harvest.module';
 import { GatewayListsModule } from './lists/lists.module';
 import { GatewayMergeModule } from './merge/merge.module';
+import { GatewayPurchasesModule } from './purchases/purchases.module';
 import { GatewayStatsModule } from './stats/stats.module';
 import { GatewayZonesModule } from './zones/zones.module';
 
@@ -111,8 +112,15 @@ import { GatewayZonesModule } from './zones/zones.module';
     GatewayMergeModule,
     // Account deletion endpoint (plan 0011).
     GatewayAccountModule,
-    // The basket a person carries around the shop (plan 0050).
-    GatewayGeneratedListsModule,
+    // The basket a person carries around the shop (plans 0050 and 0051), read
+    // from the lists it covers (plan 0136). One module since plan 0144, where
+    // the two halves stopped being two names for one thing.
+    GatewayBasketsModule,
+    // What one person bought, with or without a basket (plan 0142). Its own
+    // module because it is a different resource with a different path: the
+    // history is read from purchases and no longer from the baskets somebody
+    // made.
+    GatewayPurchasesModule,
     // Catalog endpoints — items, supermarkets, per scope prices (plan 0012, and
     // plan 0038 for the scopes).
     GatewayCatalogModule,

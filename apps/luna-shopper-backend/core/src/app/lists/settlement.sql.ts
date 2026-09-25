@@ -31,6 +31,9 @@ import { READABLE_LIST } from '../zones/zone-summary.sql';
  * `timestamptz` is microseconds, so a token carrying the value skips or repeats
  * the boundary row; this shape cannot, and it costs one primary key lookup.
  *
+ * The columns are the served shape of `LineSettlementView`, which since plan
+ * 0151 section 5 includes who settled on a basket and the shop.
+ *
  * `$1` is the item, `$2` the caller, `$3` the cursor row's id or null, `$4` the
  * limit.
  */
@@ -42,8 +45,13 @@ export const ITEM_SETTLEMENTS_SQL = `
          s."outcome",
          s."quantity",
          s."settledByUserId",
+         s."settledByParticipantId",
          s."settledAt",
-         s."revertedAt"
+         s."revertedAt",
+         s."pricePaidCents",
+         s."pricePaidCurrency",
+         s."priceScopeId",
+         s."supermarketLocationId"
   FROM "line_settlements" s
   WHERE s."itemId" = $1
     AND EXISTS (

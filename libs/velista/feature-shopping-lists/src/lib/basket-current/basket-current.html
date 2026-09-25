@@ -1,0 +1,34 @@
+<div class="page">
+  <!--
+    The clock is in the header while the listing is being read, so the history stays
+    one press from the tab even on a slow connection.
+  -->
+  <header class="bar">
+    <h1 class="title">{{ 'nav.basket' | rokuT }}</h1>
+
+    <button
+      (click)="openHistory()"
+      [attr.aria-label]="'basket.openHistory' | rokuT"
+      [attr.title]="'basket.openHistory' | rokuT"
+      class="history"
+      type="button"
+    >
+      <lib-clock-icon class="glyph" />
+    </button>
+  </header>
+
+  <!--
+    A row shaped placeholder rather than a spinner: this screen is about to become a
+    basket, and a skeleton of its rows is the honest shape of what is coming.
+  -->
+  <div class="content">
+    <lib-row-skeleton [count]="3" labelKey="history.row.loading" />
+  </div>
+</div>
+
+<!--
+  The Get shopping list sheet the route table still declares under this address. The
+  page redirects on arrival, so nothing is drawn here in practice; the outlet stays so
+  that the declared child has somewhere to render rather than failing to activate.
+-->
+<router-outlet />

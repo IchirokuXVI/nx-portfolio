@@ -1,0 +1,121 @@
+@use '../basket-shared' as shared;
+
+// The product on the line sheet. The catalog row's parts (a picture on the page's
+// own ground, the name over `brand · size`), laid out as a card: the picture is
+// larger, and the price sits under the name so a long name keeps its width.
+:host {
+  display: block;
+  margin-block-end: var(--app-space-4);
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+
+  // The picked option on the product pane.
+  &.is-chosen {
+    border-color: var(--app-action-bg);
+  }
+}
+
+// Square, and the carton sits in the middle when there is no picture. The ground
+// is the page's own, so a white product photo reads as a photo and not a hole.
+.image-box {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--app-product-card-image-size);
+  block-size: var(--app-product-card-image-size);
+  overflow: hidden;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+}
+
+.image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.what {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.name {
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--app-space-3);
+}
+
+.amount {
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+
+.place {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+.no-price {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.change {
+  @include shared.tap-target;
+
+  flex: none;
+  align-self: center;
+  padding: var(--app-space-2) var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+}

@@ -9,6 +9,7 @@ import {
   ADMIN_ZONE_PATTERNS,
 } from '../lib/messages/admin-core.messages';
 import { ADMIN_USER_PATTERNS } from '../lib/messages/admin-users.messages';
+import { APP_STATE_PATTERNS } from '../lib/messages/app-state.messages';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
@@ -95,6 +96,8 @@ describe('contract schemas', () => {
       ...Object.values(SUPERMARKET_SOURCE_PATTERNS),
       ...Object.values(POSTAL_CODE_DISCOVERY_PATTERNS),
       ...Object.values(STATS_PATTERNS),
+      // What an account has been shown (plan 0145).
+      ...Object.values(APP_STATE_PATTERNS),
     ];
 
     it.each(allMessageSubjects)(
@@ -359,10 +362,18 @@ describe('contract schemas', () => {
             outcome: 'BOUGHT',
             quantity: 2,
             settledByUserId: 'u',
+            // The list page settled it, so no participant (plan 0151).
+            settledByParticipantId: null,
             settledAt: '2026-01-01T00:00:00.000Z',
             // Standing, which is every settlement a settle writes (plan 0054,
             // section 3.3). Only a basket reopen sets it.
             revertedAt: null,
+            // What one of them cost, the chain catchment it was read at (plan
+            // 0143), and the shop, served since plan 0151.
+            pricePaidCents: 129,
+            pricePaidCurrency: 'EUR',
+            priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
+            supermarketLocationId: '9a1d73b4-e2c6-4a81-b37d-95f80b2c6e4f',
           },
         }).valid
       ).toBe(true);
@@ -382,8 +393,16 @@ describe('contract schemas', () => {
               outcome: 'NOT_AVAILABLE',
               quantity: 0,
               settledByUserId: 'u',
+              settledByParticipantId: null,
               settledAt: '2026-01-01T00:00:00.000Z',
               revertedAt: null,
+              // A close records no price, by check constraint, and keeps the
+              // scope: which chain had none is the half worth keeping (plan
+              // 0143, section 3).
+              pricePaidCents: null,
+              pricePaidCurrency: null,
+              priceScopeId: 'b4e2c6a8-1f37-4d95-8a0b-2c6e4f9a1d73',
+              supermarketLocationId: null,
             },
           ],
           nextCursor: null,
@@ -391,33 +410,153 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
-    it('generatedList.get carries both snapshot profiles (plan 0078, section 3)', () => {
-      // The two fields answer two questions, and the run this stands for is the
-      // shape velista always sends: it named its own sources, so no profile's
-      // sources were read, and it still names the profile the basket is priced
-      // against.
+    it('the basket header names its kind and its sources (plan 0133)', () => {
+      // A source is what the run was asked for, so a null `listId` is a value
+      // rather than an absence: it says every list of that zone.
+      //
+      // Asked of `basket.update`, which answers the header. The subject that
+      // used to be asked here was the owner's own read, and plan 0144 removed
+      // it: renaming it landed it on `basket.get`, which plan 0136 had already
+      // given to the participant read of the whole basket.
       expect(
-        validateMessageResponse('generatedList.get', {
+        validateMessageResponse('basket.update', {
           id: 'gl',
+          kind: 'GENERATED',
           name: null,
-          status: 'DRAFT',
+          status: 'OPEN',
           generatedAt: '2026-01-01T00:00:00.000Z',
-          sourceSnapshot: {
-            profileId: null,
-            pricingProfileId: 'sp-1',
-            sources: [{ zoneId: 'z', listId: 'l' }],
-          },
-          lines: [],
+          sources: [
+            { zoneId: 'z', listId: 'l' },
+            { zoneId: 'z2', listId: null },
+          ],
+          supermarketLocationId: null,
         }).valid
       ).toBe(true);
     });
 
-    it('generatedList.participant.list response names an account (plan 0054, section 2)', () => {
+    it('the basket header names the shop it was started at (plan 0163)', () => {
+      const header = {
+        id: 'gl',
+        kind: 'GENERATED',
+        name: null,
+        status: 'OPEN',
+        generatedAt: '2026-01-01T00:00:00.000Z',
+        sources: [],
+      };
+      expect(
+        validateMessageResponse('basket.create', {
+          basket: { ...header, supermarketLocationId: 'loc-1' },
+          list: { ...header, supermarketLocationId: 'loc-1' },
+        }).valid
+      ).toBe(true);
+      // Required and nullable, so a client can tell "no shop" from "not told".
+      expect(validateMessageResponse('basket.update', header).valid).toBe(
+        false
+      );
+    });
+
+    it('a basket read names its chain and each row says where it is usually bought (plan 0165)', () => {
+      expect(
+        validateMessageRequest('basket.get', {
+          basketId: 'gl',
+          participantId: 'p',
+          supermarketId: 's-1',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('basket.live', {
+          userId: 'u',
+          supermarketId: 's-1',
+        }).valid
+      ).toBe(true);
+
+      const row = {
+        rowKey: 'l-1',
+        content: 'Milk',
+        left: 1,
+        bought: 0,
+        asked: 1,
+        state: 'WANTED',
+        note: null,
+        noteAt: null,
+        mark: null,
+        awaitingApproval: false,
+        optionIds: [],
+        touchedBy: null,
+        touchedAt: null,
+        entries: [],
+      };
+      const progress = { done: 0, unavailable: 0, total: 1, pending: 1 };
+      const answer = (usual: unknown) =>
+        validateMessageResponse('basket.row.settle', {
+          row: { ...row, usual },
+          progress,
+        }).valid;
+
+      expect(answer(null)).toBe(true);
+      expect(answer({ state: 'HERE', bought: 2, of: 6 })).toBe(true);
+      expect(answer({ state: 'NEVER_BOUGHT', bought: 0, of: 0 })).toBe(true);
+      expect(answer({ state: 'NO_SHOP_KNOWN', bought: 0, of: 3 })).toBe(true);
+      // Required and nullable, so "no shop" is never mistaken for "not told".
+      expect(
+        validateMessageResponse('basket.row.settle', { row, progress }).valid
+      ).toBe(false);
+      // Counts only: seven is past the window, and nothing else may ride along.
+      expect(answer({ state: 'HERE', bought: 7, of: 7 })).toBe(false);
+      expect(answer({ state: 'SOMEWHERE', bought: 0, of: 1 })).toBe(false);
+      expect(
+        answer({ state: 'HERE', bought: 1, of: 1, supermarketId: 's-1' })
+      ).toBe(false);
+    });
+
+    it('supermarketLocation.shopAvailability answers a shop and its three availability states (plan 0163)', () => {
+      expect(
+        validateMessageRequest('supermarketLocation.shopAvailability', {
+          supermarketLocationId: 'loc-1',
+          itemIds: ['i-1'],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('supermarketLocation.shopAvailability', {
+          location: {
+            id: 'loc-1',
+            supermarketId: 's-1',
+            priceScopeId: 'ps-store',
+            priceScopeIds: ['ps-store', 'ps-region'],
+            label: null,
+            address: null,
+            city: null,
+            country: null,
+            postalCode: '14008',
+            postalCodeSource: null,
+            latitude: null,
+            longitude: null,
+            externalRef: null,
+            externalProvider: null,
+          },
+          supermarket: {
+            id: 's-1',
+            name: { en: 'Lidl', es: 'Lidl' },
+            logoUrl: null,
+            websiteUrl: null,
+            externalBrandKey: null,
+            defaultPriceScopeId: null,
+          },
+          availability: [
+            { itemId: 'i-1', available: true },
+            { itemId: 'i-2', available: false },
+            { itemId: 'i-3', available: null },
+          ],
+        }).valid
+      ).toBe(true);
+    });
+
+    it('basket.participant.list response names an account (plan 0054, section 2)', () => {
       // The two names are separate fields, and both are required: a registered
       // participant who typed nothing on the join screen still has an account
       // name, which is what stops a screen drawing a role where a name belongs.
       expect(
-        validateMessageResponse('generatedList.participant.list', {
+        validateMessageResponse('basket.participant.list', {
           participants: [
             {
               id: 'p',
@@ -429,9 +568,12 @@ describe('contract schemas', () => {
               joinedAt: '2026-01-01T00:00:00.000Z',
               lastSeenAt: '2026-01-01T00:00:00.000Z',
               shareLinkId: 'sl',
+              // A person the owner added by name never expires (plan 0140).
+              expiresAt: null,
             },
             // A guest has no account behind them, so both a null typed name and
             // a null username, and the number is what the screen falls back to.
+            // They came by a link, so their access ends (plan 0140, section 5).
             {
               id: 'p2',
               kind: 'GUEST',
@@ -442,42 +584,9 @@ describe('contract schemas', () => {
               joinedAt: '2026-01-01T00:00:00.000Z',
               lastSeenAt: '2026-01-01T00:00:00.000Z',
               shareLinkId: 'sl',
+              expiresAt: '2026-01-01T12:00:00.000Z',
             },
           ],
-        }).valid
-      ).toBe(true);
-    });
-
-    it('generatedList.reopenLine answers a line and a count and nothing else (plan 0054, section 3.5)', () => {
-      expect(
-        validateMessageRequest('generatedList.reopenLine', {
-          generatedListId: 'gl',
-          lineId: 'gll',
-          participantId: 'p',
-        }).valid
-      ).toBe(true);
-      expect(
-        validateMessageResponse('generatedList.reopenLine', {
-          line: {
-            id: 'gll',
-            content: 'milk',
-            quantity: 2,
-            // Back to outstanding, which is the whole of the act.
-            settledQuantity: 0,
-            itemId: null,
-            options: [],
-            position: 0,
-            // Null because the run composed this line, which is what null in
-            // that column means (plan 0055, section 4). Reopening does not
-            // touch it: who put a line here is written once.
-            createdByParticipantId: null,
-            lastEditedByParticipantId: 'p',
-            lastEditedAt: '2026-01-01T00:00:00.000Z',
-            // The settle that said so has been taken back, so the row stops
-            // captioning it (plan 0054, section 3.3).
-            lastOutcome: null,
-          },
-          skippedCount: 0,
         }).valid
       ).toBe(true);
     });
@@ -625,6 +734,7 @@ describe('contract schemas', () => {
               sku: null,
               ean: null,
               unitSize: null,
+              packCount: null,
               category: 'DAIRY',
               defaultUnit: 'LITER',
               productGroupId: null,
@@ -632,6 +742,36 @@ describe('contract schemas', () => {
           ],
           nextCursor: null,
         }).valid
+      ).toBe(true);
+    });
+
+    it('a pack count is a whole number from 2 to 1000, or null (plan 0162)', () => {
+      const update = (packCount: unknown) =>
+        validateMessageRequest('item.update', {
+          userId: 'owner',
+          itemId: 'i',
+          packCount,
+        }).valid;
+      expect(update(6)).toBe(true);
+      expect(update(null)).toBe(true);
+      expect(update(1)).toBe(false);
+      expect(update(1001)).toBe(false);
+      expect(update(2.5)).toBe(false);
+
+      expect(
+        validateMessageRequest('item.fillPackCounts', {
+          userId: 'harvester',
+          entries: [{ itemId: 'i', packCount: 6 }],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('item.fillPackCounts', {
+          userId: 'harvester',
+          entries: [{ itemId: 'i', packCount: null }],
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageResponse('item.fillPackCounts', { written: 3 }).valid
       ).toBe(true);
     });
 
@@ -649,6 +789,7 @@ describe('contract schemas', () => {
               sku: null,
               ean: null,
               unitSize: 1,
+              packCount: 6,
               category: 'DAIRY',
               defaultUnit: 'LITER',
               productGroupId: 'g',
@@ -1123,17 +1264,17 @@ describe('contract schemas', () => {
   });
 
   describe('malformed payloads fail', () => {
-    it('rejects a snapshot that omits the pricing profile (plan 0078)', () => {
-      // Required and nullable, not optional. Core reads a pre plan 0078 row's
-      // missing key as null before the view leaves it, so a payload on the wire
-      // without the key is a mapper that stopped doing that.
+    it('rejects a basket that does not say what kind it is (plan 0133)', () => {
+      // Required, with no default on the wire and none on the column either: a
+      // basket whose kind nothing states is one seven queries would each answer
+      // differently about.
       expect(
-        validateMessageResponse('generatedList.get', {
+        validateMessageResponse('basket.get', {
           id: 'gl',
           name: null,
-          status: 'DRAFT',
+          status: 'OPEN',
           generatedAt: '2026-01-01T00:00:00.000Z',
-          sourceSnapshot: { profileId: null, sources: [] },
+          sources: [],
           lines: [],
         }).valid
       ).toBe(false);
@@ -1315,5 +1456,111 @@ describe('contract schemas', () => {
         false
       );
     });
+  });
+});
+
+describe('the shops near a point and the recent shops (plan 0164)', () => {
+  const candidate = {
+    id: 'loc-1',
+    supermarketId: 's-1',
+    supermarketName: { en: 'Lidl', es: 'Lidl' },
+    label: null,
+    address: 'Calle Mayor 3',
+    city: 'Córdoba',
+    postalCode: '14001',
+    inProfile: true,
+    distanceMetres: 120,
+    excluded: false,
+  };
+
+  it('supermarketLocation.nearby takes a point with the profile, and answers a pick or a reason', () => {
+    expect(
+      validateMessageRequest('supermarketLocation.nearby', {
+        latitude: 37.88,
+        longitude: -4.77,
+        accuracyMetres: 12,
+        profilePostalCodes: ['14001'],
+        excludedSupermarketIds: [],
+        excludedSupermarketLocationIds: [],
+      }).valid
+    ).toBe(true);
+    expect(
+      validateMessageRequest('supermarketLocation.nearby', {
+        latitude: 91,
+        longitude: -4.77,
+        accuracyMetres: 12,
+        profilePostalCodes: [],
+        excludedSupermarketIds: [],
+        excludedSupermarketLocationIds: [],
+      }).valid
+    ).toBe(false);
+    expect(
+      validateMessageResponse('supermarketLocation.nearby', {
+        candidates: [candidate],
+        pick: { locationId: 'loc-1', distanceMetres: 120 },
+        noPick: null,
+      }).valid
+    ).toBe(true);
+    for (const noPick of [
+      'NONE_NEARBY',
+      'LOW_ACCURACY',
+      'AMBIGUOUS',
+      'OUTSIDE_PROFILE',
+    ]) {
+      expect(
+        validateMessageResponse('supermarketLocation.nearby', {
+          candidates: [],
+          pick: null,
+          noPick,
+        }).valid
+      ).toBe(true);
+    }
+    expect(
+      validateMessageResponse('supermarketLocation.nearby', {
+        candidates: [],
+        pick: null,
+        noPick: 'SOMEWHERE_ELSE',
+      }).valid
+    ).toBe(false);
+    // A candidate always says whether the profile refuses it.
+    const { excluded: _excluded, ...unmarked } = candidate;
+    expect(
+      validateMessageResponse('supermarketLocation.nearby', {
+        candidates: [unmarked],
+        pick: null,
+        noPick: 'AMBIGUOUS',
+      }).valid
+    ).toBe(false);
+  });
+
+  it('supermarketLocation.shopsById answers the shop view of plan 0163', () => {
+    expect(
+      validateMessageRequest('supermarketLocation.shopsById', {
+        supermarketLocationIds: ['loc-1'],
+        profilePostalCodes: [],
+      }).valid
+    ).toBe(true);
+    const { distanceMetres: _d, excluded: _e, ...shop } = candidate;
+    expect(
+      validateMessageResponse('supermarketLocation.shopsById', {
+        shops: [shop],
+      }).valid
+    ).toBe(true);
+  });
+
+  it('purchase.recentShops answers ids and dates for one account', () => {
+    expect(
+      validateMessageRequest('purchase.recentShops', { userId: 'u-1' }).valid
+    ).toBe(true);
+    expect(
+      validateMessageResponse('purchase.recentShops', {
+        shops: [
+          {
+            supermarketLocationId: 'loc-1',
+            lastBoughtAt: '2026-09-20T10:00:00.000Z',
+          },
+        ],
+      }).valid
+    ).toBe(true);
   });
 });

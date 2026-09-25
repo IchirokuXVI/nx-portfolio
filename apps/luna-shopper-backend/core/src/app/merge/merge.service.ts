@@ -20,6 +20,7 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, Repository } from 'typeorm';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import {
   LineComment,
   ListAccess,
@@ -55,7 +56,10 @@ export class MergeService {
     @InjectRepository(ZoneMembership)
     private readonly memberships: Repository<ZoneMembership>,
     private readonly authz: ZoneAuthzService,
-    private readonly events: CoreEventsPublisher
+    private readonly events: CoreEventsPublisher,
+    // An approval removes one membership and moves its content onto another, so
+    // what the household's open baskets cover moves (plan 0139, section 5).
+    private readonly baskets: BasketAnnouncer
   ) {}
 
   /**
@@ -157,6 +161,17 @@ export class MergeService {
         .where('"approvedByUserId" = :src', { src })
         .andWhere(inZoneLines, { zoneId })
         .execute();
+      // Lines the source deleted (plan 0132). An `UPDATE` query builder is not
+      // filtered by the soft delete column, which is what this one needs: every
+      // row it reaches is a deleted line, and a merged away member must not stay
+      // the author of a tombstone when they are gone from everything else.
+      await manager
+        .createQueryBuilder()
+        .update(ListLine)
+        .set({ deletedByUserId: tgt })
+        .where('"deletedByUserId" = :src', { src })
+        .andWhere(inZoneLines, { zoneId })
+        .execute();
 
       // Comments the source authored, scoped to this zone's lines.
       await manager
@@ -185,6 +200,9 @@ export class MergeService {
     const view = toMergeRequestView(saved);
     // Approval implies the source was removed from the zone (section 5).
     this.events.emit(RealtimeEvent.MergeApproved, merge.zoneId, view);
+    // Two memberships moved with it, so what the household's open baskets cover
+    // moved as well (plan 0139, section 5).
+    await this.baskets.coverageMoved(merge.zoneId);
     this.events.emitTo(
       RealtimeEvent.MemberKicked,
       { zoneId: merge.zoneId, userIds: [source.userId] },

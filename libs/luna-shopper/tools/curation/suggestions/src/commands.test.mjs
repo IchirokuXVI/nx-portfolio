@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -236,11 +236,11 @@ test('start snapshots the whole registry into brands.json', async () => {
   );
 });
 
-test('an empty registry is allowed and said out loud', async () => {
+test('an empty registry is allowed when asked for, and said out loud', async () => {
   const dir = runDir();
   const w = world({ entries: [entry('e1', 'Leche')], brands: [] });
 
-  const answer = await startIn(dir, w);
+  const answer = await startIn(dir, w, { allowEmptyRegistry: true });
 
   assert.equal(answer.brands, 0);
   assert.ok(answer.notes.some((note) => /every CREATE naming one/.test(note)));
@@ -442,8 +442,22 @@ test('a ref no decide created is a REVIEW, not a link into nothing', async () =>
     vocabularies: VOCABULARIES,
   });
 
-  assert.equal(answer.decision.decision, 'REVIEW');
-  assert.ok(answer.issues.some((i) => i.code === 'LINK_TARGET_MISSING'));
+  // A ref the packet did not show is a slip worth one more attempt (plan
+  // 0006), and a second one is the REVIEW.
+  assert.equal(answer.retryable, true);
+  assert.equal(answer.decision, null);
+  assert.ok(answer.issues.some((i) => i.code === 'LINK_TARGET_NOT_SHOWN'));
+
+  const last = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'LINK', itemRef: 'ref-invented', confidence: 0.99 },
+    final: true,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+  assert.equal(last.decision.decision, 'REVIEW');
+  assert.ok(last.issues.some((i) => i.code === 'LINK_TARGET_NOT_SHOWN'));
 });
 
 // ---------------------------------------------------------------------------
@@ -1648,3 +1662,301 @@ test('the set a row was handed is forgotten once the row is decided', async () =
     {}
   );
 });
+
+// ---------------------------------------------------------------------------
+// Plan 0006: the empty registry, shared EANs and a target nobody was shown
+// ---------------------------------------------------------------------------
+
+test('start stops on an empty registry, prints propose-brands and writes no run', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche')], brands: [] });
+
+  await assert.rejects(
+    () => startIn(dir, w, { chain: 'sm-1' }),
+    (error) => {
+      assert.match(
+        error.message,
+        /brand registry on http:\/\/localhost:3000 is empty/
+      );
+      assert.match(
+        error.message,
+        /cli\.mjs propose-brands --run-dir \S+ --main-url http:\/\/localhost:3000 --main-user dev-admin --chain sm-1/
+      );
+      assert.match(error.message, /--allow-empty-registry/);
+      return true;
+    }
+  );
+  // Nothing to resume and nothing to refuse later: the same directory takes
+  // the `start` that follows the registration.
+  assert.equal(existsSync(join(dir, 'state.json')), false);
+  assert.equal(
+    w.mainSession.calls.some(
+      (call) => call.path === '/v1/admin/harvest/entries'
+    ),
+    false
+  );
+});
+
+/** Three rows of one chain printing one barcode, a fourth on another chain. */
+function sharedEanWorld(catalogItems = []) {
+  return world({
+    entries: [
+      entry('e1', 'Alubias blancas', { ean: '8480000000017' }),
+      entry('e2', 'Pan de molde'),
+      entry('e3', 'Alubias pintas', { ean: '8480000000017' }),
+      entry('e4', 'Alubias rojas', { ean: '8480000000017' }),
+      entry('e5', 'Alubias negras', {
+        ean: '8480000000017',
+        supermarketId: 'sm-2',
+      }),
+    ],
+    catalogItems,
+  });
+}
+
+test('start indexes the queue by EAN within a chain', async () => {
+  const dir = runDir();
+  const w = sharedEanWorld();
+
+  const answer = await startIn(dir, w);
+
+  assert.equal(answer.sharedEans, 3);
+  assert.ok(
+    answer.notes.some((note) => /3 queued entries print an EAN/.test(note))
+  );
+  const snapshot = JSON.parse(
+    readFileSync(join(dir, 'shared-eans.json'), 'utf8')
+  );
+  assert.deepEqual(snapshot.entries, {
+    e1: ['e3', 'e4'],
+    e3: ['e1', 'e4'],
+    e4: ['e1', 'e3'],
+  });
+
+  const batch = await next({ runDir: dir, count: 4, gateways: w.gateways });
+  const byId = Object.fromEntries(batch.rows.map((row) => [row.entry.id, row]));
+  assert.deepEqual(byId.e1.entry.sharedEan, ['e3', 'e4']);
+  // A barcode printed once on its chain says nothing about the row.
+  assert.equal(byId.e2.entry.sharedEan, null);
+});
+
+test('a LINK on a shared EAN is a REVIEW, even when both sides print that EAN', async () => {
+  const dir = runDir();
+  const w = sharedEanWorld([
+    {
+      id: 'i1',
+      name: { es: 'Alubias blancas' },
+      brand: null,
+      ean: '8480000000017',
+      unitSize: null,
+      defaultUnit: 'UNIT',
+    },
+  ]);
+  await startIn(dir, w);
+  const row = await next({ runDir: dir, gateways: w.gateways });
+  assert.equal(row.entry.id, 'e1');
+  assert.equal(row.eanMatch.itemId, 'i1');
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'LINK', itemId: 'i1', confidence: 0.99 },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'REVIEW');
+  assert.equal(answer.decision.proposedDecision, 'LINK');
+  assert.equal(answer.decision.itemId, null);
+  assert.deepEqual(codesOf(answer.issues), ['SHARED_EAN']);
+  assert.match(answer.issues[0].detail, /8480000000017.*e3, e4/);
+});
+
+test('a CREATE on a shared EAN is a REVIEW and writes nothing to the rehearsal', async () => {
+  const dir = runDir();
+  const w = sharedEanWorld();
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e3',
+    input: {
+      ...CREATE_MILK,
+      item: {
+        ...CREATE_MILK.item,
+        nameEs: 'Alubias pintas',
+        ean: '8480000000017',
+      },
+    },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'REVIEW');
+  assert.equal(answer.decision.proposedDecision, 'CREATE');
+  assert.ok(codesOf(answer.issues).includes('SHARED_EAN'));
+  assert.equal(w.rehearsalCatalog.rows.length, 0);
+});
+
+test('a shared EAN buys no second attempt, whatever else the answer got wrong', async () => {
+  const dir = runDir();
+  const w = sharedEanWorld();
+  await startIn(dir, w);
+
+  // Unparseable, and a glitched name: both retryable on any other row.
+  const broken = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'MAYBE' },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+  assert.equal(broken.retryable, false);
+  assert.equal(broken.decision.decision, 'REVIEW');
+  assert.deepEqual(codesOf(broken.issues), [
+    'MODEL_OUTPUT_INVALID',
+    'SHARED_EAN',
+  ]);
+
+  const glitched = await decide({
+    runDir: dir,
+    entryId: 'e3',
+    input: {
+      ...CREATE_MILK,
+      item: { ...CREATE_MILK.item, nameEs: 'Alub1ias pintas' },
+    },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+  assert.equal(glitched.retryable, false);
+  assert.equal(glitched.decision.decision, 'REVIEW');
+  assert.ok(codesOf(glitched.issues).includes('SHARED_EAN'));
+  assert.ok(codesOf(glitched.issues).includes('NAME_GLITCH'));
+});
+
+test('a real id the packet did not show is refused, and the catalog is not asked', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [
+      entry('e1', 'Leche entera 1 L', { unitSize: 1, sizeFormat: 'l' }),
+    ],
+    catalogItems: [
+      {
+        id: 'i1',
+        name: { es: 'Leche entera' },
+        brand: null,
+        unitSize: 1,
+        defaultUnit: 'LITER',
+      },
+      // Real, and never surfaced by the search for the entry's name.
+      {
+        id: 'i-hidden',
+        name: { es: 'Detergente' },
+        brand: null,
+        unitSize: 1,
+        defaultUnit: 'LITER',
+      },
+    ],
+  });
+  await startIn(dir, w);
+  const row = await next({ runDir: dir, gateways: w.gateways });
+  assert.deepEqual(
+    row.candidates.map((c) => c.itemId),
+    ['i1']
+  );
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'LINK', itemId: 'i-hidden', confidence: 0.99 },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+  assert.equal(answer.retryable, true);
+  assert.equal(answer.decision, null);
+  assert.deepEqual(codesOf(answer.issues), ['LINK_TARGET_NOT_SHOWN']);
+  assert.match(
+    answer.issues[0].detail,
+    /i-hidden was not among the candidates/
+  );
+  assert.equal(
+    w.mainSession.calls.some((call) => call.path.endsWith('/i-hidden')),
+    false
+  );
+
+  const last = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'LINK', itemId: 'i-hidden', confidence: 0.99 },
+    final: true,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+  assert.equal(last.decision.decision, 'REVIEW');
+  assert.equal(last.decision.proposedDecision, 'LINK');
+  assert.ok(codesOf(last.issues).includes('LINK_TARGET_NOT_SHOWN'));
+  assert.ok(!codesOf(last.issues).includes('LINK_TARGET_MISSING'));
+});
+
+test('a LINK onto a candidate stating the same format in another unit is a LINK', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [
+      entry('e1', 'Fabada asturiana', { unitSize: 0.42, sizeFormat: 'kg' }),
+    ],
+    catalogItems: [
+      {
+        id: 'i1',
+        name: { es: 'Fabada asturiana' },
+        brand: null,
+        unitSize: 420,
+        defaultUnit: 'GRAM',
+      },
+    ],
+  });
+  await startIn(dir, w);
+  await next({ runDir: dir, gateways: w.gateways });
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'LINK', itemId: 'i1', confidence: 0.97 },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'LINK');
+  assert.equal(answer.decision.itemId, 'i1');
+  assert.deepEqual(answer.issues, []);
+});
+
+test('the proposed item is dropped only when the catalog answers 404', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [entry('e1', 'Leche entera', { itemId: 'i-gone' })],
+  });
+  await startIn(dir, w);
+
+  const row = await next({ runDir: dir, gateways: w.gateways });
+  assert.deepEqual(row.candidates, []);
+
+  // Any other failure is not an answer about the product, so the walk hears it
+  // rather than a packet that silently lost the ladder's own proposal.
+  const fetch = w.mainSession.fetch;
+  w.mainSession.fetch = async (path, init) => {
+    if (path.endsWith('/i-gone')) {
+      const error = new Error(`GET ${path} answered 503`);
+      error.status = 503;
+      throw error;
+    }
+    return fetch(path, init);
+  };
+  await assert.rejects(
+    () => next({ runDir: dir, gateways: w.gateways }),
+    /answered 503/
+  );
+});
+
+function codesOf(issues) {
+  return (issues ?? []).map((entry) => entry.code);
+}

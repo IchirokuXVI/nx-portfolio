@@ -12,6 +12,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import {
   CORE_ENTITIES,
   ListAccess,
@@ -25,6 +26,13 @@ import { MemberListingService } from './member-listing.service';
 import { ZoneAuthzService } from './zone-authz.service';
 import { ZoneCountsService } from './zone-counts.service';
 import { ZoneService } from './zone.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * The zone summary against real Postgres (plan 0017, section 11).
@@ -81,7 +89,8 @@ describeIntegration('zone summary (real Postgres)', () => {
       authz,
       counts,
       events as never,
-      new CoreAuditService(dataSource)
+      new CoreAuditService(dataSource),
+      announcer
     );
     members = new MemberListingService(membershipRepo, authz);
 
@@ -489,6 +498,41 @@ describeIntegration('zone summary (real Postgres)', () => {
           [groceriesId]
         )
       );
+    });
+
+    it('stops counting a line deleted while it still asked for two', async () => {
+      // Plan 0132: the row stays, so both numbers now need a predicate the
+      // entity cannot give raw SQL. A line deleted at quantity two would
+      // otherwise be counted as wanted for ever.
+      const lineRepo = dataSource.getRepository(ListLine);
+      const going = await lineRepo.save(
+        lineRepo.create({
+          listId: groceriesId,
+          content: 'Olives',
+          quantity: 2,
+          position: 4,
+          approvalStatus: LineApprovalStatus.APPROVED,
+          createdByUserId: ids.owner,
+        })
+      );
+      try {
+        const before = await zones.get({ userId: ids.owner, zoneId: ids.zone });
+        expect(before.lists.find((l) => l.id === groceriesId)).toMatchObject({
+          lineCount: 4,
+          wantedCount: 3,
+        });
+
+        await lineRepo.softDelete({ id: going.id });
+
+        const after = await zones.get({ userId: ids.owner, zoneId: ids.zone });
+        expect(after.lists.find((l) => l.id === groceriesId)).toMatchObject({
+          lineCount: 3,
+          wantedCount: 2,
+        });
+      } finally {
+        // A real delete, so the tombstone does not outlive this test.
+        await lineRepo.delete({ id: going.id });
+      }
     });
 
     it('is empty for a list with no lines', async () => {

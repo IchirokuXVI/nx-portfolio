@@ -101,9 +101,62 @@ export function itemLabel(item) {
   return item?.name?.es ?? item?.name?.en ?? item?.id ?? '(unnamed)';
 }
 
+/**
+ * The longest search text the gateway takes.
+ *
+ * Both routes this library searches refuse a longer `query` with a 400: the
+ * admin item search (`catalog-admin.dto.ts`) and the product group search
+ * (`catalog.dto.ts`). One long product name was enough to end a whole walk on
+ * its first row (plan 0002), so every query is cut to this before it is sent.
+ */
+export const MAX_SEARCH_LENGTH = 120;
+
+/**
+ * A search text cut to the gateway's cap at a word boundary.
+ *
+ * A word cut in half matches nothing in a full text search, or worse matches a
+ * shorter word it happens to start, so the cut falls on the last space that
+ * fits. A single word longer than the cap has no space to fall back to and is
+ * cut where the cap is, which is the only answer the gateway would take.
+ */
+export function capSearchText(text, max = MAX_SEARCH_LENGTH) {
+  const value = String(text ?? '').trim();
+  if (value.length <= max) {
+    return value;
+  }
+  if (/\s/.test(value[max])) {
+    return value.slice(0, max).trimEnd();
+  }
+  const head = value.slice(0, max);
+  const lastSpace = head.search(/\s\S*$/);
+  return (lastSpace > 0 ? head.slice(0, lastSpace) : head).trimEnd();
+}
+
 /** What a product is searched for by: its Spanish name, else its English one. */
 export function itemSearchKey(item) {
-  return normalizeName(item?.name?.es ?? item?.name?.en ?? '');
+  return capSearchText(normalizeName(item?.name?.es ?? item?.name?.en ?? ''));
+}
+
+/**
+ * The keys a product is searched for by, most specific first: the whole name,
+ * then its first three, two and one words.
+ *
+ * The group search joins every word with AND, and its trigram fallback only
+ * rescues a query about as short as a group name, so a product's whole name
+ * finds no group whose name is shorter than it (`champu liss frizz control`
+ * never reaches `Champú`). A shorter key does. The whole name still comes
+ * first, so a group named after the product ranks ahead of a broad one.
+ */
+export function itemSearchKeys(item) {
+  const whole = itemSearchKey(item);
+  const words = whole.split(/\s+/).filter(Boolean);
+  const keys = [whole];
+  for (const count of [3, 2, 1]) {
+    if (words.length > count) {
+      keys.push(words.slice(0, count).join(' '));
+    }
+  }
+  return [...new Set(keys.filter(Boolean))];
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +255,46 @@ export function buildSystemPrompt({
 export function buildDecisionSchema({ units = loadUnits() } = {}) {
   const nullableString = { type: ['string', 'null'] };
   const synonymList = { type: 'array', items: { type: 'string' } };
+
+  // A group that is present is a complete one: the four fields
+  // `checkDecisionShape` refuses a CREATE_GROUP without are required and non
+  // null. The root still admits `null` for the group, because an ASSIGN and a
+  // REVIEW carry none. This line is all the claude engine gets, since the
+  // Messages API refuses an alternation at the top of a tool schema.
+  const looseGroup = {
+    type: ['object', 'null'],
+    properties: {
+      nameEs: { type: 'string' },
+      nameEn: { type: 'string' },
+      slug: { type: 'string' },
+      referenceUnit: { type: 'string', enum: [...units] },
+      synonyms: {
+        type: ['object', 'null'],
+        properties: { es: synonymList, en: synonymList },
+      },
+    },
+    required: ['nameEs', 'nameEn', 'slug', 'referenceUnit'],
+  };
+  const shared = {
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          code: { type: 'string' },
+          detail: { type: 'string' },
+        },
+        required: ['code', 'detail'],
+      },
+    },
+    reasoning: { type: 'string' },
+  };
+  const sharedRequired = ['confidence', 'issues', 'reasoning'];
+
   return {
+    // Every field is still described at the root, so an engine that does not
+    // read `anyOf` is as well off as it was before.
     type: 'object',
     properties: {
       decision: {
@@ -211,33 +303,48 @@ export function buildDecisionSchema({ units = loadUnits() } = {}) {
       },
       groupId: nullableString,
       groupRef: nullableString,
-      group: {
-        type: ['object', 'null'],
-        properties: {
-          nameEs: nullableString,
-          nameEn: nullableString,
-          slug: nullableString,
-          referenceUnit: { type: ['string', 'null'], enum: [...units, null] },
-          synonyms: {
-            type: ['object', 'null'],
-            properties: { es: synonymList, en: synonymList },
-          },
-        },
-      },
-      confidence: { type: 'number', minimum: 0, maximum: 1 },
-      issues: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            code: { type: 'string' },
-            detail: { type: 'string' },
-          },
-          required: ['code', 'detail'],
-        },
-      },
-      reasoning: { type: 'string' },
+      group: looseGroup,
+      ...shared,
     },
-    required: ['decision', 'confidence', 'issues', 'reasoning'],
+    required: ['decision', ...sharedRequired],
+    // The shapes a decision can take, discriminated on `decision`. Ollama
+    // turns this into a grammar, so an ASSIGN that names no group cannot be
+    // produced at all. The flat schema allowed it, and 77 of 328 rows of a
+    // live gemma walk were re-asked for it and ended as REVIEW. The same fix
+    // is in the suggestions decider (its plan 0003).
+    anyOf: [
+      {
+        type: 'object',
+        properties: {
+          decision: { const: 'ASSIGN' },
+          groupId: { type: 'string' },
+          ...shared,
+        },
+        required: ['decision', 'groupId', ...sharedRequired],
+      },
+      {
+        type: 'object',
+        properties: {
+          decision: { const: 'ASSIGN' },
+          groupRef: { type: 'string' },
+          ...shared,
+        },
+        required: ['decision', 'groupRef', ...sharedRequired],
+      },
+      {
+        type: 'object',
+        properties: {
+          decision: { const: 'CREATE_GROUP' },
+          group: { ...looseGroup, type: 'object' },
+          ...shared,
+        },
+        required: ['decision', 'group', ...sharedRequired],
+      },
+      {
+        type: 'object',
+        properties: { decision: { const: 'REVIEW' }, ...shared },
+        required: ['decision', ...sharedRequired],
+      },
+    ],
   };
 }

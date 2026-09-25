@@ -6,11 +6,19 @@ import {
   type ZoneView,
 } from '@portfolio/luna-shopper/contracts';
 import { fakeAudit, type RecordedChange } from '../audit/core-audit.testing';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import { Zone, ZoneMembership } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ZoneAuthzService } from './zone-authz.service';
 import type { ZoneCountsService } from './zone-counts.service';
 import { ZoneService } from './zone.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * An operator's edit of a zone is the write its own owner makes (plan 0077,
@@ -124,7 +132,8 @@ function makeService(
       } as unknown as ZoneAuthzService,
       {} as ZoneCountsService,
       publisher as unknown as CoreEventsPublisher,
-      audit.service
+      audit.service,
+      announcer
     ),
     savedZones,
     savedMemberships,

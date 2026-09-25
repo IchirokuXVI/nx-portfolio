@@ -12,18 +12,20 @@
   -->
   <header class="bar">
     <!--
-      No back control for a guest: there is nowhere back to go. They arrived on a
-      link and this screen is the whole app to them (section 4.1). A member of a
-      shared basket has the rest of the app, so they get one too.
+      The history, where every basket's back chevron used to be (velista 0111). No
+      basket page goes back: the bottom bar is the way out, and the history is the way
+      to another basket. A guest gets neither, because the history needs an account:
+      they arrived on a link and this screen is the whole app to them (section 4.1).
     -->
-    @if (canGoBack()) {
+    @if (canOpenHistory()) {
       <button
-        (click)="back()"
-        [attr.aria-label]="'basket.back' | rokuT"
-        class="back"
+        (click)="openHistory()"
+        [attr.aria-label]="'basket.openHistory' | rokuT"
+        [attr.title]="'basket.openHistory' | rokuT"
+        class="history"
         type="button"
       >
-        <lib-chevron-left-icon class="back-glyph" />
+        <lib-clock-icon class="history-glyph" />
       </button>
     }
 
@@ -60,10 +62,12 @@
       </button>
     } @else if (hasPeople()) {
       <!--
-        Nobody is connected, or the socket is not up. The sheet still has an answer
-        worth reading — everybody who *can* open this basket — so the way into it
-        stays, drawn as a plain control that claims nothing about who is here. The
-        faces above are the claim; this is the door.
+        Nobody is connected, the socket is not up, or this is the basket that is
+        always there, which has no presence room at all (velista 0094, section
+        7). The sheet still has an answer worth reading — everybody who *can*
+        open this basket — so the way into it stays, drawn as a plain control
+        that claims nothing about who is here. The faces above are the claim;
+        this is the door.
       -->
       <button
         (click)="openPeople()"
@@ -79,7 +83,7 @@
       The one thing that stays the owner's, even for a registered participant who
       passes the all or nothing rule everywhere else (section 4.1).
     -->
-    @if (isOwner()) {
+    @if (canShare()) {
       <button
         (click)="openShare()"
         [attr.aria-label]="'basket.share.open' | rokuT"
@@ -116,6 +120,20 @@
   </header>
 
   <!--
+    One line saying what this basket is, drawn only where the kind has something
+    to explain (velista `0091`, section 3). Under the bar rather than inside it:
+    the bar is a row of controls around a one line heading, and a sentence in it
+    would push the whole screen down on a 390 wide phone.
+
+    A paragraph and not part of the heading. A reader moving by heading wants
+    the name of the screen, and "Every list you can add to, in one place" is the
+    answer to a question they have not asked yet.
+  -->
+  @if (hint(); as hintKey) {
+    <p class="hint">{{ hintKey | rokuT }}</p>
+  }
+
+  <!--
     Which of the two screens this is. A live basket and a refetching one look
     identical while nobody else is shopping and completely different the moment
     somebody is, so the difference is said rather than left to be discovered
@@ -126,10 +144,35 @@
     under somebody standing in a shop with a trolley, it tells them, and what is
     already on it stays readable (section 7).
   -->
+  <!--
+    How long this reader has, said once on arrival and again half an hour
+    before the end (velista 0094, section 5).
+
+    **Above the lines and under the bar**, where the hint is, rather than in the
+    footer: somebody who came in on a link never saw the screen that would have
+    told them, so this is the first thing about their own access they are told,
+    and it has to be where they are already reading.
+
+    Drawn for a link visitor and for nobody else. The owner and anybody added by
+    name have no end to be told about.
+  -->
+  @if (visitNotice(); as visit) {
+    <lib-visit-notice
+      (dismissed)="dismissVisit()"
+      [dismissLabel]="visit.dismissLabel"
+      [text]="visit.text"
+    />
+  }
+
   @if (revoked()) {
     <p class="stale" role="status">
       <lib-offline-icon class="stale-glyph" />
-      <span>{{ 'basket.revoked.title' | rokuT }}</span>
+      <!--
+        Removed, or a visit that ran out. Two different things to whoever is
+        holding the phone, and the reason comes from the refusal rather than
+        from a clock (velista 0094, section 2).
+      -->
+      <span>{{ endedNotice().titleKey | rokuT }}</span>
     </p>
   } @else if (!live()) {
     <p class="stale" role="status">
@@ -154,7 +197,7 @@
     destroyed and the act is trivially repeatable (section 8). A guest sees the banner
     without it, which is the whole difference between the two readers here.
   -->
-  @if (finished()) {
+  @if (finishedBanner()) {
     <div class="finished" role="status">
       <p class="finished-title">{{ 'basket.finished.title' | rokuT }}</p>
 
@@ -202,15 +245,22 @@
     }
 
     <!--
-      Removed while their phone was in their hand. It says so, and it offers the
-      one thing that might work: the link they still have. It does not offer a
-      retry, because the credential is gone and trying again would fail the same
-      way (backend 0051, section 3.3).
+      Off the basket while their phone was in their hand. It says which of the
+      two happened and it offers no retry, because the credential is gone and
+      trying again would fail the same way (backend 0051, section 3.3).
+
+      **Removed and expired are different sentences** (velista 0094, section 5).
+      Being taken off a list and running out of time are not the same thing, and
+      the old body told a removed person they could join again with the link,
+      which was never true of them. Which it was comes from the refusal's own
+      code, never from comparing a clock: a removal at 23:59 is not an expiry.
     -->
     @case ('revoked') {
       <div class="notice" role="alert">
-        <p class="notice-title">{{ 'basket.revoked.title' | rokuT }}</p>
-        <p class="notice-body">{{ 'basket.revoked.body' | rokuT }}</p>
+        <p class="notice-title">{{ endedNotice().titleKey | rokuT }}</p>
+        <p class="notice-body">
+          {{ endedNotice().bodyKey | rokuT: endedNotice().args }}
+        </p>
       </div>
     }
 
@@ -222,10 +272,16 @@
     }
 
     @default {
-      @if (lines().length === 0) {
+      @if (rows().length === 0) {
+        <!--
+          Two words per kind (velista `0091`, section 3). "Nothing on this list"
+          is about a basket somebody composed and nobody filled; the basket that
+          is always there is empty because every list it covers is, and what
+          fills it is a line added to one of them.
+        -->
         <div class="empty">
-          <p class="empty-title">{{ 'basket.empty' | rokuT }}</p>
-          <p class="empty-body">{{ 'basket.emptyHint' | rokuT }}</p>
+          <p class="empty-title">{{ emptyTitle() | rokuT }}</p>
+          <p class="empty-body">{{ emptyBody() | rokuT }}</p>
         </div>
       } @else {
         <!--
@@ -247,12 +303,14 @@
           The empty state and the no match block stay below it, in the scroll.
         -->
         <lib-list-tools
+          (openChange)="setSearchOpen($event)"
           (openFilter)="openFilter()"
           (queryChange)="search($event)"
           [activeCount]="activeCount()"
+          [open]="searchOpen()"
           [query]="searchQuery()"
-          [shown]="visibleLines().length"
-          [total]="lines().length"
+          [shown]="shownCount()"
+          [total]="countableRows().length"
           fieldId="basket-search"
         >
           <!--
@@ -264,16 +322,19 @@
             this is about how much shopping is left, and hiding rows does not buy
             anything.
           -->
+          <!--
+            **Which** sentence this is belongs to the model (velista `0091`,
+            section 4): a trip that ends counts what was got, and the basket
+            that is always there says what is left, because "3 of 40 got" on a
+            basket nobody ever finishes is true and reads as a failure.
+          -->
           <p class="progress">
-            {{
-              'basket.progress'
-                | rokuT: { done: progress().done, total: progress().total }
-            }}
-            @if (progress().unavailable > 0) {
+            {{ progressLine().key | rokuT: progressLine().args }}
+            @if (progressLine().unavailable > 0) {
               <span class="progress-unavailable">
                 {{
                   'basket.progressUnavailable'
-                    | rokuT: { count: progress().unavailable }
+                    | rokuT: { count: progressLine().unavailable }
                 }}
               </span>
             }
@@ -297,6 +358,30 @@
             />
           }
         </lib-list-tools>
+
+        <!--
+          What changed on the lists while somebody was shopping (velista 0093,
+          section 5).
+
+          **Under the tools bar and above the prompt**, inside the scroll and
+          outside the sticky bar: the bar's height is velista 0079's and a
+          banner inside it would push the search and the chips down a phone
+          every time a line moved on somebody else's list.
+
+          The count is the server's, per viewer. It goes when a read says zero,
+          which is what follows an acknowledgement, and never because this page
+          decided somebody had read it.
+
+          Drawn on a finished basket too, with the same count: what changed is
+          still worth reading. Never in the loading, failed or revoked states,
+          which this branch of the switch already excludes.
+        -->
+        @if (unseenChanges() > 0) {
+          <lib-changes-banner
+            (opened)="openChanges()"
+            [count]="unseenChanges()"
+          />
+        }
 
         <!--
           Every line is settled, so the screen asks (plan 0057, section 4). The last
@@ -335,8 +420,30 @@
           find is very often the next line.
         -->
         @if (visibleCount() === 0) {
-          <div class="empty">
-            @if (searching()) {
+          <div [class.is-usual]="usualHidesAll()" class="empty">
+            @if (usualHidesAll()) {
+              <!--
+                The usual filter hid every row (velista 0104). The first weeks look
+                exactly like this, because no purchase before it recorded a chain,
+                so the page says why and offers the one way out: the switch, off.
+              -->
+              <p class="empty-title">
+                {{ 'basket.view.usual.emptyTitle' | rokuT }}
+              </p>
+              <p class="empty-body">
+                {{ 'basket.view.usual.emptyBody' | rokuT }}
+              </p>
+              <p class="empty-body is-quiet">
+                {{ 'basket.view.usual.emptyNote' | rokuT }}
+              </p>
+              <button
+                (click)="showEveryLine()"
+                class="empty-action"
+                type="button"
+              >
+                {{ 'basket.view.usual.showAll' | rokuT }}
+              </button>
+            } @else if (searching()) {
               <p class="empty-title">
                 {{ 'basket.search.none' | rokuT: { query: searchQuery() } }}
               </p>
@@ -399,27 +506,37 @@
 
                 <ul class="lines">
                   @for (row of section.rows; track row.key) {
-                    <li>
-                      <lib-basket-line-row
-                        (open)="openLine(row.line)"
-                        (outstanding)="setRowOutstanding(row, $event)"
-                        (reopen)="reopenLine(row.line)"
-                        (settle)="settleLine(row.line)"
-                        [awaitingApproval]="pendingTargets().has(row.line.id)"
-                        [busy]="isBusy(row.line)"
-                        [canReopen]="canReopen"
+                    <!--
+                      A marked row tells the acknowledger when it is really on
+                      screen (velista 0093, section 7). Only while it is
+                      marked: an ordinary row observes nothing, so a basket of
+                      forty rows holds observers for the two that changed.
+                    -->
+                    <li [libSeenTarget]="row.row.mark !== null">
+                      <lib-basket-row
+                        (left)="setRowLeft(row, $event)"
+                        (open)="openRow(row.row)"
+                        (revert)="revertRow(row.row)"
+                        (settle)="settleRow(row.row)"
+                        (swap)="openSwap(row.row)"
+                        [atShop]="pricedAtShop()"
+                        [busy]="isBusy(row.row)"
+                        [canSwap]="canSwap(row.row)"
+                        [chosenId]="insteadOf(row.row)"
+                        [entry]="row.entry"
                         [finished]="finished()"
+                        [groupCheaper]="groupCheaper(row.row)"
                         [highlight]="highlight()"
-                        [line]="row.line"
-                        [listNames]="listNames()"
-                        [mark]="row.mark"
+                        [lists]="lists()"
                         [meId]="meId()"
-                        [notice]="noticeFor(row.line)"
-                        [origin]="row.origin"
+                        [notice]="noticeFor(row.row)"
                         [ownName]="ownName()"
                         [people]="participantsById()"
+                        [priceMark]="row.priceMark"
                         [products]="products()"
-                        [shop]="pricedShop()"
+                        [row]="row.row"
+                        [shelf]="row.shelf"
+                        [usual]="row.usual"
                       />
                     </li>
                   }
@@ -444,59 +561,105 @@
 <p aria-live="polite" class="visually-hidden said">{{ outstandingSaid() }}</p>
 
 <!--
-  The composer, at the bottom of the basket, in the same place the list page's sits
-  so the two screens agree about where the field is (plan 0053).
+  The composer, back with a list to put things on (velista 0092, section 7).
 
-  **Drawn for every participant, guests included**, which is the unusual part of this
-  screen: a line added here has no target list, so there is no permission to read and
-  no branch to write. See `canAdd` for the argument, and for the one absence — a
-  basket whose status is finished, where the server refuses the add and a field that
-  cannot submit is an invitation `0038` section 2.1 refuses to draw.
+  It sits in a fixed dock at the foot of the page, which is where the list page's
+  sits and where a thumb finds it. That is also what keeps it out of a sheet's
+  way: a sheet is fixed to the viewport above everything on the page, so the
+  composer is covered by it rather than sitting over its panel.
 
-  **No microphone.** `voice` is false and the button is always the plus, because a
-  recording goes to the list scoped assistant and a basket has no equivalent surface
-  to send one to (section 3).
-
-  A sibling of `<main>` and pinned by `position: sticky`, exactly as the list page's
-  dock is, which is also what keeps it out of a sheet's way: a sheet is fixed to the
-  viewport above everything on the page, so the composer is covered by it rather than
-  floating a text field over the settle controls (plan 0040).
+  **Drawn for an account holder with somewhere to put a line, and nobody else.**
+  A guest gets no dock, no field and no sentence about it: velista 0038 section
+  2.1 refuses to draw an invitation that cannot be accepted, and the product rule
+  that a guest is never pushed to register forbids explaining why.
 -->
 @if (state() === 'ready' && canAdd()) {
-  <div class="composer-dock">
+  <div #dock="cdkOverlayOrigin" cdkOverlayOrigin class="composer-dock">
     <!--
-      What arrived, said once. A single polite region rather than one per line, so
-      four people adding at the same time collapse into one sentence instead of
-      talking over each other for the length of a trip (section 8).
+      Where the next line goes, above the field it goes from.
 
-      A split says its own sentence here rather than in a region of its own, and
-      the store is what keeps the two from both being set: there is one thing to
-      say about this basket at a time, and a second region would talk over the
-      first while somebody is standing in an aisle (velista 0069, section 4).
+      A button when there is something to pick between and **text when there is
+      not**: one list chooses itself, and a button opening a sheet with one row
+      on it would be asking a question with one answer (`0030`).
     -->
-    <p aria-live="polite" class="visually-hidden">
-      @if (splitAnnouncement(); as split) {
-        {{
-          'basket.product.split'
-            | rokuT: { name: split.content, count: split.rows }
-        }}
-      } @else if (announcement(); as content) {
-        {{ 'basket.added.announced' | rokuT: { content } }}
-      }
-    </p>
+    @if (canRetarget()) {
+      <!--
+        Marked as the next step while nothing is chosen (velista 0110): the field
+        below it is locked until a list is, so this is the one thing to press.
+      -->
+      <button
+        (click)="openTarget()"
+        [class.is-next]="target() === null"
+        [disabled]="adding()"
+        class="target"
+        type="button"
+      >
+        @if (target(); as list) {
+          {{ 'basket.add.to' | rokuT: { list: list.name } }}
+        } @else {
+          {{ 'basket.add.choose' | rokuT }}
+        }
+      </button>
+    } @else if (target(); as list) {
+      <p class="target is-static">
+        {{ 'basket.add.to' | rokuT: { list: list.name } }}
+      </p>
+    }
 
+    <!--
+      Locked while no target is chosen (velista 0110). Plans 0091 and 0092 kept
+      the field usable so somebody could type first and choose second, and the
+      words then went nowhere: a suggestion chosen, or the plus pressed, with no
+      list to put the line on did nothing at all. So nothing can be typed until a
+      list is chosen, and a tap on the field says why. The popover it opens is
+      only that sentence: the chip that chooses a list sits right under it
+      (velista 0113).
+
+      The reason is a sentence in the page, always in the document while the
+      field is locked, because the field names it in `aria-describedby` and a
+      description has to exist before it is read.
+    -->
+    @if (target() === null) {
+      <span class="visually-hidden" id="basket-add-needs-list">{{
+        'basket.add.needsList' | rokuT
+      }}</span>
+    }
     <lib-line-composer
+      (holdingChanged)="changeHolding($event)"
+      (lockedPressed)="openNeedsList()"
       (queryChanged)="onComposerQuery($event)"
       (submitted)="add($event)"
       [busy]="adding()"
+      [holdingsOf]="holdingsOf()"
+      [lockReasonId]="target() === null ? 'basket-add-needs-list' : null"
+      [productLink]="productLink()"
+      [suggestedFor]="suggestedFor()"
+      [suggesting]="suggesting()"
       [suggestions]="suggestions()"
       [voice]="false"
     />
   </div>
+
+  <!--
+    Held against the whole dock rather than the field, so it opens above the chip
+    and never covers the control it points to. It holds the sentence and nothing
+    else (velista 0113): a button in it would have opened right above the chip
+    that does the same thing.
+  -->
+  <lib-anchored-popover
+    (closed)="closeNeedsList($event)"
+    [labelledBy]="'basket-add-needs-list-text'"
+    [open]="needsListOpen() && target() === null"
+    [origin]="dock"
+  >
+    <p class="needs-list-text" id="basket-add-needs-list-text">
+      {{ 'basket.add.needsList' | rokuT }}
+    </p>
+  </lib-anchored-popover>
 }
 
 <!--
   The sheets, as children of the page they cover (rule E1, plan 0008): the page
   keeps its scroll underneath and Android's back button dismisses them.
 -->
-<router-outlet />
+<router-outlet (deactivate)="onSheetDeactivated($event)" />

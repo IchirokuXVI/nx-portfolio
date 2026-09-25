@@ -3,7 +3,7 @@ import {
   type ListTripsChangedEvent,
 } from '@portfolio/luna-shopper/contracts';
 import type { CoreEventsPublisher } from '../../events/core-events.publisher';
-import { BASKET_ORIGIN_LISTS_SQL, OWNER_ORIGIN_LISTS_SQL } from './trips.sql';
+import { BASKET_TRIP_LISTS_SQL, OWNER_TRIP_LISTS_SQL } from './trips.sql';
 
 /**
  * Telling a list room that a basket touching the list changed (plan 0122,
@@ -24,17 +24,17 @@ interface ListIdRow {
 }
 
 /**
- * The lists one basket draws from, by its origins.
+ * The lists one basket draws from, by its coverage (plan 0136, section 7.2).
  *
- * **Read it before a delete.** The origins cascade away with the basket, so
+ * **Read it before a delete.** The sources cascade away with the basket, so
  * afterwards there is nothing left to ask.
  */
 export async function tripListsOfBasket(
   query: Query,
-  generatedListId: string
+  basketId: string
 ): Promise<string[]> {
-  const rows = (await query(BASKET_ORIGIN_LISTS_SQL, [
-    generatedListId,
+  const rows = (await query(BASKET_TRIP_LISTS_SQL, [
+    basketId,
   ])) as ListIdRow[];
   return rows.map((row) => row.listId);
 }
@@ -44,7 +44,7 @@ export async function tripListsOfOwner(
   query: Query,
   ownerUserId: string
 ): Promise<string[]> {
-  const rows = (await query(OWNER_ORIGIN_LISTS_SQL, [
+  const rows = (await query(OWNER_TRIP_LISTS_SQL, [
     ownerUserId,
   ])) as ListIdRow[];
   return rows.map((row) => row.listId);

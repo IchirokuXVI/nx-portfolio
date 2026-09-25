@@ -4,8 +4,16 @@ import {
   type ZoneByCodeView,
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
+import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import type { Zone } from '../entities';
 import { ZoneService } from './zone.service';
+
+/**
+ * Plan 0139 gave this service a basket announcer. Every write here is asserted
+ * through the events it publishes, and the announcement is not one of them: it
+ * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ */
+const announcer = fakeBasketAnnouncer();
 
 /**
  * Resolving a join code to the group behind it (plan 0024, section 1).
@@ -26,7 +34,8 @@ function makeService(zone: Zone | null, approvedMembers = 0) {
     {} as never,
     {} as never,
     {} as never,
-    {} as never
+    {} as never,
+    announcer
   );
   return { svc, zones, memberships };
 }

@@ -150,6 +150,27 @@ export const THROTTLE_LIMITS = {
    */
   usernameChange: bucket(hours(1), 5),
   /**
+   * Marking the setup finished or the tour seen (plan 0145, section 3).
+   *
+   * Modest rather than tight. This is **two writes in an account's life**, and
+   * the client fires and forgets them, so a limit exists only to stop a loop
+   * hammering the route. Ten a minute is far more than the flow can spend and
+   * leaves room for the retry of a write whose answer was lost.
+   */
+  appState: bucket(minutes(1), 10),
+  /**
+   * Asking for another generated name (plan 0145, section 4).
+   *
+   * Tight, because the button is the cheapest thing on the screen to press: it
+   * costs a round trip, a bored thumb can hold it down, and the honest use is a
+   * person reading three or four names before keeping one. Twenty a minute is
+   * one press every three seconds for a whole minute.
+   *
+   * Not `usernameChange`, which is five an hour: that bucket exists because a
+   * rename is public and abusable, and this writes nothing at all.
+   */
+  usernameSuggestion: bucket(minutes(1), 20),
+  /**
    * Uploading a voice comment (plan 0045, section 6).
    *
    * Stricter than the default bucket because an upload is orders of magnitude

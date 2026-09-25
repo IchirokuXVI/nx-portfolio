@@ -25,6 +25,7 @@ import {
   decodeCursor,
   encodeCursor,
   ForbiddenException,
+  isUuid,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import {
@@ -35,6 +36,7 @@ import {
   type SelectQueryBuilder,
 } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import { ListAccess, ShoppingList, ZoneMembership } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
@@ -55,14 +57,6 @@ import {
   SharedListGrantService,
   type GrantedAccess,
 } from './shared-list-grant.service';
-
-/**
- * Canonical UUID shape, for validating the cross-service catalog `itemId` (plan
- * 0053, section 3). The same check `SettlementService` applies to the same field,
- * for the same reason: core does not hold the catalog and cannot ask it.
- */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ListCursor {
   order: ListOrder;
@@ -144,7 +138,11 @@ export class ListService {
     private readonly events: CoreEventsPublisher,
     // `@Global()`, so the operator writes below reach the trail without any
     // caller having to hand it one (plan 0077, section 8).
-    private readonly audit: CoreAuditService
+    private readonly audit: CoreAuditService,
+    // The household's open baskets, when what they cover moved (plan 0139,
+    // section 5). Last, so no positional construction in a spec has to shift an
+    // argument to take it.
+    private readonly baskets: BasketAnnouncer
   ) {}
 
   /**
@@ -267,6 +265,11 @@ export class ListService {
       new Set(ALL_LIST_PERMISSIONS)
     );
     this.events.emit(RealtimeEvent.ListCreated, req.zoneId, view, view.id);
+    // A new list is a list every covering basket in the household now reads
+    // (plan 0139, section 5). Nothing was written to a basket, which is the
+    // point: coverage is a rule, so the basket's next read is bigger and until
+    // this event nothing told it to make one.
+    await this.baskets.coverageMoved(req.zoneId);
     await this.zoneCounts.emitZoneCounts(req.zoneId);
     return view;
   }
@@ -399,6 +402,11 @@ export class ListService {
       },
       req.listId
     );
+
+    // Who may write this list decides whose basket covers it (plan 0139, section
+    // 5), so a grant or a revocation adds or removes a whole list from somebody's
+    // basket without writing to one.
+    await this.baskets.coverageMoved(list.zoneId);
 
     // ...and one event per affected person, on their own channel, because the
     // room event names nobody and by construction cannot reach the one person it
@@ -644,6 +652,10 @@ export class ListService {
     const { id, zoneId } = list;
     await remove(list);
     this.events.emit(RealtimeEvent.ListDeleted, zoneId, { id }, id);
+    // The zone is read from the row **before** the delete, as the id is, and the
+    // announcement is made after it: the baskets are the household's rather than
+    // the list's, so they are still there to be told (plan 0139, section 5).
+    await this.baskets.coverageMoved(zoneId);
     await this.zoneCounts.emitZoneCounts(zoneId);
     return { id };
   }
@@ -743,7 +755,7 @@ export class ListService {
   async holdingItem(
     req: ListsHoldingItemRequest
   ): Promise<ListsHoldingItemResult> {
-    if (!UUID_PATTERN.test(req.itemId ?? '')) {
+    if (!isUuid(req.itemId ?? '')) {
       throw new ValidationException('itemId must be a valid item reference', {
         messageArgs: { field: 'itemId' },
       });

@@ -18,6 +18,7 @@ import {
   type CreateSupermarketLocationRequest,
   type CreateSupermarketRequest,
   type DeleteItemPricesByRunResult,
+  type FillPackCountsResult,
   type FindItemByEanResult,
   type ItemPage,
   type ItemPriceBatchEntry,
@@ -25,6 +26,7 @@ import {
   type LocalizedText,
   type NearbyPostalCodesView,
   type NearestPostalCodeView,
+  type PackCountFill,
   type PostalCodeLocationCountsView,
   type PriceScopeKind,
   type PriceScopePage,
@@ -35,6 +37,7 @@ import {
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
+  type UpdateSupermarketLocationRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
   buildNatsHeaders,
@@ -267,6 +270,23 @@ export class CatalogClient {
     });
   }
 
+  /**
+   * Every shop of a chain, a page at a time. What an import matches a place
+   * against before it creates a shop (plan 0152, section 2).
+   */
+  async listAllSupermarketLocations(
+    supermarketId: string
+  ): Promise<SupermarketLocationView[]> {
+    const held: SupermarketLocationView[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.listSupermarketLocations(supermarketId, cursor);
+      held.push(...page.items);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return held;
+  }
+
   // --- Writes --------------------------------------------------------------
 
   createSupermarket(
@@ -310,6 +330,19 @@ export class CatalogClient {
     });
   }
 
+  /**
+   * Fill fields a shop lacks, when a place is linked to it (plan 0152,
+   * section 3). The caller sends only the fields it means to write.
+   */
+  updateLocation(
+    input: Omit<UpdateSupermarketLocationRequest, 'userId'>
+  ): Promise<SupermarketLocationView> {
+    return this.send(SUPERMARKET_LOCATION_PATTERNS.update, {
+      userId: this.actor(),
+      ...input,
+    });
+  }
+
   createItem(input: Omit<CreateItemRequest, 'userId'>): Promise<ItemView> {
     return this.send(ITEM_PATTERNS.create, { userId: this.actor(), ...input });
   }
@@ -325,6 +358,18 @@ export class CatalogClient {
     return this.send(ITEM_PATTERNS.createMany, {
       userId: this.actor(),
       items,
+    });
+  }
+
+  /**
+   * Write the pack counts a run read onto products that have none (plan 0162,
+   * section 3). Catalog never overwrites a count that is set, and answers how
+   * many products it wrote. At most `PACK_COUNT_FILL_MAX` pairs per call.
+   */
+  fillPackCounts(entries: PackCountFill[]): Promise<FillPackCountsResult> {
+    return this.send(ITEM_PATTERNS.fillPackCounts, {
+      userId: this.actor(),
+      entries,
     });
   }
 

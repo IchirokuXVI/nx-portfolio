@@ -1,4 +1,5 @@
 import {
+  basketRoom,
   DOMAIN_EVENT_STREAM_SUBJECTS,
   domainEventSubject,
   listRoom,
@@ -159,6 +160,68 @@ describe('the audience an envelope names', () => {
     );
 
     expect(coreAccess.invalidateZone).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The basket audience (plan 0139, section 1).
+ *
+ * Core writes `basketIds` and nothing else. The lone `generatedListId` that
+ * envelopes written before that plan carried was read beside it for one
+ * release, and plan 0144 deleted it with the last of the old names, so the two
+ * cases that proved the old name still worked went with it.
+ */
+describe('the baskets an envelope names', () => {
+  const basketEvent = (overrides: Partial<DomainEvent>): DomainEvent =>
+    membershipEnvelope({
+      event: RealtimeEvent.BasketLinesChanged,
+      payload: { lineIds: ['li-1'] },
+      ...overrides,
+    });
+
+  it('answers one room per id of basketIds', async () => {
+    const { published } = await deliver(
+      basketEvent({ basketIds: ['b1', 'b2', 'b3'] })
+    );
+
+    expect(published[0].rooms).toEqual([
+      basketRoom('b1'),
+      basketRoom('b2'),
+      basketRoom('b3'),
+    ]);
+  });
+
+  it('addresses nobody when the envelope names no basket', async () => {
+    // An envelope with no audience this can read is dropped as a fault rather
+    // than broadcast, which is the behaviour the old name was kept alive for.
+    const { published } = await deliver(basketEvent({ basketIds: [] }));
+
+    expect(published).toEqual([]);
+  });
+
+  it('addresses the baskets alongside the other audiences, once each', async () => {
+    const { published } = await deliver(
+      basketEvent({ basketIds: ['b1', 'b2'], userIds: ['u1'] })
+    );
+
+    // The owner's own room and both basket rooms on one emit. socket.io unions
+    // the rooms of one emit, so an owner who is also in a basket room receives
+    // this once rather than twice.
+    expect(published[0].rooms).toEqual([
+      userRoom('u1'),
+      basketRoom('b1'),
+      basketRoom('b2'),
+    ]);
+  });
+
+  it('drops an envelope whose only audience is an empty basket list', async () => {
+    const { published, logger } = await deliver(basketEvent({ basketIds: [] }));
+
+    // The publisher refuses to send this at all, so it should never arrive. If
+    // one does, it is addressed to nobody and is dropped as a fault rather than
+    // fanned out to no rooms.
+    expect(published).toEqual([]);
+    expect(logger.error).toHaveBeenCalled();
   });
 });
 

@@ -10,6 +10,7 @@ import {
   PriceSourceKind,
   type AdapterKey,
 } from '@portfolio/luna-shopper/contracts';
+import { describeError } from '@portfolio/luna-shopper/platform';
 import { IsNull, Not, Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { SourceCatalogEntry, type SupermarketSource } from '../entities';
@@ -80,7 +81,7 @@ export class RunExecutor implements OnApplicationShutdown {
       };
     } catch (error) {
       this.logger.warn(
-        `Could not read the chain ${supermarketId}: ${String(error)}`
+        `Could not read the chain ${supermarketId}: ${describeError(error).message}`
       );
       return { externalBrandKey: null, brandName: null };
     }
@@ -114,6 +115,7 @@ export class RunExecutor implements OnApplicationShutdown {
       brand: row.brand,
       unitSize: row.unitSize === null ? null : Number(row.unitSize),
       sizeFormat: row.sizeFormat,
+      packCount: row.packCount ?? null,
       categoryPath: row.categoryPath ?? [],
     }));
   }
@@ -267,7 +269,9 @@ export class RunExecutor implements OnApplicationShutdown {
    */
   start(runId: string): void {
     void this.execute(runId).catch((error: unknown) => {
-      this.logger.error(`Harvest run ${runId} crashed: ${String(error)}`);
+      this.logger.error(
+        `Harvest run ${runId} crashed: ${describeError(error).message}`
+      );
     });
   }
 
@@ -529,12 +533,12 @@ export class RunExecutor implements OnApplicationShutdown {
       const status = controller.signal.aborted
         ? HarvestRunStatus.ABORTED
         : HarvestRunStatus.FAILED;
-      await this.store.finish(runId, status, String(error));
+      await this.store.finish(runId, status, describeError(error).message);
       if (source) {
         await this.sources.recordRunFinished(source, false);
       }
       this.logger.error(
-        `Harvest run ${runId} ended as ${status}: ${String(error)}`
+        `Harvest run ${runId} ended as ${status}: ${describeError(error).message}`
       );
       return status;
     } finally {
@@ -629,13 +633,16 @@ function readBackfillBudget(
 function describePrices(
   counters: Pick<
     SourceIngestCounters,
-    'pricesRecorded' | 'pricesWritten' | 'pricesConfirmed'
+    'pricesRecorded' | 'pricesWritten' | 'pricesConfirmed' | 'pricesConflicted'
   >
 ): Record<string, unknown> {
   return {
     pricesRecorded: counters.pricesRecorded,
     pricesPublished: counters.pricesWritten,
     pricesConfirmed: counters.pricesConfirmed,
+    // Plan 0155: an item two entries of the chain priced in one batch. Its
+    // prices were withheld, and a person decides which entry is the product.
+    pricesConflicted: counters.pricesConflicted,
   };
 }
 
@@ -647,6 +654,7 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
       pricesRecorded: written.pricesRecorded,
       pricesWritten: written.pricesPublished,
       pricesConfirmed: written.pricesConfirmed,
+      pricesConflicted: written.pricesConflicted,
     }),
     placesCreated: written.placesCreated,
     placesRefreshed: written.placesRefreshed,
@@ -665,6 +673,10 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     // Plan 0084, section 3: a person always wins, and the run reports the
     // disagreement rather than applying it.
     availabilityConflicts: written.conflicts,
+    // Plan 0162, section 3: counts written onto products that had none, and
+    // the products whose sources disagreed, which a person looks at.
+    packCountsFilled: written.packCountsFilled,
+    packCountConflicts: written.packCountConflicts,
   };
 }
 

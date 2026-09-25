@@ -1,5 +1,6 @@
 import type { SettlementOutcome } from './enums';
 import type { LineIndicator } from './list-view';
+import { formatMinorMoney } from './purchases';
 
 /**
  * What the detail sheet and the line page draw, as plain data (velista plan
@@ -16,13 +17,19 @@ import type { LineIndicator } from './list-view';
 export const ESTIMATE_MIN_PURCHASES = 3;
 
 /**
- * Two purchases closer than this are one purchase: twelve hours (velista `0089`,
- * section 4). Backend `0123` section 3 step 1 folds with the same number, so the line
- * sheet and the list state the same period for the same line.
+ * How long a silence ends a session of purchases: six hours (velista `0089`,
+ * section 4).
  *
- * Elapsed time and never a calendar day, so no time zone decides it.
+ * It mirrors `PURCHASE_SESSION_GAP_MS` in the backend contracts, which rule D4
+ * forbids this library to import, and it mirrors that one and no other number
+ * because the estimate promises to merge "as the server does". It was twelve
+ * hours until backend plan `0134`, against a server folding at six, which showed
+ * one line two different periods.
+ *
+ * Elapsed time and never a calendar day, so no time zone decides it. A gap of
+ * exactly this long continues the session. Only a longer one starts the next.
  */
-export const PURCHASE_MERGE_MS = 12 * 60 * 60 * 1000;
+export const PURCHASE_SESSION_GAP_MS = 6 * 60 * 60 * 1000;
 
 /**
  * The last purchase count that still reads as a phrase rather than a number
@@ -88,6 +95,17 @@ export interface SettlementRowVm {
    * strikes it through, which would read as deleted rather than as reversed.
    */
   readonly reverted: boolean;
+  /**
+   * What the purchase cost, unit price times quantity, formatted in the reader's
+   * locale (velista `0095`, section 7). Null on a row with no price and on every row
+   * that is not `BOUGHT`.
+   */
+  readonly price: string | null;
+  /**
+   * One unit's price, formatted, for the accessible "3 at 1,15 € each". Null when the
+   * row bought one unit or has no price.
+   */
+  readonly unitPrice: string | null;
 }
 
 /** One product on a line, as a removable chip. */
@@ -277,9 +295,13 @@ export interface LineDetailVm {
   /**
    * Whether this caller may record a purchase or a missing product at all.
    *
-   * `DECIDE`, the same permission the reel follows, because both say what the
-   * household now has. A reader gets the sheet with its history and neither
-   * button, which is the honest shape: knowing is not deciding.
+   * `WRITE` since backend plan 0131, which gave the list page and the basket one
+   * rule for who settles: a `WRITE` holder already recorded purchases on this
+   * line from the basket screen. A reader gets the sheet with its history and
+   * neither button, which is the honest shape: knowing is not writing.
+   *
+   * It is **not** the permission the reel follows any more. Moving what the
+   * household asks for is a change of demand and stays behind `DECIDE`.
    */
   readonly canSettle: boolean;
   /**
@@ -523,6 +545,9 @@ export function toSettlementRow(
     readonly settledAt: Date;
     /** When it was taken back, if it was. Absent for a caller that cannot revert. */
     readonly revertedAt?: Date | null;
+    /** One unit's price and its currency. Absent for a caller that has none. */
+    readonly unitPriceCents?: number | null;
+    readonly currency?: string | null;
   },
   input: {
     nameOf: (userId: string) => string | null;
@@ -534,6 +559,11 @@ export function toSettlementRow(
   const mine =
     settlement.settledByUserId !== null &&
     settlement.settledByUserId === input.callerUserId;
+
+  const cents = settlement.unitPriceCents ?? null;
+  const currency = settlement.currency ?? null;
+  const priced =
+    settlement.outcome === 'BOUGHT' && cents !== null && currency !== null;
 
   return {
     id: settlement.id,
@@ -551,5 +581,12 @@ export function toSettlementRow(
     // Optional on the argument rather than required, so the two callers that build a
     // settlement shaped object by hand are not made to state a fact they do not have.
     reverted: (settlement.revertedAt ?? null) !== null,
+    price: priced
+      ? formatMinorMoney(cents * settlement.quantity, currency, input.locale)
+      : null,
+    unitPrice:
+      priced && settlement.quantity > 1
+        ? formatMinorMoney(cents, currency, input.locale)
+        : null,
   };
 }

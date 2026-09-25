@@ -186,13 +186,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/stats",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "stats"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "stats"]
             },
             "description": "Unauthenticated liveness probe. The gateway fans out to core and auth, and the contract says a block comes back null when that service did not answer, so this one call tells you which services are actually up.",
             "auth": {
@@ -230,12 +225,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/docs",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "docs"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["docs"]
             },
             "description": "The gateway mounts Swagger at /docs. A 200 here proves the HTTP layer is up even when the services behind it are not.",
             "auth": {
@@ -273,13 +264,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/zones",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones"]
             },
             "description": "Sent with no Authorization header. The backend mints a TEMPORARY user and returns its tokens next to the zone, which is how the app onboards someone who has not signed up yet.",
             "auth": {
@@ -334,15 +320,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/by-code/{{guestJoinCode}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "by-code",
-                "{{guestJoinCode}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "by-code", "{{guestJoinCode}}"]
             },
             "description": "The public preview shown before someone commits to joining. It is deliberately thin: name and member count only, so an unauthenticated caller holding a code cannot read the zone id or anything else about it.",
             "auth": {
@@ -378,14 +357,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/account/me",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "account",
-                "me"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "account", "me"]
             },
             "description": "The guest token is accepted on authenticated routes."
           },
@@ -417,14 +390,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{guestZoneId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "{{guestZoneId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "{{guestZoneId}}"]
             },
             "description": "Keeps this folder self-cleaning: the guest owns the zone, so it can remove it before the run switches to a registered identity."
           },
@@ -459,14 +426,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/auth/register",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "register"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "register"]
             },
             "description": "Mints the identity the rest of the run uses. The pre-request script generates a unique address every time, so a repeat run never collides with the last one.\n\nRegistration is throttled to 3 per minute. If that bucket is empty the run stops here rather than cascading a missing token through every later folder.",
             "auth": {
@@ -534,14 +495,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/account/me",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "account",
-                "me"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "account", "me"]
             }
           },
           "response": [],
@@ -577,14 +532,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "login"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "login"]
             },
             "auth": {
               "type": "noauth"
@@ -634,14 +583,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/auth/refresh",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "refresh"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "refresh"]
             },
             "description": "Refresh tokens are rotated on every use: the presented one is revoked and a new one issued, so a leaked row is worth one use at most. The access token is not asserted to change, because two JWTs minted in the same second carry identical claims and are byte-identical by design.",
             "auth": {
@@ -701,14 +644,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/auth/refresh",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "refresh"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "refresh"]
             },
             "description": "Replays the token consumed by the request above. Rotation is only worth anything if the old token stops working, so this is the half worth asserting.",
             "auth": {
@@ -757,14 +694,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/auth/register",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "register"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "register"]
             },
             "description": "Deliberately reuses the address registered above. Expects 409.",
             "auth": {
@@ -813,14 +744,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "login"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "login"]
             },
             "auth": {
               "type": "noauth"
@@ -868,14 +793,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/auth/register",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "register"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "register"]
             },
             "description": "The contract sets minLength 8, so validation should reject this before it reaches the database.",
             "auth": {
@@ -925,14 +844,8 @@
             "header": [],
             "url": {
               "raw": "{{mailpitUrl}}/api/v1/messages?limit=50",
-              "host": [
-                "{{mailpitUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "messages"
-              ],
+              "host": ["{{mailpitUrl}}"],
+              "path": ["api", "v1", "messages"],
               "query": [
                 {
                   "key": "limit",
@@ -975,15 +888,8 @@
             "header": [],
             "url": {
               "raw": "{{mailpitUrl}}/api/v1/message/{{mailId}}",
-              "host": [
-                "{{mailpitUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "message",
-                "{{mailId}}"
-              ]
+              "host": ["{{mailpitUrl}}"],
+              "path": ["api", "v1", "message", "{{mailId}}"]
             },
             "description": "The mail carries a link shaped `<frontend-url>?token=<raw token>`; this pulls that query parameter out and stores it.",
             "auth": {
@@ -1022,14 +928,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/auth/verify-email",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "auth",
-                "verify-email"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "auth", "verify-email"]
             },
             "auth": {
               "type": "noauth"
@@ -1064,14 +964,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/account/me",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "account",
-                "me"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "account", "me"]
             }
           },
           "response": [],
@@ -1108,13 +1002,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/zones",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones"]
             },
             "description": "Same endpoint as the guest flow, but with a bearer token, so the zone belongs to the registered user instead of minting a new guest.",
             "body": {
@@ -1169,13 +1058,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones?limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones"],
               "query": [
                 {
                   "key": "limit",
@@ -1214,14 +1098,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{zoneId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "{{zoneId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "{{zoneId}}"]
             }
           },
           "response": [],
@@ -1252,14 +1130,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{zoneId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "{{zoneId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "{{zoneId}}"]
             },
             "body": {
               "mode": "raw",
@@ -1294,15 +1166,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/members",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "{{zoneId}}",
-                "members"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "{{zoneId}}", "members"]
             },
             "description": "Captures the caller's own membership id, which the member-scoped routes need."
           },
@@ -1339,9 +1204,7 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/members/{{membershipId}}/username",
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "v1",
                 "zones",
@@ -1393,14 +1256,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/count",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "count"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "count"]
             }
           },
           "response": [],
@@ -1423,15 +1280,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/regenerate-code",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "{{zoneId}}",
-                "regenerate-code"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "{{zoneId}}", "regenerate-code"]
             },
             "description": "Invalidates the old code. Asserts the value actually changed."
           },
@@ -1471,15 +1321,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/by-code/{{joinCode}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "by-code",
-                "{{joinCode}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "by-code", "{{joinCode}}"]
             },
             "description": "Uses the code captured from the rotation above. Paired with that request it proves rotation issued a working code rather than being a no-op.",
             "auth": {
@@ -1509,15 +1352,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/by-code/{{previousJoinCode}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "by-code",
-                "{{previousJoinCode}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "by-code", "{{previousJoinCode}}"]
             },
             "description": "The code from before the rotation must stop working, otherwise regenerating it would not actually revoke anyone's access.",
             "auth": {
@@ -1563,15 +1399,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/lists",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "{{zoneId}}",
-                "lists"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "{{zoneId}}", "lists"]
             },
             "body": {
               "mode": "raw",
@@ -1609,15 +1438,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/lists",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "{{zoneId}}",
-                "lists"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "{{zoneId}}", "lists"]
             }
           },
           "response": [],
@@ -1649,14 +1471,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/lists/{{listId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lists",
-                "{{listId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lists", "{{listId}}"]
             },
             "body": {
               "mode": "raw",
@@ -1696,15 +1512,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lists",
-                "{{listId}}",
-                "lines"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lists", "{{listId}}", "lines"]
             },
             "body": {
               "mode": "raw",
@@ -1750,15 +1559,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lists",
-                "{{listId}}",
-                "lines"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lists", "{{listId}}", "lines"]
             },
             "body": {
               "mode": "raw",
@@ -1795,15 +1597,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lists",
-                "{{listId}}",
-                "lines"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lists", "{{listId}}", "lines"]
             }
           },
           "response": [],
@@ -1839,14 +1634,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/lines/{{lineId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lines",
-                "{{lineId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lines", "{{lineId}}"]
             },
             "description": "Also checks the optimistic-concurrency version counter moves.",
             "body": {
@@ -1892,15 +1681,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/lines/{{lineId}}/quantity",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lines",
-                "{{lineId}}",
-                "quantity"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lines", "{{lineId}}", "quantity"]
             },
             "description": "Plan 0040. Adds to what is there without reading it first, so two people adding at once both land. The line stood at 3 after the edit above, so the answer is 5 and it is the server that says so.",
             "body": {
@@ -1946,15 +1728,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/lines/{{lineId}}/settle",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lines",
-                "{{lineId}}",
-                "settle"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lines", "{{lineId}}", "settle"]
             },
             "body": {
               "mode": "raw",
@@ -1995,15 +1770,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/lines/{{lineId}}/settlements",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lines",
-                "{{lineId}}",
-                "settlements"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lines", "{{lineId}}", "settlements"]
             }
           },
           "response": [],
@@ -2020,7 +1788,7 @@
                   "  pm.expect(b.items[0].quantity).to.eql(4);",
                   "});",
                   "pm.test('and it says nothing about a basket', function () {",
-                  "  pm.expect(b.items[0]).to.not.have.property('generatedListLineId');",
+                  "  pm.expect(b.items[0]).to.not.have.property('basketId');",
                   "});"
                 ]
               }
@@ -2039,15 +1807,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/lines/{{lineId}}/approval",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lines",
-                "{{lineId}}",
-                "approval"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lines", "{{lineId}}", "approval"]
             },
             "body": {
               "mode": "raw",
@@ -2087,16 +1848,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines/reorder",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lists",
-                "{{listId}}",
-                "lines",
-                "reorder"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lists", "{{listId}}", "lines", "reorder"]
             },
             "description": "Puts the second line first. The next request proves the order really changed.",
             "body": {
@@ -2129,15 +1882,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lists",
-                "{{listId}}",
-                "lines"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lists", "{{listId}}", "lines"]
             }
           },
           "response": [],
@@ -2170,15 +1916,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/lines/{{lineId}}/comments",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lines",
-                "{{lineId}}",
-                "comments"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lines", "{{lineId}}", "comments"]
             },
             "body": {
               "mode": "raw",
@@ -2210,15 +1949,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/lines/{{lineId}}/comments",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lines",
-                "{{lineId}}",
-                "comments"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lines", "{{lineId}}", "comments"]
             }
           },
           "response": [],
@@ -2245,15 +1977,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/lists",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "{{zoneId}}",
-                "lists"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "{{zoneId}}", "lists"]
             },
             "description": "The denormalised counters on the list should have followed the line edits."
           },
@@ -2287,16 +2012,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/lists/{{listId}}/lines/batch",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lists",
-                "{{listId}}",
-                "lines",
-                "batch"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lists", "{{listId}}", "lines", "batch"]
             },
             "description": "Plan 0040. All or nothing, and the answer is the created lines in request order. Last in the folder because it changes the line count the checks above assert.",
             "body": {
@@ -2347,14 +2064,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/catalog/items?limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "catalog",
-                "items"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "catalog", "items"],
               "query": [
                 {
                   "key": "limit",
@@ -2388,14 +2099,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/catalog/supermarkets?limit=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "catalog",
-                "supermarkets"
-              ],
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "catalog", "supermarkets"],
               "query": [
                 {
                   "key": "limit",
@@ -2432,15 +2137,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/catalog/items",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "admin",
-                "catalog",
-                "items"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "catalog", "items"]
             },
             "description": "The boundary of plan 0073, asserted positively. This is the one request in the suite that presents a velista access token to an admin route on purpose, and the refusal is now a 401 rather than a 403: the route is guarded by AdminJwtGuard, which verifies against the operator public key, so a user token fails to authenticate rather than failing to authorise. Every run makes this call, because the token it presents is the user's whether or not an operator token is configured.",
             "body": {
@@ -2495,9 +2193,7 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/catalog/items/00000000-0000-0000-0000-000000000000",
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "v1",
                 "catalog",
@@ -2534,15 +2230,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/catalog/items/not-a-uuid",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "catalog",
-                "items",
-                "not-a-uuid"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "catalog", "items", "not-a-uuid"]
             },
             "description": "KNOWN FAILURE against the current backend: this returns 500. A path parameter that is not a UUID is a bad request, so it should be 400 (or 404), never a server error. See the README."
           },
@@ -2582,15 +2271,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "admin",
-                "auth",
-                "login"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "auth", "login"]
             },
             "description": "An operator is a different principal from a velista user (plan 0071): a different table, a different signing key, and since plan 0073 a different namespace. Nothing earlier in this run produces a token that works here, so the folder starts by getting one. Set adminUsername and adminPassword, which `admin:create` on the server is what creates.",
             "body": {
@@ -2648,15 +2330,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/catalog/items",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "admin",
-                "catalog",
-                "items"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "catalog", "items"]
             },
             "body": {
               "mode": "raw",
@@ -2717,16 +2392,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/catalog/items/{{itemId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "admin",
-                "catalog",
-                "items",
-                "{{itemId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "catalog", "items", "{{itemId}}"]
             },
             "auth": {
               "type": "bearer",
@@ -2780,16 +2447,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/catalog/items/{{itemId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "admin",
-                "catalog",
-                "items",
-                "{{itemId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "catalog", "items", "{{itemId}}"]
             },
             "body": {
               "mode": "raw",
@@ -2852,15 +2511,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/catalog/supermarkets",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "admin",
-                "catalog",
-                "supermarkets"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "catalog", "supermarkets"]
             },
             "body": {
               "mode": "raw",
@@ -2921,9 +2573,7 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/catalog/supermarkets/{{supermarketId}}/locations",
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "v1",
                 "admin",
@@ -2987,9 +2637,7 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/catalog/supermarkets/{{supermarketId}}/locations",
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "v1",
                 "admin",
@@ -3052,15 +2700,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v2/admin/catalog/supermarket-items",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v2",
-                "admin",
-                "catalog",
-                "supermarket-items"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "admin", "catalog", "supermarket-items"]
             },
             "description": "Upsert, so running the suite twice updates the same row instead of failing.",
             "body": {
@@ -3121,16 +2762,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/catalog/items/{{itemId}}/offers",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "catalog",
-                "items",
-                "{{itemId}}",
-                "offers"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "catalog", "items", "{{itemId}}", "offers"]
             },
             "description": "The join back the other way: which locations carry this item and at what price."
           },
@@ -3171,16 +2804,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/catalog/locations/{{locationId}}/offers",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "catalog",
-                "locations",
-                "{{locationId}}",
-                "offers"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "catalog", "locations", "{{locationId}}", "offers"]
             }
           },
           "response": [],
@@ -3231,14 +2856,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/account/me",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "account",
-                "me"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "account", "me"]
             },
             "description": "GLOBAL_ONLY leaves per-zone names alone, which the next request checks.\n\nRenaming is throttled to 5 per hour per IP, which is far tighter than the per-minute auth buckets: two full suite runs use it up. A 429 here is reported as SKIPPED rather than failed, because an exhausted hourly bucket says nothing about whether the backend works.",
             "body": {
@@ -3280,15 +2899,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{zoneId}}/members",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "{{zoneId}}",
-                "members"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "{{zoneId}}", "members"]
             },
             "description": "Proves GLOBAL_ONLY propagation really is scoped: the zone membership should still carry the name set in folder 04."
           },
@@ -3330,14 +2942,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/account/me",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "account",
-                "me"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "account", "me"]
             },
             "auth": {
               "type": "noauth"
@@ -3376,14 +2982,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/account/me",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "account",
-                "me"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "account", "me"]
             },
             "auth": {
               "type": "noauth"
@@ -3417,14 +3017,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/00000000-0000-0000-0000-000000000000",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "00000000-0000-0000-0000-000000000000"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "00000000-0000-0000-0000-000000000000"]
             },
             "description": "Authenticated, so this is a genuine not-found rather than an authorisation failure."
           },
@@ -3456,15 +3050,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/by-code/ZZZZZZ",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "by-code",
-                "ZZZZZZ"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "by-code", "ZZZZZZ"]
             },
             "description": "The contract folds 'never existed' and 'no longer active' into the same 404, so the code cannot be used to probe which zones exist.",
             "auth": {
@@ -3504,13 +3091,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/zones",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones"]
             },
             "description": "name is required by CreateZoneDto.",
             "body": {
@@ -3551,13 +3133,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/definitely-not-a-route",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "definitely-not-a-route"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "definitely-not-a-route"]
             },
             "auth": {
               "type": "noauth"
@@ -3595,13 +3172,8 @@
             ],
             "url": {
               "raw": "{{baseUrl}}/v1/assistant",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "assistant"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assistant"]
             },
             "description": "The transcript is the conversation so far and `message` is what was just said. They are separate fields: the thing being answered must not also appear in the history of the question.",
             "body": {
@@ -3648,14 +3220,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/assistant/voice",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "assistant",
-                "voice"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assistant", "voice"]
             },
             "description": "multipart/form-data: the recording as a file part, the transcript as a JSON string.\n\nDo NOT set Content-Type by hand. Postman writes the boundary itself, and a hand written multipart/form-data header omits it and produces a body the server cannot split.\n\nThe cap is `ASSISTANT_AUDIO_MAX_BYTES` (2 MB by default) and it is enforced by the multipart interceptor, so a larger file is refused here before it reaches the broker.",
             "body": {
@@ -3713,14 +3279,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/assistant/voice",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "assistant",
-                "voice"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "assistant", "voice"]
             },
             "description": "The interceptor enforces the size of a part that is there; it does not insist one was sent. That is the controller, and it is a 400 rather than an empty buffer travelling to the service to be refused there.",
             "body": {
@@ -3759,14 +3319,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/lines/{{lineId2}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lines",
-                "{{lineId2}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lines", "{{lineId2}}"]
             }
           },
           "response": [],
@@ -3789,14 +3343,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/lists/{{listId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "lists",
-                "{{listId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "lists", "{{listId}}"]
             }
           },
           "response": [],
@@ -3819,14 +3367,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/zones/{{zoneId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "zones",
-                "{{zoneId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "zones", "{{zoneId}}"]
             }
           },
           "response": [],
@@ -3849,9 +3391,7 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v2/admin/catalog/supermarket-items/{{supermarketItemId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "v2",
                 "admin",
@@ -3904,16 +3444,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/catalog/locations/{{locationId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "admin",
-                "catalog",
-                "locations",
-                "{{locationId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "catalog", "locations", "{{locationId}}"]
             },
             "auth": {
               "type": "bearer",
@@ -3959,9 +3491,7 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/catalog/supermarkets/{{supermarketId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
+              "host": ["{{baseUrl}}"],
               "path": [
                 "v1",
                 "admin",
@@ -4014,16 +3544,8 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/v1/admin/catalog/items/{{itemId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "v1",
-                "admin",
-                "catalog",
-                "items",
-                "{{itemId}}"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "catalog", "items", "{{itemId}}"]
             },
             "auth": {
               "type": "bearer",

@@ -409,3 +409,95 @@
   font-size: var(--app-text-2xs);
   color: var(--app-text-muted);
 }
+
+// Where it was bought (velista 0114). The same outlined box as a product choice, so
+// the step reads as three questions of one kind, with a chevron because it opens a
+// picker rather than choosing in place. Clearing sits beside it, a touch target of its
+// own, so a stray tap on the row never throws the choice away.
+.shop-choice {
+  display: flex;
+  align-items: stretch;
+  gap: var(--app-space-2);
+}
+
+.shop-row {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-inline-size: 0;
+  min-height: var(--app-touch-target);
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include form.focus-ring;
+}
+
+.shop-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+}
+
+.shop-name,
+.shop-none {
+  overflow: hidden;
+  font-size: var(--app-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-none {
+  color: var(--app-text-secondary);
+}
+
+.shop-where {
+  overflow: hidden;
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shop-glyph {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+.shop-clear {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--app-touch-target);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  @include form.focus-ring;
+}
+
+.shop-clear-glyph {
+  font-size: var(--app-icon-sm);
+}

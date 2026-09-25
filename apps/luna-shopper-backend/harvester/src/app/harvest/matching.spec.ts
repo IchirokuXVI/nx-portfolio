@@ -8,11 +8,13 @@ import {
 import { createHash } from 'node:crypto';
 import type { SourceCatalogEntry } from '../entities';
 import {
+  ChainEanIndex,
   entryKey,
   entryNameKey,
   ItemMatchIndex,
   normalizeName,
   SiblingEntryIndex,
+  siblingKey,
 } from './matching';
 
 function item(overrides: Partial<ItemView> = {}): ItemView {
@@ -24,6 +26,7 @@ function item(overrides: Partial<ItemView> = {}): ItemView {
     sku: null,
     ean: null,
     unitSize: 1,
+    packCount: null,
     category: ItemCategory.PANTRY,
     defaultUnit: UnitOfMeasure.LITER,
     ...overrides,
@@ -166,7 +169,7 @@ describe('the sibling row index, rung 4', () => {
     ]);
 
     // Normalized on both sides, so the chain's own casing does not decide it.
-    expect(index.match('LECHE ENTERA', '1 l')).toEqual({
+    expect(index.match('LECHE ENTERA', '1 l', null)).toEqual({
       itemId: 'item-1',
       entryId: null,
     });
@@ -177,7 +180,7 @@ describe('the sibling row index, rung 4', () => {
     // resolve to it afterwards.
     const index = new SiblingEntryIndex([row({ id: 'walk-row' })]);
 
-    expect(index.match('Leche entera', '1 L')).toEqual({
+    expect(index.match('Leche entera', '1 L', null)).toEqual({
       itemId: null,
       entryId: 'walk-row',
     });
@@ -190,7 +193,7 @@ describe('the sibling row index, rung 4', () => {
       row({ status: SourceEntryStatus.REJECTED }),
     ]);
 
-    expect(index.match('Leche entera', '1 L')).toBeNull();
+    expect(index.match('Leche entera', '1 L', null)).toBeNull();
   });
 
   it('proposes nothing when two siblings disagree about the item', () => {
@@ -199,15 +202,15 @@ describe('the sibling row index, rung 4', () => {
       row({ id: 'b', status: SourceEntryStatus.ACTIVE, itemId: 'item-2' }),
     ]);
 
-    expect(index.match('Leche entera', '1 L')).toBeNull();
+    expect(index.match('Leche entera', '1 L', null)).toBeNull();
   });
 
   it('counts a row this run created as a sibling from the moment it exists', () => {
     const index = new SiblingEntryIndex([]);
-    expect(index.match('Leche entera', '1 L')).toBeNull();
+    expect(index.match('Leche entera', '1 L', null)).toBeNull();
 
     index.add(row({ status: SourceEntryStatus.ACTIVE, itemId: 'item-1' }));
-    expect(index.match('Leche entera', '1 L')).toEqual({
+    expect(index.match('Leche entera', '1 L', null)).toEqual({
       itemId: 'item-1',
       entryId: null,
     });
@@ -226,6 +229,78 @@ describe('the sibling row index, rung 4', () => {
     expect(entryNameKey('LECHE  entera', '1 l')).toBe(
       entryNameKey('Leche entera', '1 L')
     );
+  });
+});
+
+describe('the sibling key with size (plan 0155)', () => {
+  const row = (over: Partial<SourceCatalogEntry>): SourceCatalogEntry =>
+    ({
+      id: 'bottle',
+      name: 'Refresco cola',
+      sizeFormat: 'l',
+      unitSize: 1,
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-bottle',
+      ...over,
+    }) as SourceCatalogEntry;
+
+  it('keeps a 0.33 l entry and a 1 l product apart', () => {
+    // Mercadona states only the unit in `sizeFormat`, so the old key put a
+    // can and a bottle together.
+    const index = new SiblingEntryIndex([row({})]);
+
+    expect(index.match('Refresco cola', 'l', 0.33)).toBeNull();
+    expect(index.match('Refresco cola', 'l', 1)).toEqual({
+      itemId: 'item-bottle',
+      entryId: null,
+    });
+  });
+
+  it('reads a numeric column the way Postgres answers it', () => {
+    expect(siblingKey('Refresco cola', 'l', '0.3300')).toBe(
+      siblingKey('Refresco cola', 'l', 0.33)
+    );
+    expect(siblingKey('Refresco cola', 'l', null)).not.toBe(
+      siblingKey('Refresco cola', 'l', 0.33)
+    );
+  });
+
+  it('leaves the row identity alone', () => {
+    // `entryKey` is the externalId of a source with no id. Changing it would
+    // orphan every such row.
+    expect(entryNameKey('Refresco cola', 'l')).toBe('refresco cola|l');
+    expect(siblingKey('Refresco cola', 'l', 1)).toBe('refresco cola|l|1');
+  });
+});
+
+describe('the chain EAN index (plan 0155)', () => {
+  it('counts a row once however often it is noted', () => {
+    const index = new ChainEanIndex([{ externalId: 'a', ean: '1' }]);
+    index.note('a', '1');
+
+    expect(index.shared('1')).toBe(false);
+  });
+
+  it('is shared from the second row that carries the EAN', () => {
+    const index = new ChainEanIndex([{ externalId: 'a', ean: '1' }]);
+    index.note('b', '1');
+
+    expect(index.shared('1')).toBe(true);
+    expect(index.holdersOf('1').sort()).toEqual(['a', 'b']);
+  });
+
+  it('moves a row whose EAN changed, and drops one whose EAN went', () => {
+    const index = new ChainEanIndex([
+      { externalId: 'a', ean: '1' },
+      { externalId: 'b', ean: '1' },
+      { externalId: 'c', ean: '2' },
+    ]);
+    index.note('a', '2');
+    index.note('b', null);
+
+    expect(index.shared('1')).toBe(false);
+    expect(index.shared('2')).toBe(true);
+    expect(index.shared(null)).toBe(false);
   });
 });
 

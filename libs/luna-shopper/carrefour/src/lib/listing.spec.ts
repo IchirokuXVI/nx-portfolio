@@ -11,6 +11,7 @@ describe('splitCardName', () => {
       name: 'Agua mineral Bezoya',
       sizeFormat: '1,5 l.',
       unitSize: 1.5,
+      packCount: null,
     });
   });
 
@@ -33,6 +34,7 @@ describe('splitCardName', () => {
       name: 'Leche entera CARREFOUR',
       sizeFormat: 'pack de 9 unidades de 1 l.',
       unitSize: 9,
+      packCount: 9,
     });
   });
 
@@ -96,6 +98,7 @@ describe('splitCardName', () => {
       name: 'Rosquillos EL CATETO tecla 36',
       sizeFormat: null,
       unitSize: null,
+      packCount: null,
     });
   });
 
@@ -106,6 +109,7 @@ describe('splitCardName', () => {
       name: 'Servilletas CARREFOUR 30 cm',
       sizeFormat: null,
       unitSize: null,
+      packCount: null,
     });
   });
 
@@ -119,10 +123,12 @@ describe('splitCardName', () => {
       // matcher, and rewriting it here destroys what the chain printed.
       sizeFormat: '28+16 lavados',
       unitSize: null,
+      packCount: null,
     });
     expect(splitCardName('Zumo DON SIMON 3x200 ml', 'l')).toMatchObject({
       sizeFormat: '3x200 ml',
       unitSize: null,
+      packCount: 3,
     });
   });
 
@@ -131,7 +137,80 @@ describe('splitCardName', () => {
       name: '1,5 l',
       sizeFormat: null,
       unitSize: null,
+      packCount: null,
     });
+  });
+});
+
+describe('the pack count (plan 0162, section 1)', () => {
+  it('reads the count of a pack phrase', () => {
+    expect(
+      splitCardName('Leche entera CARREFOUR pack de 9 unidades de 1 l.', 'l')
+        .packCount
+    ).toBe(9);
+    expect(
+      splitCardName(
+        'Atún claro Classic Carrefour pack de 8 latas de 52 g.',
+        'kg'
+      ).packCount
+    ).toBe(8);
+    expect(
+      splitCardName('Arroz Carrefour Classic pack 6 unidades de 167 g.', 'kg')
+        .packCount
+    ).toBe(6);
+    expect(
+      splitCardName('Gelatina para gatos Carrefour 4 sobres de 100 g.', 'kg')
+        .packCount
+    ).toBe(4);
+  });
+
+  it('reads the N of NxQ', () => {
+    expect(splitCardName('Zumo DON SIMON 3x200 ml', 'l').packCount).toBe(3);
+    expect(splitCardName('Zumo DON SIMON 4 x 1,5 l', 'l').packCount).toBe(4);
+  });
+
+  it('states no count for a container phrase with no number', () => {
+    expect(
+      splitCardName('Langostinos pink caja de 500 g', 'kg').packCount
+    ).toBeNull();
+  });
+
+  it('states no count for a bonus pack, a single size or a count of 1', () => {
+    expect(
+      splitCardName('Detergente CARREFOUR 28+16 lavados', 'ud').packCount
+    ).toBeNull();
+    expect(
+      splitCardName('Agua mineral Bezoya 1,5 l.', 'l').packCount
+    ).toBeNull();
+    expect(splitCardName('Zumo DON SIMON 1x200 ml', 'l').packCount).toBeNull();
+    expect(
+      splitCardName('Leche CARREFOUR pack de 1 unidades de 1 l.', 'l').packCount
+    ).toBeNull();
+  });
+
+  it('states no count when the pack phrase and NxQ both state one', () => {
+    // A pack of packs: neither number alone is the count.
+    expect(
+      splitCardName('Zumo DON SIMON pack de 2 unidades de 3x200 ml', 'l')
+        .packCount
+    ).toBeNull();
+  });
+
+  it('states no count when the size is not read at all', () => {
+    expect(
+      splitCardName('Servilletas CARREFOUR 30 cm', 'ud').packCount
+    ).toBeNull();
+  });
+
+  it('carries the count onto the product a card reads into', () => {
+    const six: CarrefourCard = {
+      product_id: 'VC4AECOMM-1',
+      name: 'Leche entera CARREFOUR pack de 6 unidades de 1 l.',
+      price: '5,40 €',
+      price_per_unit: '0,90 €',
+      measure_unit: 'l',
+    };
+    expect(readCard(six, ['Leche']).packCount).toBe(6);
   });
 });
 

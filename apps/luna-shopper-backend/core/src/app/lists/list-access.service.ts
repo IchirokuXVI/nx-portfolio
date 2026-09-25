@@ -9,6 +9,11 @@ import { Repository } from 'typeorm';
 import { ListAccess, ListLine, ShoppingList } from '../entities';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { ZONE_READABLE_LIST_IDS_SQL } from '../zones/zone-summary.sql';
+import { canSettle } from './list-acts';
+import {
+  LIST_PERMISSIONS_AMONG_SQL,
+  type ListPermissionsAmongRow,
+} from './list-permissions.sql';
 
 /** Everything a zone OWNER or ADMIN holds on every list in their zone. */
 export const ALL_LIST_PERMISSIONS: readonly ListPermission[] = [
@@ -213,6 +218,68 @@ export class ListAccessService {
   async requireDecide(listId: string, userId: string): Promise<ShoppingList> {
     return (await this.requireAccess(listId, userId, ListPermission.DECIDE))
       .list;
+  }
+
+  /**
+   * Requires the right to settle a line: `WRITE` or `MANAGE`, per
+   * {@link canSettle} (plan 0131).
+   *
+   * It is not `requireWrite` under another name even though the two admit the
+   * same people today, because they answer different questions: one is "may this
+   * person edit the list", the other is "may this person say what happened in a
+   * shop". Plan 0136 asks the second of a basket's owner through coverage, and a
+   * call site that asked the first would go on meaning the wrong thing.
+   */
+  async requireSettle(listId: string, userId: string): Promise<ShoppingList> {
+    const resolved = await this.resolve(listId, userId);
+    if (!canSettle(resolved.permissions)) {
+      throw new ForbiddenException(REFUSALS[ListPermission.WRITE]);
+    }
+    return resolved.list;
+  }
+
+  /**
+   * The permissions one account holds on each of these lists, at request time
+   * (plan 0131).
+   *
+   * The many list twin of {@link permissionsForMembership}, and it must agree
+   * with it: the integration spec beside the SQL proves the two answer the same
+   * set for a staff member, a row holder and a stranger. A list the account has
+   * no approved membership for is **absent** from the map, which is the same
+   * answer as an empty set and one query cheaper to produce.
+   *
+   * It exists because the basket sheet asks about every list on a line at once.
+   * {@link BasketSharingService.writableAmong} already answers `WRITE`
+   * that way and stays, because the settle, the redaction and the pickers all
+   * read it; this answers all four, which is what a rule branching on `DECIDE`
+   * needs.
+   */
+  async permissionsAmong(
+    userId: string,
+    listIds: readonly string[]
+  ): Promise<Map<string, Set<ListPermission>>> {
+    const ids = [...new Set(listIds)];
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const rows = await this.lists.query<ListPermissionsAmongRow[]>(
+      LIST_PERMISSIONS_AMONG_SQL,
+      [userId, ids]
+    );
+    return new Map(
+      rows.map((row) => [
+        row.listId,
+        // The derived grant comes from the constant and never from the query,
+        // which is what {@link permissionsForMembership} does one list at a
+        // time: a fifth permission added to `ALL_LIST_PERMISSIONS` reaches both
+        // answers at once.
+        new Set(
+          row.staff
+            ? ALL_LIST_PERMISSIONS
+            : (row.permissions as ListPermission[])
+        ),
+      ])
+    );
   }
 
   /** Requires `MANAGE`: govern the list, its access table and any of its lines. */

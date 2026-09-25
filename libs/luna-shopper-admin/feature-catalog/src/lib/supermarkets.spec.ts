@@ -1,6 +1,7 @@
 import { provideLocationMocks } from '@angular/common/testing';
 import { Component } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -15,10 +16,14 @@ import {
   provideResources,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
+  draftFor,
   fieldOf,
   isEditable,
+  toInput,
   type FieldName,
 } from '@portfolio/luna-shopper-admin/models';
+import { FieldControl } from '@portfolio/luna-shopper-admin/ui';
+import { PRICE_SCOPES } from './price-scopes';
 import { SUPERMARKETS, type Supermarket } from './supermarkets';
 import { SUPERMARKET_SEED } from './supermarkets-seed';
 
@@ -47,10 +52,16 @@ async function boot(url: string): Promise<ComponentFixture<TestHost>> {
       ContentLocaleStore,
       ServerReachability,
       provideRouter(
-        adminRoutes([{ key: 'catalog', label: '', resources: [SUPERMARKETS] }])
+        adminRoutes([
+          {
+            key: 'catalog',
+            label: '',
+            resources: [SUPERMARKETS, PRICE_SCOPES],
+          },
+        ])
       ),
       provideLocationMocks(),
-      provideResources(SUPERMARKETS),
+      provideResources(SUPERMARKETS, PRICE_SCOPES),
       SessionStorage,
       SessionStore,
       DeploymentStore,
@@ -122,19 +133,42 @@ describe('the supermarkets descriptor', () => {
   });
 
   /**
-   * `UpdateSupermarketDto` has no such property, so the gateway would drop it.
-   * A field the form offered and the server ignored is worse than one it does
-   * not offer: the operator would type a value, see the form succeed, and find
-   * it unchanged.
+   * Admin plan 0034, section 2; backend plan 0153. `UpdateSupermarketDto`
+   * takes a default scope and `CreateSupermarketDto` does not, because a new
+   * chain's national scope becomes its default in the same write.
    */
-  it('does not offer to edit the default price scope, in either mode', () => {
+  it('offers the default price scope on an existing chain only', () => {
     const field = fieldOf(SUPERMARKETS, 'defaultPriceScopeId');
 
     expect(field).toBeDefined();
     expect(field === undefined ? null : isEditable(field, 'create')).toBe(
       false
     );
-    expect(field === undefined ? null : isEditable(field, 'edit')).toBe(false);
+    expect(field === undefined ? null : isEditable(field, 'edit')).toBe(true);
+  });
+
+  it('never sends a default scope when creating a chain', () => {
+    const draft = draftFor(SUPERMARKETS, null, 'create');
+    const input = toInput(
+      SUPERMARKETS,
+      { ...draft, name: { en: 'Deza', es: 'Deza' } },
+      'create',
+      draft
+    );
+
+    expect(input).not.toHaveProperty('defaultPriceScopeId');
+  });
+
+  /** The gateway refuses a scope of another chain, so none is offered. */
+  it('limits the scope picker to the chain being edited', () => {
+    const field = fieldOf(SUPERMARKETS, 'defaultPriceScopeId');
+    const scopeFrom = field?.kind === 'reference' ? field.scopeFrom : undefined;
+
+    expect(scopeFrom?.({ id: 'sm_mercadona' })).toEqual({
+      supermarketId: 'sm_mercadona',
+    });
+    // A chain that does not exist yet has no scopes to offer.
+    expect(scopeFrom?.({})).toBeNull();
   });
 
   it('calls a chain by its localized name', () => {
@@ -197,10 +231,46 @@ describe('supermarkets through the generic machinery', () => {
     const fixture = await boot('/supermarkets/sm_mercadona');
 
     // One box per content locale for the name, plus the two url fields and the
-    // brand key. The id and the price scope are shown, not edited.
+    // brand key. The default scope is a picker now, so only the id is shown
+    // and not edited.
     const inputs = fixture.nativeElement.querySelectorAll('input[type="text"]');
     expect(inputs).toHaveLength(5);
-    expect(fixture.nativeElement.querySelectorAll('.readonly')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('.readonly')).toHaveLength(1);
+    expect(
+      fixture.nativeElement.querySelector('lib-reference-picker')
+    ).not.toBeNull();
+  });
+
+  /** Admin plan 0034, section 2: the picker reads this chain's scopes only. */
+  it('offers the default scope as a picker over this chain', async () => {
+    const fixture = await boot('/supermarkets/sm_mercadona');
+
+    const control = fixture.debugElement
+      .queryAll(By.directive(FieldControl))
+      .map((node) => node.componentInstance as FieldControl)
+      .find((found) => found.field().name === 'defaultPriceScopeId');
+
+    expect(control?.scopeOf()).toEqual({ supermarketId: 'sm_mercadona' });
+  });
+
+  /**
+   * A chain with no default scope is a gap to fix, and chains made before
+   * backend plan 0153 have none. The list flags each one; a chain with a
+   * default shows its scope instead.
+   */
+  it('flags every chain that has no default scope', async () => {
+    const fixture = await boot('/supermarkets');
+
+    const flags = fixture.nativeElement.querySelectorAll('tbody .flag');
+    const without = SUPERMARKET_SEED.filter(
+      (chain) => chain.defaultPriceScopeId === null
+    );
+    expect(without.length).toBeGreaterThan(0);
+    expect(without.length).toBeLessThan(SUPERMARKET_SEED.length);
+    expect(flags).toHaveLength(without.length);
+    expect(flags[0].textContent).toContain(
+      'catalog.supermarkets.noDefaultScope'
+    );
   });
 
   it('offers a create form at `new` rather than reading a row called new', async () => {

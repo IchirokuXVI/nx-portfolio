@@ -13,14 +13,16 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { AccountModule } from './account/account.module';
 import { CoreAdminModule } from './admin/admin.module';
+import { AppStateModule } from './app-state/app-state.module';
 import { AuditModule } from './audit/audit.module';
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
 import { CORE_ENTITIES } from './entities';
-import { GeneratedListsModule } from './generated-lists/generated-lists.module';
+import { BasketsModule } from './baskets/baskets.module';
 import { ListsModule } from './lists/lists.module';
 import { MergeModule } from './merge/merge.module';
 import { ProfilesModule } from './profiles/profiles.module';
+import { PurchasesModule } from './purchases/purchases.module';
 import { RealtimeAccessModule } from './realtime/realtime-access.module';
 import { ZonesModule } from './zones/zones.module';
 
@@ -58,8 +60,16 @@ import { ZonesModule } from './zones/zones.module';
     // Shopping profiles: where a person shops (plan 0049).
     ProfilesModule,
     // Generated shopping lists: the basket you carry round the shop (plan 0050).
-    GeneratedListsModule,
+    BasketsModule,
     AccountModule,
+    // What this account has been shown: the setup, and the tour (plan 0145).
+    // It imports nothing and registers no repository: both operations are one
+    // statement each, and the row is the caller's own.
+    AppStateModule,
+    // What one person bought, with or without a basket (plan 0142). It imports
+    // nothing: both reads are raw statements whose own `WHERE` is the
+    // authorization.
+    PurchasesModule,
     // What the back office can see and do here (plan 0074). Last, because it
     // imports two of the slices above and adds nothing they depend on.
     CoreAdminModule,

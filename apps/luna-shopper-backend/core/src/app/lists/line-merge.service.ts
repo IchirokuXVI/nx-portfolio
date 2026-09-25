@@ -9,13 +9,21 @@ import {
 import { LineMergeTooManyProductsException } from '@portfolio/luna-shopper/platform';
 import { In, type EntityManager } from 'typeorm';
 import {
-  GeneratedListLineOrigin,
+  BasketLineSkip,
+  BasketTripRow,
   LineComment,
   LineSettlement,
   ListLine,
   ListLineGroupRemoval,
   ListLineItem,
 } from '../entities';
+import {
+  LineChangeRecorder,
+  snapshotOf,
+  type LineChangeActor,
+  type LineSnapshot,
+  type ListRef,
+} from './changes/line-change.recorder';
 import { itemSetHash } from './item-set-hash';
 
 /**
@@ -78,6 +86,23 @@ export function isEarlierLine(
   return a.id < b.id;
 }
 
+/** What a merge needs in order to record itself (plan 0138, section 4). */
+export interface MergeRecord {
+  list: ListRef;
+  actor: LineChangeActor;
+  /**
+   * The absorbed line as it stood **before the edit that caused the merge**.
+   *
+   * Both callers rename a line and then merge, so by the time the two rows reach
+   * {@link LineMergeService.merge} the renamed one already carries its new
+   * spelling and, when the request named one, its new quantity. Only the caller
+   * knows what it was, so only the caller can say.
+   *
+   * Absent for a merge that no edit preceded, where the object is the answer.
+   */
+  absorbedBefore?: LineSnapshot;
+}
+
 /**
  * Two lines of one list become one (plan 0112).
  *
@@ -95,6 +120,8 @@ export function isEarlierLine(
  */
 @Injectable()
 export class LineMergeService {
+  constructor(private readonly changes: LineChangeRecorder) {}
+
   /**
    * Move everything `absorbed` owns onto `survivor`, delete `absorbed`, and
    * save `survivor` as the one line.
@@ -108,12 +135,32 @@ export class LineMergeService {
    * Returns the saved survivor. It is not a view: the caller reads the line again
    * before answering, since the product set, the settlements and the claim all
    * moved underneath it.
+   *
+   * ## It records the change itself (plan 0138, section 4)
+   *
+   * Both callers hand it the list and the actor, and it writes the one `MERGED`
+   * row. Here rather than in either caller, because the absorbed line's state has
+   * to be read while its row still exists and the survivor's after the sum, and
+   * this is the only method that sees both moments. There is **no second row for
+   * the survivor**: a rename that caused the merge rides in this row's
+   * `contentAfter`.
    */
   async merge(
     manager: EntityManager,
     survivor: ListLine,
-    absorbed: ListLine
+    absorbed: ListLine,
+    record: MergeRecord
   ): Promise<ListLine> {
+    // What the line that went away was, which the change is about.
+    //
+    // `absorbedBefore` is why this is not simply read off the object: a rename
+    // hands both lines over **already carrying the new spelling** (plan 0112,
+    // section 3), so a merge of "Leche" into "Milk" would otherwise record that
+    // Milk was folded into Milk and lose the name that disappeared.
+    const went = {
+      id: absorbed.id,
+      ...(record.absorbedBefore ?? snapshotOf(absorbed)),
+    };
     const items = manager.getRepository(ListLineItem);
     const order = { position: 'ASC', id: 'ASC' } as const;
     const survivorRows = await items.find({
@@ -150,7 +197,23 @@ export class LineMergeService {
       .update({ lineId: absorbed.id }, { lineId: survivor.id });
 
     const version = survivor.version + 1;
-    await this.moveOrigins(manager, survivor.id, absorbed.id, version);
+    // Before the delete below: `basket_trip_rows` names the line by a foreign
+    // key, so a row still pointing at the absorbed line would go with it (plan
+    // 0135, section 5). It used to be done beside the basket origins, and there
+    // are none since plan 0136: an open basket reads the list, so a merged line
+    // is one row on its next read with both lines' purchases, with nothing to
+    // move.
+    await this.moveTripRows(manager, survivor.id, absorbed.id);
+
+    // Before the delete as well, and for the same reason (plan 0137, section
+    // 6): `basket_line_skips` names the line by a foreign key that cascades, so
+    // a skip still pointing at the absorbed line would go with it and a row the
+    // shopper skipped would come back as wanted because somebody fixed a
+    // spelling. There is no unique index to collide with, and two standing
+    // skips on the survivor for one basket read as the newer one.
+    await manager
+      .getRepository(BasketLineSkip)
+      .update({ lineId: absorbed.id }, { lineId: survivor.id });
 
     survivor.quantity = Math.min(
       survivor.quantity + absorbed.quantity,
@@ -160,8 +223,25 @@ export class LineMergeService {
     survivor.itemSetHash = itemSetHash(union);
     survivor.version = version;
 
+    // After the survivor holds its merged quantity and approval, and before the
+    // absorbed row goes: the change carries both sides as they finally stand, in
+    // this transaction, so it commits with the merge or not at all.
+    await this.changes.merged(
+      manager,
+      record.list,
+      went,
+      survivor,
+      record.actor
+    );
+
     // Last, once nothing the absorbed line owned still points at it. Most of
     // those tables cascade on this delete, which is why the order matters.
+    //
+    // A **real** delete, on purpose, although plan 0132 made a line soft
+    // deletable: `repo.delete` stays real on a soft deletable entity, and
+    // everything the absorbed line owned has moved onto the survivor by this
+    // point, its settlements included. There is nothing left for a row to keep,
+    // and a tombstone per merge would leave a ghost behind every rename.
     await manager.getRepository(ListLine).delete({ id: absorbed.id });
     return manager.getRepository(ListLine).save(survivor);
   }
@@ -241,47 +321,46 @@ export class LineMergeService {
   }
 
   /**
-   * The basket origins that point at the absorbed line (section 4).
+   * The trip rows that point at the absorbed line (plan 0135, section 5).
    *
-   * A basket line that has an origin on both lines ends with one row, the
-   * survivor's, holding both contributions, because
-   * `uq_generated_list_line_origin` allows one row per basket line and zone line.
-   * Every row the merge touches takes the survivor's new version, so a reader
-   * sees that the origin moved. That is information and not a conflict (plan
-   * 0050), which is why no basket room hears about it.
+   * A finished basket that asked for both lines ends with one row, the
+   * survivor's, holding both asks, because `uq_basket_trip_rows_line` allows one
+   * row per basket and zone line. The two lines are one line now, and the trip
+   * asked for it.
+   *
+   * It carries no version, because a trip row has none: it is written once and
+   * this is the one edit it ever takes. `listId` does not move either, since
+   * both lines are on one list.
+   *
+   * It does not make a finished trip follow its list. A merge changes which line
+   * the household calls milk, not how much milk the trip asked for.
    */
-  private async moveOrigins(
+  private async moveTripRows(
     manager: EntityManager,
     survivorId: string,
-    absorbedId: string,
-    version: number
+    absorbedId: string
   ): Promise<void> {
-    const origins = manager.getRepository(GeneratedListLineOrigin);
-    const moving = await origins.find({
+    const rows = manager.getRepository(BasketTripRow);
+    const moving = await rows.find({
       where: { lineId: absorbedId },
       order: { id: 'ASC' },
     });
     if (moving.length === 0) {
       return;
     }
-    const staying = await origins.find({ where: { lineId: survivorId } });
-    const byBasketLine = new Map(
-      staying.map((origin) => [origin.generatedListLineId, origin])
-    );
-    for (const origin of moving) {
-      const shared = byBasketLine.get(origin.generatedListLineId);
+    const staying = await rows.find({ where: { lineId: survivorId } });
+    const byBasket = new Map(staying.map((row) => [row.basketId, row]));
+    for (const row of moving) {
+      const shared = byBasket.get(row.basketId);
       if (shared) {
         // Deleted first, so the pair never exists twice under the unique key.
-        await origins.delete({ id: origin.id });
-        await origins.update(
+        await rows.delete({ id: row.id });
+        await rows.update(
           { id: shared.id },
-          { quantity: shared.quantity + origin.quantity, lineVersion: version }
+          { asked: shared.asked + row.asked }
         );
       } else {
-        await origins.update(
-          { id: origin.id },
-          { lineId: survivorId, lineVersion: version }
-        );
+        await rows.update({ id: row.id }, { lineId: survivorId });
       }
     }
   }

@@ -5,11 +5,15 @@ import {
   IntersectionType,
 } from '@nestjs/swagger';
 import {
+  BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
   BULK_DECISION_MAX_OPERATIONS,
   CONTENT_LOCALES,
   ITEM_LOOKUP_LIMITS,
+  ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS,
   ItemCategory,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
   PriceScopeKind,
   PriceSourceKind,
   UnitOfMeasure,
@@ -29,6 +33,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -237,6 +242,17 @@ export class UpdateSupermarketDto {
   @IsString()
   @MaxLength(64)
   externalBrandKey?: string | null;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The scope quoted for this chain when the caller names no place (plan 0049, section 3.1, and plan 0153). It must be a scope of this chain, or the answer is 400. Null clears it. A chain is created with a NATIONAL scope as its default.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  defaultPriceScopeId?: string | null;
 }
 
 // --- Supermarket locations -------------------------------------------------
@@ -369,6 +385,20 @@ export class CreateItemDto {
   @Min(0)
   unitSize?: number | null;
 
+  @ApiPropertyOptional({
+    type: 'integer',
+    nullable: true,
+    minimum: PACK_COUNT_MIN,
+    maximum: PACK_COUNT_MAX,
+    description:
+      'How many units the pack holds (plan 0162). Null, or absent, for a product that is not a pack.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(PACK_COUNT_MIN)
+  @Max(PACK_COUNT_MAX)
+  packCount?: number | null;
+
   @ApiProperty({ enum: ItemCategory })
   @IsEnum(ItemCategory)
   category!: ItemCategory;
@@ -456,6 +486,20 @@ export class UpdateItemDto {
   @IsNumber()
   @Min(0)
   unitSize?: number | null;
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    nullable: true,
+    minimum: PACK_COUNT_MIN,
+    maximum: PACK_COUNT_MAX,
+    description:
+      'Set or correct the pack count, or clear it with null (plan 0162). The only write that changes a count that is set: a harvest run fills a null count and never overwrites one.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(PACK_COUNT_MIN)
+  @Max(PACK_COUNT_MAX)
+  packCount?: number | null;
 
   @ApiPropertyOptional({ enum: ItemCategory })
   @IsOptional()
@@ -551,6 +595,60 @@ export class UpdatePriceScopeDto {
 // --- Item prices: every price a source gave (plan 0080) ---------------------
 
 /**
+ * The kinds a person may type through the back office: `ADMIN`, and the
+ * automated kinds for a price an operator copies from a source. The two user
+ * kinds are refused until backlog 0008 opens them (plan 0158).
+ */
+const ADMIN_WRITABLE_PRICE_KINDS = [
+  PriceSourceKind.ADMIN,
+  PriceSourceKind.OFFICIAL_API,
+  PriceSourceKind.OFFICIAL_WEB,
+  PriceSourceKind.OFFICIAL_LEAFLET,
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A hand typed `observedAt`: absent, or an instant no later than now and no
+ * earlier than {@link ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS} days ago (plan
+ * 0160).
+ *
+ * Checked here so the form hears it as a 400 naming the field, and again in
+ * catalog for any other caller on the subject. Protection runs from
+ * `observedAt`, so the window opens backwards only: a past date protects a row
+ * for less time, never more.
+ */
+export function ObservedAtInWindow(): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'observedAtInWindow',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown): boolean {
+          if (value === undefined || value === null) {
+            return true;
+          }
+          const at = typeof value === 'string' ? Date.parse(value) : NaN;
+          if (Number.isNaN(at)) {
+            // `IsDateString` names the malformed case.
+            return true;
+          }
+          const now = Date.now();
+          return (
+            at <= now &&
+            at >= now - ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS * DAY_MS
+          );
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return `${args.property} must not be in the future, and must be within the last ${ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS} days`;
+        },
+      },
+    });
+  };
+}
+
+/**
  * One price row, typed in by an operator.
  *
  * No `overrides` and no `protectedUntil`: an `ADMIN` row's override snapshot is
@@ -572,12 +670,12 @@ export class AddItemPriceDto {
   priceScopeId!: string;
 
   @ApiPropertyOptional({
-    enum: PriceSourceKind,
+    enum: ADMIN_WRITABLE_PRICE_KINDS,
     description:
       'Defaults to ADMIN, which is what a person typing through the back office means. The two user kinds are refused until backlog 0008 opens them.',
   })
   @IsOptional()
-  @IsEnum(PriceSourceKind)
+  @IsIn(ADMIN_WRITABLE_PRICE_KINDS)
   sourceKind?: PriceSourceKind;
 
   @ApiPropertyOptional({ nullable: true, minimum: 0 })
@@ -617,10 +715,11 @@ export class AddItemPriceDto {
   @ApiPropertyOptional({
     nullable: true,
     format: 'date-time',
-    description: 'When the price was observed. Defaults to now.',
+    description: `When the price was observed. Defaults to now. At most ${ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS} days back, and never in the future. An ADMIN row is protected for seven days from this instant, so a past date protects it for less time, never more.`,
   })
   @IsOptional()
   @IsDateString()
+  @ObservedAtInWindow()
   observedAt?: string | null;
 
   @ApiPropertyOptional({
@@ -643,15 +742,65 @@ export class AddItemPriceDto {
   validUntil?: string | null;
 }
 
-/** The history of one (item, scope), newest first (plan 0080, section 9). */
+/**
+ * The history of one (item, scope), newest first (plan 0080, section 9), or
+ * the rows one harvest run wrote (plan 0160).
+ *
+ * `itemId` and `priceScopeId` together name a history. `runId` names a run,
+ * optionally narrowed to one `itemId`, and takes no scope.
+ */
 export class ListItemPricesQueryDto extends PageQueryDto {
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Required without `runId`. With `runId` it narrows the run to one product.',
+  })
+  @ValidateIf(
+    (dto: ListItemPricesQueryDto) => !dto.runId || dto.itemId !== undefined
+  )
   @IsUUID()
-  itemId!: string;
+  itemId?: string;
 
-  @ApiProperty({ format: 'uuid' })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Required without `runId`, and refused with it.',
+  })
+  @ValidateIf(
+    (dto: ListItemPricesQueryDto) =>
+      !dto.runId || dto.priceScopeId !== undefined
+  )
   @IsUUID()
-  priceScopeId!: string;
+  @NotWithRunId()
+  priceScopeId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The rows this run inserted, and the rows whose `lastObservedAt` it moved last. Each carries `writtenBy`.',
+  })
+  @IsOptional()
+  @IsUUID()
+  runId?: string;
+}
+
+/** A query field a run read does not take (plan 0160). */
+function NotWithRunId(): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'notWithRunId',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown, args: ValidationArguments): boolean {
+          const query = args.object as { runId?: unknown };
+          return value === undefined || query.runId === undefined;
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return `${args.property} is not allowed with runId`;
+        },
+      },
+    });
+  };
 }
 
 /** Whether a scope carries one product. */
@@ -941,6 +1090,16 @@ export class PriceScopedQueryDto extends SearchOrderQueryDto {
   profileId?: string;
 }
 
+/**
+ * The catalog browse read (plan 0048), with the chain filter plan 0146 added.
+ *
+ * **Two parameters here name a supermarket and they are not the same thing.**
+ * `supermarketId`, inherited from {@link PriceScopedQueryDto}, says where the
+ * caller shops and therefore where a price is quoted from; `soldBy` says which
+ * products to list. Sending `supermarketId` alone lists the whole catalog priced
+ * at that chain, most of it unpriced, which is the answer the chain chips on
+ * velista's catalog screen are not asking for.
+ */
 export class SearchItemsQueryDto extends PriceScopedQueryDto {
   @ApiPropertyOptional({
     description:
@@ -964,6 +1123,22 @@ export class SearchItemsQueryDto extends PriceScopedQueryDto {
   @IsOptional()
   @IsUUID()
   productGroupId?: string;
+
+  @ApiPropertyOptional({
+    name: 'soldBy',
+    type: [String],
+    format: 'uuid',
+    description:
+      'Repeatable. Only the products these chains sell, which is not where the prices come from: that is supermarketId. A chain sells a product when it holds an available row for it, priced or not. Empty and absent both mean every chain.',
+  })
+  @IsOptional()
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMaxSize(MAX_SELECTORS)
+  // Any version, like the two selectors above: seeded chains carry version 5
+  // ids, and a version 4 check refused every chain but one (velista 0100).
+  @IsUUID(undefined, { each: true })
+  soldBy?: string[];
 }
 
 /** The composer's own read: ranked groups, priced (plan 0048, section 3). */
@@ -1323,6 +1498,49 @@ export class UpdateBrandDto {
   @ValidateIf((dto: UpdateBrandDto) => dto.canonicalBrandId !== null)
   @IsUUID()
   canonicalBrandId?: string | null;
+}
+
+/** One name of a brand batch (plan 0160): a label, and a chain if it is a private label. */
+export class RegisterBrandsEntryDto {
+  @ApiProperty({ maxLength: BRAND_LABEL_MAX_LENGTH })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(BRAND_LABEL_MAX_LENGTH)
+  label!: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The chain that owns this private label. Null, and usually absent, for an ordinary brand.',
+  })
+  @IsOptional()
+  @ValidateIf(
+    (dto: RegisterBrandsEntryDto) => dto.privateLabelSupermarketId !== null
+  )
+  @IsUUID()
+  privateLabelSupermarketId?: string | null;
+}
+
+/**
+ * Register many brands at once (plan 0160).
+ *
+ * A person still chose every name on the list, which keeps each registration a
+ * decision. Each name is its own transaction, and the answer is one outcome per
+ * name, so one refused name never fails the others.
+ */
+export class RegisterBrandsDto {
+  @ApiProperty({
+    type: [RegisterBrandsEntryDto],
+    minItems: 1,
+    maxItems: BRAND_BATCH_MAX,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(BRAND_BATCH_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => RegisterBrandsEntryDto)
+  brands!: RegisterBrandsEntryDto[];
 }
 
 /**

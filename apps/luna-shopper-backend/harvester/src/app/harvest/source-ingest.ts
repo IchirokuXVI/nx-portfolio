@@ -15,9 +15,11 @@ import { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { toItemPriceDetails } from './harvest.mappers';
 import {
+  ChainEanIndex,
   FUZZY_CONFIDENCE,
   ItemMatchIndex,
   SiblingEntryIndex,
+  type MatchResult,
 } from './matching';
 import type { RunContext } from './run-context';
 import {
@@ -82,6 +84,13 @@ export interface SourceObservation {
   ean: string | null;
   unitSize: number | null;
   sizeFormat: string | null;
+  /**
+   * How many units the pack holds, as the source's own adapter read it (plan
+   * 0162). Null is a statement that the product is not a pack. Absent is a
+   * source that reads no counts at all, the leaflet import, and leaves the
+   * stored count alone.
+   */
+  packCount?: number | null;
   categoryPath: string[];
   url: string | null;
   observedAt: Date;
@@ -186,6 +195,16 @@ export interface SourceIngestCounters {
   pricesWritten: number;
   /** Rows catalog already held at this value and only moved the clock on. */
   pricesConfirmed: number;
+  /**
+   * Items two entries of this chain priced at one scope in one batch, for which
+   * nothing was sent (plan 0155).
+   *
+   * One per item and scope, whatever the number of entries. Catalog keeps one
+   * current price per item, scope and kind, so sending both made the one
+   * written last the one a shopper saw. No rule picks one of them: a person
+   * does, in the queue.
+   */
+  pricesConflicted: number;
 }
 
 /**
@@ -292,18 +311,12 @@ export class SourceIngest {
     reported: readonly ReportedObservation[],
     byExternalId: Map<string, SourceCatalogEntry>,
     siblings: SiblingEntryIndex,
-    items: ItemMatchIndex
+    items: ItemMatchIndex,
+    eans: ChainEanIndex
   ): Promise<SourceIngestResult> {
     const seenAt = new Date();
     const outcomes: SourceEntryOutcome[] = [];
-    const counters: SourceIngestCounters = {
-      created: 0,
-      updated: 0,
-      unchanged: 0,
-      pricesRecorded: 0,
-      pricesWritten: 0,
-      pricesConfirmed: 0,
-    };
+    const counters = emptyCounters();
     const copies = emptyCopies();
     /** The `source_entry_prices` rows this chunk observed, one per price. */
     const observed: ObservedPrice[] = [];
@@ -316,6 +329,20 @@ export class SourceIngest {
      * rather than from what was reported.
      */
     const observations: ReportedObservation[] = [];
+
+    // Every EAN this chunk states, counted before the ladder runs (plan 0155).
+    // A full observation writes its EAN onto its row verbatim, a null included,
+    // so the count is what the rows hold once the chunk is written, and the
+    // first of five cuts sharing an EAN does not bind before the other four.
+    const chunkEans = new Set<string>();
+    for (const observation of reported) {
+      if (observation.detailFetched !== false) {
+        eans.note(observation.externalId, observation.ean);
+        if (observation.ean) {
+          chunkEans.add(observation.ean);
+        }
+      }
+    }
 
     // Steps 2 and 3, per observation and in the order the runner produced them.
     for (const observation of reported) {
@@ -336,7 +363,7 @@ export class SourceIngest {
         // Asked before the touch writes, because the touch is what makes it false.
         changed = held ? sourceGroupChanged(held, fields) : false;
         outcome = held
-          ? await this.touch(held, fields, context.runId, seenAt, items)
+          ? await this.touch(held, fields, context.runId, seenAt, items, eans)
           : await this.create(
               fields,
               input.supermarketId,
@@ -344,7 +371,8 @@ export class SourceIngest {
               seenAt,
               observation,
               items,
-              siblings
+              siblings,
+              eans
             );
       }
       observations.push(observation);
@@ -387,6 +415,21 @@ export class SourceIngest {
       }
     }
 
+    // A row bound by its EAN before a second row of the chain carried the same
+    // EAN is unbound now, whether it was loaded or bound by an earlier chunk,
+    // and is owed nothing from this chunk (plan 0155).
+    const unbound = await this.unbindSharedEans(
+      context.runId,
+      chunkEans,
+      eans,
+      byExternalId
+    );
+    for (const outcome of outcomes) {
+      if (unbound.has(outcome.entry.externalId)) {
+        outcome.itemId = null;
+      }
+    }
+
     // Step 3, grouped by resolved scope, in one statement per chunk of rows.
     await this.replaceScopePrices(context.runId, observed);
     // One row per price read at its scope. Counted here rather than inside the
@@ -404,6 +447,8 @@ export class SourceIngest {
     // one, because a wrong number on a real product is worse than no number.
     // Grouped by scope, because `catalog.addPrices` writes one scope at a time,
     // and by where the price was read, because a batch states that once.
+    // Within a batch, by item: catalog keeps one current price per item, scope
+    // and kind, so two entries of one item would each overwrite the other.
     const owed = new Map<string, OwedBatch>();
     for (const [index, outcome] of outcomes.entries()) {
       const observation = observations[index];
@@ -415,33 +460,52 @@ export class SourceIngest {
         const batch = owed.get(key) ?? {
           priceScopeId: place.priceScopeId,
           copiedFromScopeId: place.copiedFromScopeId,
-          entries: [],
+          byItem: new Map(),
         };
-        batch.entries.push(
-          priceEntryFor(outcome.itemId, observation, outcome.entry, place.price)
+        const entry = priceEntryFor(
+          outcome.itemId,
+          observation,
+          outcome.entry,
+          place.price
         );
+        const held = batch.byItem.get(outcome.itemId);
+        if (held) {
+          // The same row twice in one chunk is one row, and its later
+          // observation is the one it holds. Another row is a conflict.
+          held.entryIds.add(outcome.entry.id);
+          held.entry = entry;
+        } else {
+          batch.byItem.set(outcome.itemId, {
+            entryIds: new Set([outcome.entry.id]),
+            entry,
+          });
+        }
         owed.set(key, batch);
       }
     }
 
     let owedCount = 0;
     for (const batch of owed.values()) {
+      const entries = this.withoutConflicts(context.runId, batch);
+      if (batch.copiedFromScopeId === null) {
+        counters.pricesConflicted += batch.byItem.size - entries.length;
+      }
       const written = await this.writePrices(
         context,
         batch.priceScopeId,
         input.sourceKind,
-        batch.entries,
+        entries,
         batch.copiedFromScopeId
       );
       if (batch.copiedFromScopeId === null) {
-        owedCount += batch.entries.length;
+        owedCount += entries.length;
         counters.pricesWritten += written.inserted;
         counters.pricesConfirmed += written.confirmed;
       } else {
         copies.pricesCopied.set(
           batch.copiedFromScopeId,
           (copies.pricesCopied.get(batch.copiedFromScopeId) ?? 0) +
-            batch.entries.length
+            entries.length
         );
       }
     }
@@ -451,9 +515,84 @@ export class SourceIngest {
         `ingested (${counters.created} new, ${counters.updated} changed), ` +
         `${counters.pricesRecorded} price(s) recorded on the source rows, ` +
         `${owedCount} price(s) owed across ${owed.size} scope(s), ` +
-        `${counters.pricesWritten} written to catalog.`
+        `${counters.pricesWritten} written to catalog, ` +
+        `${counters.pricesConflicted} withheld as conflicts.`
     );
     return { outcomes, counters, copies };
+  }
+
+  /**
+   * The prices of one batch, less every item two entries priced (plan 0155).
+   *
+   * **Refuse, do not choose.** Keeping either price would be a rule that picks
+   * one cut's price for a product several cuts share, and the answer to that
+   * is a person's: accept one entry, or create the cuts as products.
+   */
+  private withoutConflicts(
+    runId: string,
+    batch: OwedBatch
+  ): ItemPriceBatchEntry[] {
+    const entries: ItemPriceBatchEntry[] = [];
+    for (const [itemId, owed] of batch.byItem) {
+      if (owed.entryIds.size > 1) {
+        this.logger.warn(
+          `Run ${runId}: entries ${[...owed.entryIds].join(', ')} all price ` +
+            `item ${itemId} at scope ${batch.priceScopeId}` +
+            (batch.copiedFromScopeId === null
+              ? ''
+              : ` (copied from ${batch.copiedFromScopeId})`) +
+            ', so none of their prices was sent.'
+        );
+        continue;
+      }
+      entries.push(owed.entry);
+    }
+    return entries;
+  }
+
+  /**
+   * Unbind every row bound by an EAN that more than one row of the chain now
+   * carries, among the EANs this chunk stated (plan 0155).
+   *
+   * Only a row the EAN rung bound is touched. A row a person accepted is a
+   * decision, and a run does not reopen one. Nothing is deleted: a price the
+   * row wrote before stays in catalog until it expires.
+   *
+   * Answers the `externalId`s it unbound.
+   */
+  private async unbindSharedEans(
+    runId: string,
+    chunkEans: ReadonlySet<string>,
+    eans: ChainEanIndex,
+    byExternalId: ReadonlyMap<string, SourceCatalogEntry>
+  ): Promise<Set<string>> {
+    const unbound = new Set<string>();
+    for (const ean of chunkEans) {
+      if (!eans.shared(ean)) {
+        continue;
+      }
+      for (const externalId of eans.holdersOf(ean)) {
+        const row = byExternalId.get(externalId);
+        if (
+          !row ||
+          row.status !== SourceEntryStatus.ACTIVE ||
+          row.matchedBy !== ItemSourceMatch.EAN
+        ) {
+          continue;
+        }
+        proposeSharedEan(row, row.itemId);
+        await this.entries.save(row);
+        unbound.add(externalId);
+      }
+    }
+    if (unbound.size > 0) {
+      this.logger.warn(
+        `Run ${runId}: ${unbound.size} row(s) bound by an EAN another row of ` +
+          'the chain also carries went back to the queue: ' +
+          `${[...unbound].join(', ')}.`
+      );
+    }
+    return unbound;
   }
 
   /**
@@ -580,7 +719,8 @@ export class SourceIngest {
     fields: SourceEntryFields,
     runId: string,
     seenAt: Date,
-    items: ItemMatchIndex
+    items: ItemMatchIndex,
+    eans: ChainEanIndex
   ): Promise<SourceEntryOutcome> {
     const learnedEan = fields.ean !== null && row.ean !== fields.ean;
     applySourceGroup(row, fields);
@@ -598,13 +738,17 @@ export class SourceIngest {
       });
       // Only the EAN rung promotes. A name match here would be a fuzzy proposal
       // made at the very moment the identifier that makes fuzziness unnecessary
-      // arrived.
+      // arrived. An EAN another row of the chain carries only proposes.
       if (match && match.matchedBy === ItemSourceMatch.EAN) {
-        row.itemId = match.itemId;
-        row.status = SourceEntryStatus.ACTIVE;
-        row.matchedBy = ItemSourceMatch.EAN;
-        row.confidence = match.confidence;
-        row.decidedAt = seenAt;
+        if (eans.shared(fields.ean)) {
+          proposeSharedEan(row, match.itemId);
+        } else {
+          row.itemId = match.itemId;
+          row.status = SourceEntryStatus.ACTIVE;
+          row.matchedBy = ItemSourceMatch.EAN;
+          row.confidence = match.confidence;
+          row.decidedAt = seenAt;
+        }
         rung = 2;
       }
     }
@@ -626,7 +770,8 @@ export class SourceIngest {
     seenAt: Date,
     observation: SourceObservation,
     items: ItemMatchIndex,
-    siblings: SiblingEntryIndex
+    siblings: SiblingEntryIndex,
+    eans: ChainEanIndex
   ): Promise<SourceEntryOutcome> {
     const draft = this.entries.create({
       supermarketId,
@@ -646,15 +791,19 @@ export class SourceIngest {
     let rung: 1 | 2 | 3 | 4 | 5 = 5;
 
     // Rungs 2 and 3: the catalog's own items. An EAN is trusted immediately,
-    // because it is the one identifier that joins across chains; a name match
-    // is a proposal and writes nothing.
+    // because it is the one identifier that joins across chains, unless
+    // another row of this chain carries it too; a name match is a proposal
+    // and writes nothing.
     const match = items.match({
       name: observation.name,
       brand: observation.brand,
       ean: observation.ean,
       unitSize: observation.unitSize,
     });
-    if (match) {
+    if (match && isSharedEan(match, observation.ean, eans)) {
+      proposeSharedEan(draft, match.itemId);
+      rung = 2;
+    } else if (match) {
       draft.itemId = match.itemId;
       draft.status = match.status;
       draft.matchedBy = match.matchedBy;
@@ -666,7 +815,11 @@ export class SourceIngest {
       // Rung 4: a sibling row of this chain under the same name and size. For a
       // leaflet that is the Mercadona product the walk found, and for a DEZA
       // leaflet the web listing.
-      const sibling = siblings.match(observation.name, observation.sizeFormat);
+      const sibling = siblings.match(
+        observation.name,
+        observation.sizeFormat,
+        observation.unitSize
+      );
       if (sibling) {
         draft.itemId = sibling.itemId;
         draft.candidateEntryId = sibling.entryId;
@@ -738,10 +891,12 @@ export class SourceIngest {
   /**
    * Step 4: the prices the `ACTIVE` rows are owed, in batches, as this run.
    *
-   * The counters map onto what the batch answers, exactly as a refresh's did: a
-   * new row is `updated`, because the source said something new, and a confirmed
-   * row is `unchanged`. Nothing is `created` here, because the row a shopper
-   * reads is derived and the run never sees it (plan 0080).
+   * A new row is `updated`, because the source said something new. A confirmed
+   * row moves no progress counter: `unchanged` counts products the ladder left
+   * alone, and adding confirmed prices to it read 6,324 for a walk of 4,246
+   * products (plan 0158). Confirmed prices are reported as `pricesConfirmed`.
+   * Nothing is `created` here, because the row a shopper reads is derived and
+   * the run never sees it (plan 0080).
    *
    * `details` is a **translation** of the observation's `extra` rather than a
    * pass through: `extra` is free and catalog's `item_price_details` is not, so
@@ -774,10 +929,7 @@ export class SourceIngest {
       // A copy moves no progress counter, for the reason `pricesRecorded`
       // leaves it out: the run's numbers describe what the chain stated.
       if (copiedFromScopeId === null) {
-        await context.report({
-          updated: result.inserted,
-          unchanged: result.confirmed,
-        });
+        await context.report({ updated: result.inserted });
       }
     }
     return { inserted, confirmed };
@@ -798,15 +950,61 @@ interface ObservedPrice extends PlacedPrice {
   entry: SourceCatalogEntry;
 }
 
-/** The prices owed to one scope, all read at the same place. */
+/** The price one item is owed in a batch, and every entry that stated one. */
+interface OwedPrice {
+  entryIds: Set<string>;
+  entry: ItemPriceBatchEntry;
+}
+
+/** The prices owed to one scope, all read at the same place, by item. */
 interface OwedBatch {
   priceScopeId: string;
   copiedFromScopeId: string | null;
-  entries: ItemPriceBatchEntry[];
+  byItem: Map<string, OwedPrice>;
+}
+
+function emptyCounters(): SourceIngestCounters {
+  return {
+    created: 0,
+    updated: 0,
+    unchanged: 0,
+    pricesRecorded: 0,
+    pricesWritten: 0,
+    pricesConfirmed: 0,
+    pricesConflicted: 0,
+  };
 }
 
 function emptyCopies(): SourceIngestCopies {
   return { pricedScopes: new Set(), pricesCopied: new Map() };
+}
+
+/** Rung 2 answered, with an EAN another row of this chain carries too. */
+function isSharedEan(
+  match: MatchResult,
+  ean: string | null,
+  eans: ChainEanIndex
+): boolean {
+  return match.matchedBy === ItemSourceMatch.EAN && eans.shared(ean);
+}
+
+/**
+ * The item a shared EAN names, proposed rather than bound (plan 0155).
+ *
+ * A `CANDIDATE`, so it writes no price until a person accepts it, and
+ * undecided, so accepting it is a decision a person makes. The item stays on
+ * the row as the proposal, which is the product the queue shows beside it.
+ */
+function proposeSharedEan(
+  row: SourceCatalogEntry,
+  itemId: string | null
+): void {
+  row.itemId = itemId;
+  row.candidateEntryId = null;
+  row.status = SourceEntryStatus.CANDIDATE;
+  row.matchedBy = ItemSourceMatch.SHARED_EAN;
+  row.confidence = FUZZY_CONFIDENCE;
+  row.decidedAt = null;
 }
 
 /**
@@ -877,6 +1075,7 @@ function fieldsOf(
     ean: observation.ean,
     unitSize: observation.unitSize,
     sizeFormat: observation.sizeFormat,
+    packCount: observation.packCount,
     categoryPath: observation.categoryPath,
     url: observation.url,
     extra: observation.extra,
@@ -928,15 +1127,9 @@ function priceEntryFor(
 export class SourceIngestSession {
   private readonly byExternalId: Map<string, SourceCatalogEntry>;
   private readonly siblings: SiblingEntryIndex;
+  private readonly eans: ChainEanIndex;
   private readonly outcomes: SourceEntryOutcome[] = [];
-  private readonly counters: SourceIngestCounters = {
-    created: 0,
-    updated: 0,
-    unchanged: 0,
-    pricesRecorded: 0,
-    pricesWritten: 0,
-    pricesConfirmed: 0,
-  };
+  private readonly counters = emptyCounters();
   private readonly copies = emptyCopies();
   private closed = false;
 
@@ -949,6 +1142,7 @@ export class SourceIngestSession {
   ) {
     this.byExternalId = new Map(rows.map((row) => [row.externalId, row]));
     this.siblings = new SiblingEntryIndex(rows);
+    this.eans = new ChainEanIndex(rows);
   }
 
   /**
@@ -977,7 +1171,8 @@ export class SourceIngestSession {
       observations,
       this.byExternalId,
       this.siblings,
-      this.items
+      this.items,
+      this.eans
     );
     this.outcomes.push(...result.outcomes);
     this.counters.created += result.counters.created;
@@ -986,6 +1181,7 @@ export class SourceIngestSession {
     this.counters.pricesRecorded += result.counters.pricesRecorded;
     this.counters.pricesWritten += result.counters.pricesWritten;
     this.counters.pricesConfirmed += result.counters.pricesConfirmed;
+    this.counters.pricesConflicted += result.counters.pricesConflicted;
     for (const scopeId of result.copies.pricedScopes) {
       this.copies.pricedScopes.add(scopeId);
     }

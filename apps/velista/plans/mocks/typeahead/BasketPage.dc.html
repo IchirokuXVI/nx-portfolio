@@ -1,0 +1,1304 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+body { margin: 0; }
+
+/* Layer 1 and the theme independent half of layer 2, copied from
+   libs/velista/ui/src/lib/styles/_primitives.scss and _semantic.scss. */
+.vel {
+  --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px;
+  --app-text-xs: 12px;
+  --app-text-sm: 14px;
+  --app-text-base: 16px;
+  --app-text-lg: 18px;
+  --app-space-2: 4px;
+  --app-space-3: 8px;
+  --app-space-4: 12px;
+  --app-space-5: 16px;
+  --app-space-hair: 3px;
+  --app-radius-sm: 8px;
+  --app-radius-md: 12px;
+  --app-radius-lg: 16px;
+  --app-radius-full: 999px;
+  --app-touch-target: 44px;
+  --app-line-row-height: 56px;
+  /* New in this design. */
+  --app-suggestion-thumb: 48px;
+  --app-chain-mark: 18px;
+  /* One card. Three lines of type at 57px, which is taller than the image, plus
+     8px of padding either side. Every number below is derived from it. */
+  --app-suggestion-card: 73px;
+  /* The part of a card that describes the product: three lines of type. The
+     button that adds it is beside that and not beside the whole card, because
+     a card also carries the lines it is already on, or the packets in a group,
+     and a 44 by 137 bar is not a better target than a 44 by 59 one. It is a
+     stripe. */
+  --app-suggestion-body: 59px;
+  /* The two bands the panel is measured against. */
+  --app-header-height: 52px;
+  --app-composer-height: 60px;
+  /* What is left once the keyboard, the header, the composer and two rows of
+     the list have taken theirs, and never more than three cards.
+
+     `--app-viewport` is the visual viewport, not the layout one: a phone
+     keyboard does not shorten `100dvh` on iOS, so the height is written from
+     `window.visualViewport` and this falls back to `100dvh` before it is.
+
+     min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
+     up the right hand side is 237px, so three cards is what fits there. On a
+     375 by 667 phone it resolves to 163px and two cards, which is the floor
+     this arithmetic protects. */
+  --app-viewport: 100dvh;
+  --app-suggestions-max-height: min(
+    calc(3 * var(--app-suggestion-card) + 8px),
+    calc(
+      var(--app-viewport) - var(--app-header-height) - var(--app-composer-height) - 2 *
+        var(--app-line-row-height)
+    )
+  );
+  font-family: var(--app-font-sans);
+}
+
+/* Night, the default theme. */
+.night {
+  --app-surface-ground: #0a0c14;
+  --app-surface-raised: #161a28;
+  --app-surface-sunken: #111420;
+  --app-text-primary: #f7f8fc;
+  --app-text-secondary: #c2c8db;
+  --app-text-muted: #98a0bb;
+  --app-border-subtle: rgba(255, 255, 255, 0.08);
+  --app-border-strong: rgba(255, 255, 255, 0.35);
+  --app-action-bg: #ffb454;
+  --app-action-fg: #0a0c14;
+  --app-action-quiet-fg: #ffb454;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.1);
+  --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-elevation-2: inset 0 1px 0 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(10, 12, 20, 0.55);
+  --app-hover: rgba(255, 255, 255, 0.05);
+  --app-thumb-bg: #ffffff;
+  --app-skeleton: rgba(255, 255, 255, 0.07);
+}
+
+/* Day. A theme in velista is a redefinition of these roles and nothing else,
+   so every rule below this point is written once and serves both. */
+.day {
+  --app-surface-ground: #f7f8fc;
+  --app-surface-raised: #ffffff;
+  --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420;
+  --app-text-secondary: #525a78;
+  --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed;
+  --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454;
+  --app-action-fg: #0a0c14;
+  --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.1);
+  --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.1);
+  --app-hover: rgba(17, 20, 31, 0.04);
+  --app-thumb-bg: #ffffff;
+  --app-skeleton: rgba(17, 20, 31, 0.06);
+}
+
+/* ---- the two bands that are not the app ------------------------------- */
+/* The status bar inset, blank on purpose. It is here because the panel height
+   is arithmetic on the screen and the inset is one of its terms. */
+.inset { flex: none; height: 47px; }
+/* The keyboard, drawn as the block of screen it takes rather than as keys. On
+   a 390 by 844 phone it is 336px with the predictive row, which is 40% of the
+   screen and the whole reason the card had to come down to 73. */
+.keyboard {
+  flex: none;
+  height: 336px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-3);
+  background: var(--app-surface-sunken);
+  border-top: 1px solid var(--app-border-subtle);
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+}
+
+.phone {
+  position: relative;
+  width: 390px;
+  height: 844px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--app-surface-ground);
+  color: var(--app-text-primary);
+}
+
+/* ---- the page under the panel ---------------------------------------- */
+.top {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  padding-inline: var(--app-space-5);
+  height: var(--app-header-height);
+  box-sizing: border-box;
+  flex: none;
+}
+.top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
+.top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+.icon-btn {
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  margin: -10px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  border-radius: var(--app-radius-full);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--app-hover); }
+
+.lines { flex: 1; min-height: 0; padding: 0 var(--app-space-5); overflow: hidden; }
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  height: var(--app-line-row-height);
+  border-top: 1px solid var(--app-border-subtle);
+}
+.line:first-child { border-top: 0; }
+/* The zone list drops the control that marked a line done and puts the product
+   there instead. A list is where a trip is planned; the basket is where it is
+   walked, and that is the screen where a line is ticked off. */
+.line-thumb {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--app-border-subtle);
+  background: var(--app-thumb-bg);
+  overflow: hidden;
+}
+.line-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* 40 rather than the card's 48, because the row is 56 tall and 48 would leave
+   4px of air. The two sizes are deliberately different. */
+.line-thumb.none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--app-surface-sunken);
+  color: var(--app-text-muted);
+}
+/* The basket keeps it. Settling a line is the thing that screen is for, so the
+   product sits beside the control rather than in place of it. */
+.settle {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--app-radius-full);
+  border: 1.5px solid var(--app-border-strong);
+  background: transparent;
+  color: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.settle.done {
+  border-color: var(--app-status-success-border, var(--app-border-strong));
+  background: var(--app-action-quiet-bg);
+  color: var(--app-text-primary);
+}
+.line.done .line-text b { color: var(--app-text-muted); text-decoration: line-through; }
+.line.done .line-thumb { opacity: 0.55; }
+.line-text { flex: 1; min-width: 0; }
+.line-text b { display: block; font-size: var(--app-text-sm); font-weight: 500; }
+.line-text span { font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+.qty {
+  flex: none;
+  min-width: 34px;
+  height: 28px;
+  padding: 0 var(--app-space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-secondary);
+}
+
+/* ---- the panel -------------------------------------------------------- */
+/* Opaque, because it covers rows of somebody's own shopping list, and anchored
+   to its last row, because it grows upward from the field under the thumb. */
+.panel {
+  flex: none;
+  position: relative;
+  height: var(--app-suggestions-max-height);
+  padding-block: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-inline: var(--app-space-4);
+  background: var(--app-surface-raised);
+  border-top: 1px solid var(--app-border-subtle);
+  box-shadow: var(--app-elevation-2);
+}
+/* Bottom anchored, and by margin rather than by `justify-content: flex-end`,
+   because a flex column that pushes its content down cannot be scrolled back up
+   to the part that overflowed. */
+.panel > :first-child { margin-top: auto; }
+
+/* The panel scrolls, and while the field is focused it is the only thing on the
+   screen that does. An opened card is about 225px, so it fills the panel on its
+   own and the cards above it are reached by scrolling.
+
+   It used to gain that room instead: opening the shop prices blurred the field,
+   the keyboard closed, and the panel went from 237px to 573px. That is gone. A
+   control in the panel must not move the page out from under the thumb that
+   pressed it, so every control here holds the focus where it is and the
+   keyboard stays up. The rule is one line on each of them:
+
+     <button (mousedown)="$event.preventDefault()">
+
+   because the browser moves focus on mousedown, not on click, and iOS Safari
+   raises a synthetic mousedown before it moves focus too. Do not cancel
+   `pointerdown` or `touchstart` instead: those carry the scroll of this panel,
+   and cancelling them takes it away. */
+.panel button,
+.panel a { touch-action: manipulation; }
+/* No gutter. A phone draws an overlay scrollbar over the content and takes no
+   width for it, and a reserved 15px track here would come out of the column the
+   product name is already fighting for. */
+.panel,
+.review-rows { scrollbar-width: none; }
+.panel::-webkit-scrollbar,
+.review-rows::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ---- one product card ------------------------------------------------- */
+/* 73px: three lines of type with 8px either side, which clears the 48px image
+   by 9px. Tight, and the tightness is the keyboard's doing rather than a taste.
+   At the 90px this card started as, only two and a half of them fit above an
+   open keyboard, and the third card is the one that makes a list feel searched
+   rather than guessed at. */
+.sug {
+  position: relative;
+  flex: none;
+  display: flex;
+  gap: var(--app-space-4);
+  padding: var(--app-space-3);
+  border-top: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+}
+.sug:first-child { border-top: 0; }
+/* ---- the one control that adds ---------------------------------------- */
+/* The card was the target and is not any more. It carries a chain row, a way
+   out to the product, and on a group an explanation and a reveal, so a tap
+   anywhere else was a guess at which of five things somebody meant.
+
+   It takes width and not height, which is the whole reason it is here rather
+   than under the image or across the foot of the card. The panel has 237px and
+   a card has 75, so a 40px band below the content buys a fourth line of type
+   and costs the third card. A 44px column costs 52px of a 290px text column,
+   and the name is the only thing in that column that gives way.
+
+   Quiet amber and not solid:
+   it is the action of its own row, and three solid bars stacked in one panel
+   stop meaning "act". */
+.pick {
+  flex: none;
+  align-self: stretch;
+  width: var(--app-touch-target);
+  min-height: var(--app-touch-target);
+  /* Stretch up to the three lines of type and no further. A card with no price
+     is only as tall as its image, so this shrinks there too and the card keeps
+     falling back to 64px. */
+  max-height: var(--app-suggestion-body);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+}
+.pick:hover { background: var(--app-action-bg); color: var(--app-action-fg); border-color: transparent; }
+.pick:active { transform: scale(0.97); }
+/* The same slot, the other way round. On the review sheet every card is already
+   going to be added, so the one control on it takes it back out. */
+.pick.drop {
+  border-color: var(--app-border-subtle);
+  background: transparent;
+  color: var(--app-text-muted);
+}
+.pick.drop:hover {
+  background: var(--app-hover);
+  color: var(--app-text-primary);
+  border-color: var(--app-border-strong);
+}
+.sug-thumb {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: var(--app-suggestion-thumb);
+  height: var(--app-suggestion-thumb);
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--app-border-subtle);
+  background: var(--app-thumb-bg);
+  overflow: hidden;
+}
+.sug-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.sug-col {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sug-l { display: flex; align-items: baseline; gap: var(--app-space-3); }
+.sug-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--app-text-base);
+  line-height: 20px;
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The packaging, beside the name because it is part of what the product is,
+   and never truncated for the same reason the size is not. */
+.fmt {
+  flex: none;
+  align-self: center;
+  padding: 1px 6px;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-secondary);
+  white-space: nowrap;
+}
+.sug-price {
+  flex: none;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+  white-space: nowrap;
+}
+.sug-meta {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--app-text-xs);
+  line-height: 15px;
+  color: var(--app-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Drawn only when it differs from the price above it. A 1 L carton priced by
+   the litre would print the same number twice. */
+.sug-unit {
+  flex: none;
+  font-size: var(--app-text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+}
+.sug-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin-top: 2px;
+  height: 18px;
+  /* Without this the row cannot be narrower than its contents, and a card with
+     five chains pushed the way out to the product past the right edge of the
+     column. The chain row is the part that gives way, because a shop name is
+     recoverable by opening it and "Details" is not recoverable at all. */
+  min-width: 0;
+}
+
+/* ---- the chains ------------------------------------------------------- */
+.chains,
+.reveal {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin-left: -2px;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font-family: inherit;
+  font-size: var(--app-text-2xs);
+  cursor: pointer;
+}
+.chains:hover,
+.reveal:hover { background: var(--app-action-quiet-bg); }
+/* The pill stays 24 tall and the target grows to 44, which is what the chip
+   token in _semantic.scss already does for a chip that is a control. */
+.chains::after,
+.reveal::after { content: ''; position: absolute; inset-block: -10px; inset-inline: -4px; }
+/* The reveal states how many packets it will show, because that count is what
+   decides whether opening it is worth the room it takes. */
+.reveal { color: var(--app-action-quiet-fg); font-weight: 600; }
+.mark {
+  width: var(--app-chain-mark);
+  height: var(--app-chain-mark);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+/* Only the cheapest chain is named. It is the one the price above belongs to,
+   and naming it is cheaper than a legend. */
+/* The one part of the foot that gives way, and it gives way by ellipsis rather
+   than by pushing its neighbours. */
+.lead-name {
+  min-width: 0;
+  padding-right: var(--app-space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.more {
+  height: var(--app-chain-mark);
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--app-text-muted);
+}
+.details {
+  position: relative;
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 2px 2px 6px;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  text-decoration: none;
+}
+.details:hover { color: var(--app-text-secondary); }
+.details::after { content: ''; position: absolute; inset-block: -10px; inset-inline: -6px; }
+
+/* ---- every shop, once the row of marks is opened ---------------------- */
+/* The collapsed row answers "who sells it". This answers "for how much", which
+   is the only reason to rank the marks by price in the first place. */
+.sug.open { background: var(--app-surface-sunken); }
+.shops {
+  position: relative;
+  z-index: 1;
+  margin-top: var(--app-space-3);
+  padding-top: var(--app-space-3);
+  border-top: 1px solid var(--app-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.shop {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: 5px 6px;
+  border-radius: var(--app-radius-sm);
+}
+.shop-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-note { flex: none; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+.shop-price {
+  flex: none;
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+}
+/* The cheapest row carries the number printed at the top of the card, so it is
+   the one drawn at full strength. Weight and order do that work; no colour is
+   spent on it, and none is borrowed from the amber that means "act". */
+.shop.best { background: var(--app-surface-raised); }
+.shop.best .shop-name { color: var(--app-text-primary); }
+.shop.best .shop-price { color: var(--app-text-primary); font-weight: 600; }
+
+/* ---- the group row, and the free text row ----------------------------- */
+.sug.group { background: var(--app-action-quiet-bg); }
+
+/* The row is tinted and its image is a crate, and neither of those says the
+   word. This does, and it is also the button that explains the word, so one
+   element carries the label and the help rather than two competing for the
+   space beside a name. */
+/* The badge and what it opens travel together, because the popover is
+   positioned against the badge and against nothing else. A sibling rather than
+   a child: a button may not contain a dialog. */
+.badge-wrap { position: relative; flex: none; align-self: center; display: inline-flex; }
+.group-badge {
+  position: relative;
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 7px;
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  font-family: inherit;
+  font-size: var(--app-text-2xs);
+  font-weight: 600;
+  line-height: 15px;
+  cursor: pointer;
+}
+.group-badge::after { content: ''; position: absolute; inset-block: -13px; inset-inline: -6px; }
+
+/* There is no popover in velista yet, so this is what one has to be. It is a
+   child of the screen and not of the panel: the panel clips and scrolls, so
+   anything anchored inside it is cut off at the top edge, which is the edge
+   this opens towards. In Angular that means a CDK overlay, positioned against
+   the badge, and not a `<span>` next to it.
+
+   It is dismissed by pressing anywhere else and by Escape, and pressing it does
+   not move the focus, so the keyboard stays up like everything else in here. */
+.pop {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 248px;
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-elevation-2);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+  line-height: 17px;
+}
+.pop b {
+  display: block;
+  margin-bottom: 5px;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+.pop-p { display: block; }
+.pop-p + .pop-p { margin-top: 5px; }
+/* The mock's stand in for an overlay. The real panel clips and scrolls, so the
+   popover cannot be a child of it; this board turns the clipping off instead of
+   pretending the problem is not there. */
+.panel.spills { overflow: visible; }
+/* The tail, pointing back at the badge it came from. */
+.pop-tail {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  margin-left: -4px;
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  border-right: 1px solid var(--app-border-subtle);
+  border-bottom: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+}
+/* A group's number is the floor under several products, not the price of the
+   thing the row adds, so it is labelled and it does not carry an item's weight. */
+.sug.group .sug-price { font-size: var(--app-text-sm); font-weight: 500; color: var(--app-text-secondary); }
+.tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--app-action-quiet-fg);
+  background: transparent;
+  border-color: var(--app-action-quiet-border);
+}
+.sug.plain { padding-top: var(--app-space-3); padding-bottom: var(--app-space-3); }
+.slot {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: var(--app-suggestion-thumb);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.slot span {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--app-radius-full);
+  border: 1px solid var(--app-border-subtle);
+  color: var(--app-text-muted);
+}
+.plain-text {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  align-self: center;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+/* ---- the lines this product is already on ----------------------------- */
+/* The point of the card is to stop a second line being made for a thing that is
+   already on the list. A stepper here is the shorter path to what somebody
+   actually wanted, which was two of it rather than one of it twice. */
+.already {
+  position: relative;
+  z-index: 1;
+  margin-top: var(--app-space-2);
+  padding-top: var(--app-space-3);
+  border-top: 1px solid var(--app-border-subtle);
+  display: flex;
+  flex-direction: column;
+}
+.already-h {
+  margin-bottom: 2px;
+  font-size: var(--app-text-2xs);
+  line-height: 15px;
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+.already-row { display: flex; align-items: center; gap: var(--app-space-3); height: 32px; }
+/* How many are on that line, as a number and not as a control. It is the chip
+   the list rows already carry, which is the right family: this states a count,
+   it does not set one.
+
+   The control is one token away and the two buttons of `lib-quantity-stepper`
+   are still in this sheet, because whether the row acts or only informs is the
+   one thing left open here. With the plain number the row is a reason to go and
+   fix the line. With the stepper it is the shorter path to two of something.
+   The states board draws both. */
+.already-n {
+  flex: none;
+  min-width: 34px;
+  height: 24px;
+  padding: 0 var(--app-space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  border: 1px solid var(--app-border-subtle);
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-secondary);
+}
+/* The app's own control, copied from
+   libs/velista/ui/src/lib/list/quantity-stepper.scss rather than shrunk: a pill
+   holding two 44px targets and a tabular number, disabled at each end so the
+   limit is visible before it is hit. LINE_QUANTITY_MIN is 0, so the minus stops
+   there rather than turning into anything else. */
+.stepper {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-hair);
+  background: var(--app-surface-sunken);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+}
+.stepper .step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius-full);
+  background: none;
+  font: inherit;
+  font-size: var(--app-text-lg);
+  color: var(--app-text-primary);
+  cursor: pointer;
+}
+.stepper .step:disabled { opacity: 0.35; cursor: default; }
+.stepper .value {
+  min-width: 2ch;
+  text-align: center;
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+.already-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+/* The basket draws lines from several lists, so a row there says which list the
+   line came from. A single list says nothing, because the reader is looking at
+   it. */
+.already-list {
+  font-size: var(--app-text-2xs);
+  line-height: 14px;
+  color: var(--app-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The line, in the words that line carries. A renamed line says what it was
+   renamed to, which is why this names lines rather than lists. */
+.already-line {
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- what is inside a group ------------------------------------------ */
+/* A group is a kind of thing rather than a packet, so the row that offers it has
+   to say which packets it means. Five of them, and the count of whatever is
+   left. */
+.inside {
+  position: relative;
+  z-index: 1;
+  margin-top: var(--app-space-2);
+  padding-top: var(--app-space-3);
+  border-top: 1px solid var(--app-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.inside-row { display: flex; align-items: baseline; gap: var(--app-space-3); height: 22px; }
+/* Name and brand read as one phrase on the left, the price holds the right. The
+   name is the only part that gives way. */
+.inside-what { flex: 1; min-width: 0; display: flex; align-items: baseline; overflow: hidden; }
+.inside-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Never truncated: two packets of the same milk differ by their brand and their
+   price, and both of those live at this end of the row. */
+.inside-brand { flex: none; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+.inside-brand::before { content: '·'; margin-inline: 4px; }
+.inside-price {
+  flex: none;
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+.inside-more {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+}
+
+/* ---- what the assistant produced, before any of it is a line ---------- */
+/* The assistant does not fill the typeahead any more. A typeahead row is an
+   answer to a word somebody is in the middle of typing, and they see the word
+   go wrong as they type it. A sentence is different: it produces four rows at
+   once, out of audio that is misheard silently, onto a list other people are
+   looking at. So the rows are shown as what they are, a proposal, and nothing
+   exists until the one button at the bottom is pressed.
+
+   It reuses the card without changing it. The only difference is the slot on
+   the right, which takes a row out here instead of putting one in. */
+.scrim { position: absolute; inset: 0; background: rgba(10, 12, 20, 0.55); }
+.review {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 76%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-elevation-2);
+}
+.grab {
+  width: 36px;
+  height: 4px;
+  margin: var(--app-space-3) auto 0;
+  flex: none;
+  border-radius: var(--app-radius-full);
+  background: var(--app-border-subtle);
+}
+.review-top { flex: none; padding: var(--app-space-4) var(--app-space-5) var(--app-space-3); }
+.review-top h2 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
+/* What was transcribed, kept in front of the reader the whole time. A misheard
+   word explains a wrong row faster than the row does. */
+.said {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+.said b {
+  color: var(--app-text-secondary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--app-space-4) var(--app-space-2);
+}
+.review-foot {
+  flex: none;
+  display: flex;
+  gap: var(--app-space-3);
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-5);
+  border-top: 1px solid var(--app-border-subtle);
+}
+.btn {
+  height: var(--app-touch-target);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--app-radius-full);
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  cursor: pointer;
+}
+/* It counts what it will do, because rows were taken out of the sheet above it
+   and the number is the only thing that says how many are left. */
+.btn.primary { flex: 1; background: var(--app-action-bg); color: var(--app-action-fg); font-weight: 600; }
+.btn.quiet {
+  flex: none;
+  padding-inline: var(--app-space-5);
+  border: 1px solid var(--app-border-subtle);
+  background: transparent;
+  color: var(--app-text-secondary);
+}
+.btn.quiet:hover { background: var(--app-hover); }
+/* A row the catalog matched nothing to. It is still going to be added, as the
+   words that were said, so it is drawn at the same weight as the rest and not
+   as a failure. */
+.review-rows .sug.plain { padding-top: var(--app-space-4); padding-bottom: var(--app-space-4); }
+
+/* ---- the two placements that were not taken --------------------------- */
+/* Drawn on the states board, because the cost of each one is the whole
+   argument. A band across the foot of the card makes it 123px and a button
+   under the image makes it 114px, against 75px for a column at the right edge,
+   and a 237px panel holds three of the first and one and a half of the others.
+   Height is the resource this screen does not have. Width it has. */
+.sug.stacked { flex-direction: column; gap: var(--app-space-3); }
+.sug.stacked .sug-row { display: flex; gap: var(--app-space-4); }
+.pick.wide {
+  width: auto;
+  align-self: stretch;
+  height: 40px;
+  min-height: 0;
+  gap: 6px;
+  border-radius: var(--app-radius-full);
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+.sug-side { flex: none; display: flex; flex-direction: column; gap: 6px; }
+.pick.under {
+  align-self: auto;
+  width: var(--app-suggestion-thumb);
+  height: var(--app-touch-target);
+  min-height: 0;
+}
+
+/* ---- the composer ----------------------------------------------------- */
+.composer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  height: var(--app-composer-height);
+  box-sizing: border-box;
+  padding: var(--app-space-3) var(--app-space-5);
+  background: var(--app-surface-raised);
+}
+.field {
+  flex: 1;
+  min-width: 0;
+  height: var(--app-touch-target);
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: 0 var(--app-space-5);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  border: 1px solid var(--app-border-subtle);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-base);
+}
+.caret { width: 2px; height: 20px; background: var(--app-action-quiet-fg); }
+.send {
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  cursor: pointer;
+}
+  </style>
+</helmet>
+
+<div class="vel phone night" style="--app-suggestion-thumb: 48px; --app-viewport: 461px;">
+
+  <div class="inset"></div>
+
+  <div class="top">
+    <button class="icon-btn" type="button" aria-label="Back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
+    </button>
+    <div style="flex-grow: 1; min-width: 0;">
+      <h1>Compra de hoy</h1>
+      <p>Mercadona &middot; 3 lists</p>
+    </div>
+    <button class="icon-btn" type="button" aria-label="List options">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
+    </button>
+  </div>
+
+  <div class="lines">
+    
+      <div class="line done">
+        <button class="settle done" type="button" aria-label="Put back Plátanos">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+        </button>
+        <span class="line-thumb ">
+          <img src="photos/bananas.jpg" alt="">
+          
+        </span>
+        <span class="line-text"><b>Plátanos</b><span>Compra semanal</span></span>
+        <span class="qty">1 kg</span>
+      </div>
+    
+      <div class="line ">
+        <button class="settle " type="button" aria-label="Settle Leche entera">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+        </button>
+        <span class="line-thumb ">
+          <img src="photos/milk-asturiana.jpg" alt="">
+          
+        </span>
+        <span class="line-text"><b>Leche entera</b><span>Compra semanal · 1 L</span></span>
+        <span class="qty">2</span>
+      </div>
+    
+      <div class="line ">
+        <button class="settle " type="button" aria-label="Settle Pan de molde integral">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+        </button>
+        <span class="line-thumb none">
+          
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg>
+          
+        </span>
+        <span class="line-text"><b>Pan de molde integral</b><span>Fin de semana</span></span>
+        <span class="qty">2</span>
+      </div>
+    
+      <div class="line ">
+        <button class="settle " type="button" aria-label="Settle Tomate frito">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+        </button>
+        <span class="line-thumb ">
+          <img src="photos/tomate-frito.jpg" alt="">
+          
+        </span>
+        <span class="line-text"><b>Tomate frito</b><span>Compra semanal · 400 g</span></span>
+        <span class="qty">3</span>
+      </div>
+    
+      <div class="line ">
+        <button class="settle " type="button" aria-label="Settle Aceite de oliva">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+        </button>
+        <span class="line-thumb ">
+          <img src="photos/olive-oil.jpg" alt="">
+          
+        </span>
+        <span class="line-text"><b>Aceite de oliva</b><span>Despensa · 1 L</span></span>
+        <span class="qty">1</span>
+      </div>
+    
+  </div>
+
+  <div class="panel" role="listbox" aria-label="Catalog suggestions">
+
+      <div class="sug ">
+        <span class="sug-thumb"><img src="photos/milk-dia.jpg" alt=""></span>
+        <span class="sug-col">
+          <span class="sug-l">
+            <span class="sug-name">Leche entera de vaca</span>
+            
+            <span class="sug-price">0,95 €</span>
+          </span>
+          <span class="sug-l">
+            <span class="sug-meta">Dia · 1 L</span>
+            
+          </span>
+          <span class="sug-foot">
+            <button class="chains" type="button" aria-label="Sold at Dia. Show every shop price" aria-expanded="">
+              
+                <span class="mark" style="background:#C8102E;color:#ffffff">D</span>
+                
+                  <span class="lead-name">Dia</span>
+                
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style=""><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <a class="details" href="#detail">Details
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
+            </a>
+          </span>
+          
+        </span>
+        <!--
+          The one thing on the card that adds it. `mousedown` is cancelled and
+          not `click`, because the browser moves focus on mousedown: cancel it
+          and the field keeps the caret, the keyboard stays up, and the page
+          does not jump 336px under the thumb that is still on the glass.
+        -->
+        <button class="pick" type="button" aria-label="Add Leche entera de vaca, Dia, 1 litre" onmousedown="event.preventDefault()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+        </button>
+      </div>
+    
+      <div class="sug ">
+        <span class="sug-thumb"><img src="photos/milk-hacendado.jpg" alt=""></span>
+        <span class="sug-col">
+          <span class="sug-l">
+            <span class="sug-name">Leche entera</span>
+            
+            <span class="sug-price">0,89 €</span>
+          </span>
+          <span class="sug-l">
+            <span class="sug-meta">Hacendado · 1 L</span>
+            
+          </span>
+          <span class="sug-foot">
+            <button class="chains" type="button" aria-label="Sold at Mercadona. Show every shop price" aria-expanded="">
+              
+                <span class="mark" style="background:#00843D;color:#ffffff">M</span>
+                
+                  <span class="lead-name">Mercadona</span>
+                
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style=""><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <a class="details" href="#detail">Details
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
+            </a>
+          </span>
+          
+        </span>
+        <!--
+          The one thing on the card that adds it. `mousedown` is cancelled and
+          not `click`, because the browser moves focus on mousedown: cancel it
+          and the field keeps the caret, the keyboard stays up, and the page
+          does not jump 336px under the thumb that is still on the glass.
+        -->
+        <button class="pick" type="button" aria-label="Add Leche entera, Hacendado, 1 litre" onmousedown="event.preventDefault()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+        </button>
+      </div>
+    
+      <div class="sug ">
+        <span class="sug-thumb"><img src="photos/milk-pascual-pack6.jpg" alt=""></span>
+        <span class="sug-col">
+          <span class="sug-l">
+            <span class="sug-name">Leche entera</span>
+            
+              <span class="fmt">Pack 6</span>
+            
+            <span class="sug-price">6,54 €</span>
+          </span>
+          <span class="sug-l">
+            <span class="sug-meta">Pascual · 6 L</span>
+            
+              <span class="sug-unit">1,09 €/L</span>
+            
+          </span>
+          <span class="sug-foot">
+            <button class="chains" type="button" aria-label="Sold at 3 shops. Show every shop price" aria-expanded="">
+              
+                <span class="mark" style="background:#004E9F;color:#ffffff">C</span>
+                
+                  <span class="lead-name">Carrefour</span>
+                
+                <span class="mark" style="background:#C8102E;color:#ffffff">D</span>
+                
+                <span class="mark" style="background:#5B2333;color:#ffffff">Z</span>
+                
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style=""><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <a class="details" href="#detail">Details
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
+            </a>
+          </span>
+          
+        </span>
+        <!--
+          The one thing on the card that adds it. `mousedown` is cancelled and
+          not `click`, because the browser moves focus on mousedown: cancel it
+          and the field keeps the caret, the keyboard stays up, and the page
+          does not jump 336px under the thumb that is still on the glass.
+        -->
+        <button class="pick" type="button" aria-label="Add Leche entera, Pascual, pack of 6" onmousedown="event.preventDefault()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+        </button>
+      </div>
+    
+      <div class="sug has-lines">
+        <span class="sug-thumb"><img src="photos/milk-asturiana.jpg" alt=""></span>
+        <span class="sug-col">
+          <span class="sug-l">
+            <span class="sug-name">Leche entera</span>
+            
+            <span class="sug-price">1,19 €</span>
+          </span>
+          <span class="sug-l">
+            <span class="sug-meta">Central Lechera Asturiana · 1 L</span>
+            
+          </span>
+          <span class="sug-foot">
+            <button class="chains" type="button" aria-label="Sold at 5 shops. Show every shop price" aria-expanded="">
+              
+                <span class="mark" style="background:#00843D;color:#ffffff">M</span>
+                
+                  <span class="lead-name">Mercadona</span>
+                
+                <span class="mark" style="background:#004E9F;color:#ffffff">C</span>
+                
+                <span class="mark" style="background:#C8102E;color:#ffffff">D</span>
+                
+                <span class="more">+2</span>
+              
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style=""><path d="m6 9 6 6 6-6"></path></svg>
+            </button>
+            <a class="details" href="#detail">Details
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
+            </a>
+          </span>
+          
+            <span class="already">
+              <span class="already-h">Product already in your list</span>
+              
+                <span class="already-row">
+                  <span class="already-text">
+                    
+                      <span class="already-list">Compra semanal</span>
+                    
+                    <span class="already-line">Leche entera</span>
+                  </span>
+                  <span class="already-n">2</span>
+                </span>
+              
+                <span class="already-row">
+                  <span class="already-text">
+                    
+                      <span class="already-list">Fin de semana</span>
+                    
+                    <span class="already-line">leche para el café</span>
+                  </span>
+                  <span class="already-n">1</span>
+                </span>
+              
+            </span>
+          
+        </span>
+        <!--
+          The one thing on the card that adds it. `mousedown` is cancelled and
+          not `click`, because the browser moves focus on mousedown: cancel it
+          and the field keeps the caret, the keyboard stays up, and the page
+          does not jump 336px under the thumb that is still on the glass.
+        -->
+        <button class="pick" type="button" aria-label="Add Leche entera, Central Lechera Asturiana, 1 litre" onmousedown="event.preventDefault()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+        </button>
+      </div>
+    
+  </div>
+
+  <div class="composer">
+    <div class="field"><span>leche entera</span><span class="caret"></span></div>
+
+    <span class="stepper" role="spinbutton" aria-label="How many" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
+      <button class="step" type="button" aria-label="One fewer"><span aria-hidden="true">&minus;</span></button>
+      <span aria-hidden="true" class="value">1</span>
+      <button class="step" type="button" aria-label="One more"><span aria-hidden="true">+</span></button>
+    </span>
+
+    <!--
+      One slot and two jobs, and the empty field decides which: a plus when
+      something is typed, a microphone when nothing is. Two buttons side by side
+      with one of them always inert is a row that has to be read before it can be
+      used, and this row already carries a stepper.
+    -->
+    <button class="send" type="button" aria-label="Add the line">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+    </button>
+  </div>
+
+  <div class="keyboard" aria-hidden="true">Keyboard, 336 px</div>
+
+</div>
+</x-dc>
+</x-dc>
+</body>
+</html>

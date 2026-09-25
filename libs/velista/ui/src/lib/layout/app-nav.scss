@@ -1,0 +1,110 @@
+// The last item of the app's column, not fixed to the screen (velista 0106). The bar
+// takes its own height out of the layout, so the page slot above it ends where the bar
+// begins and nothing a page draws can be under it. It was `position: fixed` with room
+// padded under the outlet, and padding does not move what a page pins to the bottom of
+// the screen: a sticky composer sat in exactly the strip this covered.
+//
+// The inline insets are here and the block one is inside the bar, because a notch in
+// landscape takes width off the whole row while the home indicator sits under the tabs.
+//
+// On a wide screen it is as wide as the one centred column the rest of the app is drawn
+// in, because it is inside that column (plan 0002, section 8).
+:host {
+  display: block;
+  flex: none;
+  padding-inline: var(--app-safe-left) var(--app-safe-right);
+  background: var(--app-surface-ground);
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.bar {
+  display: flex;
+  gap: var(--app-space-2);
+  padding-block: var(--app-space-3) var(--app-nav-pad-block-end);
+  padding-inline: var(--app-space-3);
+}
+
+// The whole tab is the target, not the glyph inside it: a third of the row by 60,
+// which is well past the 48 minimum on both axes (plan 0002, section 8).
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+  block-size: var(--app-nav-tab-height);
+  border-radius: var(--app-nav-tab-radius);
+  color: var(--app-text-secondary);
+  text-decoration: none;
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  line-height: var(--app-leading-heading);
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// The active tab is drawn **twice over**: the quiet action colour on the glyph and the
+// word, and a pill of the same hue behind both. Colour alone is not a state, and a
+// person who cannot tell the two colours apart still sees which tab has the pill.
+.tab.active {
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  font-weight: 700;
+}
+
+// Holds the glyph and the badge over its corner, so the count follows the icon rather
+// than the tab, and the word underneath keeps its own baseline whatever the count is.
+.mark {
+  position: relative;
+  display: flex;
+}
+
+.glyph {
+  font-size: var(--app-nav-icon);
+}
+
+.word {
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The same badge the tools row draws, down to the ring being the ground behind it, so
+// a count means one thing everywhere in the app.
+.badge {
+  position: absolute;
+  inset-block-start: calc(var(--app-badge-ring) * -1);
+  inset-inline-end: calc(var(--app-space-2) * -1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--app-badge-size);
+  block-size: var(--app-badge-size);
+  padding-inline: var(--app-space-2);
+  border: var(--app-badge-ring) solid var(--app-surface-ground);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-fg);
+  color: var(--app-surface-ground);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+// The count as words, for the link's accessible name. Never `display: none`: a name
+// that is not rendered is not read.
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -1,28 +1,38 @@
 import {
+  BrandBatchOutcome,
   BulkOperationErrorCode,
   ItemCategory,
+  ItemPriceWrittenBy,
+  NearbyShopNoPick,
   PostalCodeSource,
   PriceScopeKind,
+  PriceShownBecause,
   PriceSourceKind,
   UnitOfMeasure,
 } from '../../lib/enums/catalog.enums';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
+  BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
   BRAND_ORDERS,
   BRAND_PATTERNS,
   CATALOG_SUGGESTION_KINDS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
+  PACK_COUNT_FILL_MAX,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
   POSTAL_CODE_PATTERNS,
   PRICE_POLICY_PATTERNS,
   PRICE_SCOPE_PATTERNS,
+  PRODUCT_GROUP_MEMBERS_MAX,
   PRODUCT_GROUP_PATTERNS,
   SCOPE_ORIGINS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
+  UNIT_BASES,
 } from '../../lib/messages/catalog.messages';
 // The one bound a suggestion's product set has to respect, taken from the line it
 // will become rather than restated here, so the two cannot drift apart.
@@ -80,8 +90,15 @@ export const CATALOG_SCHEMA_IDS = {
   listBrandsRequest: schemaId('msg/brand.list/request'),
   brandKeysRequest: schemaId('msg/brand.keys/request'),
   brandKeysResult: schemaId('msg/brand.keys/response'),
+  // Plan 0160: many brands at once, one outcome per name.
+  brandBatchOutcome: schemaId('enums/BrandBatchOutcome'),
+  registerBrandsEntry: schemaId('catalog/RegisterBrandsEntry'),
+  registerBrandsRequest: schemaId('msg/brand.registerMany/request'),
+  registerBrandsOutcome: schemaId('catalog/RegisterBrandsOutcome'),
+  registerBrandsResult: schemaId('msg/brand.registerMany/response'),
   catalogSuggestion: schemaId('catalog/CatalogSuggestion'),
   catalogSuggestResponse: schemaId('catalog/CatalogSuggestResponse'),
+  priceScopeChainView: schemaId('catalog/PriceScopeChainView'),
   createProductGroupRequest: schemaId('msg/productGroup.create/request'),
   updateProductGroupRequest: schemaId('msg/productGroup.update/request'),
   productGroupIdRequest: schemaId('msg/productGroup.id/request'),
@@ -118,6 +135,10 @@ export const CATALOG_SCHEMA_IDS = {
   searchItemsRequest: schemaId('msg/item.search/request'),
   findItemByEanRequest: schemaId('msg/item.findByEan/request'),
   findItemByEanResult: schemaId('catalog/FindItemByEanResult'),
+  // Plan 0162: the harvester fills the pack counts a run saw.
+  packCountFill: schemaId('catalog/PackCountFill'),
+  fillPackCountsRequest: schemaId('msg/item.fillPackCounts/request'),
+  fillPackCountsResult: schemaId('msg/item.fillPackCounts/response'),
   // Plan 0100: the two bulk replays, and the error shape they share.
   bulkOperationErrorCode: schemaId('enums/BulkOperationErrorCode'),
   bulkOperationError: schemaId('catalog/BulkOperationError'),
@@ -141,6 +162,12 @@ export const CATALOG_SCHEMA_IDS = {
   itemPriceDetails: schemaId('catalog/ItemPriceDetails'),
   itemPriceView: schemaId('catalog/ItemPriceView'),
   itemPricePage: schemaId('catalog/ItemPricePage'),
+  // Plan 0160: a run's rows, and one product at every scope.
+  itemPriceWrittenBy: schemaId('enums/ItemPriceWrittenBy'),
+  priceShownBecause: schemaId('enums/PriceShownBecause'),
+  itemScopePricesView: schemaId('catalog/ItemScopePricesView'),
+  itemScopePricesPage: schemaId('catalog/ItemScopePricesPage'),
+  itemPricesByItemRequest: schemaId('msg/itemPrice.byItem/request'),
   pricePolicyView: schemaId('catalog/PricePolicyView'),
   pricePolicyListView: schemaId('catalog/PricePolicyListView'),
   addItemPriceRequest: schemaId('msg/itemPrice.add/request'),
@@ -206,6 +233,20 @@ export const CATALOG_SCHEMA_IDS = {
   searchShopsRequest: schemaId('msg/supermarketLocation.search/request'),
   shopView: schemaId('catalog/ShopView'),
   shopPage: schemaId('catalog/ShopPage'),
+  // A shop as a basket read at it needs it (plan 0163, section 2).
+  shopAvailabilityRequest: schemaId(
+    'msg/supermarketLocation.shopAvailability/request'
+  ),
+  shopAvailabilityView: schemaId('catalog/ShopAvailabilityView'),
+  shopItemAvailabilityView: schemaId('catalog/ShopItemAvailabilityView'),
+  // The shops near a point and the automatic pick (plan 0164).
+  nearbyShopsRequest: schemaId('msg/supermarketLocation.nearby/request'),
+  nearbyShopNoPick: schemaId('enums/NearbyShopNoPick'),
+  nearbyShopView: schemaId('catalog/NearbyShopView'),
+  nearbyShopPickView: schemaId('catalog/NearbyShopPickView'),
+  nearbyShopsView: schemaId('catalog/NearbyShopsView'),
+  shopsByIdRequest: schemaId('msg/supermarketLocation.shopsById/request'),
+  shopsByIdView: schemaId('catalog/ShopsByIdView'),
   upsertLocationItemRequest: schemaId(
     'msg/supermarketLocationItem.upsert/request'
   ),
@@ -226,9 +267,20 @@ export const CATALOG_SCHEMA_IDS = {
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
 const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
+/** A pack count (plan 0162): a whole number in the bounds, or null. */
+const packCountOrNull = (): JsonSchema => ({
+  type: ['integer', 'null'],
+  minimum: PACK_COUNT_MIN,
+  maximum: PACK_COUNT_MAX,
+});
 /** A kind, or null for a materialized row no price row stands behind (plan 0080). */
 const nullableSourceKind = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
+});
+// Plan 0157: read from the label on every request, so it is stated and never
+// required, and a reader built before it keeps validating what it holds.
+const nullableUnitBasis = (): JsonSchema => ({
+  anyOf: [{ type: 'string', enum: [...UNIT_BASES] }, { type: 'null' }],
 });
 const nullableLocalized = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
@@ -355,6 +407,7 @@ const itemOfferView = object(
     currency: nullableString(),
     unitPrice: numberOrNull(),
     unitPriceLabel: nullableString(),
+    unitBasis: nullableUnitBasis(),
     observedAt: nullableString(),
     sourceKind: nullableSourceKind(),
     // Plan 0118. Stated but not required, so a reader built before it keeps
@@ -375,41 +428,51 @@ const itemOfferView = object(
   ]
 );
 
+/**
+ * A product's own fields, exported so that a view extending one (the basket's
+ * product of plan 0163) lists the same fields rather than a copy of them.
+ */
+export const itemViewProperties: Record<string, JsonSchema> = {
+  id: nonEmptyString(),
+  name: ref(CATALOG_SCHEMA_IDS.localizedText),
+  brand: nullableString(),
+  imageUrl: nullableString(),
+  sku: nullableString(),
+  ean: nullableString(),
+  unitSize: numberOrNull(),
+  packCount: packCountOrNull(),
+  category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+  defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+  productGroupId: nullableString(),
+  // Deliberately NOT required: only the reads that take price scopes fill it,
+  // and absent means the same as null (plan 0048, section 3.1).
+  bestOffer: {
+    anyOf: [ref(CATALOG_SCHEMA_IDS.itemOfferView), { type: 'null' }],
+  },
+  // Also deliberately NOT required (plan 0109, section 2): only a lookup that
+  // asked for `all` fills it, and absent means "this read did not list the
+  // scopes", which is a different sentence from an empty array.
+  offers: array(ref(CATALOG_SCHEMA_IDS.itemOfferView)),
+};
+
+export const itemViewRequired: string[] = [
+  'id',
+  'name',
+  'brand',
+  'imageUrl',
+  'sku',
+  'ean',
+  'unitSize',
+  'packCount',
+  'category',
+  'defaultUnit',
+  'productGroupId',
+];
+
 const itemView = object(
   CATALOG_SCHEMA_IDS.itemView,
-  {
-    id: nonEmptyString(),
-    name: ref(CATALOG_SCHEMA_IDS.localizedText),
-    brand: nullableString(),
-    imageUrl: nullableString(),
-    sku: nullableString(),
-    ean: nullableString(),
-    unitSize: numberOrNull(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
-    defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
-    productGroupId: nullableString(),
-    // Deliberately NOT required: only the reads that take price scopes fill it,
-    // and absent means the same as null (plan 0048, section 3.1).
-    bestOffer: {
-      anyOf: [ref(CATALOG_SCHEMA_IDS.itemOfferView), { type: 'null' }],
-    },
-    // Also deliberately NOT required (plan 0109, section 2): only a lookup that
-    // asked for `all` fills it, and absent means "this read did not list the
-    // scopes", which is a different sentence from an empty array.
-    offers: array(ref(CATALOG_SCHEMA_IDS.itemOfferView)),
-  },
-  [
-    'id',
-    'name',
-    'brand',
-    'imageUrl',
-    'sku',
-    'ean',
-    'unitSize',
-    'category',
-    'defaultUnit',
-    'productGroupId',
-  ]
+  itemViewProperties,
+  itemViewRequired
 );
 
 const productGroupOfferView = object(
@@ -423,6 +486,11 @@ const productGroupOfferView = object(
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemOfferView), { type: 'null' }],
     },
     itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
+    // Plan 0161: the cheapest few members, only when the request asked.
+    members: {
+      ...array(ref(CATALOG_SCHEMA_IDS.itemView)),
+      maxItems: PRODUCT_GROUP_MEMBERS_MAX,
+    },
   },
   ['group', 'cheapestItem', 'offer', 'itemIds']
 );
@@ -441,8 +509,24 @@ const catalogSuggestion = object(
 
 const catalogSuggestResponse = object(
   CATALOG_SCHEMA_IDS.catalogSuggestResponse,
-  { suggestions: array(ref(CATALOG_SCHEMA_IDS.catalogSuggestion)) },
-  ['suggestions']
+  {
+    suggestions: array(ref(CATALOG_SCHEMA_IDS.catalogSuggestion)),
+    // Plan 0161: the chain behind every scope an offer above names. Required
+    // and possibly empty, like the basket's.
+    scopes: array(ref(CATALOG_SCHEMA_IDS.priceScopeChainView)),
+  },
+  ['suggestions', 'scopes']
+);
+
+/** Which chain a scope belongs to (plan 0161, section 3). No shops. */
+const priceScopeChainView = object(
+  CATALOG_SCHEMA_IDS.priceScopeChainView,
+  {
+    priceScopeId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+  },
+  ['priceScopeId', 'supermarketId', 'supermarketName']
 );
 
 // Stated once and used by both views below, so the admin view cannot drift
@@ -455,6 +539,7 @@ const supermarketItemProperties = () => ({
   currency: nullableString(),
   unitPrice: numberOrNull(),
   unitPriceLabel: nullableString(),
+  unitBasis: nullableUnitBasis(),
   observedAt: nullableString(),
   sourceKind: nullableSourceKind(),
   // Plan 0118. Stated but not required, so a reader built before it keeps
@@ -538,6 +623,7 @@ const itemPriceView = object(
     currency: nullableString(),
     unitPrice: numberOrNull(),
     unitPriceLabel: nullableString(),
+    unitBasis: nullableUnitBasis(),
     observedAt: nonEmptyString(),
     lastObservedAt: nonEmptyString(),
     validFrom: nullableString(),
@@ -553,6 +639,8 @@ const itemPriceView = object(
     details: {
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceDetails), { type: 'null' }],
     },
+    // Plan 0160. On the run's read only, so stated and never required.
+    writtenBy: ref(CATALOG_SCHEMA_IDS.itemPriceWrittenBy),
   },
   [
     'id',
@@ -577,6 +665,49 @@ const itemPriceView = object(
 const itemPricePage = paginated(
   CATALOG_SCHEMA_IDS.itemPricePage,
   CATALOG_SCHEMA_IDS.itemPriceView
+);
+/**
+ * One scope of one product, with the row the price decision chose there and
+ * why (plan 0160). `shownBecause` comes from the decision function itself.
+ */
+const itemScopePricesView = object(
+  CATALOG_SCHEMA_IDS.itemScopePricesView,
+  {
+    priceScopeId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    scopeKind: ref(CATALOG_SCHEMA_IDS.priceScopeKind),
+    scopeExternalKey: nullableString(),
+    scopeLabel: nullableLocalized(),
+    scopePriority: integer(),
+    rows: array(ref(CATALOG_SCHEMA_IDS.itemPriceView)),
+    shownItemPriceId: nullableString(),
+    shownBecause: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.priceShownBecause), { type: 'null' }],
+    },
+    stale: boolean(),
+    protectedUntil: nullableString(),
+    overrides: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.itemPriceOverrides), { type: 'null' }],
+    },
+  },
+  [
+    'priceScopeId',
+    'supermarketId',
+    'scopeKind',
+    'scopeExternalKey',
+    'scopeLabel',
+    'scopePriority',
+    'rows',
+    'shownItemPriceId',
+    'shownBecause',
+    'stale',
+    'protectedUntil',
+    'overrides',
+  ]
+);
+const itemScopePricesPage = paginated(
+  CATALOG_SCHEMA_IDS.itemScopePricesPage,
+  CATALOG_SCHEMA_IDS.itemScopePricesView
 );
 const pricePolicyView = object(
   CATALOG_SCHEMA_IDS.pricePolicyView,
@@ -885,6 +1016,7 @@ const createItemRequest = object(
     sku: nullableString(),
     ean: nullableString(),
     unitSize: numberOrNull(),
+    packCount: packCountOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
@@ -902,6 +1034,7 @@ const updateItemRequest = object(
     sku: nullableString(),
     ean: nullableString(),
     unitSize: numberOrNull(),
+    packCount: packCountOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
@@ -936,6 +1069,7 @@ const createItemInput = object(
     sku: nullableString(),
     ean: nullableString(),
     unitSize: numberOrNull(),
+    packCount: packCountOrNull(),
     category: ref(CATALOG_SCHEMA_IDS.itemCategory),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
@@ -1048,6 +1182,31 @@ const findItemByEanResult = object(
   },
   ['item']
 );
+/** One product and the count a run read for it (plan 0162, section 3). */
+const packCountFill = object(
+  CATALOG_SCHEMA_IDS.packCountFill,
+  {
+    itemId: nonEmptyString(),
+    packCount: integer({ minimum: PACK_COUNT_MIN, maximum: PACK_COUNT_MAX }),
+  },
+  ['itemId', 'packCount']
+);
+const fillPackCountsRequest = object(
+  CATALOG_SCHEMA_IDS.fillPackCountsRequest,
+  {
+    ...adminCredentialProperties,
+    entries: {
+      ...array(ref(CATALOG_SCHEMA_IDS.packCountFill)),
+      maxItems: PACK_COUNT_FILL_MAX,
+    },
+  },
+  ['userId', 'entries']
+);
+const fillPackCountsResult = object(
+  CATALOG_SCHEMA_IDS.fillPackCountsResult,
+  { written: integer({ minimum: 0 }) },
+  ['written']
+);
 const itemIdRequest = object(
   CATALOG_SCHEMA_IDS.itemIdRequest,
   { ...adminCredentialProperties, itemId: nonEmptyString() },
@@ -1094,6 +1253,11 @@ const searchItemsRequest = object(
     // Plan 0073: the back office's "what has curation not reached yet".
     withoutProductGroup: boolean(),
     priceScopeIds: array(nonEmptyString()),
+    // Plan 0146: which chains sell the products, which is not what the scopes
+    // above decide. Absent and empty both mean every chain.
+    soldBy: array(nonEmptyString()),
+    // Plan 0161: every scope's offer, read as `item.getMany` reads it.
+    offers: string({ enum: ['best', 'all'] }),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -1106,6 +1270,10 @@ const searchOffersRequest = object(
     userId: nonEmptyString(),
     query: string(),
     priceScopeIds: array(nonEmptyString()),
+    // Plan 0161: every scope's offer on each cheapest member, and how many
+    // members to add as products. A larger count is clamped by the service.
+    offers: string({ enum: ['best', 'all'] }),
+    members: integer({ minimum: 1 }),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -1238,6 +1406,54 @@ const brandKeysResult = object(
   { keys: array(nonEmptyString()) },
   ['keys']
 );
+// Plan 0160. A name is what `brand.create` takes, without a link: a batch
+// registers brands, and a spelling is a decision about two of them.
+const registerBrandsEntry = object(
+  CATALOG_SCHEMA_IDS.registerBrandsEntry,
+  {
+    label: nonEmptyString({ maxLength: BRAND_LABEL_MAX_LENGTH }),
+    privateLabelSupermarketId: nullableString(),
+  },
+  ['label']
+);
+const registerBrandsRequest = object(
+  CATALOG_SCHEMA_IDS.registerBrandsRequest,
+  {
+    ...adminCredentialProperties,
+    brands: {
+      ...array(ref(CATALOG_SCHEMA_IDS.registerBrandsEntry)),
+      minItems: 1,
+      maxItems: BRAND_BATCH_MAX,
+    },
+  },
+  ['userId', 'brands']
+);
+const registerBrandsOutcome = object(
+  CATALOG_SCHEMA_IDS.registerBrandsOutcome,
+  {
+    label: string(),
+    outcome: ref(CATALOG_SCHEMA_IDS.brandBatchOutcome),
+    brandId: nullableString(),
+    linkedItems: integerOrNull(),
+    reason: {
+      anyOf: [
+        {
+          type: 'object',
+          additionalProperties: false,
+          properties: { code: nonEmptyString(), detail: string() },
+          required: ['code', 'detail'],
+        },
+        { type: 'null' },
+      ],
+    },
+  },
+  ['label', 'outcome', 'brandId', 'linkedItems', 'reason']
+);
+const registerBrandsResult = object(
+  CATALOG_SCHEMA_IDS.registerBrandsResult,
+  { results: array(ref(CATALOG_SCHEMA_IDS.registerBrandsOutcome)) },
+  ['results']
+);
 
 // The values one price row carries (plan 0080, section 9). No `overrides` and
 // no `protectedUntil`: an ADMIN add computes its snapshot server side, and a
@@ -1296,17 +1512,30 @@ const addItemPriceBatchResult = object(
   },
   ['inserted', 'confirmed']
 );
+// Either the history of one (item, scope), or one run's rows (plan 0160).
+// Which pair was named is checked by catalog, where the refusal can say so.
 const listItemPricesRequest = object(
   CATALOG_SCHEMA_IDS.listItemPricesRequest,
   {
     ...adminCredentialProperties,
     itemId: nonEmptyString(),
     priceScopeId: nonEmptyString(),
+    runId: nonEmptyString(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
   },
-  ['userId', 'itemId', 'priceScopeId']
+  ['userId']
+);
+const itemPricesByItemRequest = object(
+  CATALOG_SCHEMA_IDS.itemPricesByItemRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+  },
+  ['userId', 'itemId']
 );
 const itemPriceIdRequest = object(
   CATALOG_SCHEMA_IDS.itemPriceIdRequest,
@@ -1495,6 +1724,9 @@ const resolvedScopeView = object(
     supermarketLocationId: nullableString(),
     priority: integer(),
     quoted: boolean(),
+    // Plan 0157. Stated but not required, so a reader built before it keeps
+    // validating what it holds.
+    priced: boolean(),
   },
   [
     'priceScopeId',
@@ -1868,6 +2100,144 @@ const shopPage = paginated(
   CATALOG_SCHEMA_IDS.shopView
 );
 
+/**
+ * A shop and the availability of some products there (plan 0163, section 2).
+ *
+ * No `userId`, like `item.getMany`: a shop and whether it stocks a product are
+ * not private, and a guest reading a shared basket is who asks.
+ */
+const shopAvailabilityRequest = object(
+  CATALOG_SCHEMA_IDS.shopAvailabilityRequest,
+  {
+    supermarketLocationId: nonEmptyString(),
+    itemIds: array(nonEmptyString()),
+  },
+  ['supermarketLocationId']
+);
+
+const shopItemAvailabilityView = object(
+  CATALOG_SCHEMA_IDS.shopItemAvailabilityView,
+  {
+    itemId: nonEmptyString(),
+    // Null is a row that says nothing, which is not the same as no row: a
+    // product with no row is absent from the answer.
+    available: { type: ['boolean', 'null'] },
+  },
+  ['itemId', 'available']
+);
+
+const shopAvailabilityView = object(
+  CATALOG_SCHEMA_IDS.shopAvailabilityView,
+  {
+    location: ref(CATALOG_SCHEMA_IDS.supermarketLocationView),
+    supermarket: ref(CATALOG_SCHEMA_IDS.supermarketView),
+    availability: array(ref(CATALOG_SCHEMA_IDS.shopItemAvailabilityView)),
+  },
+  ['location', 'supermarket', 'availability']
+);
+
+/**
+ * The shop view of plan 0163, by id rather than by import: basket.schemas
+ * imports this file, and a ref names a schema by its id alone.
+ */
+const BASKET_SHOP_VIEW_ID = schemaId('basket/BasketShopView');
+
+/**
+ * Where a device says it is (plan 0164, section 1). The bounds are the ones a
+ * coordinate has, and the point is never stored.
+ */
+const nearbyShopsRequest = object(
+  CATALOG_SCHEMA_IDS.nearbyShopsRequest,
+  {
+    latitude: { type: 'number', minimum: -90, maximum: 90 },
+    longitude: { type: 'number', minimum: -180, maximum: 180 },
+    accuracyMetres: { type: 'number', minimum: 0 },
+    profilePostalCodes: array(nonEmptyString()),
+    excludedSupermarketIds: array(nonEmptyString()),
+    excludedSupermarketLocationIds: array(nonEmptyString()),
+  },
+  [
+    'latitude',
+    'longitude',
+    'accuracyMetres',
+    'profilePostalCodes',
+    'excludedSupermarketIds',
+    'excludedSupermarketLocationIds',
+  ]
+);
+
+/**
+ * The shop view of plan 0163 with its distance and whether the profile
+ * refuses it. The eight fields are listed rather than extended, because a
+ * contract schema is one flat object.
+ */
+const nearbyShopView = object(
+  CATALOG_SCHEMA_IDS.nearbyShopView,
+  {
+    id: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+    label: nullableLocalized(),
+    address: nullableString(),
+    city: nullableString(),
+    postalCode: nullableString(),
+    inProfile: boolean(),
+    distanceMetres: integer({ minimum: 0 }),
+    excluded: boolean(),
+  },
+  [
+    'id',
+    'supermarketId',
+    'supermarketName',
+    'label',
+    'address',
+    'city',
+    'postalCode',
+    'inProfile',
+    'distanceMetres',
+    'excluded',
+  ]
+);
+
+const nearbyShopPickView = object(
+  CATALOG_SCHEMA_IDS.nearbyShopPickView,
+  {
+    locationId: nonEmptyString(),
+    distanceMetres: integer({ minimum: 0 }),
+  },
+  ['locationId', 'distanceMetres']
+);
+
+/** Exactly one of `pick` and `noPick` is set (plan 0164, section 2). */
+const nearbyShopsView = object(
+  CATALOG_SCHEMA_IDS.nearbyShopsView,
+  {
+    candidates: array(ref(CATALOG_SCHEMA_IDS.nearbyShopView)),
+    pick: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.nearbyShopPickView), { type: 'null' }],
+    },
+    noPick: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.nearbyShopNoPick), { type: 'null' }],
+    },
+  },
+  ['candidates', 'pick', 'noPick']
+);
+
+const shopsByIdRequest = object(
+  CATALOG_SCHEMA_IDS.shopsByIdRequest,
+  {
+    supermarketLocationIds: array(nonEmptyString()),
+    profilePostalCodes: array(nonEmptyString()),
+  },
+  ['supermarketLocationIds', 'profilePostalCodes']
+);
+
+const shopsByIdView = object(
+  CATALOG_SCHEMA_IDS.shopsByIdView,
+  { shops: array(ref(BASKET_SHOP_VIEW_ID)) },
+  ['shops']
+);
+
 export const catalogSchemas: JsonSchema[] = [
   enumOf(CATALOG_SCHEMA_IDS.itemCategory, Object.values(ItemCategory)),
   enumOf(CATALOG_SCHEMA_IDS.unitOfMeasure, Object.values(UnitOfMeasure)),
@@ -1877,6 +2247,18 @@ export const catalogSchemas: JsonSchema[] = [
   enumOf(
     CATALOG_SCHEMA_IDS.bulkOperationErrorCode,
     Object.values(BulkOperationErrorCode)
+  ),
+  enumOf(
+    CATALOG_SCHEMA_IDS.itemPriceWrittenBy,
+    Object.values(ItemPriceWrittenBy)
+  ),
+  enumOf(
+    CATALOG_SCHEMA_IDS.priceShownBecause,
+    Object.values(PriceShownBecause)
+  ),
+  enumOf(
+    CATALOG_SCHEMA_IDS.brandBatchOutcome,
+    Object.values(BrandBatchOutcome)
   ),
   localizedText,
   localizedSynonyms,
@@ -1889,6 +2271,7 @@ export const catalogSchemas: JsonSchema[] = [
   productGroupOfferView,
   catalogSuggestion,
   catalogSuggestResponse,
+  priceScopeChainView,
   supermarketItemView,
   adminSupermarketItemView,
   supermarketLocationItemView,
@@ -1912,6 +2295,10 @@ export const catalogSchemas: JsonSchema[] = [
   listBrandsRequest,
   brandKeysRequest,
   brandKeysResult,
+  registerBrandsEntry,
+  registerBrandsRequest,
+  registerBrandsOutcome,
+  registerBrandsResult,
   supermarketItemPage,
   adminSupermarketItemPage,
   supermarketLocationItemPage,
@@ -1945,11 +2332,17 @@ export const catalogSchemas: JsonSchema[] = [
   listProductGroupsRequest,
   findItemByEanRequest,
   findItemByEanResult,
+  packCountFill,
+  fillPackCountsRequest,
+  fillPackCountsResult,
   itemPriceOverride,
   itemPriceOverrides,
   itemPriceDetails,
   itemPriceView,
   itemPricePage,
+  itemScopePricesView,
+  itemScopePricesPage,
+  itemPricesByItemRequest,
   pricePolicyView,
   pricePolicyListView,
   addItemPriceRequest,
@@ -2003,6 +2396,16 @@ export const catalogSchemas: JsonSchema[] = [
   searchShopsRequest,
   shopView,
   shopPage,
+  shopAvailabilityRequest,
+  shopItemAvailabilityView,
+  shopAvailabilityView,
+  enumOf(CATALOG_SCHEMA_IDS.nearbyShopNoPick, Object.values(NearbyShopNoPick)),
+  nearbyShopsRequest,
+  nearbyShopView,
+  nearbyShopPickView,
+  nearbyShopsView,
+  shopsByIdRequest,
+  shopsByIdView,
 ];
 
 export const catalogMessageContracts: Record<
@@ -2085,6 +2488,10 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.createItemsRequest,
     response: CATALOG_SCHEMA_IDS.createItemsResult,
   },
+  [ITEM_PATTERNS.fillPackCounts]: {
+    request: CATALOG_SCHEMA_IDS.fillPackCountsRequest,
+    response: CATALOG_SCHEMA_IDS.fillPackCountsResult,
+  },
   [BRAND_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createBrandRequest,
     response: CATALOG_SCHEMA_IDS.createBrandResult,
@@ -2112,6 +2519,10 @@ export const catalogMessageContracts: Record<
   [BRAND_PATTERNS.keys]: {
     request: CATALOG_SCHEMA_IDS.brandKeysRequest,
     response: CATALOG_SCHEMA_IDS.brandKeysResult,
+  },
+  [BRAND_PATTERNS.registerMany]: {
+    request: CATALOG_SCHEMA_IDS.registerBrandsRequest,
+    response: CATALOG_SCHEMA_IDS.registerBrandsResult,
   },
   [PRODUCT_GROUP_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createProductGroupRequest,
@@ -2148,6 +2559,10 @@ export const catalogMessageContracts: Record<
   [ITEM_PRICE_PATTERNS.list]: {
     request: CATALOG_SCHEMA_IDS.listItemPricesRequest,
     response: CATALOG_SCHEMA_IDS.itemPricePage,
+  },
+  [ITEM_PRICE_PATTERNS.byItem]: {
+    request: CATALOG_SCHEMA_IDS.itemPricesByItemRequest,
+    response: CATALOG_SCHEMA_IDS.itemScopePricesPage,
   },
   [ITEM_PRICE_PATTERNS.delete]: {
     request: CATALOG_SCHEMA_IDS.itemPriceIdRequest,
@@ -2248,5 +2663,17 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_LOCATION_PATTERNS.search]: {
     request: CATALOG_SCHEMA_IDS.searchShopsRequest,
     response: CATALOG_SCHEMA_IDS.shopPage,
+  },
+  [SUPERMARKET_LOCATION_PATTERNS.shopAvailability]: {
+    request: CATALOG_SCHEMA_IDS.shopAvailabilityRequest,
+    response: CATALOG_SCHEMA_IDS.shopAvailabilityView,
+  },
+  [SUPERMARKET_LOCATION_PATTERNS.nearby]: {
+    request: CATALOG_SCHEMA_IDS.nearbyShopsRequest,
+    response: CATALOG_SCHEMA_IDS.nearbyShopsView,
+  },
+  [SUPERMARKET_LOCATION_PATTERNS.shopsById]: {
+    request: CATALOG_SCHEMA_IDS.shopsByIdRequest,
+    response: CATALOG_SCHEMA_IDS.shopsByIdView,
   },
 };

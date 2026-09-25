@@ -24,6 +24,22 @@ export const ERROR_CODES = [
    * instead of refreshing, and `BasketStore` reads the 401 as it always has.
    */
   'not_a_participant',
+  /**
+   * The credential named a participant whose **time ran out** (backend plan
+   * 0140, section 8), as a 401.
+   *
+   * The same status and the same treatment as `not_a_participant`: not a
+   * statement about the account, passed straight to the caller by
+   * `gatewayInterceptor` instead of refreshing, and read by `BasketStore` as a
+   * whole screen rather than a sentence. It exists so that screen can say "your
+   * time has ended" instead of "you were removed", which are two different
+   * things to whoever is holding the phone.
+   *
+   * It leaks nothing. The caller presented a credential that **was** good for
+   * this basket, so being told it ran out tells them nothing they did not hold.
+   * The preview and the join, which carry no credential, stay silent as ever.
+   */
+  'participant_expired',
   'forbidden',
   'not_found',
   'conflict',
@@ -73,7 +89,17 @@ export const ERROR_CODES = [
    * this member it read as a plain `conflict`, which on the settle path is a
    * different sentence entirely: "somebody already finished this line".
    */
-  'generated_list_finished',
+  'basket_finished',
+  /**
+   * The basket was started at a shop and the request named another (backend `0163`),
+   * as a 409.
+   *
+   * The page never sends one on purpose: a basket's own shop is drawn locked and
+   * only a device's choice can differ from it. So the app answers it by acting
+   * rather than by a sentence of its own: the store drops the device's choice and
+   * reads the basket again at its own shop (velista `0102`).
+   */
+  'basket_shop_locked',
   /**
    * The number this write was moving is not where the caller believed it started
    * (backend plans 0056 and 0057), as a 409.

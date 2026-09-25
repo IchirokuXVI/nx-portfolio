@@ -139,6 +139,74 @@ describe('BrowserGeolocationReader', () => {
       restore();
     });
 
+    it('asks the browser for the coarse, cached fix when a call passes nothing', async () => {
+      // The postal code callers (`location-sheet.ts`, `place-step.ts`) pass nothing,
+      // and velista `0103` must not change what they ask for.
+      const asked: unknown[] = [];
+      const restore = withNavigator({
+        geolocation: {
+          getCurrentPosition: (
+            ok: (position: unknown) => void,
+            _fail: unknown,
+            options: unknown
+          ) => {
+            asked.push(options);
+            ok({ coords: { latitude: 37.88, longitude: -4.78, accuracy: 30 } });
+          },
+        },
+      });
+
+      await expect(new BrowserGeolocationReader().read()).resolves.toEqual({
+        state: 'located',
+        point: { latitude: 37.88, longitude: -4.78 },
+      });
+      expect(asked).toEqual([
+        { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 },
+      ]);
+
+      restore();
+    });
+
+    it('hands each call its own options, and the accuracy only to the call that asked', async () => {
+      // The shop picker's read (velista `0103`): the satellite fix, fifteen seconds and
+      // nothing cached, with the accuracy the server judges the pick by. The next read
+      // with no options is back on the defaults, so nothing leaks between calls.
+      const asked: unknown[] = [];
+      const restore = withNavigator({
+        geolocation: {
+          getCurrentPosition: (
+            ok: (position: unknown) => void,
+            _fail: unknown,
+            options: unknown
+          ) => {
+            asked.push(options);
+            ok({ coords: { latitude: 37.88, longitude: -4.78, accuracy: 42 } });
+          },
+        },
+      });
+      const reader = new BrowserGeolocationReader();
+
+      await expect(
+        reader.read({
+          enableHighAccuracy: true,
+          timeoutMs: 15_000,
+          maximumAgeMs: 0,
+          withAccuracy: true,
+        })
+      ).resolves.toEqual({
+        state: 'located',
+        point: { latitude: 37.88, longitude: -4.78, accuracyMetres: 42 },
+      });
+      await reader.read();
+
+      expect(asked).toEqual([
+        { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
+        { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 },
+      ]);
+
+      restore();
+    });
+
     it('never rejects, whichever way it fails', async () => {
       const restore = withNavigator({ geolocation: failingWith(2) });
 

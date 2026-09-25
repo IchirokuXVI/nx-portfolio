@@ -18,6 +18,7 @@ import {
   gatewayErrorKey,
   RESOURCE_ID_PARAM,
   ResourceReferences,
+  ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   compositeParts,
@@ -79,6 +80,11 @@ export interface PriceHistoryRow {
       <p class="kind">
         {{ 'catalog.prices.history.scope' | rokuT }} {{ priceScopeId }}
       </p>
+      <!-- The same product at every other scope, with why each price is the
+           one shown (admin plan 0033). -->
+      <button (click)="everyScope()" class="every" type="button">
+        {{ 'catalog.prices.byItem.open' | rokuT }}
+      </button>
     </header>
 
     @if (loading()) {
@@ -242,7 +248,8 @@ export interface PriceHistoryRow {
       color: var(--admin-ink-muted);
     }
 
-    .back {
+    .back,
+    .every {
       min-block-size: 2.75rem;
     }
 
@@ -335,6 +342,7 @@ export class PriceDetailPage {
     this._gateways.for<Wire.CatalogItemPriceView>(itemPriceSource());
   /** Names a copied price's source scope (admin plan 0029, section 5). */
   private readonly _references = inject(ResourceReferences);
+  private readonly _registry = inject(ResourceRegistry);
   private readonly _copySourceNames = signal<ReadonlyMap<string, string>>(
     new Map()
   );
@@ -476,6 +484,14 @@ export class PriceDetailPage {
 
   back(): void {
     void this._router.navigate(['..'], { relativeTo: this._route });
+  }
+
+  /** This product at every scope, wherever the registry mounted items. */
+  everyScope(): void {
+    const path = this._registry.pathOf('items');
+    if (path !== null) {
+      void this._router.navigate([...path, this.itemId, 'prices']);
+    }
   }
 
   /** The add a price form, one segment up. */

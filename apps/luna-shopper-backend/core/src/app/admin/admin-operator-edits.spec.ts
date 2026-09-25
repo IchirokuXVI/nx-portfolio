@@ -154,12 +154,16 @@ function makeListService(over: {
   return new AdminListService(
     lists as never,
     lines as never,
-    empty as never,
+    // The baskets repository and the sources one. Neither is read on any path
+    // this file covers, which is every write an operator makes on a list.
     empty as never,
     empty as never,
     openGate,
     (over.listService ?? {}) as ListService,
-    (over.lineService ?? {}) as LineService
+    (over.lineService ?? {}) as LineService,
+    // The two reads a basket's numbers come from since plan 0136, section 7.5.
+    empty as never,
+    empty as never
   );
 }
 

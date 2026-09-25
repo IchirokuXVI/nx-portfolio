@@ -1,6 +1,6 @@
 import { extractBrand } from './brand';
 import { decodeText, sliceContainer, textOf } from './html';
-import { splitSize } from './size';
+import { packCountIn, splitSize } from './size';
 import type { DezaPage, DezaProductRow, DezaShop } from './types';
 
 /**
@@ -82,6 +82,7 @@ function parseRow(html: string): DezaProductRow | null {
     description,
     name,
     sizeFormat,
+    packCount: packCountIn(description),
     brand: extractBrand(name),
     attributes: parseAttributes(
       sliceContainer(html, "class='wpdz-row-col-icons'") ?? ''

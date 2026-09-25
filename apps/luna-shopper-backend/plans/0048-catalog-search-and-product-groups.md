@@ -35,9 +35,27 @@ and needs its own entity. This is backlog 0001 section 3.2's argument, unchanged
 - `referenceUnit` (`UnitOfMeasure`: the unit its members are compared in)
 - `synonyms` (jsonb: per locale string arrays, so `leche` and `milk` reach the same group)
 
-`Item` gains a nullable `productGroupId`. Every Pascual, Central Lechera and Hacendado milk
-points at the one Milk group, which declares that they are comparable and that the comparison
-happens in litres.
+`Item` gains a nullable `productGroupId`. Every Pascual, Central Lechera and Hacendado
+semi-skimmed milk points at the one semi-skimmed milk group, which declares that they are
+comparable and that the comparison happens in litres.
+
+> **Revised: a group is one product, not a kind of product.** This section used to say that
+> every milk points at "the one Milk group". That grain is a category. A group is one
+> product sold under several labels. Its members are so nearly identical that a shopper
+> takes any of them and compares them only on price. Its only job is the best price for
+> that product across brands and chains. So whole, semi-skimmed, skimmed and lactose free
+> milk are four groups.
+>
+> Anything that makes a shopper refuse a substitute separates groups: fat level, a free
+> from variant, flavor, fresh or shelf stable, grade, strength or dose, and form. Brand,
+> chain, printed name, package size and pack count never do. A product sold under
+> different names is still one group, such as Metamizol, Dipirona and Nolotil at the same
+> dose and form. The other names go in `synonyms`.
+>
+> An item sits in at most one group. So backlog 0010 (a product in more than one group) is
+> dropped, and a product that belongs to several things belongs to several categories. The
+> full rule is the curation prompt, `libs/luna-shopper/tools/curation/groups/src/prompt.md`.
+> In the rest of this plan, read "Milk group" or "milk" as one of those narrower groups.
 
 Two deliberate omissions against the backlog design:
 
@@ -176,8 +194,8 @@ changes the default resolution without touching the messages.
   afterwards.
 - Two lines holding the same products carry the same hash, however the products were
   added.
-- Searching "milk" or "leche" returns the Milk group ranked above any single milk item;
-  searching a brand returns that brand's items first.
+- Searching "milk" or "leche" returns the milk groups (whole, semi-skimmed and the rest)
+  above any single milk item. Searching a brand returns that brand's items first.
 - A typo within trigram distance still finds the brand.
 - `item.searchOffers` returns each group's cheapest member and unit price at the requested
   scopes, and returns the group with null price fields when no scope has a price.

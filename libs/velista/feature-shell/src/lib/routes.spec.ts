@@ -1,6 +1,18 @@
 import type { Route } from '@angular/router';
-import { SHEET_SEGMENT } from '@portfolio/velista/platform';
+import {
+  NAV_CHROME,
+  NO_NAV_CHROME,
+  SHEET_SEGMENT,
+} from '@portfolio/velista/platform';
+import { authenticatedGuard } from './auth-guards';
 import { AppShellRoutes } from './routes';
+import { setupGuard } from './setup-guard';
+
+/**
+ * What every signed in page carries: an account, and the setup's one offer
+ * (velista `0098`, section 3).
+ */
+const SIGNED_IN = [authenticatedGuard, setupGuard];
 
 /**
  * Everything below the app's layout route, which is where the pages live.
@@ -64,11 +76,15 @@ describe('AppShellRoutes', () => {
       ).toBe(true);
     });
 
-    it('offers the same two over the dashboard, beside its own', () => {
+    it('offers the same two over the dashboard, and nothing else', () => {
       // Both pages offer both entry actions, so those two copies come from one
       // function and cannot drift apart.
+      //
+      // Get shopping list is **not** among them any more (velista 0097, section 6):
+      // the button that opened it was in home's bottom row, and that row went when
+      // the app's own bar took its place. A sheet no control can open is a URL that
+      // draws a form over the wrong page.
       expect(sheetsOf('home').map((route) => route.path)).toEqual([
-        'sheet/get',
         'sheet/zones/new',
         'sheet/zones/join',
       ]);
@@ -82,10 +98,13 @@ describe('AppShellRoutes', () => {
      * person was dropped back on the history on the way out. A sheet has to cover the
      * page it was opened from, which means one child route per page that offers it.
      */
-    it('draws Get shopping list over the history as well as the dashboard', () => {
+    it('draws Get shopping list over the history and over the third tab', () => {
       expect(sheetsOf('shopping-lists').map((route) => route.path)).toEqual([
         'sheet/get',
       ]);
+      expect(
+        sheetsOf('shopping-lists/current').map((route) => route.path)
+      ).toEqual(['sheet/get']);
     });
 
     it('tells each sheet which page it is covering', () => {
@@ -96,11 +115,18 @@ describe('AppShellRoutes', () => {
         'landing',
       ]);
       expect(sheetsOf('home').map((route) => route.data?.['returnTo'])).toEqual(
-        ['home', 'home', 'home']
+        ['home', 'home']
       );
       expect(
         sheetsOf('shopping-lists').map((route) => route.data?.['returnTo'])
       ).toEqual(['shopping-lists']);
+      // A path rather than a name, which is what lets the sheet's Cancel hand it
+      // straight to `appPath` (velista 0097, section 6).
+      expect(
+        sheetsOf('shopping-lists/current').map(
+          (route) => route.data?.['returnTo']
+        )
+      ).toEqual(['shopping-lists/current']);
     });
 
     /**
@@ -114,9 +140,9 @@ describe('AppShellRoutes', () => {
     it('declares the basket before the history that now has children', () => {
       const paths = pages.map((route) => route.path);
 
-      expect(paths).toContain('shopping-lists/:generatedListId');
+      expect(paths).toContain('shopping-lists/:basketId');
       expect(paths).toContain('shopping-lists');
-      expect(paths.indexOf('shopping-lists/:generatedListId')).toBeLessThan(
+      expect(paths.indexOf('shopping-lists/:basketId')).toBeLessThan(
         paths.indexOf('shopping-lists')
       );
     });
@@ -134,7 +160,7 @@ describe('AppShellRoutes', () => {
      */
     it('scopes the connection and the store to the basket route', () => {
       const basket = pages.find(
-        (route) => route.path === 'shopping-lists/:generatedListId'
+        (route) => route.path === 'shopping-lists/:basketId'
       );
       const provided = (basket?.providers ?? []).map((provider) =>
         typeof provider === 'function' ? provider.name : String(provider)
@@ -351,7 +377,7 @@ describe('AppShellRoutes', () => {
         // Two guards, one per id. `canMatch` and not `canActivate`, because a declined
         // match has to carry on to the next route rather than abort the navigation.
         expect(routeAt(listPath)?.canMatch).toHaveLength(2);
-        expect(routeAt(listPath)?.canActivate).toHaveLength(1);
+        expect(routeAt(listPath)?.canActivate).toEqual(SIGNED_IN);
       });
 
       it('still leaves /zones/<uuid>/lists/new to the create sheet', () => {
@@ -360,7 +386,7 @@ describe('AppShellRoutes', () => {
         ).toContain('sheet/lists/new');
       });
 
-      it('offers the five sheets over it, as routes rather than flags', () => {
+      it('offers the six sheets over it, as routes rather than flags', () => {
         // Rule E1: each covers the page without losing it, and Android's back button
         // has to dismiss it. Ticking a line off is deliberately not among them.
         expect(routeAt(listPath)?.children?.map((route) => route.path)).toEqual(
@@ -375,6 +401,8 @@ describe('AppShellRoutes', () => {
             'sheet/settings',
             // The order and the category view (velista `0082`, section 4).
             'sheet/filter',
+            // A suggestion's Details in the composer (velista `0107`).
+            'sheet/products/:itemId',
           ]
         );
       });
@@ -394,7 +422,7 @@ describe('AppShellRoutes', () => {
         // allowed, on every request.
         const sheets = routeAt(listPath)?.children ?? [];
 
-        expect(sheets).toHaveLength(5);
+        expect(sheets).toHaveLength(6);
         for (const sheet of sheets) {
           expect(sheet.canActivate).toBeUndefined();
         }
@@ -442,14 +470,16 @@ describe('AppShellRoutes', () => {
 
       it('checks both ids with canMatch and demands an account', () => {
         expect(routeAt(linePath)?.canMatch).toHaveLength(2);
-        expect(routeAt(linePath)?.canActivate).toHaveLength(1);
+        expect(routeAt(linePath)?.canActivate).toEqual(SIGNED_IN);
       });
 
       it('confirms a delete over itself rather than over the list', () => {
         // Deleting is the one thing on either screen that discards a history, so it is
         // confirmed from here too, and its URL sits under this page's own.
+        // A similar product opens over it too, for a reader who cannot change the
+        // line's product and so is offered the product rather than the change.
         expect(routeAt(linePath)?.children?.map((route) => route.path)).toEqual(
-          ['sheet/confirm/delete']
+          ['sheet/confirm/delete', 'sheet/products/:itemId']
         );
       });
     });
@@ -545,7 +575,7 @@ describe('AppShellRoutes', () => {
       // and not a different route, which is a property of `SessionStore.isGuest` that
       // the page reads. Splitting it would give two URLs for one thing somebody
       // reaches by pressing one button (section 4.1).
-      expect(account?.canActivate).toHaveLength(1);
+      expect(account?.canActivate).toEqual(SIGNED_IN);
       expect(account?.canMatch).toBeUndefined();
     });
 
@@ -607,7 +637,7 @@ describe('AppShellRoutes', () => {
     it('is authenticated, and guarded by nothing else', () => {
       // A profile is private and resolves from the caller's own token, so there is
       // nothing here to authorize that the gateway does not already.
-      expect(profiles?.canActivate).toHaveLength(1);
+      expect(profiles?.canActivate).toEqual(SIGNED_IN);
       expect(profiles?.canMatch).toBeUndefined();
     });
 
@@ -664,7 +694,7 @@ describe('AppShellRoutes', () => {
     });
 
     it('is authenticated, and guarded by nothing else', () => {
-      expect(supermarkets?.canActivate).toHaveLength(1);
+      expect(supermarkets?.canActivate).toEqual(SIGNED_IN);
       expect(supermarkets?.canMatch).toBeUndefined();
     });
 
@@ -682,7 +712,7 @@ describe('AppShellRoutes', () => {
    * and that the join screen sits at the top level rather than under the listing.
    */
   describe('the basket', () => {
-    const basketPath = 'shopping-lists/:generatedListId';
+    const basketPath = 'shopping-lists/:basketId';
     const joinPath = 's/:secret';
 
     function routeAt(path: string): Route | undefined {
@@ -728,7 +758,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the six sheets over the basket, and no units sheet', () => {
+    it('offers the ten sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -741,14 +771,125 @@ describe('AppShellRoutes', () => {
       // paths share a prefix.
       expect(routeAt(basketPath)?.children?.map((route) => route.path)).toEqual(
         [
-          'sheet/lines/:lineId/settle',
+          'sheet/rows/:rowKey/settle',
+          // Change a row's product for another of its product group.
+          'sheet/rows/:rowKey/swap',
+          // What changed on the covered lists while somebody was shopping
+          // (velista `0093`, section 6). Over both basket routes, because a
+          // basket follows its lists whichever way it was opened.
+          'sheet/changes',
           'sheet/people',
           'sheet/share',
           'sheet/finish',
           'sheet/filter/shop',
           'sheet/filter',
+          // Which list the composer adds to (velista `0092`, section 7.3).
+          // Every line added from the basket names a list now, so there has to
+          // be somewhere to say which.
+          'sheet/add/list',
+          // A suggestion's Details in the composer (velista `0107`).
+          'sheet/products/:itemId',
         ]
       );
+    });
+
+    /**
+     * The basket that is always there (velista `0091`, section 2).
+     *
+     * Five assertions and each guards a different mistake: a path nothing links to,
+     * an order that makes the word readable as an id, a guard that would refuse the
+     * only reader this route has, a sheet that exists over one basket and not the
+     * other, and a `finish` that would offer to end a trip with no end.
+     */
+    describe('the basket that is always there', () => {
+      const livePath = 'shopping-lists/live';
+
+      it('is the path the app builds its links from', () => {
+        // Written out on both sides, here and in `BASKET_PATHS.live`, because
+        // naming that constant in this project is a static import of a lazy
+        // loaded library: eslint refuses it, and it would pull every basket
+        // screen into the shell's initial payload. So the two are kept in step
+        // the way the history's path already is, by both being asserted.
+        expect(routeAt(livePath)).toBeDefined();
+        expect(routeAt(livePath)?.path).toBe('shopping-lists/live');
+      });
+
+      it('is declared before the id it would otherwise be read as', () => {
+        const paths = pages.map((route) => route.path);
+
+        expect(paths.indexOf(livePath)).toBeLessThan(paths.indexOf(basketPath));
+      });
+
+      it('demands an account, unlike the basket reached by a link', () => {
+        // The opposite of the route below it, and for the same reason: a guest
+        // holding a link has no basket of their own to open, and the basket they
+        // were sent is reached by its id.
+        expect(routeAt(livePath)?.canActivate).toEqual(SIGNED_IN);
+        expect(routeAt(basketPath)?.canActivate).toBeUndefined();
+      });
+
+      it('draws the same page, with the same stores', () => {
+        expect(routeAt(livePath)?.loadComponent).toBeDefined();
+        expect(
+          (routeAt(livePath)?.providers ?? []).map(
+            (provider) => (provider as { name?: string }).name
+          )
+        ).toEqual([
+          'BasketSocket',
+          'BasketStore',
+          // What changed on the covered lists, read by a child route of this
+          // page, so the store is the route's (velista `0093`, section 2).
+          'BasketChangeStore',
+          // Where the composer's next line goes, per basket (velista `0092`,
+          // section 7.2). A store and not a signal on the page, because it
+          // reads and writes this device's memory.
+          'BasketTargetStore',
+          'BasketViewStore',
+        ]);
+        // How the page knows which basket to open, since the URL holds no id.
+        expect(routeAt(livePath)?.data?.['basket']).toBe('live');
+      });
+
+      it('carries every sheet the other route has, except finish', () => {
+        // One function builds both lists, so a sheet added later cannot exist over
+        // one basket and not the other. `finish` is the single difference, and it
+        // is a rule rather than an omission: a `LIVE` basket is never finished.
+        const live = (routeAt(livePath)?.children ?? []).map(
+          (route) => route.path
+        );
+        const byId = (routeAt(basketPath)?.children ?? []).map(
+          (route) => route.path
+        );
+
+        expect(live).toEqual(byId.filter((path) => path !== 'sheet/finish'));
+        expect(live).not.toContain('sheet/finish');
+      });
+
+      it('addresses every one of them under the marker, and guards the fall', () => {
+        for (const entry of routeAt(livePath)?.children ?? []) {
+          expect((entry.path ?? '').split('/')[0]).toBe(SHEET_SEGMENT);
+          expect(entry.canDeactivate).toHaveLength(1);
+        }
+      });
+
+      it('has the share and people sheets by name (velista `0094`)', () => {
+        // Named rather than left to the set comparison above, because velista
+        // `0094` turns on these two in particular: the basket that is always
+        // there can be shared and can have named people on it, so both sheets
+        // have to be reachable over it and not only over a trip.
+        const live = (routeAt(livePath)?.children ?? []).map(
+          (route) => route.path
+        );
+
+        expect(live).toContain(`${SHEET_SEGMENT}/share`);
+        expect(live).toContain(`${SHEET_SEGMENT}/people`);
+      });
+
+      it('is not itself addressed under the marker', () => {
+        // No page may take a `sheet` segment, or a sheet over it could collide with
+        // a sheet over its parent again.
+        expect(livePath.split('/')).not.toContain(SHEET_SEGMENT);
+      });
     });
 
     it('resolves the units sheet to nothing at all', () => {
@@ -769,14 +910,14 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(6);
+      expect(sheets).toHaveLength(10);
       for (const entry of sheets) {
         expect(entry.canActivate).toBeUndefined();
       }
     });
 
     it('provides the stores and the socket on the page, not on the app', () => {
-      // All three scoped here, which is what makes the connection's lifetime the
+      // All four scoped here, which is what makes the connection's lifetime the
       // screen's: two baskets are never open at once, and presence answers "who is
       // here" rather than "who has ever opened this" precisely because leaving the
       // route destroys the socket (plan 0048, section 4).
@@ -784,7 +925,8 @@ describe('AppShellRoutes', () => {
       // `BasketViewStore` is here rather than on the component because the sheets
       // that set its controls are **child routes** of this page (velista `0074`,
       // section 4.3), and a store the component provided is not one a sibling route
-      // can be sure to reach.
+      // can be sure to reach. `BasketTargetStore` is here for exactly that reason
+      // too: the sheet that sets it is `sheet/add/list` (velista `0092`).
       //
       // Asserted by name rather than by counting, because a count says nothing about
       // *which* provider went missing, and the socket is the one whose absence would
@@ -796,6 +938,8 @@ describe('AppShellRoutes', () => {
       expect(provided).toEqual([
         'BasketSocket',
         'BasketStore',
+        'BasketChangeStore',
+        'BasketTargetStore',
         'BasketViewStore',
       ]);
     });
@@ -830,7 +974,7 @@ describe('AppShellRoutes', () => {
       // The bot acts as the caller through the gateway with the caller's own token
       // (backend 0039, rule A1), so there is nothing here to authorize that the API
       // does not already.
-      expect(assistant?.canActivate).toHaveLength(1);
+      expect(assistant?.canActivate).toEqual(SIGNED_IN);
       expect(assistant?.canMatch).toBeUndefined();
     });
 
@@ -904,7 +1048,26 @@ describe('the sheets and their exit animation', () => {
     // back to twenty eight, and `0078` added the shop picker beside it. `0082` added
     // the zone list's filter sheet, and `0083` deleted the edit sheet, whose fields are
     // on the detail sheet now.
-    expect(sheets).toHaveLength(29);
+    //
+    // `0091` added five, and added no sheet at all: the basket is drawn at a second
+    // route, and every sheet over it is declared over both. The five are the six
+    // minus `finish`, which a basket that is never finished must not offer.
+    //
+    // `0092` added one sheet and therefore two entries, for that same reason: a
+    // line added from the basket names a list now, and `sheet/add/list` is where
+    // somebody says which, over both baskets.
+    //
+    // `0093` added one sheet and therefore two entries again: what changed on the
+    // covered lists is read over both baskets, for the same reason.
+    //
+    // `0100` added the catalog's product sheet, one page and one entry.
+    //
+    // `0107` declared that sheet over three more pages, the zone list and both
+    // baskets, so a suggestion's Details covers the page it was pressed on.
+    //
+    // Similar products added three: the product sheet over the line page, and the
+    // change sheet over both baskets.
+    expect(sheets).toHaveLength(45);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -974,12 +1137,174 @@ describe('the basket routes', () => {
   it('keeps the history behind the authenticated guard', () => {
     expect(
       pages.find((route) => route.path === 'shopping-lists')?.canActivate
-    ).toHaveLength(1);
+    ).toEqual(SIGNED_IN);
   });
 
   it('keeps it lazy, like every other page', () => {
     expect(
       pages.find((route) => route.path === 'shopping-lists')?.loadComponent
     ).toBeDefined();
+  });
+});
+
+/**
+ * The bar at the bottom of the app (velista `0097`).
+ *
+ * Two things about it are properties of this table rather than of a component: which
+ * screens ask for no chrome, and that the third tab's word is not read as a basket id.
+ */
+describe('the bottom bar', () => {
+  const paths = pages.map((route) => route.path);
+
+  /**
+   * Section 4. Each of these is one task with one way out, and two of the three tabs
+   * need an account.
+   */
+  const chromeless = [
+    '',
+    'auth/login',
+    'auth/register',
+    'auth/upgrade',
+    'auth/verify',
+    'auth/callback',
+    'join/:code',
+    's/:secret',
+  ];
+
+  it.each(chromeless)('draws no bar on "%s"', (path) => {
+    expect(pages.find((route) => route.path === path)?.data?.[NAV_CHROME]).toBe(
+      NO_NAV_CHROME
+    );
+  });
+
+  /**
+   * The other half, and the half that matters as the table grows: the bar is drawn
+   * **unless something says otherwise**, which is the opposite of a page opting in. A
+   * page added later carries no flag and therefore gets the bar, and a flag added by
+   * accident fails here.
+   */
+  it('draws it on every other page', () => {
+    const flagged = pages
+      .filter((route) => route.data?.[NAV_CHROME] === NO_NAV_CHROME)
+      .map((route) => route.path);
+
+    expect(flagged.sort()).toEqual([...chromeless].sort());
+  });
+
+  /**
+   * `current` is a word and `:basketId` is an id, so the word has to be offered
+   * first. This is the collision `SHEET_SEGMENT` exists to prevent one level down, and
+   * the basket's `canMatch` UUID guard is what keeps the pair unambiguous the other way
+   * round.
+   */
+  it('declares the third tab before the basket id it would be read as', () => {
+    expect(paths).toContain('shopping-lists/current');
+    expect(paths.indexOf('shopping-lists/current')).toBeLessThan(
+      paths.indexOf('shopping-lists/:basketId')
+    );
+  });
+
+  it('demands an account for the third tab, and keeps it lazy', () => {
+    const tab = pages.find((route) => route.path === 'shopping-lists/current');
+
+    expect(tab?.canActivate).toEqual(SIGNED_IN);
+    expect(tab?.loadComponent).toBeDefined();
+  });
+
+  it('gives the catalog tab a route to open', () => {
+    const catalog = pages.find((route) => route.path === 'catalog');
+
+    expect(catalog?.loadComponent).toBeDefined();
+    expect(catalog?.canActivate).toEqual(SIGNED_IN);
+    expect(paths.indexOf('catalog')).toBeLessThan(paths.indexOf(''));
+  });
+
+  /**
+   * One product's prices (velista `0100`, section 5): a sheet over the catalog,
+   * addressed under the sheet segment and carrying the fall guard like every other,
+   * so back dismisses it and the URL says which product is open.
+   */
+  it('addresses the product sheet under the sheet segment, with the fall guard', () => {
+    const catalog = pages.find((route) => route.path === 'catalog');
+    const product = catalog?.children?.find(
+      (route) => route.path === `${SHEET_SEGMENT}/products/:itemId`
+    );
+
+    expect(product?.loadComponent).toBeDefined();
+    expect(product?.canDeactivate).toHaveLength(1);
+    expect(catalog?.children).toHaveLength(1);
+  });
+
+  /**
+   * The same sheet over the pages whose composers link to it (velista `0107`), so
+   * Details covers the list or the basket it was pressed on rather than leaving it
+   * for the catalog tab.
+   */
+  it.each([
+    'zones/:zoneId/lists/:listId',
+    'shopping-lists/live',
+    'shopping-lists/:basketId',
+  ])('declares the product sheet over %s, with the fall guard', (path) => {
+    const page = pages.find((route) => route.path === path);
+    const product = page?.children?.find(
+      (route) => route.path === `${SHEET_SEGMENT}/products/:itemId`
+    );
+
+    expect(product?.loadComponent).toBeDefined();
+    expect(product?.canDeactivate).toHaveLength(1);
+  });
+});
+
+describe('the setup (velista 0098)', () => {
+  const setup = pages.find((route) => route.path === 'setup');
+  const screens = setup?.children ?? [];
+
+  it('has its five screens, in order', () => {
+    expect(screens.map((route) => route.path)).toEqual([
+      '',
+      'name',
+      'place',
+      'shops',
+      'done',
+    ]);
+  });
+
+  it('draws no bar on any of them', () => {
+    // The bar reads the deepest activated route, and these children sit below a
+    // parent with a component, so each one says it for itself.
+    expect(screens).toHaveLength(5);
+    for (const screen of screens) {
+      expect(screen.data?.[NAV_CHROME]).toBe(NO_NAV_CHROME);
+    }
+  });
+
+  it('gives each screen its own title', () => {
+    for (const screen of screens) {
+      expect(screen.title).toBeDefined();
+    }
+  });
+
+  it('demands an account, and does not send the setup to itself', () => {
+    expect(setup?.canActivate).toEqual([authenticatedGuard]);
+  });
+
+  it('is lazy, and declared before the front door', () => {
+    const paths = pages.map((route) => route.path);
+
+    expect(setup?.loadComponent).toBeDefined();
+    expect(paths.indexOf('setup')).toBeLessThan(paths.indexOf(''));
+  });
+
+  it('puts the setup guard on every page that demands an account', () => {
+    const signedIn = pages.filter((route) =>
+      route.canActivate?.includes(authenticatedGuard)
+    );
+
+    expect(signedIn.length).toBeGreaterThan(5);
+    for (const page of signedIn) {
+      expect(page.canActivate).toEqual(
+        page.path === 'setup' ? [authenticatedGuard] : SIGNED_IN
+      );
+    }
   });
 });

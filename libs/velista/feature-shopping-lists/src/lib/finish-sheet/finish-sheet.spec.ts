@@ -5,10 +5,7 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import {
-  BasketStore,
-  GeneratedListStore,
-} from '@portfolio/velista/data-access';
+import { BasketListStore, BasketStore } from '@portfolio/velista/data-access';
 import {
   provideVelistaTesting,
   SheetNavigation,
@@ -28,7 +25,7 @@ import { FinishSheet } from './finish-sheet';
  * consequence to warn about.
  *
  * **The write goes to the owner's surface**, not to the participant one. The route
- * behind `GeneratedListStore` is account authenticated, which is what makes "the
+ * behind `BasketListStore` is account authenticated, which is what makes "the
  * owner and nobody else" a fact about the server rather than about a template.
  *
  * **The basket is re-read before the sheet closes.** The screen underneath is drawn
@@ -49,10 +46,18 @@ interface World {
 async function render(world: World = {}) {
   TestBed.resetTestingModule();
 
-  const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const paramMap = convertToParamMap({ basketId: BASKET_ID });
   const unsettled: WritableSignal<number> = signal(world.unsettled ?? 0);
   const basket = {
-    unsettled,
+    // The **server's** count, which the store reads rather than works out: a
+    // `SKIPPED` row is pending and this side has no way to know that (velista
+    // `0090`, section 6).
+    pending: unsettled,
+    // What the sheet writes to and dismisses to, both off the store since velista
+    // `0091`: the same page is routed at `shopping-lists/live`, where the URL
+    // carries no id at all.
+    basket: signal({ id: BASKET_ID }),
+    address: signal({ basketId: BASKET_ID }),
     refresh: jest.fn().mockResolvedValue(undefined),
   };
   const generated = {
@@ -68,7 +73,7 @@ async function render(world: World = {}) {
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       { provide: BasketStore, useValue: basket },
-      { provide: GeneratedListStore, useValue: generated },
+      { provide: BasketListStore, useValue: generated },
       { provide: SheetNavigation, useValue: sheets },
       {
         provide: Router,
@@ -168,7 +173,7 @@ describe('FinishSheet', () => {
       footer(fixture)[1].click();
       await fixture.whenStable();
 
-      expect(generated.setStatus).toHaveBeenCalledWith(BASKET_ID, 'COMPLETED');
+      expect(generated.setStatus).toHaveBeenCalledWith(BASKET_ID, 'FINISHED');
     });
 
     it('re-reads the basket before it closes, so the controls go with it', async () => {

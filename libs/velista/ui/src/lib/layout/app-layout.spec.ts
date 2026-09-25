@@ -1,17 +1,23 @@
-import { Component, type Provider } from '@angular/core';
-import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { Component, signal, type Provider } from '@angular/core';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import { type AppBrand } from '@portfolio/velista/models';
 import {
   BackendReadiness,
   ConnectionState,
+  LiveBasketBadge,
+  NavChrome,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   RENDERS_WHILE_CONNECTING,
   StorageKeys,
   ThemeStore,
+  TourStore,
+  type TourCardView,
 } from '@portfolio/velista/platform';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { AppLayout } from './app-layout';
 
 /** A page below the layout, so a route can actually activate under it. */
@@ -45,6 +51,10 @@ async function createFixture(
 
 function outletOf(fixture: ComponentFixture<AppLayout>): Element | null {
   return (fixture.nativeElement as HTMLElement).querySelector('router-outlet');
+}
+
+function navOf(fixture: ComponentFixture<AppLayout>): Element | null {
+  return (fixture.nativeElement as HTMLElement).querySelector('lib-app-nav');
 }
 
 describe('AppLayout', () => {
@@ -319,6 +329,318 @@ describe('AppLayout', () => {
       button?.click();
 
       expect(reload).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * The bar at the bottom of the app (plan 0097).
+   *
+   * It is rendered **inside the branch that renders the outlet**, which is what keeps
+   * it off the startup, connection and update screens by construction rather than by a
+   * rule somebody has to remember: those screens replace the outlet, so no page is
+   * drawn at all and there is nothing for a bar to sit under.
+   */
+  describe('the tour (velista 0099)', () => {
+    function tourDouble(card: Partial<TourCardView> | null = {}) {
+      return {
+        running: signal(true),
+        card: signal<TourCardView | null>(
+          card === null
+            ? null
+            : {
+                stopId: 'nav',
+                titleKey: 'tour.nav.title',
+                bodyKey: 'tour.nav.body',
+                n: 1,
+                total: 4,
+                last: false,
+                placement: 'above',
+                element: document.createElement('div'),
+                ...card,
+              }
+        ),
+        next: jest.fn(),
+        skip: jest.fn(),
+      };
+    }
+
+    const SHEET_ROUTES: Routes = [
+      {
+        path: 'home',
+        component: TestPage,
+        children: [{ path: 'sheet/zones/new', component: TestPage }],
+      },
+    ];
+
+    async function withTour(
+      tour: ReturnType<typeof tourDouble>,
+      routes: Routes = SHEET_ROUTES
+    ): Promise<ComponentFixture<AppLayout>> {
+      const fixture = await createFixture({}, routes, [
+        { provide: TourStore, useValue: tour },
+      ]);
+      TestBed.inject(NavChrome).setUsable(true);
+      TestBed.inject(BackendReadiness).reportReady();
+      await TestBed.inject(Router).navigateByUrl('/home');
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    function mainOf(fixture: ComponentFixture<AppLayout>): HTMLElement {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        'main'
+      ) as HTMLElement;
+    }
+
+    function cardOf(fixture: ComponentFixture<AppLayout>): Element | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-tour-card'
+      );
+    }
+
+    it('draws the card over the app, and nothing behind it responds', async () => {
+      const fixture = await withTour(tourDouble());
+
+      expect(cardOf(fixture)).not.toBeNull();
+      expect(mainOf(fixture).hasAttribute('inert')).toBe(true);
+    });
+
+    it('keeps the app dimmed and inert between two stops, with no card', async () => {
+      const fixture = await withTour(tourDouble(null));
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-tour-spotlight'
+        )
+      ).not.toBeNull();
+      expect(cardOf(fixture)).toBeNull();
+      expect(mainOf(fixture).hasAttribute('inert')).toBe(true);
+    });
+
+    it('draws no card while a sheet is open', async () => {
+      const fixture = await withTour(tourDouble());
+
+      await TestBed.inject(Router).navigateByUrl('/home/sheet/zones/new');
+      fixture.detectChanges();
+
+      expect(cardOf(fixture)).toBeNull();
+      expect(mainOf(fixture).hasAttribute('inert')).toBe(false);
+    });
+
+    it('draws nothing and leaves the app alone when no run is going', async () => {
+      const tour = tourDouble();
+      tour.running.set(false);
+      const fixture = await withTour(tour);
+
+      expect(cardOf(fixture)).toBeNull();
+      expect(mainOf(fixture).hasAttribute('inert')).toBe(false);
+    });
+
+    it('puts the card above the bar', async () => {
+      const fixture = await withTour(tourDouble());
+      const host = fixture.nativeElement as HTMLElement;
+      const nav = host.querySelector('lib-app-nav') as Element;
+      const spotlight = host.querySelector('lib-tour-spotlight') as Element;
+
+      // After it in the DOM, and over it in the stacking order.
+      expect(
+        nav.compareDocumentPosition(spotlight) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+
+      const styles = resolve(__dirname, '..');
+      const semantic = readFileSync(
+        resolve(styles, 'styles/_semantic.scss'),
+        'utf8'
+      );
+      const layer = (name: string): number =>
+        Number(new RegExp(`--app-${name}-z:\\s*(\\d+)`).exec(semantic)?.[1]);
+      expect(layer('tour')).toBeGreaterThan(layer('nav'));
+      expect(
+        readFileSync(resolve(styles, 'tour/tour-spotlight.scss'), 'utf8')
+      ).toContain('z-index: var(--app-tour-z)');
+    });
+
+    it('declares the bar as the first stop’s anchor', async () => {
+      const fixture = await withTour(tourDouble());
+
+      expect(
+        (fixture.nativeElement as HTMLElement)
+          .querySelector('lib-app-nav')
+          ?.getAttribute('libtouranchor')
+      ).toBe('nav');
+    });
+
+    it('hands Next and Skip to the store', async () => {
+      const tour = tourDouble();
+      const fixture = await withTour(tour);
+      const buttons = Array.from(
+        cardOf(fixture)?.querySelectorAll('button') ?? []
+      );
+
+      buttons[1]?.dispatchEvent(new Event('click'));
+      buttons[0]?.dispatchEvent(new Event('click'));
+
+      expect(tour.next).toHaveBeenCalledTimes(1);
+      expect(tour.skip).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('the bottom bar', () => {
+    it('is absent while the startup gate holds the outlet', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(NavChrome).setUsable(true);
+      fixture.detectChanges();
+
+      expect(outletOf(fixture)).toBeNull();
+      expect(navOf(fixture)).toBeNull();
+    });
+
+    it('is present once the gate releases it', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(NavChrome).setUsable(true);
+      TestBed.inject(BackendReadiness).reportReady();
+      fixture.detectChanges();
+
+      expect(outletOf(fixture)).not.toBeNull();
+      expect(navOf(fixture)).not.toBeNull();
+    });
+
+    it('is absent on a screen that asks for no chrome', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(BackendReadiness).reportReady();
+      fixture.detectChanges();
+
+      // `usable` is false until the app layer says otherwise, which is the whole of
+      // the default: under-showing costs one navigation, over-showing hands an
+      // anonymous visitor two tabs that answer with a sign in screen.
+      expect(navOf(fixture)).toBeNull();
+    });
+
+    it('is absent behind the screen a refused build draws', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(NavChrome).setUsable(true);
+      TestBed.inject(BackendReadiness).reportTooOld();
+      fixture.detectChanges();
+
+      expect(navOf(fixture)).toBeNull();
+    });
+
+    it('carries the count the badge holds', async () => {
+      const fixture = await createFixture();
+      TestBed.inject(NavChrome).setUsable(true);
+      TestBed.inject(BackendReadiness).reportReady();
+      TestBed.inject(LiveBasketBadge).set(8);
+      fixture.detectChanges();
+
+      expect(navOf(fixture)?.querySelector('.badge')?.textContent?.trim()).toBe(
+        '8'
+      );
+    });
+
+    // Section 5, and the rule the whole app reads through one token: while the bar
+    // belongs to the screen it carries the bottom inset and nothing inside the page
+    // does. It is bound to `reserved` rather than `visible`, so a sheet takes the bar
+    // away without reflowing the page underneath it.
+    it('says so on the host, so every dock below loses its inset', async () => {
+      const fixture = await createFixture();
+      const host: HTMLElement = fixture.nativeElement;
+      TestBed.inject(BackendReadiness).reportReady();
+      fixture.detectChanges();
+
+      expect(host.classList).not.toContain('nav-up');
+
+      TestBed.inject(NavChrome).setUsable(true);
+      fixture.detectChanges();
+
+      expect(host.classList).toContain('nav-up');
+    });
+
+    // velista 0106: the app is a column one viewport tall that never scrolls. The page
+    // slot scrolls and the bar is the item after it, so nothing a page draws can be
+    // under the bar, and no page needs to know how tall the bar is.
+    describe('as the last item of the frame (velista 0106)', () => {
+      const SHEET_ROUTES: Routes = [
+        {
+          path: 'home',
+          component: TestPage,
+          children: [{ path: 'sheet/zones/new', component: TestPage }],
+        },
+      ];
+
+      async function onHome(): Promise<ComponentFixture<AppLayout>> {
+        const fixture = await createFixture({}, SHEET_ROUTES);
+        TestBed.inject(NavChrome).setUsable(true);
+        TestBed.inject(BackendReadiness).reportReady();
+        await TestBed.inject(Router).navigateByUrl('/home');
+        fixture.detectChanges();
+        return fixture;
+      }
+
+      function roomOf(fixture: ComponentFixture<AppLayout>): Element | null {
+        return (fixture.nativeElement as HTMLElement).querySelector(
+          '.nav-room'
+        );
+      }
+
+      it('comes after the page slot, which holds the outlet', async () => {
+        const fixture = await onHome();
+        const slot = (fixture.nativeElement as HTMLElement).querySelector(
+          '.app-page'
+        );
+
+        expect(slot?.contains(outletOf(fixture))).toBe(true);
+        expect(slot?.contains(navOf(fixture))).toBe(false);
+        expect(navOf(fixture)?.previousElementSibling).toBe(slot);
+      });
+
+      it('keeps its room while a sheet has put it away, so the page does not reflow', async () => {
+        const fixture = await onHome();
+        expect(roomOf(fixture)).toBeNull();
+
+        await TestBed.inject(Router).navigateByUrl('/home/sheet/zones/new');
+        fixture.detectChanges();
+
+        expect(navOf(fixture)).toBeNull();
+        expect(roomOf(fixture)).not.toBeNull();
+        expect(roomOf(fixture)?.getAttribute('aria-hidden')).toBe('true');
+
+        await TestBed.inject(Router).navigateByUrl('/home');
+        fixture.detectChanges();
+
+        expect(navOf(fixture)).not.toBeNull();
+        expect(roomOf(fixture)).toBeNull();
+      });
+
+      it('keeps no room on a screen that has no bar', async () => {
+        const fixture = await createFixture();
+        TestBed.inject(BackendReadiness).reportReady();
+        fixture.detectChanges();
+
+        expect(navOf(fixture)).toBeNull();
+        expect(roomOf(fixture)).toBeNull();
+      });
+
+      // jsdom lays nothing out, so the half a spec can see is the stylesheets. Comments
+      // are stripped first, because both files say what they used to do.
+      function rules(file: string): string {
+        return readFileSync(resolve(__dirname, file), 'utf8').replace(
+          /\/\/.*$/gm,
+          ''
+        );
+      }
+
+      it('sizes the frame to the small viewport and pads nothing under the page', () => {
+        const layout = rules('app-layout.scss');
+
+        expect(layout).toMatch(/:host\s*\{[^}]*block-size:\s*100svh/);
+        expect(layout).not.toContain('--app-page-foot');
+        expect(layout).not.toMatch(/padding-bottom/);
+      });
+
+      it('draws the bar in the flow rather than fixed over the page', () => {
+        expect(rules('app-nav.scss')).not.toMatch(/position:\s*fixed/);
+      });
     });
   });
 

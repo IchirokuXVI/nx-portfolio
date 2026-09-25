@@ -1,38 +1,56 @@
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  Router,
+  type NavigationExtras,
+  type Params,
+} from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BASKET_SERVICE,
+  BasketChangeStore,
+  BasketListStore,
   BasketStore,
+  BasketTargetStore,
   BasketViewStore,
+  fakeGroupMembers,
   GatewayError,
-  GeneratedListStore,
+  provideFakeGroupMembers,
   SessionStore,
-  type BasketSplitSaid,
+  type FakeGroupMembers,
 } from '@portfolio/velista/data-access';
 import type {
-  BasketAddLineRequest,
-  BasketLine,
+  BasketAccessEnded,
+  BasketListRef,
   BasketParticipant,
   BasketPresenceEntry,
   BasketProduct,
-  BasketSettleResult,
+  BasketRow,
+  BasketRowEntry,
+  BasketRowResult,
+  BasketShop,
+  CatalogItem,
   CatalogSuggestion,
   ErrorCode,
 } from '@portfolio/velista/models';
+import { SUGGEST_DEBOUNCE_MS } from '@portfolio/velista/models';
 import {
-  PageNavigation,
   provideFakeBrowserFacade,
   provideVelistaTesting,
-  StorageKeys,
+  SheetNavigation,
 } from '@portfolio/velista/platform';
-import { of } from 'rxjs';
-import { BasketLineRow } from '../basket-line-row/basket-line-row';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { BehaviorSubject, of } from 'rxjs';
+import { BasketRow as BasketRowComponent } from '../basket-row/basket-row';
+import { TargetListSheet } from '../target-list-sheet/target-list-sheet';
 import { BasketPage } from './basket-page';
 
 /**
@@ -61,86 +79,118 @@ import { BasketPage } from './basket-page';
 interface FakeStore {
   readonly live: WritableSignal<boolean>;
   readonly revoked: WritableSignal<boolean>;
+  /**
+   * Why the reader is off the basket, once they are (velista `0094`).
+   *
+   * Null while they are still on it, which is every spec that is not about the
+   * ended state. `UNKNOWN` and `REMOVED` draw one sentence and `EXPIRED` draws
+   * another.
+   */
+  readonly accessEnded: WritableSignal<BasketAccessEnded | null>;
+  /**
+   * How the read has got on, writable so a spec can put the page on the state a
+   * refusal leaves it in.
+   *
+   * Ready everywhere else, which is what nearly every test on this page wants.
+   */
+  readonly state: WritableSignal<string>;
   readonly present: WritableSignal<readonly BasketPresenceEntry[]>;
   readonly participants: WritableSignal<readonly BasketParticipant[]>;
-  readonly takesLines: WritableSignal<boolean>;
-  readonly lastAdded: WritableSignal<BasketLine | null>;
-  /** The most recent split, which shares the add's region (velista `0069`). */
-  readonly lastSplit: WritableSignal<BasketSplitSaid | null>;
   readonly opened: string[];
-  /** Every add the page asked for, in order, so a spec can read what it sent. */
-  readonly added: BasketAddLineRequest[];
-  /** Every query the page searched for, after its own debounce and floor. */
-  readonly searched: string[];
   /** Every time the page said the shopper has gone. See the teardown test. */
   readonly leave: jest.Mock<void, []>;
   /** The rows, writable so a spec can stand in for the refetch a refusal does. */
-  readonly lines: WritableSignal<readonly BasketLine[]>;
+  readonly rows: WritableSignal<readonly BasketRow[]>;
   /** What the store last failed with, which is where the row's sentence comes from. */
   readonly error: WritableSignal<unknown>;
-  /** Every move of a row's number, and what it answered (plan 0054). */
-  readonly setOutstanding: jest.Mock;
+  /**
+   * Every move of a row's reel, and what it answered.
+   *
+   * One mock and not two, because `setLeft` is the one call the reel makes: the
+   * client never decides whether a drag was a purchase or a take back (velista
+   * `0090`, section 6).
+   */
+  readonly setLeft: jest.Mock;
+  /** Every settle the page sent from a row's status control. */
+  readonly settle: jest.Mock;
+  /** Every revert, which is the other direction of the same control. */
+  readonly revert: jest.Mock;
   /** Where the page navigated, so a spec can see the settle sheet being opened. */
   readonly navigate: jest.Mock;
   /** Whether the trip is over, writable so a spec can end one (plan 0057). */
   readonly finished: WritableSignal<boolean>;
-  /** How many lines nobody settled, which is what the prompt waits for. */
-  readonly unsettled: WritableSignal<number>;
+  /** How many rows are still to do, **by the server**, which the prompt waits for. */
+  readonly pending: WritableSignal<number>;
   /** Every status write the page made, on the **owner's** surface (plan 0057). */
   readonly setStatus: jest.Mock;
-  /** Every per list purchase the page made, which is `0077`'s row under a heading. */
-  readonly setOriginSettled: jest.Mock;
   /** Every refetch, so a spec can see the screen being brought up to date. */
   readonly refresh: jest.Mock;
+  /** The device's shop, which `BasketStore.readAtShop` sets (velista `0102`). */
+  readonly readAt: WritableSignal<string | null>;
+  readonly readAtShop: jest.Mock;
   /** Every product the basket named, which is the other half of what a search reads. */
   readonly products: WritableSignal<ReadonlyMap<string, BasketProduct>>;
+  /** The lists this reader was served, which the filter sheet offers. */
+  readonly lists: WritableSignal<ReadonlyMap<string, BasketListRef>>;
   /** How much of the **whole** basket is got, which a search must never change. */
   readonly progress: WritableSignal<{
     done: number;
     unavailable: number;
     total: number;
   }>;
+  /**
+   * The sentence a sheet handed the page on its way out (velista `0092`,
+   * section 6.2).
+   *
+   * Writable, because what a spec is asserting is that the page **says** it: the
+   * sheet that composed it is gone by then, so a spec stands in for it.
+   */
+  readonly handedOver: WritableSignal<{ text: string; seq: number } | null>;
+  readonly handOver: jest.Mock;
+  /** Whether an add is out, which the composer's button waits on. */
+  readonly adding: WritableSignal<boolean>;
+  /** Every line added from the dock, and what it answered. */
+  readonly addLine: jest.Mock;
 }
 
 interface Options {
+  /** `?search=1`, the open search (velista `0109`). */
+  readonly search?: boolean;
   readonly live?: boolean;
   readonly revoked?: boolean;
+  /** Why the reader lost the basket, for the two endings of velista `0094`. */
+  readonly accessEnded?: BasketAccessEnded | null;
   readonly present?: readonly BasketPresenceEntry[];
   readonly participants?: readonly BasketParticipant[];
   /** Who the reader is on this basket. The owner alone gets the share control. */
   readonly me?: BasketParticipant | null;
   /** Their account name, which is the one name the basket itself never carries. */
   readonly username?: string | null;
-  /** Whether the basket still takes lines. False is a finished one. */
-  readonly takesLines?: boolean;
-  /** What the add answers. Null is a refusal, which puts the text back. */
-  readonly addAnswers?: BasketLine | null;
-  /** What the catalog offers under the field. */
-  readonly suggestions?: readonly CatalogSuggestion[];
   /** The rows on the basket. Empty draws the empty state. */
-  readonly lines?: readonly BasketLine[];
+  readonly lines?: readonly BasketRow[];
   /** Whether the trip is over (plan 0057). A finished basket draws no controls. */
   readonly finished?: boolean;
+  /** Which basket this is (velista `0091`). `LIVE` draws the other surface. */
+  readonly kind?: 'GENERATED' | 'LIVE' | 'UNKNOWN';
   /**
-   * How many lines nobody settled. Defaults to all of them, which is a fresh trip.
+   * How many rows are still to do, **by the server**.
    *
-   * Zero with lines on the basket is what makes the "all done" prompt appear, and
-   * the two are stated separately here for the same reason the real store derives
-   * one from the other rather than counting the array: the question the prompt asks
-   * is about what is left, not about how many rows there are.
+   * Zero with rows on the basket is what makes the "all done" prompt appear. The
+   * two are stated separately for the reason the store reads it rather than
+   * counting the array: a `SKIPPED` row is pending and this side cannot know that
+   * (velista `0090`, section 6).
    */
   readonly unsettled?: number;
   /** Whether a finish or a reopen lands. False is the failure the banner reports. */
   readonly statusWriteLands?: boolean;
-  /** The products the lines pick, so a search can match a name or a brand (`0074`). */
+  /** The products the rows name, so a search can match a name or a brand (`0074`). */
   readonly products?: ReadonlyMap<string, BasketProduct>;
   /**
-   * The lists the run drew from (`0075`). Absent is a guest, who has none, so the
-   * filter sheet draws no lists section and the chip row can hold no list chip.
+   * The covered lists this reader was served (`0090`). Empty is a guest, who is
+   * served none, so the filter sheet draws no lists section and the chip row can
+   * hold no list chip.
    */
-  readonly sources?: readonly { zoneId: string; listId: string }[];
-  /** Those lists by name, for the list chip and the sheet's checkboxes. */
-  readonly listNames?: ReadonlyMap<string, string>;
+  readonly served?: readonly BasketListRef[];
   /** What the progress sentence counts. Defaults to a basket nobody has started. */
   readonly progress?: { done: number; unavailable: number; total: number };
   /**
@@ -160,6 +210,21 @@ interface Options {
    * found nothing apart from one that broke (`0059` section 7).
    */
   readonly echoValues?: boolean;
+  /** What the catalog says each product group holds. */
+  readonly groupMembers?: FakeGroupMembers;
+  /**
+   * How many changes are new to this viewer (velista `0093`, section 5).
+   *
+   * Zero by default, which is a basket nobody has changed under the reader, and
+   * draws no banner. The number is the **server's**: the page never counts it
+   * and never takes it down after a tap.
+   */
+  readonly unseenChanges?: number;
+  /**
+   * The shop this device reads the basket at, already answered (velista `0102`),
+   * or none. What the usual filter of velista `0104` needs to have anything to do.
+   */
+  readonly readAtShop?: BasketShop;
 }
 
 function guest(
@@ -176,6 +241,24 @@ function guest(
   };
 }
 
+/**
+ * Somebody with an account who is not the owner (velista `0092`, section 7.1).
+ *
+ * The composer's rule turns on holding an account rather than on being the
+ * owner, so this is the reader that tells the two conditions apart: they get the
+ * field where a guest does not, and they lose it when the basket covers no list
+ * they may write.
+ */
+function registered(participantId = 'p-dana'): BasketPresenceEntry {
+  return {
+    participantId,
+    kind: 'REGISTERED',
+    displayName: 'Dana',
+    guestNumber: null,
+    userId: 'u-2',
+  };
+}
+
 function owner(participantId = 'p-owner'): BasketPresenceEntry {
   return {
     participantId,
@@ -186,24 +269,67 @@ function owner(participantId = 'p-owner'): BasketPresenceEntry {
   };
 }
 
-/** The line an add answers with, which is all the page does with the answer. */
-function line(
-  content: string,
-  overrides: Partial<BasketLine> = {}
-): BasketLine {
+/** One row of the basket, with one entry unless a test says otherwise. */
+function line(content: string, overrides: Partial<BasketRow> = {}): BasketRow {
+  const left = overrides.left ?? 1;
+  const bought = overrides.bought ?? 0;
   return {
-    id: `line-${content}`,
+    rowKey: `row-${content}`,
     content,
-    quantity: 1,
-    settled: 0,
-    pickId: null,
+    left,
+    bought,
+    asked: bought + left,
+    state: 'WANTED',
+    note: null,
+    noteAt: null,
+    mark: null,
+    awaitingApproval: false,
     optionIds: [],
-    position: 0,
-    createdBy: 'p-owner',
     touchedBy: null,
     touchedAt: null,
-    lastOutcome: null,
+    usual: null,
+    entries: [entry(null, `zl-${content}`, left)],
     ...overrides,
+  };
+}
+
+function entry(
+  listId: string | null,
+  lineId: string,
+  left = 1,
+  over: Partial<BasketRowEntry> = {}
+): BasketRowEntry {
+  return {
+    lineId,
+    listId,
+    left,
+    bought: 0,
+    asked: left,
+    state: 'WANTED',
+    awaitingApproval: false,
+    demandEditable: true,
+    ...over,
+  };
+}
+
+function ref(listId: string, name: string): BasketListRef {
+  return { listId, name, zoneId: 'z1', zoneName: 'Home' };
+}
+
+/** The two lists the fixtures below are served, which is what the sheet offers. */
+const SERVED = [
+  ref('l-groceries', 'Groceries'),
+  ref('l-weekly', 'Weekly shop'),
+];
+
+/** What a row write answers: the row as it now stands, and the counts. */
+function rowResult(row: BasketRow): BasketRowResult {
+  return {
+    row,
+    progress: { done: 0, unavailable: 0, total: 1 },
+    pending: 1,
+    replacedRowKey: null,
+    skippedCount: 0,
   };
 }
 
@@ -212,11 +338,57 @@ function participant(entry: BasketPresenceEntry): BasketParticipant {
     id: entry.participantId,
     kind: entry.kind,
     displayName: entry.displayName,
+    username: null,
     guestNumber: entry.guestNumber,
     userId: entry.userId,
     joinedAt: null,
     lastSeenAt: null,
     shareLinkId: null,
+    // Nobody in these fixtures is on the basket with a link unless a spec says
+    // so: an expiry is what makes the visit notice appear, and it would
+    // otherwise be drawn over every test on this page.
+    expiresAt: null,
+  };
+}
+
+/** Somebody a link let in, whose time on the basket runs out (velista `0094`). */
+function visitor(
+  entry: BasketPresenceEntry,
+  endsInMinutes: number
+): BasketParticipant {
+  return {
+    ...participant(entry),
+    shareLinkId: 'sl1',
+    expiresAt: new Date(Date.now() + endsInMinutes * 60 * 1000),
+  };
+}
+
+/**
+ * A route's query as the router keeps it: observable, merged into by a navigation, and
+ * replaced by a navigation to a whole URL.
+ */
+function queryOnRoute(initial: Params) {
+  const queryParamMap = new BehaviorSubject(convertToParamMap(initial));
+  let params: Params = initial;
+
+  return {
+    queryParamMap,
+    set(next: Params): void {
+      params = next;
+      queryParamMap.next(convertToParamMap(next));
+    },
+    /** `queryParamsHandling: 'merge'`, where a null takes a parameter off. */
+    merged(extra: Params | null | undefined): Params {
+      const next: Params = { ...params };
+      for (const [key, value] of Object.entries(extra ?? {})) {
+        if (value === null || value === undefined) {
+          delete next[key];
+        } else {
+          next[key] = value;
+        }
+      }
+      return next;
+    },
   };
 }
 
@@ -227,53 +399,83 @@ async function render(options: Options = {}): Promise<{
   TestBed.resetTestingModule();
 
   const me = options.me === undefined ? participant(owner()) : options.me;
+  // The device's shop (velista `0102`), read at once by this double.
+  const readAt = signal<string | null>(options.readAtShop?.id ?? null);
 
   const store: FakeStore = {
     live: signal(options.live ?? true),
     revoked: signal(options.revoked ?? false),
+    accessEnded: signal<BasketAccessEnded | null>(options.accessEnded ?? null),
+    state: signal<string>('ready'),
     present: signal(options.present ?? []),
     participants: signal(options.participants ?? []),
-    takesLines: signal(options.takesLines ?? true),
-    lastAdded: signal<BasketLine | null>(null),
-    lastSplit: signal<BasketSplitSaid | null>(null),
     opened: [],
-    added: [],
-    searched: [],
     leave: jest.fn(),
-    lines: signal<readonly BasketLine[]>(options.lines ?? []),
+    rows: signal<readonly BasketRow[]>(options.lines ?? []),
     error: signal<unknown>(null),
-    // A raise and a lower both answer a settle result, so the default is the one
-    // neither has anything to report about (backend `0056`, section 3).
-    setOutstanding: jest.fn(
-      (lineId: string): Promise<BasketSettleResult | null> =>
-        Promise.resolve({
-          line: line(lineId),
-          skippedCount: 0,
-        })
+    /**
+     * The reel's one call, in both directions.
+     *
+     * It answers the row as the server would, which is what the page draws: the
+     * row on screen is the answer's and never the number that was sent.
+     */
+    setLeft: jest.fn(
+      (rowKey: string): Promise<BasketRowResult | null> =>
+        Promise.resolve(rowResult(line(rowKey)))
+    ),
+    settle: jest.fn(
+      (rowKey: string): Promise<BasketRowResult | null> =>
+        Promise.resolve(rowResult(line(rowKey)))
+    ),
+    revert: jest.fn(
+      (rowKey: string): Promise<BasketRowResult | null> =>
+        Promise.resolve(rowResult(line(rowKey)))
     ),
     navigate: jest.fn().mockResolvedValue(true),
     finished: signal(options.finished ?? false),
-    unsettled: signal(options.unsettled ?? options.lines?.length ?? 0),
+    pending: signal(options.unsettled ?? options.lines?.length ?? 0),
     setStatus: jest.fn().mockResolvedValue(options.statusWriteLands ?? true),
-    // The whole line comes back, exactly as the real write answers it: the row has
-    // to redraw from the server's answer and never from the number it sent.
-    setOriginSettled: jest.fn(
-      (lineId: string): Promise<BasketOriginSettledResult | null> =>
-        Promise.resolve({
-          line: line(lineId),
-          origin: null,
-          skippedCount: 0,
-          skipped: [],
-        })
-    ),
     refresh: jest.fn().mockResolvedValue(undefined),
+    readAt,
+    readAtShop: jest.fn((locationId: string | null) => {
+      readAt.set(locationId);
+      return Promise.resolve();
+    }),
     products: signal<ReadonlyMap<string, BasketProduct>>(
       options.products ?? new Map()
     ),
+    lists: signal<ReadonlyMap<string, BasketListRef>>(
+      new Map((options.served ?? []).map((held) => [held.listId, held]))
+    ),
     progress: signal(options.progress ?? { done: 0, unavailable: 0, total: 0 }),
+    handedOver: signal<{ text: string; seq: number } | null>(null),
+    handOver: jest.fn(),
+    adding: signal(false),
+    // An add answers the row it landed on, exactly as the store folds it: the row
+    // on screen is the answer's and never the words that were typed.
+    addLine: jest.fn(
+      (body: { content: string }): Promise<BasketRowResult | null> =>
+        Promise.resolve(
+          rowResult({ ...line('zl-added'), content: body.content })
+        )
+    ),
   };
 
-  const paramMap = convertToParamMap({ generatedListId: 'basket-saturday' });
+  const paramMap = convertToParamMap({ basketId: 'basket-saturday' });
+
+  // The URL's query, which holds whether the search is open (velista `0109`). The
+  // router below moves it the way the real one would, so opening the search, Cancel
+  // and the phone's back button all reach the page through the route, as they do in
+  // the app.
+  const url = queryOnRoute(options.search === true ? { search: '1' } : {});
+  store.navigate.mockImplementation(
+    (commands: readonly unknown[], extras?: NavigationExtras) => {
+      if (commands.length === 0) {
+        url.set(url.merged(extras?.queryParams));
+      }
+      return Promise.resolve(true);
+    }
+  );
 
   await TestBed.configureTestingModule({
     imports: [BasketPage, RokuTranslatorTestingModule.forTesting()],
@@ -284,17 +486,36 @@ async function render(options: Options = {}): Promise<{
         provide: Router,
         useValue: {
           navigate: store.navigate,
-          navigateByUrl: jest.fn().mockResolvedValue(true),
+          navigateByUrl: jest.fn((to: string) => {
+            url.set(
+              Object.fromEntries(new URL(to, 'http://velista').searchParams)
+            );
+            return Promise.resolve(true);
+          }),
+          // What `ListSearchNavigation.close` builds its fallback from.
+          createUrlTree: (_: unknown, extras?: NavigationExtras) =>
+            url.merged(extras?.queryParams),
+          serializeUrl: (params: Params) =>
+            `/shopping-lists/basket-saturday${
+              Object.keys(params).length === 0
+                ? ''
+                : `?${new URLSearchParams(params)}`
+            }`,
         },
       },
       {
         provide: ActivatedRoute,
         useValue: {
           paramMap: of(paramMap),
+          queryParamMap: url.queryParamMap,
           snapshot: {
             paramMap,
-            queryParamMap: convertToParamMap({}),
-            data: {},
+            get queryParamMap() {
+              return url.queryParamMap.value;
+            },
+            // What the route says about which basket to open (velista `0091`):
+            // `live` for the caller's own, absent for a basket named by its id.
+            data: options.kind === 'LIVE' ? { basket: 'live' } : {},
           },
           parent: null,
         },
@@ -308,63 +529,96 @@ async function render(options: Options = {}): Promise<{
         useValue: {
           basket: signal({
             id: 'basket-saturday',
+            kind: options.kind ?? 'GENERATED',
             name: 'Saturday shop',
-            generatedAt: null,
+            // Where the trip has got to, **on the basket**, which is where the page
+            // reads it from since velista `0091`: `selectBasketSurface` decides the
+            // banner, the finish control and the prompt from the basket it is
+            // handed, so a fixture that left this `OPEN` and moved a separate flag
+            // would be describing a basket the server cannot send.
+            status: (options.finished ?? false) ? 'FINISHED' : 'OPEN',
+            createdAt: null,
+            rows: store.rows(),
+            lists: options.served ?? [],
+            participants: options.participants ?? [],
+            me,
             products: new Map(),
             scopes: new Map(),
-            // What the run drew from, which is what the filter sheet offers and what
-            // the list filter and its chip are about (`0075`). Absent by default, so
-            // every test in this file that predates it still renders a guest's sheet.
-            sources: options.sources,
+            // The shop the read was made at, which names it (velista `0102`).
+            shop: options.readAtShop ?? null,
+            progress: options.progress ?? {
+              done: 0,
+              unavailable: 0,
+              total: 0,
+            },
+            pending: options.unsettled ?? options.lines?.length ?? 0,
+            unseenChangeCount: options.unseenChanges ?? 0,
+            newestUnseenChangeId:
+              (options.unseenChanges ?? 0) > 0 ? 'chg-newest' : null,
           }),
-          state: signal('ready'),
-          lines: store.lines,
+          state: store.state,
+          rows: store.rows,
+          lists: store.lists,
           products: store.products,
+          // The device's shop (velista `0102`), read at once by this double.
+          readAt: store.readAt,
+          shopRead: store.readAt,
+          readAtShop: store.readAtShop,
           error: store.error,
           progress: store.progress,
-          busyLines: signal(new Set<string>()),
+          pending: store.pending,
+          busyRows: signal(new Set<string>()),
           participantsById: signal(new Map<string, BasketParticipant>()),
-          listNames: signal(options.listNames ?? new Map<string, string>()),
-          seesZoneData: signal(true),
           me: signal(me),
           live: store.live,
           revoked: store.revoked,
+          accessEnded: store.accessEnded,
           present: store.present,
           participants: store.participants,
-          takesLines: store.takesLines,
-          adding: signal(false),
-          lastAdded: store.lastAdded,
-          lastSplit: store.lastSplit,
+          kind: signal(options.kind ?? 'GENERATED'),
+          // How a sheet over this page addresses its basket (velista `0091`).
+          address: signal({ basketId: 'basket-saturday' }),
+          isOpen: signal(!(options.finished ?? false)),
+          // A sheet that could not find its row says so once, through the page.
+          rowGone: signal(0),
+          sayRowGone: jest.fn(),
+          // A sentence a sheet composed on its way out, for this page to say in
+          // the one live region this screen has (velista `0092`, section 6.2).
+          handedOver: store.handedOver,
+          handOver: store.handOver,
+          // What the composer needs: whether an add is out, and the add itself.
+          adding: store.adding,
+          addLine: store.addLine,
+          chosen: signal(new Map<string, string>()),
+          choose: jest.fn(),
+          itemIdFor: () => undefined,
+          skip: jest.fn().mockResolvedValue(null),
+          unskip: jest.fn().mockResolvedValue(null),
+          setDemand: jest.fn().mockResolvedValue(null),
+          rowFor: (key: string) =>
+            store.rows().find((row) => row.rowKey === key) ??
+            store
+              .rows()
+              .find((row) => row.entries.some((held) => held.lineId === key)) ??
+            null,
           open: (id: string) => {
             store.opened.push(id);
             return Promise.resolve();
           },
+          // The caller's own basket, which takes no id: the route is a word and
+          // the server hands the id back on the answer.
+          openLive: () => {
+            store.opened.push('live');
+            return Promise.resolve();
+          },
           leave: store.leave,
-          // Session local, and empty unless a spec says otherwise: no field of a line
-          // carries whether the list it was sent to has accepted it (`0056`).
-          pendingTargets: signal(new Set<string>()),
           finished: store.finished,
-          unsettled: store.unsettled,
           refresh: store.refresh,
-          settle: () => Promise.resolve(null),
-          reopen: () => Promise.resolve(null),
-          setOutstanding: store.setOutstanding,
-          setOriginSettled: store.setOriginSettled,
-          addLine: (body: BasketAddLineRequest) => {
-            store.added.push(body);
-            const answer =
-              options.addAnswers === undefined
-                ? line(body.content)
-                : options.addAnswers;
-            if (answer !== null) {
-              store.lastAdded.set(answer);
-            }
-            return Promise.resolve(answer);
-          },
-          suggest: (query: string) => {
-            store.searched.push(query);
-            return Promise.resolve(options.suggestions ?? []);
-          },
+          settle: store.settle,
+          revert: store.revert,
+          setLeft: store.setLeft,
+          renameRow: () => Promise.resolve(null),
+          suggest: () => Promise.resolve([]),
         },
       },
       // The owner's surface, which is where the one write of plan 0057 goes: the
@@ -372,8 +626,10 @@ async function render(options: Options = {}): Promise<{
       // any token they hold. The page injects it for every reader and calls it only
       // through a control the owner alone is drawn.
       {
-        provide: GeneratedListStore,
-        useValue: { setStatus: store.setStatus },
+        provide: BasketListStore,
+        useValue: {
+          setStatus: store.setStatus,
+        },
       },
       // Listed after the testing module's own, which is what makes it win: a
       // translator that echoes its values, for the assertions that are about the
@@ -403,11 +659,31 @@ async function render(options: Options = {}): Promise<{
       // needs nothing this harness does not already stand in for, since everything
       // it reads comes off `BasketStore` and the locale store above.
       BasketViewStore,
+      // The real one, beside `BasketViewStore`: the route provides both, it
+      // reads the faked `BasketStore` above and a `BrowserFacade`
+      // `provideVelistaTesting` already supplies, and its whole job is to answer
+      // where the composer's next line goes (velista `0092`, section 7.2).
+      BasketTargetStore,
+      // The fourth store the route provides (velista `0093`). The page never
+      // draws an entry from it and still lets it go on the way out, so the
+      // instance has to exist; the banner's count comes off the basket read.
+      BasketChangeStore,
+      // The one thing it reaches past `BasketStore` for. This file fakes the
+      // store rather than the gateway, so the real token behind it is not
+      // provided anywhere; the sheet is what exercises these two calls.
+      {
+        provide: BASKET_SERVICE,
+        useValue: {
+          changes: jest.fn().mockResolvedValue({ items: [], nextCursor: null }),
+          acknowledgeChanges: jest.fn().mockResolvedValue(undefined),
+        },
+      },
       // ...except this device's storage, which `0076` gave it. A fresh `Map` per
       // test and not the real facade: jsdom hands every test in this file the same
       // `localStorage`, so a test that chose an order would hand it to the next
       // page to open, through the restore the page now runs on load.
       provideFakeBrowserFacade(options.storage ?? new Map()),
+      provideFakeGroupMembers(options.groupMembers ?? fakeGroupMembers()),
     ],
   }).compileComponents();
 
@@ -589,7 +865,11 @@ describe('the basket header, live', () => {
     });
   });
 
-  describe('the way back', () => {
+  /**
+   * No basket page has a back chevron (velista `0111`). The history button takes its
+   * place for every reader with an account, on the live basket and on a generated one.
+   */
+  describe('the history in the header', () => {
     const registered = (): BasketParticipant =>
       participant({
         ...guest('p-me', 1),
@@ -598,37 +878,62 @@ describe('the basket header, live', () => {
         userId: 'u-2',
       });
 
-    async function pressBack(
-      me: BasketParticipant
-    ): Promise<jest.SpyInstance | null> {
-      const { fixture } = await render({ me });
-      const back = query(fixture, 'button.back');
-      if (back === null) {
-        return null;
-      }
-      const spy = jest
-        .spyOn(TestBed.inject(PageNavigation), 'back')
-        .mockResolvedValue(undefined);
-      back.click();
-      return spy;
-    }
+    it('draws no chevron on a generated basket', async () => {
+      const { fixture } = await render({ me: participant(owner()) });
 
-    it('takes the owner back, falling back to the history', async () => {
-      const spy = await pressBack(participant(owner()));
-
-      expect(spy).not.toBeNull();
-      expect(spy?.mock.calls[0]?.[0]).toMatch(/shopping-lists$/);
+      expect(query(fixture, '.bar lib-chevron-left-icon')).toBeNull();
+      expect(query(fixture, 'button.back')).toBeNull();
     });
 
-    it('takes a registered participant back, falling back to the dashboard', async () => {
-      const spy = await pressBack(registered());
+    it('draws no chevron on the live basket', async () => {
+      const { fixture } = await render({
+        me: participant(owner()),
+        kind: 'LIVE',
+      });
 
-      expect(spy).not.toBeNull();
-      expect(spy?.mock.calls[0]?.[0]).toMatch(/home$/);
+      expect(query(fixture, '.bar lib-chevron-left-icon')).toBeNull();
+      expect(query(fixture, 'button.back')).toBeNull();
     });
 
-    it('offers a guest no way back', async () => {
-      expect(await pressBack(participant(guest('p-9', 1)))).toBeNull();
+    it('offers the owner the history, named for a screen reader', async () => {
+      const { fixture } = await render({ me: participant(owner()) });
+      const history = query(fixture, '.bar button.history');
+
+      expect(history).not.toBeNull();
+      expect(history?.getAttribute('aria-label')).toBe('basket.openHistory');
+    });
+
+    it('offers it on the live basket too', async () => {
+      const { fixture } = await render({
+        me: participant(owner()),
+        kind: 'LIVE',
+      });
+
+      expect(query(fixture, '.bar button.history')).not.toBeNull();
+    });
+
+    it('offers a registered participant the history', async () => {
+      const { fixture } = await render({ me: registered() });
+
+      expect(query(fixture, '.bar button.history')).not.toBeNull();
+    });
+
+    it('offers a guest no history, because it needs an account', async () => {
+      const { fixture } = await render({ me: participant(guest('p-9', 1)) });
+
+      expect(query(fixture, '.bar button.history')).toBeNull();
+    });
+
+    it('pushes the history', async () => {
+      const { fixture } = await render({ me: participant(owner()) });
+      const go = TestBed.inject(Router).navigateByUrl as jest.Mock;
+      go.mockClear();
+
+      query(fixture, '.bar button.history')?.click();
+
+      expect(go).toHaveBeenCalledWith('/en/shopping-lists');
+      // A push: back from the history comes back to this basket.
+      expect(go.mock.calls[0]?.[1]).toBeUndefined();
     });
   });
 
@@ -679,164 +984,6 @@ describe('the basket header, live', () => {
       ).toHaveLength(1);
     });
   });
-
-  /**
-   * Plan 0053: the composer at the bottom of the basket.
-   *
-   * The claims worth a test are the ones a template mistake would quietly break:
-   * that it is drawn for **everybody** rather than for a reader who passes a rule,
-   * that it is absent on a basket the server would refuse, that it never offers a
-   * microphone, and that a refused add does not swallow what somebody typed while
-   * standing in an aisle.
-   */
-  describe('adding a line in the aisle', () => {
-    it('is drawn for a guest, who holds no account at all', async () => {
-      // The inversion of `0030`, and the one row of this screen's table with no
-      // reader-shaped condition on it: a line added here has no target list, so
-      // there is no permission to read and no branch to write.
-      const { fixture } = await render({
-        me: participant(guest('p-1', 1)),
-      });
-
-      expect(query(fixture, 'lib-line-composer')).not.toBeNull();
-      // And still no share control, which is the owner's alone. The two are
-      // independent, which is the whole point of asserting them together.
-      expect(query(fixture, '.share')).toBeNull();
-    });
-
-    it('is absent on a finished basket, never disabled', async () => {
-      // The server refuses the add, and a field that cannot submit is the
-      // invitation plan 0038 section 2.1 refuses to draw.
-      const { fixture } = await render({ takesLines: false });
-
-      expect(query(fixture, 'lib-line-composer')).toBeNull();
-    });
-
-    it('never offers a microphone', async () => {
-      // A recording goes to the list scoped assistant, which a basket has no
-      // equivalent of: offering a microphone with nowhere to send its audio is
-      // worse than offering nothing (section 3).
-      const { fixture } = await render();
-
-      expect(query(fixture, 'lib-mic-icon')).toBeNull();
-      expect(query(fixture, 'lib-plus-icon')).not.toBeNull();
-    });
-
-    it('sends what was typed, with its quantity', async () => {
-      const { fixture, store } = await render();
-
-      typeInto(fixture, 'Batteries');
-      await submit(fixture);
-
-      expect(store.added).toEqual([{ content: 'Batteries', quantity: 1 }]);
-      // Free text stays first class: nothing is attached, and no product is
-      // insisted on (section 4).
-      expect(store.added[0].itemId).toBeUndefined();
-      expect(store.added[0].options).toBeUndefined();
-    });
-
-    it('leaves the typed text in the field when the add fails', async () => {
-      // Losing six characters is nothing; losing the item somebody just remembered
-      // in an aisle is the failure this screen cannot afford (section 7).
-      const { fixture } = await render({ addAnswers: null });
-
-      typeInto(fixture, 'Batteries');
-      await submit(fixture);
-
-      expect(field(fixture).value).toBe('Batteries');
-    });
-
-    it('clears the field when the add lands', async () => {
-      // The other half of the one above, and the reason it is a separate test: a
-      // composer that never cleared would pass the restore assertion for free.
-      const { fixture } = await render();
-
-      typeInto(fixture, 'Batteries');
-      await submit(fixture);
-
-      expect(field(fixture).value).toBe('');
-    });
-
-    it('announces the new line politely, and says nothing before one arrives', async () => {
-      const { fixture } = await render();
-
-      const region = query(fixture, '.composer-dock [aria-live]');
-      expect(region?.getAttribute('aria-live')).toBe('polite');
-      expect(region?.textContent?.trim()).toBe('');
-
-      typeInto(fixture, 'Batteries');
-      await submit(fixture);
-
-      expect(
-        query(fixture, '.composer-dock [aria-live]')?.textContent?.trim()
-      ).not.toBe('');
-    });
-
-    it('announces a split once, in the same region the add uses', async () => {
-      const { fixture, store } = await render();
-
-      store.lastSplit.set({ content: 'Milk', rows: 2 });
-      fixture.detectChanges();
-
-      // The same node, because there is one thing to say about this basket at a
-      // time: a second region would talk over the first (velista `0069`).
-      expect(
-        query(fixture, '.composer-dock [aria-live]')?.textContent?.trim()
-      ).toContain('basket.product.split');
-    });
-
-    describe('the typeahead', () => {
-      beforeEach(() => jest.useFakeTimers());
-      afterEach(() => jest.useRealTimers());
-
-      it('asks for nothing under three characters', async () => {
-        const { fixture, store } = await render();
-
-        typeInto(fixture, 'ba');
-        jest.advanceTimersByTime(1000);
-
-        expect(store.searched).toEqual([]);
-      });
-
-      it('asks once for a run of keystrokes, and for the last of them', async () => {
-        // The debounce and the sequence number are the container's, exactly as they
-        // are on the list page: somebody who has used velista's list screen must
-        // not have to learn a second search.
-        const { fixture, store } = await render();
-
-        typeInto(fixture, 'bat');
-        typeInto(fixture, 'batt');
-        typeInto(fixture, 'batte');
-        jest.advanceTimersByTime(1000);
-
-        expect(store.searched).toEqual(['batte']);
-      });
-    });
-  });
-
-  it('opens the basket it was routed to', async () => {
-    const { store } = await render();
-
-    expect(store.opened).toEqual(['basket-saturday']);
-  });
-
-  it('lets the basket go when the screen is destroyed', async () => {
-    // The one test standing between this screen and a participant socket that
-    // outlives it. Both the store and the socket are provided by the basket route,
-    // and a route's environment injector is cached on the route config: Angular
-    // destroys it only under `withExperimentalAutoCleanupInjectors()`, which this app
-    // does not enable. So every `DestroyRef` inside those two services is silent, and
-    // the connection stayed up, holding the room, for the rest of the page's life.
-    // A component's destruction is real, so the assertion belongs here rather than in
-    // a service spec where `TestBed` teardown would flatter it.
-    const { fixture, store } = await render();
-
-    expect(store.leave).not.toHaveBeenCalled();
-
-    fixture.destroy();
-
-    expect(store.leave).toHaveBeenCalledTimes(1);
-  });
 });
 
 /**
@@ -849,9 +996,9 @@ describe('the basket header, live', () => {
  */
 describe('the number on a row', () => {
   /** The row component, which is what a gesture reaches the page through. */
-  function row(fixture: ComponentFixture<BasketPage>): BasketLineRow {
-    return fixture.debugElement.query(By.directive(BasketLineRow))
-      .componentInstance as BasketLineRow;
+  function row(fixture: ComponentFixture<BasketPage>): BasketRowComponent {
+    return fixture.debugElement.query(By.directive(BasketRowComponent))
+      .componentInstance as BasketRowComponent;
   }
 
   /** Let the page await the write, then draw what came back. */
@@ -863,7 +1010,7 @@ describe('the number on a row', () => {
     fixture.detectChanges();
   }
 
-  const milk = () => line('Milk', { quantity: 5 });
+  const milk = () => line('Milk', { left: 5 });
 
   it('sends where the gesture ended and where it believed it began', async () => {
     // `from` is not decoration: without it a stale gesture is applied as the
@@ -871,10 +1018,82 @@ describe('the number on a row', () => {
     // `0056`, section 3.2).
     const { fixture, store } = await render({ lines: [milk()] });
 
-    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    row(fixture).left.emit({ from: 5, to: 3 });
     await settleWrites(fixture);
 
-    expect(store.setOutstanding).toHaveBeenCalledWith('line-Milk', 3, 5);
+    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, {});
+  });
+
+  describe('the price scope (velista 0095, section 6)', () => {
+    const priced = new Map<string, BasketProduct>([
+      [
+        'item-milk',
+        {
+          id: 'item-milk',
+          name: { en: 'Whole milk', es: 'Leche entera' },
+          brand: null,
+          size: null,
+          unit: null,
+          offer: {
+            price: 0.95,
+            currency: 'EUR',
+            unitPrice: null,
+            unitPriceLabel: null,
+            observedAt: null,
+            sourceKind: 'OFFICIAL_WEB',
+            stale: false,
+            priceScopeId: 's-dia',
+          },
+          offers: [],
+          atShop: null,
+          productGroupId: null,
+          categories: ['DAIRY'],
+        },
+      ],
+    ]);
+    const pricedMilk = () =>
+      line('Milk', { left: 5, optionIds: ['item-milk'] });
+
+    it('the reel names the scope of the price the row draws', async () => {
+      const { fixture, store } = await render({
+        lines: [pricedMilk()],
+        products: priced,
+      });
+
+      row(fixture).left.emit({ from: 5, to: 3 });
+      await settleWrites(fixture);
+
+      expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, {
+        priceScopeId: 's-dia',
+      });
+    });
+
+    it('the status control names it too, and never an amount', async () => {
+      const { fixture, store } = await render({
+        lines: [pricedMilk()],
+        products: priced,
+      });
+
+      row(fixture).settle.emit();
+      await settleWrites(fixture);
+
+      const [, body] = store.settle.mock.calls[0];
+      expect(body).toEqual({
+        outcome: 'BOUGHT',
+        quantity: 5,
+        from: 5,
+        priceScopeId: 's-dia',
+      });
+    });
+
+    it('names no scope for a row that draws no price', async () => {
+      const { fixture, store } = await render({ lines: [milk()] });
+
+      row(fixture).settle.emit();
+      await settleWrites(fixture);
+
+      expect(store.settle.mock.calls[0][1]).not.toHaveProperty('priceScopeId');
+    });
   });
 
   it('says which of the two happened, once, in the live region', async () => {
@@ -883,7 +1102,7 @@ describe('the number on a row', () => {
     // (section 7).
     const { fixture } = await render({ lines: [milk()] });
 
-    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    row(fixture).left.emit({ from: 5, to: 3 });
     await settleWrites(fixture);
 
     expect(query(fixture, '.said')?.textContent).toContain(
@@ -896,16 +1115,16 @@ describe('the number on a row', () => {
     // goes where the sentence for it already lives (plan 0052, section 6.4). A raise
     // answers `skippedCount: 0`, so this needs no branch on direction.
     const { fixture, store } = await render({ lines: [milk()] });
-    store.setOutstanding.mockResolvedValue({
-      line: milk(),
+    store.setLeft.mockResolvedValue({
+      ...rowResult(milk()),
       skippedCount: 1,
     });
 
-    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    row(fixture).left.emit({ from: 5, to: 3 });
     await settleWrites(fixture);
 
     expect(store.navigate).toHaveBeenCalledWith(
-      ['sheet', 'lines', 'line-Milk', 'settle'],
+      ['sheet', 'rows', 'row-Milk', 'settle'],
       expect.anything()
     );
   });
@@ -915,7 +1134,7 @@ describe('the number on a row', () => {
     // sentence is the true one; a refusal that only said "that did not work" would
     // send somebody dragging again into the same race.
     const { fixture, store } = await render({ lines: [milk()] });
-    store.setOutstanding.mockImplementation(() => {
+    store.setLeft.mockImplementation(() => {
       store.error.set(
         new GatewayError({
           code: 'stale_quantity' as ErrorCode,
@@ -923,11 +1142,11 @@ describe('the number on a row', () => {
           correlationId: 'ref-1',
         })
       );
-      store.lines.set([line('Milk', { quantity: 3 })]);
+      store.rows.set([line('Milk', { left: 3 })]);
       return Promise.resolve(null);
     });
 
-    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    row(fixture).left.emit({ from: 5, to: 3 });
     await settleWrites(fixture);
 
     expect(row(fixture).notice()?.key).toBe('basket.error.staleLine');
@@ -941,7 +1160,7 @@ describe('the number on a row', () => {
     // A failure with no sentence is the defect `basket-error-copy.ts` exists to
     // close: somebody in a shop performed this on purpose and is waiting on it.
     const { fixture, store } = await render({ lines: [milk()] });
-    store.setOutstanding.mockImplementation(() => {
+    store.setLeft.mockImplementation(() => {
       store.error.set(
         new GatewayError({
           code: 'forbidden',
@@ -952,7 +1171,7 @@ describe('the number on a row', () => {
       return Promise.resolve(null);
     });
 
-    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    row(fixture).left.emit({ from: 5, to: 3 });
     await settleWrites(fixture);
 
     expect(row(fixture).notice()?.key).toBe('basket.error.accessChanged');
@@ -963,7 +1182,7 @@ describe('the number on a row', () => {
     // somebody has since moved again is a claim about the present that nothing is
     // checking.
     const { fixture, store } = await render({ lines: [milk()] });
-    store.setOutstanding.mockImplementation(() => {
+    store.setLeft.mockImplementation(() => {
       store.error.set(
         new GatewayError({
           code: 'forbidden',
@@ -974,12 +1193,12 @@ describe('the number on a row', () => {
       return Promise.resolve(null);
     });
 
-    row(fixture).outstanding.emit({ from: 5, to: 3 });
+    row(fixture).left.emit({ from: 5, to: 3 });
     await settleWrites(fixture);
     expect(row(fixture).notice()).not.toBeNull();
 
-    store.setOutstanding.mockResolvedValue({ line: milk(), skippedCount: 0 });
-    row(fixture).outstanding.emit({ from: 5, to: 4 });
+    store.setLeft.mockResolvedValue({ line: milk(), skippedCount: 0 });
+    row(fixture).left.emit({ from: 5, to: 4 });
     await settleWrites(fixture);
 
     expect(row(fixture).notice()).toBeNull();
@@ -1004,8 +1223,11 @@ describe('finishing the shopping', () => {
 
   const rows = (fixture: ComponentFixture<BasketPage>) =>
     fixture.debugElement
-      .queryAll(By.directive(BasketLineRow))
-      .map((found) => found.componentInstance as BasketLineRow);
+      .queryAll(By.directive(BasketRowComponent))
+      .map(
+        (found: { componentInstance: unknown }) =>
+          found.componentInstance as BasketRowComponent
+      );
 
   /** Let the page await a status write, then draw what came back. */
   async function settleWrite(
@@ -1071,8 +1293,8 @@ describe('finishing the shopping', () => {
 
   describe('when every line is settled', () => {
     const settledLines = [
-      line('Milk', { quantity: 1, settled: 1, lastOutcome: 'BOUGHT' }),
-      line('Eggs', { quantity: 1, settled: 1, lastOutcome: 'BOUGHT' }),
+      line('Milk', { left: 0, bought: 1, state: 'DONE' }),
+      line('Eggs', { left: 0, bought: 1, state: 'DONE' }),
     ];
 
     it('asks, rather than finishing anything itself', async () => {
@@ -1093,8 +1315,9 @@ describe('finishing the shopping', () => {
       // by somebody standing in a dairy aisle.
       const { fixture } = await render({ lines: settledLines, unsettled: 0 });
 
-      expect(query(fixture, 'lib-line-composer')).not.toBeNull();
-      expect(rows(fixture).every((row) => row.finished())).toBe(false);
+      expect(
+        rows(fixture).every((drawn: BasketRowComponent) => drawn.finished())
+      ).toBe(false);
     });
 
     it('opens the same sheet the header control does', async () => {
@@ -1114,7 +1337,7 @@ describe('finishing the shopping', () => {
 
     it('says nothing while a line is still outstanding', async () => {
       const { fixture } = await render({
-        lines: [line('Milk', { quantity: 2 })],
+        lines: [line('Milk', { left: 2 })],
         unsettled: 1,
       });
 
@@ -1140,7 +1363,7 @@ describe('finishing the shopping', () => {
   });
 
   describe('a finished basket', () => {
-    const someLines = [line('Milk', { quantity: 2 }), line('Eggs')];
+    const someLines = [line('Milk', { left: 2 }), line('Eggs')];
 
     it('says so, and still draws every line', async () => {
       // The screen is the receipt for a trip somebody took, and the most likely
@@ -1163,16 +1386,21 @@ describe('finishing the shopping', () => {
     it('takes every control off the rows', async () => {
       const { fixture } = await render({ finished: true, lines: someLines });
 
-      expect(rows(fixture).every((row) => row.finished())).toBe(true);
+      expect(
+        rows(fixture).every((drawn: BasketRowComponent) => drawn.finished())
+      ).toBe(true);
     });
 
+    /**
+     * No composer is drawn between velista `0090` and `0092`: backend `0136`
+     * deleted the target free add this one wrote to, and `0092` brings the field
+     * back with a list to put the line on.
+     */
     it('draws no field to add a line into', async () => {
-      const { fixture, store } = await render({
+      const { fixture } = await render({
         finished: true,
         lines: someLines,
       });
-      store.takesLines.set(false);
-      fixture.detectChanges();
 
       expect(query(fixture, 'lib-line-composer')).toBeNull();
     });
@@ -1208,7 +1436,7 @@ describe('finishing the shopping', () => {
       query(fixture, '.finished-action')?.click();
       await settleWrite(fixture);
 
-      expect(store.setStatus).toHaveBeenCalledWith('basket-saturday', 'ACTIVE');
+      expect(store.setStatus).toHaveBeenCalledWith('basket-saturday', 'OPEN');
       expect(store.refresh).toHaveBeenCalled();
       expect(store.navigate).not.toHaveBeenCalled();
     });
@@ -1266,13 +1494,16 @@ describe('searching the basket', () => {
       size: null,
       unit: null,
       offer: null,
+      offers: [],
+      productGroupId: null,
+      categories: ['OTHER'],
     };
   }
 
-  const threeLines: readonly BasketLine[] = [
-    line('Milk', { id: 'l-1', pickId: 'item-milk' }),
-    line('Sourdough loaf', { id: 'l-2' }),
-    line('Plátano', { id: 'l-3' }),
+  const threeLines: readonly BasketRow[] = [
+    line('Milk', { rowKey: 'l-1', optionIds: ['item-milk'] }),
+    line('Sourdough loaf', { rowKey: 'l-2' }),
+    line('Plátano', { rowKey: 'l-3' }),
   ];
 
   const products = new Map<string, BasketProduct>([
@@ -1292,7 +1523,7 @@ describe('searching the basket', () => {
   function rows(fixture: ComponentFixture<BasketPage>): HTMLElement[] {
     return Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
-        '.lines lib-basket-line-row'
+        '.lines lib-basket-row'
       )
     );
   }
@@ -1347,18 +1578,22 @@ describe('searching the basket', () => {
 
       expect(query(fixture, '.tools-bar .search')).not.toBeNull();
       expect(query(fixture, '.tools-bar lib-chip-row')).not.toBeNull();
-      expect(query(fixture, '.tools-bar lib-basket-line-row')).toBeNull();
+      expect(query(fixture, '.tools-bar lib-basket-row')).toBeNull();
     });
 
-    it('marks the standalone build, where the document is what scrolls', async () => {
-      // This harness supplies the standalone base path. The class is what lets the
-      // stylesheet stop `.page` being the bar's scroll container there, which jsdom
-      // cannot lay out, so the class is the half a spec can see.
-      const { fixture } = await render({ lines: threeLines });
+    it('scrolls in its own column in both run modes, with the composer after it', () => {
+      // velista 0106. The app is a frame that never scrolls, so `.page` is the tools
+      // bar's scroll container standalone and mounted alike, and the composer is the
+      // next item of the host rather than a row pinned to the document's foot, which
+      // is the strip the bottom bar covered. jsdom cannot lay any of this out, so the
+      // stylesheet is the half a spec can see.
+      const css = readFileSync(join(__dirname, 'basket-page.scss'), 'utf8')
+        // Comments out, because the stylesheet says what it used to do.
+        .replace(/\/\/.*$/gm, '');
 
-      expect(
-        (fixture.nativeElement as HTMLElement).classList.contains('standalone')
-      ).toBe(true);
+      expect(css).not.toContain('.standalone');
+      expect(css).not.toMatch(/position:\s*sticky/);
+      expect(css).toMatch(/\.composer-dock\s*\{[^}]*flex:\s*none/);
     });
   });
 
@@ -1403,6 +1638,72 @@ describe('searching the basket', () => {
       fixture.detectChanges();
 
       expect(searchField(fixture)).toBeNull();
+      expect(rows(fixture)).toHaveLength(3);
+    });
+
+    it('opens by pushing search=1, merged into the query', async () => {
+      const { fixture, store } = await render({ lines: threeLines });
+      openSearch(fixture);
+
+      expect(store.navigate).toHaveBeenCalledWith([], {
+        relativeTo: TestBed.inject(ActivatedRoute),
+        queryParams: { search: '1' },
+        queryParamsHandling: 'merge',
+      });
+      expect(store.navigate.mock.calls[0][1]).not.toHaveProperty('replaceUrl');
+    });
+
+    it('closes and clears the query when back takes search=1 off (velista 0109)', async () => {
+      const { fixture } = await render({ lines: threeLines });
+      openSearch(fixture);
+      search(fixture, 'milk');
+      expect(rows(fixture)).toHaveLength(1);
+
+      // The phone's back button: the entry opening pushed is popped, which the page
+      // hears as the route's query losing the parameter.
+      await TestBed.inject(Router).navigateByUrl(
+        '/shopping-lists/basket-saturday'
+      );
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(searchField(fixture)).toBeNull();
+      expect(TestBed.inject(BasketViewStore).query()).toBe('');
+      expect(rows(fixture)).toHaveLength(3);
+    });
+
+    it('closes from Cancel through PageNavigation.back, to the basket without search', async () => {
+      const { fixture } = await render({ lines: threeLines, search: true });
+
+      query(fixture, '.search-cancel')?.click();
+
+      // Nothing of this app is behind a spec's first entry, which is the cold load of
+      // a URL with search=1: the fallback replaces and never leaves the app.
+      expect(TestBed.inject(Router).navigateByUrl).toHaveBeenCalledWith(
+        '/shopping-lists/basket-saturday',
+        { replaceUrl: true }
+      );
+    });
+
+    it('keeps search=1 on the filter sheet, so closing it comes back to the search', async () => {
+      const { fixture, store } = await render({
+        lines: threeLines,
+        search: true,
+      });
+
+      query(fixture, '.search .tool')?.click();
+
+      expect(store.navigate).toHaveBeenCalledWith(['sheet', 'filter'], {
+        relativeTo: TestBed.inject(ActivatedRoute),
+        queryParams: { search: '1' },
+      });
+    });
+
+    it('draws the field open and empty on a cold load with search=1', async () => {
+      const { fixture } = await render({ lines: threeLines, search: true });
+
+      expect(searchField(fixture)?.value).toBe('');
       expect(rows(fixture)).toHaveLength(3);
     });
 
@@ -1531,20 +1832,29 @@ describe('searching the basket', () => {
       expect(text(fixture)).toContain('basket.search.none:{"query":"yogurt"}');
       // The thing somebody searched for and did not find is very often the next
       // line, so the field to add it stays.
-      expect(query(fixture, 'lib-line-composer')).not.toBeNull();
     });
 
-    it('clears the query when the line is added, so the new row is seen landing', async () => {
-      const { fixture } = await render({ lines: threeLines });
+    /**
+     * The search used to clear itself when this reader's own line landed, because
+     * the thing somebody searched for and did not find is very often the next
+     * thing they add. The composer is velista `0092`'s, with a list to add to, and
+     * that rule comes back with it.
+     *
+     * What holds in the meantime is that the search survives the basket moving
+     * underneath it: it is a string somebody is typing, and nothing but leaving
+     * the screen takes it away (`0076`).
+     */
+    it('keeps what was typed while the basket moves underneath it', async () => {
+      const { fixture, store } = await render({ lines: threeLines });
       openSearch(fixture);
       search(fixture, 'yogurt');
       expect(rows(fixture)).toHaveLength(0);
 
-      typeInto(fixture, 'Yogurt');
-      await submit(fixture);
+      store.rows.set([...threeLines, line('Yogurt', { rowKey: 'l-4' })]);
+      fixture.detectChanges();
 
-      expect(searchField(fixture)?.value).toBe('');
-      expect(rows(fixture)).toHaveLength(3);
+      expect(searchField(fixture)?.value).toBe('yogurt');
+      expect(rows(fixture)).toHaveLength(1);
     });
   });
 
@@ -1572,50 +1882,24 @@ describe('searching the basket', () => {
    * `chip-row.spec.ts`, because jsdom lays nothing out.
    */
   describe('filtering and ordering', () => {
-    /** Two lists, one line each, and a line nobody has accepted yet. */
-    const sourced: readonly BasketLine[] = [
+    /** Two served lists, one row each, and a row this reader cannot place. */
+    const sourced: readonly BasketRow[] = [
       line('Milk', {
-        id: 'l-1',
-        origins: [
-          {
-            id: 'o-1',
-            zoneId: 'z1',
-            listId: 'l-groceries',
-            lineId: 'zl-1',
-            quantity: 1,
-          },
-        ],
+        rowKey: 'l-1',
+        entries: [entry('l-groceries', 'zl-1')],
       }),
       line('Bread', {
-        id: 'l-2',
-        origins: [
-          {
-            id: 'o-2',
-            zoneId: 'z1',
-            listId: 'l-weekly',
-            lineId: 'zl-2',
-            quantity: 1,
-          },
-        ],
+        rowKey: 'l-2',
+        entries: [entry('l-weekly', 'zl-2')],
       }),
-      line('Batteries', { id: 'l-3', origins: [] }),
+      // Its list is covered and not served, which `toBasket` maps to a null id.
+      line('Batteries', { rowKey: 'l-3' }),
     ];
-
-    const SOURCES = [
-      { zoneId: 'z1', listId: 'l-groceries' },
-      { zoneId: 'z1', listId: 'l-weekly' },
-    ];
-
-    const LIST_NAMES = new Map([
-      ['l-groceries', 'Groceries'],
-      ['l-weekly', 'Weekly shop'],
-    ]);
 
     async function renderSourced(echoValues = false) {
       return render({
         lines: sourced,
-        sources: SOURCES,
-        listNames: LIST_NAMES,
+        served: SERVED,
         echoValues,
       });
     }
@@ -1786,87 +2070,24 @@ describe('searching the basket', () => {
       );
     });
 
-    it('sinks the line on no list under its own heading', async () => {
+    /**
+     * **A reader cannot filter out what they cannot name** (velista `0090`,
+     * section 8.2). A row with an unserved entry might well be on the very list
+     * they kept, and there is no way to ask, so it stays where it was.
+     *
+     * There is no sink any more: backend `0136` removed the thing it held, since
+     * a line is on a list or it does not exist.
+     */
+    it('keeps a row it cannot place, rather than sinking it', async () => {
       const { fixture } = await renderSourced();
 
-      expect(headings(fixture)).toEqual([]);
-
       TestBed.inject(BasketViewStore).toggleList('l-weekly');
       fixture.detectChanges();
 
-      expect(headings(fixture)).toEqual(['basket.group.noList']);
-      expect(text(fixture)).toContain('basket.group.noListHint');
-      expect(rows(fixture)).toHaveLength(2);
-    });
-
-    /** "4 of 12 got" is about the trip. Hiding rows buys nothing. */
-    it('keeps the progress sentence counting the whole basket', async () => {
-      const { fixture } = await renderSourced(true);
-      TestBed.inject(BasketViewStore).toggleList('l-weekly');
-      fixture.detectChanges();
-
-      expect(text(fixture)).toContain('"total":3');
-    });
-
-    /**
-     * The two empty states say different things, and the filter's cannot quote a
-     * query: there is none.
-     */
-    it('says the filter matched nothing, rather than quoting an empty search', async () => {
-      const { fixture } = await render({
-        lines: [sourced[1]],
-        sources: SOURCES,
-        listNames: LIST_NAMES,
-      });
-
-      TestBed.inject(BasketViewStore).toggleList('l-weekly');
-      fixture.detectChanges();
-
-      expect(text(fixture)).toContain('basket.view.none');
-      expect(text(fixture)).not.toContain('basket.search.none');
-      // The thing somebody was looking for is very often the next line.
-      expect(query(fixture, 'lib-line-composer')).not.toBeNull();
-    });
-
-    it('gives the whole view state back on leaving', async () => {
-      const { fixture } = await renderSourced();
-      const view = TestBed.inject(BasketViewStore);
-      view.setOrder('alpha');
-      view.toggleList('l-weekly');
-
-      fixture.destroy();
-
-      expect(view.order()).toBe('shop');
-      expect(view.lists()).toBeNull();
-    });
-
-    /**
-     * The page is what pairs the restore with the load (`0076`, section 3), and it
-     * does it **after** `open` resolves rather than beside it: the scopes and the
-     * source lists a remembered value is checked against arrive with the basket.
-     */
-    it('opens on what this device remembered last time', async () => {
-      const { fixture } = await render({
-        lines: sourced,
-        sources: SOURCES,
-        listNames: LIST_NAMES,
-        storage: new Map([
-          [
-            StorageKeys.basketView,
-            JSON.stringify({
-              version: 1,
-              order: { value: 'alpha', until: null },
-            }),
-          ],
-        ]),
-      });
-
-      expect(TestBed.inject(BasketViewStore).order()).toBe('alpha');
-      // And the chip row says so, because a list drawn in an order nobody can see a
-      // reason for looks broken to the next person handed the phone.
-      expect(chips(fixture)[0]?.textContent).toContain(
-        'basket.view.order.alpha'
-      );
+      expect(headings(fixture)).toHaveLength(0);
+      expect(
+        rows(fixture).map((row) => row.getAttribute('data-content') ?? '')
+      ).not.toHaveLength(0);
     });
   });
 
@@ -1896,58 +2117,46 @@ describe('searching the basket', () => {
       size: null,
       unit: null,
       offer: null,
+      offers: [],
+      productGroupId: null,
       categories: ['DAIRY'],
       ...over,
     });
 
-    const grouped: readonly BasketLine[] = [
+    const grouped: readonly BasketRow[] = [
       line('Milk', {
-        id: 'l-1',
-        quantity: 3,
-        settled: 3,
-        lastOutcome: 'BOUGHT',
-        pickId: 'i-milk',
-        origins: [
-          {
-            id: 'o-1',
-            zoneId: 'z1',
-            listId: 'l-weekly',
-            lineId: 'zl-1',
-            quantity: 2,
-            settled: 2,
-          },
-          {
-            id: 'o-2',
-            zoneId: 'z1',
-            listId: 'l-groceries',
-            lineId: 'zl-2',
-            quantity: 1,
-            settled: 1,
-          },
+        rowKey: 'l-1',
+        left: 0,
+        bought: 3,
+        state: 'DONE',
+        optionIds: ['i-milk'],
+        entries: [
+          entry('l-weekly', 'zl-1', 0, {
+            bought: 2,
+            asked: 2,
+            state: 'DONE',
+          }),
+          entry('l-groceries', 'zl-2', 0, {
+            bought: 1,
+            asked: 1,
+            state: 'DONE',
+          }),
         ],
       }),
       line('Cheese', {
-        id: 'l-2',
-        pickId: 'i-milk',
-        origins: [
-          {
-            id: 'o-3',
-            zoneId: 'z1',
-            listId: 'l-weekly',
-            lineId: 'zl-3',
-            quantity: 4,
-            settled: 0,
-          },
-        ],
+        rowKey: 'l-2',
+        left: 4,
+        optionIds: ['i-milk'],
+        entries: [entry('l-weekly', 'zl-3', 4)],
       }),
-      line('Something for dinner', { id: 'l-3', origins: [] }),
+      // A row this reader cannot place, which is what a null `listId` means.
+      line('Something for dinner', { rowKey: 'l-3' }),
     ];
 
     async function renderGrouped(grouping: 'category' | 'list') {
       const rendered = await render({
         lines: grouped,
-        sources: SOURCES,
-        listNames: LIST_NAMES,
+        served: SERVED,
         products: new Map([['i-milk', milk()]]),
       });
       TestBed.inject(BasketViewStore).setGrouping(grouping);
@@ -1959,11 +2168,15 @@ describe('searching the basket', () => {
     const rowFor = (
       fixture: ComponentFixture<BasketPage>,
       content: string
-    ): BasketLineRow | null =>
+    ): BasketRowComponent | null =>
       fixture.debugElement
-        .queryAll(By.directive(BasketLineRow))
-        .map((found) => found.componentInstance as BasketLineRow)
-        .find((row) => row.line().content === content) ?? null;
+        .queryAll(By.directive(BasketRowComponent))
+        .map(
+          (found: { componentInstance: unknown }) =>
+            found.componentInstance as BasketRowComponent
+        )
+        .find((drawn: BasketRowComponent) => drawn.row().content === content) ??
+      null;
 
     /** Let the page await the write, then draw what came back. */
     async function settleWrites(
@@ -2019,7 +2232,9 @@ describe('searching the basket', () => {
         [
           expect.stringContaining('Weekly shop'),
           expect.stringContaining('Groceries'),
-          expect.stringContaining('basket.group.noList'),
+          // One heading for every entry this reader cannot place, and it names
+          // none of them (velista `0090`, section 8.2).
+          expect.stringContaining('basket.group.otherLists'),
         ]
       );
     });
@@ -2027,11 +2242,9 @@ describe('searching the basket', () => {
     it('says a close that bought nothing apart from a purchase, on the heading', async () => {
       const closed = [
         line('Bread', {
-          id: 'l-1',
-          quantity: 1,
-          settled: 1,
-          lastOutcome: 'NOT_AVAILABLE',
-          pickId: 'i-milk',
+          rowKey: 'l-1',
+          state: 'NOT_AVAILABLE',
+          optionIds: ['i-milk'],
         }),
       ];
       const { fixture } = await render({
@@ -2055,47 +2268,1333 @@ describe('searching the basket', () => {
     });
 
     /**
-     * The write this plan's section 4.1 turns on. A reel under a list heading counts
-     * what is still to get for **that list**, and the write takes what has been got,
-     * so the two numbers are subtracted from what the list asked for on the way past.
-     * `from` is that list's settled count as the screen last read it, never the
-     * line's.
+     * **One call, under a heading and everywhere else** (velista `0090`,
+     * section 6). `setLeft` is what the reel emits into, and it turns the pair of
+     * numbers into a settle or a revert: the client never decides which.
+     *
+     * The units a reel under a heading commits are allocated to that household by
+     * velista `0092`, from the entries pane. Until then the reel commits against
+     * the row and the server divides oldest entry first, which is what it did
+     * before a heading existed.
      */
-    it('commits a row under a list heading through the per list write', async () => {
+    it('commits a row under a list heading through the row’s own write', async () => {
       const { fixture, store } = await renderGrouped('list');
 
       // Four asked for and none got, so the reel runs from four and lands on one.
-      rowFor(fixture, 'Cheese')?.outstanding.emit({ from: 4, to: 1 });
+      rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 1 });
       await settleWrites(fixture);
 
-      expect(store.setOriginSettled).toHaveBeenCalledWith('l-2', {
-        lineId: 'zl-3',
-        settled: 3,
-        from: 0,
-      });
-      expect(store.setOutstanding).not.toHaveBeenCalled();
+      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4, {});
     });
 
-    it('commits an ungrouped row through the line’s own write, as it always has', async () => {
+    it('commits an ungrouped row through the same call', async () => {
       const { fixture, store } = await render({ lines: grouped });
 
-      rowFor(fixture, 'Cheese')?.outstanding.emit({ from: 1, to: 0 });
+      rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 0 });
       await settleWrites(fixture);
 
-      expect(store.setOutstanding).toHaveBeenCalledWith('l-2', 0, 1);
-      expect(store.setOriginSettled).not.toHaveBeenCalled();
+      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4, {});
     });
 
     /**
-     * The "List" radio is the filter sheet's, and it is offered on the same test the
-     * store uses to drop a remembered one: a reader with no source lists has nothing
+     * The "List" radio is the filter sheet's, and it is offered on the same test
+     * the store uses to drop a remembered one: a reader served no list has nothing
      * to group by, and a sheet that offered it would draw "Nothing" over a basket
      * grouped by list.
      */
-    it('offers no list grouping to a reader with no source lists', async () => {
+    it('offers no list grouping to a reader served no list', async () => {
       await render({ lines: grouped });
 
       expect(TestBed.inject(BasketViewStore).sourceLists()).toEqual([]);
     });
+  });
+});
+
+/**
+ * How long this reader has, and what they are told when it runs out (velista
+ * `0094`, sections 5 and 2).
+ *
+ * The clock is pinned throughout, because everything here is a comparison
+ * against it, and `whenStable` is never awaited under fake timers: that hangs,
+ * which is the house rule for every spec in this repo that pins the clock.
+ */
+describe('a visit that ends', () => {
+  /** The owner, named, so the "ask Marta" half of the sentence has a name. */
+  const namedOwner = (): BasketParticipant => ({
+    ...participant(owner()),
+    username: 'Marta',
+  });
+
+  const notice = (fixture: ComponentFixture<BasketPage>) =>
+    query(fixture, 'lib-visit-notice .words')?.textContent?.trim() ?? null;
+
+  const dismiss = (fixture: ComponentFixture<BasketPage>) =>
+    query(fixture, 'lib-visit-notice .dismiss') as HTMLButtonElement | null;
+
+  beforeEach(() => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
+    jest.setSystemTime(new Date('2026-09-22T10:00:00'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('tells an account holder when it ends and whom to ask', async () => {
+    const me = visitor(registered(), 240);
+    const { fixture } = await render({
+      me,
+      participants: [namedOwner(), me],
+    });
+
+    expect(notice(fixture)).toBe('basket.visit.account');
+  });
+
+  it('asks nobody by name when the basket carries none for the owner', async () => {
+    // A basket generated before luna `0054` backfilled usernames. "Ask Owner"
+    // would be worse than not naming anybody.
+    const me = visitor(registered(), 240);
+    const { fixture } = await render({
+      me,
+      participants: [participant(owner()), me],
+    });
+
+    expect(notice(fixture)).toBe('basket.visit.accountNameless');
+  });
+
+  it('tells a guest the time and nothing else', async () => {
+    // Rule C2: a guest is never shown register, and being kept takes an
+    // account, so the "ask to be added" half is not said to them at all.
+    const me = visitor(guest('p-9', 1), 240);
+    const { fixture } = await render({ me, participants: [namedOwner(), me] });
+
+    expect(notice(fixture)).toBe('basket.visit.guest');
+  });
+
+  it('says nothing at all to the owner or to a named person', async () => {
+    const owned = await render({ participants: [participant(owner())] });
+    expect(notice(owned.fixture)).toBeNull();
+
+    const named = participant(registered());
+    const invited = await render({
+      me: named,
+      participants: [namedOwner(), named],
+    });
+    expect(notice(invited.fixture)).toBeNull();
+  });
+
+  it('remembers a dismissal, for that basket, on that device', async () => {
+    const me = visitor(registered(), 240);
+    const { fixture } = await render({
+      me,
+      participants: [namedOwner(), me],
+    });
+
+    dismiss(fixture)?.click();
+    fixture.detectChanges();
+
+    expect(notice(fixture)).toBeNull();
+  });
+
+  it('insists under half an hour, and cannot be dismissed', async () => {
+    const me = visitor(registered(), 10);
+    const { fixture } = await render({
+      me,
+      participants: [namedOwner(), me],
+    });
+
+    expect(notice(fixture)).toBe('basket.visit.ending');
+    expect(dismiss(fixture)).toBeNull();
+  });
+
+  it('comes back at the threshold, even on a basket nobody touched', async () => {
+    // The whole reason there is a timer rather than a computed over the clock:
+    // nothing else on this screen moves while somebody reads it, so a derived
+    // value would cross the threshold silently.
+    const me = visitor(registered(), 45);
+    const { fixture } = await render({
+      me,
+      participants: [namedOwner(), me],
+    });
+
+    dismiss(fixture)?.click();
+    fixture.detectChanges();
+    expect(notice(fixture)).toBeNull();
+
+    jest.advanceTimersByTime(16 * 60 * 1000);
+    fixture.detectChanges();
+
+    expect(notice(fixture)).toBe('basket.visit.ending');
+  });
+
+  it('clears its timer when the page goes', async () => {
+    // Asserted against **this** timer's own handle rather than against the
+    // pending count, which is not this page's alone: the composer debounces and
+    // the acknowledger dwells, and both are running here too.
+    //
+    // The warning is set for thirty minutes before an end that is forty five
+    // minutes out, so it is the one timer armed for exactly a quarter of an
+    // hour.
+    const warningWait = 15 * 60 * 1000;
+    const realSetTimeout = globalThis.setTimeout;
+    const armed: unknown[] = [];
+
+    const setSpy = jest.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      handler: () => void,
+      wait?: number
+    ) => {
+      const handle = realSetTimeout(handler, wait);
+      if (wait === warningWait) {
+        armed.push(handle);
+      }
+      return handle;
+    }) as never);
+    const clearSpy = jest.spyOn(globalThis, 'clearTimeout');
+
+    try {
+      const me = visitor(registered(), 45);
+      const { fixture } = await render({
+        me,
+        participants: [namedOwner(), me],
+      });
+      expect(armed).toHaveLength(1);
+
+      fixture.destroy();
+
+      // A route provider's `DestroyRef` never fires in this app, so a timer set
+      // anywhere but the component would still be pending here.
+      expect(clearSpy.mock.calls.flat()).toContain(armed[0]);
+    } finally {
+      setSpy.mockRestore();
+      clearSpy.mockRestore();
+    }
+  });
+
+  describe('after it has ended', () => {
+    const title = (fixture: ComponentFixture<BasketPage>) =>
+      query(fixture, '.notice .notice-title')?.textContent?.trim() ?? null;
+    const body = (fixture: ComponentFixture<BasketPage>) =>
+      query(fixture, '.notice .notice-body')?.textContent?.trim() ?? null;
+
+    /** The store answering a refusal: the state, and the reason behind it. */
+    const ended = async (reason: BasketAccessEnded, me: BasketParticipant) => {
+      const rendered = await render({
+        me,
+        participants: [namedOwner(), me],
+        accessEnded: reason,
+      });
+      rendered.store.state.set('revoked');
+      rendered.fixture.detectChanges();
+      return rendered.fixture;
+    };
+
+    it('says the time ran out, and whom to ask, to an account holder', async () => {
+      const fixture = await ended('EXPIRED', visitor(registered(), 240));
+
+      expect(title(fixture)).toBe('basket.ended.title');
+      expect(body(fixture)).toBe('basket.ended.bodyAccount');
+    });
+
+    it('asks a guest for a new link and never for an account', async () => {
+      const fixture = await ended('EXPIRED', visitor(guest('p-9', 1), 240));
+
+      expect(body(fixture)).toBe('basket.ended.bodyGuest');
+    });
+
+    it('says it was taken back when somebody was removed', async () => {
+      const fixture = await ended('REMOVED', participant(registered()));
+
+      expect(title(fixture)).toBe('basket.revoked.title');
+      expect(body(fixture)).toBe('basket.revoked.body');
+    });
+
+    it('says the same when the refusal named no reason', async () => {
+      // `UNKNOWN` is the socket being swept: the eviction event carries no
+      // reason, so the ordinary sentence is the honest one.
+      const fixture = await ended('UNKNOWN', visitor(registered(), 240));
+
+      expect(title(fixture)).toBe('basket.revoked.title');
+      expect(body(fixture)).toBe('basket.revoked.body');
+    });
+  });
+});
+
+/**
+ * The same page, drawing the basket that is always there (velista `0091`,
+ * section 3).
+ *
+ * **One component and one template.** What differs is a heading, a sentence,
+ * four absent controls and two words of an empty state, and every one of them
+ * comes off `selectBasketSurface`, so these tests are about the page reading that
+ * model rather than about the model itself.
+ */
+describe('the basket that is always there', () => {
+  const someLines = [line('Milk', { left: 2 }), line('Eggs')];
+
+  it('opens the caller’s own basket, with no id to open it by', async () => {
+    const { store } = await render({ kind: 'LIVE', lines: someLines });
+
+    expect(store.opened).toEqual(['live']);
+  });
+
+  it('draws no finish control, because it is never finished', async () => {
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      me: participant(owner()),
+    });
+
+    expect(query(fixture, '.finish')).toBeNull();
+  });
+
+  it('never asks whether the trip is over', async () => {
+    // Every line settled is not a status change here and finishes nothing: the
+    // basket has no end to reach.
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      unsettled: 0,
+    });
+
+    expect(query(fixture, '.prompt')).toBeNull();
+  });
+
+  it('draws no finished banner and no reopen', async () => {
+    // `finished: true` is refused by the model rather than by the template: a
+    // `LIVE` basket is always `OPEN`, so the banner has nothing to say.
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      finished: true,
+    });
+
+    expect(query(fixture, '.finished')).toBeNull();
+  });
+
+  it('draws no faces, because the server keeps no presence room for it', async () => {
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      present: [owner(), guest('p-9', 1)],
+      participants: [participant(owner())],
+    });
+
+    expect(query(fixture, '.faces')).toBeNull();
+  });
+
+  it('keeps the way into the people sheet, which it can still answer', async () => {
+    // Velista `0094` section 7. The faces are a claim about who is here right
+    // now and a `LIVE` basket has no presence room to make it from, but it can
+    // be shared and can have named people on it, so the sheet has something to
+    // say and the header keeps the door to it. This used to be gated on
+    // presence, which left the basket that is always there with no way in at
+    // all.
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      participants: [participant(owner())],
+    });
+
+    expect(query(fixture, '.people')).not.toBeNull();
+  });
+
+  it('still offers the owner the share sheet: both kinds are shareable', async () => {
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      me: participant(owner()),
+    });
+
+    expect(query(fixture, '.share')).not.toBeNull();
+  });
+
+  it('says what it is, once, under the heading', async () => {
+    const { fixture } = await render({ kind: 'LIVE', lines: someLines });
+
+    expect(text(fixture)).toContain('basket.live.hint');
+  });
+
+  it('says what is left rather than counting a trip', async () => {
+    const { fixture } = await render({
+      kind: 'LIVE',
+      lines: someLines,
+      unsettled: 12,
+      progress: { done: 3, unavailable: 0, total: 15 },
+    });
+
+    expect(text(fixture)).toContain('basket.live.leftAndGot');
+    expect(text(fixture)).not.toContain('basket.progress');
+  });
+
+  it('says a different thing when there is nothing to buy', async () => {
+    const { fixture } = await render({ kind: 'LIVE', lines: [] });
+
+    expect(text(fixture)).toContain('basket.live.empty');
+    expect(text(fixture)).toContain('basket.live.emptyHint');
+  });
+
+  it('keeps every row a generated basket would draw', async () => {
+    // The rows, the reels and the settle sheet are the same screen. Only the
+    // header and the two sentences differ.
+    const { fixture } = await render({ kind: 'LIVE', lines: someLines });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.lines li')
+    ).toHaveLength(2);
+  });
+});
+
+/**
+ * What changed while the shopper was not looking (velista `0093`).
+ *
+ * Three things this page owns and each is a different mistake. The **banner**
+ * is the server's count and sits under the sticky bar rather than inside it, so
+ * the bar keeps its height. The **counts** leave a `REMOVED` row out, in one
+ * selector, so the tools bar and the chip row cannot disagree. And the prompt
+ * does not congratulate anybody over a basket of rows that have all left.
+ */
+describe('what changed on the lists', () => {
+  const banner = (fixture: ComponentFixture<BasketPage>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('lib-changes-banner');
+
+  it('says how many are new to this viewer', async () => {
+    const { fixture } = await render({
+      lines: [line('zl-1')],
+      unseenChanges: 3,
+    });
+
+    expect(banner(fixture)).not.toBeNull();
+    expect(banner(fixture)?.textContent).toContain('basket.changes.banner');
+  });
+
+  it('draws nothing at all when the server says nothing is new', async () => {
+    const { fixture } = await render({ lines: [line('zl-1')] });
+
+    expect(banner(fixture)).toBeNull();
+  });
+
+  it('sits under the tools bar and outside it, so the bar keeps its height', async () => {
+    // Inside the sticky bar the banner would push the search and the chips
+    // down a phone every time a line moved on somebody else's list (velista
+    // `0079`, sections 2 and 3).
+    const { fixture } = await render({
+      lines: [line('zl-1')],
+      unseenChanges: 1,
+    });
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('lib-list-tools lib-changes-banner')).toBeNull();
+    const tools = host.querySelector('lib-list-tools');
+    expect(
+      tools?.compareDocumentPosition(banner(fixture) as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('opens the sheet at the basket’s own sheet URL', async () => {
+    const { fixture, store } = await render({
+      lines: [line('zl-1')],
+      unseenChanges: 2,
+    });
+
+    (
+      (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-changes-banner button'
+      ) as HTMLButtonElement
+    ).click();
+
+    expect(store.navigate).toHaveBeenCalledWith(
+      ['sheet', 'changes'],
+      expect.anything()
+    );
+  });
+
+  it('is drawn on a finished basket too, because what changed is still worth reading', async () => {
+    const { fixture } = await render({
+      lines: [line('zl-1')],
+      finished: true,
+      unseenChanges: 1,
+    });
+
+    expect(banner(fixture)).not.toBeNull();
+  });
+
+  it('is drawn on no basket that failed to load', async () => {
+    // The whole rows branch is behind `ready`, and the banner is inside it:
+    // a count over a basket nobody can see is a sentence about nothing.
+    const { fixture } = await render({ revoked: true, unseenChanges: 4 });
+
+    expect(banner(fixture)).toBeNull();
+  });
+
+  it('leaves a REMOVED row out of the tools bar’s two numbers', async () => {
+    const { fixture } = await render({
+      lines: [
+        line('zl-1'),
+        { ...line('zl-2'), state: 'REMOVED', entries: [] },
+        line('zl-3'),
+      ],
+      echoValues: true,
+    });
+
+    // The bar draws its pair only while the field is open, which is where the
+    // numbers can be read at all.
+    const tool = (
+      fixture.nativeElement as HTMLElement
+    ).querySelector<HTMLElement>('.tool');
+    tool?.click();
+    fixture.detectChanges();
+
+    // Two countable rows of three drawn: a row somebody took off the basket is
+    // information about it rather than a thing to buy, and counting it on one
+    // side alone is what produces "3 of 2".
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.search-count')
+        ?.textContent
+    ).toContain('{"shown":2,"total":2}');
+  });
+
+  it('still draws the removed row, so nobody wonders where the line went', async () => {
+    const { fixture } = await render({
+      lines: [line('zl-1'), { ...line('zl-2'), state: 'REMOVED', entries: [] }],
+    });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('lib-basket-row')
+    ).toHaveLength(2);
+  });
+
+  it('leaves the progress sentence exactly as the server counted it', async () => {
+    // Never recounted here (velista `0060`, section 4). The server's progress
+    // already excludes a `REMOVED` row, and a second count on this side is how
+    // one screen comes to disagree with itself.
+    const { fixture } = await render({
+      lines: [line('zl-1'), { ...line('zl-2'), state: 'REMOVED', entries: [] }],
+      progress: { done: 1, unavailable: 0, total: 1 },
+      unsettled: 0,
+      echoValues: true,
+    });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.progress')
+        ?.textContent
+    ).toContain('"total":1');
+  });
+
+  it('asks nothing of a basket whose rows have all left', async () => {
+    // "All done?" over a basket holding nothing but rows that left its coverage
+    // would congratulate somebody for shopping nobody did.
+    const { fixture } = await render({
+      lines: [{ ...line('zl-1'), state: 'REMOVED', entries: [] }],
+      unsettled: 0,
+    });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.prompt')
+    ).toBeNull();
+  });
+});
+
+/**
+ * The composer, back with a list to put things on (velista `0092`, section 7).
+ *
+ * Two things are worth asserting and the rest is the list page's composer
+ * unchanged.
+ *
+ * **Who gets one**, which is the rule velista `0053` section 2 is reversed by: a
+ * guest was given the field because an added line had no target and changed
+ * nothing shared. Every line has a target now, so the safety argument is gone and
+ * the control goes with it. A sentence explaining that would be an invitation to
+ * register, which the product rule forbids, so the dock is simply absent.
+ *
+ * **That the add names a list**, because a line with no list is a line with
+ * nowhere to be.
+ */
+describe('the composer and the list it adds to', () => {
+  const served = [
+    {
+      listId: 'l-weekly',
+      name: 'Weekly shop',
+      zoneId: 'z1',
+      zoneName: 'Flat',
+    },
+    {
+      listId: 'l-parents',
+      name: 'Groceries',
+      zoneId: 'z2',
+      zoneName: 'Home',
+    },
+  ];
+
+  const dock = (fixture: ComponentFixture<BasketPage>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('.composer-dock');
+
+  const chip = (fixture: ComponentFixture<BasketPage>) =>
+    (fixture.nativeElement as HTMLElement).querySelector('.target');
+
+  describe('who gets one', () => {
+    it('draws it for the owner with a list to write', async () => {
+      const { fixture } = await render({ served: [served[0]] });
+      expect(dock(fixture)).not.toBeNull();
+    });
+
+    it('draws it for a registered participant with a list to write', async () => {
+      const { fixture } = await render({
+        me: participant(registered()),
+        served: [served[0]],
+      });
+
+      expect(dock(fixture)).not.toBeNull();
+    });
+
+    it('draws nothing at all for a guest', async () => {
+      // No dock, no field and **no sentence about it**: velista `0038` section
+      // 2.1 refuses to draw an invitation that cannot be accepted, and the
+      // product rule that a guest is never pushed to register forbids the
+      // explanation.
+      const { fixture } = await render({
+        me: participant(guest('p-guest-1', 1)),
+        served: [],
+      });
+
+      expect(dock(fixture)).toBeNull();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-line-composer'
+        )
+      ).toBeNull();
+    });
+
+    it('draws nothing for an account holder with nowhere to put a line', async () => {
+      // Not a second way of saying the condition above. A registered co shopper
+      // on somebody else's basket may hold `WRITE` on none of its lists.
+      const { fixture } = await render({
+        me: participant(registered()),
+        served: [],
+      });
+
+      expect(dock(fixture)).toBeNull();
+    });
+
+    it('draws nothing on a finished trip', async () => {
+      const { fixture } = await render({ finished: true, served: [served[0]] });
+      expect(dock(fixture)).toBeNull();
+    });
+  });
+
+  describe('the target', () => {
+    it('is text when the basket covers one list this reader writes', async () => {
+      // Nothing to pick between, so nobody is asked a question with one answer.
+      const { fixture } = await render({ served: [served[0]] });
+
+      expect(chip(fixture)?.tagName.toLowerCase()).toBe('p');
+      expect(chip(fixture)?.textContent).toContain('basket.add.to');
+    });
+
+    it('is a button when there is more than one', async () => {
+      const { fixture } = await render({ served });
+
+      expect(chip(fixture)?.tagName.toLowerCase()).toBe('button');
+      expect(chip(fixture)?.textContent).toContain('basket.add.choose');
+    });
+  });
+
+  /**
+   * Velista `0110`, which reverses `0091` and `0092`: with no list chosen the field
+   * is locked rather than usable, because the words typed into it went nowhere.
+   */
+  describe('with no list chosen', () => {
+    const popover = () => document.querySelector<HTMLElement>('.pop');
+
+    afterEach(() => {
+      // The popover lives in the top layer, next to the dock, and a fixture that
+      // is torn down with it open would leave it for the next test to find.
+      TestBed.resetTestingModule();
+    });
+
+    it('locks the field and the button, and says why', async () => {
+      const { fixture } = await render({ served });
+      const input = field(fixture);
+
+      expect(input.readOnly).toBe(true);
+      expect(input.getAttribute('aria-disabled')).toBe('true');
+      const reason = document.getElementById(
+        input.getAttribute('aria-describedby') ?? ''
+      );
+      expect(reason?.textContent).toContain('basket.add.needsList');
+      expect(
+        query(fixture, 'lib-line-composer .send') as HTMLButtonElement
+      ).toHaveProperty('disabled', true);
+      // The chip stays a working button, marked as the next step.
+      expect(chip(fixture)).toHaveProperty('disabled', false);
+      expect(chip(fixture)?.classList).toContain('is-next');
+    });
+
+    it('asks the catalog nothing', async () => {
+      const { fixture } = await render({ served });
+      const suggest = jest.spyOn(TestBed.inject(BasketStore), 'suggest');
+
+      // Past the field's own hold, which is the composer's to test: this is the
+      // page's guard, reached as the composer's query would reach it.
+      const page = fixture.componentInstance as unknown as {
+        onComposerQuery(query: string): void;
+      };
+      page.onComposerQuery('milk');
+      fixture.detectChanges();
+      await new Promise((done) => setTimeout(done, SUGGEST_DEBOUNCE_MS + 50));
+
+      expect(suggest).not.toHaveBeenCalled();
+    });
+
+    it('opens the popover when the field is tapped', async () => {
+      const { fixture } = await render({ served });
+      expect(popover()).toBeNull();
+
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+
+      expect(popover()?.textContent).toContain('basket.add.needsList');
+    });
+
+    it('holds the sentence and no button (velista 0113)', async () => {
+      // The chip that chooses a list sits right under the popover, so a button
+      // in it that did the same thing was a second copy of the chip.
+      const { fixture } = await render({ served });
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+
+      expect(popover()?.textContent?.trim()).toBe('basket.add.needsList');
+      expect(popover()?.querySelector('button, a, [tabindex]')).toBeNull();
+      expect(popover()?.getAttribute('aria-labelledby')).toBe(
+        'basket-add-needs-list-text'
+      );
+    });
+
+    it('closes the popover when the chip opens the sheet', async () => {
+      // A press on the chip is not a press outside the popover, because the
+      // overlay counts the dock as its own, so without this it stays drawn above
+      // the sheet.
+      const { fixture, store } = await render({ served });
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+      expect(popover()).not.toBeNull();
+
+      (chip(fixture) as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(store.navigate).toHaveBeenCalledWith(
+        ['sheet', 'add', 'list'],
+        expect.anything()
+      );
+      expect(popover()).toBeNull();
+    });
+
+    it('closes the popover on Escape', async () => {
+      const { fixture } = await render({ served });
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
+      fixture.detectChanges();
+
+      expect(popover()).toBeNull();
+    });
+
+    it('unlocks the composer, and closes the popover, once a list is chosen', async () => {
+      const { fixture } = await render({ served });
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+
+      TestBed.inject(BasketTargetStore).choose(served[1]);
+      fixture.detectChanges();
+
+      expect(popover()).toBeNull();
+      expect(field(fixture).readOnly).toBe(false);
+      expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
+      expect(chip(fixture)?.classList).not.toContain('is-next');
+      expect(chip(fixture)?.textContent).toContain('basket.add.to');
+    });
+
+    /**
+     * Velista `0113`: once a list is chosen the next thing is to type, so focus
+     * goes to the field as the sheet's route goes. The router outlet is not
+     * driven here, so its `deactivate` is stood in for by the handler it calls.
+     */
+    describe('focus once a list is chosen', () => {
+      const onSheetGone = (
+        fixture: ComponentFixture<BasketPage>,
+        sheet: unknown
+      ) =>
+        (
+          fixture.componentInstance as unknown as {
+            onSheetDeactivated(sheet: unknown): void;
+          }
+        ).onSheetDeactivated(sheet);
+
+      /** A target sheet as the outlet hands it over, after a choice or none. */
+      const sheet = (chose: boolean): TargetListSheet => {
+        const made = TestBed.runInInjectionContext(() => new TargetListSheet());
+        jest
+          .spyOn(TestBed.inject(SheetNavigation), 'dismiss')
+          .mockResolvedValue(undefined as never);
+        if (chose) {
+          (
+            made as unknown as { choose(list: (typeof served)[number]): void }
+          ).choose(served[1]);
+        }
+        return made;
+      };
+
+      it('lands on the field after a choice, when the chip opened the sheet', async () => {
+        const { fixture } = await render({ served });
+        (chip(fixture) as HTMLButtonElement).focus();
+        (chip(fixture) as HTMLButtonElement).click();
+        fixture.detectChanges();
+
+        const chosen = sheet(true);
+        fixture.detectChanges();
+        onSheetGone(fixture, chosen);
+        fixture.detectChanges();
+
+        expect(document.activeElement).toBe(field(fixture));
+        expect(field(fixture).readOnly).toBe(false);
+        expect(popover()).toBeNull();
+      });
+
+      it('lands on the field after a choice, when a tap on the locked field led there', async () => {
+        const { fixture } = await render({ served });
+        field(fixture).focus();
+        field(fixture).dispatchEvent(new Event('focus'));
+        fixture.detectChanges();
+        expect(popover()).not.toBeNull();
+        (chip(fixture) as HTMLButtonElement).click();
+        fixture.detectChanges();
+
+        const chosen = sheet(true);
+        fixture.detectChanges();
+        onSheetGone(fixture, chosen);
+        fixture.detectChanges();
+
+        expect(document.activeElement).toBe(field(fixture));
+        // The focus it moves is not read as a tap on a locked field.
+        expect(popover()).toBeNull();
+      });
+
+      it('moves nothing when the sheet was dismissed without a choice', async () => {
+        const { fixture } = await render({ served });
+        const button = chip(fixture) as HTMLButtonElement;
+        button.focus();
+
+        onSheetGone(fixture, sheet(false));
+        fixture.detectChanges();
+
+        expect(document.activeElement).toBe(button);
+      });
+
+      it('moves nothing for a sheet that is not the target sheet', async () => {
+        const { fixture } = await render({ served });
+        const button = chip(fixture) as HTMLButtonElement;
+        button.focus();
+
+        onSheetGone(fixture, { chose: true });
+        fixture.detectChanges();
+
+        expect(document.activeElement).toBe(button);
+      });
+
+      it('moves nothing for the target a single list sets on arrival', async () => {
+        // `restore` chooses the only list itself, on every read, and that is not
+        // somebody choosing: the page opens with focus where it was.
+        const { fixture } = await render({ served: [served[0]] });
+
+        expect(field(fixture).readOnly).toBe(false);
+        expect(document.activeElement).not.toBe(field(fixture));
+      });
+    });
+
+    it('changes nothing on a basket with one list, which chooses itself', async () => {
+      const { fixture } = await render({ served: [served[0]] });
+      const suggest = jest.spyOn(TestBed.inject(BasketStore), 'suggest');
+
+      expect(field(fixture).readOnly).toBe(false);
+      expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
+
+      field(fixture).dispatchEvent(new Event('focus'));
+      typeInto(fixture, 'milk');
+      await new Promise((done) => setTimeout(done, SUGGEST_DEBOUNCE_MS + 50));
+
+      expect(popover()).toBeNull();
+      expect(suggest).toHaveBeenCalledWith('milk');
+    });
+  });
+
+  describe('adding a line', () => {
+    it('names the list, and sends the words and the amount', async () => {
+      const { fixture, store } = await render({ served: [served[0]] });
+
+      const page = fixture.componentInstance as unknown as {
+        add(entry: { content: string; quantity: number }): Promise<void>;
+      };
+      await page.add({ content: 'Batteries', quantity: 2 });
+
+      expect(store.addLine).toHaveBeenCalledWith({
+        targetListId: 'l-weekly',
+        content: 'Batteries',
+        quantity: 2,
+      });
+    });
+
+    it('sends a suggestion’s product set as itemIds', async () => {
+      const { fixture, store } = await render({ served: [served[0]] });
+
+      const page = fixture.componentInstance as unknown as {
+        add(entry: {
+          content: string;
+          quantity: number;
+          itemIds?: readonly string[];
+        }): Promise<void>;
+      };
+      await page.add({
+        content: 'Milk',
+        quantity: 1,
+        itemIds: ['i-1', 'i-2'],
+      });
+
+      expect(store.addLine).toHaveBeenCalledWith(
+        expect.objectContaining({ itemIds: ['i-1', 'i-2'] })
+      );
+    });
+
+    it('sends nothing without a target', async () => {
+      // The submit is disabled without one, so this is the belt: an add with no
+      // list is a line with nowhere to be.
+      const { fixture, store } = await render({ served });
+
+      const page = fixture.componentInstance as unknown as {
+        add(entry: { content: string; quantity: number }): Promise<void>;
+      };
+      await page.add({ content: 'Batteries', quantity: 1 });
+
+      expect(store.addLine).not.toHaveBeenCalled();
+    });
+
+    it('says what arrived, once, in the screen’s own region', async () => {
+      const { fixture } = await render({ served: [served[0]] });
+
+      const page = fixture.componentInstance as unknown as {
+        add(entry: { content: string; quantity: number }): Promise<void>;
+      };
+      await page.add({ content: 'Batteries', quantity: 1 });
+      fixture.detectChanges();
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.said')
+          ?.textContent
+      ).toContain('basket.added.announced');
+    });
+
+    it('says what went wrong, and keeps the words', async () => {
+      const { fixture, store } = await render({ served: [served[0]] });
+      store.addLine.mockResolvedValueOnce(null);
+
+      const page = fixture.componentInstance as unknown as {
+        add(entry: { content: string; quantity: number }): Promise<void>;
+      };
+      await page.add({ content: 'Batteries', quantity: 1 });
+      fixture.detectChanges();
+
+      // Losing six characters is nothing; losing the item somebody just
+      // remembered in an aisle is the failure this screen cannot afford.
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.said')
+          ?.textContent
+      ).toContain('basket.error');
+    });
+  });
+
+  describe('a sentence a sheet handed over', () => {
+    it('says it in the one region this screen has', async () => {
+      // A demand taken to zero takes the row out of the basket, the sheet over it
+      // dismisses itself, and this page is what is left with a live region
+      // (velista `0092`, section 6.2).
+      const { fixture, store } = await render({ served: [served[0]] });
+
+      store.handedOver.set({
+        text: 'Sourdough loaf is no longer asked for.',
+        seq: 1,
+      });
+      fixture.detectChanges();
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.said')
+          ?.textContent
+      ).toContain('Sourdough loaf is no longer asked for.');
+    });
+  });
+});
+
+/**
+ * **Nothing on the basket removes a row** (velista `0092`, section 2).
+ *
+ * A basket has nothing of its own to remove: it holds no lines, and a row is the
+ * covered lines that share a name. Removing one is an act on a **list**, on the
+ * list page, behind that page's own rule; a `REMOVED` row is how the basket shows
+ * that somebody did it, and drawing that row is velista `0093`.
+ *
+ * So this scans the scope's own templates rather than asserting about one screen.
+ * A delete control is the kind of thing that arrives by analogy with the list
+ * page, in a component nobody thought to write a test for, and the honest guard
+ * is the one that reads every file.
+ */
+describe('no control on the basket removes a row', () => {
+  const scope = join(__dirname, '..');
+
+  function templates(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((held) => {
+      const path = join(dir, held.name);
+      if (held.isDirectory()) {
+        return templates(path);
+      }
+      return held.isFile() && held.name.endsWith('.html') ? [path] : [];
+    });
+  }
+
+  it('draws no delete or trash glyph anywhere in the scope', () => {
+    const offenders = templates(scope).filter((path) => {
+      const html = readFileSync(path, 'utf8');
+      return /<lib-trash-icon|<lib-delete-icon/.test(html);
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('calls no store method that would take a row away', () => {
+    // The store has none of these and never had: the names are asserted so that
+    // adding one is a red spec rather than a quiet capability.
+    const offenders = templates(scope).filter((path) => {
+      const html = readFileSync(path, 'utf8');
+      return /\b(removeRow|deleteRow|hideRow|dropRow)\s*\(/.test(html);
+    });
+
+    expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * The lines a suggestion card names on the basket (velista `0101`, section 4): one
+ * per entry of each row holding the product, the list above it, and the settle
+ * sheet's demand write when one is stepped.
+ */
+describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
+  const MILK: CatalogSuggestion = {
+    kind: 'item',
+    item: {
+      id: 'item-milk',
+      name: { es: 'Leche entera', en: 'Whole milk' },
+      brand: 'Hacendado',
+      size: 1,
+      unit: 'LITER',
+      productGroupId: null,
+      category: 'DAIRY',
+      offer: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+      unitBasis: null,
+    },
+  };
+
+  interface CardSurface {
+    holdingsOf(): (suggestion: CatalogSuggestion) => readonly {
+      lineId: string;
+      text: string;
+      listName: string | null;
+      quantity: number;
+      editable: boolean;
+    }[];
+    productLink(): ((itemId: string) => string) | null;
+    changeHolding(change: {
+      holding: { lineId: string };
+      from: number;
+      to: number;
+    }): Promise<void>;
+  }
+
+  const milk = () =>
+    line('Milk', {
+      optionIds: ['item-milk'],
+      entries: [
+        entry('l-groceries', 'zl-1', 2),
+        entry('l-hidden', 'zl-2', 1, { demandEditable: false }),
+      ],
+    });
+
+  it('names each entry, with the list above it where this reader was served it', async () => {
+    const { fixture } = await render({
+      lines: [milk(), line('Bread')],
+      served: SERVED,
+    });
+    const page = fixture.componentInstance as unknown as CardSurface;
+
+    expect(
+      page
+        .holdingsOf()(MILK)
+        .map((held) => [
+          held.lineId,
+          held.text,
+          held.listName,
+          held.quantity,
+          held.editable,
+        ])
+    ).toEqual([
+      ['zl-1', 'Milk', 'Groceries', 2, true],
+      ['zl-2', 'Milk', null, 1, false],
+    ]);
+  });
+
+  it('sends the settle sheet’s demand write for the stepped entry', async () => {
+    const { fixture } = await render({ lines: [milk()], served: SERVED });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      setDemand: jest.Mock;
+    };
+
+    await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 3 });
+
+    expect(store.setDemand).toHaveBeenCalledWith('row-Milk', {
+      lineId: 'zl-1',
+      quantity: 3,
+      from: 2,
+    });
+  });
+
+  it('links to the product for an account, and to nothing for a guest', async () => {
+    const owned = await render({ lines: [milk()] });
+    // Over this basket and not the catalog tab (velista `0107`), so closing the
+    // sheet lands back here.
+    expect(
+      (
+        owned.fixture.componentInstance as unknown as CardSurface
+      ).productLink()?.('item-milk')
+    ).toMatch(/\/shopping-lists\/basket-saturday\/sheet\/products\/item-milk$/);
+
+    const visiting = await render({
+      lines: [milk()],
+      me: participant(guest('p-1', 1)),
+    });
+    expect(
+      (
+        visiting.fixture.componentInstance as unknown as CardSurface
+      ).productLink()
+    ).toBeNull();
+  });
+});
+
+/**
+ * Only what I usually buy here, on the page (velista `0104`).
+ *
+ * The message under a kept row, and the empty state when the filter hides every
+ * row, with the one button that turns it off.
+ */
+describe('BasketPage: what you usually buy here', () => {
+  const MERCADONA: BasketShop = {
+    id: 'loc-mayor',
+    supermarketId: 'sm-merca',
+    chain: { en: 'Mercadona', es: 'Mercadona' },
+    label: null,
+    address: 'Calle Mayor 3',
+    city: 'Córdoba',
+    postalCode: '14001',
+    inProfile: true,
+  };
+
+  function usual(
+    content: string,
+    state: 'NEVER_BOUGHT' | 'NO_SHOP_KNOWN' | 'ELSEWHERE' | 'HERE',
+    bought = 0,
+    of = 0
+  ): BasketRow {
+    return line(content, { usual: { state, bought, of } });
+  }
+
+  function drawnRows(fixture: ComponentFixture<BasketPage>) {
+    return fixture.debugElement
+      .queryAll(By.directive(BasketRowComponent))
+      .map((node) => node.componentInstance as BasketRowComponent);
+  }
+
+  it('hands a kept row its message only while the switch is on', async () => {
+    const { fixture } = await render({
+      lines: [usual('Eggs', 'HERE', 2, 6), usual('Milk', 'ELSEWHERE', 0, 6)],
+      readAtShop: MERCADONA,
+    });
+
+    expect(drawnRows(fixture).map((drawn) => drawn.usual())).toEqual([
+      null,
+      null,
+    ]);
+
+    TestBed.inject(BasketViewStore).setUsual(true);
+    fixture.detectChanges();
+
+    expect(drawnRows(fixture).map((drawn) => drawn.row().content)).toEqual([
+      'Eggs',
+    ]);
+    expect(drawnRows(fixture)[0].usual()).toEqual({ bought: 2, of: 6 });
+  });
+
+  it('says why it hid everything, and turns itself off from the button', async () => {
+    const { fixture } = await render({
+      lines: [
+        usual('Milk', 'ELSEWHERE', 0, 6),
+        usual('Bread', 'NO_SHOP_KNOWN', 0, 3),
+      ],
+      readAtShop: MERCADONA,
+    });
+    const view = TestBed.inject(BasketViewStore);
+
+    view.setUsual(true);
+    fixture.detectChanges();
+
+    expect(drawnRows(fixture)).toHaveLength(0);
+    expect(text(fixture)).toContain('basket.view.usual.emptyTitle');
+    expect(text(fixture)).toContain('basket.view.usual.emptyNote');
+    expect(text(fixture)).not.toContain('basket.view.none');
+
+    const button = fixture.debugElement.query(By.css('.empty-action'));
+    (button.nativeElement as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(view.usual()).toBe(false);
+    expect(drawnRows(fixture)).toHaveLength(2);
+  });
+});
+
+describe('similar products on the basket', () => {
+  const OFFER = {
+    price: 1.2,
+    currency: 'EUR',
+    unitPrice: 1.2,
+    unitPriceLabel: 'EUR/L',
+    observedAt: null,
+    sourceKind: 'OFFICIAL_WEB' as const,
+    stale: false,
+    priceScopeId: 's1',
+  };
+
+  const GROUPED: BasketProduct = {
+    id: 'i-milk',
+    name: { en: 'Milk', es: 'Leche' },
+    brand: null,
+    imageUrl: null,
+    size: 1,
+    unit: 'LITER',
+    offer: OFFER,
+    offers: [],
+    atShop: null,
+    productGroupId: 'g-milk',
+    categories: ['DAIRY'],
+  };
+
+  const member = (id: string, unitPrice: number): CatalogItem => ({
+    id,
+    name: { en: id, es: id },
+    brand: null,
+    size: 1,
+    unit: 'LITER',
+    productGroupId: 'g-milk',
+    category: 'DAIRY',
+    offer: { ...OFFER, price: unitPrice, unitPrice },
+    chainPrices: [],
+    imageUrl: null,
+    packCount: null,
+    unitBasis: null,
+  });
+
+  const milkRow = (listId: string | null) =>
+    line('Milk', {
+      optionIds: ['i-milk'],
+      entries: [entry(listId, 'zl-Milk')],
+    });
+
+  function drawn(fixture: ComponentFixture<BasketPage>): BasketRowComponent {
+    return fixture.debugElement.query(By.directive(BasketRowComponent))
+      .componentInstance as BasketRowComponent;
+  }
+
+  it('offers the change on a row whose product has a group, on a list the reader writes', async () => {
+    const groupMembers = fakeGroupMembers();
+    const { fixture, store } = await render({
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+      groupMembers,
+    });
+
+    expect(drawn(fixture).canSwap()).toBe(true);
+    expect(groupMembers.asked.map((read) => read.groupIds)).toEqual([
+      ['g-milk'],
+    ]);
+
+    drawn(fixture).swap.emit();
+
+    expect(store.navigate).toHaveBeenCalledWith(
+      ['sheet', 'rows', 'row-Milk', 'swap'],
+      expect.anything()
+    );
+  });
+
+  it('offers no change on a list the reader may not write, or with no group', async () => {
+    const unserved = await render({
+      lines: [milkRow(null)],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+    });
+    expect(drawn(unserved.fixture).canSwap()).toBe(false);
+
+    const ungrouped = await render({
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', { ...GROUPED, productGroupId: null }]]),
+    });
+    expect(drawn(ungrouped.fixture).canSwap()).toBe(false);
+  });
+
+  it('offers a guest no change and reads no group for one', async () => {
+    const groupMembers = fakeGroupMembers();
+    const { fixture } = await render({
+      me: participant(guest('p-9', 1)),
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+      groupMembers,
+    });
+
+    expect(drawn(fixture).canSwap()).toBe(false);
+    expect(groupMembers.asked).toEqual([]);
+  });
+
+  it('marks a product another member of its group beats on price', async () => {
+    const cheaper = await render({
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+      groupMembers: fakeGroupMembers({
+        members: { 'g-milk': [member('i-milk', 1.2), member('i-oat', 0.9)] },
+      }),
+    });
+    expect(drawn(cheaper.fixture).groupCheaper()).toBe(true);
+
+    const best = await render({
+      lines: [milkRow('l-groceries')],
+      served: SERVED,
+      products: new Map([['i-milk', GROUPED]]),
+      groupMembers: fakeGroupMembers({
+        members: { 'g-milk': [member('i-milk', 1.2), member('i-oat', 1.5)] },
+      }),
+    });
+    expect(drawn(best.fixture).groupCheaper()).toBe(false);
   });
 });

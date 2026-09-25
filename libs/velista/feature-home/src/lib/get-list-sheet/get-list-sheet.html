@@ -1,9 +1,23 @@
 <lib-sheet-shell
   (dismiss)="dismiss()"
   [dismissible]="!submitting()"
-  labelledBy="get-list-title"
+  [labelledBy]="pane() === 'shop' ? 'get-list-shop-title' : 'get-list-title'"
 >
   <!--
+    Which shop the list is bought at, over the form rather than in a sheet of its
+    own (velista 0102): a second sheet would destroy this one and everything typed
+    and ticked in it.
+  -->
+  @if (pane() === 'shop') {
+    <lib-get-list-shop-pane
+      (back)="closeShopPicker()"
+      (picked)="pickShop($event)"
+      (pickedNear)="pickNearShop($event)"
+      [pickedId]="shop()?.id ?? null"
+      [profileId]="selectedProfileId() ?? ''"
+    />
+  } @else {
+    <!--
     The title and the way to the history share a row, and that is section 3.1 rather
     than decoration. It carries **the dashboard's only unconditional route into the
     history**, which is a heavier job than it had when this was written and is the same
@@ -19,21 +33,21 @@
     other place this sheet is mounted, so the link is absent there: it would lead to
     the screen it is already on.
   -->
-  <div class="head-row">
-    <h2 class="title" id="get-list-title">{{ 'getList.title' | rokuT }}</h2>
-    @if (showHistory) {
-      <button (click)="openHistory()" class="history" type="button">
-        {{ 'home.action.history' | rokuT }}
-      </button>
-    }
-  </div>
-  <p class="body">{{ 'getList.body' | rokuT }}</p>
+    <div class="head-row">
+      <h2 class="title" id="get-list-title">{{ 'getList.title' | rokuT }}</h2>
+      @if (showHistory) {
+        <button (click)="openHistory()" class="history" type="button">
+          {{ 'home.action.history' | rokuT }}
+        </button>
+      }
+    </div>
+    <p class="body">{{ 'getList.body' | rokuT }}</p>
 
-  <label class="label" for="get-list-name">
-    {{ 'getList.name.label' | rokuT }}
-  </label>
+    <label class="label" for="get-list-name">
+      {{ 'getList.name.label' | rokuT }}
+    </label>
 
-  <!--
+    <!--
     Read only rather than disabled while the request is out, for `CreateGroupSheet`'s
     reason: a disabled input leaves the accessible tree and loses focus, throwing the
     person to the top of the sheet at the moment they are waiting to hear something.
@@ -41,50 +55,132 @@
     The placeholder is the date, because that is literally what an empty name produces.
     A placeholder that shows the real default is worth more than one that describes it.
   -->
-  <input
-    (input)="onNameInput($event)"
-    [attr.maxlength]="maxLength"
-    [placeholder]="namePlaceholder()"
-    [readOnly]="submitting()"
-    [value]="name()"
-    autocomplete="off"
-    class="field"
-    id="get-list-name"
-    type="text"
-  />
-  <p class="hint">{{ 'getList.name.hint' | rokuT }}</p>
+    <input
+      (input)="onNameInput($event)"
+      [attr.maxlength]="maxLength"
+      [placeholder]="namePlaceholder()"
+      [readOnly]="submitting()"
+      [value]="name()"
+      autocomplete="off"
+      class="field"
+      id="get-list-name"
+      type="text"
+    />
+    <p class="hint">{{ 'getList.name.hint' | rokuT }}</p>
 
-  <!--
+    <!--
     One choice is furniture, so the row is drawn only for somebody with more than one
     profile. The run still names the profile either way.
   -->
-  @if (showProfiles()) {
-    <div class="profile-row">
-      <label class="label profile-label" for="get-list-profile">
-        {{ 'getList.profile.label' | rokuT }}
-      </label>
-      <select
-        (change)="onProfileChange($event)"
-        [disabled]="submitting()"
-        [value]="selectedProfileId()"
-        class="profile-select"
-        id="get-list-profile"
-      >
-        @for (profile of profiles(); track profile.id) {
-          <option [value]="profile.id">
-            {{ profile.name ?? ('profiles.defaultName' | rokuT) }}
-          </option>
-        }
-      </select>
-    </div>
-  }
+    @if (showProfiles()) {
+      <div class="profile-row">
+        <label class="label profile-label" for="get-list-profile">
+          {{ 'getList.profile.label' | rokuT }}
+        </label>
+        <select
+          (change)="onProfileChange($event)"
+          [disabled]="submitting()"
+          [value]="selectedProfileId()"
+          class="profile-select"
+          id="get-list-profile"
+        >
+          @for (profile of profiles(); track profile.id) {
+            <option [value]="profile.id">
+              {{ profile.name ?? ('profiles.defaultName' | rokuT) }}
+            </option>
+          }
+        </select>
+      </div>
+    }
 
-  <span class="label sources-label">{{ 'getList.sources.label' | rokuT }}</span>
-
-  @if (noSources()) {
-    <p class="none" role="status">{{ 'getList.sources.none' | rokuT }}</p>
-  } @else {
     <!--
+    Where the list is bought (velista 0102): any of the person's shops by default,
+    or one shop chosen in the same picker the basket's filter sheet opens. After the
+    profile, because the shops offered are that profile's.
+
+    The line under it says what Generate will do with the choice before it happens,
+    because afterwards the shop is the list's for good, for everybody in it.
+  -->
+    <span class="label shop-label" id="get-list-shop-label">
+      {{ 'getList.shop.label' | rokuT }}
+    </span>
+    <!--
+      What "Near me" picked (velista 0103), with the distance and a way to change
+      it, until dismissed or until the shop changes.
+    -->
+    @if (nearPickMessage(); as message) {
+      <lib-shop-pick-message
+        (changeShop)="openShopPicker()"
+        (dismissed)="dismissNearPick()"
+        [distance]="message.distance"
+        [shop]="message.shop"
+        class="shop-pick-message"
+      />
+    }
+    @if (chosenShop(); as chosen) {
+      <div class="shop-row is-chosen">
+        <lib-pin-icon class="shop-pin" />
+        <span class="shop-body">
+          <span class="shop-chain">{{ chosen.chain }}</span>
+          @if (chosen.where !== null) {
+            <span class="shop-where">{{ chosen.where }}</span>
+          }
+          @if (chosen.outsideAreas) {
+            <lib-outside-areas class="shop-outside" />
+          }
+        </span>
+        <button
+          (click)="openShopPicker()"
+          [attr.aria-label]="'getList.shop.changeLabel' | rokuT"
+          [disabled]="submitting()"
+          #shopRow
+          class="shop-change"
+          type="button"
+        >
+          {{ 'getList.shop.change' | rokuT }}
+        </button>
+        <button
+          (click)="clearShop()"
+          [attr.aria-label]="'getList.shop.clearLabel' | rokuT"
+          [disabled]="submitting()"
+          class="shop-clear"
+          type="button"
+        >
+          <lib-close-icon class="shop-clear-glyph" />
+        </button>
+      </div>
+      <p class="hint" id="get-list-shop-hint">
+        {{ 'getList.shop.chosenHint' | rokuT }}
+      </p>
+    } @else {
+      <button
+        (click)="openShopPicker()"
+        [attr.aria-describedby]="'get-list-shop-hint'"
+        [attr.aria-label]="
+          ('getList.shop.label' | rokuT) + ': ' + ('getList.shop.any' | rokuT)
+        "
+        [disabled]="submitting() || selectedProfileId() === null"
+        #shopRow
+        class="shop-row is-any"
+        type="button"
+      >
+        <lib-pin-icon class="shop-pin" />
+        <span class="shop-any">{{ 'getList.shop.any' | rokuT }}</span>
+        <lib-chevron-right-icon class="shop-go" />
+      </button>
+      <p class="hint" id="get-list-shop-hint">
+        {{ 'getList.shop.anyHint' | rokuT }}
+      </p>
+    }
+
+    <span class="label sources-label">{{
+      'getList.sources.label' | rokuT
+    }}</span>
+
+    @if (noSources()) {
+      <p class="none" role="status">{{ 'getList.sources.none' | rokuT }}</p>
+    } @else {
+      <!--
       The other way of having nowhere to draw from (plan 0049, section 4): somebody who
       is in groups but can write in none of them. This screen cannot know it on open
       without a `listLists` per group, so it is said the moment every group that has
@@ -92,153 +188,154 @@
       person to infer it from an empty expansion. `polite`, because it appears while
       they are opening groups rather than in answer to a question they asked.
     -->
-    @if (noWritableSources()) {
-      <p aria-live="polite" class="none" role="status">
-        {{ 'getList.sources.noneWritable' | rokuT }}
-      </p>
-    }
+      @if (noWritableSources()) {
+        <p aria-live="polite" class="none" role="status">
+          {{ 'getList.sources.noneWritable' | rokuT }}
+        </p>
+      }
 
-    <!--
+      <!--
       A real checkbox tree (section 7): the group's name is a disclosure button with
       `aria-expanded`, its tick is a separate `role="checkbox"` that reports
       `mixed` when its lists disagree, and each list is a checkbox of its own. Two
       controls per group row rather than one, because expanding and choosing are two
       different acts and a single target would make one of them unreachable.
     -->
-    <div class="tree">
-      @for (zone of zones(); track zone.id) {
-        <div class="zone">
-          <div class="zone-row">
-            <button
-              (click)="toggleExpanded(zone.id)"
-              [attr.aria-expanded]="isExpanded(zone.id)"
-              [attr.aria-label]="
-                (isExpanded(zone.id)
-                  ? 'getList.sources.collapse'
-                  : 'getList.sources.expand'
-                ) | rokuT: { name: zone.name }
-              "
-              class="zone-disclosure"
-              type="button"
-            >
-              @if (isExpanded(zone.id)) {
-                <lib-chevron-down-icon class="twisty" />
-              } @else {
-                <lib-chevron-right-icon class="twisty" />
-              }
-              <span class="zone-name">{{ zone.name }}</span>
-            </button>
+      <div class="tree">
+        @for (zone of zones(); track zone.id) {
+          <div class="zone">
+            <div class="zone-row">
+              <button
+                (click)="toggleExpanded(zone.id)"
+                [attr.aria-expanded]="isExpanded(zone.id)"
+                [attr.aria-label]="
+                  (isExpanded(zone.id)
+                    ? 'getList.sources.collapse'
+                    : 'getList.sources.expand'
+                  ) | rokuT: { name: zone.name }
+                "
+                class="zone-disclosure"
+                type="button"
+              >
+                @if (isExpanded(zone.id)) {
+                  <lib-chevron-down-icon class="twisty" />
+                } @else {
+                  <lib-chevron-right-icon class="twisty" />
+                }
+                <span class="zone-name">{{ zone.name }}</span>
+              </button>
 
-            <button
-              (click)="toggleZone(zone.id)"
-              [attr.aria-checked]="
-                zoneState(zone.id) === 'all'
-                  ? 'true'
-                  : zoneState(zone.id) === 'none'
-                    ? 'false'
-                    : 'mixed'
-              "
-              [attr.aria-label]="zone.name"
-              [class.is-mixed]="zoneState(zone.id) === 'some'"
-              [class.is-on]="zoneState(zone.id) === 'all'"
-              class="tick"
-              role="checkbox"
-              type="button"
-            >
-              @if (zoneState(zone.id) === 'all') {
-                <lib-check-icon class="check" />
-              }
-            </button>
-          </div>
+              <button
+                (click)="toggleZone(zone.id)"
+                [attr.aria-checked]="
+                  zoneState(zone.id) === 'all'
+                    ? 'true'
+                    : zoneState(zone.id) === 'none'
+                      ? 'false'
+                      : 'mixed'
+                "
+                [attr.aria-label]="zone.name"
+                [class.is-mixed]="zoneState(zone.id) === 'some'"
+                [class.is-on]="zoneState(zone.id) === 'all'"
+                class="tick"
+                role="checkbox"
+                type="button"
+              >
+                @if (zoneState(zone.id) === 'all') {
+                  <lib-check-icon class="check" />
+                }
+              </button>
+            </div>
 
-          @if (isExpanded(zone.id)) {
-            @let loaded = listsOf(zone.id);
+            @if (isExpanded(zone.id)) {
+              @let loaded = listsOf(zone.id);
 
-            @if (loaded?.state === 'loading') {
-              <p class="list-note"><lib-spinner-icon class="spinner" /></p>
-            } @else if (loaded?.state === 'failed') {
-              <p class="list-note">{{ 'getList.error' | rokuT }}</p>
-            } @else if (loaded?.lists?.length === 0) {
-              <!--
+              @if (loaded?.state === 'loading') {
+                <p class="list-note"><lib-spinner-icon class="spinner" /></p>
+              } @else if (loaded?.state === 'failed') {
+                <p class="list-note">{{ 'getList.error' | rokuT }}</p>
+              } @else if (loaded?.lists?.length === 0) {
+                <!--
                 This one group has nothing writable in it, which is ordinary among
                 several. The sentence above appears only once *every* expanded group
                 has answered this way.
               -->
-              <p class="list-note">
-                {{ 'getList.sources.noneWritable' | rokuT }}
-              </p>
-            } @else {
-              @for (list of loaded?.lists ?? []; track list.id) {
-                <button
-                  (click)="toggleList(zone.id, list.id)"
-                  [attr.aria-checked]="listChecked(zone.id, list.id)"
-                  class="list-row"
-                  role="checkbox"
-                  type="button"
-                >
-                  <span class="list-name">{{ list.name }}</span>
-                  <span
-                    [class.is-on]="listChecked(zone.id, list.id)"
-                    class="tick"
+                <p class="list-note">
+                  {{ 'getList.sources.noneWritable' | rokuT }}
+                </p>
+              } @else {
+                @for (list of loaded?.lists ?? []; track list.id) {
+                  <button
+                    (click)="toggleList(zone.id, list.id)"
+                    [attr.aria-checked]="listChecked(zone.id, list.id)"
+                    class="list-row"
+                    role="checkbox"
+                    type="button"
                   >
-                    @if (listChecked(zone.id, list.id)) {
-                      <lib-check-icon class="check" />
-                    }
-                  </span>
-                </button>
+                    <span class="list-name">{{ list.name }}</span>
+                    <span
+                      [class.is-on]="listChecked(zone.id, list.id)"
+                      class="tick"
+                    >
+                      @if (listChecked(zone.id, list.id)) {
+                        <lib-check-icon class="check" />
+                      }
+                    </span>
+                  </button>
+                }
               }
             }
-          }
-        </div>
-      }
-    </div>
-    <p class="hint">{{ 'getList.sources.hint' | rokuT }}</p>
-  }
+          </div>
+        }
+      </div>
+      <p class="hint">{{ 'getList.sources.hint' | rokuT }}</p>
+    }
 
-  <!--
+    <!--
     Who else gets this basket (velista 0085, section 3). After the sources, because
     what goes in the basket is the decision the sheet is opened for, and drawn only
     when there is somebody to choose. Nobody is chosen by default.
   -->
-  @if (showPeople()) {
-    <span class="label people-label" id="get-list-people">
-      {{ 'getList.people.label' | rokuT }}
-    </span>
-    <lib-people-picker
-      (toggled)="toggleMember($event)"
-      [attr.aria-labelledby]="'get-list-people'"
-      [disabled]="submitting()"
-      [groups]="contactGroups()"
-      [selected]="members()"
-      class="people"
-      role="group"
-    />
-  }
-
-  @if (errorKey(); as key) {
-    <p class="error" role="alert">{{ key | rokuT }}</p>
-  }
-
-  <button
-    (click)="submit()"
-    [disabled]="!canSubmit()"
-    class="primary"
-    type="button"
-  >
-    @if (submitting()) {
-      <lib-spinner-icon class="spinner" />
-      {{ 'getList.submitting' | rokuT }}
-    } @else {
-      {{ 'getList.submit' | rokuT }}
+    @if (showPeople()) {
+      <span class="label people-label" id="get-list-people">
+        {{ 'getList.people.label' | rokuT }}
+      </span>
+      <lib-people-picker
+        (toggled)="toggleMember($event)"
+        [attr.aria-labelledby]="'get-list-people'"
+        [disabled]="submitting()"
+        [groups]="contactGroups()"
+        [selected]="members()"
+        class="people"
+        role="group"
+      />
     }
-  </button>
 
-  <button
-    (click)="dismiss()"
-    [disabled]="submitting()"
-    class="cancel"
-    type="button"
-  >
-    {{ 'getList.cancel' | rokuT }}
-  </button>
+    @if (errorKey(); as key) {
+      <p class="error" role="alert">{{ key | rokuT }}</p>
+    }
+
+    <button
+      (click)="submit()"
+      [disabled]="!canSubmit()"
+      class="primary"
+      type="button"
+    >
+      @if (submitting()) {
+        <lib-spinner-icon class="spinner" />
+        {{ 'getList.submitting' | rokuT }}
+      } @else {
+        {{ 'getList.submit' | rokuT }}
+      }
+    </button>
+
+    <button
+      (click)="dismiss()"
+      [disabled]="submitting()"
+      class="cancel"
+      type="button"
+    >
+      {{ 'getList.cancel' | rokuT }}
+    </button>
+  }
 </lib-sheet-shell>

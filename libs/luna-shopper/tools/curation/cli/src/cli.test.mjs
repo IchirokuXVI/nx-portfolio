@@ -12,8 +12,10 @@ import test from 'node:test';
 import { ENGINES } from '../../../../../shared/model-engines/src/index.mjs';
 import {
   REPO_ROOT,
+  STOP_SIGNALS,
   defaultRunDir,
   installInterrupt,
+  loadResume,
   main,
   parseArgs,
   parseLimit,
@@ -24,6 +26,7 @@ import {
   usageText,
 } from './cli.mjs';
 import { deciderPath, makeDecider } from './decider.mjs';
+import { writeRunFile } from './run-files.mjs';
 import { fakeChild } from './test-fakes.mjs';
 
 function sink() {
@@ -160,6 +163,25 @@ test('a pipe is not asked, it is told', async () => {
   );
 });
 
+/** A decisions file with one LINK, which is one operation to send. */
+function oneLinkFile() {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-apply-'));
+  const file = join(dir, 'decisions.jsonl');
+  writeFileSync(
+    file,
+    [
+      { header: true, runId: 'r1', mainUrl: 'http://localhost:3000' },
+      { entryId: 'e1', decision: 'LINK', itemId: 'i1', expect: {} },
+    ]
+      .map(
+        (line) => `${JSON.stringify(line)}
+`
+      )
+      .join('')
+  );
+  return file;
+}
+
 test('--apply takes no slot and makes no model call', async () => {
   const spawned = [];
   const started = [];
@@ -170,7 +192,7 @@ test('--apply takes no slot and makes no model call', async () => {
       '--implementation',
       'suggestions',
       '--apply',
-      'decisions.jsonl',
+      oneLinkFile(),
       '--main-url',
       'http://localhost:3000',
     ],
@@ -289,6 +311,27 @@ test('an unknown effort is refused before anything is started', async () => {
         platform: 'linux',
       }),
     /Unknown effort ultra\. It is one of low, medium, high, xhigh, max\./
+  );
+  assert.deepEqual(spawned, []);
+});
+
+test('--chain with the groups decider is refused before a slot is taken', async () => {
+  const spawned = [];
+  await assert.rejects(
+    () =>
+      main(['--implementation', 'groups', '--chain', 'chain-1'], {
+        env: {},
+        stdout: sink(),
+        stderr: sink(),
+        isTty: false,
+        spawn: async (...call) => {
+          spawned.push(call);
+          return { code: 0, stdout: '{}', stderr: '' };
+        },
+        repoRoot: '/repo',
+        platform: 'linux',
+      }),
+    /--chain works with the suggestions decider only/
   );
   assert.deepEqual(spawned, []);
 });
@@ -445,8 +488,9 @@ test('the first Ctrl+C stops the run and the second stops the process', () => {
     controller,
     stderr,
     on: (event, fn) => {
-      assert.equal(event, 'SIGINT');
-      handler = fn;
+      if (event === 'SIGINT') {
+        handler = fn;
+      }
     },
     off: () => {
       handler = null;
@@ -542,4 +586,198 @@ test('the manual smoke run is documented at the top of this CLI', () => {
   const header = source.slice(0, source.indexOf('*/'));
   assert.match(header, /THE MANUAL SMOKE RUN/);
   assert.match(header, /luna-slot\.sh --list/);
+});
+
+// ---------------------------------------------------------------------------
+// Plan 0005
+// ---------------------------------------------------------------------------
+
+test('SIGTERM and SIGHUP stop the run the way the first Ctrl+C does', () => {
+  const controller = new AbortController();
+  const stderr = sink();
+  const exits = [];
+  const handlers = new Map();
+  const release = installInterrupt({
+    controller,
+    stderr,
+    on: (event, fn) => handlers.set(event, fn),
+    off: (event) => handlers.delete(event),
+    exit: (code) => exits.push(code),
+    slotOf: () => 4,
+  });
+
+  assert.deepEqual([...handlers.keys()], STOP_SIGNALS);
+  assert.deepEqual(STOP_SIGNALS, ['SIGINT', 'SIGTERM', 'SIGHUP']);
+
+  handlers.get('SIGTERM')('SIGTERM');
+  assert.equal(controller.signal.aborted, true);
+  assert.match(stderr.text(), /SIGTERM: stopping\. .*the report is written/);
+  assert.deepEqual(exits, []);
+
+  // A second signal of any kind is the escape hatch, and it prints the exact
+  // command that takes the abandoned slot down.
+  handlers.get('SIGHUP')('SIGHUP');
+  assert.deepEqual(exits, [129]);
+  assert.ok(
+    stderr
+      .text()
+      .includes(
+        'take it down with: bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --down 4'
+      )
+  );
+
+  release();
+  assert.equal(handlers.size, 0);
+});
+
+test('--apply needs neither the implementation nor the main url', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-apply-'));
+  const file = join(dir, 'decisions.jsonl');
+  writeFileSync(
+    file,
+    [
+      { header: true, runId: 'r1', mainUrl: 'http://main:3000' },
+      { itemId: 'i1', decision: 'ASSIGN', groupId: 'g1', expect: {} },
+    ]
+      .map((line) => `${JSON.stringify(line)}\n`)
+      .join('')
+  );
+  writeRunFile(dir, { implementation: 'groups' });
+  const started = [];
+  const { requests, startChild } = fakeChild([
+    { applied: true, operations: 1 },
+  ]);
+
+  const code = await main(['--apply', file], {
+    env: {},
+    stdout: sink(),
+    stderr: sink(),
+    isTty: false,
+    startChild: (command, args) => {
+      started.push(args[0]);
+      return startChild();
+    },
+    repoRoot: '/repo',
+  });
+
+  assert.equal(code, 0);
+  assert.match(started[0], /curation\/groups\/src\/cli\.mjs$/);
+  assert.deepEqual(requests[0].args.slice(0, 4), [
+    '--main-url',
+    'http://main:3000',
+    '--file',
+    file,
+  ]);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('--apply of a run with only reviews starts no decider and succeeds', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-apply-'));
+  const file = join(dir, 'decisions.jsonl');
+  writeFileSync(
+    file,
+    [
+      { header: true, runId: 'r1', mainUrl: 'http://main:3000' },
+      { itemId: 'i1', decision: 'REVIEW', issues: [] },
+    ]
+      .map((line) => `${JSON.stringify(line)}\n`)
+      .join('')
+  );
+  const stderr = sink();
+  const code = await main(['--apply', file], {
+    env: {},
+    stdout: sink(),
+    stderr,
+    isTty: false,
+    startChild: () => {
+      throw new Error('no decider should start');
+    },
+    repoRoot: '/repo',
+  });
+  assert.equal(code, 0);
+  assert.match(stderr.text(), /nothing to apply/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('a directory this orchestrator never opened cannot be resumed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-resume-'));
+  assert.throws(() => loadResume(dir), /curation-run\.json does not exist/);
+  writeRunFile(dir, { implementation: 'suggestions', opened: {} });
+  assert.throws(() => loadResume(dir), /holds no state\.json/);
+  writeFileSync(join(dir, 'state.json'), '{}');
+  assert.equal(loadResume(dir).implementation, 'suggestions');
+  assert.throws(() => loadResume(true), /--resume takes the run directory/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+/** A run directory a resume accepts, started on the given engine and chain. */
+function resumableRunDir(stored = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-resume-'));
+  writeFileSync(join(dir, 'state.json'), '{}');
+  writeRunFile(dir, {
+    implementation: 'groups',
+    engine: 'claude',
+    model: 'claude-sonnet-5',
+    effort: null,
+    chain: null,
+    limit: null,
+    mainUrl: 'http://main:3000',
+    mainUser: null,
+    opened: { runId: 'r1', remaining: 10, prompt: 'P' },
+    ...stored,
+  });
+  return dir;
+}
+
+test('a resume keeps what the run was started with, and refuses to change it', async () => {
+  const dir = resumableRunDir();
+  const options = {
+    env: {},
+    stdout: sink(),
+    stderr: sink(),
+    isTty: false,
+    spawn: async () => ({ code: 0, stdout: '', stderr: '' }),
+    repoRoot: '/repo',
+  };
+  await assert.rejects(
+    () => main(['--resume', dir, '--implementation', 'suggestions'], options),
+    /was started with --implementation groups, and a resumed run keeps it/
+  );
+  await assert.rejects(
+    () => main(['--resume', dir, '--main-url', 'http://elsewhere'], options),
+    /was started with --main-url http:\/\/main:3000/
+  );
+  await assert.rejects(
+    () => main(['--resume', dir, '--run-dir', dir], options),
+    /Leave out --run-dir/
+  );
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('a resume takes a slot of its own and never asks which decider', async () => {
+  const dir = resumableRunDir();
+  const spawned = [];
+  const code = await main(['--resume', dir], {
+    env: {},
+    stdout: sink(),
+    stderr: sink(),
+    // A terminal that would be asked, and must not be: the run says.
+    isTty: true,
+    ask: async () => {
+      throw new Error('a resume asks nothing');
+    },
+    spawn: async (command, args) => {
+      spawned.push([command, ...args].join(' '));
+      return { code: 0, stdout: '', stderr: '' };
+    },
+    repoRoot: '/repo',
+    interrupt: ({ controller }) => {
+      controller.abort(new Error('the run was stopped with Ctrl+C'));
+      return () => undefined;
+    },
+  });
+  assert.equal(code, 130);
+  assert.ok(spawned.some((call) => call.includes('--ephemeral --up 1')));
+  assert.ok(spawned.some((call) => call.includes('--ephemeral --down 1')));
+  rmSync(dir, { recursive: true, force: true });
 });

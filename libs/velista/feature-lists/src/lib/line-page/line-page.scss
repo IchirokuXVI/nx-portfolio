@@ -331,6 +331,32 @@
   color: var(--app-status-danger-fg);
 }
 
+// What the purchase cost (velista `0095`, section 7), at the trailing edge beside the
+// date. A reverted purchase keeps its price, quietly, as the rest of its row does.
+.history-price {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+
+  &.reverted {
+    color: var(--app-text-muted);
+  }
+}
+
+// Heard and not seen: the unit price in words. Here and not global, because velista has
+// no global utility class (velista `0082`).
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .history-when {
   flex-shrink: 0;
   font-size: var(--app-text-xs);

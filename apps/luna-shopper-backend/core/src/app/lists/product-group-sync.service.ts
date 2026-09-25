@@ -16,6 +16,7 @@ import { runOnce } from '@portfolio/luna-shopper/platform';
 // a type leaves index 0 undefined and the service unconstructable. It costs a
 // boot failure that no unit spec sees, because a spec passes its own double in.
 import { DataSource, In, Repository, type EntityManager } from 'typeorm';
+import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import {
   ListLine,
   ListLineGroupRemoval,
@@ -24,7 +25,7 @@ import {
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ProcessedEventStore } from '../events/idempotency.store';
-import { LineClaimService } from '../generated-lists/line-claim.service';
+import { LineClaimService } from '../baskets/line-claim.service';
 import { itemSetHash } from './item-set-hash';
 import { toLineItemSet } from './line-item-set';
 import { toLineView } from './list.mappers';
@@ -56,13 +57,13 @@ import { readLineSettlementSummaries } from './settlement.sql';
  *
  * ## What it must not touch (section 8)
  *
- * **Baskets.** A `GeneratedListLine` is a snapshot taken at generation time, and
- * a shopping list that rewrites itself while you are in the shop is hostile. A
- * person editing a line's products mid trip already does not disturb an active
- * basket, so a sync must not either. That requirement is a **negative** one:
- * nothing here may grow a path into `generated_list_lines` or
- * `generated_list_line_options`, and the spec asserts it directly because nothing
- * else would catch its violation.
+ * **Baskets.** A shopping list that rewrites itself while you are in the shop is
+ * hostile, and a person editing a line's products mid trip must not disturb an
+ * open basket. Plan 0136 changed what protects that rather than whether it
+ * holds: a basket held a snapshot of its own and now holds none, so a sync
+ * cannot reach one by writing to it. What it must still not do is move the
+ * **zone line's** product set under a shopper's thumb, which is the rule the
+ * spec asserts directly because nothing else would catch its violation.
  *
  * **Settlements**, which hang off basket lines and are a record of what somebody
  * actually bought. **`quantity`**, never touched and in particular never
@@ -82,7 +83,10 @@ export class ProductGroupSyncService {
     private readonly lists: Repository<ShoppingList>,
     private readonly claims: LineClaimService,
     private readonly events: CoreEventsPublisher,
-    private readonly store: ProcessedEventStore
+    private readonly store: ProcessedEventStore,
+    // A row's options moved, so every basket covering the line reads it again
+    // (plan 0139, section 3).
+    private readonly baskets: BasketAnnouncer
   ) {}
 
   /**
@@ -374,5 +378,15 @@ export class ProductGroupSyncService {
         line.listId
       );
     }
+
+    // One announcement per list, naming that list's lines (plan 0139, section
+    // 3). One product joining a group touches lines in many households, so this
+    // is the site where a nudge per line would be the burst the read above was
+    // written to avoid.
+    await this.baskets.linesChangedAcross(
+      lines
+        .filter((line) => zoneOf.has(line.listId))
+        .map((line) => ({ listId: line.listId, lineId: line.id }))
+    );
   }
 }

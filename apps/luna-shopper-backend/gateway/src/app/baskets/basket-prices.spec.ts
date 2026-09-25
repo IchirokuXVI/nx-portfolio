@@ -1,0 +1,1119 @@
+import {
+  BASKET_PATTERNS,
+  BasketKind,
+  BasketRowState,
+  BasketRowUsualState,
+  BasketStatus,
+  ITEM_PATTERNS,
+  ItemCategory,
+  LineApprovalStatus,
+  ParticipantKind,
+  PriceSourceKind,
+  SUPERMARKET_LOCATION_PATTERNS,
+  SUPERMARKET_PATTERNS,
+  UnitOfMeasure,
+  type BasketView,
+  type CatalogScopeView,
+  type BasketParticipantContext,
+  type BasketParticipantView,
+  type ItemView,
+  type ShopAvailabilityView,
+} from '@portfolio/luna-shopper/contracts';
+import { CatalogSuggestService } from '../catalog/catalog-suggest.service';
+import type { ShopperSelection } from '../catalog/scope-resolution.service';
+import { BasketCatalogService } from './basket-catalog.service';
+import { BasketController, BasketLiveController } from './basket.controller';
+import { SettlePriceService } from './settle-price.service';
+
+/**
+ * What a basket row costs, and where (plan 0066, sections 3 to 5).
+ *
+ * The composition these tests drive is {@link BasketCatalogService}, which plan
+ * 0136 moved out of the participant controller with nothing about it changed
+ * except where it reads the rows from, and it is reached here through
+ * `BasketController.get`, the `GET /v1/baskets/:id` that replaced
+ * `GET /v1/baskets/:id/basket`. The spec moved with the composition it
+ * proves; the rules it proves are the same ones.
+ *
+ * The basket read carries two things a client may ignore entirely: a `bestOffer`
+ * on every product, and a description of every scope those offers name. Every
+ * test here is about the rules that make that safe rather than about the
+ * numbers, which are catalog's and are proven there:
+ *
+ * - **the scope is the basket's, never the reader's**, and failing to price is
+ *   never failing to read (section 3);
+ * - **the price reaches everybody and the shop reaches only a reader the basket
+ *   says may have it** (section 5, and plan 0136 section 2 for who that is).
+ */
+
+const BASKET_ID = 'b4b1f0e2-1f5a-4c2e-9a4d-6f0e2b7c1d33';
+const OWNER = 'u-owner';
+const PROFILE = 'prof-home';
+const SCOPE_A = 'scope-a';
+const SCOPE_B = 'scope-b';
+
+const participant = (
+  overrides: Partial<BasketParticipantContext> = {}
+): BasketParticipantContext => ({
+  participantId: 'p-1',
+  basketId: BASKET_ID,
+  kind: ParticipantKind.GUEST,
+  userId: null,
+  ...overrides,
+});
+
+/** The reader's own participant row, as core hands it back on the view. */
+const me: BasketParticipantView = {
+  id: 'p-1',
+  kind: ParticipantKind.GUEST,
+  displayName: null,
+  username: null,
+  guestNumber: 1,
+  userId: null,
+  shareLinkId: null,
+};
+
+/**
+ * The basket core answers with: one row naming three products.
+ *
+ * `optionIds` is the union of the products the row names (plan 0136, section 2),
+ * which is where the deleted line's `itemId` and `options` went. The composition
+ * reads exactly this array, so a row is all the fixture needs to be.
+ *
+ * `servesLocations` is the flag **core** decides and the gateway obeys: it is a
+ * fact about the reader that arrives on the view, not something the gateway can
+ * work out from the participant it was handed.
+ */
+const basketView = (servesLocations: boolean): BasketView => ({
+  id: BASKET_ID,
+  kind: BasketKind.GENERATED,
+  name: null,
+  status: BasketStatus.OPEN,
+  createdAt: '2026-09-01T08:00:00.000Z',
+  rows: [
+    {
+      rowKey: 'l1',
+      content: 'Milk',
+      left: 2,
+      bought: 0,
+      asked: 2,
+      state: BasketRowState.WANTED,
+      note: null,
+      noteAt: null,
+      mark: null,
+      awaitingApproval: false,
+      optionIds: ['i-hacendado', 'i-pascual', 'i-unpriced'],
+      touchedBy: null,
+      touchedAt: null,
+      entries: [
+        {
+          lineId: 'l1',
+          left: 2,
+          bought: 0,
+          state: BasketRowState.WANTED,
+          approvalStatus: LineApprovalStatus.APPROVED,
+          demandEditable: true,
+        },
+      ],
+      usual: null,
+    },
+  ],
+  lists: [],
+  participants: [],
+  me,
+  progress: { done: 0, unavailable: 0, total: 1, pending: 1 },
+  truncated: false,
+  servesLocations,
+  unseenChangeCount: 0,
+  newestUnseenChangeId: null,
+  supermarketLocationId: null,
+});
+
+const item = (id: string, offer: ItemView['bestOffer']): ItemView => ({
+  id,
+  name: { en: id, es: id },
+  brand: null,
+  imageUrl: null,
+  sku: null,
+  ean: null,
+  unitSize: 1,
+  category: ItemCategory.DAIRY,
+  defaultUnit: UnitOfMeasure.LITER,
+  productGroupId: null,
+  bestOffer: offer,
+});
+
+const offer = (itemId: string, priceScopeId: string, price: number) => ({
+  itemId,
+  priceScopeId,
+  price,
+  currency: 'EUR',
+  unitPrice: price,
+  unitPriceLabel: 'EUR/L',
+  observedAt: '2026-09-01T06:00:00.000Z',
+  sourceKind: PriceSourceKind.OFFICIAL_WEB,
+  stale: false,
+});
+
+/** A Mercadona shop in the scope every offer below comes from. */
+const location = (id: string, address: string) => ({
+  id,
+  supermarketId: 'mercadona',
+  priceScopeId: SCOPE_A,
+  label: null,
+  address,
+  city: 'Córdoba',
+  country: 'ES',
+  postalCode: '14008',
+  latitude: null,
+  longitude: null,
+  externalRef: null,
+  externalProvider: null,
+});
+
+/** The shop of that scope, as the basket names it. */
+const named = (id: string, address: string) => ({
+  supermarketLocationId: id,
+  label: null,
+  address,
+  city: 'Córdoba',
+  postalCode: '14008',
+});
+
+/** The resolution the basket's profile reaches: two scopes, one chain each. */
+const resolution = (): CatalogScopeView => ({
+  priceScopeIds: [SCOPE_A, SCOPE_B],
+  scopes: [
+    {
+      priceScopeId: SCOPE_A,
+      supermarketId: 'mercadona',
+      postalCode: '14008',
+      origin: 'POSTAL_CODE',
+      approximate: false,
+    },
+    {
+      priceScopeId: SCOPE_B,
+      supermarketId: 'carrefour',
+      postalCode: '14008',
+      origin: 'POSTAL_CODE',
+      approximate: false,
+    },
+  ],
+  coverage: [],
+  approximate: false,
+  profileId: PROFILE,
+  explicit: false,
+});
+
+interface World {
+  /** What the basket says about this reader (plan 0136, section 2). */
+  readonly servesLocations?: boolean;
+  /** What catalog answers the priced lookup with, or a throw. */
+  readonly items?: ItemView[] | 'throws';
+  /** What the resolver answers with. */
+  readonly resolves?: CatalogScopeView;
+  /**
+   * The profile core answers with, null for a basket composed before plan 0078.
+   *
+   * A run scoped by hand used to answer null here, which is why no basket
+   * velista created ever showed a price. Since plan 0078 core answers the
+   * snapshot's `pricingProfileId`, so only a basket older than that plan is
+   * unpriced.
+   */
+  readonly profileId?: string | null;
+  /** What the basket's profile refuses (plan 0064), or a throw. */
+  readonly refuses?: ShopperSelection | 'throws';
+  /** The shop the basket was started at (plan 0163), null for none. */
+  readonly basketShop?: string | null;
+  /** What catalog answers about a shop (plan 0163), or a throw. */
+  readonly shop?: ShopAvailabilityView | 'throws';
+}
+
+/** Refusing nothing, which is the default every test but two runs with. */
+const refusesNothing = (): ShopperSelection => ({
+  profileId: PROFILE,
+  postalCodes: ['14008'],
+  excludedSupermarketIds: [],
+  excludedSupermarketLocationIds: [],
+});
+
+function build(world: World = {}) {
+  const calls: { subject: string; payload: unknown }[] = [];
+  const send = jest.fn(async (subject: string, payload: unknown) => {
+    calls.push({ subject, payload });
+    switch (subject) {
+      case BASKET_PATTERNS.get:
+      case BASKET_PATTERNS.live:
+        return {
+          ...basketView(world.servesLocations ?? false),
+          supermarketLocationId: world.basketShop ?? null,
+        };
+      case BASKET_PATTERNS.searchScope:
+        return {
+          ownerUserId: OWNER,
+          profileId: world.profileId === undefined ? PROFILE : world.profileId,
+          // The actor's flag, carried on the same answer since plan 0143 so
+          // that a settle can decide whether it may record a shop without
+          // reading a whole basket for one boolean.
+          servesLocations: world.servesLocations ?? false,
+          supermarketLocationId: world.basketShop ?? null,
+        };
+      case SUPERMARKET_LOCATION_PATTERNS.shopAvailability:
+        if (world.shop === 'throws' || world.shop === undefined) {
+          throw new Error('catalog does not know that shop');
+        }
+        return world.shop;
+      case ITEM_PATTERNS.getMany:
+        if (world.items === 'throws') {
+          throw new Error('catalog unreachable');
+        }
+        return {
+          items: world.items ?? [
+            item('i-hacendado', offer('i-hacendado', SCOPE_A, 0.95)),
+            item('i-pascual', offer('i-pascual', SCOPE_A, 1.15)),
+            item('i-unpriced', null),
+          ],
+        };
+      case SUPERMARKET_PATTERNS.list:
+        return {
+          items: [
+            { id: 'mercadona', name: { en: 'Mercadona', es: 'Mercadona' } },
+            { id: 'carrefour', name: { en: 'Carrefour', es: 'Carrefour' } },
+          ],
+          nextCursor: null,
+        };
+      case SUPERMARKET_LOCATION_PATTERNS.list:
+        return {
+          items: [
+            location('loc-tejares', 'Ronda de los Tejares 32'),
+            location('loc-lagartijo', 'Avenida del Gran Capitán 5'),
+          ],
+          nextCursor: null,
+        };
+      default:
+        throw new Error(`unexpected subject ${subject}`);
+    }
+  });
+
+  const describe = jest.fn(async () => world.resolves ?? resolution());
+  const forShops = jest.fn(async (): Promise<ShopperSelection> => {
+    if (world.refuses === 'throws') {
+      throw new Error('core slow');
+    }
+    return world.refuses ?? refusesNothing();
+  });
+
+  // One NATS fake behind both: the controller reads the basket with it and the
+  // composition reads catalog with it, which is the whole of the wiring under
+  // test here.
+  const catalog = new BasketCatalogService(
+    { send } as never,
+    {
+      describe,
+      forShops,
+    } as never,
+    // The real helper over the same fake: naming a scope's chain is part of
+    // what this file proves, and plan 0161 moved it there.
+    new CatalogSuggestService({ send } as never)
+  );
+  // The settle price service is not what this file proves (plan 0143 has its
+  // own spec), and the controller needs one to be constructed.
+  const controller = new BasketController(
+    { send } as never,
+    catalog,
+    new SettlePriceService({ send } as never, { describe } as never)
+  );
+
+  const lookups = () =>
+    calls
+      .filter((call) => call.subject === ITEM_PATTERNS.getMany)
+      .map(
+        (call) =>
+          call.payload as {
+            ids: string[];
+            priceScopeIds?: string[];
+            offers?: string;
+          }
+      );
+  const locationReads = () =>
+    calls
+      .filter((call) => call.subject === SUPERMARKET_LOCATION_PATTERNS.list)
+      .map((call) => call.payload as { priceScopeId?: string; userId: string });
+
+  const live = new BasketLiveController({ send } as never, catalog);
+
+  return {
+    controller,
+    live,
+    send,
+    calls,
+    describe,
+    forShops,
+    lookups,
+    locationReads,
+  };
+}
+
+describe('GET /v1/baskets/:id: prices (plan 0066)', () => {
+  it("prices against the basket's profile, never the reader's (section 3)", async () => {
+    const { controller, describe, lookups } = build();
+
+    // A registered participant with an account and, presumably, a profile of
+    // their own. Nothing about them reaches the resolver.
+    await controller.get(
+      participant({ kind: ParticipantKind.REGISTERED, userId: 'u-stranger' }),
+      BASKET_ID
+    );
+
+    expect(describe).toHaveBeenCalledTimes(1);
+    expect(describe).toHaveBeenCalledWith(OWNER, { profileId: PROFILE });
+    expect(lookups()).toEqual([
+      {
+        ids: ['i-hacendado', 'i-pascual', 'i-unpriced'],
+        priceScopeIds: [SCOPE_A, SCOPE_B],
+        // Plan 0109, section 3: every scope's offer, so the screen can answer
+        // "what does this shop charge" as well as "what will this cost".
+        offers: 'all',
+      },
+    ]);
+  });
+
+  it('answers the basket unpriced when the profile resolves to nothing (section 3.1)', async () => {
+    const { controller, lookups } = build({
+      // The ordinary path, not the `catch`: since plan 0069 an empty profile
+      // resolves to no scopes rather than raising, so this arrives as a view
+      // with nothing in it and the read carries on.
+      resolves: {
+        priceScopeIds: [],
+        scopes: [],
+        coverage: [],
+        approximate: false,
+        profileId: PROFILE,
+        explicit: false,
+      },
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    // No scopes on the lookup, so catalog answers names with no `bestOffer`
+    // key, exactly as before; and no scope descriptions, because there is
+    // nothing to describe. The read itself is untouched.
+    expect(lookups()).toEqual([
+      { ids: ['i-hacendado', 'i-pascual', 'i-unpriced'] },
+    ]);
+    expect(result.id).toBe(BASKET_ID);
+    expect(result.scopes).toEqual([]);
+  });
+
+  it('answers the basket unpriced for a basket composed before plan 0078', async () => {
+    const { controller, describe, lookups } = build({ profileId: null });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(describe).not.toHaveBeenCalled();
+    expect(lookups()[0]).not.toHaveProperty('priceScopeIds');
+    expect(result.scopes).toEqual([]);
+  });
+
+  it('answers the basket with no products and no scopes when catalog throws', async () => {
+    const { controller } = build({ items: 'throws' });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    // Failing to price, or to name, is never failing to read: the rows are the
+    // basket and a shopper in an aisle keeps them.
+    expect(result.id).toBe(BASKET_ID);
+    expect(result.products).toEqual([]);
+    expect(result.scopes).toEqual([]);
+  });
+
+  it('gives a guest the chain and no shops (section 5)', async () => {
+    const { controller, locationReads } = build({ servesLocations: false });
+
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.GUEST }),
+      BASKET_ID
+    );
+
+    expect(result.scopes).toEqual([
+      {
+        priceScopeId: SCOPE_A,
+        supermarketId: 'mercadona',
+        supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+        locations: [],
+      },
+    ]);
+    // Not fetched and then dropped: never asked for. The address is the
+    // owner's geography and a guest's read has no business reaching it.
+    expect(locationReads()).toEqual([]);
+  });
+
+  it('gives a reader the basket serves locations to the chain and its shops', async () => {
+    const { controller, locationReads } = build({ servesLocations: true });
+
+    // Plan 0136, section 2: what decides is `BasketView.servesLocations`, which
+    // core answers for the owner and for every person the owner **named**. It
+    // is not a fact the gateway can derive from the participant it holds, and
+    // being `REGISTERED` and writing every covered list — which was the whole
+    // of the deleted `seesZoneData` — is no longer enough on its own. So this
+    // reader has an account and still gets shops only because the view says so.
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.REGISTERED, userId: 'u-named' }),
+      BASKET_ID
+    );
+
+    expect(result.scopes).toHaveLength(1);
+    expect(result.scopes[0].supermarketName.en).toBe('Mercadona');
+    expect(result.scopes[0].locations).toEqual([
+      named('loc-tejares', 'Ronda de los Tejares 32'),
+      named('loc-lagartijo', 'Avenida del Gran Capitán 5'),
+    ]);
+    // The shops of the one scope the offers name, read as the owner: the
+    // profile behind them is the owner's, whoever is looking.
+    expect(locationReads()).toEqual([
+      expect.objectContaining({ priceScopeId: SCOPE_A, userId: OWNER }),
+    ]);
+  });
+
+  it('answers the same scope JSON since the chain naming moved (plan 0161)', async () => {
+    const { controller } = build({ servesLocations: true });
+
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
+      BASKET_ID
+    );
+
+    // Serialized, so the key order is checked as well as the keys: the chain
+    // half now comes from the helper the dropdown shares, and the wire must not
+    // tell.
+    expect(JSON.stringify(result.scopes)).toBe(
+      JSON.stringify([
+        {
+          priceScopeId: SCOPE_A,
+          supermarketId: 'mercadona',
+          supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+          locations: [
+            named('loc-tejares', 'Ronda de los Tejares 32'),
+            named('loc-lagartijo', 'Avenida del Gran Capitán 5'),
+          ],
+        },
+      ])
+    );
+  });
+
+  it('describes exactly the scopes the offers reference, with no extras (section 4)', async () => {
+    // The profile resolves to two scopes; every offer came from the first.
+    const { controller } = build({ servesLocations: true });
+
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
+      BASKET_ID
+    );
+
+    expect(result.scopes.map((scope) => scope.priceScopeId)).toEqual([SCOPE_A]);
+  });
+
+  it("never names a shop the basket's profile switched off (section 4)", async () => {
+    const { controller, forShops } = build({
+      servesLocations: true,
+      refuses: {
+        ...refusesNothing(),
+        excludedSupermarketLocationIds: ['loc-tejares'],
+      },
+    });
+
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
+      BASKET_ID
+    );
+
+    // The refusals are the basket's, asked for by the basket's profile, exactly
+    // as the prices are.
+    expect(forShops).toHaveBeenCalledWith(OWNER, { profileId: PROFILE });
+    expect(result.scopes[0].locations).toEqual([
+      named('loc-lagartijo', 'Avenida del Gran Capitán 5'),
+    ]);
+  });
+
+  it('hides every shop of a chain refused whole (plan 0064, section 2.1)', async () => {
+    const { controller, locationReads } = build({
+      servesLocations: true,
+      refuses: {
+        ...refusesNothing(),
+        excludedSupermarketIds: ['mercadona'],
+      },
+    });
+
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
+      BASKET_ID
+    );
+
+    // The chain still names the price, because the price is real and came from
+    // a resolution made before the chain was refused. Its shops are not
+    // fetched and then dropped: never asked for.
+    expect(result.scopes[0].supermarketName.en).toBe('Mercadona');
+    expect(result.scopes[0].locations).toEqual([]);
+    expect(locationReads()).toEqual([]);
+  });
+
+  it('does not ask what a reader who sees no shops has refused', async () => {
+    const { controller, forShops, locationReads } = build({
+      servesLocations: false,
+    });
+
+    // A registered participant who arrived by a link. Plan 0136, section 2 is
+    // explicit that a link visitor is served the chain and the price scope and
+    // never a street address, guest **or** registered, so the refusals that
+    // only ever trim a shop list are a round trip nobody will read.
+    await controller.get(
+      participant({ kind: ParticipantKind.REGISTERED, userId: 'u-visitor' }),
+      BASKET_ID
+    );
+
+    expect(forShops).not.toHaveBeenCalled();
+    expect(locationReads()).toEqual([]);
+  });
+
+  it('keeps the shops when the refusals cannot be read', async () => {
+    const { controller } = build({
+      servesLocations: true,
+      refuses: 'throws',
+    });
+
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
+      BASKET_ID
+    );
+
+    // A preference that cannot be applied is not a disclosure: `servesLocations`
+    // already decided this reader may see the shops, so core being slow costs
+    // an excluded shop staying on the list rather than costing the address.
+    expect(result.scopes[0].locations).toHaveLength(2);
+  });
+
+  it('asks for no refusals for a basket composed before plan 0078', async () => {
+    const { controller, forShops } = build({
+      servesLocations: true,
+      profileId: null,
+    });
+
+    const result = await controller.get(
+      participant({ kind: ParticipantKind.OWNER, userId: OWNER }),
+      BASKET_ID
+    );
+
+    // Naming none would resolve the owner's default profile, whose opinions
+    // about shops are not the ones this basket was composed against.
+    expect(forShops).not.toHaveBeenCalled();
+    expect(result.scopes).toEqual([]);
+  });
+
+  it('keeps the prices when the scopes cannot be named', async () => {
+    const { controller, send } = build();
+    send.mockImplementation(async (subject: string) => {
+      if (subject === SUPERMARKET_PATTERNS.list) {
+        throw new Error('catalog slow');
+      }
+      if (subject === BASKET_PATTERNS.get) {
+        return basketView(false);
+      }
+      if (subject === BASKET_PATTERNS.searchScope) {
+        return { ownerUserId: OWNER, profileId: PROFILE };
+      }
+      return {
+        items: [item('i-hacendado', offer('i-hacendado', SCOPE_A, 0.95))],
+      };
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    // A price with no place is a smaller answer and still the answer to "how
+    // much". The client is written to resolve a scope id to nothing.
+    expect(result.products[0].bestOffer?.price).toBe(0.95);
+    expect(result.scopes).toEqual([]);
+  });
+});
+
+/**
+ * Every scope's price, on the read the whole screen is built on (plan 0109,
+ * section 3).
+ *
+ * The cheapest offer answers "what will this cost" and cannot answer "what does
+ * this shop charge", so a shop filter built on it drops every product a chain
+ * stocks but is dearer at. The read asks catalog for all of them, and the two
+ * things that have to hold are that nothing else about the read moved, and that
+ * a scope reaching the client on `offers` alone is still named.
+ */
+describe('GET /v1/baskets/:id: every shop (plan 0109)', () => {
+  /** A product quoted by both scopes, cheaper at the first. */
+  const quotedTwice = (): ItemView => ({
+    ...item('i-hacendado', offer('i-hacendado', SCOPE_A, 0.95)),
+    offers: [
+      offer('i-hacendado', SCOPE_A, 0.95),
+      offer('i-hacendado', SCOPE_B, 1.15),
+    ],
+  });
+
+  it('carries every scope on every product, cheapest first and still on bestOffer', async () => {
+    const { controller } = build({
+      items: [quotedTwice(), { ...item('i-unpriced', null), offers: [] }],
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(result.products[0].offers?.map((row) => row.priceScopeId)).toEqual([
+      SCOPE_A,
+      SCOPE_B,
+    ]);
+    expect(result.products[0].bestOffer?.priceScopeId).toBe(SCOPE_A);
+    // A product nothing quotes says so with an empty list rather than by being
+    // absent: the row still has a name to draw.
+    expect(result.products[1].offers).toEqual([]);
+  });
+
+  it('names a chain that quotes a product without ever being the cheapest', async () => {
+    // The whole reason the read was widened. `i-pascual` is dearer at Carrefour
+    // than the Mercadona product beside it, so no `bestOffer` on this basket
+    // names Carrefour at all, and a scopes array read off `bestOffer` would
+    // leave the client a price with no shop behind it.
+    const { controller } = build({
+      servesLocations: false,
+      items: [
+        quotedTwice(),
+        {
+          ...item('i-pascual', offer('i-pascual', SCOPE_A, 1.15)),
+          offers: [
+            offer('i-pascual', SCOPE_A, 1.15),
+            offer('i-pascual', SCOPE_B, 1.35),
+          ],
+        },
+      ],
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(result.scopes.map((scope) => scope.priceScopeId)).toEqual([
+      SCOPE_A,
+      SCOPE_B,
+    ]);
+    expect(result.scopes.map((scope) => scope.supermarketName.en)).toEqual([
+      'Mercadona',
+      'Carrefour',
+    ]);
+  });
+
+  it('still describes nothing when no scope quoted anything', async () => {
+    const { controller } = build({
+      items: [{ ...item('i-unpriced', null), offers: [] }],
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(result.scopes).toEqual([]);
+  });
+
+  it('asks for the cheapest alone when the basket resolves to no scopes', async () => {
+    const { controller, lookups } = build({
+      resolves: {
+        priceScopeIds: [],
+        scopes: [],
+        coverage: [],
+        approximate: false,
+        profileId: PROFILE,
+        explicit: false,
+      },
+    });
+
+    await controller.get(participant(), BASKET_ID);
+
+    // A lookup that prices nothing has no offers to list, so the unpriced
+    // request is exactly the one it always was.
+    expect(lookups()[0]).not.toHaveProperty('offers');
+  });
+});
+
+/**
+ * The read at a shop (plan 0163, sections 2 and 3).
+ *
+ * A shop is named by the basket, else by `locationId`. With one, catalog is
+ * asked once for the shop's stack and the stored availability of the basket's
+ * products, the shop's quoted scope joins the scopes the read prices at, and
+ * every product carries `atShop`. The owner's profile is not consulted for
+ * any of it: a shop outside the owner's postal codes is priced like one inside.
+ */
+describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
+  /** A LIDL shop in Madrid, which the Córdoba profile never resolves. */
+  const FAR_SHOP = '5c7e9a1b-3d5f-4a7b-9c1d-3e5f7a9b1c3d';
+  const FAR_STORE = 'scope-far-store';
+  const FAR_REGION = 'scope-far-region';
+  const OTHER_SHOP = '9b1c3d5c-7e9a-4a7b-9c1d-3e5f7a9b1c3d';
+
+  const farShop = (
+    availability: ShopAvailabilityView['availability'] = [],
+    postalCode = '28013'
+  ): ShopAvailabilityView => ({
+    location: {
+      id: FAR_SHOP,
+      supermarketId: 'lidl',
+      priceScopeId: FAR_STORE,
+      priceScopeIds: [FAR_STORE, FAR_REGION],
+      label: { en: 'Lidl Gran Vía', es: 'Lidl Gran Vía' },
+      address: 'Gran Vía 1',
+      city: 'Madrid',
+      country: 'ES',
+      postalCode,
+      postalCodeSource: null,
+      latitude: null,
+      longitude: null,
+      externalRef: null,
+      externalProvider: null,
+    },
+    supermarket: {
+      id: 'lidl',
+      name: { en: 'Lidl', es: 'Lidl' },
+    } as ShopAvailabilityView['supermarket'],
+    availability,
+  });
+
+  /** Every product priced at the profile, and two of them at the far shop. */
+  const pricedEverywhere = (): ItemView[] => [
+    {
+      ...item('i-hacendado', offer('i-hacendado', SCOPE_A, 0.95)),
+      offers: [
+        offer('i-hacendado', SCOPE_A, 0.95),
+        offer('i-hacendado', FAR_STORE, 1.05),
+      ],
+    },
+    {
+      ...item('i-pascual', offer('i-pascual', SCOPE_A, 1.15)),
+      offers: [
+        offer('i-pascual', SCOPE_A, 1.15),
+        offer('i-pascual', FAR_STORE, 1.25),
+      ],
+    },
+    { ...item('i-unpriced', null), offers: [] },
+  ];
+
+  it('prices a shop outside the owner’s profile at that shop’s scope stack', async () => {
+    const { controller, lookups } = build({
+      servesLocations: true,
+      shop: farShop(),
+      items: pricedEverywhere(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: FAR_SHOP,
+    });
+
+    // The shop's quoted scope joins the owner's, so catalog prices it too.
+    expect(lookups()[0].priceScopeIds).toEqual([SCOPE_A, SCOPE_B, FAR_STORE]);
+    const [hacendado, pascual, unpriced] = result.products;
+    expect(hacendado.atShop).toEqual({
+      priceScopeId: FAR_STORE,
+      price: 1.05,
+      currency: 'EUR',
+      available: null,
+    });
+    expect(pascual.atShop?.price).toBe(1.25);
+    // No price at the shop is a null price and no scope, never a guess.
+    expect(unpriced.atShop).toEqual({
+      priceScopeId: null,
+      price: null,
+      currency: null,
+      available: null,
+    });
+    // The shop is named in `scopes`, so a client can draw it even though no
+    // scope of the owner's profile lists it.
+    const far = result.scopes.find((scope) => scope.priceScopeId === FAR_STORE);
+    expect(far).toEqual({
+      priceScopeId: FAR_STORE,
+      supermarketId: 'lidl',
+      supermarketName: { en: 'Lidl', es: 'Lidl' },
+      locations: [
+        {
+          supermarketLocationId: FAR_SHOP,
+          label: { en: 'Lidl Gran Vía', es: 'Lidl Gran Vía' },
+          address: 'Gran Vía 1',
+          city: 'Madrid',
+          postalCode: '28013',
+        },
+      ],
+    });
+    // A `LIVE` or unlocked basket has no shop of its own to name.
+    expect(result.shop).toBeNull();
+  });
+
+  it('asks catalog for the shop alone before the rows, then for the shop and every product the rows name', async () => {
+    const { controller, send } = build({ shop: farShop() });
+
+    await controller.get(participant(), BASKET_ID, { locationId: FAR_SHOP });
+
+    const asked = send.mock.calls.filter(
+      ([subject]) => subject === SUPERMARKET_LOCATION_PATTERNS.shopAvailability
+    );
+    expect(asked).toEqual([
+      // The chain, which core needs on the row read (plan 0165).
+      [
+        SUPERMARKET_LOCATION_PATTERNS.shopAvailability,
+        { supermarketLocationId: FAR_SHOP, itemIds: [] },
+      ],
+      [
+        SUPERMARKET_LOCATION_PATTERNS.shopAvailability,
+        {
+          supermarketLocationId: FAR_SHOP,
+          itemIds: ['i-hacendado', 'i-pascual', 'i-unpriced'],
+        },
+      ],
+    ]);
+  });
+
+  it('answers atShop.available as stored: true, false, and null with no row', async () => {
+    const { controller } = build({
+      shop: farShop([
+        { itemId: 'i-hacendado', available: true },
+        { itemId: 'i-pascual', available: false },
+      ]),
+      items: pricedEverywhere(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: FAR_SHOP,
+    });
+
+    expect(
+      result.products.map((product) => [product.id, product.atShop?.available])
+    ).toEqual([
+      ['i-hacendado', true],
+      ['i-pascual', false],
+      // No row for this shop: unknown, and never read off the chain.
+      ['i-unpriced', null],
+    ]);
+  });
+
+  it('answers a row the shop holds with a null value as null', async () => {
+    const { controller } = build({
+      shop: farShop([{ itemId: 'i-hacendado', available: null }]),
+      items: pricedEverywhere(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: FAR_SHOP,
+    });
+
+    expect(result.products[0].atShop?.available).toBeNull();
+  });
+
+  it('carries atShop null on every product, and no shop, when the read has none', async () => {
+    const { controller, send } = build({ items: pricedEverywhere() });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(result.products.every((product) => product.atShop === null)).toBe(
+      true
+    );
+    expect(result.shop).toBeNull();
+    expect(send.mock.calls.map(([subject]) => subject)).not.toContain(
+      SUPERMARKET_LOCATION_PATTERNS.shopAvailability
+    );
+  });
+
+  it('reads a basket started at a shop at that shop, and names it', async () => {
+    const { controller } = build({
+      basketShop: FAR_SHOP,
+      shop: farShop([], '14008'),
+      items: pricedEverywhere(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(result.supermarketLocationId).toBe(FAR_SHOP);
+    expect(result.products[0].atShop?.priceScopeId).toBe(FAR_STORE);
+    expect(result.shop).toEqual({
+      id: FAR_SHOP,
+      supermarketId: 'lidl',
+      supermarketName: { en: 'Lidl', es: 'Lidl' },
+      label: { en: 'Lidl Gran Vía', es: 'Lidl Gran Vía' },
+      address: 'Gran Vía 1',
+      city: 'Madrid',
+      postalCode: '14008',
+      // The profile's codes are 14008, so this shop is in it (section 3).
+      inProfile: true,
+    });
+  });
+
+  it('says a basket’s shop is outside the profile when its postal code is', async () => {
+    const { controller } = build({
+      basketShop: FAR_SHOP,
+      shop: farShop(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(result.shop?.inProfile).toBe(false);
+  });
+
+  it('accepts the basket’s own shop named again', async () => {
+    const { controller } = build({ basketShop: FAR_SHOP, shop: farShop() });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: FAR_SHOP,
+    });
+
+    expect(result.shop?.id).toBe(FAR_SHOP);
+  });
+
+  it('refuses another shop on a basket started at one, with 409 basket_shop_locked', async () => {
+    const { controller, lookups } = build({
+      basketShop: FAR_SHOP,
+      shop: farShop(),
+    });
+
+    await expect(
+      controller.get(participant(), BASKET_ID, { locationId: OTHER_SHOP })
+    ).rejects.toMatchObject({ code: 'basket_shop_locked' });
+    // Refused before catalog is asked anything.
+    expect(lookups()).toEqual([]);
+  });
+
+  it('keeps the read when catalog cannot name the shop, and draws no shop half', async () => {
+    const { controller } = build({ shop: 'throws' });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: FAR_SHOP,
+    });
+
+    expect(result.id).toBe(BASKET_ID);
+    expect(result.products.every((product) => product.atShop === null)).toBe(
+      true
+    );
+  });
+
+  describe('the read names its chain to core (plan 0165)', () => {
+    const coreReads = (calls: { subject: string; payload: unknown }[]) =>
+      calls
+        .filter(
+          (call) =>
+            call.subject === BASKET_PATTERNS.get ||
+            call.subject === BASKET_PATTERNS.live
+        )
+        .map((call) => call.payload);
+
+    it('sends the chain of the shop the read names', async () => {
+      const { controller, calls } = build({ shop: farShop() });
+
+      await controller.get(participant(), BASKET_ID, { locationId: FAR_SHOP });
+
+      expect(coreReads(calls)).toEqual([
+        { basketId: BASKET_ID, participantId: 'p-1', supermarketId: 'lidl' },
+      ]);
+      // The chain is learned before the rows are read, not after.
+      const subjects = calls.map((call) => call.subject);
+      expect(
+        subjects.indexOf(SUPERMARKET_LOCATION_PATTERNS.shopAvailability)
+      ).toBeLessThan(subjects.indexOf(BASKET_PATTERNS.get));
+    });
+
+    it('sends the chain of the basket’s own shop when the read names none', async () => {
+      const { controller, calls } = build({
+        basketShop: FAR_SHOP,
+        shop: farShop(),
+      });
+
+      await controller.get(participant(), BASKET_ID);
+
+      expect(coreReads(calls)).toEqual([
+        { basketId: BASKET_ID, participantId: 'p-1', supermarketId: 'lidl' },
+      ]);
+    });
+
+    it('sends no chain when the read has no shop, and asks catalog nothing about one', async () => {
+      const { controller, calls } = build();
+
+      await controller.get(participant(), BASKET_ID);
+
+      expect(coreReads(calls)).toEqual([
+        { basketId: BASKET_ID, participantId: 'p-1' },
+      ]);
+      expect(calls.map((call) => call.subject)).not.toContain(
+        SUPERMARKET_LOCATION_PATTERNS.shopAvailability
+      );
+    });
+
+    it('sends no chain when catalog cannot name the shop, and still reads', async () => {
+      const { controller, calls } = build({ shop: 'throws' });
+
+      const result = await controller.get(participant(), BASKET_ID, {
+        locationId: FAR_SHOP,
+      });
+
+      expect(coreReads(calls)).toEqual([
+        { basketId: BASKET_ID, participantId: 'p-1' },
+      ]);
+      expect(result.id).toBe(BASKET_ID);
+    });
+
+    it('asks core whose basket it is once per read, not twice', async () => {
+      const { controller, calls } = build({ shop: farShop() });
+
+      await controller.get(participant(), BASKET_ID, { locationId: FAR_SHOP });
+
+      expect(
+        calls.filter((call) => call.subject === BASKET_PATTERNS.searchScope)
+      ).toHaveLength(1);
+    });
+
+    it('refuses another shop before reading the rows', async () => {
+      const { controller, calls } = build({
+        basketShop: FAR_SHOP,
+        shop: farShop(),
+      });
+
+      await expect(
+        controller.get(participant(), BASKET_ID, { locationId: OTHER_SHOP })
+      ).rejects.toMatchObject({ code: 'basket_shop_locked' });
+      expect(coreReads(calls)).toEqual([]);
+    });
+
+    it('sends the chain of the device’s shop on the permanent basket', async () => {
+      const { live, calls } = build({ shop: farShop() });
+
+      await live.live({ userId: OWNER } as never, { locationId: FAR_SHOP });
+
+      expect(coreReads(calls)).toEqual([
+        { userId: OWNER, supermarketId: 'lidl' },
+      ]);
+    });
+
+    it('sends no chain on the permanent basket read with no shop', async () => {
+      const { live, calls } = build();
+
+      await live.live({ userId: OWNER } as never);
+
+      expect(coreReads(calls)).toEqual([{ userId: OWNER }]);
+    });
+
+    it('passes core’s `usual` through untouched', async () => {
+      const { controller, send } = build({ shop: farShop() });
+      const usual = { state: BasketRowUsualState.HERE, bought: 2, of: 6 };
+      const inner = send.getMockImplementation();
+      send.mockImplementation(async (subject: string, payload: unknown) => {
+        const answer = await inner?.(subject, payload);
+        if (subject !== BASKET_PATTERNS.get) {
+          return answer;
+        }
+        const view = answer as BasketView;
+        return {
+          ...view,
+          rows: view.rows.map((row) => ({ ...row, usual })),
+        } as never;
+      });
+
+      const result = await controller.get(participant(), BASKET_ID, {
+        locationId: FAR_SHOP,
+      });
+
+      expect(result.rows[0].usual).toEqual(usual);
+    });
+  });
+});

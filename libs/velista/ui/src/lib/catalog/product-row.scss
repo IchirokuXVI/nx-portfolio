@@ -1,0 +1,169 @@
+// One catalog product (velista 0100, section 3), drawn as the mock draws it: a
+// picture, the name over `brand · size`, and the price at the trailing edge.
+:host {
+  display: block;
+}
+
+.row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  inline-size: 100%;
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// Square, and the carton sits in the middle when there is no picture. The ground
+// is the page's own, so a white product photo reads as a photo and not a hole.
+.thumb {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--app-product-thumb-size);
+  block-size: var(--app-product-thumb-size);
+  overflow: hidden;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+}
+
+.image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.glyph {
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.what {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.name {
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-heading);
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--app-space-2);
+  flex: none;
+  text-align: end;
+}
+
+.amount {
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.caption {
+  font-size: var(--app-text-2xs);
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+// Old, by the server's own judgement. Muted and nothing else: no badge (section 3).
+.price.is-stale .amount {
+  font-weight: 500;
+  color: var(--app-text-muted);
+}
+
+.no-price {
+  flex: none;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// What pressing the row does, when it does more than open the product.
+.verb {
+  flex: none;
+  padding: var(--app-space-2) var(--app-space-4);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+
+.row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+// The skeleton: the same box, with bones where the text goes.
+.skeleton {
+  cursor: default;
+}
+
+.bone {
+  display: block;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+}
+
+.thumb.bone {
+  border-radius: var(--app-radius-md);
+}
+
+.line-long {
+  inline-size: 70%;
+  block-size: var(--app-space-4);
+}
+
+.line-short {
+  inline-size: 40%;
+  block-size: var(--app-space-3);
+}
+
+.line-price {
+  flex: none;
+  inline-size: var(--app-space-10);
+  block-size: var(--app-space-4);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bone {
+    animation: pulse var(--app-motion-slow) var(--app-motion-ease) infinite
+      alternate;
+  }
+}
+
+@keyframes pulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.55;
+  }
+}

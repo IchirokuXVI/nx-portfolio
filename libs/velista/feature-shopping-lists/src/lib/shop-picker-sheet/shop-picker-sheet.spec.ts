@@ -6,10 +6,23 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { BasketStore, BasketViewStore } from '@portfolio/velista/data-access';
-import type { BasketPriceScope } from '@portfolio/velista/models';
 import {
+  BasketStore,
+  BasketViewStore,
+  SHOP_FINDER_SERVICE,
+  ShopFinderMemory,
+  ShopPickNotices,
+  toNearbyShops,
+  toRecentShops,
+} from '@portfolio/velista/data-access';
+import type {
+  BasketParticipant,
+  BasketPriceScope,
+} from '@portfolio/velista/models';
+import {
+  fakeGeolocationReader,
   provideFakeBrowserFacade,
+  provideFakeGeolocationReader,
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
@@ -63,11 +76,28 @@ const OWNER_SCOPES = [
   ]),
 ];
 
-/** A guest's: the same chains with every address withheld (`0066`, section 5). */
-const GUEST_SCOPES = [scope('s-merca', 'Mercadona'), scope('s-dia', 'Dia')];
+/** Chains whose scopes name no shop: a scope catalog could not place. */
+const NO_SHOP_SCOPES = [scope('s-merca', 'Mercadona'), scope('s-dia', 'Dia')];
 
-function render(scopes: readonly BasketPriceScope[]) {
+function render(
+  scopes: readonly BasketPriceScope[],
+  options: {
+    /** The reader's own participant row, or null before the basket has arrived. */
+    readonly me?: Pick<BasketParticipant, 'kind'> | null;
+    readonly memory?: ShopFinderMemory;
+    readonly reader?: ReturnType<typeof fakeGeolocationReader>;
+  } = {}
+) {
   TestBed.resetTestingModule();
+  const memory = options.memory ?? new ShopFinderMemory();
+  const reader =
+    options.reader ??
+    fakeGeolocationReader({
+      outcome: {
+        state: 'located',
+        point: { latitude: 37.88, longitude: -4.78, accuracyMetres: 12 },
+      },
+    });
 
   const sheets = {
     dismiss: jest.fn().mockResolvedValue(undefined),
@@ -77,22 +107,42 @@ function render(scopes: readonly BasketPriceScope[]) {
   const held = signal(
     new Map(scopes.map((entry) => [entry.priceScopeId, entry]))
   );
+  // The device's shop (velista `0102`), read at once by this double.
+  const readAt = signal<string | null>(null);
   const store = {
+    readAt,
+    shopRead: readAt,
+    readAtShop: jest.fn((locationId: string | null) => {
+      readAt.set(locationId);
+      return Promise.resolve();
+    }),
     lines: signal([]),
+    // How a sheet addresses its own basket since velista `0091`: off the store,
+    // never off `paramMap`, which has no id under `shopping-lists/live`.
+    address: signal({ basketId: BASKET_ID }),
     products: signal(new Map()),
     lastAdded: signal(null),
-    me: signal(null),
-    basket: computed(() => ({ sources: [], scopes: held() })),
+    me: signal(options.me ?? null),
+    basket: computed(() => ({
+      id: BASKET_ID,
+      sources: [],
+      scopes: held(),
+      shop: null,
+      lockedShopId: null,
+      readAt: readAt(),
+    })),
     listNames: signal(new Map<string, string>()),
   };
 
-  const paramMap = convertToParamMap({ generatedListId: BASKET_ID });
+  const paramMap = convertToParamMap({ basketId: BASKET_ID });
   TestBed.configureTestingModule({
     imports: [ShopPickerSheet, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: '' }),
       { provide: BasketStore, useValue: store },
       BasketViewStore,
+      { provide: SHOP_FINDER_SERVICE, useValue: memory },
+      provideFakeGeolocationReader(reader),
       provideFakeBrowserFacade(new Map()),
       { provide: SheetNavigation, useValue: sheets },
       { provide: Router, useValue: { navigate: jest.fn() } },
@@ -111,7 +161,14 @@ function render(scopes: readonly BasketPriceScope[]) {
   const fixture = TestBed.createComponent(ShopPickerSheet);
   fixture.detectChanges();
 
-  return { fixture, sheets, view: TestBed.inject(BasketViewStore) };
+  return {
+    fixture,
+    sheets,
+    memory,
+    reader,
+    view: TestBed.inject(BasketViewStore),
+    notices: TestBed.inject(ShopPickNotices),
+  };
 }
 
 type Fixture = ReturnType<typeof render>['fixture'];
@@ -152,14 +209,12 @@ function type(fixture: Fixture, query: string): void {
 }
 
 /**
- * Choosing which shop the prices come from (velista `0078`, section 4).
+ * Choosing which shop the person is buying at (velista `0078`, section 4; `0102`).
  *
- * The supermarkets page's own pieces over a **basket's** scopes: the search across
- * every chain, the chain buttons, and the shops under their postal codes. What these
- * assert is the two things that make it a picker rather than that page. A row picks
- * the **scope**, because the price belongs to the scope and not to the door; and a
- * reader the server sent no addresses to picks a chain, because there is nothing
- * finer for them to pick.
+ * The supermarkets page's own pieces over a **basket's** scopes, drawn by
+ * `ShopPicker` from `ui`: the search across every chain, the chain buttons, and the
+ * shops under their postal codes. A row picks **the shop**, because the shop is
+ * where the person is standing, and every participant is served the same shops.
  */
 describe('ShopPickerSheet', () => {
   it('draws one button per chain, with the count of its shops', () => {
@@ -185,7 +240,15 @@ describe('ShopPickerSheet', () => {
     expect(headings(fixture)).toEqual(['14008', '14001']);
   });
 
-  it('writes the scope, not the shop, and goes back to the filter sheet', () => {
+  it('draws the body the get a list sheet draws too', () => {
+    const { fixture } = render(OWNER_SCOPES);
+
+    expect(
+      fixture.debugElement.query(By.css('lib-shop-picker'))
+    ).not.toBeNull();
+  });
+
+  it('writes the shop that was picked, and goes back to the filter sheet', () => {
     const { fixture, sheets, view } = render(OWNER_SCOPES);
     tapChain(fixture, 0);
 
@@ -194,8 +257,9 @@ describe('ShopPickerSheet', () => {
       .nativeElement.click();
     fixture.detectChanges();
 
-    // The second shop of the first scope: both rows pick that one scope.
-    expect(view.shop()).toBe('s-merca');
+    // The second shop of the first scope, and not the scope: two Mercadonas of
+    // one scope are two places to stand (velista `0102`).
+    expect(view.shop()).toBe('loc-barcelona');
     // A pop, because the filter sheet pushed this one: the filter sheet's URL is
     // only the fallback for a cold load on this sheet's own address.
     expect(sheets.dismiss).toHaveBeenCalledWith(
@@ -204,19 +268,16 @@ describe('ShopPickerSheet', () => {
     expect(sheets.leaveTo).not.toHaveBeenCalled();
   });
 
-  it('checks the scope’s first shop when it is already the chosen one', () => {
+  it('checks the chosen shop and no other of its scope', () => {
     const { fixture, view } = render(OWNER_SCOPES);
-    view.setShop('s-merca');
+    view.setShop('loc-barcelona');
     fixture.detectChanges();
     tapChain(fixture, 0);
 
     const radios = fixture.debugElement
       .queryAll(By.css('lib-shop-list .checkbox'))
       .map((node) => node.nativeElement as HTMLInputElement);
-    // A radio group has one checked control and a scope holds two shops that
-    // charge the same, so the first stands for the scope, which is the shop the
-    // filter sheet names under the chain.
-    expect(radios.map((radio) => radio.checked)).toEqual([true, false]);
+    expect(radios.map((radio) => radio.checked)).toEqual([false, true]);
   });
 
   describe('the search', () => {
@@ -273,23 +334,291 @@ describe('ShopPickerSheet', () => {
     });
   });
 
-  describe('a reader with no addresses', () => {
-    it('draws the chain buttons and no shops at all', () => {
-      const { fixture } = render(GUEST_SCOPES);
+  /**
+   * A chain is not a place to stand in, so a scope with no shop to name offers
+   * nothing to pick, and its chain has no button (velista `0102`).
+   */
+  it('draws no button for a chain with no shop to pick', () => {
+    const { fixture, view } = render(NO_SHOP_SCOPES);
 
-      expect(chains(fixture)).toHaveLength(2);
-      expect(rows(fixture)).toHaveLength(0);
+    expect(chains(fixture)).toHaveLength(0);
+    expect(rows(fixture)).toHaveLength(0);
+    expect(view.shop()).toBeNull();
+  });
+});
+
+/** A shop view as the gateway names one, near the device or bought at. */
+function shopView(id: string, chain: string, inProfile = true) {
+  return {
+    id,
+    supermarketId: `sm-${chain}`,
+    supermarketName: { en: chain, es: chain },
+    label: null,
+    address: `Calle ${id}`,
+    city: 'Córdoba',
+    postalCode: '14001',
+    inProfile,
+  };
+}
+
+/** Let the reader, the fake route and the store settle, then draw. */
+async function settle(fixture: Fixture): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    await Promise.resolve();
+  }
+  fixture.detectChanges();
+}
+
+function pressNearMe(fixture: Fixture): void {
+  (
+    fixture.nativeElement.querySelector(
+      'lib-near-me-button button'
+    ) as HTMLButtonElement
+  ).click();
+}
+
+/**
+ * "Near me" and the recent shops in a basket (velista `0103`): the basket's own
+ * nearby route, any participant, and the server's pick acted on as given.
+ */
+describe('ShopPickerSheet, near me', () => {
+  it('asks for no position until Near me is pressed', async () => {
+    const { fixture, reader, memory } = render(OWNER_SCOPES, {
+      me: { kind: 'OWNER' },
+    });
+    await settle(fixture);
+
+    expect(reader.state.reads).toBe(0);
+    expect(memory.calls).not.toContain('basket');
+  });
+
+  it('sets the shop the server picked, closes, and leaves the message with its distance', async () => {
+    const memory = new ShopFinderMemory();
+    memory.nearby = toNearbyShops({
+      candidates: [
+        {
+          ...shopView('near-1', 'Mercadona'),
+          distanceMetres: 120,
+          excluded: false,
+        },
+      ],
+      pick: { locationId: 'near-1', distanceMetres: 120 },
+      noPick: null,
+    });
+    const { fixture, sheets, view, notices, reader } = render(OWNER_SCOPES, {
+      memory,
     });
 
-    it('picks that chain’s scope when a button is tapped', () => {
-      const { fixture, sheets, view } = render(GUEST_SCOPES);
+    pressNearMe(fixture);
+    await settle(fixture);
 
-      tapChain(fixture, 1);
+    // The basket's own route, with the picker's own read of the device.
+    expect(memory.calls).toEqual(['basket']);
+    expect(memory.asked).toEqual([BASKET_ID]);
+    expect(reader.state.options[0]).toMatchObject({
+      enableHighAccuracy: true,
+      timeoutMs: 15_000,
+      maximumAgeMs: 0,
+    });
+    expect(view.shop()).toBe('near-1');
+    expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+    expect(notices.notice()).toMatchObject({
+      basket: BASKET_ID,
+      shop: { id: 'near-1' },
+      distanceMetres: 120,
+    });
+  });
 
-      expect(view.shop()).toBe('s-dia');
-      expect(sheets.dismiss).toHaveBeenCalledWith(
-        `/en/shopping-lists/${BASKET_ID}/sheet/filter`
+  it.each(['AMBIGUOUS', 'LOW_ACCURACY', 'OUTSIDE_PROFILE'] as const)(
+    'draws the candidates for %s and picks nothing',
+    async (reason) => {
+      const memory = new ShopFinderMemory();
+      memory.nearby = toNearbyShops({
+        candidates: [
+          {
+            ...shopView('near-1', 'Mercadona', reason !== 'OUTSIDE_PROFILE'),
+            distanceMetres: 180,
+            excluded: false,
+          },
+          {
+            ...shopView('near-2', 'Dia'),
+            distanceMetres: 230,
+            excluded: false,
+          },
+        ],
+        pick: null,
+        noPick: reason,
+      });
+      const { fixture, sheets, view, notices } = render(OWNER_SCOPES, {
+        memory,
+      });
+
+      pressNearMe(fixture);
+      await settle(fixture);
+
+      const region = fixture.nativeElement.querySelector(
+        '.near-region'
+      ) as HTMLElement;
+      expect(region.textContent).toContain(
+        `basket.view.shop.near.reason.${reason}`
       );
+      expect(
+        [...region.querySelectorAll('.aside')].map((node) =>
+          node.textContent?.trim()
+        )
+      ).toEqual(['180 m', '230 m']);
+      expect(view.shop()).toBeNull();
+      expect(sheets.dismiss).not.toHaveBeenCalled();
+      expect(notices.notice()).toBeNull();
+    }
+  );
+
+  it('draws one line for no shop nearby', async () => {
+    const { fixture } = render(OWNER_SCOPES);
+
+    pressNearMe(fixture);
+    await settle(fixture);
+
+    expect(
+      fixture.nativeElement.querySelector('.near-region .line')?.textContent
+    ).toContain('basket.view.shop.near.reason.NONE_NEARBY');
+  });
+
+  it('lets a guest choose a nearby shop the owner never listed, with no message', async () => {
+    const memory = new ShopFinderMemory();
+    memory.nearby = toNearbyShops({
+      candidates: [
+        {
+          ...shopView('elsewhere', 'Lidl'),
+          distanceMetres: 90,
+          excluded: false,
+        },
+        { ...shopView('other', 'Dia'), distanceMetres: 140, excluded: false },
+      ],
+      pick: null,
+      noPick: 'AMBIGUOUS',
     });
+    const { fixture, sheets, view, notices } = render(OWNER_SCOPES, {
+      me: { kind: 'GUEST' },
+      memory,
+    });
+
+    pressNearMe(fixture);
+    await settle(fixture);
+    (
+      fixture.nativeElement.querySelector(
+        '.near-region input'
+      ) as HTMLInputElement
+    ).click();
+
+    expect(memory.calls).toEqual(['basket']);
+    expect(view.shop()).toBe('elsewhere');
+    expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+    expect(notices.notice()).toBeNull();
+  });
+
+  it.each([
+    ['denied', 'basket.view.shop.near.denied'],
+    ['timed-out', 'basket.view.shop.near.timedOut'],
+    ['unavailable', 'basket.view.shop.near.failed'],
+  ] as const)(
+    'says so in one line when the device answers %s, and asks no server',
+    async (state, key) => {
+      const reader = fakeGeolocationReader({ outcome: { state } });
+      const { fixture, memory } = render(OWNER_SCOPES, { reader });
+
+      pressNearMe(fixture);
+      await settle(fixture);
+
+      expect(
+        fixture.nativeElement.querySelector('.near-region .line')?.textContent
+      ).toContain(key);
+      expect(memory.calls).not.toContain('basket');
+      // The chains still work below the line.
+      expect(chains(fixture)).toHaveLength(2);
+    }
+  );
+
+  it('says the lookup failed in one line when the server does not answer', async () => {
+    const memory = new ShopFinderMemory();
+    memory.failNearby = true;
+    const { fixture } = render(OWNER_SCOPES, { memory });
+
+    pressNearMe(fixture);
+    await settle(fixture);
+
+    expect(
+      fixture.nativeElement.querySelector('.near-region .line')?.textContent
+    ).toContain('basket.view.shop.near.failed');
+  });
+});
+
+describe('ShopPickerSheet, recent shops', () => {
+  it('draws the signed in reader’s recent shops first, and a pick from them sets the shop', async () => {
+    const memory = new ShopFinderMemory();
+    memory.recent = toRecentShops({
+      shops: [
+        {
+          shop: shopView('recent-1', 'Lidl'),
+          lastBoughtAt: new Date().toISOString(),
+        },
+        {
+          shop: shopView('recent-2', 'Dia'),
+          lastBoughtAt: '2026-01-02T10:00:00Z',
+        },
+      ],
+    });
+    const { fixture, view } = render(OWNER_SCOPES, {
+      me: { kind: 'OWNER' },
+      memory,
+    });
+    await settle(fixture);
+
+    expect(memory.calls).toEqual(['recent']);
+    const section = fixture.nativeElement.querySelector(
+      '.section'
+    ) as HTMLElement;
+    expect(section.textContent).toContain('basket.view.shop.recent.heading');
+    expect(section.querySelectorAll('.row')).toHaveLength(2);
+    expect(section.querySelector('.aside')?.textContent).toContain(
+      'basket.view.shop.recent.today'
+    );
+
+    (section.querySelector('input') as HTMLInputElement).click();
+    expect(view.shop()).toBe('recent-1');
+  });
+
+  it('draws no recent section when the reader has none', async () => {
+    const { fixture, memory } = render(OWNER_SCOPES, {
+      me: { kind: 'REGISTERED' },
+    });
+    await settle(fixture);
+
+    expect(memory.calls).toEqual(['recent']);
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'basket.view.shop.recent.heading'
+    );
+  });
+
+  it('never asks for recent shops for a guest, and draws none', async () => {
+    const memory = new ShopFinderMemory();
+    memory.recent = toRecentShops({
+      shops: [
+        {
+          shop: shopView('recent-1', 'Lidl'),
+          lastBoughtAt: '2026-09-01T10:00:00Z',
+        },
+      ],
+    });
+    const { fixture } = render(OWNER_SCOPES, {
+      me: { kind: 'GUEST' },
+      memory,
+    });
+    await settle(fixture);
+
+    expect(memory.calls).toEqual([]);
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'basket.view.shop.recent.heading'
+    );
   });
 });

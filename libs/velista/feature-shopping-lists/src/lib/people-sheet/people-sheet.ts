@@ -19,15 +19,16 @@ import { BasketStore, SessionStore } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   formatGeneratedDate,
+  isLinkVisitor,
   type BasketParticipant,
 } from '@portfolio/velista/models';
-import {
-  appPath,
-  generatedListIdOf,
-  SheetNavigation,
-} from '@portfolio/velista/platform';
+import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import { SheetShell } from '@portfolio/velista/ui';
-import { participantInitials, participantName } from '../basket-labels';
+import {
+  participantInitials,
+  participantName,
+  visitTime,
+} from '../basket-labels';
 import { basketPath } from '../basket-paths';
 
 /**
@@ -81,8 +82,14 @@ export class PeopleSheet {
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
 
-  /** The basket underneath, which is where closing this sheet goes. */
-  private readonly _generatedListId = generatedListIdOf(this._route);
+  /**
+   * The basket underneath, which is where closing this sheet goes.
+   *
+   * From the **store** and not from `paramMap` since velista `0091`: the same
+   * page is routed at `shopping-lists/live`, where there is no id in the URL at
+   * all, and a sheet that read one there would dismiss to `/shopping-lists/`.
+   */
+  private readonly _address = this._store.address;
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
   /** The account, for the owner's own row, which the basket carries unnamed. */
@@ -104,7 +111,9 @@ export class PeopleSheet {
     viewChild<ElementRef<HTMLElement>>('leaveQuestion');
 
   protected readonly busy = this._busy.asReadonly();
-  protected readonly seesZoneData = this._store.seesZoneData;
+  protected readonly seesDevices = computed(() =>
+    this._store.participants().some((person) => 'device' in person)
+  );
 
   /** Whether the reader owns this basket, which is who may remove somebody. */
   protected readonly isOwner = computed(
@@ -131,9 +140,9 @@ export class PeopleSheet {
     if (basket.name !== null && basket.name !== '') {
       return basket.name;
     }
-    return basket.generatedAt === null
+    return basket.createdAt === null
       ? ''
-      : formatGeneratedDate(basket.generatedAt, this._locale());
+      : formatGeneratedDate(basket.createdAt, this._locale());
   });
 
   /**
@@ -146,6 +155,7 @@ export class PeopleSheet {
   protected readonly people = computed(() => {
     const meId = this._store.me()?.id ?? null;
     const ownName = this._session.username();
+    const locale = this._locale();
 
     return this._store.participants().map((person) => {
       // Core keeps no `displayName` for an owner, so without their account name the
@@ -155,20 +165,22 @@ export class PeopleSheet {
 
       return {
         person,
-        label: participantName(
-          person,
-          this._translator,
-          this._locale(),
-          naming
-        ),
-        initials: participantInitials(
-          person,
-          this._translator,
-          this._locale(),
-          naming
-        ),
+        label: participantName(person, this._translator, locale, naming),
+        initials: participantInitials(person, this._translator, locale, naming),
         isGuest: person.kind === 'GUEST',
         isMe: person.id === meId,
+        /**
+         * When this person's visit ends, formatted, or null for the owner and
+         * for anybody added by name (velista `0094`, section 6).
+         *
+         * Resolved here rather than in the template, where the rest of this
+         * row's strings are, and for the same reason: it is `Intl` work that
+         * needs the locale, and a template that did it per row would be doing
+         * it on every redraw of the sheet.
+         */
+        until: isLinkVisitor(person)
+          ? visitTime(person.expiresAt, this._translator, locale)
+          : null,
         // Only a reader who passes the rule receives a device at all, so this is
         // the honest test for "is there a detail pane worth opening". The one
         // exception is a member's own row, which holds the way to leave.
@@ -191,6 +203,101 @@ export class PeopleSheet {
     const id = this._openId();
     return this.people().find((row) => row.person.id === id)?.label ?? '';
   });
+
+  /**
+   * The open person's own row, as the list drew it, or null.
+   *
+   * The pane reads this rather than {@link openPerson} for anything the row
+   * already worked out, which is how the two can never disagree about when
+   * somebody's visit ends.
+   */
+  private readonly _openRow = computed(() => {
+    const id = this._openId();
+    return this.people().find((row) => row.person.id === id) ?? null;
+  });
+
+  /** When the open person's visit ends, formatted, or null. */
+  protected readonly openUntil = computed(() => this._openRow()?.until ?? null);
+
+  /**
+   * Whether the owner is offered "Keep on this list" over the open person
+   * (velista `0094`, section 6).
+   *
+   * Three conditions, and the third is the one worth stating. The reader has to
+   * be the owner, the person has to be here on the link rather than by name,
+   * **and they have to have an account**: keeping somebody is adding them by
+   * name, and a guest has no name to be added by. The server waives its contact
+   * rule for a live link visitor precisely so this control works on somebody
+   * outside every group of the owner's (backend `0140`, section 6).
+   */
+  protected readonly canKeep = computed(() => {
+    const person = this.openPerson();
+    return (
+      this.isOwner() &&
+      person !== null &&
+      isLinkVisitor(person) &&
+      person.userId !== null
+    );
+  });
+
+  /**
+   * Whether the owner is being told that a guest cannot be kept.
+   *
+   * Said **to the owner only**, and that is rule C2 doing its work from the
+   * other side: the sentence is about what an account would allow, and a guest
+   * reading it about themselves is an invitation to register in all but name.
+   */
+  protected readonly showsGuestCannotStay = computed(() => {
+    const person = this.openPerson();
+    return (
+      this.isOwner() &&
+      person !== null &&
+      isLinkVisitor(person) &&
+      person.userId === null
+    );
+  });
+
+  /** The key of a failed keep, under the button, or null. */
+  protected readonly keepError = signal<string | null>(null);
+
+  /**
+   * Which leave question the reader is asked (velista `0094`, section 6).
+   *
+   * A named person cannot come back on their own: the link would not make them
+   * one again, so only the owner adding them does. A visitor can, for as long
+   * as the link they came by still works. Two facts, two sentences, chosen from
+   * the reader's own row rather than from the basket.
+   */
+  protected readonly leaveQuestionKey = computed(() => {
+    const me = this._store.me();
+    return me !== null && isLinkVisitor(me)
+      ? 'basket.people.leaveVisitor'
+      : 'basket.people.leaveNamed';
+  });
+
+  /**
+   * Keep the open person on this list, which is the owner promoting them.
+   *
+   * The same call the picker's tick makes. The row becomes a named person
+   * through the store's ordinary participant read, so nothing here patches it:
+   * `canKeep` goes false on its own and the button with it.
+   */
+  protected async keep(): Promise<void> {
+    const userId = this.openPerson()?.userId;
+    if (userId === undefined || userId === null) {
+      return;
+    }
+
+    this._busy.set(true);
+    this.keepError.set(null);
+    const kept = await this._store.addParticipant(userId);
+    this._busy.set(false);
+    if (!kept) {
+      // The pane stays where it is, with the sentence under the button that was
+      // pressed: the person is still on the basket and still visiting.
+      this.keepError.set('basket.people.keepFailed');
+    }
+  }
 
   /** Whether the open pane is the reader's own row and they may leave from it. */
   protected readonly offersLeave = computed(
@@ -299,7 +406,7 @@ export class PeopleSheet {
    */
   protected close(): void {
     void this._sheet.dismiss(
-      basketPath(this._locale(), this._basePath, this._generatedListId())
+      basketPath(this._locale(), this._basePath, this._address())
     );
   }
 }

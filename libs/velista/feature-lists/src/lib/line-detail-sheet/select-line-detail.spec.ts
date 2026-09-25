@@ -65,7 +65,11 @@ function bought(
   };
 }
 
-function item(id: string, en: string, brand: string | null = null): CatalogItem {
+function item(
+  id: string,
+  en: string,
+  brand: string | null = null
+): CatalogItem {
   return {
     id,
     name: { es: en, en },
@@ -106,7 +110,9 @@ describe('selectLineDetail', () => {
 
   describe('the estimate', () => {
     it('is absent below three purchases, because two make one interval', () => {
-      expect(select({ settlements: [bought(0), bought(14)] })?.estimate).toBeNull();
+      expect(
+        select({ settlements: [bought(0), bought(14)] })?.estimate
+      ).toBeNull();
     });
 
     it('reads as a phrase from three purchases to six', () => {
@@ -221,10 +227,10 @@ describe('selectLineDetail', () => {
     });
 
     it('chains the fold on the previous settlement, as the server does', () => {
-      // A slow partial settle: rows 8 hours apart for a day. Each is within twelve hours
+      // A slow partial settle: rows 5 hours apart for a day. Each is within the session
       // of the one before it, so the whole run is one purchase.
       const HOUR = DAY / 24;
-      const slow = [0, 8, 16, 24].map((hours) =>
+      const slow = [0, 5, 10, 15, 20, 24].map((hours) =>
         bought(0, {
           id: `st-slow-${hours}`,
           settledAt: new Date(NOW - hours * HOUR),
@@ -238,6 +244,29 @@ describe('selectLineDetail', () => {
 
       expect(estimate?.fromPurchases).toBe(3);
       expect(estimate?.medianDays).toBe(7);
+    });
+
+    it('folds on exactly the session and splits a millisecond past it', () => {
+      // The boundary the server draws in `continuesPurchaseSession` (backend plan 0134,
+      // section 7). Six hours apart is one purchase, so the gaps are 7 and 7 and the
+      // estimate reads three purchases.
+      const SESSION = 6 * 60 * 60 * 1000;
+      const pair = (gap: number) => [
+        bought(0),
+        bought(0, {
+          id: 'st-0-later',
+          settledAt: new Date(NOW - gap),
+        }),
+      ];
+
+      expect(
+        select({ settlements: [...pair(SESSION), bought(7), bought(14)] })
+          ?.estimate?.fromPurchases
+      ).toBe(3);
+      expect(
+        select({ settlements: [...pair(SESSION + 1), bought(7), bought(14)] })
+          ?.estimate?.fromPurchases
+      ).toBe(4);
     });
   });
 
@@ -275,9 +304,9 @@ describe('selectLineDetail', () => {
   describe('the choices', () => {
     it('are empty on a free text line and on a line with one product', () => {
       expect(select()?.choices).toEqual([]);
-      expect(select({ line: line({ itemIds: ['item-milk-a'] }) })?.choices).toEqual(
-        []
-      );
+      expect(
+        select({ line: line({ itemIds: ['item-milk-a'] }) })?.choices
+      ).toEqual([]);
     });
 
     it('name every product once there is something to ask', () => {

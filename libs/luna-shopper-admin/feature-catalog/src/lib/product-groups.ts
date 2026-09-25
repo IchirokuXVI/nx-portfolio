@@ -8,6 +8,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { UNIT_OF_MEASURE_OPTIONS } from './catalog-enums';
 import { productGroupSource } from './catalog-sources';
+import { ProductGroupDetailPage } from './product-group-detail-page';
 
 /** A set of comparable products, as the gateway describes it. */
 export type ProductGroup = Wire.CatalogProductGroupView;
@@ -104,6 +105,9 @@ export const PRODUCT_GROUPS = defineResource<ProductGroup>({
   ],
 
   actions: { create: true, edit: true, delete: true },
+
+  // The generic form, with "Add items" under it (admin plan 0035, section 2).
+  detail: ProductGroupDetailPage,
 
   gateway: () =>
     inject(RESOURCE_GATEWAYS).for<ProductGroup>(productGroupSource()),

@@ -286,6 +286,92 @@
       "restart": "Start again"
     }
   },
+  "nav": {
+    "home": "Home",
+    "catalog": "Catalog",
+    "basket": "Shopping list",
+    "label": "Main sections",
+    "badge": "{{count}} still to get"
+  },
+  "catalog": {
+    "title": "Catalog",
+    "near": "near {{code}}",
+    "search": {
+      "all": "Search every supermarket",
+      "chain": "Search {{chain}}",
+      "label": "Search the catalog",
+      "clear": "Clear the search"
+    },
+    "chips": {
+      "label": "Shops",
+      "all": "All shops"
+    },
+    "order": {
+      "label": "Order",
+      "relevance": "Best match",
+      "name": "A to Z",
+      "created": "Newest"
+    },
+    "count": "{{count}} products",
+    "countMore": "More than {{count}} products",
+    "chain": {
+      "shops": "{{count}} shops near you. Prices are what {{chain}} charges here."
+    },
+    "row": {
+      "noPrice": "no price"
+    },
+    "unit": {
+      "KILOGRAM": "{{price}} / kg",
+      "LITER": "{{price}} / L",
+      "UNIT": "{{price}} / unit",
+      "DOZEN": "{{price}} / dozen",
+      "WASH": "{{price}} / wash"
+    },
+    "empty": {
+      "title": "Nothing matches \"{{query}}\"",
+      "body": "Check the spelling, or look for a shorter word.",
+      "clear": "Clear the search",
+      "chainTitle": "Nothing from {{chain}} yet",
+      "chainBody": "Velista has not read this shop yet. Choose All shops to see everything."
+    },
+    "noScope": {
+      "title": "We do not know where you shop",
+      "body": "You can read the whole catalog without a postal code. Prices need one, because they are not the same in two towns.",
+      "add": "Add my postal code"
+    },
+    "unserved": {
+      "title": "No shop we know is near {{code}}",
+      "body": "You can read the whole catalog. Prices appear when a supermarket near you is in Velista."
+    },
+    "refused": {
+      "title": "You turned off every shop near you",
+      "body": "You can read the whole catalog. Prices come from the shops you use, so turn one back on to see them.",
+      "action": "Choose my shops"
+    },
+    "more": "Loading more",
+    "error": {
+      "title": "The catalog did not load",
+      "body": "Check your connection and try again.",
+      "retry": "Try again",
+      "more": "More products did not load."
+    },
+    "product": {
+      "cheapest": "CHEAPEST",
+      "notSold": "not sold here",
+      "seen": "Seen {{when}}. Velista reads the shops, so a price can be behind the shelf.",
+      "loading": "Looking up the prices",
+      "failed": "The prices did not load. Close this and try again.",
+      "noShops": "We do not know where you shop, so there are no prices to show.",
+      "close": "Close"
+    },
+    "similar": {
+      "title": "Similar products",
+      "titleFor": "Similar to {{name}}",
+      "failed": "Similar products did not load.",
+      "change": "Change",
+      "changeLabel": "Change to {{label}}"
+    }
+  },
   "home": {
     "loading": "Loading your groups",
     "or": "OR",
@@ -331,6 +417,7 @@
       "zones": "Your groups"
     },
     "shoppingList": {
+      "label": "Your recent trip",
       "open": "{{name}}, {{count}} still to get",
       "more_one": "and {{count}} more",
       "more_other": "and {{count}} more",
@@ -441,7 +528,36 @@
         "LITER": "{{size}} L",
         "PACK": "{{size}} packs"
       },
-      "asWritten": "Add “{{text}}” as written"
+      "asWritten": "Add “{{text}}” as written",
+      "card": {
+        "loading": "Looking for products",
+        "add": "Add {{name}}",
+        "from": "from {{price}}",
+        "pack": "Pack {{count}}",
+        "seen": "seen {{when}}",
+        "stale": "Price not checked lately",
+        "soldAt": "Sold at {{chain}}. Show every shop price",
+        "soldAtMany": "Sold at {{count}} shops. Show every shop price",
+        "shops": "Price at each shop",
+        "details": "Details",
+        "detailsOf": "Details of {{name}}",
+        "groupBadge": "Group",
+        "groupHelp": "What a product group is",
+        "groupHelpTitle": "Product groups",
+        "groupHelpBody": "A group holds products that do the same job. Add the group as one line, and Velista picks the cheapest of them when you go shopping.",
+        "groupHelpSwap": "You can swap it for another product in the group at any time.",
+        "groupLine_one": "One line, the cheapest product at the shop",
+        "groupLine_other": "One line, cheapest of {{count}} at the shop",
+        "groupProducts_one": "{{count}} product",
+        "groupProducts_other": "{{count}} products",
+        "groupMore_one": "and {{count}} more",
+        "groupMore_other": "and {{count}} more",
+        "already": "Product already in your list",
+        "noMatch": "No products match “{{- query}}”",
+        "noMatchFreeText": "You can still add it as written",
+        "alsoCalled": "Also called: {{- synonym}}",
+        "alreadyQuantity": "How many of {{line}}"
+      }
     },
     "empty": {
       "title": "Nothing on this list yet",
@@ -603,6 +719,13 @@
       "rateValue": "every {{days}} days",
       "rateRough": "every few weeks",
       "bought": "I bought this",
+      "shop": {
+        "label": "Where did you buy it?",
+        "none": "Not specified",
+        "optional": "Optional",
+        "clear": "Clear the shop",
+        "back": "Back to how many"
+      },
       "notAvailable": "They did not have it",
       "everything": "See more details",
       "howMany": "How many did you get?",
@@ -648,6 +771,7 @@
       "rate": "about how often you buy it",
       "lastBought": "last bought, {{count}}",
       "boughtBy": "Bought {{count}} · {{who}}",
+      "each": "{{count}} at {{price}} each",
       "missingBy": "Not in the shop · {{who}}",
       "you": "you",
       "someone": "somebody"
@@ -670,7 +794,6 @@
     },
     "trips": {
       "toBuy": "To buy",
-      "loose": "Loose buys",
       "labelNamed": "{{name}} · {{date}}",
       "bought": "{{bought}} of {{total}} bought",
       "lines": "{{count}} lines",
@@ -688,8 +811,7 @@
         "partly": "Bought some",
         "notAvailable": "Not in the shop",
         "notBought": "Was on the list, nobody bought it",
-        "boughtBy": "Bought · {{name}}",
-        "nowAsks": "The list now asks for {{count}}"
+        "boughtBy": "Bought · {{name}}"
       }
     },
     "due": {
@@ -787,6 +909,9 @@
     },
     "row": {
       "profiles": "Shopping profiles"
+    },
+    "tour": {
+      "again": "Show me around again"
     }
   },
   "install": {
@@ -1034,26 +1159,49 @@
     "emptyHint": "Whoever made it has not put anything on it yet.",
     "failed": "This list would not load",
     "retry": "Try again",
-    "back": "Back",
+    "openHistory": "History",
+    "live": {
+      "title": "Everything to buy",
+      "titleOf": "{{name}}: everything to buy",
+      "hint": "Every list you can add to, in one place.",
+      "left": "{{pending}} to buy",
+      "leftAndGot": "{{pending}} to buy, {{done}} got this trip",
+      "allGot": "Nothing left, {{done}} got this trip",
+      "empty": "Nothing to buy",
+      "emptyHint": "Lines added to your lists show up here."
+    },
     "unnamed": "Shopping list",
     "notLive": "Not updating right now",
     "revoked": {
       "title": "You are no longer on this list",
-      "body": "Whoever shared it has taken it back. If you still have the link, you can join again.",
-      "rejoin": "Use the link again"
+      "body": "Whoever shared it took it back."
+    },
+    "ended": {
+      "title": "Your time on this list has ended",
+      "bodyAccount": "A link lasts 12 hours. Ask {{name}} for a new one, or to add you so you stay.",
+      "bodyAccountNameless": "A link lasts 12 hours. Ask for a new one, or to be added so you stay.",
+      "bodyGuest": "A link lasts 12 hours. Ask whoever sent it for a new one."
+    },
+    "visit": {
+      "account": "You are on this list until {{time}}. Ask {{name}} to add you to keep it.",
+      "accountNameless": "You are on this list until {{time}}. Ask whoever shared it to add you to keep it.",
+      "guest": "You are on this list until {{time}}.",
+      "ending": "Your time on this list ends at {{time}}.",
+      "dismiss": "Got it"
+    },
+    "time": {
+      "dayAndTime": "{{day}}, {{time}}"
     },
     "line": {
       "open": "Settle {{name}}",
       "outstanding_one": "{{count}} outstanding",
       "outstanding_other": "{{count}} outstanding",
-      "partly": "{{settled}} of {{total}} got",
       "wanted": "×{{count}}",
       "free": "No product chosen",
       "busy": "Saving",
       "takenBack_one": "1 taken back",
       "takenBack_other": "{{count}} taken back",
-      "listShare": "this list asked for {{asked}} of the {{total}}",
-      "listPartly": "{{settled}} of {{asked}} got"
+      "removed": "No longer on the list"
     },
     "outstanding": {
       "label": "{{name}}, still to get",
@@ -1066,10 +1214,6 @@
       "gotSome": "{{name}} got {{count}}",
       "none": "{{name}} says they had none",
       "you": "you"
-    },
-    "added": {
-      "by": "Added by {{name}}",
-      "announced": "{{content}} added"
     },
     "from": {
       "one": "from {{first}}",
@@ -1110,20 +1254,48 @@
         "listHint": "each list’s own amounts"
       },
       "shop": {
-        "legend": "Prices from",
+        "legend": "Buying at",
         "any": "Any of your shops",
         "anyGuest": "Any of the shops",
         "anyHint": "the cheapest",
         "none": "One shop",
         "choose": "Choose",
-        "chooseLabel": "Choose the shop prices are from",
+        "chooseLabel": "Choose the shop you are buying at",
         "change": "Change",
-        "changeLabel": "Change the shop prices are from",
-        "title": "Prices from",
+        "changeLabel": "Change the shop you are buying at",
+        "title": "Buying at",
         "back": "Back to filter and order",
         "search": "Shop, chain or street",
         "count_one": "{{count}} shop",
-        "count_other": "{{count}} shops"
+        "count_other": "{{count}} shops",
+        "locked": "Set when this list was started",
+        "outside": "Outside your areas",
+        "near": {
+          "button": "Near me",
+          "buttonLabel": "Find the shops near me",
+          "finding": "Finding you",
+          "heading": "Near you",
+          "headingHint": "nearest first, within {{distance}}",
+          "reason": {
+            "AMBIGUOUS": "Several shops are close. Choose yours.",
+            "LOW_ACCURACY": "Your location is not precise enough to choose for you.",
+            "OUTSIDE_PROFILE": "This shop is outside your areas.",
+            "NONE_NEARBY": "No shop within {{distance}}."
+          },
+          "denied": "Velista cannot see your location. Choose your shop below.",
+          "timedOut": "Finding you took too long. Try Near me again, or choose below.",
+          "failed": "Could not find shops near you. Choose below.",
+          "picked": "Buying at {{shop}} ({{distance}}).",
+          "change": "Change",
+          "changeLabel": "Change the shop you are buying at",
+          "dismiss": "Dismiss this message"
+        },
+        "recent": {
+          "heading": "Recent",
+          "headingHint": "where you bought, newest first",
+          "today": "Today",
+          "yesterday": "Yesterday"
+        }
       },
       "lists": {
         "legend": "Lists",
@@ -1136,7 +1308,19 @@
         "byList": "By list",
         "shop": "{{name}}",
         "more": "+{{count}}",
-        "moreLabel": "{{count}} more, open filter and order"
+        "moreLabel": "{{count}} more, open filter and order",
+        "lockedLabel": "{{name}}, set when this list was started"
+      },
+      "usual": {
+        "label": "Only what I usually buy here",
+        "hint": "Counted at every {{chain}}",
+        "chip": "Usually bought here",
+        "here_one": "Bought here the one time it was bought",
+        "here_other": "Bought here {{bought}} of the last {{count}} times",
+        "emptyTitle": "Nothing on this list is something you usually buy here",
+        "emptyBody": "Every line was last bought at another shop, or bought with no shop chosen.",
+        "emptyNote": "Purchases made without a chosen shop are not counted. Buy with a shop chosen and this fills in.",
+        "showAll": "Show every line"
       }
     },
     "price": {
@@ -1144,26 +1328,19 @@
       "notListedAt": "not listed at {{chain}}"
     },
     "group": {
-      "noList": "On no list yet",
-      "noListHint": "added in the shop",
       "notListed": "Not listed at {{chain}}",
       "notListedHint": "still yours to get",
       "noCategory": "No category",
       "noCategoryHint": "lines with no product",
       "progress": "{{done}} of {{total}} got",
       "unavailable_one": "{{count}} not available",
-      "unavailable_other": "{{count}} not available"
+      "unavailable_other": "{{count}} not available",
+      "otherLists": "Other lists"
     },
     "settle": {
       "title": "{{name}}",
-      "all_one": "Got it",
-      "all_other": "Got all {{count}}",
-      "some": "Got some",
-      "someTitle": "How many did you get?",
       "none": "They had none",
       "cancel": "Cancel",
-      "submit": "Record it",
-      "quantity": "How many",
       "more": "One more",
       "fewer": "One fewer",
       "failed": "That did not save. Try again.",
@@ -1176,14 +1353,7 @@
       "title": "Which did you get?",
       "hint": "Move units to the ones you got. {{name}} keeps the rest.",
       "hintNone": "Move units to the ones you got. The rest stays without a product.",
-      "rest": "gets the rest",
-      "noneRest": "no product chosen, gets the rest",
       "units": "{{name}}, units",
-      "less": "One fewer {{name}}",
-      "more": "One more {{name}}",
-      "apply": "Apply",
-      "notBought": "This changes which rows to buy. Nothing is marked as bought.",
-      "split": "{{name}} split into {{count}} rows",
       "none": "This line names no product",
       "cheapest": "Cheapest",
       "noPrice": "No price",
@@ -1191,33 +1361,11 @@
       "asOfStale": "Prices from {{when}}, and some may be out of date"
     },
     "units": {
-      "extra": "{{lists}} for these lists, plus {{extra}} extra",
-      "lists": "Lists that asked for this",
       "askedFor": "Asked for",
       "got": "Got",
       "askedLabel": "{{name}}, asked for",
       "gotLabel": "{{name}}, got",
-      "more_one": "1 more list",
-      "more_other": "{{count}} more lists",
-      "listAsks": "asks for {{count}} on its list",
-      "listNow": "its list now asks for {{count}}",
-      "pending": "waiting for the list to agree",
-      "noAccess": "You can no longer change this list",
-      "claimed": "somebody is already buying this for that list",
-      "rejected": "that list said no to this line",
-      "cannotTake": "this line cannot be added to that list",
-      "cameHome": "Added to {{name}}. {{count}} recorded as bought there",
-      "stillWaiting_one": "1 bought and not yet on any list",
-      "stillWaiting_other": "{{count}} bought and not yet on any list",
-      "alreadyHere": "this list already has it, read again",
-      "byName": "matched by name: “{{content}}”",
-      "loading": "Reading the lists",
-      "failed": "The lists could not be read",
-      "retry": "Try again",
-      "empty": "There is no list you can put this on"
-    },
-    "send": {
-      "pending": "Waiting for that list to approve it"
+      "pending": "waiting for the list to agree"
     },
     "people": {
       "title": "On this list",
@@ -1238,7 +1386,12 @@
       "close": "Close",
       "joinedUnknown": "Not known",
       "leave": "Leave this list",
-      "leaveQuestion": "Leave “{{name}}”? You can come back with the link if you have it.",
+      "leaveNamed": "Leave “{{name}}”? Only whoever made it can add you again.",
+      "leaveVisitor": "Leave “{{name}}”? You can come back while its link still works.",
+      "until": "with the link, until {{time}}",
+      "keep": "Keep on this list",
+      "keepFailed": "That did not go through. Try again.",
+      "guestCannotStay": "A guest is here until the time above. To stay longer they need to be added from your groups.",
       "leaveConfirm": "Leave",
       "stay": "Stay",
       "leaveFailed": "That did not go through. Try again.",
@@ -1254,16 +1407,23 @@
       "joinedWith_one": "{{count}} person joined with it",
       "joinedWith_other": "{{count}} people joined with it",
       "made": "made {{date}}",
-      "note": "This is the list’s one link. Copy it again whenever you need it, for as many people as you like. It stops working when the list is done or when you revoke it.",
+      "note": "Anyone who opens it can shop this list for 12 hours. Add people from your groups to keep them on it.",
+      "bodyLive": "Anyone with the link can shop everything on your lists, no account needed. They see the lines, never your groups.",
+      "none": "This list has no link right now.",
+      "ended": "The last link has ended. Links last 12 hours.",
+      "make": "Make a link",
+      "makeNew": "Make a new link",
+      "worksUntil": "Works until {{time}}",
+      "worksUntilDay": "Works until {{day}}, {{time}}",
+      "checking": "Checking the link",
       "revoke": "Revoke the link",
-      "close": "Close",
-      "minting": "Making a link"
+      "close": "Close"
     },
     "revoke": {
       "title": "Revoke the link?",
-      "body_one": "Nobody new will be able to join, and the list will have no link until you share it again. The {{count}} person already shopping keeps working.",
-      "body_other": "Nobody new will be able to join, and the list will have no link until you share it again. The {{count}} people already shopping keep working.",
-      "bodyNone": "Nobody new will be able to join, and the list will have no link until you share it again.",
+      "body_one": "Nobody new will be able to join. The {{count}} person already shopping keeps working until their time ends.",
+      "body_other": "Nobody new will be able to join. The {{count}} people already shopping keep working until their time ends.",
+      "bodyNone": "Nobody new will be able to join.",
       "cascade_one": "Also remove the {{count}} guest who joined with it",
       "cascade_other": "Also remove the {{count}} guests who joined with it",
       "cascadeHint": "They lose the list on their next action. Only tick this if the link reached the wrong hands.",
@@ -1292,6 +1452,7 @@
       "people_other": "{{count}} people are on it",
       "nameLabel": "Your name",
       "optional": "Optional",
+      "forHours": "You can shop this list for {{hours}} hours.",
       "nameHint": "So people know who got the bread",
       "continue": "Continue as guest",
       "or": "or, if you use Velista",
@@ -1373,6 +1534,86 @@
       "HOUSEHOLD": "Household",
       "PERSONAL_CARE": "Personal care",
       "OTHER": "Other"
+    },
+    "entries": {
+      "title": "Lists that ask for this",
+      "otherList": "Another list",
+      "asks": "asks for {{count}}",
+      "got": "got {{count}}",
+      "gotLabel": "{{name}}, got"
+    },
+    "row": {
+      "boughtOf": "{{bought}} of {{asked}}",
+      "gone": "That line is no longer in this list."
+    },
+    "skip": {
+      "action": "Not today",
+      "undo": "Back on the list",
+      "caption": "Skipped for now",
+      "earlierOn": "Skipped on {{date}}",
+      "earlier": "Skipped earlier",
+      "state": "skipped for now"
+    },
+    "demand": {
+      "label": "The list asks for",
+      "askLabel": "{{name}}, asks for",
+      "nothingLeft": "{{name}} is no longer asked for.",
+      "refused": "Only somebody who approves lines on that list can change it."
+    },
+    "add": {
+      "to": "To: {{list}}",
+      "choose": "Choose a list",
+      "sheetTitle": "Which list is this for?",
+      "needsList": "Choose a list first. The new product goes into the list you pick."
+    },
+    "added": {
+      "announced": "{{content}} added"
+    },
+    "mark": {
+      "added": "New",
+      "changed": "Changed",
+      "addedLabel": "{{name}}, new on the list",
+      "changedLabel": "{{name}}, changed"
+    },
+    "changes": {
+      "banner_one": "{{count}} change on your lists",
+      "banner_other": "{{count}} changes on your lists",
+      "title": "What changed",
+      "loading": "Loading what changed",
+      "failed": "That would not load",
+      "retry": "Try again",
+      "empty": "Nothing changed on your lists lately",
+      "more": "Show more",
+      "loaded_one": "{{count}} more change loaded",
+      "loaded_other": "{{count}} more changes loaded",
+      "close": "Close",
+      "entry": {
+        "added": "“{{name}}” was added, asking for {{count}}",
+        "quantity": "“{{name}}” asks for {{after}} instead of {{before}}",
+        "notNeeded": "“{{name}}” is no longer needed",
+        "renamed": "“{{before}}” is now called “{{name}}”",
+        "merged": "“{{before}}” was merged into “{{name}}”",
+        "deleted": "“{{name}}” was removed",
+        "pendingAgain": "“{{name}}” is waiting for approval again",
+        "rejected": "“{{name}}” was turned down",
+        "approved": "“{{name}}” was approved",
+        "unknown": "“{{name}}” changed",
+        "inList": "in {{list}}"
+      }
+    },
+    "shelf": {
+      "unavailable": "Not available at this shop",
+      "instead": "Instead of {{name}}, not available at this shop"
+    },
+    "swap": {
+      "open": "Change product",
+      "openLabel": "Change {{name}} for a similar product",
+      "title": "Change product",
+      "instead": "Instead of {{name}}",
+      "none": "There are no similar products.",
+      "failed": "The change did not save. Try again.",
+      "cancel": "Cancel",
+      "cheaper": "cheaper option"
     }
   },
   "getList": {
@@ -1399,6 +1640,17 @@
     "error": "That did not go through. Try again",
     "people": {
       "label": "Share with"
+    },
+    "shop": {
+      "label": "Buying at",
+      "any": "Any of your shops",
+      "anyHint": "Choose a shop when you are about to go in, and the list is priced there.",
+      "chosenHint": "Everybody in this list buys here, and it cannot be changed after Generate.",
+      "chooseLabel": "Choose the shop this list is bought at",
+      "change": "Change",
+      "changeLabel": "Change the shop this list is bought at",
+      "clearLabel": "Buy at any of your shops instead",
+      "back": "Back to get shopping list"
     }
   },
   "history": {
@@ -1441,8 +1693,115 @@
     "people": {
       "title": "People",
       "none": "Nobody else is in your groups yet.",
-      "linkJoined": "Joined with the link. Removing them also stops the link working for them.",
+      "visiting": "Here with the link until {{time}}",
+      "removeNote": "Somebody you remove cannot come back with a link.",
       "failed": "That did not save. Try again."
+    }
+  },
+  "setup": {
+    "back": "Back",
+    "welcome": {
+      "title": "Three questions and you are shopping",
+      "body": "You do not have to answer any of them. If you skip a question, we choose for you, and you can change it later.",
+      "one": "What we call you",
+      "oneBody": "The name everyone in your groups sees.",
+      "two": "Where you shop",
+      "twoBody": "A postal code. Without one we cannot show a price.",
+      "three": "Which supermarkets",
+      "threeBody": "All of them, until you say otherwise.",
+      "start": "Start",
+      "later": "Not now"
+    },
+    "step": "Step {{n}} of {{total}}",
+    "skip": "Skip",
+    "name": {
+      "title": "What do we call you?",
+      "body": "Everyone in your groups sees this name. It is not your email address, and it does not have to be your real name.",
+      "label": "Your name",
+      "placeholder": "Leave it blank",
+      "picked": "We already picked one for you.",
+      "keeps": "Leave the field blank and it stays yours.",
+      "another": "Pick another one",
+      "keep": "Keep {{name}}",
+      "continue": "Continue as {{name}}",
+      "note": "You can change it later on your account screen. Names are not unique, so somebody else can be {{name}} too."
+    },
+    "place": {
+      "title": "Where do you shop?",
+      "body": "The same product costs different amounts in different towns, so we cannot show you a price until we know which shops are near you. A postal code is as close as we ever need.",
+      "useLocation": "Use my location",
+      "or": "or type it",
+      "privacy": "If you press the button, your position is turned into a postal code and the position is thrown away. We store the code and nothing finer.",
+      "placed": "We placed you in",
+      "nearby": "Include the codes around it",
+      "nearbyBody": "A shop one street over is often in the next code. Ticked because you just told us where you are.",
+      "reachesTitle": "What that reaches",
+      "reaches": "{{chains}} supermarket chains and {{shops}} shops",
+      "reachesBody": "You choose between them on the next screen.",
+      "skipTitle": "Without a postal code the catalog still works and shows no prices.",
+      "skipBody": "Lists, groups and the assistant are unaffected. Add a code whenever you like, on your shopping profile.",
+      "skipAnyway": "Skip anyway",
+      "back": "Back",
+      "continue": "Continue"
+    },
+    "shops": {
+      "title": "Which supermarkets?",
+      "body": "All of them are on. Turn off a chain you will never walk into, and its prices stop counting anywhere in the app.",
+      "near": "Near {{code}}",
+      "all": "Every chain we hold",
+      "turnAllOff": "Turn all off",
+      "count": "{{count}} shops",
+      "off": "OFF",
+      "note": "A chain means every shop it has here. Refuse one shop on its own later, on your shopping profile.",
+      "noneTitle": "With every chain off, nothing has a price.",
+      "noneBody": "The catalog, your lists and the assistant all keep working. Turn one back on whenever you like.",
+      "done": "Done",
+      "loading": "Loading the supermarkets",
+      "failed": "The supermarkets did not load."
+    },
+    "done": {
+      "title": "That is everything",
+      "body": "Each answer is already saved. Change any of them from your account screen.",
+      "name": "Name",
+      "where": "Where",
+      "shops": "Shops",
+      "nearby": "{{code}} and nearby",
+      "chainsOf": "{{on}} chains of {{total}}",
+      "skipped": "Skipped",
+      "tourTitle": "Would you like a quick tour?",
+      "tourBody": "We will show you around the app, one screen at a time, so that nothing is hard to find. It is short, and you can stop it whenever you like.",
+      "tourStart": "Show me around",
+      "tourNo": "No, thank you"
+    }
+  },
+  "tour": {
+    "progress": "{{n}} of {{total}}",
+    "skip": "Skip the tour",
+    "next": "Next",
+    "finish": "Finish",
+    "nav": {
+      "title": "These three take you everywhere",
+      "body": "Home is where you are now. Catalog is every product in the shops near you. Shopping list is what you take to the supermarket."
+    },
+    "groups": {
+      "title": "A group is who you shop with",
+      "body": "Your household, your family, the flat you share. Everybody in it sees the same lists at the same time."
+    },
+    "lists": {
+      "title": "Inside a group are lists",
+      "body": "A list is what a group is running out of. Anybody in the group can add to it, from anywhere."
+    },
+    "basket": {
+      "title": "One list for the whole trip",
+      "body": "Velista puts everything your groups need into one list, and tells you which shop sells each thing cheapest. You tick things off as you put them in the trolley."
+    },
+    "assistant": {
+      "title": "Ask instead of looking",
+      "body": "Tell Velista what you need in your own words, the way you would tell a person. It writes it on the right list for you."
+    },
+    "voice": {
+      "title": "Say it instead of typing it",
+      "body": "Tap the microphone, say what is missing, and tap it again to finish. It is the quickest way to add something with your hands full."
     }
   }
 }

@@ -1,11 +1,12 @@
 /**
  * What a local engine costs, said out loud before the run and after it.
  *
- * `--engine ollama` is the default because a leaflet reading is cheap to redo,
- * the drift check and the baseline already exist to catch a bad one, and a free
- * first pass over a 40 page leaflet is worth having. It is **not** good enough
- * to accept unseen, and the tool has to say so rather than imply it by exiting
- * zero.
+ * `--engine ollama` used to be the default, as a free first pass. It is not the
+ * default any more (plan 0003): local vision models are unreliable on leaflets,
+ * gemma4 was measured unstable on them, and the developer asked for leaflets to
+ * be read by Sonnet or another strong vision model. It is still there for an
+ * operator who names it, and it is **not** good enough to accept unseen, so the
+ * tool says so rather than imply it by exiting zero.
  *
  * It is printed **before** the run as well as after, because a warning is worth
  * nothing to somebody who has already waited eleven minutes and started reading
@@ -32,17 +33,22 @@ export function localEngineShortNotice(engine, model) {
   );
 }
 
+/** The line that says why a local model is not the default. */
+export const LOCAL_VISION_WARNING =
+  'Local vision models are unreliable on leaflets: they loop, drop tiles and invent prices. The default, --engine claude --model sonnet, is the reader to trust.';
+
 /** The whole notice, printed before the run and again at the end of it. */
 export function localEngineNotice(engine, model) {
   return [
     localEngineShortNotice(engine, model),
+    LOCAL_VISION_WARNING,
     'It found every tile and invented nothing, and it got 63% of headline prices,',
     '55% of ANTES prices and 31% of unit prices right, against 95%, 100% and 100%',
     'for Sonnet 5. On every price drop tile it invented a single unit price the',
     'page does not print.',
     '',
     'Check this reading against the pages before you upload it. For a reading you',
-    'do not intend to check, use --engine manual and paste the prompt into a',
-    'stronger model.',
+    'do not intend to check, leave --engine out, or use --engine manual and paste',
+    'the prompt into a stronger model.',
   ].join('\n');
 }

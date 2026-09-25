@@ -1,0 +1,77 @@
+<lib-sheet-shell (dismiss)="close()" labelledBy="changes-title">
+  <h2 class="title" id="changes-title">
+    {{ 'basket.changes.title' | rokuT }}
+  </h2>
+
+  @switch (state()) {
+    @case ('failed') {
+      <!--
+        The read did not arrive. A retry and nothing else: nothing was lost and
+        there is nothing here for a reader to correct.
+      -->
+      <p class="failed">{{ 'basket.changes.failed' | rokuT }}</p>
+      <button (click)="retry()" class="secondary" type="button">
+        {{ 'basket.changes.retry' | rokuT }}
+      </button>
+    }
+
+    @case ('ready') {
+      @if (entries().length === 0) {
+        <p class="hint">{{ 'basket.changes.empty' | rokuT }}</p>
+      } @else {
+        <!--
+          A real list, so a screen reader is told how many there are and can
+          move between them (velista 0093, section 10). Newest first, which is
+          the server's order and is never re-sorted here.
+        -->
+        <ul class="entries">
+          @for (entry of entries(); track entry.id) {
+            <li>
+              <lib-change-entry [entry]="entry" />
+            </li>
+          }
+        </ul>
+
+        @if (hasMore()) {
+          <button
+            (click)="more()"
+            [disabled]="loadingMore()"
+            class="secondary"
+            type="button"
+          >
+            {{ 'basket.changes.more' | rokuT }}
+          </button>
+        }
+      }
+    }
+
+    @default {
+      <!--
+        The shape of the list rather than a spinner, so the sheet does not jump
+        when the entries land. Announced, because a panel that is silently
+        empty for a second is a panel somebody thinks is broken.
+      -->
+      <div aria-live="polite" class="skeleton" role="status">
+        <span aria-hidden="true" class="skeleton-entry"></span>
+        <span aria-hidden="true" class="skeleton-entry"></span>
+        <span aria-hidden="true" class="skeleton-entry"></span>
+        <span class="visually-hidden">
+          {{ 'basket.changes.loading' | rokuT }}
+        </span>
+      </div>
+    }
+  }
+
+  <!--
+    What "Show more" answered. Focus stays on the button, so a reader who
+    cannot see the entries land is told here instead (velista 0088, section 10).
+
+    Outside every branch above, because a live region has to be in the document
+    before the text lands in it.
+  -->
+  <p aria-live="polite" class="visually-hidden">{{ announcement() }}</p>
+
+  <button (click)="close()" class="quiet" type="button">
+    {{ 'basket.changes.close' | rokuT }}
+  </button>
+</lib-sheet-shell>

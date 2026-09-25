@@ -12,6 +12,7 @@ import {
   type LineSettlement,
   type ListPermission,
   type Page,
+  type SettleLineOptions,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
@@ -370,7 +371,7 @@ export class LineMemory implements LineServiceI {
   }
 
   /**
-   * Say what happened to a line on a trip. `DECIDE`.
+   * Say what happened to a line on a trip. `WRITE` (backend plan 0131).
    *
    * Three properties worth reproducing faithfully, because every screen built on this
    * fixture depends on them (backend plan 0047, section 4):
@@ -384,10 +385,13 @@ export class LineMemory implements LineServiceI {
   async settle(
     lineId: string,
     outcome: SettlementOutcome,
-    options?: { quantity?: number; itemId?: string }
+    options?: SettleLineOptions
   ): Promise<{ line: Line; settlement: LineSettlement }> {
     const line = this._lineOrThrow(lineId);
-    this._require(line.listId, 'DECIDE');
+    // `WRITE` or `MANAGE`, which is `canSettle` on the server since backend plan
+    // 0131. The fixture refuses exactly who the server refuses, or a screen
+    // built against it draws a control the real API answers 403 to.
+    this._requireSettle(line.listId);
 
     if (outcome === 'NOT_AVAILABLE' && options?.quantity !== undefined) {
       throw memoryFailure('validation_failed', 400);
@@ -416,6 +420,9 @@ export class LineMemory implements LineServiceI {
       // basket act (luna `0054`, section 3) and this fake is the zone list surface,
       // which has no route that would set this.
       revertedAt: null,
+      // A hand settle on a zone list names no scope, so nothing records a price.
+      unitPriceCents: null,
+      currency: null,
     };
     this._settlements = [settlement, ...this._settlements];
 
@@ -638,6 +645,24 @@ export class LineMemory implements LineServiceI {
   /** Test seam: the next write throws this code, once. */
   failNextWrite(code: GatewayError['code']): void {
     this._nextWriteFails = code;
+  }
+
+  /**
+   * The right to record a purchase: `WRITE` or `MANAGE` (backend plan 0131).
+   *
+   * Its own method rather than a second argument on {@link _require}, because
+   * the question is "may this person settle" and not "does this person hold one
+   * named permission". The refusal is the same shape either way.
+   */
+  private _requireSettle(listId: string): readonly ListPermission[] {
+    const permissions = this._permissionsFor(listId);
+    if (!permissions.includes('WRITE') && !permissions.includes('MANAGE')) {
+      throw memoryFailure(
+        permissions.length === 0 ? 'not_found' : 'forbidden',
+        permissions.length === 0 ? 404 : 403
+      );
+    }
+    return permissions;
   }
 
   /**

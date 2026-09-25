@@ -4,7 +4,6 @@ import {
   Delete,
   Get,
   HttpStatus,
-  Param,
   Patch,
   Post,
   Query,
@@ -22,6 +21,7 @@ import {
   type ResendAdminVerificationResult,
   type UpdateAdminUserResult,
 } from '@portfolio/luna-shopper/contracts';
+import { UuidParam } from '@portfolio/luna-shopper/platform';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { adminCredential } from './admin-credential';
@@ -105,7 +105,7 @@ export class AdminUsersController {
   @ApiContractResponse(ADMIN_USER_PATTERNS.get)
   get(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<AdminUserDetailView> {
     return this.nats.send<AdminUserDetailView>(ADMIN_USER_PATTERNS.get, {
       ...adminCredential(admin),
@@ -124,7 +124,7 @@ export class AdminUsersController {
   @ApiContractResponse(ADMIN_USER_PATTERNS.delete)
   remove(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string
+    @UuidParam('id') id: string
   ): Promise<DeleteAdminUserResult> {
     return this.nats.send<DeleteAdminUserResult>(ADMIN_USER_PATTERNS.delete, {
       ...adminCredential(admin),
@@ -153,7 +153,7 @@ export class AdminUsersController {
   @ApiProblemResponses({ body: true, conflict: true })
   resendVerification(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: ResendAdminVerificationDto
   ): Promise<ResendAdminVerificationResult> {
     return this.nats.send<ResendAdminVerificationResult>(
@@ -182,7 +182,7 @@ export class AdminUsersController {
   @ApiProblemResponses({ body: true, conflict: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
-    @Param('id') id: string,
+    @UuidParam('id') id: string,
     @Body() dto: UpdateAdminUserDto
   ): Promise<UpdateAdminUserResult> {
     return this.nats.send<UpdateAdminUserResult>(ADMIN_USER_PATTERNS.update, {

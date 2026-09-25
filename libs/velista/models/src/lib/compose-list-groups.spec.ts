@@ -56,6 +56,7 @@ function compose(
     past?: readonly Trip[];
     rows?: Readonly<Record<string, readonly TripRow[]>>;
     open?: readonly string[];
+    tripsReady?: boolean;
     reordering?: boolean;
     state?: Partial<ListViewState>;
     query?: string;
@@ -82,6 +83,7 @@ function compose(
     live: options.live ?? [],
     past: options.past ?? [],
     rowsOf: (key) => options.rows?.[key],
+    tripsReady: options.tripsReady ?? true,
     openKeys: new Set(options.open ?? []),
     reordering: options.reordering ?? false,
     dueLineIds: options.due,
@@ -143,16 +145,75 @@ describe('composeListGroups (velista 0088)', () => {
       expect(view.trips[0].rows).toBeNull();
     });
 
-    it('puts a zero line with no purchase last, and a zero line with purchases nowhere in To buy', () => {
+    it('puts a zero line with no purchase last, and a zero line with purchases in its trips once they loaded', () => {
       const view = groups(
-        compose([
-          { id: 'saffron', quantity: 0, boughtCount: 0 },
-          { id: 'eggs', quantity: 0, boughtCount: 3 },
-          { id: 'bread', quantity: 2 },
-        ])
+        compose(
+          [
+            { id: 'saffron', quantity: 0, boughtCount: 0 },
+            { id: 'eggs', quantity: 0, boughtCount: 3 },
+            { id: 'bread', quantity: 2 },
+          ],
+          { past: [trip('s1', { kind: 'SESSION' })] }
+        )
       );
 
       expect(ids(view.toBuy)).toEqual(['bread', 'saffron']);
+    });
+  });
+
+  describe('a line at zero with purchases (velista 0095, test 8)', () => {
+    const seeds = [
+      { id: 'eggs', quantity: 0, boughtCount: 3 },
+      { id: 'saffron', quantity: 0, boughtCount: 0 },
+      { id: 'bread', quantity: 2 },
+    ];
+
+    it('stays last in To buy while the trips have not loaded or failed', () => {
+      const view = groups(
+        compose(seeds, {
+          past: [trip('s1', { kind: 'SESSION' })],
+          tripsReady: false,
+        })
+      );
+
+      expect(ids(view.toBuy)).toEqual(['bread', 'saffron', 'eggs']);
+    });
+
+    it('stays last in To buy when the heads loaded and named no trip', () => {
+      const view = groups(compose(seeds, { tripsReady: true }));
+
+      expect(ids(view.toBuy)).toEqual(['bread', 'saffron', 'eggs']);
+      expect(view.trips).toEqual([]);
+    });
+
+    it('leaves To buy and is not due once the heads loaded and named a trip', () => {
+      const view = groups(
+        compose(seeds, {
+          past: [trip('s1', { kind: 'SESSION' })],
+          tripsReady: true,
+        })
+      );
+
+      expect(ids(view.toBuy)).toEqual(['bread', 'saffron']);
+      expect(ids(view.due)).toEqual([]);
+    });
+
+    it('is drawn once, as due, when the list suggests it', () => {
+      const view = groups(compose(seeds, { tripsReady: false, due: ['eggs'] }));
+
+      expect(ids(view.toBuy)).toEqual(['bread', 'saffron']);
+      expect(ids(view.due)).toEqual(['eggs']);
+    });
+
+    it('leaves the claimed rule as it was: a claimed line stays until its rows arrive', () => {
+      const view = groups(
+        compose([{ id: 'milk', claimed: true }], {
+          live: [trip('b-live', { live: true })],
+          tripsReady: false,
+        })
+      );
+
+      expect(ids(view.toBuy)).toEqual(['milk']);
     });
 
     it('keeps rejected lines last of all', () => {

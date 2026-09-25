@@ -87,6 +87,10 @@ describeIntegration('a trusted source imports a place (real Postgres)', () => {
             nextCursor: null,
           });
         }
+        // The chain holds no shop yet, so nothing matches (plan 0152).
+        if (subject === SUPERMARKET_LOCATION_PATTERNS.list) {
+          return of({ items: [], nextCursor: null });
+        }
         return of({ id: LOCATION, supermarketId: CHAIN });
       }),
     } as unknown as ClientProxy;

@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { throwError, type Observable } from 'rxjs';
 import { getRequestContext } from '../context/request-context';
 import { DEFAULT_LOCALE, type SupportedLocale } from '../localization/locale';
+import { isBodyWithheld, WITHHELD_BODY } from '../logging/withheld-body';
 import { isDomainException, retryAfterSecondsOf } from './domain-exception';
 import { ERROR_CODES, type ErrorCode } from './error-codes';
 import {
@@ -18,6 +19,26 @@ import {
   type ProblemDetails,
 } from './problem-details';
 import { buildProblemDetails } from './problem-factory';
+
+/** Postgres refusing a value for its type, `'undefined'::uuid` for one. */
+const PG_INVALID_TEXT_REPRESENTATION = '22P02';
+
+/**
+ * The Postgres error code of a TypeORM `QueryFailedError`, read by shape so
+ * the platform does not depend on TypeORM. The driver error carries it, and
+ * TypeORM copies it onto the wrapper too.
+ */
+function postgresCodeOf(exception: unknown): string | undefined {
+  if (!(exception instanceof Error)) {
+    return undefined;
+  }
+  const candidate = exception as {
+    code?: unknown;
+    driverError?: { code?: unknown };
+  };
+  const code = candidate.driverError?.code ?? candidate.code;
+  return typeof code === 'string' ? code : undefined;
+}
 
 /** Maps an HTTP status onto the closest stable error code. */
 function codeForStatus(status: number): ErrorCode {
@@ -169,6 +190,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     if (exception instanceof RpcException) {
       return { code: ERROR_CODES.INTERNAL, detail: exception.message };
     }
+    if (postgresCodeOf(exception) === PG_INVALID_TEXT_REPRESENTATION) {
+      // A malformed id that reached a `uuid` cast. The route should have
+      // refused it with `UuidParam` first, and this is the backstop for one
+      // that does not: what the caller sent is wrong, so it is a 400 and not
+      // "something went wrong on our side" (plan 0158).
+      return {
+        code: ERROR_CODES.VALIDATION_FAILED,
+        detail: 'A value in the request is not in the format it must be in.',
+      };
+    }
     return { code: ERROR_CODES.INTERNAL };
   }
 
@@ -196,7 +227,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             url: req?.originalUrl ?? req?.url,
             params: req?.params,
             query: req?.query,
-            body: req?.body,
+            // A route may mark its bodies as never logged (plan 0164): the
+            // point a device reports is one of them.
+            body: isBodyWithheld(req) ? WITHHELD_BODY : req?.body,
           },
         },
         'Unhandled error while processing request'

@@ -97,6 +97,11 @@ export class CatalogMemory implements CatalogServiceI {
       group: row,
       itemIds: MEMBERS[row.id] ?? [],
       offer: null,
+      // The reveal's first five, in fixture order: with no prices there is no
+      // cheapest, and the server orders an unpriced group's members by name.
+      members: ITEMS.filter((one) => one.productGroupId === row.id).slice(0, 5),
+      // The fixture groups carry no other words, and match on their names alone.
+      synonyms: { en: [], es: [] },
     }));
 
     const items: CatalogSuggestion[] = ITEMS.filter((row) =>
@@ -136,6 +141,13 @@ export class CatalogMemory implements CatalogServiceI {
   ): Promise<readonly ProductGroup[] | null> {
     const wanted = new Set(groupIds);
     return GROUPS.filter((row) => wanted.has(row.id));
+  }
+
+  /** The fixture's members of one group, unpriced like every row here. */
+  async groupMembers(
+    groupId: string
+  ): Promise<readonly CatalogItem[] | null> {
+    return ITEMS.filter((row) => row.productGroupId === groupId);
   }
 }
 
@@ -178,6 +190,10 @@ function item(
     productGroupId,
     category,
     offer: null,
+    chainPrices: [],
+    imageUrl: null,
+    packCount: null,
+    unitBasis: null,
   };
 }
 

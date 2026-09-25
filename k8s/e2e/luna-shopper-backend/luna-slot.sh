@@ -90,8 +90,11 @@
 # this repository already ranks above a .env file. The files on disk are read (so
 # a hand edited key still applies) and never written.
 #
-# The slot number is required with every ephemeral verb, because nothing records
-# it. Slot 0 is refused: it is the developer's own.
+# The slot number is required with every ephemeral verb, because nothing in the
+# checkout records it. Slot 0 is refused: it is the developer's own. While it
+# runs, the slot is held by a RECORD in the main .git directory, which --list
+# prints and --auto skips, and a slot that a worktree claims, a lock keeps or
+# another record holds is refused (see "ephemeral records" below).
 #
 # This script (re)writes, all git ignored, so it is safe per worktree:
 #   - k8s/e2e/luna-shopper-backend/.env.slot   (compose: project name + host ports)
@@ -136,8 +139,11 @@ PROBE="$root/tools/dev/probe-ports.mjs"
 #
 # Three consequences, and none of them is a detail:
 #
-#   The slot number and the verb are both REQUIRED. Nothing is recorded, so there
-#   is nothing to read back: an --ephemeral run cannot infer which slot it means.
+#   The slot number and the verb are both REQUIRED. Nothing in the checkout
+#   records the number, so there is nothing to read back: an --ephemeral run
+#   cannot infer which slot it means. The record that holds the slot says which
+#   process has it, not which slot a checkout means, and one checkout can hold
+#   several.
 #
 #   The rendered files, the compose descriptor, the logs and the pid files live
 #   in a directory OUTSIDE the repository, one per slot, so a --down after an --up
@@ -467,13 +473,19 @@ warn_foreign_ports() {
 # the result next session, and once --down releases the claim those volumes belong
 # to a number --auto will hand to the next worktree that asks, with nothing
 # telling it they are there.
-lock_dir() {
+shared_dir() {
   local dir
   dir="$(git rev-parse --git-common-dir 2>/dev/null)" || return 1
   [[ -n "$dir" ]] || return 1
   # `git rev-parse` answers relatively when it can, and this script has already
   # cd'd to the workspace root, so that is what a relative answer is relative to.
   [[ "$dir" == /* || "$dir" =~ ^[A-Za-z]: ]] || dir="$root/$dir"
+  echo "$dir"
+}
+
+lock_dir() {
+  local dir
+  dir="$(shared_dir)" || return 1
   echo "$dir/luna-slot-locks"
 }
 
@@ -534,6 +546,204 @@ slot_volumes() {
   docker volume ls --format '{{.Name}}' 2>/dev/null | grep -E "^${project}_" || true
 }
 
+# --- ephemeral records -------------------------------------------------------
+#
+# A RECORD is the third kind, beside a claim and a lock (tools/dev/plans/0004).
+#
+#   a claim belongs to a worktree, and a lock belongs to a slot's databases.
+#   a record belongs to the PROCESS that ran `--ephemeral --up <n>`, and it says
+#   that process holds the number while it runs.
+#
+# An ephemeral slot used to be held by nothing but its open ports. So it was
+# invisible from the moment a tool chose the number to the moment the first port
+# opened, and two tools that chose at the same time both took it.
+#
+# The record is a directory, `<main .git>/luna-slot-ephemeral/<n>`, beside the
+# locks and for the same reason: every checkout reads the same one. `mkdir` makes
+# it, because `mkdir` fails when the directory exists, and it does so the same way
+# in Git Bash and on Linux. Of two racing callers, the first mkdir wins. Inside it
+# is one file, `owner`, with the pid of the caller and the time.
+#
+# A record is STALE when its pid is gone and every port of the slot is closed.
+# The next `--ephemeral --up` of that number takes it over. Both conditions are
+# needed: a caller that ran the script from a short lived shell is gone as soon
+# as the script returns, and its slot is still up.
+record_root() {
+  local dir
+  dir="$(shared_dir)" || return 1
+  echo "$dir/luna-slot-ephemeral"
+}
+
+record_path() {
+  local dir
+  dir="$(record_root)" || return 1
+  echo "$dir/$1"
+}
+
+# One field of a record's owner file, or nothing.
+record_field() {
+  local file="$1/owner"
+  [[ -f "$file" ]] || return 0
+  sed -n "s/^$2=//p" "$file" | head -n 1 | tr -d '\r'
+}
+
+# The process that asked for the slot, which is the process the record follows.
+#
+# On Linux that is the parent of this script. In Git Bash it is not so simple.
+# When the caller is not an MSYS program (node, for the curation cli), bash sees
+# a parent pid of 1, so the parent is read from Windows instead. Git's own
+# `bin/bash.exe` launcher can sit between the two, and it exits with the script,
+# so a parent named bash.exe that bash does not know is passed over. The pid in
+# the record is a Windows pid there, which is what Task Manager shows.
+caller_pid() {
+  if [[ ! -r "/proc/$$/winpid" ]]; then
+    echo "$PPID"
+    return 0
+  fi
+  if (( PPID != 1 )) && [[ -r "/proc/$PPID/winpid" ]]; then
+    cat "/proc/$PPID/winpid"
+    return 0
+  fi
+
+  local self found=''
+  self="$(cat "/proc/$$/winpid")"
+  found="$(powershell.exe -NoProfile -NonInteractive -Command "
+    \$id = $self; \$n = 0
+    do {
+      \$p = Get-CimInstance Win32_Process -Filter \"ProcessId=\$id\"
+      if (-not \$p) { break }
+      \$id = \$p.ParentProcessId
+      \$parent = Get-CimInstance Win32_Process -Filter \"ProcessId=\$id\"
+      \$n++
+    } while (\$parent -and \$parent.Name -in 'bash.exe', 'sh.exe' -and \$n -lt 4)
+    \$id" 2>/dev/null | tr -d '\r')" || found=''
+  # Without an answer the record follows this script, which is gone when it
+  # returns. The open ports still hold the slot after that.
+  if [[ "$found" =~ ^[0-9]+$ ]]; then echo "$found"; else echo "$self"; fi
+}
+
+pid_alive() {
+  local pid="$1"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  if [[ -r "/proc/$$/winpid" ]]; then
+    tasklist //FI "PID eq $pid" //NH //FO CSV 2>/dev/null | grep -q "^\"[^\"]*\",\"$pid\","
+  else
+    kill -0 "$pid" 2>/dev/null || [[ -d "/proc/$pid" ]]
+  fi
+}
+
+# True when no port of the slot answers, the same test find_free_slot makes.
+slot_quiet() {
+  local -a ports
+  local port state
+  mapfile -t ports < <(slot_ports "$1")
+  while IFS=$'\t' read -r port state; do
+    [[ "$state" == "closed" ]] || return 1
+  done < <(probe_ports "${ports[@]}")
+  return 0
+}
+
+# live, stale, pending, or nothing when the slot has no record.
+#
+# pending is the moment between the winning mkdir and its owner file. It lasts
+# milliseconds, so a record still without an owner a minute later was left by a
+# caller that died in that moment, and it is judged by its ports alone.
+record_state() {
+  local dir pid
+  dir="$(record_path "$1")" || return 0
+  [[ -d "$dir" ]] || return 0
+  if [[ ! -f "$dir/owner" ]]; then
+    if [[ -n "$(find "$dir" -maxdepth 0 -mmin -1 2>/dev/null)" ]]; then
+      echo pending
+    elif slot_quiet "$1"; then
+      echo stale
+    else
+      echo live
+    fi
+    return 0
+  fi
+  pid="$(record_field "$dir" pid)"
+  if pid_alive "$pid" || ! slot_quiet "$1"; then echo live; else echo stale; fi
+}
+
+# "ephemeral (pid N), since <date>, from <worktree>", or nothing.
+record_note() {
+  local dir pid since wt
+  dir="$(record_path "$1")" || return 0
+  [[ -d "$dir" ]] || return 0
+  pid="$(record_field "$dir" pid)"
+  since="$(record_field "$dir" since)"
+  wt="$(record_field "$dir" worktree)"
+  echo "ephemeral (pid ${pid:-unknown}), since ${since:-an unrecorded date}, from ${wt:-an unnamed worktree}"
+}
+
+# Take the record for a slot, or refuse and name who holds it.
+#
+# A stale record is taken over under a second mkdir, `<n>.takeover`, and the
+# state is judged again inside it. Without that, two callers that both judged
+# the record stale could both replace it, and the second would delete the record
+# the first had just made. The final word is still the mkdir of the record.
+take_record() {
+  local slot="$1" base dir me state pid
+  base="$(record_root)" || {
+    echo "could not locate the main .git directory, so slot $slot cannot be recorded." >&2
+    echo "Without a record, another tool can choose the same number; nothing was started." >&2
+    return 1
+  }
+  mkdir -p "$base"
+  dir="$base/$slot"
+  me="$(caller_pid)"
+
+  if ! mkdir "$dir" 2>/dev/null; then
+    local guard="$base/$slot.takeover"
+    # A guard older than a minute belongs to a caller that died holding it.
+    if [[ -n "$(find "$guard" -maxdepth 0 -mmin +1 2>/dev/null)" ]]; then
+      rmdir "$guard" 2>/dev/null || true
+    fi
+    if ! mkdir "$guard" 2>/dev/null; then
+      echo "Luna Shopper slot $slot is being taken by another caller at this moment. Nothing was started." >&2
+      return 1
+    fi
+
+    state="$(record_state "$slot")"
+    pid="$(record_field "$dir" pid)"
+    if [[ "$state" != 'stale' && ( -z "$pid" || "$pid" != "$me" ) ]]; then
+      rmdir "$guard" 2>/dev/null || true
+      echo "Luna Shopper slot $slot is held by $(record_note "$slot")." >&2
+      echo "Nothing was started. Pick a slot --list does not print, or stop that one with" >&2
+      echo "  bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --down $slot" >&2
+      return 1
+    fi
+    if [[ "$state" == 'stale' ]]; then
+      echo "==> Luna Shopper slot $slot had a stale record: $(record_note "$slot")"
+      echo "    Its caller is gone and every port is closed, so this run takes it over."
+    fi
+    rm -rf "$dir"
+    if ! mkdir "$dir" 2>/dev/null; then
+      rmdir "$guard" 2>/dev/null || true
+      echo "Luna Shopper slot $slot was taken by another caller first. Nothing was started." >&2
+      return 1
+    fi
+    rmdir "$guard" 2>/dev/null || true
+  fi
+
+  # Written beside and then renamed, so a reader sees a whole file or none.
+  {
+    echo "# Written by luna-slot.sh --ephemeral --up. Not committed: it lives in the"
+    echo "# main .git directory so every checkout reads it. --ephemeral --down removes it."
+    echo "pid=$me"
+    echo "since=$(date '+%Y-%m-%d %H:%M')"
+    echo "worktree=$root"
+  } > "$dir/owner.tmp"
+  mv -f "$dir/owner.tmp" "$dir/owner"
+}
+
+clear_record() {
+  local dir
+  dir="$(record_path "$1")" || return 0
+  rm -rf "$dir"
+}
+
 usage() {
   cat >&2 <<'EOF'
 usage:
@@ -546,7 +756,8 @@ usage:
   luna-slot.sh --unlock [<slot>]   drop a --keep-data lock, and nothing else
   luna-slot.sh --ephemeral --up <slot>   run a slot without configuring this
                                          checkout for it: no .env is written and
-                                         no claim is made
+                                         no claim is made, and a record holds the
+                                         number until --ephemeral --down <slot>
 
 Source changes need none of this: `nx serve` watches each service and the
 libraries it consumes and restarts that one process itself. --restart is for a
@@ -586,11 +797,17 @@ options:
                          the .env files, which are read and left alone. So one
                          checkout can hold slot 0 and drive another slot beside
                          it. It takes --up, --down and --restart, the slot number
-                         is required with each (nothing records it), and slot 0
-                         is refused. The rendered files, the logs and the pid
-                         files live outside the repository, under
-                         $TMPDIR/luna-slot-ephemeral/slot<n>, which --down
-                         removes.
+                         is required with each (the checkout does not record
+                         it), and slot 0 is refused. The rendered files, the
+                         logs and the pid files live outside the repository,
+                         under $TMPDIR/luna-slot-ephemeral/slot<n>, which --down
+                         removes. --up refuses a slot that a worktree claims, a
+                         lock keeps or another ephemeral run holds. It holds the
+                         slot with a record in the main .git directory, which
+                         --list prints as "ephemeral (pid N)", --auto skips,
+                         and --down removes. A record whose pid is gone and
+                         whose ports are all closed is stale, and the next
+                         --ephemeral --up of that number takes it over.
 
 The Angular slots are a separate numbering: any of them can call this backend,
 and several can at the same time. Backend slot 3 does not imply front end slot 3.
@@ -1165,10 +1382,10 @@ VOICE_COMMENT_MAX_BYTES=2097152
 VOICE_COMMENT_CONTENT_TYPES=
 # One number, two readers (plans 0052 and 0059): a live basket older than this
 # claims none of its lines, and the sweep finishes it at the same age.
-GENERATED_LIST_CLAIM_WINDOW=60h
-GENERATED_LIST_SWEEP_ENABLED=true
-GENERATED_LIST_SWEEP_INTERVAL=1h
-GENERATED_LIST_SWEEP_BATCH=100
+BASKET_CLAIM_WINDOW=60h
+BASKET_SWEEP_ENABLED=true
+BASKET_SWEEP_INTERVAL=1h
+BASKET_SWEEP_BATCH=100
 # The zone reaper, the other scheduled job core runs. Stated for the same reason
 # as auth's orphan reaper: it deletes rows from this slot's database on a timer,
 # so the switch belongs in the file that configures the service and not only in a
@@ -1186,6 +1403,10 @@ PROFILE_NEARBY_RADIUS_BY_COUNTRY=
 # (velista plan 0058). Beyond it the screen offers typing the code instead, which
 # is a path worth being able to force by lowering this.
 PROFILE_LOCATION_MAX_DISTANCE_METRES=10000
+# Stamp the tour as seen on every account created on this slot, so that a new
+# account never opens it. On here and off everywhere else: set it to false to
+# work on the tour itself (velista plan 0099).
+NEW_ACCOUNTS_SKIP_TOUR=true
 EOF
   telemetry_env core
   } | merge_env "$root/apps/luna-shopper-backend/core/.env" "${DERIVED_KEYS[core]} $TELEMETRY_DERIVED"
@@ -1389,7 +1610,8 @@ EOF
 # The lowest slot no other worktree claims and nothing is listening on. Both
 # conditions matter: a claim with nothing running is a worktree that is configured
 # but idle and would collide the moment it starts, and an open port with no claim
-# is something outside this repository that would collide right now.
+# is something outside this repository that would collide right now. A slot that
+# is locked, or held by a live ephemeral record, is passed over too.
 find_free_slot() {
   local -A claimed=()
   local wt s self
@@ -1401,7 +1623,7 @@ find_free_slot() {
     [[ -n "$s" ]] && claimed[$s]="$wt"
   done < <(worktree_paths)
 
-  # Why each slot was passed over, kept so that running out can say so. The three
+  # Why each slot was passed over, kept so that running out can say so. The four
   # causes have different fixes, and one message for all of them is not enough.
   local -A why=()
   local slot busy state port
@@ -1417,6 +1639,14 @@ find_free_slot() {
       why[$slot]="locked (databases kept) by $(lock_note "$slot")"
       continue
     fi
+    # A stale record is no reason to pass a slot over: its caller is gone and
+    # its ports are closed, which is what the probe below checks again.
+    case "$(record_state "$slot")" in
+      live | pending)
+        why[$slot]="held by $(record_note "$slot")"
+        continue
+        ;;
+    esac
     mapfile -t ports < <(slot_ports "$slot")
     busy=0
     while IFS=$'\t' read -r port state; do
@@ -1434,11 +1664,12 @@ find_free_slot() {
   done
   echo "(slot 0 is the developer's own, and --auto never takes it)" >&2
   echo >&2
-  echo "The three causes have different fixes:" >&2
+  echo "The four causes have different fixes:" >&2
   echo "  claimed    that worktree still holds the number. --down in it gives the slot" >&2
   echo "             back now; --down --keep-slot is what holds one on purpose." >&2
   echo "  locked     its databases were kept deliberately. --up <n> takes the slot AND" >&2
   echo "             those databases; --unlock <n> frees the number and leaves them." >&2
+  echo "  held       an --ephemeral run has it. --ephemeral --down <n> gives it back." >&2
   echo "  listening  something outside this repository has the port, so no --down" >&2
   echo "             anywhere will free it." >&2
   echo >&2
@@ -1566,6 +1797,31 @@ up() {
   local -a wanted=()
   resolve_services "$services_csv" wanted || return $?
 
+  # An ephemeral slot takes nothing that somebody else holds: not a number a
+  # worktree claims, not the databases a lock keeps, and not a slot another
+  # ephemeral run holds. The ordinary mode takes a locked slot when it is named,
+  # but it takes it for a worktree that will then claim it. An ephemeral run
+  # claims nothing, and it would leave the databases with no owner at all.
+  if [[ -n "$EPHEMERAL" ]]; then
+    local wt claimants=''
+    while IFS= read -r wt; do
+      [[ -n "$wt" ]] || continue
+      [[ "$(slot_of_worktree "$wt")" == "$requested_slot" ]] && claimants+="  $wt"$'\n'
+    done < <(worktree_paths)
+    if [[ -n "$claimants" ]]; then
+      echo "Luna Shopper slot $requested_slot is claimed by:" >&2
+      printf '%s' "$claimants" >&2
+      echo "Nothing was started. Pick a slot --list does not print." >&2
+      return 1
+    fi
+    if locked "$requested_slot"; then
+      echo "Luna Shopper slot $requested_slot is locked, databases kept, by $(lock_note "$requested_slot")." >&2
+      echo "Nothing was started. Pick a slot --list does not print." >&2
+      return 1
+    fi
+    take_record "$requested_slot" || return 1
+  fi
+
   # --auto in a worktree that already holds a claim keeps that number rather than
   # taking a fresh one. Taking a fresh one abandons whatever is still running on
   # the old number, which is what stopped `--up --auto` being the one command an
@@ -1638,8 +1894,9 @@ up() {
     echo "  mailpit  http://localhost:${LUNA_MAILPIT_UI_PORT}"
     echo
     if [[ -n "$EPHEMERAL" ]]; then
-      echo "Nothing in this checkout was changed, and no worktree claims the slot, so"
-      echo "the number is only held by the ports being open. Take it down with:"
+      echo "Nothing in this checkout was changed, and no worktree claims the slot. It is"
+      echo "held by $(record_note "$LUNA_SLOT"),"
+      echo "which --list shows. Take it down, and give the number back, with:"
       echo "  bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --down $LUNA_SLOT"
     else
       echo "Serve the matching front end with:  tools/dev/ng-slot.sh --up $LUNA_SLOT"
@@ -1890,8 +2147,12 @@ down() {
   # An ephemeral slot was never claimed, so there is no claim to give back and no
   # .env of this worktree's that has anything of this slot's in it to strip. What
   # there is to remove is the directory outside the repository, and with it the
-  # rendered files, the logs and the pid files.
+  # rendered files, the logs and the pid files. The record goes too, after
+  # everything is stopped, so the number is held until the ports are closed. With
+  # --keep-data the lock written above holds the slot from here on.
   if [[ -n "$EPHEMERAL" ]]; then
+    clear_record "$LUNA_SLOT"
+    echo "  the ephemeral record for slot $LUNA_SLOT is removed."
     if [[ -n "$keep_data" ]]; then
       echo "  the rendered environment is kept in $EPHEMERAL_DIR beside the databases."
     else
@@ -1989,7 +2250,7 @@ list() {
   printf '  %-4s %-20s %-9s %-9s %-7s %-6s %s\n' \
     'SLOT' 'COMPOSE PROJECT' 'INFRA' 'SERVICES' 'OBSERV' 'TEST' 'CLAIMED BY'
 
-  local infra services observ testdb claim first line note
+  local infra services observ testdb claim first line note record
   for (( slot = 0; slot <= MAX_SLOT; slot++ )); do
     infra="$(count_open infra_ports "$slot")"
     services="$(count_open service_ports "$slot")"
@@ -1997,6 +2258,16 @@ list() {
     testdb="$(count_open test_db_ports "$slot")"
     claim="${claimed_by[$slot]:-}"
     note="$(lock_note "$slot")"
+
+    # An ephemeral record goes in the claimed by column, because it holds the
+    # number the way a claim does. A stale one still gets its row, so that the
+    # next --ephemeral --up of the number is not a surprise.
+    record="$(record_state "$slot")"
+    if [[ -n "$record" ]]; then
+      line="$(record_note "$slot")"
+      [[ "$record" == 'stale' ]] && line="$line, STALE: caller gone, every port closed"
+      [[ -n "$claim" ]] && claim="$claim"$'\n'"$line" || claim="$line"
+    fi
 
     # Nothing running, nobody configured for it, and no databases being kept: not
     # worth a line. A lock is exactly the case where the slot looks free and is
@@ -2041,7 +2312,10 @@ list() {
   echo "LOCKED means somebody kept that slot's databases with --down --keep-data. --auto"
   echo "skips it; --up <n> takes it and the databases with it; --unlock <n> frees the"
   echo "number and leaves them."
-  echo "Slots 0..${MAX_SLOT} with no claim, no lock and no listener are omitted."
+  echo "ephemeral (pid N) is a slot an --ephemeral --up holds while pid N runs or any"
+  echo "port is open. --auto skips it; --ephemeral --down <n> gives it back. A STALE one"
+  echo "is taken over by the next --ephemeral --up of that number."
+  echo "Slots 0..${MAX_SLOT} with no claim, no lock, no record and no listener are omitted."
 }
 
 # --- argument parsing --------------------------------------------------------

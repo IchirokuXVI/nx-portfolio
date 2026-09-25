@@ -47,6 +47,9 @@ export const AUTH_SCHEMA_IDS = {
   setUsernameRequest: schemaId('msg/auth.setUsername/request'),
   getProfileRequest: schemaId('msg/auth.getProfile/request'),
   userProfileView: schemaId('auth/UserProfileView'),
+  // A fresh generated name, for the setup's first step (plan 0145, section 4).
+  suggestUsernameRequest: schemaId('msg/auth.suggestUsername/request'),
+  suggestUsernameResult: schemaId('auth/SuggestUsernameResult'),
   // Several accounts' global usernames at once (plan 0114, section 9).
   getUsernamesRequest: schemaId('msg/auth.getUsernames/request'),
   userUsernameView: schemaId('auth/UserUsernameView'),
@@ -213,10 +216,10 @@ const mintParticipantTokenRequest = object(
   AUTH_SCHEMA_IDS.mintParticipantTokenRequest,
   {
     participantId: nonEmptyString(),
-    generatedListId: nonEmptyString(),
+    basketId: nonEmptyString(),
     kind: nonEmptyString(),
   },
-  ['participantId', 'generatedListId', 'kind']
+  ['participantId', 'basketId', 'kind']
 );
 
 const mintParticipantTokenResult = object(
@@ -241,17 +244,45 @@ const getProfileRequest = object(
   ['userId']
 );
 
+/**
+ * The profile's fields, apart from the schema that publishes them, so that the
+ * view the gateway composes on top of it (plan 0145, section 2) is built from
+ * this map rather than from a second copy of these six lines. Two copies would
+ * be two things to keep in step, and the one that drifts is the documented one.
+ */
+export const USER_PROFILE_VIEW_PROPERTIES: Record<string, JsonSchema> = {
+  userId: nonEmptyString(),
+  kind: ref(ENUM_IDS.userKind),
+  username: nonEmptyString(),
+  email: nullableString(),
+  emailVerified: boolean(),
+  displayName: nullableString(),
+};
+
+/** The names of {@link USER_PROFILE_VIEW_PROPERTIES}, every one of them required. */
+export const USER_PROFILE_VIEW_REQUIRED: string[] = Object.keys(
+  USER_PROFILE_VIEW_PROPERTIES
+);
+
 const userProfileView = object(
   AUTH_SCHEMA_IDS.userProfileView,
-  {
-    userId: nonEmptyString(),
-    kind: ref(ENUM_IDS.userKind),
-    username: nonEmptyString(),
-    email: nullableString(),
-    emailVerified: boolean(),
-    displayName: nullableString(),
-  },
-  ['userId', 'kind', 'username', 'email', 'emailVerified', 'displayName']
+  USER_PROFILE_VIEW_PROPERTIES,
+  USER_PROFILE_VIEW_REQUIRED
+);
+
+// No `userId`: the caller is asking for a name, not asking about themselves,
+// and the handler writes nothing anywhere. The locale is the only input, and it
+// falls back to the request context when it is absent.
+const suggestUsernameRequest = object(
+  AUTH_SCHEMA_IDS.suggestUsernameRequest,
+  { locale: nonEmptyString() },
+  []
+);
+
+const suggestUsernameResult = object(
+  AUTH_SCHEMA_IDS.suggestUsernameResult,
+  { username: nonEmptyString() },
+  ['username']
 );
 
 const getUsernamesRequest = object(
@@ -298,6 +329,8 @@ export const authSchemas: JsonSchema[] = [
   setUsernameRequest,
   getProfileRequest,
   userProfileView,
+  suggestUsernameRequest,
+  suggestUsernameResult,
   getUsernamesRequest,
   userUsernameView,
   getUsernamesResult,
@@ -367,6 +400,10 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.getProfile]: {
     request: AUTH_SCHEMA_IDS.getProfileRequest,
     response: AUTH_SCHEMA_IDS.userProfileView,
+  },
+  [AUTH_PATTERNS.suggestUsername]: {
+    request: AUTH_SCHEMA_IDS.suggestUsernameRequest,
+    response: AUTH_SCHEMA_IDS.suggestUsernameResult,
   },
   [AUTH_PATTERNS.getUsernames]: {
     request: AUTH_SCHEMA_IDS.getUsernamesRequest,

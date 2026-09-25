@@ -18,6 +18,7 @@ import {
 import {
   clampPageSize,
   decodeCursor,
+  describeError,
   encodeCursor,
   PostalCodeUnknownException,
   RunInProgressException,
@@ -164,7 +165,7 @@ export class PostalCodeDiscoveryService {
     } catch (error) {
       this.logger.error(
         `Could not consider announced postal codes ${codes.join(', ')} in ` +
-          `${country}: ${String(error)}`
+          `${country}: ${describeError(error).message}`
       );
     }
   }

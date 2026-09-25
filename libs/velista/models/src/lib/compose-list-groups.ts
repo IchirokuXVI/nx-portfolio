@@ -36,6 +36,11 @@ export interface ListGroupsInput<T extends ListViewLine> {
   readonly past: readonly Trip[];
   /** One trip's rows, or undefined until they arrive. */
   readonly rowsOf: (key: string) => readonly TripRow[] | undefined;
+  /**
+   * Whether a heads read for this list succeeded (velista `0095`, section 5). False
+   * while the first read is out and after it failed.
+   */
+  readonly tripsReady: boolean;
   /** The keys of the trips somebody has open. */
   readonly openKeys: ReadonlySet<string>;
   readonly reordering: boolean;
@@ -87,9 +92,15 @@ export type ListGroupsView<T extends ListViewLine> =
  * ## What goes in To buy (section 3)
  *
  * Every wanted line no live trip draws, in list order, then the lines at zero that were
- * never bought, then the rejected lines of either kind. A claimed line leaves To buy
- * only once a live trip's rows that name it have arrived, so no line is ever on neither
- * side. A line at zero with purchases is in no live group: it lives in its trips.
+ * never bought, then the lines at zero with purchases that no trip can be trusted to
+ * hold, then the rejected lines of either kind. **No line is ever on neither side.**
+ *
+ * - A claimed line leaves To buy only once a live trip's rows that name it have
+ *   arrived.
+ * - A line at zero with purchases leaves To buy only once a heads read succeeded and
+ *   named at least one trip (velista `0095`, section 5). Before the heads arrive, after
+ *   they failed, and when the list has no trip at all, it stays in To buy, where it
+ *   can be raised.
  *
  * ## Reorder mode (section 7)
  *
@@ -125,8 +136,12 @@ export function composeListGroups<T extends ListViewLine>(
     }
   }
 
+  const tripsHold =
+    input.tripsReady && input.live.length + input.past.length > 0;
+
   const wanted: T[] = [];
   const neverBought: T[] = [];
+  const boughtAtZero: T[] = [];
   const rejected: T[] = [];
   for (const line of input.lines) {
     const facts = input.factsOf(line.id);
@@ -139,7 +154,9 @@ export function composeListGroups<T extends ListViewLine>(
     const isWanted =
       facts.quantity > 0 && !(facts.claimed && heldByLive.has(line.id));
     const isNeverBought = facts.quantity === 0 && facts.boughtCount === 0;
-    if (!isWanted && !isNeverBought) {
+    const isUnheld =
+      !tripsHold && facts.quantity === 0 && facts.boughtCount > 0;
+    if (!isWanted && !isNeverBought && !isUnheld) {
       continue;
     }
 
@@ -151,15 +168,26 @@ export function composeListGroups<T extends ListViewLine>(
       rejected.push(line);
     } else if (isWanted) {
       wanted.push(line);
-    } else {
+    } else if (isNeverBought) {
       neverBought.push(line);
+    } else {
+      boughtAtZero.push(line);
     }
   }
+
+  const due = input.reordering ? [] : dueLinesOf(input, narrow);
+  // A due line is drawn in its own section under To buy, so it is held already.
+  const dueIds = new Set(due.map((line) => line.id));
 
   const narrowedWanted = narrow(wanted);
   const toBuy = input.reordering
     ? narrowedWanted
-    : [...narrowedWanted, ...narrow(neverBought), ...narrow(rejected)];
+    : [
+        ...narrowedWanted,
+        ...narrow(neverBought),
+        ...narrow(boughtAtZero.filter((line) => !dueIds.has(line.id))),
+        ...narrow(rejected),
+      ];
 
   if (input.reordering) {
     return {
@@ -171,8 +199,6 @@ export function composeListGroups<T extends ListViewLine>(
       trips: [],
     };
   }
-
-  const due = dueLinesOf(input, narrow);
 
   const byId = new Map(input.lines.map((line) => [line.id, line]));
   const trips: TripGroup<T>[] = [];

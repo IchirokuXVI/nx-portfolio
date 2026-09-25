@@ -1,3 +1,4 @@
+import type { PriceUnitBasis } from './catalog-browse';
 import type {
   CommentTranscription,
   LineApprovalStatus,
@@ -11,7 +12,7 @@ import type {
   ZoneRole,
   ZoneStatus,
 } from './enums';
-import type { LocalizedName } from './shopping-profile';
+import type { LocalizedName, Supermarket } from './shopping-profile';
 
 /**
  * The app's own domain models (rule D4, plan 0004 section 4.1).
@@ -377,6 +378,15 @@ export interface LineSettlement {
    * Null for every row written before that plan.
    */
   readonly revertedAt: Date | null;
+  /**
+   * What **one unit** cost, in the minor unit of {@link currency}, or null when nobody
+   * knew (backend `0143`, velista `0095` section 7). Every `NOT_AVAILABLE`, every
+   * settlement from before the price was recorded, and every hand settle on a zone
+   * list, which names no scope.
+   */
+  readonly unitPriceCents: number | null;
+  /** ISO 4217, null exactly when {@link unitPriceCents} is. */
+  readonly currency: string | null;
 }
 
 /**
@@ -415,11 +425,27 @@ export interface ProductOffer {
    * The scope that quoted this price. Opaque.
    *
    * The basket resolves it against `BasketView.scopes` to name a chain and a
-   * shop. No other screen resolves it at all: the suggestion response is one
-   * array and carries no scopes to resolve against, and a typeahead row draws
-   * no place anyway (velista `0063`, section 6.5).
+   * shop. The suggestion card resolves it too since velista `0101`, which
+   * reversed `0063` section 6.5: the suggest response carries a scope map of
+   * chain names since backend `0161`, and the mapper turns each offer into a
+   * {@link ChainPrice} while that map is in hand.
    */
   readonly priceScopeId: string;
+}
+
+/**
+ * What one chain charges for one product, as the suggestion card draws it
+ * (velista `0101`, section 2).
+ *
+ * **One per chain**, which is a display rule and the client's (backend `0161`,
+ * section 3): a chain can price a product in more than one scope, and the card
+ * names chains, so the cheapest of that chain's offers stands for it. Resolved
+ * by the mapper, because the scope map that names a chain arrives in the same
+ * response and nowhere else.
+ */
+export interface ChainPrice {
+  readonly chain: Supermarket;
+  readonly offer: ProductOffer;
 }
 
 /**
@@ -472,6 +498,34 @@ export interface CatalogItem {
    * pack's price and is never derived from a smaller one.
    */
   readonly offer: ProductOffer | null;
+  /**
+   * Every chain's price for it, cheapest first, one per chain (velista `0101`).
+   *
+   * Filled only by the two suggest reads, which are the only ones that ask for
+   * every scope's offer and carry the scope map that names a chain. Empty
+   * everywhere else, and empty where a scope could not be named: an offer the
+   * card cannot attribute is not drawn as a chain.
+   */
+  readonly chainPrices: readonly ChainPrice[];
+  /**
+   * The front photograph, or null. On the wire since before velista `0101` and
+   * empty until backend `0126` to `0129` import one, so the card draws its
+   * state with no photograph until then.
+   */
+  readonly imageUrl: string | null;
+  /**
+   * How many units the pack holds, a whole number from 2, or null for a product
+   * that is not a pack (backend `0162`). A number rather than the words a chain
+   * prints, so the card renders "Pack 6" or "Pack de 6" itself.
+   */
+  readonly packCount: number | null;
+  /**
+   * What {@link ProductOffer.unitPrice} on {@link offer} is counted in, or null
+   * when unknown or when there is no offer (velista `0101`). The card's "1,09 € /
+   * L", read off the wire for `CatalogProduct.unitBasis`'s reason: the label is
+   * text for a human and not a unit to parse.
+   */
+  readonly unitBasis: PriceUnitBasis | null;
 }
 
 /** One catalog group: the thing "milk" means before it means a brand of it. */
@@ -512,8 +566,31 @@ export type CatalogSuggestion =
        * other read is a field nothing can trust.
        */
       readonly offer: ProductOffer | null;
+      /**
+       * The group's cheapest few products, for the card's reveal (velista
+       * `0101`, backend `0161`). At most five, in the server's order, cheapest
+       * first. {@link itemIds} is still the count; "and N more" is the
+       * difference between the two.
+       */
+      readonly members: readonly CatalogItem[];
+      /**
+       * The other words the catalog files this group under, per language, as
+       * the operator wrote them (velista `0108`, target 4).
+       *
+       * Read so a card can say **why** it matched. Group search matches the
+       * name and these words alike, so "alg" offers "Discos desmaquillantes"
+       * because one of its Spanish words is "algodón", and a card that does
+       * not say so reads as a wrong answer. Empty on a group that has none.
+       */
+      readonly synonyms: CatalogSynonyms;
     }
   | { readonly kind: 'item'; readonly item: CatalogItem };
+
+/** A group's other words, per language. Either list may be empty. */
+export interface CatalogSynonyms {
+  readonly en: readonly string[];
+  readonly es: readonly string[];
+}
 
 /**
  * A recording somebody just made, on its way to being sent (velista plan 0039).
@@ -660,4 +737,33 @@ export interface UserProfile {
   readonly email: string | null;
   readonly emailVerified: boolean;
   readonly displayName: string | null;
+  /**
+   * What the account has been shown (backend `0145`, velista `0098`).
+   *
+   * Optional because only `GET /v1/account/me` carries it. `PATCH /v1/account/me`
+   * answers the auth half alone, so a rename's answer has none, and `ProfileStore`
+   * keeps the copy it held rather than forgetting it.
+   */
+  readonly appState?: AppState;
+}
+
+/**
+ * The moments an account has passed, stamped once and never moved (backend `0145`).
+ *
+ * The flag is the account's and not the device's, so a setup finished on a phone is
+ * finished on a laptop too. Null is "not yet". The gateway answers two nulls when core
+ * cannot be reached, which reads the same as a new account, on purpose: asking again
+ * once is a nuisance, and the name in the app bar must never wait on core.
+ */
+export interface AppState {
+  /** When the setup was finished or dismissed, as an ISO timestamp, or null. */
+  readonly setupCompletedAt: string | null;
+  /** When the tour was finished or skipped, as an ISO timestamp, or null. */
+  readonly tourSeenAt: string | null;
+}
+
+/** The flags `PATCH /v1/account/app-state` accepts. Each is absent or true. */
+export interface AppStateFlags {
+  readonly setupCompleted?: true;
+  readonly tourSeen?: true;
 }

@@ -1,0 +1,61 @@
+:host {
+  display: block;
+}
+
+// One row under the header, in the scroll, quiet.
+//
+// The `action-quiet` surface rather than a status colour, and that is the whole
+// design decision here: a visit that ends in twelve hours is what every link
+// does, and a shopper reading this has done nothing wrong. Amber is this app's
+// **accent** and not its attention role (`0002`, section 4.4), so borrowing it
+// would say "fault" in the one place the product most needs to sound ordinary.
+// The ended state, which is a real stop, is the thing that wears the alert
+// treatment, and it is drawn elsewhere on the page.
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2) var(--app-space-3);
+  margin-block: var(--app-space-3);
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-card-radius);
+  background: var(--app-action-quiet-bg);
+}
+
+.words {
+  flex: 1;
+  // So the sentence keeps the row to itself and the button wraps under it on a
+  // narrow phone rather than squeezing the words into a column.
+  min-inline-size: 12rem;
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+  text-wrap: pretty;
+}
+
+// Quiet, and it is the whole tap target: dismissing is a convenience and never
+// a decision, so it takes the treatment the app gives a control that changes
+// nothing about the basket.
+.dismiss {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-3);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--app-text-primary);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}

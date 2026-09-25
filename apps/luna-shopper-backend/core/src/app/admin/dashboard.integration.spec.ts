@@ -1,6 +1,7 @@
 import {
   ADMIN_DASHBOARD_WINDOW_DAYS,
-  GeneratedListStatus,
+  BasketKind,
+  BasketStatus,
   MembershipStatus,
   ZoneRole,
   ZoneStatus,
@@ -12,13 +13,14 @@ import {
   describeIntegration,
   requiredEnv,
 } from '@portfolio/luna-shopper/test-fixtures/jest';
+import { randomUUID } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import { CORE_MIGRATIONS } from '../db/migrations';
 import {
   CORE_ENTITIES,
   CoreAudit,
-  GeneratedList,
+  Basket,
   ShoppingList,
   Zone,
   ZoneMembership,
@@ -85,7 +87,7 @@ describeIntegration('core’s dashboard block (real Postgres)', () => {
   let zones: Repository<Zone>;
   let memberships: Repository<ZoneMembership>;
   let lists: Repository<ShoppingList>;
-  let baskets: Repository<GeneratedList>;
+  let baskets: Repository<Basket>;
   let trail: Repository<CoreAudit>;
 
   beforeAll(async () => {
@@ -115,7 +117,7 @@ describeIntegration('core’s dashboard block (real Postgres)', () => {
     zones = dataSource.getRepository(Zone);
     memberships = dataSource.getRepository(ZoneMembership);
     lists = dataSource.getRepository(ShoppingList);
-    baskets = dataSource.getRepository(GeneratedList);
+    baskets = dataSource.getRepository(Basket);
     trail = dataSource.getRepository(CoreAudit);
 
     audit = new CoreAuditService(dataSource);
@@ -180,20 +182,19 @@ describeIntegration('core’s dashboard block (real Postgres)', () => {
   }
 
   async function newBasket(
-    status: GeneratedListStatus
-  ): Promise<GeneratedList> {
+    status: BasketStatus,
+    kind: BasketKind = BasketKind.GENERATED
+  ): Promise<Basket> {
     return baskets.save(
       baskets.create({
-        ownerUserId: MEMBER,
+        // A person holds one permanent basket, by
+        // `uq_baskets_live_owner`, so a `LIVE` one gets an owner of its
+        // own rather than sharing the member every trip here belongs to.
+        ownerUserId: kind === BasketKind.LIVE ? randomUUID() : MEMBER,
         name: null,
         status,
         generatedAt: at(MIDDLE_DAY),
-        sourceSnapshot: {
-          profileId: null,
-          pricingProfileId: null,
-          sources: [],
-        },
-        defaultTargetListId: null,
+        kind,
         idempotencyKey: null,
       })
     );
@@ -269,18 +270,27 @@ describeIntegration('core’s dashboard block (real Postgres)', () => {
     expect(block.memberships).toEqual({ pending: 2 });
   });
 
-  it('counts the baskets by the two statuses one is ever in', async () => {
-    await newBasket(GeneratedListStatus.DRAFT);
-    await newBasket(GeneratedListStatus.DRAFT);
-    await newBasket(GeneratedListStatus.COMPLETED);
+  it('counts the trips by status, and the permanent baskets beside them', async () => {
+    await newBasket(BasketStatus.OPEN);
+    await newBasket(BasketStatus.OPEN);
+    await newBasket(BasketStatus.FINISHED);
     // The row that makes `total` worth sending rather than deriving from the
-    // two: `ACTIVE` is never written, so the live basket is `DRAFT`, and the two
-    // reported statuses fall short of the total exactly when this row exists.
-    await newBasket(GeneratedListStatus.ARCHIVED);
+    // two: the reported statuses fall short of the total exactly when an
+    // archived row exists.
+    await newBasket(BasketStatus.ARCHIVED);
+    // One permanent basket, counted on its own and outside `total` (plan 0133,
+    // section 6): one row per person is a different number from how many trips
+    // have been composed.
+    await newBasket(BasketStatus.OPEN, BasketKind.LIVE);
 
     const block = await dashboard.dashboard(REQUEST);
 
-    expect(block.baskets).toEqual({ total: 4, draft: 2, completed: 1 });
+    expect(block.baskets).toEqual({
+      total: 4,
+      open: 2,
+      finished: 1,
+      live: 1,
+    });
   });
 
   it('fills both windows from tables holding two rows each', async () => {

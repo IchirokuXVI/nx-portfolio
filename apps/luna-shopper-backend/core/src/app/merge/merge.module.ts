@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BasketCoverageModule } from '../baskets/basket-coverage.module';
 import {
   LineComment,
   ListAccess,
@@ -29,6 +30,9 @@ import { MergeService } from './merge.service';
       LineComment,
     ]),
     ZonesModule,
+    // An approval moves two memberships, and with them what the household's open
+    // baskets cover (plan 0139, section 5).
+    BasketCoverageModule,
   ],
   controllers: [MergeController],
   providers: [MergeService],

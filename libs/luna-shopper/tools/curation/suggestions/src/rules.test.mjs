@@ -4,10 +4,13 @@ import { test } from 'node:test';
 import {
   ISSUE_DETAIL_MAX,
   REASONING_MAX,
+  SEARCH_TEXT_MAX,
+  UNIT_BASES,
   brandKey,
   buildDecisionSchema,
   buildSystemPrompt,
   canonicalBrand,
+  capSearchText,
   carriesBrand,
   carriesGlitch,
   carriesSize,
@@ -17,7 +20,11 @@ import {
   loadPromptTemplate,
   loadVocabularies,
   normalizeName,
+  printedUnit,
   privateLabelLines,
+  sameBaseSize,
+  suggestBrandLabel,
+  toBaseSize,
 } from './rules.mjs';
 
 function fixture(name) {
@@ -616,4 +623,77 @@ test('the schema caps the two fields that are billed on every row', () => {
     }),
     false
   );
+});
+
+// ---------------------------------------------------------------------------
+// Plan 0006
+// ---------------------------------------------------------------------------
+
+test('capSearchText cuts at the last word boundary within 120 characters', () => {
+  assert.equal(SEARCH_TEXT_MAX, 120);
+  assert.equal(capSearchText('leche entera 1 l'), 'leche entera 1 l');
+
+  const words = Array.from({ length: 40 }, (_, i) => `palabra${i}`).join(' ');
+  const cut = capSearchText(words);
+  assert.ok(cut.length <= 120, `${cut.length} characters`);
+  // Whole words only: the cut is a prefix of the text that ends on a word.
+  assert.ok(words.startsWith(cut));
+  assert.equal(words[cut.length], ' ');
+
+  // Exactly the cap is left alone, and a boundary right after it is used.
+  const exact = `${'a'.repeat(59)} ${'b'.repeat(60)}`;
+  assert.equal(capSearchText(exact), exact);
+  assert.equal(capSearchText(`${exact} c`), exact);
+
+  // One word longer than the cap has no boundary and is cut where it falls.
+  assert.equal(capSearchText('x'.repeat(300)), 'x'.repeat(120));
+  assert.equal(capSearchText(null), '');
+});
+
+test('printedUnit reads the unit a sizeFormat ends in', () => {
+  assert.deepEqual(printedUnit('kg'), { unit: 'KILOGRAM', factor: 1 });
+  assert.deepEqual(printedUnit('420 g'), { unit: 'GRAM', factor: 1 });
+  assert.deepEqual(printedUnit('6x200ml'), { unit: 'MILLILITER', factor: 1 });
+  assert.deepEqual(printedUnit('33 cl'), { unit: 'MILLILITER', factor: 10 });
+  assert.deepEqual(printedUnit('1 L'), { unit: 'LITER', factor: 1 });
+  assert.deepEqual(printedUnit('ud'), { unit: 'UNIT', factor: 1 });
+  assert.deepEqual(printedUnit('KILOGRAM'), { unit: 'KILOGRAM', factor: 1 });
+  assert.equal(printedUnit('m'), null);
+  assert.equal(printedUnit('Paquete'), null);
+  assert.equal(printedUnit(null), null);
+});
+
+test('every catalog unit has a base, and 420 g is 0.42 kg', () => {
+  for (const unit of loadVocabularies().units) {
+    assert.ok(UNIT_BASES[unit], `${unit} has no base`);
+  }
+  const grams = toBaseSize(420, 'GRAM');
+  const kilos = toBaseSize(0.42, 'KILOGRAM');
+  assert.deepEqual(grams, { family: 'weight', value: 420 });
+  assert.ok(sameBaseSize(grams, kilos));
+  assert.ok(!sameBaseSize(grams, toBaseSize(0.5, 'KILOGRAM')));
+  assert.ok(!sameBaseSize(toBaseSize(1, 'LITER'), toBaseSize(1000, 'GRAM')));
+  // A product of doubles that is not exactly the number it reads as.
+  assert.ok(
+    sameBaseSize(toBaseSize(0.29, 'LITER', 1), toBaseSize(290, 'MILLILITER'))
+  );
+  assert.equal(toBaseSize(1, 'METER'), null);
+  assert.equal(toBaseSize(null, 'GRAM'), null);
+});
+
+test('suggestBrandLabel keeps a mixed case spelling and title cases capitals', () => {
+  assert.equal(suggestBrandLabel(['HACENDADO', 'Hacendado']), 'Hacendado');
+  assert.equal(suggestBrandLabel(['EL POZO']), 'El Pozo');
+  assert.equal(suggestBrandLabel(['DEBORAH 48H']), 'Deborah 48H');
+  assert.equal(suggestBrandLabel(['ColaCao', 'COLACAO']), 'ColaCao');
+  assert.equal(suggestBrandLabel([]), null);
+});
+
+test('the prompt names the fields and codes plan 0006 added', () => {
+  const template = loadPromptTemplate();
+  assert.match(template, /entry\.sharedEan/);
+  assert.match(template, /SHARED_EAN/);
+  assert.match(template, /LINK_TARGET_NOT_SHOWN/);
+  assert.match(template, /LINK_TARGET_MISSING/);
+  assert.match(template, /420 g and 0\.42 kg are one format/);
 });

@@ -33,7 +33,8 @@ export interface FakeLineSettlements {
     }): Promise<Partial<LineSettlement> | null>;
     find(options: {
       where: {
-        generatedListLineId?: string;
+        basketLineId?: string;
+        basketId?: string;
         lineId?: string;
         outcome?: SettlementOutcome;
         revertedAt?: unknown;
@@ -130,8 +131,10 @@ export function fakeLineSettlements(
             (entry) =>
               (where.lineId === undefined ||
                 entry.row.lineId === where.lineId) &&
-              (where.generatedListLineId === undefined ||
-                entry.row.generatedListLineId === where.generatedListLineId) &&
+              // The basket, which is the only way to ask "was this bought on
+              // that trip" since plan 0136 deleted the basket line.
+              (where.basketId === undefined ||
+                entry.row.basketId === where.basketId) &&
               (where.outcome === undefined ||
                 entry.row.outcome === where.outcome) &&
               standing(entry.row, where)

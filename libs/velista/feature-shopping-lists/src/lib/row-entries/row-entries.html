@@ -1,0 +1,96 @@
+<!--
+  One live region around the whole pane (section 7), so a change to either number on
+  any reel is announced once and not twice. Politeness is what coalesces it: a screen
+  reader queues these and drops the ones a later value has already superseded, so a
+  thumb travelling seven units announces where it landed rather than every number on
+  the way.
+-->
+<section aria-live="polite" class="entries" role="status">
+  <h3 class="heading">{{ 'basket.entries.title' | rokuT }}</h3>
+
+  <!--
+    The two columns, named once above the rows rather than on each of them. Hidden
+    from the accessibility tree, because each reel below already carries a name that
+    says which column it is, and a screen reader reading a header row would hear the
+    words twice.
+  -->
+  <p aria-hidden="true" class="columns">
+    <span class="columns-asked">{{ 'basket.units.askedFor' | rokuT }}</span>
+    <span class="columns-got">{{ 'basket.units.got' | rokuT }}</span>
+  </p>
+
+  <ul class="rows">
+    @for (entry of entries(); track entry.lineId) {
+      <li class="row">
+        <span class="row-label">
+          <!--
+            The list and its group, or one sentence for a list this reader was not
+            served. Both arrive already resolved, because "may I name this list" is
+            one question with one answer since backend `0136`.
+          -->
+          <span class="row-name">{{ entry.name }}</span>
+        </span>
+
+        <!--
+          What this household asks for (velista 0092, section 6).
+
+          A reel that commits on release, like the one beside it. No button and
+          no confirmation: the list changes when the reel settles.
+
+          Only where the server says it may be, which is `demandEditable` and the
+          two conditions beside it. An entry that fails any of them keeps the
+          plain number, and **nothing explains why a control is absent** (`0030`).
+        -->
+        @if (entry.demandEditable) {
+          <lib-quantity-reel
+            (committedTo)="onAsked(entry.lineId, $event)"
+            [label]="entry.askLabel"
+            [min]="0"
+            [readonly]="busy()"
+            [value]="entry.left"
+            class="ask-reel"
+          />
+        } @else {
+          <span class="row-number">
+            <span class="visually-hidden">
+              {{ 'basket.entries.asks' | rokuT: { count: entry.asked } }}
+            </span>
+            {{ entry.asked }}
+          </span>
+        }
+
+        <!--
+          What this basket has bought for this household. **A control, and it buys**:
+          raising it settles that many against this list alone and lowering it takes
+          that list's newest purchases back.
+
+          Capped at what this household asked for, because a household cannot have
+          got more of a row than it wanted; a shopper who bought more moves the row's
+          own reel instead.
+        -->
+        @if (entry.editable) {
+          <lib-quantity-reel
+            (committedTo)="onCommitted(entry.lineId, $event)"
+            [label]="entry.label"
+            [max]="entry.asked"
+            [min]="0"
+            [readonly]="busy()"
+            [value]="entry.bought"
+            class="got-reel"
+          />
+        } @else {
+          <!--
+            The numbers stay. A row nobody may move still says what each household
+            asked for and got, which is the information half of the rule the missing
+            reel is the control half of, and a finished trip is a receipt rather than
+            a form.
+          -->
+          <span class="row-number">
+            <span class="visually-hidden">{{ entry.label }}</span>
+            {{ entry.bought }}
+          </span>
+        }
+      </li>
+    }
+  </ul>
+</section>
