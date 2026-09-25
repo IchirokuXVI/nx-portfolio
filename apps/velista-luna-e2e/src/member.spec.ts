@@ -1,18 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
-import {
-  LIST_GROCERIES_ID,
-  LIST_HARDWARE_ID,
-} from '@portfolio/luna-shopper/test-fixtures';
+import { LIST_HARDWARE_ID } from '@portfolio/luna-shopper/test-fixtures';
 import {
   ALICE_EMAIL,
   DANA_EMAIL,
   listLines,
   login,
-  readBasketLines,
+  readBasketRows,
   resetAliceWorld,
   type Session,
 } from './support/api';
 import {
+  addInTheAisle,
   expectBasketUrl,
   generateBasket,
   newVisitor,
@@ -42,10 +40,10 @@ import {
  * account. That is the whole difference between the two specs, and the people
  * sheet is where it shows: her row carries no guest mark.
  *
- * The second half is the owner's, and it is the lists summary doing the thing
- * plan 0068 built it for: a line added in the aisle, bought, and then raised for
- * two households at once from the one sheet, which the API confirms landed on
- * both lists.
+ * The second half is the owner's, and it is the lists behind a row doing what
+ * velista 0092 built them for: a line added in the aisle to one list, bought,
+ * and then asked for again from the settle sheet, which the API confirms
+ * reached the household's list.
  */
 test.describe('a registered participant', () => {
   let alice: Session;
@@ -61,7 +59,7 @@ test.describe('a registered participant', () => {
     await alice?.dispose();
   });
 
-  test('sees the zone through a shared basket, and the owner raises an aisle line for both lists', async ({
+  test('sees the zone through a shared basket, and the owner asks for an aisle line again', async ({
     page,
     browser,
   }) => {
@@ -114,33 +112,35 @@ test.describe('a registered participant', () => {
       await people.getByRole('button', { name: 'Close', exact: true }).click();
       await expectBasketUrl(dana, basketId);
 
-      // What a guest never gets: the lists summary on the settle sheet, with
-      // the list that asked for the line named.
+      // What a guest never gets: the lists behind the row on the settle sheet,
+      // with the list that asks for the line named (velista `0090`, 9.2).
       const dialog = await openSettleSheet(dana, 'Milk');
-      const summary = dialog.locator('lib-line-lists-summary');
+      const entries = dialog.locator('lib-row-entries');
       await expect(
-        summary.getByRole('heading', { name: 'Lists that asked for this' })
+        entries.getByRole('heading', { name: 'Lists that ask for this' })
       ).toBeVisible();
       await expect(
-        summary.locator('.row-name', { hasText: 'Groceries' })
+        entries.locator('.row-name', { hasText: 'Groceries' })
       ).toBeVisible();
       await dana.keyboard.press('Escape');
       await expectBasketUrl(dana, basketId);
     });
 
-    await test.step('3. Alice adds a line in the aisle, buys it, and raises it for both lists', async () => {
+    await test.step('3. Alice adds a line in the aisle to Hardware, buys it, and asks for it again', async () => {
       // Typed straight after Dana's arrival, with no reload in between, which is
       // the timing the store's read guard exists for: her arrival reached this
       // page as a burst of socket events and the coalesced re-read they schedule
       // is still out when the line below is added (velista `0086`).
       await expect(row(page, 'Milk')).toBeVisible();
 
-      const composer = page.locator('lib-line-composer');
-      await composer
-        .getByRole('textbox', { name: 'Add something' })
-        .fill(aisleLine);
-      await composer.getByRole('button', { name: 'Add', exact: true }).click();
-      await expect(row(page, aisleLine)).toBeVisible();
+      // A line added in the shop lands on one list, chosen beside the field
+      // (velista `0092` section 7, `0110`).
+      await addInTheAisle(page, basketId, 'Hardware', aisleLine);
+      await expect
+        .poll(async () =>
+          (await listLines(alice, LIST_HARDWARE_ID)).map((l) => l.content)
+        )
+        .toContain(aisleLine);
 
       await row(page, aisleLine)
         .getByRole('button', { name: `Mark ${aisleLine} as got` })
@@ -154,35 +154,34 @@ test.describe('a registered participant', () => {
       // Bought, as the backend records it and not only as the row draws it.
       await expect
         .poll(async () => {
-          const line = (await readBasketLines(alice, basketId)).find(
-            (l) => l.content === aisleLine
+          const bought = (await readBasketRows(alice, basketId)).find(
+            (r) => r.content === aisleLine
           );
-          return line ? line.settledQuantity >= line.quantity : false;
+          return bought ? bought.left === 0 && bought.bought >= 1 : false;
         })
         .toBe(true);
 
-      // The lists summary: no list asked for this, so both sit behind the
-      // disclosure. Raising a list's "asked for" reel from zero is how a line
-      // added in the shop reaches that household.
+      // The lists behind the row: Hardware, with what it asks for as a reel the
+      // owner may move (velista `0092`, section 6). Raising it from zero is how
+      // the household's list asks for one more after the shop.
       const dialog = await openSettleSheet(page, aisleLine);
-      const summary = dialog.locator('lib-line-lists-summary');
-      await summary.getByRole('button', { name: /more lists?$/ }).click();
-      for (const list of ['Groceries', 'Hardware']) {
-        await nudge(reel(summary, `${list}, asked for`), 1);
-        await expect(reel(summary, `${list}, asked for`)).toHaveAttribute(
-          'aria-valuenow',
-          '1'
-        );
-      }
+      const entries = dialog.locator('lib-row-entries');
+      await expect(
+        entries.locator('.row-name', { hasText: 'Hardware' })
+      ).toBeVisible();
+      const asks = reel(entries, /^Hardware.*, asks for$/);
+      await nudge(asks, 1);
+      await expect(asks).toHaveAttribute('aria-valuenow', '1');
 
-      // Both zone lists carry it now, read back through the API.
-      for (const listId of [LIST_GROCERIES_ID, LIST_HARDWARE_ID]) {
-        await expect
-          .poll(async () =>
-            (await listLines(alice, listId)).map((l) => l.content)
-          )
-          .toContain(aisleLine);
-      }
+      // The zone list asks for it again, read back through the API.
+      await expect
+        .poll(
+          async () =>
+            (await listLines(alice, LIST_HARDWARE_ID)).find(
+              (l) => l.content === aisleLine
+            )?.quantity
+        )
+        .toBe(1);
     });
   });
 });
