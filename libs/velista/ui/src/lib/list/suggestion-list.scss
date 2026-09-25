@@ -190,7 +190,8 @@
 
 // ---- one card
 
-// 73px: three lines of type with 8px either side, which clears the 48px photograph.
+// 77px with its hairline: three lines of type with 8px either side, which clears the
+// 48px photograph (`--app-suggestion-card`).
 .sug {
   position: relative;
   flex: none;
@@ -454,14 +455,18 @@
 }
 
 // The pill stays small and the target grows to the touch target, which is what the
-// chip token already does for a chip that is a control.
+// chip token already does for a chip that is a control. It grows upward from just
+// inside the card's bottom padding rather than evenly (velista 0113): centred, it
+// hung 5 to 7px below the card and gave the panel that much to scroll with one card
+// in it. The pill sits 6px above the card's edge, so 4px below it stays inside.
 .chains::after,
 .reveal::after,
 .details::after {
   content: '';
   position: absolute;
-  inset-block: calc((var(--app-touch-target) - var(--app-chain-mark)) / -2);
+  bottom: calc(var(--app-space-2) * -1);
   inset-inline: calc(var(--app-space-2) * -1);
+  height: var(--app-touch-target);
 }
 
 // ---- every chain's price, once the row is opened

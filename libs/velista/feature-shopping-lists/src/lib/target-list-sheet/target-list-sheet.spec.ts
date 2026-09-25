@@ -165,6 +165,29 @@ describe('TargetListSheet', () => {
     );
   });
 
+  it('says a list was chosen, for the basket page to focus the field (velista 0113)', async () => {
+    const { fixture } = await render([WEEKLY, GROCERIES]);
+    expect(fixture.componentInstance.chose).toBe(false);
+
+    // The row not already checked: a remembered target from an earlier visit is
+    // checked on arrival, and a checked radio fires no change when pressed.
+    rows(fixture)
+      .map((row) => row.querySelector<HTMLInputElement>('input'))
+      .find((input) => input !== null && !input.checked)
+      ?.click();
+
+    expect(fixture.componentInstance.chose).toBe(true);
+  });
+
+  it('says nothing was chosen when it is dismissed without an answer', async () => {
+    const { fixture, dismiss } = await render([WEEKLY, GROCERIES]);
+
+    (fixture.componentInstance as unknown as { close(): void }).close();
+
+    expect(dismiss).toHaveBeenCalled();
+    expect(fixture.componentInstance.chose).toBe(false);
+  });
+
   it('marks the one already chosen', async () => {
     const { fixture, target } = await render([WEEKLY, GROCERIES]);
     target.choose(GROCERIES);

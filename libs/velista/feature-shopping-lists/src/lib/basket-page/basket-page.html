@@ -608,8 +608,9 @@
       the field usable so somebody could type first and choose second, and the
       words then went nowhere: a suggestion chosen, or the plus pressed, with no
       list to put the line on did nothing at all. So nothing can be typed until a
-      list is chosen, a tap on the field says why, and the popover it opens holds
-      the same way to choose as the chip above.
+      list is chosen, and a tap on the field says why. The popover it opens is
+      only that sentence: the chip that chooses a list sits right under it
+      (velista 0113).
 
       The reason is a sentence in the page, always in the document while the
       field is locked, because the field names it in `aria-describedby` and a
@@ -638,8 +639,9 @@
 
   <!--
     Held against the whole dock rather than the field, so it opens above the chip
-    and never covers the control it points to. Inserted in the document right
-    after the dock, so Tab from the field reaches its button.
+    and never covers the control it points to. It holds the sentence and nothing
+    else (velista 0113): a button in it would have opened right above the chip
+    that does the same thing.
   -->
   <lib-anchored-popover
     (closed)="closeNeedsList($event)"
@@ -650,13 +652,6 @@
     <p class="needs-list-text" id="basket-add-needs-list-text">
       {{ 'basket.add.needsList' | rokuT }}
     </p>
-    <button
-      (click)="chooseFromNeedsList()"
-      class="needs-list-action"
-      type="button"
-    >
-      {{ 'basket.add.needsListAction' | rokuT }}
-    </button>
   </lib-anchored-popover>
 }
 
@@ -664,4 +659,4 @@
   The sheets, as children of the page they cover (rule E1, plan 0008): the page
   keeps its scroll underneath and Android's back button dismisses them.
 -->
-<router-outlet />
+<router-outlet (deactivate)="onSheetDeactivated($event)" />

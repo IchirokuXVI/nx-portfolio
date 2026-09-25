@@ -40,11 +40,13 @@ import { SUGGEST_DEBOUNCE_MS } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
+  SheetNavigation,
 } from '@portfolio/velista/platform';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject, of } from 'rxjs';
 import { BasketRow as BasketRowComponent } from '../basket-row/basket-row';
+import { TargetListSheet } from '../target-list-sheet/target-list-sheet';
 import { BasketPage } from './basket-page';
 
 /**
@@ -2944,14 +2946,30 @@ describe('the composer and the list it adds to', () => {
       expect(popover()?.textContent).toContain('basket.add.needsList');
     });
 
-    it('opens the target sheet from the popover’s button', async () => {
-      const { fixture, store } = await render({ served });
+    it('holds the sentence and no button (velista 0113)', async () => {
+      // The chip that chooses a list sits right under the popover, so a button
+      // in it that did the same thing was a second copy of the chip.
+      const { fixture } = await render({ served });
       field(fixture).dispatchEvent(new Event('focus'));
       fixture.detectChanges();
 
-      popover()
-        ?.querySelector<HTMLButtonElement>('.needs-list-action')
-        ?.click();
+      expect(popover()?.textContent?.trim()).toBe('basket.add.needsList');
+      expect(popover()?.querySelector('button, a, [tabindex]')).toBeNull();
+      expect(popover()?.getAttribute('aria-labelledby')).toBe(
+        'basket-add-needs-list-text'
+      );
+    });
+
+    it('closes the popover when the chip opens the sheet', async () => {
+      // A press on the chip is not a press outside the popover, because the
+      // overlay counts the dock as its own, so without this it stays drawn above
+      // the sheet.
+      const { fixture, store } = await render({ served });
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+      expect(popover()).not.toBeNull();
+
+      (chip(fixture) as HTMLButtonElement).click();
       fixture.detectChanges();
 
       expect(store.navigate).toHaveBeenCalledWith(
@@ -2959,9 +2977,6 @@ describe('the composer and the list it adds to', () => {
         expect.anything()
       );
       expect(popover()).toBeNull();
-      // Focus goes back to the field, for the sheet to hand back on its way out,
-      // and handing it back does not open the popover again.
-      expect(document.activeElement).toBe(field(fixture));
     });
 
     it('closes the popover on Escape', async () => {
@@ -2990,6 +3005,103 @@ describe('the composer and the list it adds to', () => {
       expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
       expect(chip(fixture)?.classList).not.toContain('is-next');
       expect(chip(fixture)?.textContent).toContain('basket.add.to');
+    });
+
+    /**
+     * Velista `0113`: once a list is chosen the next thing is to type, so focus
+     * goes to the field as the sheet's route goes. The router outlet is not
+     * driven here, so its `deactivate` is stood in for by the handler it calls.
+     */
+    describe('focus once a list is chosen', () => {
+      const onSheetGone = (
+        fixture: ComponentFixture<BasketPage>,
+        sheet: unknown
+      ) =>
+        (
+          fixture.componentInstance as unknown as {
+            onSheetDeactivated(sheet: unknown): void;
+          }
+        ).onSheetDeactivated(sheet);
+
+      /** A target sheet as the outlet hands it over, after a choice or none. */
+      const sheet = (chose: boolean): TargetListSheet => {
+        const made = TestBed.runInInjectionContext(() => new TargetListSheet());
+        jest
+          .spyOn(TestBed.inject(SheetNavigation), 'dismiss')
+          .mockResolvedValue(undefined as never);
+        if (chose) {
+          (
+            made as unknown as { choose(list: (typeof served)[number]): void }
+          ).choose(served[1]);
+        }
+        return made;
+      };
+
+      it('lands on the field after a choice, when the chip opened the sheet', async () => {
+        const { fixture } = await render({ served });
+        (chip(fixture) as HTMLButtonElement).focus();
+        (chip(fixture) as HTMLButtonElement).click();
+        fixture.detectChanges();
+
+        const chosen = sheet(true);
+        fixture.detectChanges();
+        onSheetGone(fixture, chosen);
+        fixture.detectChanges();
+
+        expect(document.activeElement).toBe(field(fixture));
+        expect(field(fixture).readOnly).toBe(false);
+        expect(popover()).toBeNull();
+      });
+
+      it('lands on the field after a choice, when a tap on the locked field led there', async () => {
+        const { fixture } = await render({ served });
+        field(fixture).focus();
+        field(fixture).dispatchEvent(new Event('focus'));
+        fixture.detectChanges();
+        expect(popover()).not.toBeNull();
+        (chip(fixture) as HTMLButtonElement).click();
+        fixture.detectChanges();
+
+        const chosen = sheet(true);
+        fixture.detectChanges();
+        onSheetGone(fixture, chosen);
+        fixture.detectChanges();
+
+        expect(document.activeElement).toBe(field(fixture));
+        // The focus it moves is not read as a tap on a locked field.
+        expect(popover()).toBeNull();
+      });
+
+      it('moves nothing when the sheet was dismissed without a choice', async () => {
+        const { fixture } = await render({ served });
+        const button = chip(fixture) as HTMLButtonElement;
+        button.focus();
+
+        onSheetGone(fixture, sheet(false));
+        fixture.detectChanges();
+
+        expect(document.activeElement).toBe(button);
+      });
+
+      it('moves nothing for a sheet that is not the target sheet', async () => {
+        const { fixture } = await render({ served });
+        const button = chip(fixture) as HTMLButtonElement;
+        button.focus();
+
+        onSheetGone(fixture, { chose: true });
+        fixture.detectChanges();
+
+        expect(document.activeElement).toBe(button);
+      });
+
+      it('moves nothing for the target a single list sets on arrival', async () => {
+        // `restore` chooses the only list itself, on every read, and that is not
+        // somebody choosing: the page opens with focus where it was.
+        const { fixture } = await render({ served: [served[0]] });
+
+        expect(field(fixture).readOnly).toBe(false);
+        expect(document.activeElement).not.toBe(field(fixture));
+      });
     });
 
     it('changes nothing on a basket with one list, which chooses itself', async () => {
