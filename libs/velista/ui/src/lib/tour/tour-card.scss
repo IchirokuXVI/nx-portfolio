@@ -13,6 +13,12 @@
   background: var(--app-surface-overlay);
   box-shadow: var(--app-elevation-2);
   color: var(--app-text-primary);
+  // A card taller than the screen scrolls inside itself rather than leaving it
+  // (velista 0112). The cap is measured by the spotlight, which knows the screen.
+  box-sizing: border-box;
+  max-block-size: var(--app-tour-card-max, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 
   @include tokens.app-focus-ring;
 }

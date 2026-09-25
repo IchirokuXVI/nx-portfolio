@@ -3,7 +3,7 @@
   With a ring, the ring's own shadow is the dimming, and this layer stays clear so the
   control shows through it.
 -->
-<div [class.dimmed]="ring() === null" class="blocker"></div>
+<div [class.dimmed]="ring() === null" #layer class="blocker"></div>
 
 @if (ring(); as box) {
   <div
@@ -17,7 +17,13 @@
 }
 
 @if (slot(); as place) {
+  <!--
+    The card's height cap goes down as a custom property rather than as the slot's own
+    height: a slot that scrolled would clip the card's shadow and its focus ring, and
+    the card scrolling inside itself clips neither (velista 0112).
+  -->
   <div
+    [style.--app-tour-card-max]="cardMax()"
     [style.bottom.px]="place.bottom"
     [style.top.px]="place.top"
     #cardSlot

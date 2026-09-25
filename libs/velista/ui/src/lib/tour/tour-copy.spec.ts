@@ -73,5 +73,14 @@ describe('the tour copy (rule O6)', () => {
       expect(lookup(copy, 'tour.progress')).toContain('{{n}}');
       expect(lookup(copy, 'tour.progress')).toContain('{{total}}');
     });
+
+    // The microphone is a toggle (velista 0112): one tap starts listening and another
+    // stops it. A card that says to hold it teaches a gesture that does nothing.
+    it('says to tap the microphone, never to hold it', () => {
+      const body = lookup(copy, 'tour.voice.body') ?? '';
+
+      expect(body).toMatch(locale === 'en' ? /\btap\b/i : /\btoca\b/i);
+      expect(body).not.toMatch(/\bhold|mant[eé]n/i);
+    });
   });
 });
