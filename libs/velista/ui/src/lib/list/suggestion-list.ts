@@ -437,6 +437,14 @@ export class SuggestionList {
     });
   }
 
+  /** A card or a row was chosen, with the button it was chosen by. */
+  protected choose(suggestion: CatalogSuggestion, event: Event): void {
+    this.chose.emit({
+      suggestion,
+      anchor: event.currentTarget as HTMLElement,
+    });
+  }
+
   /**
    * **Nothing in the panel may close the keyboard** (rule 2 of `0101`).
    *
@@ -448,13 +456,6 @@ export class SuggestionList {
    * the card itself. Not `pointerdown` and not `touchstart`: those carry the
    * panel's own scroll, and cancelling them would take it away.
    */
-  protected choose(suggestion: CatalogSuggestion, event: Event): void {
-    this.chose.emit({
-      suggestion,
-      anchor: event.currentTarget as HTMLElement,
-    });
-  }
-
   protected holdFocus(event: MouseEvent): void {
     event.preventDefault();
   }
