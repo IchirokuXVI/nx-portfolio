@@ -30,6 +30,7 @@ import {
   COMMENT_PATTERNS,
   LINE_PATTERNS,
   LIST_PATTERNS,
+  SettlementOutcome,
   type AddLineResult,
   type CommentAudioView,
   type CommentPage,
@@ -67,6 +68,7 @@ import type { CurrentUser } from '../auth/jwt.strategy';
 import {
   pricedItemId,
   SettlePriceService,
+  shopPricedItemId,
 } from '../baskets/settle-price.service';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
@@ -570,6 +572,10 @@ export class LinesController {
     // scopes, and `servedLocations` is true: they are the caller's own shops.
     // With no `itemId`, core says which product the line records and that is
     // the product priced (plan 0151, section 3).
+    //
+    // A shop with no scope is the zone list's "I bought this" (velista `0114`):
+    // the gateway works the scope out from the shop and records neither when it
+    // cannot, so naming a shop never fails a purchase.
     const paid = dto.priceScopeId
       ? await this.prices.read({
           userId: user.userId,
@@ -584,7 +590,20 @@ export class LinesController {
           supermarketLocationId: dto.supermarketLocationId,
           servedLocations: true,
         })
-      : null;
+      : dto.supermarketLocationId && dto.outcome === SettlementOutcome.BOUGHT
+        ? await this.prices.readAtShop({
+            userId: user.userId,
+            profileId: undefined,
+            itemId: shopPricedItemId(
+              dto.itemId,
+              dto.itemId === undefined
+                ? await this.settlePick(user.userId, id)
+                : undefined
+            ),
+            supermarketLocationId: dto.supermarketLocationId,
+            servedLocations: true,
+          })
+        : null;
     const req: SettleLineRequest = {
       userId: user.userId,
       lineId: id,

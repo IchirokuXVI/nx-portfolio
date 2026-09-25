@@ -11,6 +11,7 @@ import {
   pricedItemId,
   SETTLE_PRICE_BUDGET_MS,
   SettlePriceService,
+  shopPricedItemId,
   type SettlePriceInput,
 } from './settle-price.service';
 
@@ -461,5 +462,128 @@ describe('pricedItemId', () => {
     expect((thrown as ValidationException).messageArgs).toEqual({
       field: 'itemId',
     });
+  });
+});
+
+/**
+ * A settle that names a shop and no scope (velista `0114`).
+ *
+ * The zone list's "I bought this" says where and never at what price, so the
+ * scope is the shop's own most specific one, kept only when the product has a
+ * price there, the way the basket works out the scope it shows at a shop. Every
+ * way of not resolving ends in null: no price, and no shop either.
+ */
+describe('the price a settle at a shop with no scope records (velista 0114)', () => {
+  const atShop = (
+    extra: Partial<Omit<SettlePriceInput, 'priceScopeId'>> = {}
+  ): Omit<SettlePriceInput, 'priceScopeId'> => ({
+    userId: OWNER,
+    profileId: undefined,
+    itemId: ITEM,
+    supermarketLocationId: SHOP,
+    servedLocations: true,
+    ...extra,
+  });
+
+  it("resolves the shop's most specific scope, and records it with the shop, its chain and the price", async () => {
+    const w = build({
+      shopStack: [FAR_SCOPE, SCOPE],
+      items: [product([offer(FAR_SCOPE, 1.1), offer(SCOPE, 0.95)])],
+    });
+
+    expect(await w.service.readAtShop(atShop())).toEqual({
+      priceScopeId: FAR_SCOPE,
+      supermarketLocationId: SHOP,
+      supermarketId: CHAIN,
+      pricePaidCents: 110,
+      pricePaidCurrency: 'EUR',
+    });
+    // A scope worked out from the shop is the shop's, not the profile's, so
+    // the profile is never asked.
+    expect(w.describe).not.toHaveBeenCalled();
+  });
+
+  it('records nothing when the product has no price at that scope', async () => {
+    const w = build({
+      shopStack: [FAR_SCOPE, SCOPE],
+      items: [product([offer(SCOPE, 0.95)])],
+    });
+
+    expect(await w.service.readAtShop(atShop())).toBeNull();
+  });
+
+  it('records nothing when the offer there has no amount', async () => {
+    const w = build({
+      shopStack: [SCOPE],
+      items: [product([offer(SCOPE, null)])],
+    });
+
+    expect(await w.service.readAtShop(atShop())).toBeNull();
+  });
+
+  it('records nothing for a shop catalog cannot answer for', async () => {
+    const w = build({ shopStack: 'throws' });
+
+    expect(await w.service.readAtShop(atShop())).toBeNull();
+  });
+
+  it('records nothing for a shop with no scope at all', async () => {
+    const w = build({ shopStack: [] });
+
+    expect(await w.service.readAtShop(atShop())).toBeNull();
+  });
+
+  it('records nothing on a free text line, and never asks for a price', async () => {
+    const w = build();
+
+    expect(
+      await w.service.readAtShop(atShop({ itemId: undefined }))
+    ).toBeNull();
+    expect(w.calls).not.toContain(ITEM_PATTERNS.getMany);
+  });
+
+  it('asks nothing for a reader who is not served shops', async () => {
+    const w = build();
+
+    expect(
+      await w.service.readAtShop(atShop({ servedLocations: false }))
+    ).toBeNull();
+    expect(w.calls).toEqual([]);
+  });
+
+  it('gives up inside its budget with nothing at all', async () => {
+    jest.useFakeTimers();
+    try {
+      const w = build({ items: 'never answers' });
+
+      const pending = w.service.readAtShop(atShop());
+      await Promise.resolve();
+      await Promise.resolve();
+      jest.advanceTimersByTime(SETTLE_PRICE_BUDGET_MS);
+
+      expect(await pending).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('the product a shop only settle is priced for (velista 0114)', () => {
+  it('is the one the caller named', () => {
+    expect(shopPricedItemId(ITEM, { pickedItemId: null, optionCount: 2 })).toBe(
+      ITEM
+    );
+  });
+
+  it("is core's pick on a line with one product", () => {
+    expect(
+      shopPricedItemId(undefined, { pickedItemId: ITEM, optionCount: 1 })
+    ).toBe(ITEM);
+  });
+
+  it('is none, and never a refusal, on a line with several and none named', () => {
+    expect(
+      shopPricedItemId(undefined, { pickedItemId: null, optionCount: 2 })
+    ).toBeUndefined();
   });
 });

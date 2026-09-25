@@ -12,6 +12,7 @@ import {
   type LineSettlement,
   type ListPermission,
   type Page,
+  type SettleLineOptions,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
@@ -384,7 +385,7 @@ export class LineMemory implements LineServiceI {
   async settle(
     lineId: string,
     outcome: SettlementOutcome,
-    options?: { quantity?: number; itemId?: string }
+    options?: SettleLineOptions
   ): Promise<{ line: Line; settlement: LineSettlement }> {
     const line = this._lineOrThrow(lineId);
     // `WRITE` or `MANAGE`, which is `canSettle` on the server since backend plan

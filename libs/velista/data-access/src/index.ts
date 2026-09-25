@@ -94,6 +94,7 @@ export * from './lib/realtime/realtime-memory';
 export * from './lib/realtime/realtime-socket';
 export * from './lib/realtime/room-registry';
 export * from './lib/realtime/socket-factory';
+export * from './lib/shops/bought-shop-memory';
 export * from './lib/shops/shop-api';
 export * from './lib/shops/shop-finder';
 export * from './lib/shops/shop-finder-api';

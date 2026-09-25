@@ -212,13 +212,24 @@ describe('the row settle route (plan 0143, section 4.2)', () => {
 });
 
 describe('the list page settle route', () => {
-  function buildList() {
+  const SHOP_PAID = {
+    ...PAID,
+    supermarketLocationId: SHOP,
+    supermarketId: 'chain-1',
+  };
+
+  function buildList(options: { atShop?: typeof SHOP_PAID | null } = {}) {
     const sent: { subject: string; payload: unknown }[] = [];
     const send = jest.fn(async (subject: string, payload: unknown) => {
       sent.push({ subject, payload });
       return { line: {}, settlement: {} };
     });
-    const prices = { read: jest.fn(async () => PAID) };
+    const prices = {
+      read: jest.fn(async () => PAID),
+      readAtShop: jest.fn(async () =>
+        options.atShop === undefined ? SHOP_PAID : options.atShop
+      ),
+    };
     return {
       controller: new LinesController(
         { send } as never,
@@ -263,6 +274,52 @@ describe('the list page settle route', () => {
     } as SettleLineDto);
 
     expect(w.prices.read).not.toHaveBeenCalled();
+    expect((w.sent[0].payload as SettleLineRequest).paid).toBeUndefined();
+  });
+
+  it('works the scope out from the shop when the client named only a shop (velista 0114)', async () => {
+    const w = buildList();
+
+    await w.controller.settle({ userId: ACTOR } as never, 'line-1', {
+      outcome: SettlementOutcome.BOUGHT,
+      quantity: 1,
+      itemId: ITEM,
+      supermarketLocationId: SHOP,
+    } as SettleLineDto);
+
+    expect(w.prices.read).not.toHaveBeenCalled();
+    expect(w.prices.readAtShop).toHaveBeenCalledWith({
+      userId: ACTOR,
+      profileId: undefined,
+      itemId: ITEM,
+      supermarketLocationId: SHOP,
+      servedLocations: true,
+    });
+    expect((w.sent[0].payload as SettleLineRequest).paid).toEqual(SHOP_PAID);
+  });
+
+  it('settles with no price and no shop when the shop resolves nothing', async () => {
+    const w = buildList({ atShop: null });
+
+    await w.controller.settle({ userId: ACTOR } as never, 'line-1', {
+      outcome: SettlementOutcome.BOUGHT,
+      itemId: ITEM,
+      supermarketLocationId: SHOP,
+    } as SettleLineDto);
+
+    expect(w.sent.map((call) => call.subject)).toEqual([LINE_PATTERNS.settle]);
+    expect((w.sent[0].payload as SettleLineRequest).paid).toBeUndefined();
+  });
+
+  it('asks nothing about a shop on a trip that found nothing', async () => {
+    const w = buildList();
+
+    await w.controller.settle({ userId: ACTOR } as never, 'line-1', {
+      outcome: SettlementOutcome.NOT_AVAILABLE,
+      supermarketLocationId: SHOP,
+    } as SettleLineDto);
+
+    expect(w.prices.readAtShop).not.toHaveBeenCalled();
     expect((w.sent[0].payload as SettleLineRequest).paid).toBeUndefined();
   });
 
@@ -470,6 +527,20 @@ describe('a settle with no itemId (plan 0151)', () => {
       expect(w.sent.map((call) => call.subject)).not.toContain(
         LINE_PATTERNS.settle
       );
+    });
+
+    it('no itemId, several products, only a shop: settles with no shop rather than refusing (velista 0114)', async () => {
+      const w = wire(TWO_OPTIONS);
+
+      await w.lines.settle(
+        { userId: ACTOR } as never,
+        'line-1',
+        settleBody({ priceScopeId: undefined, supermarketLocationId: SHOP })
+      );
+
+      expect(
+        w.payloadOf<SettleLineRequest>(LINE_PATTERNS.settle).paid
+      ).toBeUndefined();
     });
 
     it('asks core nothing when the caller named the product', async () => {

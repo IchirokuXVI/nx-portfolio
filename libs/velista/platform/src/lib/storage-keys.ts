@@ -60,6 +60,16 @@ export const StorageKeys = {
    */
   listView: `list-view:${APP_KEY}`,
   /**
+   * The shop the last "I bought this" on a zone list named (velista `0114`), so
+   * the next one starts on it.
+   *
+   * One record for the device, like `basketView`, and with the basket shop's
+   * lifetime for the basket shop's reason: a shop is true for the trip and not for
+   * the month. It holds the shop as the picker named it, so the step can print it
+   * without asking anybody, and clearing the choice deletes it.
+   */
+  boughtShop: `bought-shop:${APP_KEY}`,
+  /**
    * That this document already spent its one reload on a build the server refuses
    * (plan 0072 D4).
    *
