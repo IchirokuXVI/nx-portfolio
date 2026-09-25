@@ -712,6 +712,13 @@
       "rateValue": "cada {{days}} días",
       "rateRough": "cada pocas semanas",
       "bought": "Lo he comprado",
+      "shop": {
+        "label": "¿Dónde lo compraste?",
+        "none": "Sin indicar",
+        "optional": "Opcional",
+        "clear": "Quitar la tienda",
+        "back": "Volver a cuántos"
+      },
       "notAvailable": "No lo tenían",
       "everything": "Ver más detalles",
       "howMany": "¿Cuántos has cogido?",

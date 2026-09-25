@@ -1,0 +1,41 @@
+<!--
+  The chevron beside the title, back to the step. It changes nothing: a pick is the
+  only thing that sets the shop, and the step is where it is cleared.
+-->
+<div class="head">
+  <button
+    (click)="back.emit()"
+    [attr.aria-label]="'list.detail.shop.back' | rokuT"
+    #backButton
+    class="back"
+    type="button"
+  >
+    <lib-chevron-left-icon class="back-glyph" />
+  </button>
+  <h2 class="title" id="bought-shop-title">
+    {{ 'list.detail.shop.label' | rokuT }}
+  </h2>
+  <lib-near-me-button (pressed)="findNear()" [busy]="finding()" />
+</div>
+
+<!--
+  The body the basket and the get a list sheet draw too (velista 0102, 0103): the
+  recent shops, the search, the chain buttons and their shops, one radio each.
+-->
+<lib-shop-picker
+  (chosen)="select($event)"
+  (picked)="pick($event)"
+  (queried)="onQuery($event)"
+  [chains]="chains()"
+  [groups]="groups()"
+  [matchCount]="matchCount()"
+  [matches]="matches()"
+  [near]="near()"
+  [openKey]="openKey()"
+  [openName]="openName()"
+  [pickedId]="pickedId()"
+  [query]="query()"
+  [recent]="recent()"
+  [state]="state()"
+  fieldId="bought-shop-search"
+/>

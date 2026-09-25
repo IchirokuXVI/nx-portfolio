@@ -14,6 +14,7 @@ import {
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 import { ScopeResolutionService } from '../catalog/scope-resolution.service';
 import { NatsClient } from '../messaging/nats-client';
+import { quotedScopeOf } from './basket-shop';
 
 /**
  * Everything this service is allowed to spend, in milliseconds (plan 0143,
@@ -77,6 +78,28 @@ export function pricedItemId(
       'itemId is required to settle with a priceScopeId when there are several products to choose from',
       { messageArgs: { field: 'itemId' } }
     );
+  }
+  return pick.pickedItemId ?? undefined;
+}
+
+/**
+ * The product a list page settle that names only a shop is priced for (velista
+ * `0114`).
+ *
+ * {@link pricedItemId} without its refusal. That refusal exists because the
+ * caller named a scope, which says they saw a price for one product; a shop says
+ * no such thing, and a shop is optional, so a line with several products and
+ * none named records no shop rather than failing a purchase over it.
+ */
+export function shopPricedItemId(
+  named: string | undefined,
+  pick: SettlePick | undefined
+): string | undefined {
+  if (named !== undefined) {
+    return named;
+  }
+  if (pick === undefined || pick.optionCount > 1) {
+    return undefined;
   }
   return pick.pickedItemId ?? undefined;
 }
@@ -179,6 +202,76 @@ export class SettlePriceService {
     } finally {
       timer.stop();
     }
+  }
+
+  /**
+   * The four values a settle records when the client named a shop and no scope
+   * (velista `0114`), or null when it records nothing.
+   *
+   * The zone list's "I bought this" names where, and never a scope, because it
+   * drew no price. So the scope is worked out here, **the way the basket works
+   * out the one it shows at a shop**: the most specific scope of the shop's
+   * stack ({@link quotedScopeOf}), kept only when that scope has a price for the
+   * product. Then the price is that price, exactly as {@link read} records it.
+   *
+   * Nothing resolves for a shop catalog does not know, a product with no price
+   * there, a free text line, or a catalog slower than the budget, and every one
+   * of them answers null: no price and **no shop**, because the settlement may
+   * not name a shop without a scope, and a purchase never fails over a shop.
+   * Each is logged at `debug`, for {@link read}'s reason.
+   */
+  async readAtShop(
+    input: Omit<SettlePriceInput, 'priceScopeId'>
+  ): Promise<SettlementPaid | null> {
+    if (!input.supermarketLocationId || !input.servedLocations) {
+      return null;
+    }
+    if (!input.itemId) {
+      // A free text line, or several products and none named: there is no
+      // product to find a price for, so there is no scope to record either.
+      this.log.debug('Settle shop not recorded: no product to price');
+      return null;
+    }
+
+    const timer = new Budget(SETTLE_PRICE_BUDGET_MS);
+    try {
+      return await timer.race(this.lookupAtShop(input), () => {
+        this.log.debug(
+          `Settle shop lookup gave up after ${SETTLE_PRICE_BUDGET_MS}ms`
+        );
+        return null;
+      });
+    } finally {
+      timer.stop();
+    }
+  }
+
+  /** {@link readAtShop}'s lookup, under its budget. */
+  private async lookupAtShop(
+    input: Omit<SettlePriceInput, 'priceScopeId'>
+  ): Promise<SettlementPaid | null> {
+    const shop = await this.shopOf({ ...input, priceScopeId: undefined });
+    const quoted = shop === null ? null : quotedScopeOf(shop);
+    if (shop === null || quoted === null) {
+      this.log.debug('Settle shop not recorded: catalog named no scope for it');
+      return null;
+    }
+
+    const offer = await this.offerOf(input.itemId, quoted);
+    if (!offer || offer.price === null || offer.currency === null) {
+      this.log.debug(
+        'Settle shop not recorded: no price for the product at its scope'
+      );
+      return null;
+    }
+
+    return {
+      priceScopeId: quoted,
+      supermarketLocationId: shop.location.id,
+      supermarketId: shop.supermarket.id,
+      pricePaidCents: Math.round(offer.price * 100),
+      pricePaidCurrency: offer.currency,
+    };
   }
 
   /** Steps 2 to 4, which share the one budget above. */

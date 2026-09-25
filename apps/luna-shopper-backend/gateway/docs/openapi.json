@@ -24577,7 +24577,7 @@
           "supermarketLocationId": {
             "type": "string",
             "format": "uuid",
-            "description": "The one shop you are standing in."
+            "description": "The shop it was bought at. With `priceScopeId`, it is recorded when that scope is one of the shop's. Without one, the gateway works the scope out from the shop (its most specific scope, when that scope has a price for the product) and records the shop, the scope and that price; when nothing resolves it records none of them and the purchase still succeeds."
           }
         },
         "required": [

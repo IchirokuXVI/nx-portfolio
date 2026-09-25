@@ -11,6 +11,7 @@ import type {
   Page,
   ReorderLinesRequest,
   SetLineApprovalRequest,
+  SettleLineOptions,
   SettleLineRequest,
   SettlementOutcome,
   UpdateLineRequest,
@@ -169,7 +170,7 @@ export class LineApi implements LineServiceI {
   async settle(
     lineId: string,
     outcome: SettlementOutcome,
-    options?: { quantity?: number; itemId?: string }
+    options?: SettleLineOptions
   ): Promise<{ line: Line; settlement: LineSettlement }> {
     // `quantity` is refused outright on a trip that found nothing, so it is
     // dropped here rather than sent and rejected: the whitelist would answer 400
@@ -180,6 +181,12 @@ export class LineApi implements LineServiceI {
         ? {}
         : { quantity: options.quantity }),
       ...(options?.itemId === undefined ? {} : { itemId: options.itemId }),
+      // Only on a purchase: a trip that found nothing records no shop (velista
+      // `0114`), and the server prices nothing for it either.
+      ...(outcome === 'NOT_AVAILABLE' ||
+      options?.supermarketLocationId === undefined
+        ? {}
+        : { supermarketLocationId: options.supermarketLocationId }),
     };
 
     const body = await firstValueFrom(
@@ -237,10 +244,10 @@ export class LineApi implements LineServiceI {
     }
 
     const body = await firstValueFrom(
-      this._http.get<unknown>(
-        this._urls.gateway(`/v1/items/${itemId}/lists`),
-        { params, context: operation('lines.holdingLists') }
-      )
+      this._http.get<unknown>(this._urls.gateway(`/v1/items/${itemId}/lists`), {
+        params,
+        context: operation('lines.holdingLists'),
+      })
     );
 
     return isRecord(body)
@@ -279,10 +286,7 @@ export class LineApi implements LineServiceI {
     return toPage(body, toLineSettlement);
   }
 
-  async setApproval(
-    lineId: string,
-    status: LineApprovalStatus
-  ): Promise<Line> {
+  async setApproval(lineId: string, status: LineApprovalStatus): Promise<Line> {
     // `approvalStatus`, not `approved`. `SetApprovalDto` takes the enum, so a boolean
     // body is refused by the whitelist before core sees it.
     const request: SetLineApprovalRequest = { approvalStatus: status };
@@ -303,11 +307,9 @@ export class LineApi implements LineServiceI {
     const request: ReorderLinesRequest = { orderedLineIds };
 
     await firstValueFrom(
-      this._http.post<unknown>(
-        `${this._list(listId)}/lines/reorder`,
-        request,
-        { context: operation('lines.reorder') }
-      )
+      this._http.post<unknown>(`${this._list(listId)}/lines/reorder`, request, {
+        context: operation('lines.reorder'),
+      })
     );
   }
 

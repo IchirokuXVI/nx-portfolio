@@ -712,6 +712,13 @@
       "rateValue": "every {{days}} days",
       "rateRough": "every few weeks",
       "bought": "I bought this",
+      "shop": {
+        "label": "Where did you buy it?",
+        "none": "Not specified",
+        "optional": "Optional",
+        "clear": "Clear the shop",
+        "back": "Back to how many"
+      },
       "notAvailable": "They did not have it",
       "everything": "See more details",
       "howMany": "How many did you get?",

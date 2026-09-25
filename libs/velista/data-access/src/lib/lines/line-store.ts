@@ -15,6 +15,7 @@ import {
   type LineApprovalStatus,
   type LineSettlement,
   type Page,
+  type SettleLineOptions,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
@@ -665,7 +666,7 @@ export class LineStore {
   async settle(
     lineId: string,
     outcome: SettlementOutcome,
-    options?: { quantity?: number; itemId?: string }
+    options?: SettleLineOptions
   ): Promise<
     | { readonly state: 'settled'; readonly line: Line }
     | { readonly state: 'failed'; readonly error: unknown }

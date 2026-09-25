@@ -19,6 +19,7 @@ import type {
   ProfilePostalCode,
   ResolvedPostalCode,
   SessionTokens,
+  SettleLineOptions,
   SettlementOutcome,
   SharedBasketSummary,
   ShoppingListsLoad,
@@ -691,6 +692,7 @@ export type LineWriteCall =
       readonly outcome: SettlementOutcome;
       readonly quantity?: number;
       readonly itemId?: string;
+      readonly supermarketLocationId?: string;
     }
   | {
       readonly kind: 'approval';
@@ -1021,7 +1023,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     settle: async (
       lineId: string,
       settleOutcome: SettlementOutcome,
-      settleOptions?: { quantity?: number; itemId?: string }
+      settleOptions?: SettleLineOptions
     ) => {
       calls.push({
         kind: 'settle',

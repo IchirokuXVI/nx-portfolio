@@ -7,6 +7,7 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  boughtShopRecord,
   fakeItemNames,
   fakeLineStore,
   fakeListStore,
@@ -22,6 +23,7 @@ import {
   type FakeItemNames,
 } from '@portfolio/velista/data-access';
 import type {
+  BasketShop,
   CatalogItem,
   Line,
   LineSettlement,
@@ -29,8 +31,11 @@ import type {
   ShoppingListSummary,
 } from '@portfolio/velista/models';
 import {
+  BrowserFacade,
+  fakeBrowserFacade,
   provideVelistaTesting,
   SheetNavigation,
+  StorageKeys,
 } from '@portfolio/velista/platform';
 import { QuantityReel, SheetShell } from '@portfolio/velista/ui';
 import { BehaviorSubject } from 'rxjs';
@@ -109,6 +114,8 @@ interface Options {
   readonly autoApproveLines?: boolean;
   readonly commentCount?: number;
   readonly state?: 'loading' | 'loaded';
+  /** This device's storage, for the remembered shop (velista `0114`). */
+  readonly storage?: Map<string, string>;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -178,6 +185,10 @@ async function render(options: Options = {}): Promise<{
       provideFakeItemNames(itemNames),
       provideFakeSessionStore('REGISTERED'),
       { provide: REALTIME_CLIENT, useValue: realtime },
+      {
+        provide: BrowserFacade,
+        useValue: fakeBrowserFacade(options.storage ?? new Map()),
+      },
       { provide: SheetNavigation, useValue: sheets },
       { provide: Router, useValue: router },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
@@ -856,6 +867,112 @@ describe('LineDetailSheet', () => {
 
       expect(textOf(fixture)).not.toContain('list.gone.');
       expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('where it was bought (velista 0114)', () => {
+    const SHOP: BasketShop = {
+      id: 'loc-1',
+      supermarketId: 'chain-1',
+      chain: { es: 'Mercadona', en: 'Mercadona' },
+      label: null,
+      address: 'Ronda de los Tejares 1',
+      city: 'Cordoba',
+      postalCode: '14008',
+      inProfile: null,
+    };
+
+    const remembered = (): Map<string, string> =>
+      new Map([[StorageKeys.boughtShop, boughtShopRecord(SHOP, Date.now())]]);
+
+    async function openStep(
+      fixture: ComponentFixture<LineDetailSheet>
+    ): Promise<void> {
+      button(fixture, 'list.detail.bought')?.click();
+      await settle(fixture);
+    }
+
+    async function record(
+      fixture: ComponentFixture<LineDetailSheet>
+    ): Promise<void> {
+      button(fixture, 'list.detail.record')?.click();
+      await settle(fixture);
+    }
+
+    it('asks where, says Not specified, and settles exactly as before with no shop', async () => {
+      const { fixture, lines } = await render();
+
+      await openStep(fixture);
+      expect(textOf(fixture)).toContain('list.detail.shop.label');
+      expect(textOf(fixture)).toContain('list.detail.shop.none');
+      expect(fixture.nativeElement.querySelector('.shop-clear')).toBeNull();
+
+      await record(fixture);
+      const call = lines.calls.at(-1);
+      expect(call).toMatchObject({ kind: 'settle', outcome: 'BOUGHT' });
+      expect(call).not.toHaveProperty('supermarketLocationId');
+    });
+
+    it('starts on the shop this device named last, and sends it', async () => {
+      const { fixture, lines } = await render({ storage: remembered() });
+
+      await openStep(fixture);
+      expect(textOf(fixture)).toContain('Mercadona');
+      expect(textOf(fixture)).toContain('Ronda de los Tejares 1, Cordoba');
+
+      await record(fixture);
+      expect(lines.calls.at(-1)).toMatchObject({
+        kind: 'settle',
+        outcome: 'BOUGHT',
+        supermarketLocationId: SHOP.id,
+      });
+    });
+
+    it('clears the shop, sends none, and stops offering it', async () => {
+      const storage = remembered();
+      const { fixture, lines } = await render({ storage });
+
+      await openStep(fixture);
+      (
+        fixture.nativeElement.querySelector('.shop-clear') as HTMLButtonElement
+      ).click();
+      await settle(fixture);
+
+      expect(textOf(fixture)).toContain('list.detail.shop.none');
+      expect(storage.has(StorageKeys.boughtShop)).toBe(false);
+
+      await record(fixture);
+      expect(lines.calls.at(-1)).not.toHaveProperty('supermarketLocationId');
+    });
+
+    it('remembers a picked shop, back on the step, and sends it', async () => {
+      const storage = new Map<string, string>();
+      const { fixture, lines } = await render({ storage });
+
+      await openStep(fixture);
+      // The picker itself is the shared body's to test; here it is its output.
+      fixture.componentInstance.step.set('shop');
+      fixture.componentInstance.onShopPicked(SHOP);
+      await settle(fixture);
+
+      expect(fixture.componentInstance.step()).toBe('howMany');
+      expect(storage.has(StorageKeys.boughtShop)).toBe(true);
+      expect(textOf(fixture)).toContain('Mercadona');
+
+      await record(fixture);
+      expect(lines.calls.at(-1)).toMatchObject({
+        supermarketLocationId: SHOP.id,
+      });
+    });
+
+    it('never names a shop for "they did not have it"', async () => {
+      const { fixture, lines } = await render({ storage: remembered() });
+
+      await fixture.componentInstance.recordNotAvailable();
+      await settle(fixture);
+
+      expect(lines.calls.at(-1)).toMatchObject({ outcome: 'NOT_AVAILABLE' });
+      expect(lines.calls.at(-1)).not.toHaveProperty('supermarketLocationId');
     });
   });
 });
