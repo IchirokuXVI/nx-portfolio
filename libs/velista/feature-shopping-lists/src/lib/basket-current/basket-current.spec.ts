@@ -78,111 +78,99 @@ const text = (fixture: ComponentFixture<BasketCurrentPage>) =>
   (fixture.nativeElement as HTMLElement).textContent ?? '';
 
 describe('BasketCurrentPage', () => {
-  /**
-   * With a basket being shopped the tab is a doorway and not a screen: the address bar
-   * names the basket, so a reload lands on it rather than here.
-   */
-  it('goes to the live basket, replacing its own entry', async () => {
-    const go = jest.spyOn(Router.prototype, 'navigateByUrl');
-    await render(fakeBasketListStore([basket()]));
+  let go: jest.SpyInstance;
 
-    expect(go).toHaveBeenCalledWith('/en/shopping-lists/gl1', {
+  beforeEach(() => {
+    go = jest.spyOn(Router.prototype, 'navigateByUrl');
+  });
+
+  afterEach(() => go.mockRestore());
+
+  /** The redirects this page sent, which never includes the history's push. */
+  const redirects = () =>
+    go.mock.calls.filter(([, extras]) => extras?.replaceUrl === true);
+
+  /**
+   * With an open generated basket the tab is a doorway: the address bar names the
+   * basket, so a reload lands on it rather than here.
+   */
+  it('goes to the newest open generated basket, replacing its own entry', async () => {
+    await render(
+      fakeBasketListStore([basket({ id: 'gl2' }), basket({ id: 'gl1' })])
+    );
+
+    expect(go).toHaveBeenCalledWith('/en/shopping-lists/gl2', {
       replaceUrl: true,
     });
+    expect(redirects()).toHaveLength(1);
+  });
 
-    go.mockRestore();
+  /** With none, the live basket, which every account has (velista `0111`). */
+  it('goes to the live basket when there is no generated basket', async () => {
+    await render();
+
+    expect(go).toHaveBeenCalledWith('/en/shopping-lists/live', {
+      replaceUrl: true,
+    });
+  });
+
+  // A basket that is over is not one to shop, so it does not answer the tab.
+  it('goes to the live basket when every generated basket is finished', async () => {
+    await render(fakeBasketListStore([basket({ status: 'FINISHED' })]));
+
+    expect(go).toHaveBeenCalledWith('/en/shopping-lists/live', {
+      replaceUrl: true,
+    });
   });
 
   /**
-   * `replaceUrl` is the whole of the back button working: pushed instead, back from the
-   * basket would land here and be sent forward again.
+   * `replaceUrl` is the whole of the back button working: pushed instead, back from
+   * the basket would land here and be sent forward again.
    */
   it('never pushes an entry of its own', async () => {
-    const go = jest.spyOn(Router.prototype, 'navigateByUrl');
     await render(fakeBasketListStore([basket()]));
 
     expect(
       go.mock.calls.every(([, extras]) => extras?.replaceUrl === true)
     ).toBe(true);
-
-    go.mockRestore();
   });
 
-  // A basket that is over is not one to shop, so it does not answer the tab.
-  it('stays on the empty state for a finished basket', async () => {
-    const go = jest.spyOn(Router.prototype, 'navigateByUrl');
-    const fixture = await render(
-      fakeBasketListStore([basket({ status: 'COMPLETED' })])
-    );
+  it('draws no empty state', async () => {
+    const fixture = await render();
 
-    expect(go).not.toHaveBeenCalled();
-    expect(text(fixture)).toContain('basket.current.empty.title');
-
-    go.mockRestore();
+    expect(text(fixture)).not.toContain('basket.current.empty');
+    expect(query(fixture, '.primary')).toBeNull();
   });
 
-  describe('with no basket', () => {
-    it('draws the empty state and both of its actions', async () => {
-      const fixture = await render();
-
-      expect(text(fixture)).toContain('basket.current.empty.title');
-      expect(text(fixture)).toContain('basket.current.empty.body');
-      expect(query(fixture, '.primary')?.textContent?.trim()).toBe(
-        'basket.current.empty.make'
-      );
-      expect(query(fixture, '.secondary')?.textContent?.trim()).toBe(
-        'basket.current.empty.older'
-      );
-    });
-
-    it('opens the generation sheet over this page', async () => {
-      const fixture = await render();
-      const go = jest.spyOn(TestBed.inject(Router), 'navigate');
-
-      (query(fixture, '.primary') as HTMLButtonElement).click();
-
-      // Relative and stamped with the sheet marker, so the sheet covers this page and
-      // the back gesture dismisses it (rule E1, plan 0008).
-      expect(go).toHaveBeenCalledWith(
-        ['sheet', 'get'],
-        expect.objectContaining({ relativeTo: expect.anything() })
-      );
-    });
-
-    it('goes to the history from See older lists', async () => {
-      const fixture = await render();
-      const go = jest.spyOn(TestBed.inject(Router), 'navigateByUrl');
-
-      (query(fixture, '.secondary') as HTMLButtonElement).click();
-
-      expect(go).toHaveBeenCalledWith('/en/shopping-lists');
-    });
-  });
-
-  /**
-   * Section 7: the clock that used to sit beside Get shopping list on home is in this
-   * screen's header, **in both states**, so the history stays one press from the tab
-   * while the listing is still being read.
-   */
-  describe('the clock in the header', () => {
-    it('is there while the listing is on its way', async () => {
+  describe('while the listing is on its way', () => {
+    it('shows the loading state and goes nowhere yet', async () => {
       const fixture = await render(
         fakeBasketListStore([], { state: 'loading' })
       );
 
-      expect(query(fixture, '.bar .history')).not.toBeNull();
       expect(query(fixture, 'lib-row-skeleton')).not.toBeNull();
+      expect(redirects()).toHaveLength(0);
     });
 
-    it('is there with no basket at all', async () => {
-      const fixture = await render();
+    it('goes once the listing answers', async () => {
+      const store = fakeBasketListStore([], { state: 'loading' });
+      const fixture = await render(store);
 
-      expect(query(fixture, '.bar .history')).not.toBeNull();
+      store.set([basket({ id: 'gl3' })]);
+      store.setState('loaded');
+      fixture.detectChanges();
+      TestBed.tick();
+
+      expect(go).toHaveBeenCalledWith('/en/shopping-lists/gl3', {
+        replaceUrl: true,
+      });
+      expect(redirects()).toHaveLength(1);
     });
 
-    it('opens the history', async () => {
-      const fixture = await render();
-      const go = jest.spyOn(TestBed.inject(Router), 'navigateByUrl');
+    it('keeps the history one press away', async () => {
+      const fixture = await render(
+        fakeBasketListStore([], { state: 'loading' })
+      );
 
       (query(fixture, '.bar .history') as HTMLButtonElement).click();
 
@@ -191,18 +179,32 @@ describe('BasketCurrentPage', () => {
   });
 
   /**
-   * A failed read is not an empty one. Drawing "nothing to shop yet" over a request
-   * that never answered tells somebody halfway round a shop that their basket is gone.
+   * A failed read is not a reason to draw an error: the listing only decides which
+   * basket to open, and the live basket needs no listing (velista `0111`).
    */
-  it('says what the history says when the read fails', async () => {
-    const fixture = await render(
-      fakeBasketListStore([], {
-        state: 'failed',
-        error: new GatewayError(500, 'boom', 'cid-1'),
-      })
-    );
+  describe('when the listing fails', () => {
+    it('goes to the live basket rather than drawing an error', async () => {
+      const fixture = await render(
+        fakeBasketListStore([], {
+          state: 'failed',
+          error: new GatewayError(500, 'boom', 'cid-1'),
+        })
+      );
 
-    expect(query(fixture, 'lib-error-state')).not.toBeNull();
-    expect(text(fixture)).not.toContain('basket.current.empty.title');
+      expect(query(fixture, 'lib-error-state')).toBeNull();
+      // The failure was held from an earlier read, so it reads again first.
+      fixture.detectChanges();
+      TestBed.tick();
+      expect(go).toHaveBeenCalledWith('/en/shopping-lists/live', {
+        replaceUrl: true,
+      });
+    });
+
+    it('reads a failed listing again rather than trusting it', async () => {
+      const store = fakeBasketListStore([], { state: 'failed' });
+      await render(store);
+
+      expect(store.calls).toContain('reload');
+    });
   });
 });

@@ -77,7 +77,7 @@ lib-line-composer {
   border-block-end: 1px solid var(--app-border-subtle);
 }
 
-.back,
+.history,
 .share,
 .people,
 .finish {
@@ -99,13 +99,10 @@ lib-line-composer {
   }
 }
 
-// The two **actions** in the bar react to a pointer. The way out of the bar does
-// not, and that is the whole of plan 0052 section 9: the `page.back` mixin in
-// `_list-page.scss`, `_zone-page.scss`, `_account-page.scss` and
-// `_install-page.scss` sets a focus ring and stops, and every hand written back
-// control in the app does the same. This one shared its rule with `.share` and
-// `.people` and inherited a hover from them, so the basket's was the one back
-// control in the product that lit up under a cursor.
+// Every control in the bar is an action and reacts to a pointer. The history took
+// the back chevron's place (velista 0111), and the chevron was the one control here
+// that did not light up, by plan 0052 section 9's rule for a way out.
+.history,
 .share,
 .people,
 .finish {
@@ -115,7 +112,7 @@ lib-line-composer {
   }
 }
 
-.back-glyph,
+.history-glyph,
 .share-glyph,
 .people-glyph,
 .finish-glyph {

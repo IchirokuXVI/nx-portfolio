@@ -1145,7 +1145,7 @@
     "emptyHint": "Whoever made it has not put anything on it yet.",
     "failed": "This list would not load",
     "retry": "Try again",
-    "back": "Back",
+    "openHistory": "History",
     "live": {
       "title": "Everything to buy",
       "titleOf": "{{name}}: everything to buy",
@@ -1526,14 +1526,6 @@
       "HOUSEHOLD": "Household",
       "PERSONAL_CARE": "Personal care",
       "OTHER": "Other"
-    },
-    "current": {
-      "empty": {
-        "title": "Nothing to shop yet",
-        "body": "Velista makes one shopping list out of everything your groups still need. It tells you where each thing is cheapest.",
-        "make": "Make my shopping list",
-        "older": "See older lists"
-      }
     },
     "entries": {
       "title": "Lists that ask for this",

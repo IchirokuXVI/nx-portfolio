@@ -1145,7 +1145,7 @@
     "emptyHint": "Quien la ha hecho todavía no ha puesto nada.",
     "failed": "Esta lista no se ha podido cargar",
     "retry": "Inténtalo de nuevo",
-    "back": "Atrás",
+    "openHistory": "Historial",
     "live": {
       "title": "Todo por comprar",
       "titleOf": "{{name}}: todo por comprar",
@@ -1526,14 +1526,6 @@
       "HOUSEHOLD": "Hogar",
       "PERSONAL_CARE": "Cuidado personal",
       "OTHER": "Otros"
-    },
-    "current": {
-      "empty": {
-        "title": "Nada que comprar todavía",
-        "body": "Velista reúne en una lista todo lo que tus grupos necesitan y te dice dónde sale más barato.",
-        "make": "Crear mi lista",
-        "older": "Ver listas anteriores"
-      }
     },
     "entries": {
       "title": "Listas que lo piden",

@@ -8,11 +8,17 @@ import type {
 } from '@portfolio/velista/models';
 import {
   BrowserFacade,
+  LiveBasketBadge,
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
 import { GatewayError } from '../errors';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
 import { RealtimeMemory } from '../realtime/realtime-memory';
+import {
+  fakeLiveBasketStore,
+  provideFakeLiveBasketStore,
+  type FakeLiveBasketStore,
+} from '../testing/store-doubles';
 import {
   BASKET_LIST_SERVICE,
   type BasketListServiceI,
@@ -113,7 +119,10 @@ function fakeService(options: FakeOptions = {}) {
   return { service, calls };
 }
 
-function harness(options: FakeOptions = {}) {
+function harness(
+  options: FakeOptions = {},
+  live: FakeLiveBasketStore = fakeLiveBasketStore()
+) {
   TestBed.resetTestingModule();
   const fake = fakeService(options);
 
@@ -123,11 +132,13 @@ function harness(options: FakeOptions = {}) {
       BasketListStore,
       { provide: BASKET_LIST_SERVICE, useValue: fake.service },
       { provide: REALTIME_CLIENT, useExisting: RealtimeMemory },
+      provideFakeLiveBasketStore(live),
     ],
   });
 
   return {
     store: TestBed.inject(BasketListStore),
+    live,
     realtime: TestBed.inject(RealtimeMemory),
     // What a resume is driven by: `AppResumed` counts the false to true edge of
     // this signal, and the store reads the listing again when the count moves.
@@ -137,6 +148,90 @@ function harness(options: FakeOptions = {}) {
 }
 
 describe('BasketListStore', () => {
+  /**
+   * The badge counts the basket the tab opens (velista `0111`): the newest open
+   * generated basket, or the live basket when there is none.
+   */
+  describe('the tab badge', () => {
+    const pending = () => TestBed.inject(LiveBasketBadge).pending();
+
+    it('counts the newest open generated basket', async () => {
+      const { store } = harness({
+        pages: [
+          {
+            items: [
+              summary({ id: 'new', lineCount: 9, settledLineCount: 2 }),
+              summary({ id: 'old', lineCount: 5, settledLineCount: 0 }),
+            ],
+            nextCursor: null,
+          },
+        ],
+      });
+
+      await store.load();
+      TestBed.tick();
+
+      expect(pending()).toBe(7);
+    });
+
+    it('counts the live basket when no generated basket is open', async () => {
+      const live = fakeLiveBasketStore(
+        {
+          id: 'basket-live',
+          progress: { done: 1, unavailable: 0, total: 5 },
+          pending: 4,
+        },
+        { state: 'idle' }
+      );
+      const { store } = harness(
+        {
+          pages: [
+            {
+              items: [summary({ status: 'FINISHED' })],
+              nextCursor: null,
+            },
+          ],
+        },
+        live
+      );
+
+      await store.load();
+      TestBed.tick();
+
+      expect(pending()).toBe(4);
+      // Asked for, because nothing else had.
+      expect(live.calls).toContain('load');
+    });
+
+    it('counts the live basket when the listing fails', async () => {
+      const live = fakeLiveBasketStore({
+        id: 'basket-live',
+        progress: { done: 0, unavailable: 0, total: 3 },
+        pending: 3,
+      });
+      const { store } = harness({ listRejectsWith: new Error('down') }, live);
+
+      await store.load();
+      TestBed.tick();
+
+      expect(pending()).toBe(3);
+    });
+
+    it('draws nothing before the listing has answered', () => {
+      harness(
+        {},
+        fakeLiveBasketStore({
+          id: 'basket-live',
+          progress: { done: 0, unavailable: 0, total: 3 },
+          pending: 3,
+        })
+      );
+      TestBed.tick();
+
+      expect(pending()).toBeNull();
+    });
+  });
+
   describe('the first read', () => {
     it('holds what the listing answered, newest first as it arrived', async () => {
       const { store } = harness({

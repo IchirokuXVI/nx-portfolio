@@ -46,7 +46,6 @@ import {
   appPath,
   BrowserFacade,
   ListSearchNavigation,
-  PageNavigation,
   searchOpenOf,
   sheetSegments,
   visitNoticeKey,
@@ -54,8 +53,8 @@ import {
 import {
   AnchoredPopover,
   ChangesBanner,
-  ChevronLeftIcon,
   ChipRow,
+  ClockIcon,
   FlagIcon,
   LineComposer,
   ListTools,
@@ -151,8 +150,8 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
     BasketRow,
     CdkOverlayOrigin,
     ChangesBanner,
-    ChevronLeftIcon,
     ChipRow,
+    ClockIcon,
     SeenTarget,
     FlagIcon,
     LineComposer,
@@ -208,7 +207,6 @@ export class BasketPage {
 
   private readonly _target = inject(BasketTargetStore);
   private readonly _router = inject(Router);
-  private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -301,29 +299,16 @@ export class BasketPage {
   );
 
   /**
-   * Whether this is the basket the bottom bar's basket tab opens (velista `0105`):
-   * the permanent one, or the newest basket being shopped, which is where
-   * `shopping-lists/current` sends the tab.
+   * Whether the header offers the history (velista `0111`): the owner, and a
+   * registered member of a shared basket. A guest has no history, because it needs
+   * an account, and they arrived on a link that makes this screen the whole app.
    *
-   * The same `active()[0]` that redirect reads, so the two cannot disagree about
-   * which basket the tab means.
+   * It takes the place of the back chevron on every basket. No basket page goes
+   * back: the bottom bar is the way out, and the history is the way to another basket.
    */
-  private readonly _isTabBasket = computed(
-    () => this._live || this._id === this._generated.active()[0]?.id
-  );
-
-  /**
-   * Whether the reader has an app to go back to: the owner, and a registered member of
-   * a shared basket. A guest has none, because they arrived on a link and this screen
-   * is the whole app to them.
-   *
-   * Nor on the tab's own basket (velista `0105`). The bottom bar is on screen there
-   * with its basket tab lit, so the bar is the way out, and a chevron beside it would
-   * be a second one.
-   */
-  protected readonly canGoBack = computed(() => {
+  protected readonly canOpenHistory = computed(() => {
     const kind = this._store.me()?.kind;
-    return (kind === 'OWNER' || kind === 'REGISTERED') && !this._isTabBasket();
+    return kind === 'OWNER' || kind === 'REGISTERED';
   });
 
   /**
@@ -1860,25 +1845,14 @@ export class BasketPage {
   }
 
   /**
-   * Back to wherever this was opened from.
+   * The history, pushed, so back from it returns to this basket.
    *
-   * `PageNavigation`, not a navigation of our own, which is what this used to do:
-   * it walked to the history whatever was behind it, so a basket opened from the
-   * dashboard card landed on a screen nobody had asked to see, and the back
-   * gesture and the button in the corner disagreed about where back is.
-   *
-   * The history is the **fallback**, for the arrival with nothing behind it — a
-   * reload, or a link opened cold — which is exactly the destination this button
-   * used to have unconditionally.
-   *
-   * A member's fallback is the dashboard instead. The history lists the reader's own
-   * baskets, and a basket somebody shared with them is not one of those.
+   * By absolute URL: the basket is reached at `shopping-lists/live` and at
+   * `shopping-lists/<id>`, and one address serves both.
    */
-  protected back(): void {
-    void this._pages.back(
-      this.surface()?.back === 'history'
-        ? appPath(this._locale(), this._basePath, BASKET_PATHS.list)
-        : appPath(this._locale(), this._basePath, 'home')
+  protected openHistory(): void {
+    void this._router.navigateByUrl(
+      appPath(this._locale(), this._basePath, BASKET_PATHS.list)
     );
   }
 }
