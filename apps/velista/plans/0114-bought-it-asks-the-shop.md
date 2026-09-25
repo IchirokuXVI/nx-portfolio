@@ -1,3 +1,5 @@
+> **PR:** [#493](https://github.com/IchirokuXVI/nx-portfolio/pull/493)
+
 # 0114: "I bought it" asks the shop
 
 On a zone list, the line sheet's "I bought it" asks how many were bought and which product, then
